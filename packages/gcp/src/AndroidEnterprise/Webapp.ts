@@ -23,12 +23,12 @@ import {
 
 export type WebappProps = {
   /**
-   * Play EMM enterprise id. Immutable — changing it replaces the web app.
+   * Play EMM enterprise id. Immutable -- changing it replaces the web app.
    */
   enterpriseId: string;
   /**
-   * Server-assigned web app id (`app:com.google.enterprise.webapp.…`).
-   * Immutable — changing it replaces the web app.
+   * Server-assigned web app id (`app:com.google.enterprise.webapp....`).
+   * Immutable -- changing it replaces the web app.
    */
   webAppId?: string;
   /**
@@ -87,7 +87,7 @@ export type Webapp = Resource<
  * Web apps have no labels field and their title is shown to users, so
  * Alchemy tracks an app by its recorded id only (`list` finds apps from
  * older releases that carried a title marker). `enterpriseId` and `webAppId` are identity
- * — changing either replaces the app. Title, start URL, display mode,
+ * -- changing either replaces the app. Title, start URL, display mode,
  * icons, and publish state update in place.
  *
  * ### Creating a Web App

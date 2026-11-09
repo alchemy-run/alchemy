@@ -3,8 +3,8 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `mediaconvert:CreateJob` — submit a transcode job from
- * runtime code, the classic "S3 upload event → Lambda → transcode" workflow.
+ * Runtime binding for `mediaconvert:CreateJob` -- submit a transcode job from
+ * runtime code, the classic "S3 upload event -> Lambda -> transcode" workflow.
  * Also grants `iam:PassRole` (conditioned to `mediaconvert.amazonaws.com`)
  * for the S3-access role the job passes to the service.
  *

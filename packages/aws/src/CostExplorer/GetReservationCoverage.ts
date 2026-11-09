@@ -11,13 +11,13 @@ export interface GetReservationCoverageRequest extends ce.GetReservationCoverage
  * Runtime binding for `ce:GetReservationCoverage`.
  *
  * Retrieve how much of your eligible usage (EC2, RDS, ElastiCache,
- * Redshift, OpenSearch, …) was covered by reservations over a time
+ * Redshift, OpenSearch, ...) was covered by reservations over a time
  * period. Provide the implementation with
  * `Effect.provide(AWS.CostExplorer.GetReservationCoverageHttp)`.
  * ### Reservations
  * **Example:** Check Reservation Coverage
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const getReservationCoverage = yield* AWS.CostExplorer.GetReservationCoverage();
  *
  * // runtime

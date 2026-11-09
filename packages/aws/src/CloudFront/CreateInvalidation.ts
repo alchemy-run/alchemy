@@ -10,7 +10,7 @@ export interface CreateInvalidationRequest extends Omit<
 
 /**
  * Grants a Function permission to create CloudFront cache invalidations for a
- * distribution at runtime — the classic post-publish/CMS purge pattern.
+ * distribution at runtime -- the classic post-publish/CMS purge pattern.
  * ### Invalidating from a Function
  * **Example:** Purge Paths After a Content Update
  * ```typescript

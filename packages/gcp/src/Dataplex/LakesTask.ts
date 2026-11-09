@@ -32,7 +32,7 @@ const DEFAULT_TRIGGER = "ON_DEMAND";
 
 export type TaskTriggerSpec = {
   /**
-   * Trigger type. Immutable — changing it replaces the task.
+   * Trigger type. Immutable -- changing it replaces the task.
    * @default "ON_DEMAND"
    */
   type?: dataplex.GoogleCloudDataplexV1TaskTriggerSpecTypeEnum | (string & {});
@@ -117,7 +117,7 @@ export type LakesTaskProps = {
   /**
    * Parent lake. Full name
    * `projects/{project}/locations/{location}/lakes/{lake}` or the lake id
-   * (combined with `location`). Immutable — changing it replaces the task.
+   * (combined with `location`). Immutable -- changing it replaces the task.
    */
   lake: string;
   /**
@@ -126,7 +126,7 @@ export type LakesTaskProps = {
    */
   location?: string;
   /**
-   * Task id. Immutable — changing it replaces the task.
+   * Task id. Immutable -- changing it replaces the task.
    */
   taskId?: string;
   /**
@@ -226,7 +226,7 @@ export interface LakesTaskLookup {
 }
 
 /**
- * A Dataplex lake task — a Spark or notebook job scheduled against a lake.
+ * A Dataplex lake task -- a Spark or notebook job scheduled against a lake.
  *
  * Changing `lake`, `taskId`, `location`, or trigger type replaces the
  * task. Description, labels, execution spec, and Spark/notebook config

@@ -1,14 +1,14 @@
 /**
  * Shared child-process ENTRY for framework production builds.
  *
- * Executed only as a spawned process by `runBuildChild` (`BuildChild.ts`) —
+ * Executed only as a spawned process by `runBuildChild` (`BuildChild.ts`) --
  * never imported. `argv[2]` carries the JSON {@link BuildChildPayload}: the
  * framework source module to load (a file URL), the config for its exported
  * `buildInChild`, and the path to persist the resulting `BuildOutput` to.
  *
  * This is deliberately the ONLY module in the package with top-level
  * execution: every importable module (including the framework source
- * modules) stays pure — their `buildInChild` exports are plain functions
+ * modules) stays pure -- their `buildInChild` exports are plain functions
  * returning Effects, callable in-process by tests. Process concerns (argv
  * parsing, platform services, exit codes) live here, at the process
  * boundary where they belong.

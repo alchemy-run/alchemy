@@ -13,7 +13,7 @@ export interface GetWirelessDeviceStatisticsRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `iotwireless:GetWirelessDeviceStatistics` — read the
+ * Runtime binding for `iotwireless:GetWirelessDeviceStatistics` -- read the
  * bound wireless device's operating information (last uplink time, RSSI/SNR
  * gateway metadata, battery level, device state) from a deployed Lambda or
  * Task.

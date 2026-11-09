@@ -43,7 +43,7 @@ export interface NotificationChannel extends Resource<
 > {}
 
 /**
- * A DevOps Guru notification channel — an Amazon SNS topic that DevOps Guru
+ * A DevOps Guru notification channel -- an Amazon SNS topic that DevOps Guru
  * uses to notify you when insights are generated, closed, or change severity.
  *
  * The channel configuration is immutable in the AWS API: changing the topic
@@ -133,7 +133,7 @@ export const NotificationChannelProvider = () =>
           const channels = yield* listChannels;
           // Prefer the stored channel id; fall back to the topic lookup
           // (state-loss recovery). A half-created state row can't round-trip
-          // an Output-valued `topicArn` — report "not found".
+          // an Output-valued `topicArn` -- report "not found".
           const found =
             output?.id !== undefined
               ? channels.find((c) => c.Id === output.id)
@@ -147,7 +147,7 @@ export const NotificationChannelProvider = () =>
           return { id: found.Id, topicArn };
         }),
 
-        // The channel's identity is its SNS topic — changing the topic
+        // The channel's identity is its SNS topic -- changing the topic
         // replaces the channel. Filter changes are converged in `reconcile`.
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
@@ -157,13 +157,13 @@ export const NotificationChannelProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ news, output, session }) {
-          // 1. OBSERVE — cloud state is authoritative; output.id is a cache.
+          // 1. OBSERVE -- cloud state is authoritative; output.id is a cache.
           const channels = yield* listChannels;
           let observed =
             (output?.id !== undefined ? channels.find((c) => c.Id === output.id) : undefined) ??
             findByTopic(channels, news.topicArn);
 
-          // 2. SYNC — the config is immutable; converge drifted filters by
+          // 2. SYNC -- the config is immutable; converge drifted filters by
           //    removing and re-adding the channel.
           if (observed?.Id !== undefined && !matchesDesired(observed.Config, news)) {
             yield* devopsguru
@@ -172,7 +172,7 @@ export const NotificationChannelProvider = () =>
             observed = undefined;
           }
 
-          // 3. ENSURE — add the channel when missing. A ConflictException is
+          // 3. ENSURE -- add the channel when missing. A ConflictException is
           //    a race with a peer reconciler; re-observe by topic.
           let id = observed?.Id;
           if (id === undefined) {

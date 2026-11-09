@@ -7,7 +7,7 @@ import type * as Effect from "effect/Effect";
  * `rds:ApplyPendingMaintenanceAction`).
  *
  * Applies (or schedules) a pending maintenance action on an RDS resource
- * — e.g. an ops function that rolls maintenance during a controlled window. Provide the implementation with
+ * -- e.g. an ops function that rolls maintenance during a controlled window. Provide the implementation with
  * `Effect.provide(AWS.RDS.ApplyPendingMaintenanceActionHttp)`.
  * ### Maintenance
  * **Example:** Apply Maintenance Immediately

@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `transcribe:UpdateMedicalVocabulary` — replace a medical vocabulary with a new source file.
+ * Runtime binding for `transcribe:UpdateMedicalVocabulary` -- replace a medical vocabulary with a new source file.
  *
  * Amazon Transcribe batch actions have no resource-level IAM; the host is
  * granted `transcribe:UpdateMedicalVocabulary` on `*`.

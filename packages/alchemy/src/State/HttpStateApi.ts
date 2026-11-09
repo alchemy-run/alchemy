@@ -18,7 +18,7 @@ import { UserFacingError } from "../UserFacingError.ts";
  * Pinned to JSON encoding via {@link HttpApiSchema.asJson} so that both
  * sides of the API agree on `Content-Type: application/json`. With a
  * bare `Schema.Any` the server's payload-decoder map is keyed off the
- * default content type only — any client request that arrives with a
+ * default content type only -- any client request that arrives with a
  * differently-shaped body (or a transport that drops the
  * `Content-Type` header entirely) falls into the `payloadBy.get(
  * contentType)` miss branch in `HttpApiBuilder.decodePayload` and

@@ -15,13 +15,13 @@ export interface RevokeCertificateRequest extends Omit<
  * Runtime binding for `acm:RevokeCertificate`.
  *
  * Bind this operation to a {@link Certificate} to get a callable that revokes
- * a previously exported public certificate — e.g. from a security-automation
+ * a previously exported public certificate -- e.g. from a security-automation
  * function reacting to a leaked private key. Revocation is permanent. Provide
  * the implementation with `Effect.provide(AWS.ACM.RevokeCertificateHttp)`.
  * ### Revoking Certificates
  * **Example:** Revoke a Compromised Certificate
  * ```typescript
- * // init — bind the operation to the certificate
+ * // init -- bind the operation to the certificate
  * const revokeCertificate = yield* AWS.ACM.RevokeCertificate(certificate);
  *
  * // runtime

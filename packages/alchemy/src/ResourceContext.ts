@@ -2,7 +2,7 @@ import * as Context from "effect/Context";
 
 /**
  * Identity of the resource whose provider lifecycle operation (`diff`, `read`,
- * `precreate`, `reconcile`, `delete`, …) is running. The engine provides it for
+ * `precreate`, `reconcile`, `delete`, ...) is running. The engine provides it for
  * the duration of each call, so helpers several calls below a reconciler
  * (e.g. `Bundle.build`) can key per-resource state without the provider
  * threading its identity through. Absent outside a lifecycle operation.

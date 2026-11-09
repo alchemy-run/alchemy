@@ -6,15 +6,15 @@ import type { Flow } from "./Flow.ts";
 /**
  * Runtime binding for `mediaconnect:DescribeFlow`.
  *
- * Reads the bound {@link Flow}'s live state — status (`STANDBY`/`ACTIVE`),
- * source, outputs, and entitlements — e.g. for an operations dashboard or
+ * Reads the bound {@link Flow}'s live state -- status (`STANDBY`/`ACTIVE`),
+ * source, outputs, and entitlements -- e.g. for an operations dashboard or
  * a scheduler that only starts a flow that is not already running. The
  * flow ARN is injected from the binding. Provide the implementation with
  * `Effect.provide(AWS.MediaConnect.DescribeFlowHttp)`.
  * ### Observing Flows
  * **Example:** Read the Flow's Current Status
  * ```typescript
- * // init — bind the operation to the flow
+ * // init -- bind the operation to the flow
  * const describeFlow = yield* AWS.MediaConnect.DescribeFlow(flow);
  *
  * // runtime

@@ -7,8 +7,8 @@ import type { User } from "./User.ts";
 /**
  * Shared scaffolding for the AWS Transfer Family runtime bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, makeTransfer…HttpBinding({ … }))` over one of the
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, makeTransfer...HttpBinding({ ... }))` over one of the
  * three builders below. Everything except the operation, the IAM action
  * list, and the injected identifier(s) is boilerplate.
  */
@@ -38,7 +38,7 @@ export const makeTransferServerHttpBinding = <I extends { ServerId?: string }, A
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (server: Server) {
-      // Outputs yield a DEFERRED effect — resolve again per invocation below.
+      // Outputs yield a DEFERRED effect -- resolve again per invocation below.
       const ServerId = yield* server.serverId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${server})`({
@@ -63,7 +63,7 @@ export const makeTransferServerHttpBinding = <I extends { ServerId?: string }, A
  * Build the impl Effect for a user-scoped Transfer operation: the runtime
  * callable injects the bound {@link User}'s `ServerId` + `UserName` and the
  * deploy-time half grants `actions` on the user's ARN
- * (`arn:…:user/{serverId}/{userName}`).
+ * (`arn:...:user/{serverId}/{userName}`).
  */
 export const makeTransferUserHttpBinding = <
   I extends { ServerId?: string; UserName?: string },
@@ -83,7 +83,7 @@ export const makeTransferUserHttpBinding = <
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (user: User) {
-      // Outputs yield a DEFERRED effect — resolve again per invocation below.
+      // Outputs yield a DEFERRED effect -- resolve again per invocation below.
       const ServerId = yield* user.serverId;
       const UserName = yield* user.userName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {

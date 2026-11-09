@@ -23,14 +23,14 @@ export interface OperationSettingProps {
   /**
    * Zone the operation belongs to.
    *
-   * Immutable — changing the zone triggers a replacement.
+   * Immutable -- changing the zone triggers a replacement.
    */
   zoneId: string;
   /**
    * UUID of the API Shield operation the override applies to (cross-resource
    * reference to `Cloudflare.ApiShield.Operation`).
    *
-   * Immutable — the operation is the override's identity, so changing it
+   * Immutable -- the operation is the override's identity, so changing it
    * triggers a replacement.
    */
   operationId: string;
@@ -64,7 +64,7 @@ export type OperationSetting = Resource<
 /**
  * A per-operation schema validation override
  * (`/zones/{zone_id}/schema_validation/settings/operations/{operation_id}`)
- * — pins a mitigation action for a single API Shield operation, superseding
+ * -- pins a mitigation action for a single API Shield operation, superseding
  * the zone-level default just for that operation.
  *
  * The override is keyed by the operation's UUID; deleting the resource
@@ -118,7 +118,7 @@ export const OperationSettingProvider = () =>
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       // Per-operation overrides live inside a zone with no account-wide
-      // enumeration API — fan out over every zone and list its operation
+      // enumeration API -- fan out over every zone and list its operation
       // settings, exhaustively paginated.
       const zones = yield* listAllZones(accountId);
       const rows = yield* Effect.forEach(
@@ -142,7 +142,7 @@ export const OperationSettingProvider = () =>
               ),
             ),
             // A zone with no API Shield / schema-validation entitlement
-            // rejects the route — skip it, keep the rest. (Transient
+            // rejects the route -- skip it, keep the rest. (Transient
             // code-10000 "Authentication error" blips under concurrency are
             // retried globally by the Cloudflare retry policy, so they never
             // reach here as a real failure.)
@@ -184,7 +184,7 @@ export const OperationSettingProvider = () =>
       if (observed === undefined) return undefined;
       const attrs = toAttributes(zoneId, observed);
       // An override carries no ownership marker. When we have no prior
-      // output (cold read), an existing override was set out-of-band —
+      // output (cold read), an existing override was set out-of-band --
       // brand it `Unowned` so the engine gates takeover behind adoption.
       return output !== undefined ? attrs : Unowned(attrs);
     }),
@@ -194,11 +194,11 @@ export const OperationSettingProvider = () =>
       const zoneId = news.zoneId as string;
       const operationId = news.operationId as string;
 
-      // 1. Observe — an absent override (`OperationNotFound` on an
+      // 1. Observe -- an absent override (`OperationNotFound` on an
       //    operation with no override) simply means "not set yet".
       const observed = yield* getOperationSetting(zoneId, operationId);
 
-      // 2/3. Ensure + Sync — the PUT is a true upsert, so a single call
+      // 2/3. Ensure + Sync -- the PUT is a true upsert, so a single call
       //    converges both the greenfield and the drifted case. Skip it
       //    entirely on a no-op.
       if (observed?.mitigationAction === news.mitigationAction) {
@@ -217,7 +217,7 @@ export const OperationSettingProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      // Idempotent — clearing an already-cleared override (or one that
+      // Idempotent -- clearing an already-cleared override (or one that
       // cascaded away with its operation) is success.
       yield* schemaValidation
         .deleteSettingOperation({

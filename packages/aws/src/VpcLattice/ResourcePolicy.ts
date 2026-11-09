@@ -10,7 +10,7 @@ import type { Providers } from "../Providers.ts";
 export interface ResourcePolicyProps {
   /**
    * The ARN of the service network or service the resource policy is attached
-   * to. Immutable — changing it replaces the resource.
+   * to. Immutable -- changing it replaces the resource.
    */
   resourceArn: string;
   /**
@@ -41,7 +41,7 @@ export interface ResourcePolicy extends Resource<
 
 /**
  * A resource-based permission policy on a VPC Lattice service or service
- * network — the policy AWS RAM manages when sharing Lattice resources across
+ * network -- the policy AWS RAM manages when sharing Lattice resources across
  * accounts, attachable directly for fine-grained cross-account control.
  *
  * ### Attaching Resource Policies
@@ -76,7 +76,7 @@ export const ResourcePolicyProvider = () =>
   Provider.effect(
     ResourcePolicy,
     Effect.gen(function* () {
-      // A missing parent and a parent without a policy are both "no policy" —
+      // A missing parent and a parent without a policy are both "no policy" --
       // getResourcePolicy answers with an empty body for the latter, so treat
       // an absent `policy` as non-existence.
       const observe = (resourceArn: string) =>
@@ -107,7 +107,7 @@ export const ResourcePolicyProvider = () =>
           const resourceArn = news.resourceArn;
           const desired = toDesired(news.policy);
 
-          // Observe — putResourcePolicy is an upsert. Compare the
+          // Observe -- putResourcePolicy is an upsert. Compare the
           // canonicalized live document against the canonicalized desired one
           // so a re-deploy of an equivalent policy (key order, whitespace)
           // skips the API call entirely.
@@ -126,7 +126,7 @@ export const ResourcePolicyProvider = () =>
           return { resourceArn, policy: desired };
         }),
         // Resource policies are sub-resources keyed entirely by their parent
-        // service network / service ARN — there is no enumeration API.
+        // service network / service ARN -- there is no enumeration API.
         list: () => Effect.succeed([] as ResourcePolicy["Attributes"][]),
         delete: Effect.fn(function* ({ output }) {
           yield* vpclattice

@@ -29,7 +29,7 @@ export type HttpHealthCheckProps = {
    */
   httpHealthCheckName?: string;
   /**
-   * Optional description. Alchemy ownership is stored in a `[alchemy …]`
+   * Optional description. Alchemy ownership is stored in a `[alchemy ...]`
    * prefix so `list` / nuke can find resources (legacy HttpHealthCheck has
    * no labels field).
    */
@@ -40,7 +40,7 @@ export type HttpHealthCheckProps = {
    */
   checkIntervalSec?: number;
   /**
-   * Probe timeout in seconds. Must be ≤ `checkIntervalSec`.
+   * Probe timeout in seconds. Must be <= `checkIntervalSec`.
    * @default 5
    */
   timeoutSec?: number;
@@ -130,7 +130,7 @@ export interface HttpHealthCheckLookup {
  *
  * Legacy HTTP health checks are required by target-pool network load
  * balancers. Other load balancers and MIG autohealing should use
- * `HealthCheck`. Compute HttpHealthCheck has no labels field — Alchemy
+ * `HealthCheck`. Compute HttpHealthCheck has no labels field -- Alchemy
  * ownership is stored in the description so nuke can find leaked checks.
  *
  * ### Creating an HTTP Health Check

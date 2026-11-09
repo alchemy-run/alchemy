@@ -6,14 +6,14 @@ import type { KnowledgeBase } from "./KnowledgeBase.ts";
 /**
  * The `RetrieveAndGenerate` request. The knowledge base is referenced inside
  * `retrieveAndGenerateConfiguration.knowledgeBaseConfiguration.knowledgeBaseId`
- * — pass the bound {@link KnowledgeBase}'s `knowledgeBaseId` there. The
+ * -- pass the bound {@link KnowledgeBase}'s `knowledgeBaseId` there. The
  * binding scopes IAM to the bound knowledge base and the bound generation
  * models.
  */
 export interface RetrieveAndGenerateRequest extends bedrock.RetrieveAndGenerateRequest {}
 
 /**
- * Runtime binding for `bedrock-agent-runtime:RetrieveAndGenerate` — the fully
+ * Runtime binding for `bedrock-agent-runtime:RetrieveAndGenerate` -- the fully
  * managed RAG operation: retrieve relevant passages from a
  * {@link KnowledgeBase} and generate a grounded answer with a foundation
  * model in one call.

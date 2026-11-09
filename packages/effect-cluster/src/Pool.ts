@@ -58,7 +58,7 @@ export interface Pool extends Resource<
 /**
  * The set of entity classes one pool hosts, collected from the
  * entities that were given it. Pool Layers (`ClusterDocker.SwarmPool`,
- * …) declare one and build their program from it; it owns nothing in the
+ * ...) declare one and build their program from it; it owns nothing in the
  * cloud.
  *
  * @internal

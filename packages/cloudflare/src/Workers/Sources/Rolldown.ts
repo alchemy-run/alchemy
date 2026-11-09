@@ -98,7 +98,7 @@ const toModuleRules = (main: string, rules: readonly ModuleRule[] | undefined) =
 
 /**
  * Rolldown resolves imports to real paths, so an absolute glob under a
- * symlink (macOS `/var` → `/private/var`) is matched by its real base.
+ * symlink (macOS `/var` -> `/private/var`) is matched by its real base.
  */
 const realGlobs = (rules: readonly ModuleRule[] | undefined) =>
   Effect.gen(function* () {
@@ -166,7 +166,7 @@ const TEXT_EXTENSIONS =
 export const WorkerBundle = Shared.makeWorkerBundle<WorkerBundleOptions, AdditionalModuleRule>({
   // Loaded lazily so importing the Cloudflare provider (or the CLI, whose
   // command tree reaches this module) never loads rolldown's native
-  // binding — only actually bundling a Worker does (#562).
+  // binding -- only actually bundling a Worker does (#562).
   loadCompatPlugins: () =>
     import("@alchemy.run/cloudflare-runtime/rolldown").then((module) => module.default),
   virtualEntry: (options) =>
@@ -250,7 +250,7 @@ ${[
 /**
  * The default source provider: bundle `props.main` with rolldown.
  *
- * `hash()` deliberately builds — recomputing "without building" is
+ * `hash()` deliberately builds -- recomputing "without building" is
  * impossible for rolldown without a source-tree memo hash, and today's
  * semantics accept that. The build routes through `Artifacts.cached`
  * under the same key as `build()`, so a diff that had to build shares

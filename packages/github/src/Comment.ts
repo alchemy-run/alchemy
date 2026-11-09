@@ -44,7 +44,7 @@ export interface CommentProps {
    * Override the GitHub host or API base URL for this resource only (e.g.
    * `github.example.com` for GitHub Enterprise). Falls back to
    * `GitHub.providers({ baseUrl })`, then to the host resolved by the auth
-   * provider. Changing it replaces the resource — the same name on a
+   * provider. Changing it replaces the resource -- the same name on a
    * different GitHub instance is a different physical resource.
    */
   baseUrl?: string;
@@ -79,7 +79,7 @@ export interface Comment extends Resource<
  * `Comment` manages the lifecycle of a single comment on an issue or pull
  * request. Comments are created on the first deploy and updated in place on
  * subsequent deploys when the `body` changes. By default, comments are never
- * deleted to preserve discussion history — set `allowDelete: true` to opt in.
+ * deleted to preserve discussion history -- set `allowDelete: true` to opt in.
  *
  * Authentication is resolved in order: explicit `token` prop,
  * `GITHUB_ACCESS_TOKEN` env var, `GITHUB_TOKEN` env var. The token needs
@@ -167,11 +167,11 @@ export const CommentProvider = () =>
     // ambient scope to enumerate from, this collapses to the empty list.
     list: () => Effect.succeed([]),
 
-    // A comment belongs to (host, owner, repository, issueNumber) — its
+    // A comment belongs to (host, owner, repository, issueNumber) -- its
     // server-assigned id is meaningless anywhere else, so moving it replaces
     // the resource: a fresh comment is posted on the new issue, and the old
     // one is deleted only when `allowDelete` is set (the provider's `delete`
-    // no-ops otherwise, preserving discussion history — the default).
+    // no-ops otherwise, preserving discussion history -- the default).
     diff: Effect.fn(function* ({ news, olds }) {
       if (!isResolved(news)) return;
       if (olds === undefined) return;
@@ -190,7 +190,7 @@ export const CommentProvider = () =>
         const body = dedent(news.body);
         const scope = { owner: news.owner, repo: news.repository };
 
-        // Observe — GitHub assigns `comment_id` server-side. Probe for live
+        // Observe -- GitHub assigns `comment_id` server-side. Probe for live
         // state via the cached id; a 404 (deleted out-of-band, or never
         // created) collapses to "no observed comment" so we converge by
         // posting a fresh one.
@@ -200,7 +200,7 @@ export const CommentProvider = () =>
             )
           : undefined;
 
-        // Ensure — when no live comment exists, POST creates one. Sync — PATCH
+        // Ensure -- when no live comment exists, POST creates one. Sync -- PATCH
         // the existing comment with the desired body. GitHub's updateComment is
         // idempotent for identical bodies (returns same updatedAt), so we
         // always issue the call rather than diffing.

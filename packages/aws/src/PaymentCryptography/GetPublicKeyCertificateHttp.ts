@@ -4,7 +4,7 @@ import { makePaymentCryptographyKeyHttpBinding } from "./BindingHttp.ts";
 import { GetPublicKeyCertificate } from "./GetPublicKeyCertificate.ts";
 
 /**
- * HTTP implementation of {@link GetPublicKeyCertificate} — grants the host
+ * HTTP implementation of {@link GetPublicKeyCertificate} -- grants the host
  * Function `payment-cryptography:GetPublicKeyCertificate` on the key and
  * calls the Payment Cryptography control-plane API at runtime.
  */

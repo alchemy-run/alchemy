@@ -13,7 +13,7 @@ import type { Instance } from "./Instance.ts";
  * ### Managing Group Memberships
  * **Example:** Remove a User From a Group
  * ```typescript
- * // init — bind the operation to the Identity Center instance
+ * // init -- bind the operation to the Identity Center instance
  * const deleteGroupMembership = yield* AWS.IdentityCenter.DeleteGroupMembership(instance);
  *
  * // runtime

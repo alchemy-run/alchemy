@@ -11,14 +11,14 @@ export interface DescribeKeyValueStoreRequest extends Omit<
 /**
  * Runtime binding for `cloudfront-keyvaluestore:DescribeKeyValueStore`.
  *
- * Reads the bound KeyValueStore's data-plane metadata — item count, total
+ * Reads the bound KeyValueStore's data-plane metadata -- item count, total
  * size, and the current `ETag` that write operations ({@link PutKey},
  * {@link DeleteKey}, {@link UpdateKeys}) require as `IfMatch`. Provide the
  * implementation with `Effect.provide(AWS.CloudFront.DescribeKeyValueStoreHttp)`.
  * ### Reading KeyValueStore Data
  * **Example:** Fetch the Store's ETag Before a Write
  * ```typescript
- * // init — bind the operation to the store
+ * // init -- bind the operation to the store
  * const describeStore = yield* CloudFront.DescribeKeyValueStore(store);
  *
  * // runtime

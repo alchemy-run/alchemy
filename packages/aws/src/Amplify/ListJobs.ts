@@ -14,10 +14,10 @@ export interface ListJobsRequest extends Omit<amplify.ListJobsRequest, "appId"> 
  * ### Observing Jobs
  * **Example:** Read the Latest Job of a Branch
  * ```typescript
- * // init — bind the operation to the app
+ * // init -- bind the operation to the app
  * const listJobs = yield* AWS.Amplify.ListJobs(app);
  *
- * // runtime — the first summary is the most recent job
+ * // runtime -- the first summary is the most recent job
  * const { jobSummaries } = yield* listJobs({
  *   branchName: "main",
  *   maxResults: 1,

@@ -9,8 +9,8 @@ import { Stage } from "../Stage.ts";
 /**
  * Resolve a bundle entrypoint (`main`) to a real filesystem path.
  *
- * `main` is user-supplied and is very commonly `import.meta.url` — a
- * `file://` URL — which `FileSystem.realPath` cannot `lstat` directly
+ * `main` is user-supplied and is very commonly `import.meta.url` -- a
+ * `file://` URL -- which `FileSystem.realPath` cannot `lstat` directly
  * (it would try to stat a literal `file:` path). Convert any `file://`
  * URL to a path first, then resolve to the canonical real path.
  */

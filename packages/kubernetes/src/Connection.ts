@@ -7,7 +7,7 @@ import type * as Redacted from "effect/Redacted";
  * `HelmChart`) targets a cluster through a serializable {@link Connection}:
  * the API server endpoint (or enough information to discover it) plus an
  * {@link ConnectionAuth} descriptor whose `kind` selects the
- * {@link ClusterAdapter} that knows how to authenticate requests — and,
+ * {@link ClusterAdapter} that knows how to authenticate requests -- and,
  * for managed clouds, how to provision workload identity and container
  * images.
  *
@@ -18,7 +18,7 @@ import type * as Redacted from "effect/Redacted";
 
 /**
  * The auth descriptor registry, keyed by adapter kind. Cloud providers
- * extend it via module augmentation — e.g. AWS registers:
+ * extend it via module augmentation -- e.g. AWS registers:
  *
  * ```ts
  * declare module "@alchemy.run/kubernetes/Connection" {
@@ -29,13 +29,13 @@ import type * as Redacted from "effect/Redacted";
  * ```
  *
  * The built-in kinds cover anything `kubectl` can reach: a kubeconfig
- * context (including `exec` credential plugins — `aws eks get-token`,
+ * context (including `exec` credential plugins -- `aws eks get-token`,
  * `kubelogin`, `gke-gcloud-auth-plugin`), a static bearer token, a client
  * certificate, or a raw exec credential plugin invocation.
  */
 export interface AuthRegistry {
   /**
-   * Resolve the cluster, user, and credentials from a kubeconfig file —
+   * Resolve the cluster, user, and credentials from a kubeconfig file --
    * the "anything kubectl can reach" adapter. Honors client certificates,
    * static tokens, and `exec` credential plugins declared in the file.
    */
@@ -78,7 +78,7 @@ export interface AuthRegistry {
 }
 
 /**
- * The discriminated auth union — one member per {@link AuthRegistry} entry,
+ * The discriminated auth union -- one member per {@link AuthRegistry} entry,
  * each tagged with its registry key as `kind`.
  */
 export type ConnectionAuth = {
@@ -96,7 +96,7 @@ export type ConnectionAuth = {
 export interface ContainerRegistry {
   /**
    * Registry host, optionally followed by the namespace images are pushed
-   * under — e.g. `localhost:5001`, `ghcr.io/acme`, or
+   * under -- e.g. `localhost:5001`, `ghcr.io/acme`, or
    * `us-docker.pkg.dev/my-project/apps`.
    */
   server: string;
@@ -125,16 +125,16 @@ export interface Connection {
   certificateAuthorityData?: string;
   /** Skip TLS verification (self-signed local clusters). */
   insecureSkipTlsVerify?: boolean;
-  /** How to authenticate — selects the {@link ClusterAdapter} by `kind`. */
+  /** How to authenticate -- selects the {@link ClusterAdapter} by `kind`. */
   auth: ConnectionAuth;
   /**
    * Where `main` and `context` workloads push their images. Required for
    * those sources unless the cluster's platform adapter provides a
-   * registry (EKS → ECR).
+   * registry (EKS -> ECR).
    */
   registry?: ContainerRegistry;
   /**
-   * CPU architecture of the cluster's nodes — the default target of
+   * CPU architecture of the cluster's nodes -- the default target of
    * workload image builds when a workload doesn't set `architecture`.
    * @default "amd64"
    */
@@ -143,7 +143,7 @@ export interface Connection {
 
 /**
  * Anything a `Kubernetes.*` workload accepts as its `cluster` prop: a raw
- * {@link Connection}, or any value exposing one as a `connection` field —
+ * {@link Connection}, or any value exposing one as a `connection` field --
  * which is how managed cluster resources (`AWS.EKS.Cluster`) participate:
  * their attributes carry a `connection`, so the whole resource can be
  * passed directly.
@@ -155,7 +155,7 @@ const isConnection = (value: ClusterLike): value is Connection =>
 
 /**
  * Normalize a {@link ClusterLike} to its {@link Connection}. Throws when
- * the value carries neither shape — e.g. a managed cluster resource whose
+ * the value carries neither shape -- e.g. a managed cluster resource whose
  * attributes predate the `connection` field.
  */
 export const toConnection = (cluster: ClusterLike): Connection => {
@@ -164,7 +164,7 @@ export const toConnection = (cluster: ClusterLike): Connection => {
   throw new Error(
     "The `cluster` value carries no Kubernetes connection. Pass a cluster " +
       "resource whose attributes expose `connection` (e.g. `AWS.EKS.Cluster`" +
-      " — redeploy the cluster if it was created before the `connection` " +
+      " \u2014 redeploy the cluster if it was created before the `connection` " +
       "attribute existed), a `Kubernetes.KubeConfig(...)`, or a raw " +
       "`Kubernetes.Connection`.",
   );
@@ -172,13 +172,13 @@ export const toConnection = (cluster: ClusterLike): Connection => {
 
 /**
  * Connect `Kubernetes.*` workloads to any cluster your local kubeconfig can
- * reach — k3s, kind, on-prem, AKS, GKE, anything `kubectl` works against.
+ * reach -- k3s, kind, on-prem, AKS, GKE, anything `kubectl` works against.
  * Exec credential plugins declared in the file (`aws eks get-token`,
  * `kubelogin`, `gke-gcloud-auth-plugin`) are honored, so cloud-CLI-managed
  * contexts work as-is.
  *
  * This is a plain helper, not a resource: nothing is provisioned and the
- * cluster appears in no plan — it only describes how to reach the API
+ * cluster appears in no plan -- it only describes how to reach the API
  * server.
  *
  * ```ts

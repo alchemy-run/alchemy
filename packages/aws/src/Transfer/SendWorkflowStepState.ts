@@ -16,10 +16,10 @@ import type * as Effect from "effect/Effect";
  * ### Custom Workflow Steps
  * **Example:** Complete a Custom Step
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const sendWorkflowStepState = yield* AWS.Transfer.SendWorkflowStepState();
  *
- * // runtime — inside the Lambda invoked by the workflow's custom step
+ * // runtime -- inside the Lambda invoked by the workflow's custom step
  * yield* sendWorkflowStepState({
  *   WorkflowId: event.serviceMetadata.executionDetails.workflowId,
  *   ExecutionId: event.serviceMetadata.executionDetails.executionId,

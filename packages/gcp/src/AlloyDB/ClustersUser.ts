@@ -20,12 +20,12 @@ export type ClustersUserProps = {
   /**
    * Parent cluster id or full resource name
    * (`projects/{project}/locations/{location}/clusters/{cluster}`).
-   * Immutable — changing it replaces the user.
+   * Immutable -- changing it replaces the user.
    */
   cluster: string;
   /**
-   * Region of the parent cluster (`us-central1`, …). Ignored when
-   * `cluster` is a full resource name. Immutable — changing it replaces
+   * Region of the parent cluster (`us-central1`, ...). Ignored when
+   * `cluster` is a full resource name. Immutable -- changing it replaces
    * the user. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -35,23 +35,23 @@ export type ClustersUserProps = {
    * Database user id (the `{user}` segment of
    * `.../clusters/{cluster}/users/{user}`). If omitted, a unique
    * PostgreSQL identifier is generated. For IAM users this is the
-   * principal email. Immutable — changing it replaces the user.
+   * principal email. Immutable -- changing it replaces the user.
    */
   userId?: string;
   /**
    * User type. `ALLOYDB_BUILT_IN` requires `password`.
-   * `ALLOYDB_IAM_USER` uses IAM authentication. Immutable — changing
+   * `ALLOYDB_IAM_USER` uses IAM authentication. Immutable -- changing
    * it replaces the user.
    * @default "ALLOYDB_BUILT_IN"
    */
   userType?: alloydb.UserUserTypeEnum | (string & {});
   /**
-   * Password for `ALLOYDB_BUILT_IN` users. Write-only — never returned
+   * Password for `ALLOYDB_BUILT_IN` users. Write-only -- never returned
    * by the API. Updating this value rotates the password.
    */
   password?: string;
   /**
-   * PostgreSQL roles to grant (`alloydbsuperuser`, `pg_monitor`, …).
+   * PostgreSQL roles to grant (`alloydbsuperuser`, `pg_monitor`, ...).
    */
   databaseRoles?: string[];
   /**
@@ -75,7 +75,7 @@ export type ClustersUser = Resource<
     clusterName: string;
     /** Project id. */
     project: string;
-    /** Region id (`us-central1`, …). */
+    /** Region id (`us-central1`, ...). */
     location: string;
     /** User type (`ALLOYDB_BUILT_IN`, `ALLOYDB_IAM_USER`). */
     userType: string;

@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `textract:StartExpenseAnalysis` — start an
+ * Runtime binding for `textract:StartExpenseAnalysis` -- start an
  * asynchronous invoice/receipt analysis job for a document stored in S3.
  * Poll the returned `JobId` with `GetExpenseAnalysis`. The caller needs
  * `s3:GetObject` on the input bucket.

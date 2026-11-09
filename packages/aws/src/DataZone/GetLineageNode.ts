@@ -17,7 +17,7 @@ export interface GetLineageNodeRequest extends Omit<
  * ### Data Lineage
  * **Example:** Read a Lineage Node
  * ```typescript
- * // init — bind the operation to the domain
+ * // init -- bind the operation to the domain
  * const getLineageNode = yield* AWS.DataZone.GetLineageNode(domain);
  *
  * // runtime

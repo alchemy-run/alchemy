@@ -19,7 +19,7 @@ import { LocalEdgeLive } from "./Workers/LocalEdge.ts";
  * first use (see `Local/Sidecar.ts`).
  */
 export const LOCAL_PROVIDERS_URL = import.meta.resolve(
-  // `import.meta.resolve(<string>)` is a runtime API — TypeScript's
+  // `import.meta.resolve(<string>)` is a runtime API -- TypeScript's
   // `rewriteRelativeImportExtensions` does NOT touch the string literal, so
   // we have to pick the right extension ourselves. `import.meta.url` reflects
   // the actual on-disk extension of *this* file (`.ts` when loaded from
@@ -46,7 +46,7 @@ export class LocalRuntimeState extends Context.Service<
      * A local workerd instance bakes its queue-consumer wiring in at start
      * time (`runtime.start({ queueConsumers })`), but the `Consumer`
      * resource that populates {@link queueConsumers} reconciles as a
-     * *sibling* of the Worker — the engine may start workerd before the
+     * *sibling* of the Worker -- the engine may start workerd before the
      * consumer registers. Providers that mutate a worker's runtime wiring
      * (e.g. `ConsumerProviderLocal`) invoke the script's hook after
      * updating state so the running instance is reconfigured; the hook is
@@ -67,8 +67,8 @@ const LocalRuntimeStateLive = Layer.succeed(
 
 /**
  * Directory under `.alchemy` holding local-provider persistent state
- * (workerd storage). Shared so every consumer — the local runtime layer and
- * Vite child processes — points at the same storage.
+ * (workerd storage). Shared so every consumer -- the local runtime layer and
+ * Vite child processes -- points at the same storage.
  */
 export const localStorageDirectory = Effect.gen(function* () {
   const { dotAlchemy } = yield* AlchemyContext;
@@ -107,7 +107,7 @@ let _localRuntimeServices: ReturnType<typeof makeLocalRuntimeServices> | undefin
  *
  * Returns a **module-memoized layer reference**: local providers register
  * via `ProviderLayer.dual`, which builds each provider's local variant
- * lazily against the stack build's shared `Layer.MemoMap` — memoization is
+ * lazily against the stack build's shared `Layer.MemoMap` -- memoization is
  * keyed by layer identity, so Worker/Queue/Consumer/Container composing
  * this exact reference into their local thunks share one runtime instance
  * per stack build (a fresh build gets a fresh instance via its own memo

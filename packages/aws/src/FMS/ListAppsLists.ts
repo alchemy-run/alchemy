@@ -15,7 +15,7 @@ export interface ListAppsListsRequest extends fms.ListAppsListsRequest {}
  * ### Applications Lists
  * **Example:** List Applications Lists
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const listAppsLists = yield* AWS.FMS.ListAppsLists();
  *
  * // runtime

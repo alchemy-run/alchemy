@@ -9,7 +9,7 @@ export interface DescribeFirewallRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `network-firewall:DescribeFirewall` — read the bound
+ * Runtime binding for `network-firewall:DescribeFirewall` -- read the bound
  * {@link Firewall}'s configuration and status (sync states, endpoint ids,
  * capacity usage); the firewall ARN is injected automatically.
  *
@@ -18,7 +18,7 @@ export interface DescribeFirewallRequest extends Omit<
  * ### Reading Firewall State
  * **Example:** Read the Firewall Status
  * ```typescript
- * // init — grants network-firewall:DescribeFirewall on the firewall
+ * // init -- grants network-firewall:DescribeFirewall on the firewall
  * const describeFirewall = yield* AWS.NetworkFirewall.DescribeFirewall(firewall);
  *
  * // runtime

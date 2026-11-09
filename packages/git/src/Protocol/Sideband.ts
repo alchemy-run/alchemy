@@ -5,9 +5,9 @@
  * When `side-band-64k` is negotiated, binary data is carried as pkt-lines
  * whose first payload byte is the band:
  *
- * - **band 1** — pack data (or the receive-pack report)
- * - **band 2** — progress messages (client prints to stderr as `remote: `)
- * - **band 3** — fatal error message; the client aborts
+ * - **band 1** -- pack data (or the receive-pack report)
+ * - **band 2** -- progress messages (client prints to stderr as `remote: `)
+ * - **band 3** -- fatal error message; the client aborts
  *
  * Frame arithmetic: max pkt-line total 65520 = 4 length bytes + 1 band byte
  * + **65515** data bytes, so every frame carries at most 65515 payload bytes.
@@ -18,7 +18,7 @@ import { concatBytes, utf8Encode } from "./ObjectCodec.ts";
 import { flushPkt } from "./Pkt.ts";
 
 /**
- * Maximum data bytes per side-band-64k frame (65520 − 4 length − 1 band).
+ * Maximum data bytes per side-band-64k frame (65520 - 4 length - 1 band).
  */
 export const SIDEBAND_DATA_MAX = 65515;
 
@@ -29,7 +29,7 @@ export type SidebandBand = 1 | 2 | 3;
 
 /**
  * Encodes a single side-band frame. The data must be at most
- * {@link SIDEBAND_DATA_MAX} bytes — use {@link sidebandFrames} to split
+ * {@link SIDEBAND_DATA_MAX} bytes -- use {@link sidebandFrames} to split
  * arbitrary payloads.
  */
 const HEX = "0123456789abcdef";
@@ -125,12 +125,12 @@ export const sidebandFrameAll = (band: SidebandBand, data: Uint8Array) => {
  *
  * Why this shape, measured on a 40 MiB bundle (DESIGN §22.4):
  *
- * - An Effect `Stream` body tops out around 15–20 MiB/s: every chunk is a
- *   fiber round trip. The raw case is a platform-to-platform `pipeTo` —
- *   zero JS per chunk — and runs at the client's line rate (71 MiB/s here).
+ * - An Effect `Stream` body tops out around 15-20 MiB/s: every chunk is a
+ *   fiber round trip. The raw case is a platform-to-platform `pipeTo` --
+ *   zero JS per chunk -- and runs at the client's line rate (71 MiB/s here).
  * - Sideband cannot be a bare pipe: the protocol caps a frame at 65515
- *   data bytes. Writing frames one at a time into the identity stream —
- *   whether from a `TransformStream` or a manual loop — also measured
+ *   data bytes. Writing frames one at a time into the identity stream --
+ *   whether from a `TransformStream` or a manual loop -- also measured
  *   ~15 MiB/s: the identity stream is unbuffered, so each `write` waits
  *   for the consumer, and 64 KiB per round trip is the ceiling.
  * - So: read ~1 MiB at a time (BYOB `readAtLeast` on byte sources, which
@@ -138,10 +138,10 @@ export const sidebandFrameAll = (band: SidebandBand, data: Uint8Array) => {
  *   16× fewer round trips; one extra memcpy per byte (~1 ms/MiB).
  *
  * Errors on the source abort the writable, which errors the body the
- * client is reading — the right signal for a truncated pack.
+ * client is reading -- the right signal for a truncated pack.
  */
 export const pumpPackBody = (options: {
-  /** Bytes before the pack (NAK/ACK lines, progress) — sent as-is. */
+  /** Bytes before the pack (NAK/ACK lines, progress) -- sent as-is. */
   readonly prefix: Uint8Array;
   readonly source: ReadableStream<Uint8Array>;
   readonly sideband: boolean;
@@ -227,7 +227,7 @@ export const sidebandFramedLength = (size: number): number =>
 /**
  * Re-frames a byte stream into band frames of EXACTLY
  * {@link SIDEBAND_DATA_MAX} data bytes (the last one shorter), independent
- * of how the input is chunked — so the output length is a pure function
+ * of how the input is chunked -- so the output length is a pure function
  * of the input length ({@link sidebandFramedLength}), which an R2 put of
  * a stream needs up front. Used to write a bundle's pre-framed twin.
  */

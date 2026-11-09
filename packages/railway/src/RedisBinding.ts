@@ -16,7 +16,7 @@ export const REDIS_URL_ENV = "REDIS_URL";
  * Each `{Op}Http.ts` is a thin `Layer.effect` over {@link makeRedisBinding}.
  * Deploy-time writes `REDIS_URL` onto the host Service as a Railway
  * reference (`${{RedisName.REDIS_URL}}`). Runtime commands use that URL
- * internally — callers never read `Config.Redacted`.
+ * internally -- callers never read `Config.Redacted`.
  *
  * The RESP client lives in `@alchemy.run/redis`. This file only wires the
  * Railway host binding.
@@ -57,7 +57,7 @@ export const makeRedisBinding = <Client>(options: { makeClient: (url: Url) => Cl
         const host = yield* Binding.Host;
         if (isRailwayHost(host)) {
           // Resolve the physical service name at apply, not at Service
-          // init — LogicalId (`Cache`) is not a Railway variable
+          // init -- LogicalId (`Cache`) is not a Railway variable
           // reference. Same Output-in-env pattern as ConnectPostgres.
           yield* host.bind`${redis}`({
             env: {

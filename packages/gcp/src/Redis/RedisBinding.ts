@@ -79,7 +79,7 @@ export const makeRedisBinding = <Client>(options: {
         yield* bind`${options.tag}(${instance})`({ iam: [authGrantOf(instance)] });
       }
       // A composed Output's binding key is its inspect string, which embeds
-      // the mapping functions' source — and that differs between the
+      // the mapping functions' source -- and that differs between the
       // deploy-time source and the bundled runtime. Name it per instance.
       const endpoint = yield* Output.named(
         endpointOf(instance),

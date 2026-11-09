@@ -6,7 +6,7 @@ import type { InsightRuleResource } from "./binding-common.ts";
 type InsightRules = [InsightRuleResource, ...InsightRuleResource[]];
 
 /**
- * Runtime binding for `cloudwatch:EnableInsightRules` — resume data
+ * Runtime binding for `cloudwatch:EnableInsightRules` -- resume data
  * collection for the bound Contributor Insights rules after they were
  * paused with {@link DisableInsightRules}. Bind it to one or more
  * {@link InsightRule} resources; the rule names are injected automatically.
@@ -16,7 +16,7 @@ type InsightRules = [InsightRuleResource, ...InsightRuleResource[]];
  * ### Managing Insight Rules
  * **Example:** Resume a Contributor Insights Rule
  * ```typescript
- * // init — grants cloudwatch:EnableInsightRules on the rule
+ * // init -- grants cloudwatch:EnableInsightRules on the rule
  * const enableInsightRules = yield* AWS.CloudWatch.EnableInsightRules(rule);
  *
  * // runtime

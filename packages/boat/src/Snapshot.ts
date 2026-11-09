@@ -258,13 +258,13 @@ export const SnapshotProvider = () =>
           const name = yield* snapshotName(id, news.name ?? output?.name);
           const setupHash = yield* setupHashOf(news);
 
-          // Observe — a ready snapshot of this exact setup is kept.
+          // Observe -- a ready snapshot of this exact setup is kept.
           const observed = yield* observeSnapshot(name);
           if (observed?.status === "ready" && output?.setupHash === setupHash) {
             return toAttributes(observed, setupHash);
           }
 
-          // Ensure — saving under an existing name replaces its disk.
+          // Ensure -- saving under an existing name replaces its disk.
           yield* session.note(`Building snapshot ${name}...`);
           return toAttributes(yield* takeSnapshot(id, name, news), setupHash);
         }),

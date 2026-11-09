@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `config:ListDiscoveredResources` — enumerate the
+ * Runtime binding for `config:ListDiscoveredResources` -- enumerate the
  * resource identifiers (type, id, name) AWS Config has discovered for a
  * resource type, including optionally deleted resources.
  *
@@ -12,7 +12,7 @@ import type * as Effect from "effect/Effect";
  * ### Discovering Resources
  * **Example:** List Discovered Buckets
  * ```typescript
- * // init — grants config:ListDiscoveredResources
+ * // init -- grants config:ListDiscoveredResources
  * const listDiscoveredResources = yield* AWS.Config.ListDiscoveredResources();
  *
  * // runtime

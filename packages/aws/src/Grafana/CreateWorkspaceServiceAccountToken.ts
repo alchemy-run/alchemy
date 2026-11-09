@@ -14,7 +14,7 @@ export interface CreateWorkspaceServiceAccountTokenRequest {
   /** The id of the service account to mint the token for. */
   serviceAccountId: string;
   /**
-   * How long the token is valid — converted to whole seconds on the wire
+   * How long the token is valid -- converted to whole seconds on the wire
    * (`secondsToLive`). Maximum 30 days.
    */
   timeToLive: Duration.Input;
@@ -26,7 +26,7 @@ export interface CreateWorkspaceServiceAccountTokenRequest {
  * {@link Workspace}.
  *
  * Mints a short-lived API token for a Grafana service account. The token
- * `key` is returned exactly once, as a `Redacted` value — use it as a
+ * `key` is returned exactly once, as a `Redacted` value -- use it as a
  * `Bearer` token against the workspace's Grafana HTTP API. Ideal for token
  * rotation from a scheduled Lambda. Provide the implementation with
  * `Effect.provide(AWS.Grafana.CreateWorkspaceServiceAccountTokenHttp)`.

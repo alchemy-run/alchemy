@@ -7,8 +7,8 @@ import type { Application } from "./Application.ts";
  * Shared scaffolding for AWS Kinesis Analytics v2 (Managed Service for
  * Apache Flink) HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, makeKinesisAnalyticsHttpBinding({ … }))` over the
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, makeKinesisAnalyticsHttpBinding({ ... }))` over the
  * builder below. Everything except the operation and the IAM action list is
  * boilerplate.
  *
@@ -21,7 +21,7 @@ import type { Application } from "./Application.ts";
 /**
  * Account-level variant of {@link makeKinesisAnalyticsHttpBinding} for
  * operations that take no application argument (`ListApplications`). The
- * deploy-time half grants `actions` on `*` — Kinesis Analytics list calls
+ * deploy-time half grants `actions` on `*` -- Kinesis Analytics list calls
  * are not resource-scoped.
  */
 export const makeKinesisAnalyticsAccountHttpBinding = <I, A, E, R>(options: {
@@ -72,7 +72,7 @@ export const makeKinesisAnalyticsHttpBinding = <
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <App extends Application>(application: App) {
-      // Outputs yield a DEFERRED effect — resolve again per invocation below.
+      // Outputs yield a DEFERRED effect -- resolve again per invocation below.
       const ApplicationName = yield* application.applicationName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${application})`({

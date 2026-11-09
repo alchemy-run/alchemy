@@ -24,7 +24,7 @@ export const readWriteDatabaseIam: BindingIam = {
 
 const trimPath = (path: string) => path.replace(/^\/+|\/+$/g, "");
 
-/** `"a/b/c"` → `{ parent: "a/b", last: "c" }`. */
+/** `"a/b/c"` -> `{ parent: "a/b", last: "c" }`. */
 const splitLast = (path: string) => {
   const trimmed = trimPath(path);
   const at = trimmed.lastIndexOf("/");

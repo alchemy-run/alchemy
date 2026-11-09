@@ -6,8 +6,8 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `DescribeDBClusterEndpoints` operation (IAM action
  * `rds:DescribeDBClusterEndpoints`).
  *
- * Lists a Neptune cluster's endpoints — the writer, reader, and any custom
- * endpoints — so a function can discover the host names to route Gremlin or
+ * Lists a Neptune cluster's endpoints -- the writer, reader, and any custom
+ * endpoints -- so a function can discover the host names to route Gremlin or
  * openCypher traffic to. Provide the implementation with
  * `Effect.provide(AWS.Neptune.DescribeDBClusterEndpointsHttp)`.
  * ### Monitoring Clusters

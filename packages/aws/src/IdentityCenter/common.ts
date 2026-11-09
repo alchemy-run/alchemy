@@ -23,8 +23,8 @@ export class IdentityCenterCommonInvalidProps extends Data.TaggedError(
 /**
  * Unwrap an identity-store sensitive field. Distilled decodes
  * `smithy.api#sensitive` strings (`DisplayName`, `Description`, `UserName`,
- * …) into `Redacted.Redacted<string>` at runtime, so any resource-level
- * comparison or Attributes projection must unwrap first — comparing the
+ * ...) into `Redacted.Redacted<string>` at runtime, so any resource-level
+ * comparison or Attributes projection must unwrap first -- comparing the
  * Redacted wrapper against a plain string is always `false` and would make
  * reconcile loop or persist `<redacted>` wrappers into state.
  */

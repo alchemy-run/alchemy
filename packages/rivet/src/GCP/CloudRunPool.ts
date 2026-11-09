@@ -36,7 +36,7 @@ export interface CloudRunPoolOptions extends PoolSettings {
  * plane, and a worker pool whose instances host every `Rivet.DurableObject`
  * given this pool. Worker pools serve no requests and keep a fixed number
  * of instances running, which is what a node is: it only connects out to
- * the control plane. Works with any control plane it can reach —
+ * the control plane. Works with any control plane it can reach --
  * `RivetGCP.ComputeEngineControlPlane`, `RivetCloud.ControlPlane`, or one on
  * another cloud.
  *

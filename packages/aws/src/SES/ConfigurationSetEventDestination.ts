@@ -100,7 +100,7 @@ export interface ConfigurationSetEventDestination extends Resource<
 > {}
 
 /**
- * An event destination on an SES v2 configuration set — streams
+ * An event destination on an SES v2 configuration set -- streams
  * send/delivery/bounce/complaint (and open/click) events to SNS,
  * EventBridge, or CloudWatch.
  * ### Creating Event Destinations
@@ -214,7 +214,7 @@ export const ConfigurationSetEventDestinationProvider = () =>
           })
           .pipe(
             Effect.map((r) => r.EventDestinations ?? []),
-            // configuration set (or destination) missing → not found
+            // configuration set (or destination) missing -> not found
             Effect.catchTag("NotFoundException", () =>
               Effect.succeed([] as sesv2Types.EventDestination[]),
             ),
@@ -289,11 +289,11 @@ export const ConfigurationSetEventDestinationProvider = () =>
           const name = output?.eventDestinationName ?? (yield* createName(id, news));
           const desired = toDefinition(news);
 
-          // 1. OBSERVE — look the destination up on the owning set.
+          // 1. OBSERVE -- look the destination up on the owning set.
           const observed = yield* findDestination(configurationSetName, name);
 
           if (observed === undefined) {
-            // 2. ENSURE — create; AlreadyExists is a race → converge with
+            // 2. ENSURE -- create; AlreadyExists is a race -> converge with
             //    an update instead.
             yield* sesv2
               .createConfigurationSetEventDestination({
@@ -311,7 +311,7 @@ export const ConfigurationSetEventDestinationProvider = () =>
                 ),
               );
           } else if (!isInSync(observed, desired)) {
-            // 3. SYNC — apply the delta only when observed drifted.
+            // 3. SYNC -- apply the delta only when observed drifted.
             yield* sesv2.updateConfigurationSetEventDestination({
               ConfigurationSetName: configurationSetName,
               EventDestinationName: name,

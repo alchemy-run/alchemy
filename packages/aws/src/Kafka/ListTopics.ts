@@ -16,7 +16,7 @@ import type { ServerlessCluster } from "./ServerlessCluster.ts";
  * const listTopics = yield* Kafka.ListTopics(cluster);
  *
  * const page = yield* listTopics({ TopicNameFilter: "orders" });
- * // page.Topics → [{ TopicName: "orders", PartitionCount: 3, … }]
+ * // page.Topics -> [{ TopicName: "orders", PartitionCount: 3, ... }]
  * ```
  *
  * @binding

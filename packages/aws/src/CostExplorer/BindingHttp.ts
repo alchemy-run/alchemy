@@ -7,14 +7,14 @@ import type { CostCategory } from "./CostCategory.ts";
 /**
  * Shared HTTP scaffolding for the Cost Explorer runtime bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the builders
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the builders
  * below. Everything except the operation, the IAM action, and (for the
  * scoped builders) the injected ARN is boilerplate.
  *
  * Cost Explorer is a global service served exclusively from the `us-east-1`
  * endpoint, so every operation is resolved with the Region pinned via
- * {@link pinCe} — exactly like the resource providers in `common.ts`.
+ * {@link pinCe} -- exactly like the resource providers in `common.ts`.
  *
  * Per the `ce` service authorization reference, most query actions support
  * no resource types, so the account-level builder grants on
@@ -26,7 +26,7 @@ import type { CostCategory } from "./CostCategory.ts";
 /**
  * Build the impl Effect for an account-level Cost Explorer operation (the
  * cost/usage queries, forecasts, recommendations, and cost allocation tag
- * operations — none of which are resource-scoped).
+ * operations -- none of which are resource-scoped).
  */
 export const makeCostExplorerHttpBinding = <
   I extends object,
@@ -64,7 +64,7 @@ export const makeCostExplorerHttpBinding = <
       }
       return Effect.fn(`AWS.CostExplorer.${options.capability}`)(function* (request?: I) {
         // The region must also be pinned at the call site: the yield-time
-        // snapshot is only a fallback — the calling fiber's ambient Region
+        // snapshot is only a fallback -- the calling fiber's ambient Region
         // (the host Function's own region) wins over it.
         return yield* pinCe(op((request ?? {}) as I));
       });
@@ -114,7 +114,7 @@ export const makeAnomalyMonitorHttpBinding = <
       return Effect.fn(`AWS.CostExplorer.${options.capability}(${monitor.LogicalId})`)(function* (
         request: Omit<I, "MonitorArn">,
       ) {
-        // Call-site region pin — see makeCostExplorerHttpBinding above.
+        // Call-site region pin -- see makeCostExplorerHttpBinding above.
         return yield* pinCe(
           op({
             ...request,
@@ -129,7 +129,7 @@ export const makeAnomalyMonitorHttpBinding = <
  * Build the impl Effect for an operation bound to one {@link CostCategory}.
  * The runtime callable injects the bound category's ARN as the request's
  * `CostCategoryArn`. The deploy-time half grants `iamActions` on
- * `Resource: ["*"]` — per the `ce` service authorization reference,
+ * `Resource: ["*"]` -- per the `ce` service authorization reference,
  * `ce:ListCostCategoryResourceAssociations` supports no resource types, so
  * a grant scoped to the category ARN would never match.
  */
@@ -170,7 +170,7 @@ export const makeCostCategoryHttpBinding = <
       return Effect.fn(`AWS.CostExplorer.${options.capability}(${category.LogicalId})`)(function* (
         request?: Omit<I, "CostCategoryArn">,
       ) {
-        // Call-site region pin — see makeCostExplorerHttpBinding above.
+        // Call-site region pin -- see makeCostExplorerHttpBinding above.
         return yield* pinCe(
           op({
             ...request,

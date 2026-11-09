@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { KxEnvironment } from "./KxEnvironment.ts";
 
 /**
- * Runtime binding for `finspace:CreateKxScalingGroup` — provisions a shared compute host in the bound environment that multiple kdb clusters can be placed on.
+ * Runtime binding for `finspace:CreateKxScalingGroup` -- provisions a shared compute host in the bound environment that multiple kdb clusters can be placed on.
  * Provide the implementation with
  * `Effect.provide(AWS.FinSpace.CreateKxScalingGroupHttp)`.
  * ### Managing Scaling Groups

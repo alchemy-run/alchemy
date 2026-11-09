@@ -66,7 +66,7 @@ const options: Array<{ value: RailwayAuthConfig["method"]; label: string; descri
     {
       value: "oauth",
       label: "OAuth (CLI login session)",
-      description: "recommended — open railway.com/cli-login, confirm the pairing code",
+      description: "recommended \u2014 open railway.com/cli-login, confirm the pairing code",
     },
     {
       value: "env",
@@ -97,10 +97,10 @@ const resolveApiBaseUrl = (explicit?: string) =>
  *
  * Supported methods:
  * - `env`: reads `RAILWAY_API_TOKEN` (account Bearer). Project tokens are
- *   not used — they cannot reach workspace-wide operations.
+ *   not used -- they cannot reach workspace-wide operations.
  * - `stored`: prompts for an API token and stores it in the provider file.
- * - `oauth`: CLI login session (`loginSessionCreate` → open the pairing URL →
- *   poll `loginSessionVerify` / `loginSessionConsume` → store the token).
+ * - `oauth`: CLI login session (`loginSessionCreate` -> open the pairing URL ->
+ *   poll `loginSessionVerify` / `loginSessionConsume` -> store the token).
  *   Does not require a pre-existing token. An optional `RAILWAY_API_URL`
  *   overrides the backboard host (default `https://backboard.railway.com`).
  */
@@ -189,7 +189,7 @@ export const RailwayAuth = AuthProviderLayer<RailwayAuthConfig, RailwayResolvedC
                 const token = yield* getEnvRedacted(RAILWAY_API_TOKEN_ENV);
                 if (!token) {
                   yield* Interaction.warning(
-                    `Railway: ${RAILWAY_API_TOKEN_ENV} is not currently set — export it before deploying.`,
+                    `Railway: ${RAILWAY_API_TOKEN_ENV} is not currently set \u2014 export it before deploying.`,
                   );
                 }
                 return { method: "env" as const };

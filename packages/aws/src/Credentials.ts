@@ -13,7 +13,7 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { AWSEnvironment } from "./Environment.ts";
 
-// NB: do not re-export `fromEnv` here — it is unavailable under the
+// NB: do not re-export `fromEnv` here -- it is unavailable under the
 // browser/workerd bundle condition (`credentials.browser`), which would break
 // any Cloudflare Worker that transitively imports this module.
 export { Credentials, fromCredentials } from "@distilled.cloud/aws/Credentials";
@@ -44,7 +44,7 @@ export const fromEnvironment = Layer.effect(
  * outer ONCE (e.g. when a binding initializes) and reuse the returned resolver
  * for every request. That is what makes the cache actually cache: each request
  * runs the shared resolver, which only calls `AssumeRole` when the cached
- * credentials are missing or within the refresh window — never per request.
+ * credentials are missing or within the refresh window -- never per request.
  *
  * `roleArn` and `base` are accepted as effects/layers so the long-lived signing
  * credentials and role ARN can be read lazily at refresh time (e.g. from a
@@ -131,7 +131,7 @@ export const makeAssumeRoleResolver = (options: {
  * returned temporary credentials (cached until shortly before expiry).
  *
  * `base` supplies the long-lived credentials used to *sign* the `AssumeRole`
- * call — typically static IAM-user access keys (see
+ * call -- typically static IAM-user access keys (see
  * {@link fromCredentials}). The `AssumeRole` request itself is signed against
  * `base`, while the temporary credentials it returns become the resolved
  * `Credentials` for every downstream AWS call.

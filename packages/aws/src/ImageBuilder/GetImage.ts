@@ -5,8 +5,8 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `imagebuilder:GetImage`.
  *
- * Reads an image build version by ARN — its state (`BUILDING`, `AVAILABLE`,
- * `CANCELLED`, `FAILED`, …) and the AMIs/containers it produced. Build
+ * Reads an image build version by ARN -- its state (`BUILDING`, `AVAILABLE`,
+ * `CANCELLED`, `FAILED`, ...) and the AMIs/containers it produced. Build
  * versions are created dynamically by pipeline runs, so this is an
  * account-level binding: pass the `imageBuildVersionArn` returned by
  * `StartImagePipelineExecution` or found via `ListImagePipelineImages`.
@@ -15,7 +15,7 @@ import type * as Effect from "effect/Effect";
  * ### Observing Builds
  * **Example:** Poll a Build's State
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getImage = yield* AWS.ImageBuilder.GetImage();
  *
  * // runtime

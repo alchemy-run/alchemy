@@ -6,7 +6,7 @@ import type { Job } from "./Job.ts";
 export interface ListJobRunsRequest extends Omit<SVC.ListJobRunsRequest, "Name"> {}
 
 /**
- * Runtime binding for `databrew:ListJobRuns` — lists the previous runs of
+ * Runtime binding for `databrew:ListJobRuns` -- lists the previous runs of
  * the bound DataBrew job (newest first, paginated via `NextToken`).
  * ### Observing Job Runs
  * **Example:** List Recent Runs

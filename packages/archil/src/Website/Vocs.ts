@@ -20,7 +20,7 @@ export interface VocsProps extends FrameworkSiteProps {
 /**
  * Deploy a [Vocs](https://vocs.dev) documentation project to an Archil
  * sandbox. Static assets first, then Vocs' Waku RSC handler
- * (`/about` → `about/index.html`, otherwise SSR).
+ * (`/about` -> `about/index.html`, otherwise SSR).
  *
  *
  * ### Creating Vocs Sites

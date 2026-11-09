@@ -13,7 +13,7 @@ export interface GetCertificateRequest extends Omit<
  *
  * Bind a {@link CertificateAuthority} inside a function runtime to retrieve
  * a certificate previously issued by the CA (via the
- * {@link IssueCertificate} binding). Issuance is asynchronous — retry while
+ * {@link IssueCertificate} binding). Issuance is asynchronous -- retry while
  * the typed `RequestInProgressException` is observed. Provide
  * `ACMPCA.GetCertificateHttp` on the Function effect to implement the
  * binding.

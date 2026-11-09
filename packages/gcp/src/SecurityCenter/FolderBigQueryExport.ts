@@ -32,14 +32,14 @@ export type FolderBigQueryExportProps = {
    * Export id (the `{export}` segment of
    * `folders/{folder}/bigQueryExports/{export}`). If omitted, a unique id
    * is generated from the stack, stage, and logical id. Letters, digits,
-   * and hyphens; max 63 characters. Immutable — changing it replaces the
+   * and hyphens; max 63 characters. Immutable -- changing it replaces the
    * export.
    */
   exportId?: string;
   /**
    * Parent folder (`folders/{folder}` or the numeric id). Defaults to
    * the project's Resource Manager folder ancestor.
-   * Immutable — changing it replaces the export.
+   * Immutable -- changing it replaces the export.
    */
   folder?: string;
   /**
@@ -54,7 +54,7 @@ export type FolderBigQueryExportProps = {
   filter?: string;
   /**
    * Human-readable description. BigQuery exports have no labels field, so
-   * Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes.
    */
   description?: string;
@@ -120,7 +120,7 @@ export interface FolderBigQueryExportLookup {
 /**
  * A folder-scoped Security Command Center BigQuery export.
  *
- * Exports have no labels field — Alchemy stamps ownership into the
+ * Exports have no labels field -- Alchemy stamps ownership into the
  * description so `list` / nuke can find them. Export id and folder are
  * identity. Dataset, filter, and description update in place.
  *

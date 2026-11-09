@@ -2,7 +2,7 @@
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 /**
  * Ambient app types injected into the user's project by the integration
- * (`injectTypes` in `astro:config:done`) — the fork of upstream
+ * (`injectTypes` in `astro:config:done`) -- the fork of upstream
  * `@astrojs/cloudflare/types.d.ts`: `Astro.locals` carries the Cloudflare
  * runtime (`locals.runtime.ctx`, `caches`, `cf`).
  */

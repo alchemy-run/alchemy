@@ -15,7 +15,7 @@ import type { ViteBuildChildConfig, ViteBuildChildResult } from "./ViteChild.sha
  * working directory. Running the build out of process is the isolation
  * boundary: vite resolves a relative root against live `process.cwd()`,
  * plugins read cwd freely, and the build's own spawns (via cross-spawn)
- * `process.chdir` the hosting process transiently — none of which is safe
+ * `process.chdir` the hosting process transiently -- none of which is safe
  * inside the concurrent engine/test process.
  *
  * Protocol: V8-serialized {@link ViteBuildChildConfig} on stdin; the child
@@ -53,8 +53,8 @@ const program = Effect.gen(function* () {
 });
 
 // The parent streams this child's output and turns its exit code + stderr
-// into the resource-scoped build error. Skip runMain's own `✖` report, but
-// print the cause: vite only logs `✗ Build failed in …`, so this is the only
+// into the resource-scoped build error. Skip runMain's own `\u2716` report, but
+// print the cause: vite only logs `x Build failed in ...`, so this is the only
 // place the actual error (a rolldown diagnostic, a plugin throwing during
 // config resolution) reaches the parent.
 runMain(

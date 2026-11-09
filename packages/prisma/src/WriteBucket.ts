@@ -28,7 +28,7 @@ export interface WriteBucket extends Binding.Service<
 
 /**
  * Write-only client for a Prisma Object Store bucket. It deliberately exposes
- * no read operations — see the role caveat on {@link WriteBucketBinding}.
+ * no read operations -- see the role caveat on {@link WriteBucketBinding}.
  */
 export interface WriteBucketClient {
   /**
@@ -46,7 +46,7 @@ export interface WriteBucketClient {
   delete(keys: string | string[]): Effect.Effect<void, BucketError, RuntimeContext>;
   /**
    * Mint a presigned upload URL, so a browser can write the object without
-   * credentials. Pure client-side SigV4 — no request is made to the store.
+   * credentials. Pure client-side SigV4 -- no request is made to the store.
    *
    * When `contentType` is set the uploader must send exactly that
    * `Content-Type`, because it is signed into the URL.
@@ -71,8 +71,8 @@ export interface WriteBucketClient {
  * **Role caveat.** Prisma bucket keys carry one of two coarse roles, `read`
  * and `read_write`; there is no write-only role. This binding therefore mints
  * a `read_write` key, and the credential it puts in the host environment can
- * also read. The write-only contract is enforced client-side —
- * {@link WriteBucketClient} exposes no read operations — and becomes a
+ * also read. The write-only contract is enforced client-side --
+ * {@link WriteBucketClient} exposes no read operations -- and becomes a
  * server-side boundary if Prisma grows a write-only role.
  *
  * ### Binding a Bucket

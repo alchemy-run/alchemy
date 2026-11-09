@@ -52,7 +52,7 @@ export interface HarvestJobEventSourceProps extends EventRouteProps {
    * Restrict to notifications about specific harvest jobs (matched against
    * the event's top-level `resources`, which contains the harvest job ARN
    * `{endpointArn}/harvestJob/{name}`). Prefix patterns are not supported
-   * here — filter in the handler for per-endpoint routing.
+   * here -- filter in the handler for per-endpoint routing.
    */
   harvestJobArns?: readonly string[];
 }
@@ -63,10 +63,10 @@ export interface HarvestJobEventSourceProps extends EventRouteProps {
  * the account's default EventBridge bus (source `aws.mediapackagev2`,
  * detail-type `MediaPackageV2 HarvestJob Notification`) when a live-to-VOD
  * harvest job completes or fails; this subscribes the host Function to
- * those events so it can publish the exported clip — or alert on a failed
- * export — without polling `GetHarvestJob`.
+ * those events so it can publish the exported clip -- or alert on a failed
+ * export -- without polling `GetHarvestJob`.
  *
- * MediaPackage publishes to EventBridge automatically — no additional
+ * MediaPackage publishes to EventBridge automatically -- no additional
  * resource is created besides the EventBridge rule targeting the host.
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.

@@ -6,15 +6,15 @@ import type { ExperimentTemplate } from "./ExperimentTemplate.ts";
 /**
  * Runtime binding for `fis:GetExperimentTemplate`.
  *
- * Reads the bound {@link ExperimentTemplate}'s full definition — targets,
- * actions, stop conditions, log and report configuration — so a runtime
+ * Reads the bound {@link ExperimentTemplate}'s full definition -- targets,
+ * actions, stop conditions, log and report configuration -- so a runtime
  * function can inspect the experiment it is about to start. The template id
  * is injected from the binding. Provide the implementation with
  * `Effect.provide(AWS.FIS.GetExperimentTemplateHttp)`.
  * ### Inspecting Templates
  * **Example:** Read the Bound Template's Definition
  * ```typescript
- * // init — bind the operation to the experiment template
+ * // init -- bind the operation to the experiment template
  * const getExperimentTemplate = yield* AWS.FIS.GetExperimentTemplate(template);
  *
  * // runtime

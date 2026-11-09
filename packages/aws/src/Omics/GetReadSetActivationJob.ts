@@ -11,7 +11,7 @@ export interface GetReadSetActivationJobRequest extends Omit<
 /**
  * Runtime binding for `omics:GetReadSetActivationJob`.
  *
- * Bind this operation to a `SequenceStore` to get a callable that reads the status of a read-set activation job — the
+ * Bind this operation to a `SequenceStore` to get a callable that reads the status of a read-set activation job -- the
  * store/workflow id is injected automatically and the action is granted on the
  * bound resource. Provide the implementation with
  * `Effect.provide(AWS.Omics.GetReadSetActivationJobHttp)`.

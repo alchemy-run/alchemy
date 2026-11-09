@@ -17,7 +17,7 @@ export interface StartSavingsPlansPurchaseRecommendationGenerationRequest
  * ### Savings Plans
  * **Example:** Refresh the Recommendations
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const startSavingsPlansPurchaseRecommendationGeneration = yield* AWS.CostExplorer.StartSavingsPlansPurchaseRecommendationGeneration();
  *
  * // runtime

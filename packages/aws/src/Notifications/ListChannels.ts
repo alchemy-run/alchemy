@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { NotificationConfiguration } from "./NotificationConfiguration.ts";
 
 /**
- * Request for {@link ListChannels} — the bound configuration's ARN is
+ * Request for {@link ListChannels} -- the bound configuration's ARN is
  * injected automatically.
  */
 export interface ListChannelsRequest extends Omit<
@@ -21,7 +21,7 @@ export interface ListChannelsRequest extends Omit<
  * ### Reading Configuration Channels
  * **Example:** List a Configuration's Channels
  * ```typescript
- * // init — bind the operation to the configuration
+ * // init -- bind the operation to the configuration
  * const listChannels = yield* AWS.Notifications.ListChannels(config);
  *
  * // runtime

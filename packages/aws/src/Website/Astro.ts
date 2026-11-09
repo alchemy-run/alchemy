@@ -14,14 +14,14 @@ export const ASTRO_AWS_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/astr
 export const ASTRO_WEB_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/astro/node";
 
 export type AstroProps = FrameworkSiteProps<{
-  // Astro is configured in YOUR `astro.config.*`, which loads natively —
+  // Astro is configured in YOUR `astro.config.*`, which loads natively --
   // this resource only deploys it. The `astro` bag is a deploy-time
   // overlay merged OVER the file for values a config file cannot hold
   // (per-stage values, other resources' Outputs).
   /**
    * Deploy-time Astro config overrides, merged OVER your natively-loaded
    * `astro.config.*` (values here win). Use it for values that vary per
-   * stage or derive from other resources' Outputs — everything else
+   * stage or derive from other resources' Outputs -- everything else
    * belongs in the config file.
    */
   astro?: {
@@ -30,7 +30,7 @@ export type AstroProps = FrameworkSiteProps<{
     /** Base path the site is served from (astro's `base`). */
     base?: string;
     /**
-     * Astro output target — a deploy-topology decision (whether a
+     * Astro output target -- a deploy-topology decision (whether a
      * server function exists). `"server"` renders pages on demand in
      * the Lambda; individual pages opt into prerendering with
      * `export const prerender = true`. `"static"` prerenders every
@@ -57,7 +57,7 @@ export type AstroProps = FrameworkSiteProps<{
   /**
    * Serve the built error page (e.g. astro's `404.html`) for requests that
    * match no uploaded file. Only applies to `output: "static"`
-   * sites — a server-backed site forwards misses to the Lambda instead.
+   * sites -- a server-backed site forwards misses to the Lambda instead.
    */
   errorPage?: string;
   /**
@@ -82,14 +82,14 @@ export type AstroProps = FrameworkSiteProps<{
  *
  * The build runs through `@alchemy.run/frontend-frameworks/astro` with the
  * `@alchemy.run/frontend-frameworks/astro/aws` deploy target (a wrangler-free
- * AWS Lambda adapter is injected — your `astro.config.*` must not declare
- * one) — the package must be installed in your project.
+ * AWS Lambda adapter is injected -- your `astro.config.*` must not declare
+ * one) -- the package must be installed in your project.
  *
  * Pages render on demand by default (`output: "server"`); pages that
  * `export const prerender = true` are prerendered at build time and served
  * from S3. When your `astro.config.*` or `astro: { output: "static" }`
  * declares a static site, every page is prerendered and the deploy is
- * assets-only — no Lambda.
+ * assets-only -- no Lambda.
  *
  * Your `astro.config.*` is the home for Astro configuration and loads
  * natively; the `astro` prop is a deploy-time override bag merged OVER
@@ -150,7 +150,7 @@ export type AstroProps = FrameworkSiteProps<{
  */
 export const Astro = (id: string, props: InputProps<AstroProps, "server"> = {}) => {
   const p = props as AstroProps;
-  // The prop wins, then the config file's `output`, then `"server"` —
+  // The prop wins, then the config file's `output`, then `"server"` --
   // astro's own zero-config default is `"static"`. Resolved here because
   // an assets-only site creates no Lambda.
   return resolveAstroOutput({ rootDir: p.rootDir, config: p.config, output: p.astro?.output }).pipe(

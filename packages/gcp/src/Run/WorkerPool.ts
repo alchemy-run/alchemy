@@ -137,7 +137,7 @@ export type InstanceSplit = {
   type?: string;
   /** Revision to assign instances to when allocating by revision. */
   revision?: string;
-  /** Percent of instances (0–100). */
+  /** Percent of instances (0-100). */
   percent?: number;
 };
 
@@ -161,11 +161,11 @@ export type WorkerPoolProps = PlatformProps & {
    * `projects/{project}/locations/{location}/workerPools/{workerPool}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Must begin with a letter, not end with a hyphen, and be
-   * fewer than 50 characters. Immutable — changing it replaces the pool.
+   * fewer than 50 characters. Immutable -- changing it replaces the pool.
    */
   workerPoolId?: string;
   /**
-   * Region (`us-central1`, `europe-west1`, …). Immutable — changing it
+   * Region (`us-central1`, `europe-west1`, ...). Immutable -- changing it
    * replaces the pool. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -263,7 +263,7 @@ export type WorkerPool = Resource<
     workerPoolId: string;
     /** Project id. */
     project: string;
-    /** Region (`us-central1`, …). */
+    /** Region (`us-central1`, ...). */
     location: string;
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;
@@ -281,7 +281,7 @@ export type WorkerPool = Resource<
     latestCreatedRevision: string | undefined;
     /** Latest Ready revision name. */
     latestReadyRevision: string | undefined;
-    /** Terminal condition state (`CONDITION_SUCCEEDED`, …). */
+    /** Terminal condition state (`CONDITION_SUCCEEDED`, ...). */
     terminalConditionState: string | undefined;
     /** True while Cloud Run is still reconciling the desired state. */
     reconciling: boolean;
@@ -327,7 +327,7 @@ export interface WorkerPoolLookup {
    */
   workerPoolId: string;
   /**
-   * Region (`us-central1`, `europe-west1`, …). `US-CENTRAL1` is accepted
+   * Region (`us-central1`, `europe-west1`, ...). `US-CENTRAL1` is accepted
    * and normalized to `us-central1`.
    */
   location?: string;

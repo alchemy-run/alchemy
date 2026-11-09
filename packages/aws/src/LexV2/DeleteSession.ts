@@ -13,7 +13,7 @@ export interface DeleteSessionRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `lex:DeleteSession` — end a conversation with an
+ * Runtime binding for `lex:DeleteSession` -- end a conversation with an
  * Amazon Lex V2 bot alias, discarding its session state so the next user
  * input starts a fresh conversation.
  *

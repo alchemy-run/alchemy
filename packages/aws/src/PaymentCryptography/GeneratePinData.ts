@@ -9,7 +9,7 @@ export interface GeneratePinDataRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `payment-cryptography:GeneratePinData` — generates
+ * Runtime binding for `payment-cryptography:GeneratePinData` -- generates
  * PIN-related data (PIN, PVV, PIN block) under a PIN generation {@link Key}
  * (e.g. a Visa PVK) and returns the PIN block encrypted under a PIN
  * encryption {@link Key} (PEK). Provide `GeneratePinDataHttp` on the

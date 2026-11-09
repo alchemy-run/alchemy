@@ -36,13 +36,13 @@ export interface SnippetRule {
 
 export interface SnippetRulesProps {
   /**
-   * Zone the rules apply to. Stable — changing the zone triggers
+   * Zone the rules apply to. Stable -- changing the zone triggers
    * replacement.
    */
   zoneId: string;
   /**
    * Ordered list of snippet rules. The whole list is owned by this
-   * resource and replaced atomically on every change — rules managed
+   * resource and replaced atomically on every change -- rules managed
    * elsewhere in the zone will be overwritten on deploy.
    */
   rules: SnippetRule[];
@@ -82,7 +82,7 @@ export type SnippetRules = Resource<
  *
  * Snippet rules activate snippets against traffic: each rule pairs a
  * Rules-language expression with the name of the snippet to execute on
- * matching requests. The zone has exactly one rule list — this resource
+ * matching requests. The zone has exactly one rule list -- this resource
  * owns it in its entirety (PUT-replace semantics), so there should be at
  * most one `SnippetRules` resource per zone.
  *
@@ -125,7 +125,7 @@ export const SnippetRulesProvider = () =>
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       // Snippet rules are a per-zone singleton with no account-wide list
-      // API — enumerate every zone and read its rule list. Zones with no
+      // API -- enumerate every zone and read its rule list. Zones with no
       // rules have nothing to manage (matches `read` returning undefined
       // for an empty list), so skip them.
       const allZones = yield* listAllZones(accountId);
@@ -162,7 +162,7 @@ export const SnippetRulesProvider = () =>
       const observed = yield* listObservedRules(zoneId);
       if (observed.length === 0) return undefined;
       const attrs: SnippetRulesAttributes = { zoneId, rules: observed };
-      // No prior state of our own but the zone already has rules — they
+      // No prior state of our own but the zone already has rules -- they
       // may be managed by hand or by another tool. Refuse to take over
       // unless adoption is explicitly allowed.
       if (output === undefined) return Unowned(attrs);
@@ -204,7 +204,7 @@ export const SnippetRulesProvider = () =>
 /**
  * `ListRulesResponse` is untyped in distilled (`unknown`); the wire shape
  * is an array of rule objects under `result`, camelized by the service key
- * dictionary at decode (`snippet_name` → `snippetName`).
+ * dictionary at decode (`snippet_name` -> `snippetName`).
  */
 interface WireRule {
   readonly snippetName?: string;
@@ -215,7 +215,7 @@ interface WireRule {
 
 const listObservedRules = (zoneId: string) =>
   snippets.listRules({ zoneId }).pipe(
-    // A zone that has never had a snippet-rule list 404s — there is simply
+    // A zone that has never had a snippet-rule list 404s -- there is simply
     // no rule list, which is equivalent to an empty one.
     Effect.catchTag("SnippetRulesNotFound", () => Effect.succeed([])),
     Effect.map((result): SnippetRuleAttribute[] => {

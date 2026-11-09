@@ -7,7 +7,7 @@ export interface TranslateKeyMaterialRequest
   extends paymentcryptographydata.TranslateKeyMaterialInput {}
 
 /**
- * Runtime binding for `payment-cryptography:TranslateKeyMaterial` —
+ * Runtime binding for `payment-cryptography:TranslateKeyMaterial` --
  * translates an ECDH-derived TR-31 wrapped key block into a TR-31 key block
  * wrapped under a Key Encryption Key, without importing the short-lived key
  * into the service. The key identifiers live in nested request structures
@@ -19,7 +19,7 @@ export interface TranslateKeyMaterialRequest
  * ### Key Material Translation
  * **Example:** Translate an ECDH-wrapped key to a KEK-wrapped TR-31 block
  * ```typescript
- * // init — grant on every key the request references
+ * // init -- grant on every key the request references
  * const translateKeyMaterial =
  *   yield* PaymentCryptography.TranslateKeyMaterial(ecdhPrivateKey, caKey, kek);
  * const ecdhPrivateKeyArn = yield* ecdhPrivateKey.keyArn;

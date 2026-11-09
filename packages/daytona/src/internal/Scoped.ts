@@ -26,7 +26,7 @@ export type ScopedOperation<I, O, E, F extends PropertyKey = SandboxFixed> =
 
 /**
  * Every operation of a generated service module (`@distilled.cloud/daytona/process`,
- * `/git`, …), re-exposed with Daytona's own parameters and typed errors,
+ * `/git`, ...), re-exposed with Daytona's own parameters and typed errors,
  * minus the fields the client supplies (the sandbox and organization).
  */
 export type ScopedModule<M, F extends PropertyKey = SandboxFixed> = {

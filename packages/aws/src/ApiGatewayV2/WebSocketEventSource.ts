@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Api } from "./Api.ts";
 
 /**
- * The event shape a WebSocket route handler receives — the API Gateway v2
+ * The event shape a WebSocket route handler receives -- the API Gateway v2
  * WebSocket proxy event (`requestContext.connectionId`, `routeKey`,
  * `eventType`, plus `body` for `MESSAGE` events).
  */

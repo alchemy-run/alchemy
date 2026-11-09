@@ -25,6 +25,6 @@ export interface ServicesShape {
 /**
  * Rivet Services: Rivet's prebuilt node, which hosts Durable Streams and
  * agentOS. Provided by a services pool on a host (`RivetDocker.ServicesPool`,
- * …), and required by every `Rivet.DurableStream`.
+ * ...), and required by every `Rivet.DurableStream`.
  */
 export class Services extends Context.Service<Services, ServicesShape>()("Rivet.Services") {}

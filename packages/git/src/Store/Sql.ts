@@ -5,11 +5,11 @@ import type { DurableObjectState, SqlStorageValue } from "@alchemy.run/cloudflar
  * Exposes:
  *
  * - the exact DDL as idempotent init effects ({@link initRepoSchema},
- *   {@link initRegistrySchema}) — run in the DO's outer init under
+ *   {@link initRegistrySchema}) -- run in the DO's outer init under
  *   `blockConcurrencyWhile` semantics,
  * - typed row interfaces mirroring each table,
  * - a small {@link SqlClient} over the raw synchronous `cf.SqlStorage`
- *   surface: `all`/`first`/`run`, the chunked-`IN` helper (≤ 100 bound
+ *   surface: `all`/`first`/`run`, the chunked-`IN` helper (<= 100 bound
  *   params per statement), and the {@link SqlClient.transactionSync}
  *   wrapper every ref mutation goes through (DESIGN.md §3.4).
  *
@@ -21,9 +21,9 @@ import type * as cf from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
 import { StoreError } from "../Protocol/Store.ts";
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // DDL (exact, DESIGN.md §3.1)
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /**
  * Current Repo DO schema version, stored in the `config` table under
@@ -92,9 +92,9 @@ export const REPO_DDL: ReadonlyArray<string> = [
   detail     TEXT,
   updated_at INTEGER NOT NULL
 ) WITHOUT ROWID`,
-  // pull requests: base/head are live branch refs — the rows store intent +
+  // pull requests: base/head are live branch refs -- the rows store intent +
   // lifecycle, never a diff snapshot. Rows are never deleted (close, don't
-  // delete — numbers stay dense and stable); `merge_commit` is set iff
+  // delete -- numbers stay dense and stable); `merge_commit` is set iff
   // state='merged' (the head tip for a fast-forward, the two-parent merge
   // commit otherwise).
   `CREATE TABLE IF NOT EXISTS pulls (
@@ -116,13 +116,13 @@ export const REPO_DDL: ReadonlyArray<string> = [
  * Additive column migrations for Repo tables created by an earlier schema
  * version (mirrors {@link REGISTRY_MIGRATIONS}). `CREATE TABLE IF NOT
  * EXISTS` leaves an existing table untouched, so any future `pulls` (or
- * other) column addition goes here — never into the `CREATE TABLE`.
+ * other) column addition goes here -- never into the `CREATE TABLE`.
  * Re-running is safe because "duplicate column name" is swallowed.
  */
 export const REPO_MIGRATIONS: ReadonlyArray<string> = [];
 
 /**
- * The Registry DO DDL (DESIGN.md §3.1, bottom): the `owner/name → repoId`
+ * The Registry DO DDL (DESIGN.md §3.1, bottom): the `owner/name -> repoId`
  * authority, listing surface, and fork-lineage ledger.
  */
 export const REGISTRY_DDL: ReadonlyArray<string> = [
@@ -147,9 +147,9 @@ export const REGISTRY_DDL: ReadonlyArray<string> = [
 ) WITHOUT ROWID`,
 ];
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Typed row interfaces
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /** One `config` row. */
 export interface ConfigRow extends Record<string, SqlStorageValue> {
@@ -244,20 +244,20 @@ export interface RegistryRepoRow extends Record<string, SqlStorageValue> {
   readonly fork_count: number;
   readonly created_at: number;
   readonly deleted_at: number | null;
-  /** Denormalised from the Repo DO — see the DDL comment. */
+  /** Denormalised from the Repo DO -- see the DDL comment. */
   readonly default_branch: string;
   readonly read_only: number;
   readonly is_public: number;
   readonly status: string;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Chunked-IN helpers
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /**
  * The maximum number of bound parameters per statement (DESIGN.md: chunked
- * `IN` lists ≤ 100 params).
+ * `IN` lists <= 100 params).
  */
 export const MAX_IN_PARAMS = 100;
 
@@ -277,14 +277,14 @@ export const chunk = <T>(
 };
 
 /**
- * Builds an `IN`-list placeholder string: `placeholders(3)` → `"?, ?, ?"`.
+ * Builds an `IN`-list placeholder string: `placeholders(3)` -> `"?, ?, ?"`.
  */
 export const placeholders = (count: number): string =>
   Array.from({ length: count }, () => "?").join(", ");
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // SqlClient
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /**
  * Options for {@link SqlClient.inChunks}: fixed bindings placed before /
@@ -295,7 +295,7 @@ export interface InChunksOptions {
   readonly prefix?: ReadonlyArray<SqlStorageValue> | undefined;
   /** Bindings placed after the chunk params in each statement. */
   readonly suffix?: ReadonlyArray<SqlStorageValue> | undefined;
-  /** Max chunk params per statement (capped so total ≤ {@link MAX_IN_PARAMS}). */
+  /** Max chunk params per statement (capped so total <= {@link MAX_IN_PARAMS}). */
   readonly chunkSize?: number | undefined;
 }
 
@@ -323,7 +323,7 @@ export interface SqlClient {
     ...bindings: Array<SqlStorageValue>
   ) => Effect.Effect<void, StoreError>;
   /**
-   * Runs `makeQuery(placeholders)` once per ≤ 100-param chunk of `items` and
+   * Runs `makeQuery(placeholders)` once per <= 100-param chunk of `items` and
    * concatenates the rows. Row order across chunks follows input order of the
    * chunks, but callers must not rely on intra-query ordering.
    */
@@ -333,13 +333,13 @@ export interface SqlClient {
     options?: InChunksOptions,
   ) => Effect.Effect<Array<Row>, StoreError>;
   /**
-   * Runs `body` inside `DurableObjectStorage.transactionSync` — atomic
+   * Runs `body` inside `DurableObjectStorage.transactionSync` -- atomic
    * against mid-event failure, with the DO's input/output gates guaranteeing
    * no interleaving between statements (DESIGN.md §3.4). The body MUST be
    * fully synchronous (no awaits, no Effects).
    *
    * `rollback(error)` aborts the transaction (every statement is rolled
-   * back) and surfaces `error` on the typed error channel — this is the CAS
+   * back) and surfaces `error` on the typed error channel -- this is the CAS
    * abort path for `atomic` pushes. Any other thrown value also rolls back
    * and surfaces as a {@link StoreError}.
    */
@@ -434,9 +434,9 @@ export const makeSqlClient = (state: DurableObjectState["Service"]): SqlClient =
   };
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Schema init
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /**
  * Idempotently applies the Repo DO DDL ({@link REPO_DDL}) and seeds the
@@ -448,7 +448,7 @@ export const initRepoSchema = Effect.fn(function* (sql: SqlClient) {
     yield* sql.run(statement);
   }
   for (const statement of REPO_MIGRATIONS) {
-    // Already-applied migrations fail with "duplicate column name" — that
+    // Already-applied migrations fail with "duplicate column name" -- that
     // is the success case on every run after the first.
     yield* sql.run(statement).pipe(Effect.ignore);
   }
@@ -481,7 +481,7 @@ export const initRegistrySchema = Effect.fn(function* (sql: SqlClient) {
     yield* sql.run(statement);
   }
   for (const statement of REGISTRY_MIGRATIONS) {
-    // Already-applied migrations fail with "duplicate column name" — that
+    // Already-applied migrations fail with "duplicate column name" -- that
     // is the success case on every run after the first.
     yield* sql.run(statement).pipe(Effect.ignore);
   }

@@ -7,7 +7,7 @@ import type { ServerlessCluster } from "./ServerlessCluster.ts";
  * Runtime binding for the `CreateTopic` operation (IAM action
  * `kafka:CreateTopic`), scoped to one {@link ServerlessCluster}.
  *
- * Creates a Kafka topic on the bound cluster through the MSK control plane —
+ * Creates a Kafka topic on the bound cluster through the MSK control plane --
  * no Kafka admin client or VPC connectivity required. Provide the
  * implementation with `Effect.provide(AWS.Kafka.CreateTopicHttp)`.
  * ### Managing Topics
@@ -19,7 +19,7 @@ import type { ServerlessCluster } from "./ServerlessCluster.ts";
  *   TopicName: "orders",
  *   PartitionCount: 3,
  * });
- * // topic.TopicArn, topic.Status → "CREATING" | "ACTIVE"
+ * // topic.TopicArn, topic.Status -> "CREATING" | "ACTIVE"
  * ```
  *
  * @binding

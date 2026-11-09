@@ -33,12 +33,12 @@ export type AutoscalingPolicyProps = {
    * Policy id (the `{policy}` segment of
    * `projects/{project}/locations/{location}/autoscalingPolicies/{policy}`).
    * If omitted, a unique RFC1035 name is generated. 3-50 characters;
-   * letters, numbers, hyphens, underscores. Immutable — changing it
+   * letters, numbers, hyphens, underscores. Immutable -- changing it
    * replaces the policy.
    */
   policyId?: string;
   /**
-   * Location (`us-central1`, …). Immutable — changing it replaces the
+   * Location (`us-central1`, ...). Immutable -- changing it replaces the
    * policy. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
@@ -115,7 +115,7 @@ export interface AutoscalingPolicyLookup {
    */
   policyId: string;
   /**
-   * Location (`us-central1`, …). `US-CENTRAL1` is accepted and normalized
+   * Location (`us-central1`, ...). `US-CENTRAL1` is accepted and normalized
    * to `us-central1`.
    */
   location?: string;

@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 export interface RenewDomainRequest extends route53domains.RenewDomainRequest {}
 
 /**
- * Runtime binding for `route53domains:RenewDomain` — renew a domain
+ * Runtime binding for `route53domains:RenewDomain` -- renew a domain
  * registered in the current AWS account for the specified number of years.
  * Renewal is asynchronous: the response carries an `OperationId` you can
  * poll with `AWS.Route53Domains.GetOperationDetail`.

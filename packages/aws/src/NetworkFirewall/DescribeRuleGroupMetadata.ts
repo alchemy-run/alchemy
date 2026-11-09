@@ -9,7 +9,7 @@ export interface DescribeRuleGroupMetadataRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `network-firewall:DescribeRuleGroupMetadata` — read
+ * Runtime binding for `network-firewall:DescribeRuleGroupMetadata` -- read
  * the high-level metadata (type, capacity, last-modified time) of the bound
  * {@link RuleGroup} without fetching the full rules definition; the rule
  * group ARN is injected automatically.
@@ -19,7 +19,7 @@ export interface DescribeRuleGroupMetadataRequest extends Omit<
  * ### Reading Rule Group State
  * **Example:** Read Rule Group Metadata
  * ```typescript
- * // init — grants network-firewall:DescribeRuleGroupMetadata on the rule group
+ * // init -- grants network-firewall:DescribeRuleGroupMetadata on the rule group
  * const describeRuleGroupMetadata =
  *   yield* AWS.NetworkFirewall.DescribeRuleGroupMetadata(ruleGroup);
  *

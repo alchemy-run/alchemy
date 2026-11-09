@@ -13,7 +13,7 @@ export type FindingCategory = "CLASSIFICATION" | "POLICY";
 export type FindingSeverityDescription = "Low" | "Medium" | "High";
 
 /**
- * The `detail` payload Macie delivers to EventBridge for a finding — the full
+ * The `detail` payload Macie delivers to EventBridge for a finding -- the full
  * finding document. Only the commonly-matched fields are typed; the schema
  * grows over time.
  */
@@ -76,7 +76,7 @@ export interface FindingEventSourceProps extends EventRouteProps {
  * subscribes the host Function to those events so it can triage, notify, or
  * quarantine the affected S3 objects.
  *
- * Macie publishes to EventBridge automatically — no additional resource is
+ * Macie publishes to EventBridge automatically -- no additional resource is
  * created besides the EventBridge rule targeting the host. Provide the
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.

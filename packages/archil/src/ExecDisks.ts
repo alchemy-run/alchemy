@@ -8,7 +8,7 @@ import type { ExecResult } from "./Clients.ts";
 
 /** One disk in a multi-disk exec. */
 export interface ExecDisksMount {
-  /** Disk id (`dsk-…`). */
+  /** Disk id (`dsk-...`). */
   disk: string;
   /** Mount this subdirectory of the disk instead of its root. */
   subdirectory?: string;

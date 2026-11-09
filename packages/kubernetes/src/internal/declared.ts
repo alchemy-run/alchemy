@@ -8,7 +8,7 @@ import * as Redacted from "effect/Redacted";
  * Core list keys. Used only for the upstream groups in {@link builtinGroups}
  * when `fieldsV1` did not describe that path. `ports` is `containerPort`+
  * `protocol` on containers and `port`+`protocol` on Services. Every other
- * list is atomic, Kubernetes' default — a CRD field named `containers` included.
+ * list is atomic, Kubernetes' default -- a CRD field named `containers` included.
  */
 const listKeys: Record<string, readonly (readonly string[])[]> = {
   containers: [["name"]],
@@ -386,8 +386,8 @@ const maskOf = (
 
 /**
  * Declared paths, values taken from `document` (the apply response or a later
- * GET). Undeclared keys — HPA replicas, controller annotations, apiserver
- * defaults — are absent. Map-list order is not significant.
+ * GET). Undeclared keys -- HPA replicas, controller annotations, apiserver
+ * defaults -- are absent. Map-list order is not significant.
  */
 const selectDeclared = (
   declaration: unknown,

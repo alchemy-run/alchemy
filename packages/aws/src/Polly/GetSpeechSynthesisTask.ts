@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `polly:GetSpeechSynthesisTask` — retrieve the status
+ * Runtime binding for `polly:GetSpeechSynthesisTask` -- retrieve the status
  * (and output S3 URI) of an asynchronous synthesis task by its TaskId.
  *
  * The binding takes no arguments and grants the function
@@ -16,7 +16,7 @@ import type * as Effect from "effect/Effect";
  * // init
  * const getSpeechSynthesisTask = yield* AWS.Polly.GetSpeechSynthesisTask();
  *
- * // runtime — bounded poll until the task leaves the queue
+ * // runtime -- bounded poll until the task leaves the queue
  * const task = yield* getSpeechSynthesisTask({ TaskId: taskId }).pipe(
  *   Effect.repeat({
  *     schedule: Schedule.spaced("2 seconds"),

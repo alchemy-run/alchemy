@@ -7,8 +7,8 @@ import * as Stream from "effect/Stream";
  * Delete every CloudWatch log group whose name starts with `prefix`.
  *
  * For resources whose SERVICE (not alchemy) creates per-resource log groups
- * on their behalf — RDS log exports (`/aws/rds/instance/<id>/<type>`),
- * CloudHSM audit logs (`/aws/cloudhsm/<clusterId>`) — and leaves them behind
+ * on their behalf -- RDS log exports (`/aws/rds/instance/<id>/<type>`),
+ * CloudHSM audit logs (`/aws/cloudhsm/<clusterId>`) -- and leaves them behind
  * when the resource is deleted. The owning provider calls this after the
  * resource is gone so the groups don't leak (cf. Lambda's `/aws/lambda/<fn>`
  * reap in `Lambda/Function.ts`).
@@ -20,7 +20,7 @@ import * as Stream from "effect/Stream";
  * resource delete, so a missing group is success and any other failure or a
  * slow API only logs a warning.
  *
- * Internal scaffolding — NOT exported from the Logs service `index.ts`.
+ * Internal scaffolding -- NOT exported from the Logs service `index.ts`.
  */
 export const reapLogGroupsByPrefix = (prefix: string) =>
   logs.describeLogGroups.pages({ logGroupNamePrefix: prefix }).pipe(

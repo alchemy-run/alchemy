@@ -6,7 +6,7 @@ import type { Channel } from "./Channel.ts";
 /**
  * Runtime binding for `ivs:GetStream`.
  *
- * Reads the bound {@link Channel}'s active (live) stream — state, health,
+ * Reads the bound {@link Channel}'s active (live) stream -- state, health,
  * viewer count, and playback URL. Fails with the typed
  * `ChannelNotBroadcasting` tag when the channel is not live. The channel
  * ARN is injected from the binding. Provide the implementation with
@@ -14,7 +14,7 @@ import type { Channel } from "./Channel.ts";
  * ### Monitoring Live Streams
  * **Example:** Check Whether a Channel Is Live
  * ```typescript
- * // init — bind the operation to the channel
+ * // init -- bind the operation to the channel
  * const getStream = yield* AWS.IVS.GetStream(channel);
  *
  * // runtime

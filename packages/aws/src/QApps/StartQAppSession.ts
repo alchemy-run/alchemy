@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { QApp } from "./QApp.ts";
 
 /**
- * Request for {@link StartQAppSession} — `instanceId` and `appId` are injected from the bound Q App.
+ * Request for {@link StartQAppSession} -- `instanceId` and `appId` are injected from the bound Q App.
  */
 export interface StartQAppSessionRequest extends Omit<
   qapps.StartQAppSessionInput,
@@ -19,7 +19,7 @@ export interface StartQAppSessionRequest extends Omit<
  * ### Sessions
  * **Example:** Start a Session
  * ```typescript
- * // init — bind the operation to the Q App
+ * // init -- bind the operation to the Q App
  * const startQAppSession = yield* AWS.QApps.StartQAppSession(app);
  *
  * // runtime

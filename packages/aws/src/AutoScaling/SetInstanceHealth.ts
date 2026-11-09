@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { AutoScalingGroup } from "./AutoScalingGroup.ts";
 
 /**
- * `SetInstanceHealth` request. The operation is instance-scoped — EC2 Auto
+ * `SetInstanceHealth` request. The operation is instance-scoped -- EC2 Auto
  * Scaling resolves the instance's owning group for authorization, which the
  * binding grants on the bound {@link AutoScalingGroup}'s ARN.
  */
@@ -14,17 +14,17 @@ export interface SetInstanceHealthRequest extends autoscaling.SetInstanceHealthQ
  * Runtime binding for the `SetInstanceHealth` operation (IAM action
  * `autoscaling:SetInstanceHealth` scoped to the group ARN).
  *
- * Reports an instance's health to EC2 Auto Scaling — the backbone of custom
+ * Reports an instance's health to EC2 Auto Scaling -- the backbone of custom
  * health checks: a watchdog Lambda (or the instance itself) flags an instance
  * `Unhealthy` and the group replaces it. Provide the implementation with
  * `Effect.provide(AWS.AutoScaling.SetInstanceHealthHttp)`.
  * ### Custom Health Checks
  * **Example:** Flag a failing instance for replacement
  * ```typescript
- * // init — bind the operation to the group
+ * // init -- bind the operation to the group
  * const setInstanceHealth = yield* AWS.AutoScaling.SetInstanceHealth(group);
  *
- * // runtime — mark the instance unhealthy so the group replaces it
+ * // runtime -- mark the instance unhealthy so the group replaces it
  * yield* setInstanceHealth({
  *   InstanceId: instanceId,
  *   HealthStatus: "Unhealthy",

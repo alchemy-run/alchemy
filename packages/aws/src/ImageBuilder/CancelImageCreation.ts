@@ -14,7 +14,7 @@ import type * as Effect from "effect/Effect";
  * ### Running Builds
  * **Example:** Cancel an In-Flight Build
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const cancelBuild = yield* AWS.ImageBuilder.CancelImageCreation();
  *
  * // runtime

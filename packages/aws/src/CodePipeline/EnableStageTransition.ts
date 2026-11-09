@@ -9,7 +9,7 @@ export interface EnableStageTransitionRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `codepipeline:EnableStageTransition` — re-opens a
+ * Runtime binding for `codepipeline:EnableStageTransition` -- re-opens a
  * transition into (`Inbound`) or out of (`Outbound`) a stage that was
  * previously disabled.
  * ### Operating Stages

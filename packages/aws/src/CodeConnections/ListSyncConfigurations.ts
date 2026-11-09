@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { RepositoryLink } from "./RepositoryLink.ts";
 
 /**
- * Request for {@link ListSyncConfigurations} — the sync type to list; the
+ * Request for {@link ListSyncConfigurations} -- the sync type to list; the
  * repository link ID is injected from the bound resource.
  */
 export interface ListSyncConfigurationsRequest extends Omit<
@@ -16,13 +16,13 @@ export interface ListSyncConfigurationsRequest extends Omit<
  * Runtime binding for `codeconnections:ListSyncConfigurations`.
  *
  * Bind this operation to a {@link RepositoryLink} to enumerate the sync
- * configurations attached to the link — which AWS resources Git sync keeps
+ * configurations attached to the link -- which AWS resources Git sync keeps
  * converged from the linked repository. Provide the implementation with
  * `Effect.provide(AWS.CodeConnections.ListSyncConfigurationsHttp)`.
  * ### Monitoring Git Sync
  * **Example:** List the Link's Sync Configurations
  * ```typescript
- * // init — bind the operation to the repository link
+ * // init -- bind the operation to the repository link
  * const listSyncConfigurations =
  *   yield* AWS.CodeConnections.ListSyncConfigurations(link);
  *

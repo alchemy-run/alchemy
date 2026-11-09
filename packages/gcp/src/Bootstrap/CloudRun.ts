@@ -1,11 +1,11 @@
 /**
  * Process bootstrap for `GCP.Run.Service`. The generated entry imports
- * this module and the user's `main`, nothing else — see
+ * this module and the user's `main`, nothing else -- see
  * `alchemy/Runtime/Bootstrap` for why.
  *
  * Runtime credentials come from the Cloud Run metadata server (the
  * service's runtime service account), so HTTP bindings call GCP with
- * exactly the IAM the deploy granted — never the deploy-time token.
+ * exactly the IAM the deploy granted -- never the deploy-time token.
  */
 import { BunServices } from "@effect/platform-bun";
 import { BunHttpServer } from "alchemy/Http";

@@ -24,7 +24,7 @@ export const isRestApiEvent = (event: any): event is lambda.APIGatewayProxyEvent
   // WebSocket proxy events carry `messageDirection`; REST v1 events don't.
   event?.requestContext?.messageDirection === undefined;
 
-/** `/items/{proxy+}` → `itemsproxy` for stable, readable logical ids. */
+/** `/items/{proxy+}` -> `itemsproxy` for stable, readable logical ids. */
 const sanitizePathKey = (path: string, httpMethod: string) =>
   `${path}-${httpMethod}`.replace(/[^A-Za-z0-9]+/g, "") || "root";
 
@@ -33,7 +33,7 @@ const sanitizePathKey = (path: string, httpMethod: string) =>
  *
  * At deploy time this layer materializes the path `Resource` chain, the
  * `Method` with an `AWS_PROXY` integration, and the API Gateway invoke
- * `Permission` for each registered route — and registers each child as a
+ * `Permission` for each registered route -- and registers each child as a
  * `RestApiBinding` on the API so any `Deployment` of the same API is
  * ordered after them. At runtime it dispatches matching REST proxy events
  * to the registered handler.

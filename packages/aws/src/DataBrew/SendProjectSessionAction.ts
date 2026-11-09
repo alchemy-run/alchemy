@@ -9,7 +9,7 @@ export interface SendProjectSessionActionRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `databrew:SendProjectSessionAction` — performs a
+ * Runtime binding for `databrew:SendProjectSessionAction` -- performs a
  * recipe step (optionally as a preview) inside an open interactive session
  * on the bound DataBrew project. Authenticate with the `Redacted`
  * `ClientSessionId` returned by {@link StartProjectSession}.

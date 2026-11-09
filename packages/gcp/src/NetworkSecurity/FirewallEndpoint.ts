@@ -40,11 +40,11 @@ export type FirewallEndpointProps = {
    * FirewallEndpoint id (the `{firewallEndpoint}` segment of
    * `projects/{project}/locations/{location}/firewallEndpoints/{firewallEndpoint}`).
    * If omitted, a unique name is generated from the stack, stage, and
-   * logical id. Immutable — changing it replaces the endpoint.
+   * logical id. Immutable -- changing it replaces the endpoint.
    */
   firewallEndpointId?: string;
   /**
-   * Zone of the endpoint (`us-central1-a`, …). Immutable — changing it
+   * Zone of the endpoint (`us-central1-a`, ...). Immutable -- changing it
    * replaces the endpoint. `US-CENTRAL1-A` is accepted and normalized to
    * `us-central1-a`.
    * @default "us-central1-a"
@@ -52,7 +52,7 @@ export type FirewallEndpointProps = {
   location?: string;
   /**
    * Project billed for the endpoint. Required for organization-scoped
-   * endpoints; omit for project-scoped endpoints. Immutable — changing
+   * endpoints; omit for project-scoped endpoints. Immutable -- changing
    * it replaces the endpoint.
    */
   billingProjectId?: string;
@@ -61,7 +61,7 @@ export type FirewallEndpointProps = {
    */
   description?: string;
   /**
-   * Enable jumbo frames on the endpoint. Immutable — changing it
+   * Enable jumbo frames on the endpoint. Immutable -- changing it
    * replaces the endpoint.
    * @default false
    */
@@ -92,7 +92,7 @@ export type FirewallEndpoint = Resource<
     jumboFramesEnabled: boolean;
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;
-    /** Server-reported lifecycle state (`ACTIVE`, `CREATING`, …). */
+    /** Server-reported lifecycle state (`ACTIVE`, `CREATING`, ...). */
     state: string | undefined;
     /** Whether reconciling is in progress. */
     reconciling: boolean;
@@ -123,7 +123,7 @@ export interface FirewallEndpointLookup {
    */
   firewallEndpointId: string;
   /**
-   * Zone of the endpoint (`us-central1-a`, …). `US-CENTRAL1-A` is accepted
+   * Zone of the endpoint (`us-central1-a`, ...). `US-CENTRAL1-A` is accepted
    * and normalized to `us-central1-a`.
    */
   location?: string;

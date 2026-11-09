@@ -24,7 +24,7 @@ export type CatalogsServingConfigProps = {
   /**
    * Parent catalog resource name
    * `projects/{project}/locations/{location}/catalogs/{catalog}` or a
-   * catalog id (combined with `location`). Immutable — changing it
+   * catalog id (combined with `location`). Immutable -- changing it
    * replaces the serving config.
    * @default "default_catalog"
    */
@@ -36,7 +36,7 @@ export type CatalogsServingConfigProps = {
   location?: string;
   /**
    * Serving config id (`[a-z-_]`, 4-63 characters). If omitted, a unique
-   * id is generated. Immutable — changing it replaces the serving config.
+   * id is generated. Immutable -- changing it replaces the serving config.
    */
   servingConfigId?: string;
   /**
@@ -95,7 +95,7 @@ export type CatalogsServingConfigProps = {
    */
   facetControlIds?: string[];
   /**
-   * Recommendation diversity level (`no-diversity`, `low-diversity`, …).
+   * Recommendation diversity level (`no-diversity`, `low-diversity`, ...).
    */
   diversityLevel?: string;
   /**

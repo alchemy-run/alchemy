@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `comprehendmedical:InferRxNorm` — detect medication entities in clinical text and link them to concept identifiers in the RxNorm ontology (medication names, dosages, frequencies).
+ * Runtime binding for `comprehendmedical:InferRxNorm` -- detect medication entities in clinical text and link them to concept identifiers in the RxNorm ontology (medication names, dosages, frequencies).
  *
  * Comprehend Medical has no resource-level IAM, so the binding takes no
  * arguments and grants `comprehendmedical:InferRxNorm` on `*`. Provide the

@@ -37,7 +37,7 @@ export interface TrackerConsumer extends Resource<
  * Links an Amazon Location {@link Tracker} to a {@link GeofenceCollection}
  * so every device position uploaded to the tracker is automatically
  * evaluated against the collection's geofences, emitting ENTER/EXIT events
- * (delivered to EventBridge — see `consumeTrackerEvents`).
+ * (delivered to EventBridge -- see `consumeTrackerEvents`).
  *
  * The association is existence-only: both properties are immutable and any
  * change replaces it.

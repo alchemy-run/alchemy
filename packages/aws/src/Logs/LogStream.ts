@@ -34,7 +34,7 @@ export interface LogStream extends Resource<
 > {}
 
 /**
- * A CloudWatch Logs log stream — a sequence of log events within a log group.
+ * A CloudWatch Logs log stream -- a sequence of log events within a log group.
  *
  * Most log streams are created automatically by the emitting service (Lambda
  * creates its own streams under `/aws/lambda/...`); declare one explicitly
@@ -76,7 +76,7 @@ export const LogStreamProvider = () =>
 
       return {
         stables: ["logStreamName", "logGroupName", "logStreamArn"],
-        // No account-wide stream list — fan out over every log group.
+        // No account-wide stream list -- fan out over every log group.
         list: () =>
           Effect.gen(function* () {
             const groups = yield* logs.describeLogGroups.pages({}).pipe(
@@ -109,7 +109,7 @@ export const LogStreamProvider = () =>
                         logStreamArn: stream.arn,
                       })),
                   ),
-                  // group deleted between list and describe — skip
+                  // group deleted between list and describe -- skip
                   Effect.catchTag("ResourceNotFoundException", () => Effect.succeed([])),
                 ),
               { concurrency: 10 },
@@ -137,7 +137,7 @@ export const LogStreamProvider = () =>
             logStreamArn: observed.arn,
           };
         }),
-        // Existence-only resource: observe → if missing, create. Nothing on a
+        // Existence-only resource: observe -> if missing, create. Nothing on a
         // log stream is mutable.
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const logGroupName = news.logGroupName;

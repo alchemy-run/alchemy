@@ -12,7 +12,7 @@ import type { DBCluster } from "./DBCluster.ts";
 
 /**
  * Connection descriptor for a DocumentDB cluster's MongoDB-compatible data
- * plane. The `url` field is a ready-to-use `mongodb://` connection string —
+ * plane. The `url` field is a ready-to-use `mongodb://` connection string --
  * it feeds the {@link mongo} Effect client (or any MongoDB driver) directly.
  */
 export interface MongoConnectionInfo {
@@ -36,7 +36,7 @@ export interface MongoConnectionInfo {
    * DocumentDB certificates chain to the private Amazon RDS CA that Node's
    * trust store doesn't carry, so the URL sets
    * `tlsAllowInvalidCertificates=true` (TLS encryption on, identity
-   * verification off — libpq `require` semantics, matching
+   * verification off -- libpq `require` semantics, matching
    * `AWS.RDS.Connect`). Pass the RDS CA bundle to {@link mongo}'s `ca`
    * option to restore full verification.
    */
@@ -58,8 +58,8 @@ export interface ConnectOptions {
    * MongoDB-protocol login. Defaults to the cluster's managed master user
    * secret (`manageMasterUserPassword: true`).
    *
-   * DocumentDB authenticates over the MongoDB wire protocol (SCRAM) —
-   * database users and roles (`read`, `readWrite`, `dbAdmin`, …) are created
+   * DocumentDB authenticates over the MongoDB wire protocol (SCRAM) --
+   * database users and roles (`read`, `readWrite`, `dbAdmin`, ...) are created
    * *inside* the database with `db.createUser(...)`, not through IAM. IAM
    * only governs the management plane, so unlike Aurora there is no
    * `auth: "iam"` mode.
@@ -77,7 +77,7 @@ export interface ConnectOptions {
   tls?: boolean;
   /**
    * Subnets the host Function should be attached to so it can open a socket
-   * to the cluster — DocumentDB is VPC-only. Wired through the host's `vpc`
+   * to the cluster -- DocumentDB is VPC-only. Wired through the host's `vpc`
    * binding channel, equivalent to setting the Function's `vpc` prop.
    */
   subnetIds?: Input<SubnetId[]>;
@@ -95,8 +95,8 @@ export interface ConnectOptions {
  * master user secret by default).
  *
  * Binding it yields an Effect (not a callable) that resolves a
- * {@link MongoConnectionInfo} — host, port, credentials, and a ready-to-use
- * `mongodb://` URL — fresh on every execution. No socket is opened; feed the
+ * {@link MongoConnectionInfo} -- host, port, credentials, and a ready-to-use
+ * `mongodb://` URL -- fresh on every execution. No socket is opened; feed the
  * result into {@link mongo} (the bundled Effect client over the `mongodb`
  * driver) or any MongoDB driver. The deploy half grants
  * `secretsmanager:GetSecretValue` on the secret and publishes the endpoint
@@ -108,7 +108,7 @@ export interface ConnectOptions {
  * export default MyFunction.make(
  *   { main: import.meta.url, functionUrl: true },
  *   Effect.gen(function* () {
- *     // init — bind the cluster's managed master secret; grants
+ *     // init -- bind the cluster's managed master secret; grants
  *     // secretsmanager:GetSecretValue and attaches the function to the
  *     // cluster's VPC subnets/security groups
  *     const connect = yield* AWS.DocDB.Connect(cluster, {
@@ -116,7 +116,7 @@ export interface ConnectOptions {
  *       subnetIds: [subnetA.subnetId, subnetB.subnetId],
  *       securityGroupIds: [appSecurityGroup.groupId],
  *     });
- *     // init — build the Effect mongo client (one connection per execution)
+ *     // init -- build the Effect mongo client (one connection per execution)
  *     const db = yield* AWS.DocDB.mongo(connect);
  *
  *     return {
@@ -137,7 +137,7 @@ export interface ConnectOptions {
  * // init
  * const connect = yield* AWS.DocDB.Connect(cluster, { database: "app" });
  *
- * // runtime — host/port/credentials plus a ready-to-use mongodb:// URL
+ * // runtime -- host/port/credentials plus a ready-to-use mongodb:// URL
  * const info = yield* connect;
  * ```
  *
@@ -171,7 +171,7 @@ export interface MongoConnectionUrlOptions {
  * Format a `mongodb://` connection URL with the DocumentDB-recommended
  * options (`replicaSet=rs0`, `readPreference=secondaryPreferred`,
  * `retryWrites=false`, and `authMechanism=SCRAM-SHA-1` when credentials are
- * present — DocumentDB does not support SCRAM-SHA-256). Username and
+ * present -- DocumentDB does not support SCRAM-SHA-256). Username and
  * password are percent-encoded; the result is `Redacted` because it embeds
  * the password.
  */
@@ -205,7 +205,7 @@ export const formatMongoConnectionUrl = (
   });
   if (options.tls === true) {
     query.set("tls", "true");
-    // DocumentDB certs chain to the private Amazon RDS CA — keep TLS on with
+    // DocumentDB certs chain to the private Amazon RDS CA -- keep TLS on with
     // identity verification off unless the caller supplies the CA bundle
     // (see `mongo`'s `ca` option, which restores full verification).
     if (!query.has("tlsCAFile")) {

@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Job } from "./Job.ts";
 
 /**
- * Runtime binding for `databrew:StartJobRun` — lets a workload kick off a
+ * Runtime binding for `databrew:StartJobRun` -- lets a workload kick off a
  * run of a DataBrew job (a `PROFILE` analysis or a `RECIPE` transformation).
  *
  * The response carries the `RunId`, which can be observed with the

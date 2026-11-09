@@ -63,12 +63,12 @@ export type EndpointProps = {
   /**
    * Endpoint id (the `{endpoint}` segment of
    * `projects/{project}/locations/{location}/endpoints/{endpoint}`).
-   * If omitted, a unique name is generated. Immutable — changing it
+   * If omitted, a unique name is generated. Immutable -- changing it
    * replaces the endpoint.
    */
   endpointId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the endpoint.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -91,7 +91,7 @@ export type EndpointProps = {
    */
   network?: string;
   /**
-   * Customer-managed encryption. Immutable — changing it replaces the
+   * Customer-managed encryption. Immutable -- changing it replaces the
    * endpoint.
    */
   encryptionSpec?: EncryptionSpec;
@@ -199,7 +199,7 @@ export interface EndpointLookup {
    */
   endpointId: string;
   /**
-   * Region (`us-central1`, `us-east1`, …).
+   * Region (`us-central1`, `us-east1`, ...).
    */
   location?: string;
   /**
@@ -212,7 +212,7 @@ export interface EndpointLookup {
 /**
  * A Vertex AI Endpoint for online prediction.
  *
- * Name, location, network, encryption, and GDC zone are identity —
+ * Name, location, network, encryption, and GDC zone are identity --
  * changing them replaces the endpoint. Display name, description, labels,
  * traffic split, dedicated-endpoint flag, client connection, logging, and
  * GenAI features update in place.
@@ -389,7 +389,7 @@ const getByName = (name: string) =>
 /**
  * Look an endpoint up by name. An endpoint is invisible while its create
  * operation is pending (minutes on a fresh project), so on a miss wait for
- * any pending create of this endpoint id and look again — otherwise an
+ * any pending create of this endpoint id and look again -- otherwise an
  * interrupted create's recovery read / delete reports it gone and leaks it.
  */
 const getSettled = (name: string) =>

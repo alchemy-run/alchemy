@@ -6,8 +6,8 @@ import type { Graph } from "./Graph.ts";
 /**
  * Runtime binding for `detective:ListIndicators`.
  *
- * Lists the indicators of compromise a finished investigation surfaced —
- * TTPs, impossible travel, new geolocations, related findings — the raw
+ * Lists the indicators of compromise a finished investigation surfaced --
+ * TTPs, impossible travel, new geolocations, related findings -- the raw
  * material for an automated triage report. The graph ARN is injected from
  * the bound {@link Graph}.
  * Provide the implementation with

@@ -5,7 +5,7 @@ import type { CertificateAuthority } from "./CertificateAuthority.ts";
 /**
  * Options for {@link makeACMPCAHttpBinding}.
  *
- * @internal shared HTTP scaffolding for the ACM PCA capability bindings —
+ * @internal shared HTTP scaffolding for the ACM PCA capability bindings --
  * not exported from the service index.
  */
 export interface ACMPCAHttpBindingOptions<
@@ -31,7 +31,7 @@ export interface ACMPCAHttpBindingOptions<
 /**
  * Build the implementation Effect for an ACM PCA HTTP capability binding.
  *
- * Every ACM PCA capability has the same shape — resolve the CA's ARN,
+ * Every ACM PCA capability has the same shape -- resolve the CA's ARN,
  * register an IAM policy statement for `acm-pca:{action}` scoped to that
  * CA at deploy time, and return a runtime callable that injects
  * `CertificateAuthorityArn` into the operation's request. Only the

@@ -17,13 +17,13 @@ export type RowAccessPolicyProps = {
   /**
    * Dataset id (the `{dataset}` segment of
    * `projects/{project}/datasets/{dataset}`) or a full dataset resource
-   * name. Immutable — changing it replaces the policy.
+   * name. Immutable -- changing it replaces the policy.
    */
   datasetId: string;
   /**
    * Table id (the `{table}` segment of
    * `projects/{project}/datasets/{dataset}/tables/{table}`) or a full
-   * table resource name. Immutable — changing it replaces the policy.
+   * table resource name. Immutable -- changing it replaces the policy.
    */
   tableId: string;
   /**
@@ -31,7 +31,7 @@ export type RowAccessPolicyProps = {
    * `projects/{project}/datasets/{dataset}/tables/{table}/rowAccessPolicies/{policy}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Letters, numbers, and underscores; max 256 characters.
-   * Immutable — changing it replaces the policy.
+   * Immutable -- changing it replaces the policy.
    */
   policyId?: string;
   /**
@@ -42,7 +42,7 @@ export type RowAccessPolicyProps = {
   /**
    * Initial IAM members granted this policy (`user:`, `group:`,
    * `serviceAccount:`, `domain:`, `allAuthenticatedUsers`, `allUsers`).
-   * Input-only — sent on create, not readable after insert.
+   * Input-only -- sent on create, not readable after insert.
    */
   grantees?: string[];
 };
@@ -78,7 +78,7 @@ export type RowAccessPolicy = Resource<
 >;
 
 /**
- * A Google BigQuery row-access policy — a filter predicate plus IAM
+ * A Google BigQuery row-access policy -- a filter predicate plus IAM
  * members that together hide rows from unauthorized readers.
  *
  * Row-access policies have no labels, and Alchemy never edits the filter

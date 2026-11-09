@@ -4,7 +4,7 @@
 // so this module never has to value-import the optional peer.
 //
 // Granularity policy: a dedicated tag wherever the discriminant is STABLE
-// and handling genuinely branches — the SQL-standard integrity-violation
+// and handling genuinely branches -- the SQL-standard integrity-violation
 // SQLSTATEs (23xxx) and Prisma's error categories (`ORM.*`,
 // `RUNTIME.*`, ...). Individual codes stay a typed `code` field rather than
 // one class per code: the code set churns per RC, while categories and
@@ -12,7 +12,7 @@
 import * as Data from "effect/Data";
 
 /**
- * Prisma structured error codes observed in 8.0.0-rc.8 — an OPEN union
+ * Prisma structured error codes observed in 8.0.0-rc.8 -- an OPEN union
  * (`string` stays assignable) so new RC codes never break, while known ones
  * autocomplete.
  */
@@ -54,12 +54,12 @@ interface QueryErrorFields {
   cause: unknown;
 }
 
-// ── integrity violations (SQL-standard SQLSTATE class 23) ─────────────
+// -- integrity violations (SQL-standard SQLSTATE class 23) -------------
 // The driver normalizes target codes onto SQLSTATE, so these tags are
 // stable across databases and RCs.
 
 /**
- * Unique or primary-key conflict (SQLSTATE `23505`) — the "email already
+ * Unique or primary-key conflict (SQLSTATE `23505`) -- the "email already
  * registered" case:
  *
  * ```typescript
@@ -72,7 +72,7 @@ export class UniqueViolationError extends Data.TaggedError(
   "Prisma.UniqueViolationError",
 )<QueryErrorFields> {}
 
-/** Foreign-key violation (SQLSTATE `23503`) — a referenced row is missing. */
+/** Foreign-key violation (SQLSTATE `23503`) -- a referenced row is missing. */
 export class ForeignKeyViolationError extends Data.TaggedError(
   "Prisma.ForeignKeyViolationError",
 )<QueryErrorFields> {}
@@ -94,7 +94,7 @@ export type ConstraintViolationError =
   | NotNullViolationError
   | CheckViolationError;
 
-// ── other SQL / connection failures ───────────────────────────────────
+// -- other SQL / connection failures -----------------------------------
 
 /**
  * Any other SQL statement failure (syntax, permissions, serialization,
@@ -120,12 +120,12 @@ export class ConnectionError extends Data.TaggedError("Prisma.ConnectionError")<
   cause: unknown;
 }> {}
 
-// ── Prisma pipeline categories ────────────────────────────────────────
+// -- Prisma pipeline categories ----------------------------------------
 
 /**
  * ORM-lane misuse or validation failure (`ORM.*` codes: unknown
  * table/column/relation, invalid include, unsupported aggregate, ...).
- * Almost always a programming bug — don't retry.
+ * Almost always a programming bug -- don't retry.
  */
 export class OrmError extends Data.TaggedError("Prisma.OrmError")<{
   code: ErrorCode;

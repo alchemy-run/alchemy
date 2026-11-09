@@ -6,16 +6,16 @@ import type { Task } from "./Task.ts";
 /**
  * Runtime binding for `datasync:DescribeTask`.
  *
- * Reads the bound {@link Task}'s full detail — status, transfer options,
+ * Reads the bound {@link Task}'s full detail -- status, transfer options,
  * filters, schedule (including `ScheduleDetails` with the last disable
- * reason), and the ARN of the currently running execution — so an ops
+ * reason), and the ARN of the currently running execution -- so an ops
  * function can monitor the task's health. The task ARN is injected from the
  * binding. Provide the implementation with
  * `Effect.provide(AWS.DataSync.DescribeTaskHttp)`.
  * ### Monitoring Tasks
  * **Example:** Check The Task's Status
  * ```typescript
- * // init — bind the operation to the task
+ * // init -- bind the operation to the task
  * const describeTask = yield* AWS.DataSync.DescribeTask(task);
  *
  * // runtime

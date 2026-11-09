@@ -52,7 +52,7 @@ export type ServicesConnectorProps = {
   /**
    * Parent Data Connect service. Full name
    * `projects/{project}/locations/{location}/services/{service}` or the
-   * service id (combined with `location`). Immutable — changing it
+   * service id (combined with `location`). Immutable -- changing it
    * replaces the connector. The service must already have an active
    * schema compatible with `source`.
    */
@@ -65,7 +65,7 @@ export type ServicesConnectorProps = {
   /**
    * Connector id (the `{connector}` segment). If omitted, a unique
    * RFC1035 name is generated from the stack, stage, and logical id.
-   * Immutable — changing it replaces the connector.
+   * Immutable -- changing it replaces the connector.
    */
   connectorId?: string;
   /**
@@ -160,7 +160,7 @@ export interface ServicesConnectorLookup {
 }
 
 /**
- * A Firebase Data Connect connector — a set of GraphQL queries and
+ * A Firebase Data Connect connector -- a set of GraphQL queries and
  * mutations compiled against the service's active schema.
  *
  * Changing `connectorId`, `service`, or `location` replaces the

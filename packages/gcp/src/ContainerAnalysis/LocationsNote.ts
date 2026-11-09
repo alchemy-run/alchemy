@@ -27,7 +27,7 @@ import type { NoteProps } from "./Note.ts";
 
 export type LocationsNoteProps = NoteProps & {
   /**
-   * Location (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Location (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the note. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)

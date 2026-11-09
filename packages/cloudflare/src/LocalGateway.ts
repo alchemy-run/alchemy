@@ -1,14 +1,14 @@
 /**
  * Shared scaffolding for the local-simulator gateways.
  *
- * The local binding simulators (KV, R2, D1, ...) live inside workerd — only
+ * The local binding simulators (KV, R2, D1, ...) live inside workerd -- only
  * a Worker with the native binding can reach them. Deploy-time code (Action
  * capability clients, provider reconciles) runs in Node, so the `*Local`
  * layers bridge the two with the runtime's platform proxy
- * (`PlatformProxy.open` — our `getPlatformProxy`): a scoped workerd
+ * (`PlatformProxy.open` -- our `getPlatformProxy`): a scoped workerd
  * instance hosts the binding, and Node drives it through proxied clients.
  *
- * NOT exported from `index.ts` — provider/capability-internal scaffolding.
+ * NOT exported from `index.ts` -- provider/capability-internal scaffolding.
  */
 import { layerRuntime } from "@alchemy.run/cloudflare-runtime/core";
 import { AlchemyContext } from "alchemy/AlchemyContext";
@@ -22,8 +22,8 @@ import { isLocalId } from "./LocalRuntime.ts";
  * A standalone local-runtime layer for gateway consumers OUTSIDE the
  * provider stack (e.g. capability `*Local` layers running in an Action,
  * whose ambient context has no workerd `Runtime`). Configured identically
- * to the providers' shared runtime — same `.alchemy/local` storage
- * directory — so it reads and writes the same simulator data.
+ * to the providers' shared runtime -- same `.alchemy/local` storage
+ * directory -- so it reads and writes the same simulator data.
  */
 export const localGatewayRuntime = Layer.unwrap(
   Effect.gen(function* () {

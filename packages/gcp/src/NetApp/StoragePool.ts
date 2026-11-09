@@ -39,11 +39,11 @@ export type StoragePoolProps = {
    * Storage pool id (the `{storagePool}` segment of
    * `projects/{project}/locations/{location}/storagePools/{storagePool}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
-   * and logical id. Immutable — changing it replaces the pool.
+   * and logical id. Immutable -- changing it replaces the pool.
    */
   storagePoolId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the pool. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
@@ -51,13 +51,13 @@ export type StoragePoolProps = {
   location?: string;
   /**
    * VPC network name (`default`) or path
-   * `projects/{project}/global/networks/{network}`. Immutable — changing
+   * `projects/{project}/global/networks/{network}`. Immutable -- changing
    * it replaces the pool.
    * @default "default"
    */
   network?: string;
   /**
-   * Service level. Immutable — changing it replaces the pool.
+   * Service level. Immutable -- changing it replaces the pool.
    * @default "STANDARD"
    */
   serviceLevel?: netapp.StoragePoolServiceLevelEnum | (string & {});
@@ -67,17 +67,17 @@ export type StoragePoolProps = {
    */
   capacityGib?: number | string;
   /**
-   * Active zone for a regional Flex pool. Immutable — changing it
+   * Active zone for a regional Flex pool. Immutable -- changing it
    * replaces the pool.
    */
   zone?: string;
   /**
-   * Replica zone for a regional Flex pool. Immutable — changing it
+   * Replica zone for a regional Flex pool. Immutable -- changing it
    * replaces the pool.
    */
   replicaZone?: string;
   /**
-   * KMS config used to encrypt volumes. Full name or id. Immutable —
+   * KMS config used to encrypt volumes. Full name or id. Immutable --
    * changing it replaces the pool.
    */
   kmsConfig?: string;
@@ -86,7 +86,7 @@ export type StoragePoolProps = {
    */
   activeDirectory?: string;
   /**
-   * Enable NFS LDAP. Immutable — changing it replaces the pool.
+   * Enable NFS LDAP. Immutable -- changing it replaces the pool.
    */
   ldapEnabled?: boolean;
   /**
@@ -95,11 +95,11 @@ export type StoragePoolProps = {
    */
   allowAutoTiering?: boolean;
   /**
-   * Pool type. Immutable — changing it replaces the pool.
+   * Pool type. Immutable -- changing it replaces the pool.
    */
   type?: netapp.StoragePoolTypeEnum | (string & {});
   /**
-   * Pool mode. Immutable — changing it replaces the pool.
+   * Pool mode. Immutable -- changing it replaces the pool.
    */
   mode?: netapp.StoragePoolModeEnum | (string & {});
   /**
@@ -107,7 +107,7 @@ export type StoragePoolProps = {
    */
   qosType?: netapp.StoragePoolQosTypeEnum | (string & {});
   /**
-   * Enable independent scaling of capacity and performance. Immutable —
+   * Enable independent scaling of capacity and performance. Immutable --
    * changing it replaces the pool.
    */
   customPerformanceEnabled?: boolean;
@@ -128,7 +128,7 @@ export type StoragePoolProps = {
    */
   enableHotTierAutoResize?: boolean;
   /**
-   * Scale type. Immutable — changing it replaces the pool.
+   * Scale type. Immutable -- changing it replaces the pool.
    */
   scaleType?: netapp.StoragePoolScaleTypeEnum | (string & {});
   /**
@@ -229,7 +229,7 @@ export interface StoragePoolLookup {
    */
   storagePoolId: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * Region (`us-central1`, `us-east1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -241,7 +241,7 @@ export interface StoragePoolLookup {
 }
 
 /**
- * A Cloud NetApp Volumes storage pool — billed capacity that hosts
+ * A Cloud NetApp Volumes storage pool -- billed capacity that hosts
  * volumes at a service level.
  *
  * Changing `storagePoolId`, `location`, `network`, `serviceLevel`,

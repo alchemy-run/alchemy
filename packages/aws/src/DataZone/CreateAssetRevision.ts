@@ -17,7 +17,7 @@ export interface CreateAssetRevisionRequest extends Omit<
  * ### Publishing Assets
  * **Example:** Revise an Asset
  * ```typescript
- * // init — bind the operation to the domain
+ * // init -- bind the operation to the domain
  * const createAssetRevision = yield* AWS.DataZone.CreateAssetRevision(domain);
  *
  * // runtime

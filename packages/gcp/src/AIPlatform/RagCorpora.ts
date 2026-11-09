@@ -46,7 +46,7 @@ export type RagVectorDbConfig = {
 
 export type RagCorporaProps = {
   /**
-   * Vertex AI location. Immutable — changing it replaces the corpus.
+   * Vertex AI location. Immutable -- changing it replaces the corpus.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
@@ -56,7 +56,7 @@ export type RagCorporaProps = {
   displayName?: string;
   /**
    * Human-readable description. RagCorpus has no labels field, so Alchemy
-   * ownership is stored in a `[alchemy …]` prefix for `list` / nuke.
+   * ownership is stored in a `[alchemy ...]` prefix for `list` / nuke.
    */
   description?: string;
   /**
@@ -101,7 +101,7 @@ export type RagCorpora = Resource<
 >;
 
 /**
- * A Vertex AI RAG corpus — a container for RagFiles used by retrieval
+ * A Vertex AI RAG corpus -- a container for RagFiles used by retrieval
  * augmented generation.
  *
  * RagCorpus has no labels, so Alchemy stamps ownership into the

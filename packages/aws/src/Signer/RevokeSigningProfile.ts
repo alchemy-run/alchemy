@@ -8,17 +8,17 @@ import type { SigningProfile } from "./SigningProfile.ts";
  *
  * Revokes a version of the bound {@link SigningProfile}, permanently
  * invalidating every signature that version produced on or after
- * `effectiveTime` — the incident-response lever when signing material is
+ * `effectiveTime` -- the incident-response lever when signing material is
  * compromised. Revocation is irreversible. The profile name is injected from
  * the binding; pass the `profileVersion` to revoke. Provide the
  * implementation with `Effect.provide(AWS.Signer.RevokeSigningProfileHttp)`.
  * ### Revoking Signatures
  * **Example:** Revoke a Compromised Profile Version
  * ```typescript
- * // init — bind the operation to the profile
+ * // init -- bind the operation to the profile
  * const revokeSigningProfile = yield* AWS.Signer.RevokeSigningProfile(profile);
  *
- * // runtime — invalidate everything the version signed from now on
+ * // runtime -- invalidate everything the version signed from now on
  * yield* revokeSigningProfile({
  *   profileVersion,
  *   reason: "signing key compromised",

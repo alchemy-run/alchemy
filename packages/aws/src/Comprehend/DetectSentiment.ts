@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `comprehend:DetectSentiment` — infer the prevailing
+ * Runtime binding for `comprehend:DetectSentiment` -- infer the prevailing
  * sentiment of a piece of text (`POSITIVE`, `NEGATIVE`, `NEUTRAL`, or
  * `MIXED`).
  *

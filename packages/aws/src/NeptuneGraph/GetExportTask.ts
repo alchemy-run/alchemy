@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for the `GetExportTask` operation (IAM action `neptune-graph:GetExportTask`).
  *
- * Reads one export task by id — status, progress percentage, and exported-record counts. Task ids are server-generated runtime data. Provide the implementation with
+ * Reads one export task by id -- status, progress percentage, and exported-record counts. Task ids are server-generated runtime data. Provide the implementation with
  * `Effect.provide(AWS.NeptuneGraph.GetExportTaskHttp)`.
  * ### Importing and Exporting Data
  * **Example:** Poll an export task
@@ -13,7 +13,7 @@ import type * as Effect from "effect/Effect";
  * const getExportTask = yield* NeptuneGraph.GetExportTask();
  *
  * const task = yield* getExportTask({ taskIdentifier });
- * // task.status → "SUCCEEDED"
+ * // task.status -> "SUCCEEDED"
  * ```
  *
  * @binding

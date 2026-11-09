@@ -74,7 +74,7 @@ export interface ReferenceStoreLookup {
 }
 
 /**
- * An Amazon HealthOmics reference store — a container for reference genomes
+ * An Amazon HealthOmics reference store -- a container for reference genomes
  * that read sets are aligned against.
  *
  * A reference store name is auto-generated from the app, stage, and logical
@@ -184,7 +184,7 @@ export const ReferenceStoreProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // OBSERVE — the store id is a server-generated cache; if the store
+          // OBSERVE -- the store id is a server-generated cache; if the store
           // was deleted out-of-band, getReferenceStore returns NotFound and we
           // recreate.
           let store =
@@ -194,7 +194,7 @@ export const ReferenceStoreProvider = () =>
                   .getReferenceStore({ id: output.referenceStoreId })
                   .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
-          // ENSURE — create if missing. The store name is not a unique key, so
+          // ENSURE -- create if missing. The store name is not a unique key, so
           // there is no AlreadyExists race to tolerate here.
           if (store === undefined) {
             store = yield* omics.createReferenceStore({
@@ -205,7 +205,7 @@ export const ReferenceStoreProvider = () =>
             });
           }
 
-          // SYNC TAGS — diff against observed cloud tags so adoption converges.
+          // SYNC TAGS -- diff against observed cloud tags so adoption converges.
           yield* syncOmicsTags(store.arn, desiredTags);
 
           yield* session.note(store.id);

@@ -17,7 +17,7 @@ export interface ListManagedNotificationChildEventsRequest
  * ### Reading AWS-Managed Notifications
  * **Example:** List an Aggregate Event's Children
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const listManagedNotificationChildEvents =
  *   yield* AWS.Notifications.ListManagedNotificationChildEvents();
  *

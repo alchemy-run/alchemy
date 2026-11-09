@@ -1,14 +1,14 @@
 /**
- * `SfnEffect<A, E>` — the yieldable, pipeable Step Functions program type.
+ * `SfnEffect<A, E>` -- the yieldable, pipeable Step Functions program type.
  *
  * It mirrors Effect's `<A, E>` channels (there is deliberately no `R`
- * channel: an ASL program cannot require services — its "requirements" are
+ * channel: an ASL program cannot require services -- its "requirements" are
  * the resources its Task states reference, collected structurally at
  * compile). It is **not** an `Effect`: it is a shallow-embedded AST that
  * *feels* like Effect (generator syntax, `catchTag` narrowing `E`) but
  * constructs a data structure that `compile.ts` turns into ASL JSON.
  *
- * Yielding a real `Effect` inside `Sfn.gen` is a **type error** — only
+ * Yielding a real `Effect` inside `Sfn.gen` is a **type error** -- only
  * `SfnEffect`s (branded with {@link SfnTypeId}) are yieldable.
  */
 import { pipeArguments } from "effect/Pipeable";
@@ -74,7 +74,7 @@ export const isSfnEffect = (value: unknown): value is SfnEffect<any, any> =>
   SfnTypeId in value;
 
 /**
- * Write a Step Functions program with generator syntax — the `Sfn`
+ * Write a Step Functions program with generator syntax -- the `Sfn`
  * counterpart of `Effect.gen`. Each `yield*` of an `SfnEffect` resumes with
  * a **typed reference** ({@link Expr}) to that step's result, usable in
  * later payloads and conditions; the compiler turns the sequence into
@@ -92,7 +92,7 @@ export const isSfnEffect = (value: unknown): value is SfnEffect<any, any> =>
  *
  * The generator is a *trace*, not a running program: it executes at compile
  * time with placeholder references, so data-dependent JS control flow over
- * step results is unsound — use `Sfn.when` / `Sfn.match` for branching.
+ * step results is unsound -- use `Sfn.when` / `Sfn.match` for branching.
  * Yielding a real `Effect` is a type error by design.
  */
 export const gen = <Y extends SfnEffect<any, any>, R, In = any>(

@@ -29,7 +29,7 @@ export interface Flag {
   readonly value: string | undefined;
 }
 
-/** A heredoc attached to an instruction (`RUN <<EOF … EOF`). */
+/** A heredoc attached to an instruction (`RUN <<EOF ... EOF`). */
 export interface Heredoc {
   /** The delimiter word, e.g. `EOF`. */
   readonly name: string;
@@ -113,7 +113,7 @@ export interface Stage {
   readonly raw: string;
   /** The base: an image reference, an earlier stage's name, or `scratch`. */
   readonly image: string;
-  /** `FROM … AS name`. */
+  /** `FROM ... AS name`. */
   readonly name: string | undefined;
   readonly flags: ReadonlyArray<Flag>;
   readonly instructions: ReadonlyArray<Instruction>;
@@ -555,7 +555,7 @@ const validateFlags = Effect.fn(function* (
   return flags;
 });
 
-/** `ENV`/`LABEL` pairs: `k=v …`, or the legacy `k value with spaces`. */
+/** `ENV`/`LABEL` pairs: `k=v ...`, or the legacy `k value with spaces`. */
 const nameValues = Effect.fn(function* (rest: string, key: string, escape: string, line: number) {
   const words = parseWords(rest, escape);
   if (words.length === 0) return [];
@@ -603,7 +603,7 @@ const DURATION_UNITS: Record<string, number> = {
   ns: 1,
   us: 1e3,
   µs: 1e3,
-  μs: 1e3,
+  "\u03bcs": 1e3,
   ms: 1e6,
   s: 1e9,
   m: 60e9,

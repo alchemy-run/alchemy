@@ -6,8 +6,8 @@ import type { JobQueue } from "./JobQueue.ts";
 /**
  * Shared scaffolding for AWS Batch HTTP bindings.
  *
- * NOT exported from `index.ts` — every queue-anchored `{Op}Http.ts` in this
- * service is a thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of
+ * NOT exported from `index.ts` -- every queue-anchored `{Op}Http.ts` in this
+ * service is a thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of
  * the two builders below. Everything except the operation, the IAM action
  * list, and (for queue-scoped operations) the injected `jobQueue` is
  * boilerplate. `SubmitJobHttp` binds TWO resources (queue + job definition)
@@ -18,7 +18,7 @@ import type { JobQueue } from "./JobQueue.ts";
  * Build the impl Effect for a job-level operation (describe/terminate/cancel
  * submitted jobs). The bound {@link JobQueue} anchors the binding's identity;
  * the deploy-time half grants `actions` on `*` because job ARNs
- * (`arn:…:job/{jobId}`) are only known at runtime and `batch:DescribeJobs` /
+ * (`arn:...:job/{jobId}`) are only known at runtime and `batch:DescribeJobs` /
  * `batch:ListJobs` have no resource-level IAM at all.
  */
 export const makeBatchJobHttpBinding = <I, A, E, R>(options: {
@@ -62,7 +62,7 @@ export const makeBatchQueueHttpBinding = <I extends { jobQueue?: string }, A, E,
   tag: string;
   /** The distilled operation; `jobQueue` is injected from the bound queue. */
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
-  /** IAM actions granted on the queue ARN (or `*` — see `wildcardIam`). */
+  /** IAM actions granted on the queue ARN (or `*` -- see `wildcardIam`). */
   actions: readonly string[];
   /** Grant on `*` instead of the queue ARN (actions without resource-level IAM). */
   wildcardIam?: boolean;
@@ -72,7 +72,7 @@ export const makeBatchQueueHttpBinding = <I extends { jobQueue?: string }, A, E,
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (queue: JobQueue) {
-      // Outputs yield a DEFERRED effect — resolve again per invocation below.
+      // Outputs yield a DEFERRED effect -- resolve again per invocation below.
       const JobQueueArn = yield* queue.jobQueueArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${queue})`({

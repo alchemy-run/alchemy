@@ -49,7 +49,7 @@ export type CatalogsBranchesProductProps = {
   /**
    * Parent catalog resource name
    * `projects/{project}/locations/{location}/catalogs/{catalog}` or a
-   * catalog id (combined with `location`). Immutable — changing it
+   * catalog id (combined with `location`). Immutable -- changing it
    * replaces the product.
    * @default "default_catalog"
    */
@@ -66,7 +66,7 @@ export type CatalogsBranchesProductProps = {
   branchId?: string;
   /**
    * Product id (max 128 characters). If omitted, a unique id is
-   * generated. Immutable — changing it replaces the product.
+   * generated. Immutable -- changing it replaces the product.
    */
   productId?: string;
   /**
@@ -97,7 +97,7 @@ export type CatalogsBranchesProductProps = {
    */
   brands?: string[];
   /**
-   * Language of title/description (`en-US`, …).
+   * Language of title/description (`en-US`, ...).
    */
   languageCode?: string;
   /**

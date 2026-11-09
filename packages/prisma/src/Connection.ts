@@ -132,12 +132,12 @@ export interface Connection extends Resource<
      * Conventional application database URL, redacted in state.
      *
      * Resolves to the pooled Postgres URL first, then direct Postgres, then
-     * Accelerate — the serverless-safe default for application traffic.
+     * Accelerate -- the serverless-safe default for application traffic.
      */
     databaseUrl: Redacted.Redacted<string> | undefined;
     /**
      * Parsed direct connection components ready to feed into a Postgres
-     * origin — e.g. `Cloudflare.Hyperdrive`'s `origin` prop. Points at the
+     * origin -- e.g. `Cloudflare.Hyperdrive`'s `origin` prop. Points at the
      * direct (non-pooled) endpoint, which is the recommended target when
      * fronting Prisma Postgres with another pooler like Hyperdrive.
      */

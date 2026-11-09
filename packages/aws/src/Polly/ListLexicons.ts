@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `polly:ListLexicons` — list the pronunciation
+ * Runtime binding for `polly:ListLexicons` -- list the pronunciation
  * lexicons stored in the region (name plus attributes; use the names as
  * `LexiconNames` in synthesis requests).
  *

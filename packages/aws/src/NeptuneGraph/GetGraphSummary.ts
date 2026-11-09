@@ -7,7 +7,7 @@ import type { Graph } from "./Graph.ts";
  * Runtime binding for the `GetGraphSummary` operation (IAM action `neptune-graph:GetGraphSummary`),
  * scoped to one {@link Graph}.
  *
- * Reads the data summary of the bound graph — node/edge counts, labels, and (in `DETAILED` mode) per-label structure. Cheap way to sanity-check a load or drive dashboards without running a query. Provide the implementation with
+ * Reads the data summary of the bound graph -- node/edge counts, labels, and (in `DETAILED` mode) per-label structure. Cheap way to sanity-check a load or drive dashboards without running a query. Provide the implementation with
  * `Effect.provide(AWS.NeptuneGraph.GetGraphSummaryHttp)`.
  * ### Inspecting a Graph
  * **Example:** Read node and edge counts

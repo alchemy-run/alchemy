@@ -36,7 +36,7 @@ export interface PrerenderResponseMetadata {
   hasBody: boolean;
   /**
    * The metadata collected during the render, or `undefined` when no render
-   * scope could be installed in the worker (degraded collection — the path is
+   * scope could be installed in the worker (degraded collection -- the path is
    * recorded as "not tracked", which is distinct from tracked-but-empty).
    */
   metadata?: PrerenderRenderMetadata;

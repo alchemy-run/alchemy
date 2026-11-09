@@ -13,7 +13,7 @@ export interface GetInstancesHealthStatusRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `servicediscovery:GetInstancesHealthStatus` — reads
+ * Runtime binding for `servicediscovery:GetInstancesHealthStatus` -- reads
  * the current health status (`HEALTHY`, `UNHEALTHY`, or `UNKNOWN`) of the
  * bound {@link Service}'s instances. There is a brief delay between
  * registering an instance and its health status becoming available.

@@ -29,13 +29,13 @@ export type CustomJobSpec = aiplatform.GoogleCloudAiplatformV1CustomJobSpec;
 
 export type CustomJobProps = {
   /**
-   * Region. Immutable — changing it replaces the job.
+   * Region. Immutable -- changing it replaces the job.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
    * User-facing display name (max 128 characters). Defaults to a generated
-   * id. Immutable after create — CustomJob has no update API.
+   * id. Immutable after create -- CustomJob has no update API.
    */
   displayName?: string;
   /**
@@ -92,7 +92,7 @@ export type CustomJob = Resource<
 >;
 
 /**
- * A Vertex AI CustomJob — a container or Python training workload.
+ * A Vertex AI CustomJob -- a container or Python training workload.
  *
  * Creating a CustomJob starts it immediately. There is no update API, so
  * reconcile is observe-ensure (create if missing). Delete cancels a

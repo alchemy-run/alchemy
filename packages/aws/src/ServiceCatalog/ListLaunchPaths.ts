@@ -7,14 +7,14 @@ import type * as Effect from "effect/Effect";
  *
  * Lists the launch paths (the portfolio routes through which the caller can provision a product). The path ID is required by `ProvisionProduct` when the product is published to more than one portfolio.
  *
- * Account-level operation — which products the caller can see and act on
+ * Account-level operation -- which products the caller can see and act on
  * is governed by portfolio principal associations, so the binding takes no
  * resource argument. Provide the implementation with
  * `Effect.provide(AWS.ServiceCatalog.ListLaunchPathsHttp)`.
  * ### Browsing the Catalog
  * **Example:** Find the Launch Path for a Product
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listLaunchPaths = yield* AWS.ServiceCatalog.ListLaunchPaths();
  *
  * // runtime

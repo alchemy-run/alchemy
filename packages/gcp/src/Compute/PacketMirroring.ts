@@ -30,7 +30,7 @@ export type PacketMirroringFilter = {
    */
   direction?: PacketMirroringFilterDirection | (string & {});
   /**
-   * IP protocols to copy (`tcp`, `udp`, `icmp`, `esp`, …). Empty (the
+   * IP protocols to copy (`tcp`, `udp`, `icmp`, `esp`, ...). Empty (the
    * default) copies every protocol that matches `cidrRanges`.
    */
   ipProtocols?: string[];
@@ -64,26 +64,26 @@ export type PacketMirroringMirroredResources = {
 export type PacketMirroringProps = {
   /**
    * PacketMirroring name (RFC1035, 1-63 characters). If omitted, a unique
-   * name is generated from the stack, stage, and logical id. Immutable —
+   * name is generated from the stack, stage, and logical id. Immutable --
    * changing it replaces the policy.
    */
   packetMirroringName?: string;
   /**
-   * Region the policy lives in. Immutable — changing it replaces the
+   * Region the policy lives in. Immutable -- changing it replaces the
    * policy. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
-   * Optional description. Alchemy ownership is stored in a `[alchemy …]`
+   * Optional description. Alchemy ownership is stored in a `[alchemy ...]`
    * prefix so `list` / nuke can find resources (Compute PacketMirroring has
-   * no labels field). Immutable — changing it replaces the policy.
+   * no labels field). Immutable -- changing it replaces the policy.
    */
   description?: string;
   /**
    * Mirrored VPC network name (`default`), partial URL
    * (`global/networks/default`), or self-link. Only packets on this
-   * network are copied. Immutable — changing it replaces the policy.
+   * network are copied. Immutable -- changing it replaces the policy.
    */
   network: string;
   /**
@@ -93,7 +93,7 @@ export type PacketMirroringProps = {
    */
   collectorIlb: string;
   /**
-   * Mirrored sources — at least one of `tags`, `instances`, or
+   * Mirrored sources -- at least one of `tags`, `instances`, or
    * `subnetworks`. Updated in place.
    */
   mirroredResources: PacketMirroringMirroredResources;
@@ -105,7 +105,7 @@ export type PacketMirroringProps = {
   enable?: boolean | PacketMirroringEnable | (string & {});
   /**
    * Tie-breaker when two policies match the same VM. Lower wins.
-   * Valid range is `0`–`65535`.
+   * Valid range is `0`-`65535`.
    * @default 1000
    */
   priority?: number;
@@ -196,7 +196,7 @@ export interface PacketMirroringLookup {
  * Packet Mirroring copies traffic from selected VMs, subnets, or network
  * tags in a VPC and sends it to a collector internal passthrough Network
  * Load Balancer (`ForwardingRule` with `isMirroringCollector: true`).
- * Compute PacketMirroring has no labels field — Alchemy ownership is
+ * Compute PacketMirroring has no labels field -- Alchemy ownership is
  * stored in the description so nuke can find leaked resources.
  *
  * Name, region, network, and description are immutable; collector ILB,

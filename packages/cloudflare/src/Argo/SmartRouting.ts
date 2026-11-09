@@ -12,13 +12,13 @@ type TypeId = typeof TypeId;
 
 export type SmartRoutingProps = {
   /**
-   * Zone the Argo Smart Routing setting belongs to. Stable — changing the
+   * Zone the Argo Smart Routing setting belongs to. Stable -- changing the
    * zone triggers a replacement (the old zone's setting is restored to
    * the value it had before Alchemy managed it).
    */
   zoneId: string;
   /**
-   * Whether Argo Smart Routing is enabled on the zone. Mutable — patched
+   * Whether Argo Smart Routing is enabled on the zone. Mutable -- patched
    * in place.
    *
    * @default true
@@ -61,7 +61,7 @@ export type SmartRouting = Resource<
  * least-congested, most-reliable paths instead of standard BGP routes,
  * reducing time to first byte for origin-bound requests.
  *
- * The setting is a singleton — it always exists on every zone with a
+ * The setting is a singleton -- it always exists on every zone with a
  * Cloudflare default, so this resource never creates or deletes anything
  * physical. Reconcile patches the setting when the observed value differs
  * from the desired one; destroy restores the value the setting had before
@@ -69,7 +69,7 @@ export type SmartRouting = Resource<
  *
  * Argo Smart Routing is a paid, usage-billed add-on. On a zone without
  * the Argo subscription every read or patch of this setting fails with
- * the typed `NotAuthorized` error (Cloudflare code 1015) — purchase the
+ * the typed `NotAuthorized` error (Cloudflare code 1015) -- purchase the
  * add-on on the zone before managing this resource.
  * ### Enabling Smart Routing
  * **Example:** Enable Argo Smart Routing on a zone
@@ -109,7 +109,7 @@ export const SmartRoutingProvider = () =>
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // No account-wide API for this zone singleton — enumerate every
+      // No account-wide API for this zone singleton -- enumerate every
       // zone in the account and read its setting.
       const allZones = yield* listAllZones(accountId);
       const rows = yield* Effect.forEach(
@@ -117,7 +117,7 @@ export const SmartRoutingProvider = () =>
         (zoneId) =>
           argo.getSmartRouting({ zoneId }).pipe(
             Effect.map((observed) => toAttributes(zoneId, observed, toValue(observed.value))),
-            // Argo Smart Routing is a paid add-on — zones without the
+            // Argo Smart Routing is a paid add-on -- zones without the
             // subscription reject every read with the typed entitlement
             // tag (code 1015); skip them. Zones deleted out-of-band
             // surface InvalidObjectIdentifier.
@@ -146,17 +146,17 @@ export const SmartRoutingProvider = () =>
       const zoneId = output?.zoneId ?? (olds?.zoneId as string | undefined);
       if (!zoneId) return undefined;
       const observed = yield* argo.getSmartRouting({ zoneId }).pipe(
-        // Zone deleted out-of-band — the setting is gone with it.
+        // Zone deleted out-of-band -- the setting is gone with it.
         Effect.catchTags({
           InvalidObjectIdentifier: () => Effect.undefined,
-          // Argo subscription removed out-of-band — the setting is no
+          // Argo subscription removed out-of-band -- the setting is no
           // longer visible or manageable on the zone.
           NotAuthorized: () => Effect.undefined,
         }),
       );
       if (observed === undefined) return undefined;
       // The setting is a singleton that always exists with a Cloudflare
-      // default — there is nothing to "own", so a cold read adopts freely
+      // default -- there is nothing to "own", so a cold read adopts freely
       // (never `Unowned`). The observed value at adoption time becomes the
       // `initialValue` restored on destroy.
       const initialValue = output !== undefined ? output.initialValue : toValue(observed.value);
@@ -168,17 +168,17 @@ export const SmartRoutingProvider = () =>
       const zoneId = news.zoneId as string;
       const desired: "on" | "off" = (news.enabled ?? true) ? "on" : "off";
 
-      // 1. Observe — the setting always exists (NotAuthorized propagates
+      // 1. Observe -- the setting always exists (NotAuthorized propagates
       //    as a typed, clear "Argo subscription required" failure).
       const observed = yield* argo.getSmartRouting({ zoneId });
 
-      // 2. Capture — the pre-management value, restored on destroy.
+      // 2. Capture -- the pre-management value, restored on destroy.
       //    `output` (including an adoption read) already carries it;
       //    otherwise this is our first touch and the observed value is
       //    the zone's original.
       const initialValue = output !== undefined ? output.initialValue : toValue(observed.value);
 
-      // 3. Sync — patch only when the observed value differs.
+      // 3. Sync -- patch only when the observed value differs.
       if (toValue(observed.value) === desired) {
         return toAttributes(zoneId, observed, initialValue);
       }
@@ -191,7 +191,7 @@ export const SmartRoutingProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { zoneId, initialValue } = output;
-      // Observe — if the zone is gone, or the Argo subscription was
+      // Observe -- if the zone is gone, or the Argo subscription was
       // removed out-of-band, the setting is no longer ours to restore.
       const observed = yield* argo.getSmartRouting({ zoneId }).pipe(
         Effect.catchTags({
@@ -214,7 +214,7 @@ export const SmartRoutingProvider = () =>
 
 /**
  * Narrow the distilled response's open `"on" | "off" | (string & {})`
- * value to the closed pair — Cloudflare only ever returns the two
+ * value to the closed pair -- Cloudflare only ever returns the two
  * literals for this setting.
  */
 const toValue = (value: string): "on" | "off" => (value === "on" ? "on" : "off");

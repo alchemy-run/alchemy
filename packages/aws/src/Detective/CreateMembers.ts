@@ -7,7 +7,7 @@ import type { Graph } from "./Graph.ts";
  * Runtime binding for `detective:CreateMembers`.
  *
  * Invites accounts into the behavior graph (or auto-enables organization
- * accounts) — the automation hook for onboarding new accounts to Detective
+ * accounts) -- the automation hook for onboarding new accounts to Detective
  * as they join the fleet. The graph ARN is injected from the bound
  * {@link Graph}.
  * Provide the implementation with

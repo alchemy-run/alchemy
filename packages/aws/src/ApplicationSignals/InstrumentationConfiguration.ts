@@ -18,7 +18,7 @@ export class InstrumentationConfigurationUnexpectedResponse extends Data.TaggedE
 export interface InstrumentationConfigurationProps {
   /**
    * The kind of dynamic instrumentation: `PROBE` or `BREAKPOINT`.
-   * Configurations are immutable — changing the type replaces the
+   * Configurations are immutable -- changing the type replaces the
    * configuration.
    */
   instrumentationType: appsignals.InstrumentationType;
@@ -38,15 +38,15 @@ export interface InstrumentationConfigurationProps {
    */
   signalType: appsignals.DynamicInstrumentationSignalType;
   /**
-   * The code location to instrument (`Language`, `FilePath`, and — as the
-   * language requires — `CodeUnit`, `ClassName`, `MethodName`,
+   * The code location to instrument (`Language`, `FilePath`, and -- as the
+   * language requires -- `CodeUnit`, `ClassName`, `MethodName`,
    * `LineNumber`). Changing the location replaces the configuration.
    */
   location: appsignals.CodeLocation;
   /**
    * What the instrumentation captures at the location: arguments, return
    * value, stack trace, locals, and the mandatory `CaptureLimits`.
-   * Configurations are immutable — changing this replaces it.
+   * Configurations are immutable -- changing this replaces it.
    */
   captureConfiguration: appsignals.CodeCaptureConfiguration;
   /**
@@ -59,7 +59,7 @@ export interface InstrumentationConfigurationProps {
    */
   expiresAt?: Date | string;
   /**
-   * Attribute filter groups — the instrumentation only fires when a
+   * Attribute filter groups -- the instrumentation only fires when a
    * request matches all attributes within one of the groups.
    */
   attributeFilters?: { [key: string]: string | undefined }[];
@@ -108,7 +108,7 @@ export interface InstrumentationConfiguration extends Resource<
 > {}
 
 /**
- * A CloudWatch Application Signals dynamic instrumentation configuration —
+ * A CloudWatch Application Signals dynamic instrumentation configuration --
  * instructs instrumented SDK agents to capture a snapshot (arguments,
  * locals, return value, stack trace) at a specific code location of a
  * discovered service, without redeploying the application.
@@ -274,7 +274,7 @@ export const InstrumentationConfigurationProvider = () =>
 
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
-          // Configurations are immutable after creation — any change other
+          // Configurations are immutable after creation -- any change other
           // than tags replaces. Tags fall through to the default update.
           if (olds !== undefined && immutableFingerprint(news) !== immutableFingerprint(olds)) {
             return { action: "replace" } as const;
@@ -285,12 +285,12 @@ export const InstrumentationConfigurationProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. Observe — cloud state is authoritative; `output` only caches
+          // 1. Observe -- cloud state is authoritative; `output` only caches
           //    the location hash.
           let live = yield* observe(news, output?.locationHash);
 
           if (live === undefined) {
-            // 2. Ensure — create when missing; a concurrent create of the
+            // 2. Ensure -- create when missing; a concurrent create of the
             //    same location surfaces as ConflictException, which is a
             //    race: re-observe and continue.
             live = yield* appsignals
@@ -321,11 +321,11 @@ export const InstrumentationConfigurationProvider = () =>
                 ),
               );
           }
-          // 3. There is no update API — the diff replaces on any change to
+          // 3. There is no update API -- the diff replaces on any change to
           //    the immutable payload, so an observed configuration is
           //    already converged apart from tags.
 
-          // 3b. SYNC TAGS — diff against OBSERVED cloud tags so adoption
+          // 3b. SYNC TAGS -- diff against OBSERVED cloud tags so adoption
           //     converges (create-time Tags only apply on first create).
           const currentTags = yield* observedTags(live.ARN);
           const { upsert, removed } = diffTags(currentTags, desiredTags);
@@ -356,7 +356,7 @@ export const InstrumentationConfigurationProvider = () =>
               LocationIdentifier: { LocationHash: output.locationHash },
             })
             .pipe(
-              // Idempotent delete — already-gone is success.
+              // Idempotent delete -- already-gone is success.
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             );
         }),

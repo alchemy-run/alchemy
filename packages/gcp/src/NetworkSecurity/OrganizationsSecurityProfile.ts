@@ -32,7 +32,7 @@ export type OrganizationsSecurityProfileType =
   | (string & {});
 
 export type OrganizationsAntivirusOverride = {
-  /** Protocol to match (`HTTP`, `SMTP`, …). */
+  /** Protocol to match (`HTTP`, `SMTP`, ...). */
   protocol?: string;
   /** Threat action (`ALLOW`, `ALERT`, `DENY`, `DEFAULT_ACTION`). */
   action?: string;
@@ -90,24 +90,24 @@ export type OrganizationsCustomInterceptProfile = {
 export type OrganizationsSecurityProfileProps = {
   /**
    * Security profile id. If omitted, a unique RFC1035 name is generated
-   * from the stack, stage, and logical id. Immutable — changing it
+   * from the stack, stage, and logical id. Immutable -- changing it
    * replaces the profile.
    */
   securityProfileId?: string;
   /**
    * Organization id or `organizations/{organization}`. If omitted,
    * Alchemy uses `GOOGLE_ORGANIZATION_ID` or the project's Resource
-   * Manager parent. Immutable — changing it replaces the profile.
+   * Manager parent. Immutable -- changing it replaces the profile.
    */
   organization?: string;
   /**
-   * Location. Security profiles live in `global`. Immutable — changing
+   * Location. Security profiles live in `global`. Immutable -- changing
    * it replaces the profile.
    * @default "global"
    */
   location?: string;
   /**
-   * Profile type. Immutable — changing it replaces the profile.
+   * Profile type. Immutable -- changing it replaces the profile.
    * @default "THREAT_PREVENTION"
    */
   type?: OrganizationsSecurityProfileType;

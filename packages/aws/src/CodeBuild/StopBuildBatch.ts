@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Project } from "./Project.ts";
 
 /**
- * Runtime binding for `codebuild:StopBuildBatch` — stops an in-progress
+ * Runtime binding for `codebuild:StopBuildBatch` -- stops an in-progress
  * batch build of the bound project by batch id.
  * ### Batch Builds
  * **Example:** Stop a Batch Build

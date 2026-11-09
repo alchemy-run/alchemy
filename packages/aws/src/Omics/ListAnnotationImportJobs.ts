@@ -13,7 +13,7 @@ export interface ListAnnotationImportJobsRequest extends omics.ListAnnotationImp
  * ### Annotation Imports
  * **Example:** Call ListAnnotationImportJobs
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const listImports = yield* AWS.Omics.ListAnnotationImportJobs();
  * // runtime
  * const result = yield* listImports({});

@@ -71,8 +71,8 @@ export interface RestrictedApiKeyProps {
    */
   name?: string;
   /**
-   * Optional Dashboard-created restricted key (`rk_test_…` / `rk_live_…`).
-   * When omitted, the account secret from {@link Credentials} is used —
+   * Optional Dashboard-created restricted key (`rk_test_...` / `rk_live_...`).
+   * When omitted, the account secret from {@link Credentials} is used --
    * Stripe has no public API to mint restricted keys.
    */
   value?: string;
@@ -95,7 +95,7 @@ export type RestrictedApiKey = Resource<
   "Stripe.RestrictedApiKey",
   RestrictedApiKeyProps,
   {
-    /** Stable id (logical physical name — Stripe has no key object id). */
+    /** Stable id (logical physical name -- Stripe has no key object id). */
     id: string;
     /** Display name. */
     name: string;
@@ -113,8 +113,8 @@ export type RestrictedApiKey = Resource<
  *
  * HTTP bindings call `token.bind(capability, { permissions })` the same
  * way Cloudflare HTTP bindings attach policies to an AccountApiToken.
- * Stripe restricted keys (`rk_…`) can only be created in the Dashboard
- * today — `POST /v2/iam/api_keys` is Stripe Apps private preview. Until
+ * Stripe restricted keys (`rk_...`) can only be created in the Dashboard
+ * today -- `POST /v2/iam/api_keys` is Stripe Apps private preview. Until
  * that API is generally available, this resource stores the collected
  * permissions and injects either a user-supplied RAK or the account
  * secret key.
@@ -171,7 +171,7 @@ export const RestrictedApiKeyProvider = () =>
       return output;
     }),
 
-    // Logical token only — there is no Stripe list of keys we created.
+    // Logical token only -- there is no Stripe list of keys we created.
     list: Effect.fn(function* () {
       return [];
     }),
@@ -183,7 +183,7 @@ export const RestrictedApiKeyProvider = () =>
       // TODO: Mint a real restricted key once Stripe publishes a public
       // create-key API. `POST /v2/iam/api_keys` (Stripe Apps IAM preview)
       // 404s as of 2026-08. Pass `permissions` (props + bindings) as the
-      // key's scopes, persist the returned `rk_…` as `value`, and teach
+      // key's scopes, persist the returned `rk_...` as `value`, and teach
       // list/delete to enumerate/revoke it. Until then this is a logical
       // token: Dashboard `news.value` or the account secret.
       const resolveAccountApiKey = Effect.gen(function* () {

@@ -13,8 +13,8 @@ import type { PolicyStatement } from "../IAM/Policy.ts";
  * additionally need `iam:PassRole` scoped to
  * `comprehendmedical.amazonaws.com`).
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, makeComprehendMedicalHttpBinding({ … }))`.
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, makeComprehendMedicalHttpBinding({ ... }))`.
  */
 export const makeComprehendMedicalHttpBinding = <I, A, E, R>(options: {
   /**

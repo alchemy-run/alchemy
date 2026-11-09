@@ -17,7 +17,7 @@ export interface StartCostAllocationTagBackfillRequest
  * ### Cost Allocation Tags
  * **Example:** Backfill Tag Activation
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const startCostAllocationTagBackfill = yield* AWS.CostExplorer.StartCostAllocationTagBackfill();
  *
  * // runtime

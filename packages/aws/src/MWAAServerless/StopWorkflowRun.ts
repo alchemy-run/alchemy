@@ -17,7 +17,7 @@ export type StopWorkflowRunInput = Omit<mwaa.StopWorkflowRunRequest, "WorkflowAr
  * ### Running Workflows
  * **Example:** Stop A Run
  * ```typescript
- * // init — bind the operation to the workflow
+ * // init -- bind the operation to the workflow
  * const stopWorkflowRun = yield* AWS.MWAAServerless.StopWorkflowRun(workflow);
  *
  * // runtime

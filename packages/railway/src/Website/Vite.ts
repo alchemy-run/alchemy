@@ -29,22 +29,22 @@ export interface ViteProps extends FrameworkSiteProps {
 /**
  * Deploy a plain [Vite](https://vite.dev) application to Railway: static
  * assets (the `vite build` output) served by a generated Node static-file
- * server on one `Railway.Service`. For client-only projects — React/Vue/Solid
- * SPAs, `index.html` multi-page apps — whose entire deployable output is
+ * server on one `Railway.Service`. For client-only projects -- React/Vue/Solid
+ * SPAs, `index.html` multi-page apps -- whose entire deployable output is
  * static assets.
  *
  * The build runs through `@alchemy.run/frontend-frameworks/vite` with the
- * `@alchemy.run/frontend-frameworks/vite/node` deploy target — the package
+ * `@alchemy.run/frontend-frameworks/vite/node` deploy target -- the package
  * must be installed in your project. Your project's own `vite.config.*`
  * (plugins included) drives the build.
  *
  * During `alchemy dev` the site is Vite's own dev server (native HMR) and
- * no cloud resources are created — the site's `url` is the dev server's
+ * no cloud resources are created -- the site's `url` is the dev server's
  * local address. `Alchemy.remote()` opts back into the full deployment.
  *
  * SSR frameworks that wrap Vite deploy through their own composites
  * ({@link Astro | Railway.Website.Astro}, {@link SvelteKit | Railway.Website.SvelteKit},
- * {@link Octane | Railway.Website.Octane}, ...) — this composite never
+ * {@link Octane | Railway.Website.Octane}, ...) -- this composite never
  * creates a framework server module.
  *
  * ### Creating Vite Sites

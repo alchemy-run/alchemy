@@ -13,7 +13,7 @@ import type * as Effect from "effect/Effect";
  * ### Parsing EDI Documents
  * **Example:** Parse an X12 850 into JSON
  * ```typescript
- * // init — account-level, no resource argument
+ * // init -- account-level, no resource argument
  * const testParsing = yield* AWS.B2BI.TestParsing();
  *
  * // runtime
@@ -24,7 +24,7 @@ import type * as Effect from "effect/Effect";
  *     x12Details: { transactionSet: "X12_850", version: "VERSION_4010" },
  *   },
  * });
- * // result.parsedFileContent — the JSON representation of the EDI file
+ * // result.parsedFileContent -- the JSON representation of the EDI file
  * ```
  *
  * @binding

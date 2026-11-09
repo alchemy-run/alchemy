@@ -24,16 +24,16 @@ import * as FrameworkCore from "../core/index.ts";
 import { makeWakuCloudflareTarget } from "./cloudflare.ts";
 import { layer as wakuFrameworkLayer } from "./Waku.ts";
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Structural mirror of alchemy's Worker source-provider contract.
 //
 // This module is loaded dynamically by alchemy's `loadSource` (see
-// `packages/cloudflare/src/Workers/Source.ts` — `WorkerSourceModule`,
+// `packages/cloudflare/src/Workers/Source.ts` -- `WorkerSourceModule`,
 // `SourceProvider`, `SourceContext`, `DevContext`, `SourceBuildOutput`). The
-// contract is deliberately implemented STRUCTURALLY — no alchemy import — so
+// contract is deliberately implemented STRUCTURALLY -- no alchemy import -- so
 // version skew degrades to a load-time `SourceProviderError` instead of a
 // crash. Keep these shapes in sync with the alchemy interfaces.
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /** Mirror of alchemy `Cloudflare/Workers/Source.SourceHash`. */
 export interface SourceHash {
@@ -120,7 +120,7 @@ export interface ServerDevHandle {
 
 /**
  * Tag-compatible mirror of alchemy's
- * `Cloudflare.Workers.SourceProviderError` — same `_tag`, same fields, so
+ * `Cloudflare.Workers.SourceProviderError` -- same `_tag`, same fields, so
  * `Effect.catchTag` on the alchemy side matches errors raised here.
  */
 export class SourceProviderError extends Data.TaggedError(
@@ -154,7 +154,7 @@ export interface SourceProvider {
 /**
  * Serializable options of the waku source descriptor
  * (`{ provider: "@alchemy.run/frontend-frameworks/waku/source", options }` on alchemy's
- * `WorkerProps.source`). MUST stay plain JSON data — the descriptor persists
+ * `WorkerProps.source`). MUST stay plain JSON data -- the descriptor persists
  * in alchemy state and participates in the Worker metadata hash.
  */
 export interface WakuSourceOptions {
@@ -162,8 +162,8 @@ export interface WakuSourceOptions {
   readonly rootDir?: string | undefined;
   /**
    * The user's own worker entry (the user-entry seam,
-   * `DeployTarget.entry`): a module that wraps waku's handler — imported
-   * from `virtual:waku/server-entry` — and re-exports extras (Durable
+   * `DeployTarget.entry`): a module that wraps waku's handler -- imported
+   * from `virtual:waku/server-entry` -- and re-exports extras (Durable
    * Object classes, additional handlers). Relative paths resolve against
    * the root. When unset, waku's own rsc server entry is deployed.
    */
@@ -211,9 +211,9 @@ export interface WakuMemoOptions {
   readonly lockfile?: boolean | undefined;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Hashing primitives
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 const sha256 = (input: string | Uint8Array): string =>
   NodeCrypto.createHash("sha256").update(input).digest("hex");
@@ -234,15 +234,15 @@ const stableValue = (value: unknown): unknown => {
 
 const sha256Object = (value: unknown): string => sha256(JSON.stringify(stableValue(value)));
 
-/** The integration's own version — included in the input hash so upgrading the
+/** The integration's own version -- included in the input hash so upgrading the
  * adapter busts the build memo even when project sources are unchanged. */
 const PACKAGE_VERSION: string = (
   createRequire(import.meta.url)("../../package.json") as { version: string }
 ).version;
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Minimal gitignore-style matching (documented subset, zero dependencies)
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 const escapeRegExpChar = (char: string): string =>
   /[.*+?^${}()|[\]\\]/.test(char) ? `\\${char}` : char;
@@ -313,10 +313,10 @@ const compileIncludeGlobs = (globs: ReadonlyArray<string>): Array<RegExp> =>
 const matchesAny = (regexes: ReadonlyArray<RegExp>, path: string): boolean =>
   regexes.some((regex) => regex.test(path));
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Input-tree hashing (the rebuild-free change signal, mirroring the semantics
 // of alchemy's `hashViteInput` / `hashDirectory`)
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 const LOCKFILE_NAMES = [
   "bun.lock",
@@ -346,7 +346,7 @@ const findUp = Effect.fn(function* (startDir: string, filenames: ReadonlyArray<s
 });
 
 /** Collect `.gitignore` rules from `rootDir` up to the repo root (the first
- * directory containing `.git`), outermost first — same walk as alchemy's
+ * directory containing `.git`), outermost first -- same walk as alchemy's
  * `Command/Memo.ts`. Rules apply relative to `rootDir` (simplification). */
 const readGitIgnoreRules = Effect.fn(function* (rootDir: string) {
   const fs = yield* FileSystem.FileSystem;
@@ -501,9 +501,9 @@ const hashWakuInput = Effect.fn(function* (params: {
   return { hash, workspaces };
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Client-asset reading (mirror of alchemy `Cloudflare/Workers/Assets.readAssets`)
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 const SPECIAL_ASSET_FILES = [".assetsignore", "_headers", "_redirects"];
 
@@ -521,7 +521,7 @@ const maybeReadString = Effect.fn(function* (file: string) {
  * Read the client output directory into the manifest shape alchemy's
  * `putWorker`/`uploadAssets` consume: per-file `sha256(content).slice(0, 32)`
  * + byte size, keyed by `/`-prefixed posix path; the aggregate hash covers
- * only upload-affecting inputs (manifest, config, `_headers`, `_redirects` —
+ * only upload-affecting inputs (manifest, config, `_headers`, `_redirects` --
  * never the absolute directory path).
  */
 const readClientAssets = Effect.fn(function* (
@@ -576,9 +576,9 @@ const readClientAssets = Effect.fn(function* (
   } satisfies AssetReadResult;
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // The provider
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 const PROVIDER = "@alchemy.run/frontend-frameworks/waku/source";
 
@@ -600,13 +600,13 @@ export interface WakuLikeSourceIntegration {
  * which always runs from the project.
  *
  * The production **build** therefore runs in a disposable child process
- * whose working directory IS the project root (see `core/BuildChild.ts`) —
+ * whose working directory IS the project root (see `core/BuildChild.ts`) --
  * no in-process `chdir`, no lock, unbounded build concurrency. The shared `core/BuildChildRunner`
  * entry imports this module in the child and calls the exported
  * {@link buildInChild}.
  *
- * The **dev server** cannot cross a process boundary (its inputs —
- * `ctx.worker.bindings` hooks and `ctx.runtimeContext` — are live objects),
+ * The **dev server** cannot cross a process boundary (its inputs --
+ * `ctx.worker.bindings` hooks and `ctx.runtimeContext` -- are live objects),
  * so only its startup window still chdirs in-process, serialized through
  * {@link cwdLock}; the cwd is restored as soon as the server is listening.
  */
@@ -689,7 +689,7 @@ export const makeWakuSourceProvider = (
 
   return {
     // Waku's assets are a build product (`dist/public`), not a props-level
-    // directory — the provider reads and diffs them itself.
+    // directory -- the provider reads and diffs them itself.
     ownsAssets: true,
     // Dev runs the Worker in workerd with the Vite plugin's assets service.
     devAssetsBinding: true,
@@ -772,7 +772,7 @@ export const makeWakuSourceProvider = (
     }),
 
     // Rebuild-free: re-hash the project tree (+ previously-discovered
-    // workspaces) — the same recipe as alchemy's vite source. `previous` is
+    // workspaces) -- the same recipe as alchemy's vite source. `previous` is
     // only used for the auxiliary workspace list, never to skip recomputation.
     hash: Effect.fn(function* (_ctx, previous) {
       const path = yield* Path.Path;
@@ -791,7 +791,7 @@ export const makeWakuSourceProvider = (
 
     // Waku dev is a vite dev server with the cloudflare plugin embedded in
     // waku's own plugin stack (the rsc environment runs in workerd against
-    // the host-provided worker wiring) — a `server`-mode dev handle.
+    // the host-provided worker wiring) -- a `server`-mode dev handle.
     dev: Effect.fn(function* (ctx) {
       const path = yield* Path.Path;
       const rootDir = rootDirOf(path);

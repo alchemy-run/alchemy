@@ -18,7 +18,7 @@ export interface ModifyCapacityReservationRequest extends Omit<
  * load-balancer ARN).
  *
  * Sets or resets the bound load balancer's minimum LCU capacity reservation
- * at runtime — e.g. a Lambda that pre-provisions capacity ahead of a known
+ * at runtime -- e.g. a Lambda that pre-provisions capacity ahead of a known
  * traffic spike (product launch, ticket sale) and resets it afterwards, the
  * ELBv2 analogue of Auto Scaling's `SetDesiredCapacity`. Provide the
  * implementation with
@@ -26,16 +26,16 @@ export interface ModifyCapacityReservationRequest extends Omit<
  * ### Capacity Reservation
  * **Example:** Reserve capacity ahead of a spike
  * ```typescript
- * // init — bind the operation to the load balancer
+ * // init -- bind the operation to the load balancer
  * const modifyCapacityReservation =
  *   yield* AWS.ELBv2.ModifyCapacityReservation(loadBalancer);
  *
- * // runtime — reserve 100 LCUs per Availability Zone
+ * // runtime -- reserve 100 LCUs per Availability Zone
  * yield* modifyCapacityReservation({
  *   MinimumLoadBalancerCapacity: { CapacityUnits: 100 },
  * });
  *
- * // later — release the reservation
+ * // later -- release the reservation
  * yield* modifyCapacityReservation({ ResetCapacityReservation: true });
  * ```
  *

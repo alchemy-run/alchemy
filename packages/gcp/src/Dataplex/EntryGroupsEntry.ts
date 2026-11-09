@@ -42,7 +42,7 @@ export type EntrySource = {
   description?: string;
   /**
    * User-defined source labels. Alchemy ownership labels are merged in
-   * automatically — Entries have no top-level labels field.
+   * automatically -- Entries have no top-level labels field.
    */
   labels?: Record<string, string>;
   /** Ancestor entries in the source system. */
@@ -57,7 +57,7 @@ export type EntryGroupsEntryProps = {
   /**
    * Parent Entry Group. Full name
    * `projects/{project}/locations/{location}/entryGroups/{entryGroup}`
-   * or the entry-group id (combined with `location`). Immutable —
+   * or the entry-group id (combined with `location`). Immutable --
    * changing it replaces the entry.
    */
   entryGroup: string;
@@ -65,12 +65,12 @@ export type EntryGroupsEntryProps = {
    * Entry id (the `{entry}` segment of
    * `.../entryGroups/{entryGroup}/entries/{entry}`). May contain slashes
    * (up to 4000 characters). If omitted, a unique name is generated from
-   * the stack, stage, and logical id. Immutable — changing it replaces
+   * the stack, stage, and logical id. Immutable -- changing it replaces
    * the entry.
    */
   entryId?: string;
   /**
-   * Region used when `entryGroup` is a bare id. Immutable — changing it
+   * Region used when `entryGroup` is a bare id. Immutable -- changing it
    * replaces the entry.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -78,11 +78,11 @@ export type EntryGroupsEntryProps = {
   /**
    * Entry type resource name
    * `projects/{project}/locations/{location}/entryTypes/{entryType}`.
-   * Immutable — changing it replaces the entry.
+   * Immutable -- changing it replaces the entry.
    */
   entryType: string;
   /**
-   * Parent entry resource name. Immutable — changing it replaces the
+   * Parent entry resource name. Immutable -- changing it replaces the
    * entry.
    */
   parentEntry?: string;
@@ -174,7 +174,7 @@ export interface EntryGroupsEntryLookup {
 }
 
 /**
- * A Dataplex Universal Catalog Entry — a metadata record for a data
+ * A Dataplex Universal Catalog Entry -- a metadata record for a data
  * resource.
  *
  * Entries have no top-level labels field, so Alchemy stamps ownership

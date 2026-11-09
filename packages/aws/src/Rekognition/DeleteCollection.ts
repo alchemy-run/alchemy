@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `rekognition:DeleteCollection` — delete a face collection and all faces stored in it.
+ * Runtime binding for `rekognition:DeleteCollection` -- delete a face collection and all faces stored in it.
  *
  * The binding takes no arguments and grants the function
  * `rekognition:DeleteCollection` on `*` (Rekognition data-plane resources such

@@ -3,8 +3,8 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `personalize:GetSolutionMetrics` — Reads the offline evaluation metrics (precision, coverage, NDCG, …)
- * of a trained solution version — used to gate deployment on model
+ * Runtime binding for `personalize:GetSolutionMetrics` -- Reads the offline evaluation metrics (precision, coverage, NDCG, ...)
+ * of a trained solution version -- used to gate deployment on model
  * quality.
  * Provide the implementation with
  * `Effect.provide(AWS.Personalize.GetSolutionMetricsHttp)`.

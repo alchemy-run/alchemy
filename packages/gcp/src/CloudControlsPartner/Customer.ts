@@ -39,12 +39,12 @@ export type CustomerProps = {
    * Partner organization (`organizations/{organization}` or the numeric
    * id). Defaults to `GOOGLE_CLOUDCONTROLSPARTNER_ORGANIZATION`,
    * `GOOGLE_ORGANIZATION_ID`, or the project's Resource Manager
-   * ancestor. Immutable — changing it replaces the customer.
+   * ancestor. Immutable -- changing it replaces the customer.
    */
   organization?: string;
   /**
-   * Partner-operated Google Cloud location (`us-central1`, …).
-   * Immutable — changing it replaces the customer. `US-CENTRAL1` is
+   * Partner-operated Google Cloud location (`us-central1`, ...).
+   * Immutable -- changing it replaces the customer. `US-CENTRAL1` is
    * accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -52,14 +52,14 @@ export type CustomerProps = {
   /**
    * Customer Google Cloud organization id. Becomes the last segment of
    * `organizations/{organization}/locations/{location}/customers/{customer}`.
-   * Required on create and must be a valid organization id. Immutable —
+   * Required on create and must be a valid organization id. Immutable --
    * changing it replaces the customer.
    */
   customerId?: string;
   /**
    * Display name for the customer. Cloud Controls Partner customers
    * have no labels field, so Alchemy ownership is stored in a
-   * `[alchemy …]` prefix and stripped from attributes.
+   * `[alchemy ...]` prefix and stripped from attributes.
    */
   displayName?: string;
 };
@@ -98,7 +98,7 @@ export type Customer = Resource<
 /**
  * A Cloud Controls Partner customer of a sovereign-controls partner.
  *
- * Customers have no labels field — Alchemy stamps ownership into
+ * Customers have no labels field -- Alchemy stamps ownership into
  * `displayName` for `list` / nuke. Partner organization, location, and
  * customer organization id are identity. Display name updates in place.
  *

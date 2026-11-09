@@ -12,7 +12,7 @@ export interface ListNamedShadowsForThingRequest extends Omit<
  * Runtime binding for the IoT data-plane `ListNamedShadowsForThing`
  * operation (IAM action `iot:ListNamedShadowsForThing`).
  *
- * Bind it to a {@link Thing} to list the thing's named shadows — the thing
+ * Bind it to a {@link Thing} to list the thing's named shadows -- the thing
  * name is injected automatically. Provide the implementation with
  * `Effect.provide(AWS.IoT.ListNamedShadowsForThingHttp)`.
  * ### Device Shadows

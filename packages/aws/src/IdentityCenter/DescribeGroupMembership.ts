@@ -13,7 +13,7 @@ import type { Instance } from "./Instance.ts";
  * ### Querying Group Memberships
  * **Example:** Read a Membership
  * ```typescript
- * // init — bind the operation to the Identity Center instance
+ * // init -- bind the operation to the Identity Center instance
  * const describeGroupMembership = yield* AWS.IdentityCenter.DescribeGroupMembership(instance);
  *
  * // runtime

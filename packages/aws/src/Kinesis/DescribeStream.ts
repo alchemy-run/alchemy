@@ -12,7 +12,7 @@ export interface DescribeStreamRequest extends Omit<
  * Runtime binding for `kinesis:DescribeStream`.
  *
  * Bind this operation to a `Stream` to read its full description, including
- * the shard map — the stream name is injected automatically. For status and
+ * the shard map -- the stream name is injected automatically. For status and
  * counts without the shard list, prefer `AWS.Kinesis.DescribeStreamSummary`.
  * Provide the implementation with
  * `Effect.provide(AWS.Kinesis.DescribeStreamHttp)`.

@@ -187,7 +187,7 @@ export const HostedZoneProvider = () =>
       // eventually consistent and can briefly return `NoSuchChange` right after
       // submit, so coalesce that to a non-INSYNC status and keep polling.
       // `ChangeInfo.Id` comes back as "/change/C..." but `getChange` only
-      // accepts the bare id — the prefixed form returns `NoSuchChange`
+      // accepts the bare id -- the prefixed form returns `NoSuchChange`
       // forever, silently burning the full repeat cap on every change.
       const waitForChange = Effect.fn(function* (changeId: string) {
         return yield* route53.getChange({ Id: changeId.replace(/^\/change\//, "") }).pipe(
@@ -340,14 +340,14 @@ export const HostedZoneProvider = () =>
           ),
         diff: Effect.fn(function* ({ olds, news, output }) {
           if (!isResolved(news)) return undefined;
-          // Adopting a different zone than the one tracked → replace.
+          // Adopting a different zone than the one tracked -> replace.
           if (
             news.hostedZoneId !== undefined &&
             normalizeId(news.hostedZoneId) !== normalizeId(output?.id ?? olds.hostedZoneId ?? "")
           ) {
             return { action: "replace" } as const;
           }
-          // Name change → replace, but only when the old name is known — a
+          // Name change -> replace, but only when the old name is known -- a
           // half-created state row can't round-trip an Output-valued `name`
           // (it deserializes as `undefined`), and an unknown old name must
           // fall through to the create/update recovery path.
@@ -509,7 +509,7 @@ export const HostedZoneProvider = () =>
             Effect.asVoid,
             Effect.catchTag("NoSuchHostedZone", () => Effect.void),
             // A still-non-empty zone (without forceDestroy) is retried briefly
-            // in case a referencing record's delete is still propagating —
+            // in case a referencing record's delete is still propagating --
             // records looked up by zone NAME (e.g. `ECS.Service`'s `domain`)
             // have no dependency edge on the zone, so their deletes run
             // concurrently with ours (a classic Dependency Violation).

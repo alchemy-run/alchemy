@@ -20,12 +20,12 @@ export class QuickSightDataSetUnexpectedResponse extends Data.TaggedError(
 }> {}
 
 /**
- * Properties for an Amazon QuickSight dataset — a prepared, queryable model
+ * Properties for an Amazon QuickSight dataset -- a prepared, queryable model
  * built on top of one or more data sources.
  */
 export interface DataSetProps {
   /**
-   * Unique id of the dataset within the account. Stable — changing it
+   * Unique id of the dataset within the account. Stable -- changing it
    * replaces the dataset. If omitted, a unique id is generated.
    */
   dataSetId?: string;
@@ -114,7 +114,7 @@ export interface DataSetLookup {
 }
 
 /**
- * An Amazon QuickSight dataset — a prepared, queryable model built on top of
+ * An Amazon QuickSight dataset -- a prepared, queryable model built on top of
  * one or more data sources.
  *
  * QuickSight requires an active account subscription in the region. Without
@@ -209,7 +209,7 @@ export const DataSetProvider = () =>
           // 1. Observe.
           let observed = yield* readSet(accountId, dataSetId);
 
-          // 2. Ensure — create if missing (tolerate AlreadyExists race).
+          // 2. Ensure -- create if missing (tolerate AlreadyExists race).
           if (observed === undefined) {
             yield* quicksight
               .createDataSet({
@@ -229,7 +229,7 @@ export const DataSetProvider = () =>
               })
               .pipe(Effect.catchTag("ResourceExistsException", () => Effect.void));
           } else {
-            // 3. Sync — idempotent update of the dataset definition.
+            // 3. Sync -- idempotent update of the dataset definition.
             yield* quicksight.updateDataSet({
               AwsAccountId: accountId,
               DataSetId: dataSetId,

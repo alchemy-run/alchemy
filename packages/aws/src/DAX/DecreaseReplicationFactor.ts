@@ -7,7 +7,7 @@ import type { Cluster } from "./Cluster.ts";
  * Runtime binding for the `DecreaseReplicationFactor` operation (IAM action
  * `dax:DecreaseReplicationFactor`), scoped to one {@link Cluster}.
  *
- * Removes read-replica nodes from the bound DAX cluster — the scale-in half
+ * Removes read-replica nodes from the bound DAX cluster -- the scale-in half
  * of node-count automation (e.g. shrinking a cluster off-peak to cut
  * node-hour cost). Provide the implementation with
  * `Effect.provide(AWS.DAX.DecreaseReplicationFactorHttp)`.
@@ -20,7 +20,7 @@ import type { Cluster } from "./Cluster.ts";
  * const result = yield* decreaseReplicationFactor({
  *   NewReplicationFactor: 1,
  * });
- * // result.Cluster?.TotalNodes → 1 once the removal completes
+ * // result.Cluster?.TotalNodes -> 1 once the removal completes
  * ```
  *
  * @binding

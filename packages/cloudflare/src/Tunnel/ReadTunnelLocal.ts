@@ -3,7 +3,7 @@ import { readClient, ReadTunnel } from "./ReadTunnel.ts";
 import { makeLocalTunnelClient } from "./TunnelLocalBinding.ts";
 
 /**
- * Local implementation of the {@link ReadTunnel} binding — reads Cloudflare
+ * Local implementation of the {@link ReadTunnel} binding -- reads Cloudflare
  * Tunnels over the cfd_tunnel HTTP API using the **current credentials**
  * instead of a native Worker binding (`ReadTunnelBinding`) or a scoped API
  * token. No `host.bind`, no minted token, no Worker host.

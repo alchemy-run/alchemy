@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Project } from "./Project.ts";
 
 /**
- * Runtime binding for `codebuild:StartBuildBatch` — kicks off a batch
+ * Runtime binding for `codebuild:StartBuildBatch` -- kicks off a batch
  * (fan-out) build of the bound project. The project must have a build batch
  * configuration and the buildspec a `batch:` section.
  * ### Batch Builds

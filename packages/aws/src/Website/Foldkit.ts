@@ -33,7 +33,7 @@ export type FoldkitProps = FrameworkSiteProps<
  * `server: "function"`); prerendered pages and assets stay in S3.
  *
  * The Foldkit Vite plugin in your project's own `vite.config.*` owns
- * rendering and prerendering — enable `ssr.build` there for SSR or SSG.
+ * rendering and prerendering -- enable `ssr.build` there for SSR or SSG.
  * The build runs through `@alchemy.run/frontend-frameworks/foldkit`, which
  * must be installed in your project. Input files are content-hashed so
  * unchanged projects skip the build and deploy entirely.
@@ -92,7 +92,7 @@ export type FoldkitProps = FrameworkSiteProps<
  * ### Deep Links
  * A deep link like `/counter/42` arrives at the edge as a request for a
  * file that does not exist. A browser-only app serves the shell instead of
- * a 404. An app that ships a real 404 page opts out with `errorPage` — the
+ * a 404. An app that ships a real 404 page opts out with `errorPage` -- the
  * two are mutually exclusive.
  *
  * **Example:** Serving a Real 404 Page

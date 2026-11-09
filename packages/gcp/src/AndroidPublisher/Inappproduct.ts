@@ -22,12 +22,12 @@ import {
 export type InappproductProps = {
   /**
    * Play package name of the parent app (for example `com.example.app`).
-   * Immutable — changing it replaces the in-app product.
+   * Immutable -- changing it replaces the in-app product.
    */
   packageName: string;
   /**
    * SKU unique within the app. If omitted, a unique SKU is generated.
-   * Immutable — changing it replaces the product.
+   * Immutable -- changing it replaces the product.
    */
   sku?: string;
   /**
@@ -150,7 +150,7 @@ export interface InappproductLookup {
  *
  * In-app products have no labels field, so ownership rests on the
  * deterministic SKU: `read` reports a product it finds without prior state
- * as unowned (adopt it with `--adopt`). `packageName` and `sku` are identity — changing either replaces the
+ * as unowned (adopt it with `--adopt`). `packageName` and `sku` are identity -- changing either replaces the
  * product. Listings, prices, and status update in place. Prefer
  * `MonetizationSubscription` for subscriptions; this resource is for
  * managed one-time products.

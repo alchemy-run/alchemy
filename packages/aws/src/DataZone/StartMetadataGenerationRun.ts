@@ -17,7 +17,7 @@ export interface StartMetadataGenerationRunRequest extends Omit<
  * ### Metadata Generation
  * **Example:** Generate Business Descriptions
  * ```typescript
- * // init — bind the operation to the domain
+ * // init -- bind the operation to the domain
  * const startMetadataGenerationRun = yield* AWS.DataZone.StartMetadataGenerationRun(domain);
  *
  * // runtime

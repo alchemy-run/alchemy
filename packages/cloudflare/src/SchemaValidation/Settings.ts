@@ -18,7 +18,7 @@ export type MitigationAction = "none" | "log" | "block";
 
 export interface SettingsProps {
   /**
-   * Zone the settings belong to. Stable — changing the zone triggers a
+   * Zone the settings belong to. Stable -- changing the zone triggers a
    * replacement (the old zone's settings are restored to the values they
    * had before Alchemy managed them).
    */
@@ -61,7 +61,7 @@ export type Settings = Resource<TypeId, SettingsProps, SettingsAttributes, never
 
 /**
  * Zone-level schema validation settings
- * (`/zones/{zone_id}/schema_validation/settings`) — the default mitigation
+ * (`/zones/{zone_id}/schema_validation/settings`) -- the default mitigation
  * action applied to requests that do not conform to an enabled schema, plus
  * an optional zone-wide kill switch.
  *
@@ -70,7 +70,7 @@ export type Settings = Resource<TypeId, SettingsProps, SettingsAttributes, never
  * Reconcile PUTs the desired state when the observed state differs; destroy
  * restores the values the zone had before Alchemy first managed them.
  *
- * The `log` action is plan-gated (API Shield entitlement) on some zones —
+ * The `log` action is plan-gated (API Shield entitlement) on some zones --
  * setting it there fails with the typed `UnentitledMitigationAction` error.
  * ### Managing the zone default
  * **Example:** Block non-conforming requests
@@ -113,7 +113,7 @@ export const SettingsProvider = () =>
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // No account-wide API for this zone singleton — enumerate every
+      // No account-wide API for this zone singleton -- enumerate every
       // zone in the account and read its setting (every zone has one,
       // defaulting to `none`).
       const allZones = yield* listAllZones(accountId);
@@ -148,7 +148,7 @@ export const SettingsProvider = () =>
       if (zoneId === undefined) return undefined;
       const observed = yield* schemaValidation.getSetting({ zoneId });
       // The settings are a singleton that always exists with a Cloudflare
-      // default — there is nothing to "own", so a cold read adopts freely
+      // default -- there is nothing to "own", so a cold read adopts freely
       // (never `Unowned`). The observed values at adoption time become the
       // initial values restored on destroy.
       return toAttributes(
@@ -171,10 +171,10 @@ export const SettingsProvider = () =>
         overrideAction: news.validationOverrideMitigationAction ?? null,
       };
 
-      // 1. Observe — the settings always exist; read the live state.
+      // 1. Observe -- the settings always exist; read the live state.
       const observed = yield* schemaValidation.getSetting({ zoneId });
 
-      // 2. Capture — the pre-management values, restored on destroy.
+      // 2. Capture -- the pre-management values, restored on destroy.
       //    `output` (including an adoption read) already carries them;
       //    otherwise this is our first touch and the observed state is the
       //    zone's original.
@@ -186,7 +186,7 @@ export const SettingsProvider = () =>
             }
           : observedState(observed);
 
-      // 3. Sync — PUT the full desired state only when it differs.
+      // 3. Sync -- PUT the full desired state only when it differs.
       const current = observedState(observed);
       if (
         current.defaultAction === desired.defaultAction &&
@@ -204,7 +204,7 @@ export const SettingsProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { zoneId, initialDefaultMitigationAction, initialOverrideMitigationAction } = output;
-      // The singleton cannot be deleted — restore the pre-management
+      // The singleton cannot be deleted -- restore the pre-management
       // state. Skip the call when it already matches (idempotent re-delete
       // after a crashed run).
       const observed = yield* schemaValidation.getSetting({ zoneId });

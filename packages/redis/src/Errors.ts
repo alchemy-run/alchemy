@@ -15,7 +15,7 @@ export class CommandError extends Data.TaggedError("Redis.CommandError")<{
   cause: unknown;
 }> {}
 
-/** Redis replied with a RESP error (`-ERR …`, `-WRONGTYPE …`). */
+/** Redis replied with a RESP error (`-ERR ...`, `-WRONGTYPE ...`). */
 export class ReplyError extends Data.TaggedError("Redis.ReplyError")<{
   readonly code: string;
   readonly message: string;

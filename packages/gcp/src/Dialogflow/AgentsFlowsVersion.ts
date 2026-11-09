@@ -31,12 +31,12 @@ export type AgentsFlowsVersionProps = {
   /**
    * Parent flow resource name
    * `projects/{project}/locations/{location}/agents/{agent}/flows/{flow}`.
-   * Immutable — changing it replaces the version.
+   * Immutable -- changing it replaces the version.
    */
   flow: string;
   /**
    * Version id (the `{version}` segment). Server-assigned on create.
-   * Immutable — changing it replaces the version.
+   * Immutable -- changing it replaces the version.
    */
   versionId?: string;
   /** Human-readable name, unique within the flow. */

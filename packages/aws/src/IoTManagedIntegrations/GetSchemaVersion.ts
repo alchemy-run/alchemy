@@ -12,7 +12,7 @@ export interface GetSchemaVersionRequest extends mi.GetSchemaVersionRequest {}
  * (account-level).
  *
  * Reads one version of a capability or definition schema from the Managed
- * integrations schema catalog — the vocabulary that device data models and
+ * integrations schema catalog -- the vocabulary that device data models and
  * commands are expressed in. Provide the implementation with
  * `Effect.provide(AWS.IoTManagedIntegrations.GetSchemaVersionHttp)`.
  *

@@ -9,7 +9,7 @@ export interface ListRecordsRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `sagemaker:ListRecords` — list the record-identifier
+ * Runtime binding for `sagemaker:ListRecords` -- list the record-identifier
  * values stored in a `FeatureGroup`'s online store.
  *
  * Bind this operation to a `FeatureGroup` inside a function runtime to get a

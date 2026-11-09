@@ -6,7 +6,7 @@ import type { Pipe } from "./Pipe.ts";
 /**
  * Runtime binding for `pipes:StartPipe`.
  *
- * Starts the bound {@link Pipe} after it was stopped — e.g. resuming
+ * Starts the bound {@link Pipe} after it was stopped -- e.g. resuming
  * source polling on a schedule or in response to an operational signal.
  * The response reports the transitional `STARTING`/desired `RUNNING`
  * states; use {@link DescribePipe} to observe when the pipe settles. The
@@ -15,7 +15,7 @@ import type { Pipe } from "./Pipe.ts";
  * ### Controlling a Pipe
  * **Example:** Resume a Stopped Pipe
  * ```typescript
- * // init — bind the operation to the pipe
+ * // init -- bind the operation to the pipe
  * const startPipe = yield* AWS.Pipes.StartPipe(pipe);
  *
  * // runtime

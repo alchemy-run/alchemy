@@ -10,16 +10,16 @@ import { listAllZones } from "../Zone/lookup.ts";
 
 export interface FallbackOriginProps {
   /**
-   * Zone the fallback origin belongs to. Stable — a zone has exactly one
+   * Zone the fallback origin belongs to. Stable -- a zone has exactly one
    * fallback origin, so changing the zone triggers replacement.
    */
   zoneId: string;
   /**
    * Your origin hostname that requests to custom hostnames are sent to.
-   * Must be a DNS record (A, AAAA or CNAME) within the zone — create the
+   * Must be a DNS record (A, AAAA or CNAME) within the zone -- create the
    * `Cloudflare.DNS.Record` first and pass its name.
    *
-   * Mutable — the API is a PUT-style upsert.
+   * Mutable -- the API is a PUT-style upsert.
    */
   origin: string;
 }
@@ -31,7 +31,7 @@ export interface FallbackOriginAttributes {
   origin: string;
   /**
    * Activation status (`initializing`, `pending_deployment`, `active`,
-   * …). Deployment is asynchronous (typically minutes) and is not
+   * ...). Deployment is asynchronous (typically minutes) and is not
    * blocked on.
    */
   status: string | undefined;
@@ -89,7 +89,7 @@ export const FallbackOriginProvider = () =>
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // Zone singleton — no account-wide list. Enumerate every zone and
+      // Zone singleton -- no account-wide list. Enumerate every zone and
       // read its fallback origin; zones without one configured (or
       // without Cloudflare for SaaS access) are skipped.
       const allZones = yield* listAllZones(accountId);
@@ -138,7 +138,7 @@ export const FallbackOriginProvider = () =>
       // 1. Observe the singleton.
       const observed = yield* observeFallbackOrigin(zoneId);
 
-      // 2/3. Ensure + sync — PUT is a true upsert; skip the API call
+      // 2/3. Ensure + sync -- PUT is a true upsert; skip the API call
       //      entirely when the observed origin already matches (the
       //      status field converges asynchronously on its own).
       if (
@@ -183,7 +183,7 @@ export const FallbackOriginProvider = () =>
         origin: observed.origin,
         status: observed.status,
       };
-      // Owned path: we have persisted state — refresh it. Cold path: a
+      // Owned path: we have persisted state -- refresh it. Cold path: a
       // fallback origin exists but we cannot prove we created it (the
       // API has no ownership markers), so gate takeover behind adoption.
       return output?.zoneId ? attrs : Unowned(attrs);
@@ -195,7 +195,7 @@ interface ObservedFallbackOrigin {
   readonly status: string | undefined;
 }
 
-// An unset fallback origin is reported by the API as a bare 404 —
+// An unset fallback origin is reported by the API as a bare 404 --
 // typed in the distilled union as `FallbackOriginNotFound`.
 const observeFallbackOrigin = (zoneId: string) =>
   customHostnames.getFallbackOrigin({ zoneId }).pipe(

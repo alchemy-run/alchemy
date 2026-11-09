@@ -31,14 +31,14 @@ export const migrationError =
 /**
  * Open a `pg` client for the scope of `use`; it always closes afterwards,
  * including when `connect` itself fails. `config` goes to
- * `new Client(config)` unchanged — a connection string, TLS options, or a
+ * `new Client(config)` unchanged -- a connection string, TLS options, or a
  * `stream` the provider already connected (the Cloud SQL connector).
  * Prefer {@link withPgExecutor}; use this when the provider runs its own
  * executor over the client (DSQL) or plain SQL (`importFiles`).
  */
 export interface ConnectOptions {
   /**
-   * Retry the connect — never `use` — while this holds for the driver's
+   * Retry the connect -- never `use` -- while this holds for the driver's
    * error, e.g. DNS that hasn't propagated for a just-created host.
    */
   readonly retryConnect?: {
@@ -148,16 +148,16 @@ const terminated = (statement: string) => {
 };
 
 /**
- * A {@link SqlExecutor} over an API that runs a SQL string and returns rows —
+ * A {@link SqlExecutor} over an API that runs a SQL string and returns rows --
  * the Cloud SQL and AlloyDB Data APIs, or any HTTP SQL endpoint. The provider
  * supplies only `execute`, which must fail when the database reports an
  * error (Data APIs return SQL errors inside a 200). Params are inlined, since
  * these APIs bind none.
  *
  * `batch` sets how a migration and its bookkeeping row commit together:
- * - `"transaction"` — one request wrapped in `BEGIN`/`COMMIT`
+ * - `"transaction"` -- one request wrapped in `BEGIN`/`COMMIT`
  *   (`START TRANSACTION` on MySQL).
- * - `"atomic"` — one request the API already commits as a unit.
+ * - `"atomic"` -- one request the API already commits as a unit.
  */
 export const makeStatementExecutor = (options: {
   dialect: MigrationDialect;
@@ -204,8 +204,8 @@ export const rowsFromCells = (
 
 /**
  * Retry `effect` while a just-created user or database starts accepting
- * logins, which can take seconds. Wrap only idempotent work — a probe
- * query or a connection that runs one — never a migration batch.
+ * logins, which can take seconds. Wrap only idempotent work -- a probe
+ * query or a connection that runs one -- never a migration batch.
  */
 export const retryLogin = <A, E, R>(
   effect: Effect.Effect<A, E, R>,

@@ -45,7 +45,7 @@ export interface ProxyProps {
 }
 
 export interface ProxyAttributes {
-  /** Proxy ID (`pr-…`). */
+  /** Proxy ID (`pr-...`). */
   proxyId: string;
   /** Proxy name. */
   name: string;

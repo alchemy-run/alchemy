@@ -150,7 +150,7 @@ export const ProviderLive = () =>
       const title = yield* createTitle(id, news.title);
       const acct = output?.accountId ?? accountId;
 
-      // Observe — re-fetch the cached namespace; fall back to a title
+      // Observe -- re-fetch the cached namespace; fall back to a title
       // scan so we recover from out-of-band deletes or partial state
       // persistence failures.
       let observed:
@@ -169,7 +169,7 @@ export const ProviderLive = () =>
           .pipe(Effect.catchTag("NamespaceNotFound", () => Effect.undefined));
       }
 
-      // Ensure — create if missing. Cloudflare returns
+      // Ensure -- create if missing. Cloudflare returns
       // `NamespaceTitleAlreadyExists` on a concurrent create; tolerate
       // by adopting the namespace with the same title.
       if (!observed) {
@@ -193,7 +193,7 @@ export const ProviderLive = () =>
           );
       }
 
-      // Sync — KV's only mutable property is the title. Rename only
+      // Sync -- KV's only mutable property is the title. Rename only
       // when the observed title drifts from desired so we avoid
       // unnecessary API calls on every reconcile.
       let namespaceId = observed.id;
@@ -295,7 +295,7 @@ export const ProviderLive = () =>
   });
 
 /**
- * Local (dev) provider — the namespace is purely virtual: a `dev:` id keyed
+ * Local (dev) provider -- the namespace is purely virtual: a `dev:` id keyed
  * into the local workerd KV simulator. `toRuntimeBinding` lowers a
  * `kv_namespace` binding whose id is `dev:`-prefixed onto the local KV
  * service; data persists under `.alchemy/local/kv`.
@@ -315,7 +315,7 @@ export const ProviderLocal = () =>
       // update in place).
     }),
     read: Effect.fn(function* ({ output }) {
-      // Purely virtual — the persisted state row is the source of truth.
+      // Purely virtual -- the persisted state row is the source of truth.
       return output ?? undefined;
     }),
     reconcile: Effect.fn(function* ({ id, news = {}, output }) {
@@ -329,7 +329,7 @@ export const ProviderLocal = () =>
     }),
     delete: Effect.fn(function* () {
       // The simulator's on-disk data is keyed by the dev id; dropping the
-      // state row is enough — orphaned blobs are reclaimed with `.alchemy`.
+      // state row is enough -- orphaned blobs are reclaimed with `.alchemy`.
     }),
   });
 

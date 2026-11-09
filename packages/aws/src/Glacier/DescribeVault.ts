@@ -7,7 +7,7 @@ import type { Vault } from "./Vault.ts";
  * Runtime binding for the `DescribeVault` operation (IAM action
  * `glacier:DescribeVault` on the vault ARN).
  *
- * Reads the bound {@link Vault}'s description — archive count, total size
+ * Reads the bound {@link Vault}'s description -- archive count, total size
  * in bytes, and last inventory date (both as of the last nightly
  * inventory).
  * Provide the implementation with

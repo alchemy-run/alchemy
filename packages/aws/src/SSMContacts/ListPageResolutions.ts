@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `ssm-contacts:ListPageResolutions`.
  *
- * List the resolution path of a page — the chain of escalation-plan and
+ * List the resolution path of a page -- the chain of escalation-plan and
  * on-call-schedule hops that led Incident Manager to the engaged contact.
  * Provide the implementation with
  * `Effect.provide(AWS.SSMContacts.ListPageResolutionsHttp)`.

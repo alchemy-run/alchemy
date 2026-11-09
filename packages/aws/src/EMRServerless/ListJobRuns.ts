@@ -13,7 +13,7 @@ export type ListJobRunsInput = Omit<emr.ListJobRunsRequest, "applicationId">;
  * Runtime binding for `emr-serverless:ListJobRuns`.
  *
  * Enumerates job runs on the bound {@link Application}, optionally filtered
- * by state, creation window, or mode — so a function can report on running
+ * by state, creation window, or mode -- so a function can report on running
  * or recently failed jobs. Provide the implementation with
  * `Effect.provide(AWS.EMRServerless.ListJobRunsHttp)`.
  * ### Running Jobs

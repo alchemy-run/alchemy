@@ -6,8 +6,8 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `DescribeSnapshots` operation (IAM action
  * `fsx:DescribeSnapshots` on `*`).
  *
- * Lists FSx for OpenZFS snapshots — optionally filtered by `volume-id` or
- * `file-system-id` — from inside a function runtime. Pairs with
+ * Lists FSx for OpenZFS snapshots -- optionally filtered by `volume-id` or
+ * `file-system-id` -- from inside a function runtime. Pairs with
  * {@link CreateSnapshot} to poll a runtime-initiated snapshot until it
  * reaches `AVAILABLE`. Provide the implementation with
  * `Effect.provide(AWS.FSx.DescribeSnapshotsHttp)`.

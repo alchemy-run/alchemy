@@ -24,10 +24,10 @@ import type { Connection } from "./Connection.ts";
 /**
  * Bind a {@link Connection} (declared, or an existing configuration from
  * `Connection.lookup`) to a Worker and obtain the Effect-native
- * Hyperdrive client (connection string, host, port, …).
+ * Hyperdrive client (connection string, host, port, ...).
  *
  * `Connect` is a single identifier that is simultaneously the binding's Context
- * tag, its type, and the callable — `yield* Cloudflare.Hyperdrive.Connect(conn)`.
+ * tag, its type, and the callable -- `yield* Cloudflare.Hyperdrive.Connect(conn)`.
  *
  * **Example:** Using Hyperdrive inside a Worker
  * ```typescript

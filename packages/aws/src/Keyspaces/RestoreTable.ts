@@ -17,7 +17,7 @@ export interface RestoreTableRequest extends Omit<
  * recovery enabled) and a target `Keyspace` to get a callable that restores
  * the source table's continuous backup into a new table of the target
  * keyspace, automatically injecting the source keyspace/table and target
- * keyspace names. `RestoreTable` is asynchronous — the response returns the
+ * keyspace names. `RestoreTable` is asynchronous -- the response returns the
  * new table's ARN while it provisions in the `RESTORING` state. Provide the
  * `RestoreTableHttp` layer on the Function to satisfy the binding.
  * ### Backup and Restore

@@ -28,7 +28,7 @@ export interface PackageVersionStateChangeDetail {
   domainOwner?: string;
   /** Name of the repository the package version changed in. */
   repositoryName: string;
-  /** Package format (`npm`, `pypi`, `maven`, `nuget`, `generic`, …). */
+  /** Package format (`npm`, `pypi`, `maven`, `nuget`, `generic`, ...). */
   packageFormat: string;
   /** Namespace of the package, for formats that support one. */
   packageNamespace?: string;
@@ -52,7 +52,7 @@ export interface PackageVersionStateChangeDetail {
   operationType?: "Created" | "Updated" | "Deleted";
   /** Monotonic sequence number of changes to this package version. */
   sequenceNumber?: number;
-  /** Deduplication id — identical for retried deliveries of one change. */
+  /** Deduplication id -- identical for retried deliveries of one change. */
   eventDeduplicationId?: string;
   /** Additional event fields (the schema grows over time). */
   [key: string]: unknown;
@@ -97,11 +97,11 @@ export interface PackageVersionStateChangesProps extends EventRouteProps {
  * compute. CodeArtifact publishes an event to the account's default
  * EventBridge bus (source `aws.codeartifact`, detail-type `CodeArtifact
  * Package Version State Change`) every time a package version is created,
- * changes state (published, archived, disposed, …), or is deleted — including
+ * changes state (published, archived, disposed, ...), or is deleted -- including
  * versions ingested from upstream and external connections; this subscribes
  * the host Function to those events so it can react without polling.
  *
- * CodeArtifact publishes to EventBridge automatically — no additional
+ * CodeArtifact publishes to EventBridge automatically -- no additional
  * resource is created besides the EventBridge rule targeting the host.
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.
@@ -119,7 +119,7 @@ export interface PackageVersionStateChangesProps extends EventRouteProps {
  *       (events) =>
  *         Stream.runForEach(events, (event) =>
  *           Effect.log(
- *             `${event.detail.packageName}@${event.detail.packageVersion} → ${event.detail.packageVersionState}`,
+ *             `${event.detail.packageName}@${event.detail.packageVersion} -> ${event.detail.packageVersionState}`,
  *           ),
  *         ),
  *     );

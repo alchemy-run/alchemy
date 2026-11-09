@@ -8,14 +8,14 @@ import type { Parameter } from "./Parameter.ts";
 /**
  * Shared scaffolding for AWS SSM Parameter Store HTTP bindings.
  *
- * NOT exported from `index.ts` — every single-parameter `{Op}Http.ts` in this
- * service is a thin `Layer.effect(Cap, makeParameterHttpBinding({ … }))` over
+ * NOT exported from `index.ts` -- every single-parameter `{Op}Http.ts` in this
+ * service is a thin `Layer.effect(Cap, makeParameterHttpBinding({ ... }))` over
  * this builder. Everything except the operation, the IAM action list, and the
  * granted ARNs is boilerplate:
  *
  * - the deploy-time half registers `Allow(host, tag(parameter))` with the
  *   requested `actions` on the bound parameter's ARN (or the ARNs produced by
- *   `resources` — e.g. the `${arn}/*` subtree wildcard for
+ *   `resources` -- e.g. the `${arn}/*` subtree wildcard for
  *   `GetParametersByPath`), plus an optional second statement granting
  *   `kmsActions` on the parameter's encryption key so `SecureString`
  *   decryption (`kms:Decrypt`) or encryption (`kms:Encrypt`,
@@ -41,7 +41,7 @@ export const makeParameterHttpBinding = <I, A, E, R>(options: {
   /**
    * KMS actions granted on the parameter's encryption key. For
    * `String`/`StringList` parameters `keyArn` is undefined and the statement
-   * falls back to the parameter's own ARN, which matches no KMS key — the
+   * falls back to the parameter's own ARN, which matches no KMS key -- the
    * statement then grants nothing.
    */
   kmsActions?: readonly string[];

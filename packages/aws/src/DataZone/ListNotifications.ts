@@ -17,7 +17,7 @@ export interface ListNotificationsRequest extends Omit<
  * ### Portal, Profiles & Notifications
  * **Example:** Read Pending Tasks
  * ```typescript
- * // init — bind the operation to the domain
+ * // init -- bind the operation to the domain
  * const listNotifications = yield* AWS.DataZone.ListNotifications(domain);
  *
  * // runtime

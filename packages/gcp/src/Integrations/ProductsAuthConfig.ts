@@ -31,11 +31,11 @@ import { credentialBody } from "./shared.ts";
 export type ProductsAuthConfigProps = {
   /**
    * Auth config id (the `{authConfig}` segment). Server-assigned on
-   * create. Immutable — changing it replaces the config.
+   * create. Immutable -- changing it replaces the config.
    */
   authConfigId?: string;
   /**
-   * Location (`us-central1`, …). Immutable — changing it replaces the
+   * Location (`us-central1`, ...). Immutable -- changing it replaces the
    * config. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile
    *   region, else `us-central1`)
@@ -43,7 +43,7 @@ export type ProductsAuthConfigProps = {
   location?: string;
   /**
    * Product id (`IP` for Application Integration, `APIGEE` for Apigee
-   * Integration). Immutable — changing it replaces the config.
+   * Integration). Immutable -- changing it replaces the config.
    * @default "IP"
    */
   product?: string;
@@ -53,7 +53,7 @@ export type ProductsAuthConfigProps = {
   displayName?: string;
   /**
    * Human-readable description. Auth configs have no labels field, so
-   * Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes.
    */
   description?: string;
@@ -63,7 +63,7 @@ export type ProductsAuthConfigProps = {
    */
   credentialType?: CredentialType;
   /**
-   * Decrypted credential payload. Write-only — never returned on
+   * Decrypted credential payload. Write-only -- never returned on
    * attributes.
    */
   decryptedCredential?: DecryptedCredential;
@@ -117,7 +117,7 @@ export type ProductsAuthConfig = Resource<
  * A product-scoped Application Integration auth config
  * (`projects/.../products/{product}/authConfigs/{authConfig}`).
  *
- * Auth configs have no labels field — Alchemy stamps ownership into the
+ * Auth configs have no labels field -- Alchemy stamps ownership into the
  * description. Location, product, and id are immutable. Display name,
  * description, visibility, and credentials update in place.
  *

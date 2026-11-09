@@ -5,8 +5,8 @@ import { AWSEnvironment } from "../Environment.ts";
 /**
  * Shared scaffolding for AWS SageMaker Runtime HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, makeEndpointInvocationHttpBinding({ … }))` over the
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, makeEndpointInvocationHttpBinding({ ... }))` over the
  * builder below. Everything except the operation and the IAM action list is
  * boilerplate: SageMaker Runtime is a pure data-plane API whose three
  * invocation operations all take one or more endpoint names, inject

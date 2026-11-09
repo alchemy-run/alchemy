@@ -57,7 +57,7 @@ export interface StageEventSourceProps extends EventRouteProps {
   kinds?: readonly StageEventKind[];
   /**
    * Restrict to events about specific stages (matched against the event's
-   * top-level `resources`, which carries the stage's ARN — or the
+   * top-level `resources`, which carries the stage's ARN -- or the
    * composition's ARN for composition state changes).
    */
   stageArns?: readonly string[];
@@ -71,7 +71,7 @@ export interface StageEventSourceProps extends EventRouteProps {
  * subscribes the host Function to those events so it can track presence,
  * kick off post-session processing, or alert on failed compositions.
  *
- * IVS publishes to EventBridge automatically — no additional resource is
+ * IVS publishes to EventBridge automatically -- no additional resource is
  * created besides the EventBridge rule targeting the host. Provide the
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.

@@ -73,7 +73,7 @@ export interface AssessmentScope {
  */
 export interface AssessmentRole {
   /**
-   * The role type — `PROCESS_OWNER` or `RESOURCE_OWNER`.
+   * The role type -- `PROCESS_OWNER` or `RESOURCE_OWNER`.
    */
   roleType: auditmanager.RoleType;
   /**
@@ -160,7 +160,7 @@ export interface AssessmentLookup {
 }
 
 /**
- * An AWS Audit Manager assessment — an active evidence-collection engagement
+ * An AWS Audit Manager assessment -- an active evidence-collection engagement
  * created from a framework, continuously gathering evidence for the controls
  * in scope.
  *
@@ -260,7 +260,7 @@ const projectAssessment = (input: {
 // CreateAssessment validates the process-owner IAM roles up front; a
 // freshly-created role may not have propagated yet and surfaces as
 // ValidationException. Bounded retry through the propagation window (~60s).
-// Explicitly typed — an inline `Effect.retry` in provider lifecycle code
+// Explicitly typed -- an inline `Effect.retry` in provider lifecycle code
 // leaks `Retry.Return`'s conditional type into declaration emit and widens
 // the provider layer to `unknown` for every consumer of `AWS.providers()`.
 const retryThroughIamPropagation = <A, E extends { readonly _tag: string }, R>(
@@ -329,13 +329,13 @@ export const AssessmentProvider = () =>
             destination: news.assessmentReportsDestination.destination,
           };
 
-          // Observe — prefer the cached id; fall back to a name lookup so a
+          // Observe -- prefer the cached id; fall back to a name lookup so a
           // create whose state failed to persist is adopted, not duplicated.
           let assessment = output?.assessmentId
             ? yield* readAssessmentById(output.assessmentId)
             : yield* findAssessmentByName(name);
 
-          // Ensure — create if missing.
+          // Ensure -- create if missing.
           if (assessment === undefined) {
             const created = yield* retryThroughIamPropagation(
               auditmanager.createAssessment({
@@ -357,7 +357,7 @@ export const AssessmentProvider = () =>
             yield* session.note(`Created assessment ${name} (${assessment.metadata.id})`);
           }
 
-          // Sync — diff observed against desired; update on drift.
+          // Sync -- diff observed against desired; update on drift.
           const metadata = assessment.metadata;
           const observed = projectAssessment({
             name: unredact(metadata?.name) ?? "",
@@ -416,7 +416,7 @@ export const AssessmentProvider = () =>
             yield* session.note(`Updated assessment ${name}`);
           }
 
-          // Sync tags — diff against observed cloud tags.
+          // Sync tags -- diff against observed cloud tags.
           const attrs = toAttributes(assessment);
           const { removed, upsert } = diffTags(attrs.tags, desiredTags);
           if (removed.length > 0) {

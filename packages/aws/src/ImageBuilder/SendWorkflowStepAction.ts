@@ -6,14 +6,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `imagebuilder:SendWorkflowStepAction`.
  *
  * Resumes or stops an image build that is paused on a `WaitForAction`
- * workflow step — the approval half of a human/automated gate (find pending
+ * workflow step -- the approval half of a human/automated gate (find pending
  * steps with `ListWaitingWorkflowSteps`). The idempotency `clientToken` is
  * generated automatically. Provide the implementation with
  * `Effect.provide(AWS.ImageBuilder.SendWorkflowStepActionHttp)`.
  * ### Workflow Monitoring
  * **Example:** Approve a Waiting Build Step
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const sendWorkflowStepAction =
  *   yield* AWS.ImageBuilder.SendWorkflowStepAction();
  *

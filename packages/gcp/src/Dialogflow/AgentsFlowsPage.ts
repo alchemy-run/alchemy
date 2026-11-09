@@ -38,12 +38,12 @@ export type AgentsFlowsPageProps = {
   /**
    * Parent flow resource name
    * `projects/{project}/locations/{location}/agents/{agent}/flows/{flow}`.
-   * Immutable — changing it replaces the page.
+   * Immutable -- changing it replaces the page.
    */
   flow: string;
   /**
    * Page id (the `{page}` segment). Server-assigned on create. Immutable
-   * — changing it replaces the page.
+   * -- changing it replaces the page.
    */
   pageId?: string;
   /** Human-readable name, unique within the flow. */

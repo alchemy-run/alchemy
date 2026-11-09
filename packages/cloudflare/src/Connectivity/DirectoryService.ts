@@ -26,7 +26,7 @@ export type DirectoryServiceAppProtocol = "postgresql" | "mysql" | (string & {})
 
 export declare namespace DirectoryService {
   /**
-   * Network a private IP host is reachable through — identified by the
+   * Network a private IP host is reachable through -- identified by the
    * Cloudflare Tunnel that carries the traffic.
    */
   export interface Network {
@@ -96,7 +96,7 @@ export declare namespace DirectoryService {
   }
 
   /**
-   * Host a directory service is reachable at — a private IPv4/IPv6
+   * Host a directory service is reachable at -- a private IPv4/IPv6
    * address or a hostname, always reached through a Cloudflare Tunnel.
    */
   export type Host = Ipv4Host | Ipv6Host | DualStackHost | HostnameHost;
@@ -129,7 +129,7 @@ export type DirectoryServiceProps = {
    */
   type: DirectoryServiceType;
   /**
-   * Host the service is reachable at — IPv4, IPv6, dual-stack, or
+   * Host the service is reachable at -- IPv4, IPv6, dual-stack, or
    * hostname, reached through a Cloudflare Tunnel.
    */
   host: DirectoryService.Host;
@@ -221,7 +221,7 @@ export type DirectoryService = Resource<
 >;
 
 /**
- * A Cloudflare Connectivity Directory service — a named entry in the
+ * A Cloudflare Connectivity Directory service -- a named entry in the
  * account's private-network service directory that maps a service name to
  * a private host (IP or hostname) reachable through a Cloudflare Tunnel.
  *
@@ -230,8 +230,8 @@ export type DirectoryService = Resource<
  * origin (with an optional `appProtocol` hint), an `http` service describes
  * an HTTP/HTTPS origin with explicit ports.
  *
- * Names are unique within the account. All properties — including the host
- * and even the protocol type — are mutable in place via a full PUT; nothing
+ * Names are unique within the account. All properties -- including the host
+ * and even the protocol type -- are mutable in place via a full PUT; nothing
  * forces a replacement except moving accounts.
  * ### Creating a Directory Service
  * **Example:** TCP database service through a tunnel
@@ -263,7 +263,7 @@ export type DirectoryService = Resource<
  * ### Updating
  * **Example:** Changing the host in place
  * ```typescript
- * // Host, ports, name, and TLS settings are all mutable — the service
+ * // Host, ports, name, and TLS settings are all mutable -- the service
  * // keeps its serviceId across updates.
  * const db = yield* Cloudflare.Connectivity.DirectoryService("Postgres", {
  *   type: "tcp",
@@ -300,7 +300,7 @@ export const DirectoryServiceProvider = () =>
         return { action: "replace" } as const;
       }
       // Everything else (name, type, host, ports, appProtocol, TLS) is
-      // mutable via the full-body PUT — let the engine default to update.
+      // mutable via the full-body PUT -- let the engine default to update.
       return undefined;
     }),
     read: Effect.fn(function* ({ id, output, olds }) {
@@ -313,7 +313,7 @@ export const DirectoryServiceProvider = () =>
         return observed ? toAttributes(observed, acct) : undefined;
       }
 
-      // Cold read — recover from lost state by matching the deterministic
+      // Cold read -- recover from lost state by matching the deterministic
       // physical name. Names are unique within the account (the API
       // rejects duplicates), but the service carries no ownership markers,
       // so brand the match `Unowned` and let the engine gate takeover
@@ -328,7 +328,7 @@ export const DirectoryServiceProvider = () =>
       const acct = output?.accountId ?? accountId;
       const name = yield* createServiceName(id, news.name);
 
-      // Observe — the serviceId cached on `output` is a hint, not a
+      // Observe -- the serviceId cached on `output` is a hint, not a
       // guarantee: a missing service falls through to a name scan
       // (adoption / lost-state recovery) and then to create.
       let observed = output?.serviceId ? yield* getService(acct, output.serviceId) : undefined;
@@ -336,7 +336,7 @@ export const DirectoryServiceProvider = () =>
         observed = yield* findByName(acct, name);
       }
 
-      // Ensure — create when missing. A concurrent create surfaces as
+      // Ensure -- create when missing. A concurrent create surfaces as
       // the typed `VpcServiceNameAlreadyExists` (Cloudflare code 5101):
       // converge by re-scanning for the service that won the race.
       if (!observed) {
@@ -358,7 +358,7 @@ export const DirectoryServiceProvider = () =>
         observed = created;
       }
 
-      // Sync — diff observed cloud state against desired. The update API
+      // Sync -- diff observed cloud state against desired. The update API
       // is a full-body PUT, so send everything, but skip the call
       // entirely on a no-op.
       const current = toAttributes(observed, acct);
@@ -374,7 +374,7 @@ export const DirectoryServiceProvider = () =>
       return toAttributes(updated, acct);
     }),
     delete: Effect.fn(function* ({ output }) {
-      // Idempotent — an already-gone service surfaces as the typed
+      // Idempotent -- an already-gone service surfaces as the typed
       // `VpcServiceNotFound` (Cloudflare code 5104).
       yield* connectivity
         .deleteDirectoryService({

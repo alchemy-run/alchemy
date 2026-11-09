@@ -1,12 +1,12 @@
 import * as NodePath from "node:path";
 /**
- * `@alchemy.run/frontend-frameworks/vocs/node` — the Node container deploy
+ * `@alchemy.run/frontend-frameworks/vocs/node` -- the Node container deploy
  * target for Vocs.
  *
  * Vocs is Waku-based RSC. The target runs the vocs build in a disposable
  * child process (cwd = project root) with waku's node adapter, then writes
  * a Node HTTP program that serves `clientDirectory` first (extensionless
- * HTML: `/about` → `about/index.html`) and falls through to
+ * HTML: `/about` -> `about/index.html`) and falls through to
  * `INTERNAL_runFetch`. Vocs' default `renderStrategy` is `"dynamic"`, so
  * dropping server modules would deploy an empty html-shell (no pages).
  */

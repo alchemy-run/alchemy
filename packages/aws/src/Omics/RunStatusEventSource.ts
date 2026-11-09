@@ -54,7 +54,7 @@ export interface RunStatusEventSourceProps extends EventRouteProps {
  * automation (fetch outputs, kick off downstream analysis) or alert on
  * `FAILED` runs.
  *
- * HealthOmics publishes to EventBridge automatically — no additional resource
+ * HealthOmics publishes to EventBridge automatically -- no additional resource
  * is created besides the EventBridge rule targeting the host. Provide the
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.

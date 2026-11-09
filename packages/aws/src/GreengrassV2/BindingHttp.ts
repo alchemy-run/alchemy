@@ -6,8 +6,8 @@ import type { Deployment } from "./Deployment.ts";
 /**
  * Shared scaffolding for IoT Greengrass V2 HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the three
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the three
  * builders below. Everything except the operation and the IAM action list is
  * boilerplate.
  */
@@ -76,7 +76,7 @@ export const makeGreengrassDeploymentHttpBinding = <
    * the caller's credentials, so deployment-plane operations require
    * `iot:DescribeJob`/`iot:DescribeThing`-family permissions (see the
    * "dependent actions" column of the service authorization reference).
-   * These cannot be scoped to the deployment ARN — the backing job and
+   * These cannot be scoped to the deployment ARN -- the backing job and
    * target thing have their own ARNs.
    */
   dependentActions?: readonly string[];
@@ -120,7 +120,7 @@ export const makeGreengrassDeploymentHttpBinding = <
  * Build the impl Effect for an account-level Greengrass V2 operation (listing
  * components/deployments/core devices, core-device data-plane calls keyed by
  * a thing name the caller supplies at runtime). The deploy-time half grants
- * `actions` on `*` — core devices register themselves and are not modeled as
+ * `actions` on `*` -- core devices register themselves and are not modeled as
  * Alchemy resources, so there is no resource ARN to scope down to.
  */
 export const makeGreengrassAccountHttpBinding = <I, A, E, R>(options: {

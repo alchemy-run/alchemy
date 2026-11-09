@@ -6,8 +6,8 @@ import type { DeliveryStream } from "./DeliveryStream.ts";
 /**
  * Shared scaffolding for AWS Firehose HTTP bindings.
  *
- * NOT exported from `index.ts` — every near-identical `{Op}Http.ts` in this
- * service is a thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of
+ * NOT exported from `index.ts` -- every near-identical `{Op}Http.ts` in this
+ * service is a thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of
  * the builders below. Everything except the operation, the IAM action list,
  * and the granted ARNs is boilerplate. Genuinely-different bindings (the
  * batched `DeliveryStreamSink`) stay bespoke.

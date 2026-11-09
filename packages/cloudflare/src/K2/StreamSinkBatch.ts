@@ -10,7 +10,7 @@ import { StreamSink, type StreamSinkClient } from "./StreamSink.ts";
 import { WriteStream, type WriteStreamClient } from "./WriteStream.ts";
 
 /**
- * Batch packing for {@link StreamSink}. Internal — not exported from the K2
+ * Batch packing for {@link StreamSink}. Internal -- not exported from the K2
  * barrel.
  */
 

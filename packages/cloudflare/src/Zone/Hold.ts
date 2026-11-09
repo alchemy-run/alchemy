@@ -14,7 +14,7 @@ type TypeId = typeof TypeId;
 
 export type HoldProps = {
   /**
-   * Zone to place the hold on. Stable — changing the zone triggers a
+   * Zone to place the hold on. Stable -- changing the zone triggers a
    * replacement (the hold is removed from the old zone and placed on the
    * new one).
    */
@@ -25,7 +25,7 @@ export type HoldProps = {
    * `includeSubdomains: true` also blocks `staging.example.com` from
    * being added to another account.
    *
-   * Mutable — patched in place.
+   * Mutable -- patched in place.
    * @default false
    */
   includeSubdomains?: boolean;
@@ -48,7 +48,7 @@ export type HoldAttributes = {
 export type Hold = Resource<TypeId, HoldProps, HoldAttributes, never, Providers>;
 
 /**
- * A Cloudflare zone hold (`/zones/{zone_id}/hold`) — prevents the zone's
+ * A Cloudflare zone hold (`/zones/{zone_id}/hold`) -- prevents the zone's
  * hostname (and optionally its subdomains) from being added to another
  * Cloudflare account while the hold is active.
  *
@@ -56,7 +56,7 @@ export type Hold = Resource<TypeId, HoldProps, HoldAttributes, never, Providers>
  * every create/patch fails with Cloudflare code 1005, surfaced as the typed
  * `ZoneHoldsRequireEnterprise` error.
  *
- * Destroying the resource removes the hold. The delete is idempotent —
+ * Destroying the resource removes the hold. The delete is idempotent --
  * removing a hold that is already gone (or whose zone was deleted
  * out-of-band) succeeds.
  * ### Holding a zone
@@ -114,7 +114,7 @@ export const HoldProvider = () =>
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // A hold is a per-zone singleton — `getHold` always returns a record
+      // A hold is a per-zone singleton -- `getHold` always returns a record
       // for every zone (default `hold: false`), and there is no account-wide
       // enumeration API. Enumerate every zone and read its hold state.
       const allZones = yield* listAllZones(accountId);
@@ -123,7 +123,7 @@ export const HoldProvider = () =>
         (zoneId) =>
           zones.getHold({ zoneId }).pipe(
             // Cloudflare intermittently rejects a *valid* token with
-            // `Forbidden` (a transient edge auth failure). It is retryable —
+            // `Forbidden` (a transient edge auth failure). It is retryable --
             // back off and try again rather than dropping the zone, so a
             // genuinely accessible zone (e.g. the standing test zone) never
             // silently falls out of the enumeration on a blip.
@@ -132,7 +132,7 @@ export const HoldProvider = () =>
               schedule: forbiddenRetrySchedule,
             }),
             Effect.map((observed) => toAttributes(zoneId, observed)),
-            // Zone deleted out-of-band mid-enumeration — drop it.
+            // Zone deleted out-of-band mid-enumeration -- drop it.
             Effect.catchTag("InvalidZoneIdentifier", () => Effect.undefined),
           ),
         { concurrency: 10 },
@@ -156,7 +156,7 @@ export const HoldProvider = () =>
       const zoneId = output?.zoneId ?? (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
       if (!zoneId) return undefined;
       const observed = yield* zones.getHold({ zoneId }).pipe(
-        // Zone deleted out-of-band — the hold is gone with it.
+        // Zone deleted out-of-band -- the hold is gone with it.
         Effect.catchTag("InvalidZoneIdentifier", () => Effect.undefined),
       );
       if (observed === undefined || observed.hold !== true) return undefined;
@@ -171,10 +171,10 @@ export const HoldProvider = () =>
       const zoneId = news.zoneId as string;
       const desiredIncludeSubdomains = news.includeSubdomains ?? false;
 
-      // 1. Observe — is the zone currently held?
+      // 1. Observe -- is the zone currently held?
       const observed = yield* zones.getHold({ zoneId });
 
-      // 2. Ensure — place the hold if the zone is not held.
+      // 2. Ensure -- place the hold if the zone is not held.
       if (observed.hold !== true) {
         const created = yield* zones.createHold({
           zoneId,
@@ -183,7 +183,7 @@ export const HoldProvider = () =>
         return toAttributes(zoneId, created);
       }
 
-      // 3. Sync — patch includeSubdomains when the observed value differs.
+      // 3. Sync -- patch includeSubdomains when the observed value differs.
       if (normalizeIncludeSubdomains(observed.includeSubdomains) !== desiredIncludeSubdomains) {
         const patched = yield* zones
           .patchHold({
@@ -192,7 +192,7 @@ export const HoldProvider = () =>
           })
           .pipe(
             // The hold vanished between observe and patch (out-of-band
-            // removal race) — place it fresh with the desired settings.
+            // removal race) -- place it fresh with the desired settings.
             Effect.catchTag("ZoneHoldNotFound", () =>
               zones.createHold({
                 zoneId,
@@ -207,7 +207,7 @@ export const HoldProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      // Removing a hold is naturally idempotent — Cloudflare returns the
+      // Removing a hold is naturally idempotent -- Cloudflare returns the
       // (un-held) hold state even when no hold exists. Tolerate the zone
       // itself having been deleted out-of-band.
       yield* zones
@@ -219,7 +219,7 @@ export const HoldProvider = () =>
 /**
  * Normalize Cloudflare's `include_subdomains` response value. The live API
  * returns a boolean, while Cloudflare's published schema declares a string
- * (`"true"`/`"false"`) — accept both.
+ * (`"true"`/`"false"`) -- accept both.
  */
 const normalizeIncludeSubdomains = (value: unknown): boolean => value === true || value === "true";
 

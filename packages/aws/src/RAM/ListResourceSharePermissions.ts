@@ -6,14 +6,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `ram:ListResourceSharePermissions`.
  *
  * Lists the RAM permissions that are associated with a resource share.
- * Account-level operation — the target shares, invitations, and permissions
+ * Account-level operation -- the target shares, invitations, and permissions
  * are chosen per request at runtime, so the binding takes no resource
  * argument. Provide the implementation with
  * `Effect.provide(AWS.RAM.ListResourceSharePermissionsHttp)`.
  * ### Managed Permissions
  * **Example:** List the Permissions on a Share
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listResourceSharePermissions = yield* AWS.RAM.ListResourceSharePermissions();
  *
  * // runtime

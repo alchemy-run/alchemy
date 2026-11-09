@@ -13,7 +13,7 @@ export const GetVehicleStatusHttp = Layer.effect(
     requestKey: "vehicleName",
     identifier: (vehicle: Vehicle) => vehicle.vehicleName,
     // GetVehicleStatus authorizes on both the vehicle and its associated
-    // campaigns — the campaign ARNs are unknowable at deploy time.
+    // campaigns -- the campaign ARNs are unknowable at deploy time.
     resources: (vehicle: Vehicle) => [vehicle.vehicleArn, "arn:aws:iotfleetwise:*:*:campaign/*"],
   }),
 );

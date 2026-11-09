@@ -25,7 +25,7 @@ export interface StartTextTranslationJobRequest extends Omit<
 }
 
 /**
- * Runtime binding for `translate:StartTextTranslationJob` — start an
+ * Runtime binding for `translate:StartTextTranslationJob` -- start an
  * asynchronous batch translation job over a collection of documents in S3.
  *
  * The binding is constructed with the **data-access role** (the IAM role
@@ -40,7 +40,7 @@ export interface StartTextTranslationJobRequest extends Omit<
  * ### Batch Translation Jobs
  * **Example:** Start a batch translation job
  * ```typescript
- * // deploy time — bind the Translate data-access role
+ * // deploy time -- bind the Translate data-access role
  * const startJob = yield* AWS.Translate.StartTextTranslationJob(dataAccessRole);
  *
  * // runtime

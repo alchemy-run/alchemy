@@ -8,7 +8,7 @@ import type { Workspace } from "./Workspace.ts";
  * action `grafana:CreateWorkspaceServiceAccount`), scoped to one
  * {@link Workspace}.
  *
- * Creates a Grafana service account in the workspace — a non-user identity
+ * Creates a Grafana service account in the workspace -- a non-user identity
  * for machine access to the Grafana HTTP API (dashboards, alerts, data
  * sources). Mint API tokens for it with
  * `CreateWorkspaceServiceAccountToken`. Requires Grafana 9 or newer.
@@ -24,7 +24,7 @@ import type { Workspace } from "./Workspace.ts";
  *   name: "dashboard-automation",
  *   grafanaRole: "EDITOR",
  * });
- * // account.id → the service account id used for token operations
+ * // account.id -> the service account id used for token operations
  * ```
  *
  * @binding

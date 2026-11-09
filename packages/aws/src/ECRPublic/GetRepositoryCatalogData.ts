@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { PublicRepository } from "./Repository.ts";
 
 /**
- * Request for {@link GetRepositoryCatalogData} — `repositoryName` is
+ * Request for {@link GetRepositoryCatalogData} -- `repositoryName` is
  * injected.
  */
 export interface GetRepositoryCatalogDataRequest extends Omit<

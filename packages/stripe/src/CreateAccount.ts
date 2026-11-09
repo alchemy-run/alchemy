@@ -8,7 +8,7 @@ import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
 
 /**
- * Create a Stripe Connect Account over HTTP. Account-scoped — binds the
+ * Create a Stripe Connect Account over HTTP. Account-scoped -- binds the
  * API key onto the host, not a specific connected account.
  *
  * ### Creating an Account at runtime

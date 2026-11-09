@@ -29,7 +29,7 @@ export type RuleArn =
  * failure names the conflicting priority and the fix: rules composed with an
  * auto-derived priority (e.g. `AWS.ECS.Service` shared load balancer rules)
  * should set an explicit `priority` to resolve the collision. The engine
- * never probes for a free slot — priorities stay deterministic.
+ * never probes for a free slot -- priorities stay deterministic.
  */
 export class ListenerRulePriorityInUse extends Data.TaggedError("ListenerRulePriorityInUse")<{
   readonly listenerArn: string;
@@ -244,7 +244,7 @@ export const ListenerRuleProvider = () =>
       const conditions = serializeConditions(news.conditions);
       const actions = serializeActions(news.actions);
 
-      // Observe — look up the rule by our prior ARN.
+      // Observe -- look up the rule by our prior ARN.
       let rule: elbv2.Rule | undefined;
       if (output?.ruleArn) {
         const described = yield* elbv2
@@ -253,7 +253,7 @@ export const ListenerRuleProvider = () =>
         rule = described?.Rules?.[0];
       }
 
-      // Ensure — create if missing.
+      // Ensure -- create if missing.
       if (!rule?.RuleArn) {
         const created = yield* elbv2
           .createRule({
@@ -276,7 +276,7 @@ export const ListenerRuleProvider = () =>
           return yield* Effect.die(new Error("createRule returned no rule"));
         }
       } else {
-        // Sync conditions + actions — modifyRule fully replaces these lists.
+        // Sync conditions + actions -- modifyRule fully replaces these lists.
         const modified = yield* elbv2.modifyRule({
           RuleArn: rule.RuleArn,
           Conditions: conditions,
@@ -284,7 +284,7 @@ export const ListenerRuleProvider = () =>
         });
         rule = modified.Rules?.[0] ?? rule;
 
-        // Sync priority — not mutable via modifyRule.
+        // Sync priority -- not mutable via modifyRule.
         if (Number(rule.Priority) !== news.priority) {
           yield* elbv2
             .setRulePriorities({
@@ -300,7 +300,7 @@ export const ListenerRuleProvider = () =>
 
       const ruleArn = rule.RuleArn!;
 
-      // Sync tags — diff observed cloud tags against desired.
+      // Sync tags -- diff observed cloud tags against desired.
       const tagDescriptions = yield* elbv2.describeTags({
         ResourceArns: [ruleArn],
       });

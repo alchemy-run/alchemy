@@ -3,20 +3,20 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `appsync:EvaluateCode` — evaluate `APPSYNC_JS`
+ * Runtime binding for `appsync:EvaluateCode` -- evaluate `APPSYNC_JS`
  * resolver/function code against a mock context without touching a deployed
  * resolver. Useful for CI/tooling functions that validate resolver code
  * before it ships.
  *
  * An account-level operation: the binding takes no resource. GraphQL
- * *evaluation* errors do not fail the effect — they surface on the
+ * *evaluation* errors do not fail the effect -- they surface on the
  * response's `error` field. Provide `AppSync.EvaluateCodeHttp` on the
  * hosting function's Effect to implement the binding.
  *
  * ### Evaluating Resolver Code
  * **Example:** Run a resolver's request function against a mock context
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const evaluateCode = yield* AppSync.EvaluateCode();
  *
  * // runtime
@@ -29,7 +29,7 @@ import type * as Effect from "effect/Effect";
  *   context: JSON.stringify({ arguments: { a: 2, b: 3 } }),
  *   function: "request",
  * });
- * // JSON.parse(result.evaluationResult!) → { payload: 5 }
+ * // JSON.parse(result.evaluationResult!) -> { payload: 5 }
  * ```
  *
  * @binding

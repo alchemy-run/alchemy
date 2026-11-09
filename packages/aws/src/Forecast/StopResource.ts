@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `forecast:StopResource` — halt an in-progress Forecast
+ * Runtime binding for `forecast:StopResource` -- halt an in-progress Forecast
  * job (dataset import, predictor training, forecast generation, or any of
  * their export jobs), the cost-control lever for a runaway training run. A
  * stopped job cannot be resumed.

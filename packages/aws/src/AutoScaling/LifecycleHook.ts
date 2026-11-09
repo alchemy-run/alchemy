@@ -59,7 +59,7 @@ export interface LifecycleHookProps {
   /**
    * Maximum time the instance stays in the wait state before the
    * `defaultResult` is applied, e.g. `"5 minutes"` or
-   * `Duration.seconds(300)` (30 seconds–2 hours on the wire).
+   * `Duration.seconds(300)` (30 seconds-2 hours on the wire).
    * @default "1 hour"
    */
   heartbeatTimeout?: Duration.Input;
@@ -164,7 +164,7 @@ export const LifecycleHook = Resource<LifecycleHook>("AWS.AutoScaling.LifecycleH
 
 // Derive the group name from either spelling of `autoScalingGroup`. A whole
 // AutoScalingGroup resource resolves to its bare Attributes before reaching the
-// provider — the resource `Type` marker does not survive resolution — so narrow
+// provider -- the resource `Type` marker does not survive resolution -- so narrow
 // on the attributes shape, never on `Type`.
 const toAutoScalingGroupName = (
   input: LifecycleHookProps["autoScalingGroup"] | undefined,
@@ -231,7 +231,7 @@ export const LifecycleHookProvider = () =>
           const newName = yield* toName(id, news ?? {});
           const oldGroup = toAutoScalingGroupName(olds.autoScalingGroup);
           const newGroup = toAutoScalingGroupName(news.autoScalingGroup);
-          // Hook name or ASG change → replace (identity fields). Both sides must
+          // Hook name or ASG change -> replace (identity fields). Both sides must
           // be known before forcing a replacement; a half-created row may have
           // lost an Output-valued `autoScalingGroup`.
           if (
@@ -269,7 +269,7 @@ export const LifecycleHookProvider = () =>
           }
           const lifecycleHookName = output?.lifecycleHookName ?? (yield* toName(id, news));
 
-          // Ensure + Sync — `putLifecycleHook` is the single create-or-update
+          // Ensure + Sync -- `putLifecycleHook` is the single create-or-update
           // API. It overwrites the whole hook configuration, so we issue it
           // unconditionally (idempotent on matching params).
           yield* autoscaling.putLifecycleHook({
@@ -301,7 +301,7 @@ export const LifecycleHookProvider = () =>
           return toAttributes(hook);
         }),
         delete: Effect.fn(function* ({ output }) {
-          // `deleteLifecycleHook` is idempotent — a missing hook returns
+          // `deleteLifecycleHook` is idempotent -- a missing hook returns
           // success. Retry only the transient contention fault.
           yield* autoscaling
             .deleteLifecycleHook({

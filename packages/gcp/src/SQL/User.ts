@@ -47,7 +47,7 @@ export type SqlServerUserDetails = {
    */
   disabled?: boolean;
   /**
-   * SQL Server server-level roles (`sysadmin`, `dbcreator`, …).
+   * SQL Server server-level roles (`sysadmin`, `dbcreator`, ...).
    */
   serverRoles?: string[];
 };
@@ -82,24 +82,24 @@ export type UserProps = {
   /**
    * Cloud SQL instance id (the `{instance}` segment of
    * `projects/{project}/instances/{instance}`). Full resource names are
-   * accepted and reduced to the last path segment. Immutable — changing
+   * accepted and reduced to the last path segment. Immutable -- changing
    * it replaces the user.
    */
   instance: string;
   /**
    * Database user name. If omitted, a unique name is generated from the
    * stack, stage, and logical id. MySQL limits names to 32 characters.
-   * Immutable — changing it replaces the user.
+   * Immutable -- changing it replaces the user.
    */
   userName?: string;
   /**
    * Host the user can connect from. MySQL `BUILT_IN` users only; omit
-   * for PostgreSQL and SQL Server. Immutable — changing it replaces the
+   * for PostgreSQL and SQL Server. Immutable -- changing it replaces the
    * user. `"%"` allows any host.
    */
   host?: string;
   /**
-   * Password for `BUILT_IN` users. Write-only — never returned by the
+   * Password for `BUILT_IN` users. Write-only -- never returned by the
    * API. Required for PostgreSQL built-in users. Omit for IAM user
    * types. Updating this value rotates the password. Accepts a
    * `Redacted` value (e.g. `Alchemy.Random`'s `text`).
@@ -107,13 +107,13 @@ export type UserProps = {
   password?: string | Redacted.Redacted<string>;
   /**
    * Authentication type (`BUILT_IN`, `CLOUD_IAM_USER`,
-   * `CLOUD_IAM_SERVICE_ACCOUNT`, `CLOUD_IAM_GROUP`, …). Immutable —
+   * `CLOUD_IAM_SERVICE_ACCOUNT`, `CLOUD_IAM_GROUP`, ...). Immutable --
    * changing it replaces the user.
    * @default "BUILT_IN"
    */
   type?: UserType;
   /**
-   * PostgreSQL / MySQL database roles to grant (`cloudsqlsuperuser`, …).
+   * PostgreSQL / MySQL database roles to grant (`cloudsqlsuperuser`, ...).
    */
   databaseRoles?: string[];
   /**
@@ -121,11 +121,11 @@ export type UserProps = {
    */
   passwordPolicy?: UserPasswordPolicy;
   /**
-   * Dual password status (`NO_DUAL_PASSWORD`, `DUAL_PASSWORD`, …).
+   * Dual password status (`NO_DUAL_PASSWORD`, `DUAL_PASSWORD`, ...).
    */
   dualPasswordType?: DualPasswordType;
   /**
-   * SQL Server–only login details. Ignored on MySQL and PostgreSQL.
+   * SQL Server-only login details. Ignored on MySQL and PostgreSQL.
    */
   sqlserverUserDetails?: SqlServerUserDetails;
   /**
@@ -134,7 +134,7 @@ export type UserProps = {
   iamEmail?: string;
   /**
    * What to do on destroy. `ABANDON` removes the user from state without
-   * calling the Cloud SQL API — useful when the parent instance is being
+   * calling the Cloud SQL API -- useful when the parent instance is being
    * deleted, or when a PostgreSQL user still holds roles.
    * @default "DELETE"
    */
@@ -165,7 +165,7 @@ export type User = Resource<
     dualPasswordType: string | undefined;
     /** SQL Server details, if this is a SQL Server login. */
     sqlserverUserDetails: SqlServerUserDetails | undefined;
-    /** IAM group availability (`ACTIVE`, `INACTIVE`, …). */
+    /** IAM group availability (`ACTIVE`, `INACTIVE`, ...). */
     iamStatus: string | undefined;
     /** HTTP etag. */
     etag: string | undefined;

@@ -28,12 +28,12 @@ export interface BudgetActionThreshold {
 }
 
 /**
- * What the action does when it fires — exactly one of the three definitions
+ * What the action does when it fires -- exactly one of the three definitions
  * must be set, matching the action's `actionType`.
  */
 export interface BudgetActionDefinition {
   /**
-   * For `APPLY_IAM_POLICY` actions — attach the managed policy to the given
+   * For `APPLY_IAM_POLICY` actions -- attach the managed policy to the given
    * IAM roles, groups, and/or users.
    */
   iamActionDefinition?: {
@@ -47,7 +47,7 @@ export interface BudgetActionDefinition {
     users?: string[];
   };
   /**
-   * For `APPLY_SCP_POLICY` actions — attach the service control policy to
+   * For `APPLY_SCP_POLICY` actions -- attach the service control policy to
    * the given Organizations targets.
    */
   scpActionDefinition?: {
@@ -57,7 +57,7 @@ export interface BudgetActionDefinition {
     targetIds: string[];
   };
   /**
-   * For `RUN_SSM_DOCUMENTS` actions — stop the given EC2 or RDS instances.
+   * For `RUN_SSM_DOCUMENTS` actions -- stop the given EC2 or RDS instances.
    */
   ssmActionDefinition?: {
     /** Which instances to stop. */
@@ -91,7 +91,7 @@ export interface BudgetActionProps {
    */
   actionThreshold: BudgetActionThreshold;
   /**
-   * What the action does — must match `actionType`.
+   * What the action does -- must match `actionType`.
    */
   definition: BudgetActionDefinition;
   /**
@@ -142,7 +142,7 @@ export interface BudgetAction extends Resource<
 > {}
 
 /**
- * An AWS Budgets action — runs an IAM policy attachment, SCP attachment, or
+ * An AWS Budgets action -- runs an IAM policy attachment, SCP attachment, or
  * SSM stop-instances document when a budget threshold is crossed, either
  * automatically or after manual approval.
  *
@@ -272,7 +272,7 @@ const updatableSlice = (a: {
     },
     ExecutionRoleArn: a.ExecutionRoleArn,
     ApprovalModel: a.ApprovalModel,
-    // Distilled marks `Subscriber.Address` sensitive — observed subscribers
+    // Distilled marks `Subscriber.Address` sensitive -- observed subscribers
     // come back Redacted; unwrap so the observed-vs-desired comparison does
     // not see `<redacted>` and issue a dirty update on every reconcile.
     Subscribers: [...a.Subscribers]
@@ -336,7 +336,7 @@ export const BudgetActionProvider = () =>
               );
           }),
         read: Effect.fn(function* ({ output }) {
-          // The action ID is server-generated — without persisted output there
+          // The action ID is server-generated -- without persisted output there
           // is no deterministic way to find the action.
           if (!output) return undefined;
           const { accountId } = yield* AWSEnvironment.current;
@@ -372,7 +372,7 @@ export const BudgetActionProvider = () =>
             Subscribers: desiredSubscribers,
           };
 
-          // OBSERVE — the action ID is server-generated, so `output` is the
+          // OBSERVE -- the action ID is server-generated, so `output` is the
           // only handle; cloud state stays authoritative via describe.
           const observed = output
             ? yield* budgets
@@ -389,7 +389,7 @@ export const BudgetActionProvider = () =>
 
           let actionId: string;
           if (!observed) {
-            // ENSURE — create. A freshly created execution role can take a
+            // ENSURE -- create. A freshly created execution role can take a
             // few seconds to become assumable by budgets.amazonaws.com, which
             // surfaces as InvalidParameterException/AccessDeniedException.
             const created = yield* budgets
@@ -419,7 +419,7 @@ export const BudgetActionProvider = () =>
             actionId = created.ActionId;
           } else {
             actionId = observed.ActionId;
-            // SYNC — apply the update only when the observed action differs
+            // SYNC -- apply the update only when the observed action differs
             // from the desired definition.
             if (updatableSlice(observed) !== updatableSlice(desired)) {
               yield* budgets

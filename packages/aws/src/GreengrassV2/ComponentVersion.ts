@@ -17,7 +17,7 @@ export interface ComponentVersionProps {
    * the component's name (`ComponentName`), version (`ComponentVersion`),
    * lifecycle, and platform capability.
    *
-   * Component versions are immutable — changing the recipe replaces the
+   * Component versions are immutable -- changing the recipe replaces the
    * component version.
    */
   recipe: string;
@@ -108,7 +108,7 @@ export class GreengrassComponentNotReady extends Data.TaggedError("GreengrassCom
   message: string;
 }> {}
 
-// Explicitly-typed pipeable retry helper — inlining `Effect.retry` in a
+// Explicitly-typed pipeable retry helper -- inlining `Effect.retry` in a
 // provider lifecycle op leaks `Retry.Return`'s conditional into declaration
 // emit and widens the provider layer to `unknown` R for every consumer of
 // `AWS.providers()`.
@@ -240,7 +240,7 @@ export const ComponentVersionProvider = () =>
         }),
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
-          // Component versions are immutable — any recipe change replaces.
+          // Component versions are immutable -- any recipe change replaces.
           if (olds !== undefined && news.recipe !== olds.recipe) {
             return { action: "replace" } as const;
           }
@@ -251,10 +251,10 @@ export const ComponentVersionProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — cloud state is authoritative.
+          // 1. OBSERVE -- cloud state is authoritative.
           let live = yield* observeComponent(identity.arn);
 
-          // 2. ENSURE — create when missing. A concurrent create surfaces as
+          // 2. ENSURE -- create when missing. A concurrent create surfaces as
           //    the typed ConflictException / RequestAlreadyInProgressException
           //    tags, which we treat as races and re-observe.
           if (live === undefined) {
@@ -290,7 +290,7 @@ export const ComponentVersionProvider = () =>
             }).pipe(retryWhileNotReady);
           }
 
-          // 3. SYNC TAGS — diff against OBSERVED cloud tags so adoption
+          // 3. SYNC TAGS -- diff against OBSERVED cloud tags so adoption
           //    converges (create-time tags only apply on first create).
           const observedTags = normalizeTags(live.tags);
           const { upsert, removed } = diffTags(observedTags, desiredTags);

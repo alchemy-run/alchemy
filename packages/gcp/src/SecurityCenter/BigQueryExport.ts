@@ -28,7 +28,7 @@ export type BigQueryExportProps = {
    * Export id (the `{export}` segment of
    * `projects/{project}/bigQueryExports/{export}`). If omitted, a unique
    * id is generated. Lowercase letters, digits, and hyphens; must start
-   * with a letter; max 63 characters. Immutable — changing it replaces
+   * with a letter; max 63 characters. Immutable -- changing it replaces
    * the export.
    */
   exportId?: string;
@@ -43,7 +43,7 @@ export type BigQueryExportProps = {
   /**
    * Human-readable description (max 1024 characters). BigQuery exports
    * have no labels field, so Alchemy ownership is stored in a
-   * `[alchemy …]` prefix and stripped from attributes.
+   * `[alchemy ...]` prefix and stripped from attributes.
    */
   description?: string;
 };
@@ -101,7 +101,7 @@ export interface BigQueryExportLookup {
  * A project-scoped Security Command Center BigQuery export that writes
  * findings to a dataset.
  *
- * Exports have no labels field — Alchemy stamps ownership into the
+ * Exports have no labels field -- Alchemy stamps ownership into the
  * description so `list` / nuke can find them. Export id is identity.
  * Dataset, filter, and description update in place.
  *

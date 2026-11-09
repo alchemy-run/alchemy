@@ -13,7 +13,7 @@ import type { Instance } from "./Instance.ts";
  * ### Auditing Access
  * **Example:** List a Permission Set's Accounts
  * ```typescript
- * // init — bind the operation to the Identity Center instance
+ * // init -- bind the operation to the Identity Center instance
  * const listAccountsForProvisionedPermissionSet = yield* AWS.IdentityCenter.ListAccountsForProvisionedPermissionSet(instance);
  *
  * // runtime

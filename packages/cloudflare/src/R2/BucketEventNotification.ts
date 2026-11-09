@@ -16,11 +16,11 @@ type TypeId = typeof TypeId;
 /**
  * An R2 object action that can trigger an event notification.
  *
- * - `PutObject` — an object is uploaded via a single PUT
- * - `CopyObject` — an object is copied into the bucket
- * - `DeleteObject` — an object is deleted
- * - `CompleteMultipartUpload` — a multipart upload completes
- * - `LifecycleDeletion` — an object is deleted by a lifecycle rule
+ * - `PutObject` -- an object is uploaded via a single PUT
+ * - `CopyObject` -- an object is copied into the bucket
+ * - `DeleteObject` -- an object is deleted
+ * - `CompleteMultipartUpload` -- a multipart upload completes
+ * - `LifecycleDeletion` -- an object is deleted by a lifecycle rule
  */
 export type BucketEventNotificationAction =
   | "PutObject"
@@ -61,20 +61,20 @@ export interface BucketEventNotificationProps {
    * Name of the R2 bucket that produces the events. Pass
    * `bucket.bucketName` from a `Cloudflare.R2.Bucket`.
    *
-   * Immutable — changing the bucket triggers a replacement.
+   * Immutable -- changing the bucket triggers a replacement.
    */
   bucketName: string;
   /**
    * ID of the Queue that receives the event messages. Pass
    * `queue.queueId` from a `Cloudflare.Queues.Queue`.
    *
-   * Immutable — changing the queue triggers a replacement.
+   * Immutable -- changing the queue triggers a replacement.
    */
   queueId: string;
   /**
    * Jurisdiction of the bucket (must match the bucket's own jurisdiction).
    *
-   * Immutable — changing the jurisdiction triggers a replacement.
+   * Immutable -- changing the jurisdiction triggers a replacement.
    * @default "default"
    */
   jurisdiction?: Bucket.Jurisdiction;
@@ -85,7 +85,7 @@ export interface BucketEventNotificationProps {
    * drift).
    *
    * Note: Cloudflare rejects rule sets whose `prefix`/`suffix` key ranges
-   * overlap ("invalid overlap"), even when their actions are disjoint —
+   * overlap ("invalid overlap"), even when their actions are disjoint --
    * scope each rule to a distinct key range.
    */
   rules: BucketEventNotificationRule[];
@@ -122,7 +122,7 @@ export type BucketEventNotification = Resource<
  * (bucket, queue) pair and holds a list of rules; consume the messages with
  * a Queue consumer Worker.
  *
- * The configuration's identity is the (bucket, queue) pair — changing
+ * The configuration's identity is the (bucket, queue) pair -- changing
  * either triggers a replacement, while rule changes are applied in place
  * (the provider converges the pair's configuration to exactly the
  * declared rule set).
@@ -162,7 +162,7 @@ export type BucketEventNotification = Resource<
  * ### Multiple rules
  * **Example:** Separate rules per key range
  * ```typescript
- * // Rules must cover non-overlapping key ranges — Cloudflare rejects
+ * // Rules must cover non-overlapping key ranges -- Cloudflare rejects
  * // overlapping prefixes/suffixes even when the actions are disjoint.
  * yield* Cloudflare.R2.BucketEventNotification("Notifications", {
  *   bucketName: bucket.bucketName,
@@ -206,7 +206,7 @@ export const BucketEventNotificationProvider = () =>
     diff: Effect.fn(function* ({ olds = {}, news }) {
       const o = olds as Partial<BucketEventNotificationProps>;
       const n = news as BucketEventNotificationProps;
-      // No prior props to compare against — let the engine decide.
+      // No prior props to compare against -- let the engine decide.
       if (o.bucketName === undefined) return undefined;
       // bucketName/queueId are Input<string>; compare only once both
       // sides are concrete strings.
@@ -247,7 +247,7 @@ export const BucketEventNotificationProvider = () =>
 
       const attrs = toAttributes(observed, acct, bucketName, queueId, jurisdiction);
       // Event notification configs carry no ownership markers. With no
-      // prior output we cannot prove we created this configuration —
+      // prior output we cannot prove we created this configuration --
       // brand it `Unowned` so takeover is gated behind the adopt policy.
       return output ? attrs : Unowned(attrs);
     }),
@@ -260,15 +260,15 @@ export const BucketEventNotificationProvider = () =>
       const queueId = news.queueId as string;
       const jurisdiction = news.jurisdiction ?? "default";
 
-      // 1. Observe — the configuration may or may not exist; `output` is
+      // 1. Observe -- the configuration may or may not exist; `output` is
       //    only a cache of the identity, never proof of existence.
       const observed = yield* getConfiguration(acct, bucketName, queueId, jurisdiction);
 
-      // 2/3. Ensure + sync — skip the API entirely when the observed rules
+      // 2/3. Ensure + sync -- skip the API entirely when the observed rules
       //    already match the desired set.
       if (!observed || !sameRules(observed.rules ?? [], news.rules)) {
         // The PUT *appends* rules to the queue's configuration (it is not
-        // a full replace — verified against the live API), so on drift
+        // a full replace -- verified against the live API), so on drift
         // the existing configuration must be cleared first. The brief gap
         // is unavoidable; each step is independently idempotent.
         if (observed) {
@@ -301,7 +301,7 @@ export const BucketEventNotificationProvider = () =>
           })
           .pipe(
             // A freshly-created bucket or queue can briefly 404 on the
-            // event-notification endpoint — ride out the consistency lag.
+            // event-notification endpoint -- ride out the consistency lag.
             Effect.retry({
               while: (e) => e._tag === "BucketNotFound" || e._tag === "QueueNotFound",
               schedule: r2EventNotificationConsistencySchedule,
@@ -309,7 +309,7 @@ export const BucketEventNotificationProvider = () =>
           );
       }
 
-      // 4. Return — re-read so the attributes carry the server-assigned
+      // 4. Return -- re-read so the attributes carry the server-assigned
       //    per-rule IDs. The read can lag the PUT briefly.
       if (news.rules.length === 0) {
         // An empty rule set reads back as "no configuration".
@@ -342,7 +342,7 @@ export const BucketEventNotificationProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      // Idempotent — the configuration, bucket, or queue may already be
+      // Idempotent -- the configuration, bucket, or queue may already be
       // gone (all typed not-found variants in the operation's union).
       yield* r2
         .deleteBucketEventNotification({
@@ -362,7 +362,7 @@ export const BucketEventNotificationProvider = () =>
     // Parent fan-out: a notification configuration is keyed by (bucket,
     // queue) and there is no account-wide enumeration. Enumerate every R2
     // bucket (account-scoped), then list each bucket's event-notification
-    // queues — one (bucket, queue) pair is one BucketEventNotification.
+    // queues -- one (bucket, queue) pair is one BucketEventNotification.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const buckets = yield* listAllBuckets(accountId);
@@ -397,7 +397,7 @@ export const BucketEventNotificationProvider = () =>
                   })),
               ),
               // A bucket with no event-notification config (or a bucket
-              // that vanished mid-enumeration) is not an error — skip it.
+              // that vanished mid-enumeration) is not an error -- skip it.
               Effect.catchTag(
                 [
                   "NoEventNotificationConfig",
@@ -501,7 +501,7 @@ const toAttributes = (
 ): BucketEventNotificationAttributes => ({
   bucketName,
   // The endpoint echoes the queue ID in dashed-UUID form while the Queues
-  // API uses the undashed form — keep the canonical input ID so attributes
+  // API uses the undashed form -- keep the canonical input ID so attributes
   // compare cleanly against `Queue.queueId`.
   queueId,
   queueName: config.queueName ?? undefined,
@@ -528,7 +528,7 @@ const ruleIdentity = (rule: {
 
 /**
  * Compares the observed rules against the desired rules as an unordered
- * set. Descriptions are compared only when the desired rule specifies one —
+ * set. Descriptions are compared only when the desired rule specifies one --
  * Cloudflare auto-generates a description otherwise.
  */
 const sameRules = (

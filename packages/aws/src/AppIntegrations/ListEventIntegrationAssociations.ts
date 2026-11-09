@@ -9,7 +9,7 @@ export interface ListEventIntegrationAssociationsRequest extends Omit<
 > {}
 
 /**
- * Lists the associations of an AppIntegrations {@link EventIntegration} —
+ * Lists the associations of an AppIntegrations {@link EventIntegration} --
  * the clients that have associated with the event integration
  * (`app-integrations:ListEventIntegrationAssociations`).
  *
@@ -22,7 +22,7 @@ export interface ListEventIntegrationAssociationsRequest extends Omit<
  * const listEventIntegrationAssociations =
  *   yield* AWS.AppIntegrations.ListEventIntegrationAssociations(integration);
  *
- * // runtime — the EventIntegrationName is injected automatically
+ * // runtime -- the EventIntegrationName is injected automatically
  * const { EventIntegrationAssociations } =
  *   yield* listEventIntegrationAssociations();
  * ```

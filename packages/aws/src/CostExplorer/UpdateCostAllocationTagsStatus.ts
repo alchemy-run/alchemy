@@ -18,7 +18,7 @@ export interface UpdateCostAllocationTagsStatusRequest
  * ### Cost Allocation Tags
  * **Example:** Activate a Tag Key
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const updateCostAllocationTagsStatus = yield* AWS.CostExplorer.UpdateCostAllocationTagsStatus();
  *
  * // runtime

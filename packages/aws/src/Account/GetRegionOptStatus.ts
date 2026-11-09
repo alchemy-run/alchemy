@@ -13,7 +13,7 @@ import type * as Effect from "effect/Effect";
  * ### Reading Region Opt Status
  * **Example:** Check Whether an Opt-in Region Is Enabled
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getRegionOptStatus = yield* AWS.Account.GetRegionOptStatus();
  *
  * // runtime

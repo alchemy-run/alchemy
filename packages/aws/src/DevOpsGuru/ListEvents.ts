@@ -5,13 +5,13 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `devops-guru:ListEvents`.
  *
- * Lists the infrastructure and deployment events (CloudTrail changes, deployments, schema changes) DevOps Guru evaluated around an insight — the "what changed?" of an incident.
+ * Lists the infrastructure and deployment events (CloudTrail changes, deployments, schema changes) DevOps Guru evaluated around an insight -- the "what changed?" of an incident.
  * Provide the implementation with
  * `Effect.provide(AWS.DevOpsGuru.ListEventsHttp)`.
  * ### Events and Recommendations
  * **Example:** List Deployment Events Around an Insight
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listEvents = yield* AWS.DevOpsGuru.ListEvents();
  *
  * // runtime

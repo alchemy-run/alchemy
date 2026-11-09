@@ -4,14 +4,14 @@
  * GUI-style dashboard behind bare `alchemy profile`. One Sigil app stays
  * mounted for the whole session and screens replace each other in place:
  *
- *   overview — chip tabs (default profile first), selected profile's
+ *   overview -- chip tabs (default profile first), selected profile's
  *              provider details with an up/down focus cursor, keybind bar,
  *              inline rename/new/delete/remove
- *   edit     — replaces the overview: per-provider cycle rows
+ *   edit     -- replaces the overview: per-provider cycle rows
  *              (keep / reconfigure / remove, add for unconnected)
  *
  * Pure store actions (create/rename/delete) round-trip through
- * the hub via a request bridge WITHOUT unmounting — results come back as
+ * the hub via a request bridge WITHOUT unmounting -- results come back as
  * in-app notices. Only flows that must prompt in the transcript (provider
  * configuration, credential refresh) resolve the session. The built-in
  * `default` profile is pinned first and can be neither renamed nor deleted.
@@ -130,7 +130,7 @@ interface DashState {
 /**
  * Immutable-snapshot store on top of `LiveStore`, so every mutation notifies
  * the mounted dashboard. The resolver bridge and the notice auto-dismiss
- * timer live outside the snapshot — they carry no visual state.
+ * timer live outside the snapshot -- they carry no visual state.
  */
 export class DashStore extends LiveStore<DashState> {
   private resolver: ((action: PureAction | ExternalAction) => void) | null = null;
@@ -202,13 +202,13 @@ type DetailsPaneProps = {
 
 function DetailsPane({ details, refreshingProvider, focusedIndex }: DetailsPaneProps): JSX.Element {
   if (details.state === "loading") {
-    return <Spinner label="resolving credentials…" />;
+    return <Spinner label="resolving credentials&#x2026;" />;
   }
   if (details.state === "failed") {
     return <Status variant="error">{details.message}</Status>;
   }
   if (details.providers.length === 0) {
-    return <Text tone="muted">No accounts connected — press e to add one.</Text>;
+    return <Text tone="muted">No accounts connected &#x2014; press e to add one.</Text>;
   }
   const { providers } = details;
   const { nameWidth, methodWidth } = providerColumnWidths(providers);
@@ -617,7 +617,7 @@ export function Dashboard({ store, initialSelected }: DashboardProps): JSX.Eleme
       </Stack>
       <Stack gap={1} minHeight={0}>
         {entry === undefined ? (
-          <Text tone="muted">No profiles yet — press n to create one.</Text>
+          <Text tone="muted">No profiles yet &#x2014; press n to create one.</Text>
         ) : (
           <>
             {/* The profile row is the first focus slot. It sits in the same
@@ -649,7 +649,7 @@ export function Dashboard({ store, initialSelected }: DashboardProps): JSX.Eleme
           It shares the gutter with the profile/provider rows above it. */}
       <Box minHeight={1} flexShrink={0} paddingLeft={theme.space.indent}>
         {busy && flow === undefined ? (
-          <Spinner label="working…" />
+          <Spinner label="working&#x2026;" />
         ) : notice !== undefined ? (
           <Toast variant={notice.ok ? "info" : "error"}>{notice.message}</Toast>
         ) : null}
@@ -687,7 +687,7 @@ export interface DashboardSessionOptions<R> {
   readonly execute: (action: PureAction) => Effect.Effect<ExecuteResult, never, R>;
   /**
    * Runs an edit/refresh flow. Its prompts render inside the dashboard via
-   * the embedded session; resolves with a toast outcome — `ok: false`
+   * the embedded session; resolves with a toast outcome -- `ok: false`
    * renders as a persistent error notice instead of an auto-dismissing
    * success toast.
    */

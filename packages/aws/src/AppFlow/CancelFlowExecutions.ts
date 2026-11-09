@@ -12,7 +12,7 @@ export interface CancelFlowExecutionsRequest extends Omit<
  * Runtime binding for `appflow:CancelFlowExecutions`.
  *
  * Bind this operation to a {@link Flow} in the function's init phase to get a
- * callable that cancels in-progress runs of the flow — all active runs when
+ * callable that cancels in-progress runs of the flow -- all active runs when
  * called with no arguments, or only the given `executionIds`. Executions that
  * cannot be canceled (already finished, unknown) are returned in
  * `invalidExecutions`. The flow name is injected automatically and
@@ -21,10 +21,10 @@ export interface CancelFlowExecutionsRequest extends Omit<
  * ### Running Flows
  * **Example:** Cancel Specific Flow Runs
  * ```typescript
- * // init — bind the operation to the flow
+ * // init -- bind the operation to the flow
  * const cancelFlowExecutions = yield* AWS.AppFlow.CancelFlowExecutions(flow);
  *
- * // runtime — cancel a run by execution id
+ * // runtime -- cancel a run by execution id
  * const result = yield* cancelFlowExecutions({
  *   executionIds: [executionId],
  * });

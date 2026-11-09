@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `ListProtectedResources` operation (IAM action
  * `backup:ListProtectedResources`).
  *
- * Lists the resources successfully backed up by AWS Backup — each entry
+ * Lists the resources successfully backed up by AWS Backup -- each entry
  * carries the resource ARN, type, and last-backup time. Provide the
  * implementation with `Effect.provide(AWS.Backup.ListProtectedResourcesHttp)`.
  * ### Protected Resources

@@ -20,14 +20,14 @@ export type EnvironmentsUserWorkloadsSecretProps = {
   /**
    * Parent environment resource name
    * (`projects/{project}/locations/{location}/environments/{environment}`).
-   * Immutable — changing it replaces the Secret.
+   * Immutable -- changing it replaces the Secret.
    */
   environmentName: string;
   /**
    * Secret id (the last path segment). If omitted, a unique RFC1035 name
    * is generated from the stack, stage, and logical id. Must start with a
    * lowercase letter, be 1-63 characters, and match
-   * `[a-z]([-a-z0-9]*[a-z0-9])?`. Immutable — changing it replaces the
+   * `[a-z]([-a-z0-9]*[a-z0-9])?`. Immutable -- changing it replaces the
    * Secret.
    */
   secretId?: string;
@@ -53,7 +53,7 @@ export type EnvironmentsUserWorkloadsSecret = Resource<
     environmentName: string;
     /** Project id. */
     project: string;
-    /** Region id (`us-central1`, …). */
+    /** Region id (`us-central1`, ...). */
     location: string;
     /** Parent environment id. */
     environmentId: string;
@@ -74,7 +74,7 @@ export type EnvironmentsUserWorkloadsSecret = Resource<
  * Supported on Cloud Composer 3 (`composer-3-airflow-2` and newer).
  * Secrets have no labels field, so Alchemy tracks them by name and
  * never adds keys to `data`. `environmentName` and `secretId` are
- * identity — changing either replaces the Secret. Data values must be
+ * identity -- changing either replaces the Secret. Data values must be
  * base64-encoded.
  *
  * ### Creating a User Workloads Secret

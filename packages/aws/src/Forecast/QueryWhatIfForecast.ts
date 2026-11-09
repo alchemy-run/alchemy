@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `forecast:QueryWhatIfForecast` — retrieve the
+ * Runtime binding for `forecast:QueryWhatIfForecast` -- retrieve the
  * predicted time series for a single item from a what-if forecast, so an
  * application can compare a scenario (price change, promotion) against the
  * baseline served by {@link QueryForecast}.

@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `eks:ListClusters`.
  *
  * Enumerates the EKS cluster names in the caller's account and region.
- * `eks:ListClusters` is granted on `*` — the operation is account-scoped and takes no resource.
+ * `eks:ListClusters` is granted on `*` -- the operation is account-scoped and takes no resource.
  * Provide the implementation with
  * `Effect.provide(AWS.EKS.ListClustersHttp)`.
  * ### Discovering Clusters

@@ -37,7 +37,7 @@ export type RepositoriesAttachmentProps = {
   /**
    * Parent repository. Full name
    * `projects/{project}/locations/{location}/repositories/{repository}`
-   * or the repository id (combined with `location`). Immutable —
+   * or the repository id (combined with `location`). Immutable --
    * changing it replaces the attachment.
    */
   repository: string;
@@ -49,19 +49,19 @@ export type RepositoriesAttachmentProps = {
   /**
    * Attachment id (the `{attachment}` segment of
    * `.../repositories/{repository}/attachments/{attachment}`). If omitted,
-   * a unique name is generated. Immutable — changing it replaces the
+   * a unique name is generated. Immutable -- changing it replaces the
    * attachment.
    */
   attachmentId?: string;
   /**
-   * Target the attachment is for — a Version, Package, or Repository
-   * resource name. Bare ids are resolved under `repository`. Immutable —
+   * Target the attachment is for -- a Version, Package, or Repository
+   * resource name. Bare ids are resolved under `repository`. Immutable --
    * changing it replaces the attachment.
    */
   target: string;
   /**
    * Files that belong to this attachment, as File resource names or file
-   * ids under `repository`. Immutable — changing them replaces the
+   * ids under `repository`. Immutable -- changing them replaces the
    * attachment.
    */
   files: string[];
@@ -78,7 +78,7 @@ export type RepositoriesAttachmentProps = {
   /**
    * User annotations. Alchemy ownership keys (`alchemy-stack`,
    * `alchemy-stage`, `alchemy-id`) are merged in automatically.
-   * Attachments have no labels field and no update API — changing
+   * Attachments have no labels field and no update API -- changing
    * annotations replaces the attachment.
    */
   annotations?: Record<string, string>;
@@ -153,7 +153,7 @@ export interface RepositoriesAttachmentLookup {
  * version. An attachment points at one or more files already stored in
  * the repository.
  *
- * Attachments have no update API — any change replaces the resource.
+ * Attachments have no update API -- any change replaces the resource.
  * Alchemy stamps ownership into `annotations` so `list` / nuke can find
  * them.
  *

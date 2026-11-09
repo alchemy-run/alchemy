@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `ssm-contacts:AcceptPage`.
  *
  * Acknowledge a page with the accept code Incident Manager delivered to
- * the contact's channel — `READ` marks it seen, `DELIVERED` confirms
+ * the contact's channel -- `READ` marks it seen, `DELIVERED` confirms
  * receipt. Acknowledging stops further escalation stages.
  * Provide the implementation with
  * `Effect.provide(AWS.SSMContacts.AcceptPageHttp)`.

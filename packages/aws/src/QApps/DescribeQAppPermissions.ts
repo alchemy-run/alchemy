@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { QApp } from "./QApp.ts";
 
 /**
- * Request for {@link DescribeQAppPermissions} — `instanceId` and `appId` are injected from the bound Q App.
+ * Request for {@link DescribeQAppPermissions} -- `instanceId` and `appId` are injected from the bound Q App.
  */
 export interface DescribeQAppPermissionsRequest extends Omit<
   qapps.DescribeQAppPermissionsInput,
@@ -19,7 +19,7 @@ export interface DescribeQAppPermissionsRequest extends Omit<
  * ### Permissions
  * **Example:** Describe App Permissions
  * ```typescript
- * // init — bind the operation to the Q App
+ * // init -- bind the operation to the Q App
  * const describeQAppPermissions = yield* AWS.QApps.DescribeQAppPermissions(app);
  *
  * // runtime

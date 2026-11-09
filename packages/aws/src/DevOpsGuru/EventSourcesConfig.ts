@@ -27,7 +27,7 @@ export interface EventSourcesConfig extends Resource<
 > {}
 
 /**
- * The DevOps Guru event sources configuration — the account/region singleton
+ * The DevOps Guru event sources configuration -- the account/region singleton
  * that controls which integrated services DevOps Guru consumes
  * recommendations from as event sources. The one supported source is Amazon
  * CodeGuru Profiler: when enabled, profiler recommendations surface as
@@ -51,7 +51,7 @@ export interface EventSourcesConfig extends Resource<
 export const EventSourcesConfig = Resource<EventSourcesConfig>("AWS.DevOpsGuru.EventSourcesConfig");
 
 /**
- * Concurrent `UpdateEventSourcesConfig` calls conflict server-side — retry
+ * Concurrent `UpdateEventSourcesConfig` calls conflict server-side -- retry
  * the typed conflict tag on a short bounded schedule.
  *
  * Explicitly typed: inlining `Effect.retry` with options in provider
@@ -90,7 +90,7 @@ export const EventSourcesConfigProvider = () =>
       });
 
       return {
-        // Account/region singleton — surfaced only when non-default.
+        // Account/region singleton -- surfaced only when non-default.
         list: () =>
           observe.pipe(
             Effect.map((observed) => (observed.amazonCodeGuruProfiler ? [observed] : [])),
@@ -101,17 +101,17 @@ export const EventSourcesConfigProvider = () =>
           if (!observed.amazonCodeGuruProfiler) {
             return undefined;
           }
-          // The configuration can't carry ownership tags — an enabled
+          // The configuration can't carry ownership tags -- an enabled
           // configuration we have no record of belongs to someone else
           // until explicitly adopted.
           return output !== undefined ? observed : Unowned(observed);
         }),
 
         reconcile: Effect.fn(function* ({ news, session }) {
-          // 1. OBSERVE — the live configuration is authoritative.
+          // 1. OBSERVE -- the live configuration is authoritative.
           const observed = yield* observe;
 
-          // 2. SYNC — apply only when drifted.
+          // 2. SYNC -- apply only when drifted.
           const desired = news.amazonCodeGuruProfiler ?? false;
           if (observed.amazonCodeGuruProfiler !== desired) {
             yield* setProfiler(desired ? "ENABLED" : "DISABLED");

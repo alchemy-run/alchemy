@@ -8,7 +8,7 @@ import type * as Effect from "effect/Effect";
  *
  * Returns events related to DocumentDB clusters, instances, snapshots, and
  * parameter groups from the last 24 hours (up to 14 days with an explicit
- * time window) — failovers, maintenance, configuration changes. Provide the
+ * time window) -- failovers, maintenance, configuration changes. Provide the
  * implementation with `Effect.provide(AWS.DocDB.DescribeEventsHttp)`.
  * ### Monitoring Clusters
  * **Example:** Read a Cluster's Recent Events

@@ -9,7 +9,7 @@ import {
 /**
  * The `detail` payload Amazon Transcribe delivers to EventBridge when a
  * batch transcription job finishes (`Transcribe Job State Change`, statuses
- * `COMPLETED` and `FAILED` only — Transcribe does not emit intermediate
+ * `COMPLETED` and `FAILED` only -- Transcribe does not emit intermediate
  * states).
  */
 export interface TranscriptionJobEventDetail {
@@ -17,7 +17,7 @@ export interface TranscriptionJobEventDetail {
   TranscriptionJobName?: string;
   /** The terminal status: `COMPLETED` or `FAILED`. */
   TranscriptionJobStatus?: string;
-  /** Why the job failed — only present on `FAILED` events. */
+  /** Why the job failed -- only present on `FAILED` events. */
   FailureReason?: string;
   /** Additional event fields (the schema grows over time). */
   [key: string]: unknown;
@@ -34,7 +34,7 @@ export interface CallAnalyticsJobEventDetail {
   JobName?: string;
   /** The terminal status: `COMPLETED` or `FAILED`. */
   JobStatus?: string;
-  /** Why the job failed — only present on `FAILED` events. */
+  /** Why the job failed -- only present on `FAILED` events. */
   FailureReason?: string;
   /** Additional event fields (the schema grows over time). */
   [key: string]: unknown;
@@ -51,7 +51,7 @@ export interface MedicalScribeJobEventDetail {
   MedicalScribeJobName?: string;
   /** The terminal status: `COMPLETED` or `FAILED`. */
   MedicalScribeJobStatus?: string;
-  /** Why the job failed — only present on `FAILED` events. */
+  /** Why the job failed -- only present on `FAILED` events. */
   FailureReason?: string;
   /** Additional event fields (the schema grows over time). */
   [key: string]: unknown;
@@ -69,7 +69,7 @@ export interface VocabularyEventDetail {
   VocabularyName?: string;
   /** The terminal state: `READY` or `FAILED`. */
   VocabularyState?: string;
-  /** Why processing failed — only present on `FAILED` events. */
+  /** Why processing failed -- only present on `FAILED` events. */
   FailureReason?: string;
   /** Additional event fields (the schema grows over time). */
   [key: string]: unknown;
@@ -87,7 +87,7 @@ export interface LanguageModelEventDetail {
   ModelName?: string;
   /** The terminal status: `COMPLETED` or `FAILED`. */
   ModelStatus?: string;
-  /** Why training failed — only present on `FAILED` events. */
+  /** Why training failed -- only present on `FAILED` events. */
   FailureReason?: string;
   /** Additional event fields (the schema grows over time). */
   [key: string]: unknown;
@@ -118,7 +118,7 @@ export interface TranscriptionJobEventSourceProps extends EventRouteProps {
  * subscribes the host Function to those events so it can chain
  * post-transcription processing without polling {@link GetTranscriptionJob}.
  *
- * Transcribe publishes to EventBridge automatically — no additional
+ * Transcribe publishes to EventBridge automatically -- no additional
  * resource is created besides the EventBridge rule targeting the host.
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.
@@ -177,7 +177,7 @@ export interface CallAnalyticsJobEventSourceProps extends EventRouteProps {
 
 /**
  * Event source for Amazon Transcribe `Call Analytics Job State Change`
- * events (source `aws.transcribe`) — fires when a Call Analytics job
+ * events (source `aws.transcribe`) -- fires when a Call Analytics job
  * reaches `COMPLETED` or `FAILED`.
  *
  * ### Consuming Job Events
@@ -224,7 +224,7 @@ export interface MedicalScribeJobEventSourceProps extends EventRouteProps {
 
 /**
  * Event source for AWS HealthScribe `Medical Scribe Job State Change`
- * events (source `aws.transcribe`) — fires when a Medical Scribe job
+ * events (source `aws.transcribe`) -- fires when a Medical Scribe job
  * reaches `COMPLETED` or `FAILED`.
  *
  * ### Consuming Job Events
@@ -272,7 +272,7 @@ export interface VocabularyEventSourceProps extends EventRouteProps {
 
 /**
  * Event source for Amazon Transcribe `Vocabulary State Change` events
- * (source `aws.transcribe`) — fires when custom vocabulary processing
+ * (source `aws.transcribe`) -- fires when custom vocabulary processing
  * reaches `READY` or `FAILED`, so runtime-created vocabularies (e.g.
  * per-tenant via {@link CreateVocabulary}) can be used the moment they are
  * ready.
@@ -321,7 +321,7 @@ export interface LanguageModelEventSourceProps extends EventRouteProps {
 
 /**
  * Event source for Amazon Transcribe `Language Model State Change` events
- * (source `aws.transcribe`) — fires when custom language model training
+ * (source `aws.transcribe`) -- fires when custom language model training
  * (started with {@link CreateLanguageModel}) reaches `COMPLETED` or
  * `FAILED`.
  *

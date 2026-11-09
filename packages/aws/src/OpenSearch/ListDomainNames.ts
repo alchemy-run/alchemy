@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `ListDomainNames` operation (IAM action
  * `es:ListDomainNames`).
  *
- * Lists the names and engine types of all domains the account owns in the active Region — the entry point for fleet-wide monitoring. Provide the implementation with
+ * Lists the names and engine types of all domains the account owns in the active Region -- the entry point for fleet-wide monitoring. Provide the implementation with
  * `Effect.provide(AWS.OpenSearch.ListDomainNamesHttp)`.
  * ### Monitoring Domains
  * **Example:** List the Account's Domains
@@ -14,7 +14,7 @@ import type * as Effect from "effect/Effect";
  * const listDomainNames = yield* OpenSearch.ListDomainNames();
  *
  * const result = yield* listDomainNames();
- * // result.DomainNames → [{ DomainName, EngineType }, …]
+ * // result.DomainNames -> [{ DomainName, EngineType }, ...]
  * ```
  *
  * @binding

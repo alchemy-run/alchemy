@@ -196,7 +196,7 @@ export const startGracePeriod: GracePeriodCallback = async (engine: Engine, time
     // await engine.abort(ABORT_REASONS.GRACE_PERIOD_COMPLETE);
   };
   void gracePeriodHandler().catch(() => {
-    // Swallow — the engine is shutting down (abort kills the context,
+    // Swallow -- the engine is shutting down (abort kills the context,
     // which rejects the scheduler.wait inside gracePeriodHandler)
   });
 };

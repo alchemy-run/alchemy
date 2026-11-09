@@ -15,7 +15,7 @@ export interface NetworkInterconnectSettingsProps {
    * sessions on this account when a CNI does not specify its own
    * `customerAsn`.
    *
-   * Mutable — updated in place via `PUT /accounts/{account_id}/cni/settings`.
+   * Mutable -- updated in place via `PUT /accounts/{account_id}/cni/settings`.
    */
   defaultAsn: number;
 }
@@ -42,16 +42,16 @@ export type NetworkInterconnectSettings = Resource<
 >;
 
 /**
- * Account-level settings for Cloudflare Network Interconnect (CNI v2) —
+ * Account-level settings for Cloudflare Network Interconnect (CNI v2) --
  * currently the default ASN applied to new CNI BGP configurations
  * (`/accounts/{account_id}/cni/settings`).
  *
- * The settings object is an **account singleton** — it always exists and
+ * The settings object is an **account singleton** -- it always exists and
  * can never be created or deleted. Reconcile PUTs the desired value when
  * the observed value differs; destroy restores the value the setting had
  * before Alchemy first managed it (captured as `initialDefaultAsn`).
  *
- * CNI is an enterprise feature — on accounts without the Network
+ * CNI is an enterprise feature -- on accounts without the Network
  * Interconnect entitlement the endpoint fails with the typed `Forbidden`
  * error.
  * ### Managing the default ASN
@@ -90,12 +90,12 @@ export const NetworkInterconnectSettingsProvider = () =>
     nuke: { singleton: true },
     stables: ["accountId", "initialDefaultAsn"],
 
-    // Account singleton — there is no enumeration API, just the single
+    // Account singleton -- there is no enumeration API, just the single
     // `/accounts/{account_id}/cni/settings` object. Read it and return a
     // one-element array (mirroring `read` with no prior output, so
     // `initialDefaultAsn` is the observed value). CNI is an enterprise
     // feature: accounts without the entitlement reject the route with the
-    // typed `Forbidden` error — treat that as "unset" and return `[]`.
+    // typed `Forbidden` error -- treat that as "unset" and return `[]`.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const observed = yield* cni
@@ -113,7 +113,7 @@ export const NetworkInterconnectSettingsProvider = () =>
 
     read: Effect.fn(function* ({ output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // The settings singleton always exists with a Cloudflare default —
+      // The settings singleton always exists with a Cloudflare default --
       // there is nothing to "own", so a cold read adopts freely (never
       // `Unowned`). The observed value at adoption time becomes the
       // `initialDefaultAsn` restored on destroy.
@@ -130,17 +130,17 @@ export const NetworkInterconnectSettingsProvider = () =>
     reconcile: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
-      // 1. Observe — the singleton always exists; read its live value.
+      // 1. Observe -- the singleton always exists; read its live value.
       const observed = yield* cni.getSetting({ accountId });
 
-      // 2. Capture — the pre-management value, restored on destroy.
+      // 2. Capture -- the pre-management value, restored on destroy.
       //    `output` (including an adoption read) already carries it;
       //    otherwise this is our first touch and the observed value is
       //    the account's original.
       const initialDefaultAsn =
         output !== undefined ? output.initialDefaultAsn : observed.defaultAsn;
 
-      // 3. Sync — PUT only when the observed value differs.
+      // 3. Sync -- PUT only when the observed value differs.
       if (observed.defaultAsn === news.defaultAsn) {
         return {
           accountId,
@@ -161,7 +161,7 @@ export const NetworkInterconnectSettingsProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { accountId, initialDefaultAsn } = output;
-      // Observe — restore the pre-management value; skip the call when
+      // Observe -- restore the pre-management value; skip the call when
       // it already matches (idempotent re-delete after a crashed run).
       const observed = yield* cni.getSetting({ accountId });
       if (observed.defaultAsn === initialDefaultAsn) return;

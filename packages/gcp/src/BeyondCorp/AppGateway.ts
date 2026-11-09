@@ -44,24 +44,24 @@ export type AppGatewayProps = {
    * AppGateway id (the `{appGateway}` segment of
    * `projects/{project}/locations/{location}/appGateways/{appGateway}`).
    * If omitted, a unique RFC1035 name is generated. Must be 4-63
-   * characters matching `[a-z]([a-z0-9-]{0,61}[a-z0-9])?`. Immutable —
+   * characters matching `[a-z]([a-z0-9-]{0,61}[a-z0-9])?`. Immutable --
    * changing it replaces the gateway.
    */
   appGatewayId?: string;
   /**
-   * Region (`us-central1`, …). Immutable — changing it replaces the
+   * Region (`us-central1`, ...). Immutable -- changing it replaces the
    * gateway. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
-   * Network connectivity type. Immutable — changing it replaces the
+   * Network connectivity type. Immutable -- changing it replaces the
    * gateway.
    * @default "TCP_PROXY"
    */
   type?: beyondcorp.AppGatewayTypeEnum | (string & {});
   /**
-   * Hosting type. Immutable — changing it replaces the gateway.
+   * Hosting type. Immutable -- changing it replaces the gateway.
    * @default "GCP_REGIONAL_MIG"
    */
   hostType?: beyondcorp.AppGatewayHostTypeEnum | (string & {});
@@ -97,7 +97,7 @@ export type AppGateway = Resource<
     displayName: string | undefined;
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;
-    /** Server-reported state (`CREATED`, `CREATING`, …). */
+    /** Server-reported state (`CREATED`, `CREATING`, ...). */
     state: string | undefined;
     /** Server-defined URI. */
     uri: string | undefined;
@@ -128,7 +128,7 @@ export interface AppGatewayLookup {
    */
   appGatewayId: string;
   /**
-   * Region (`us-central1`, …). `US-CENTRAL1` is accepted and normalized to
+   * Region (`us-central1`, ...). `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    */
   location?: string;
@@ -144,7 +144,7 @@ export interface AppGatewayLookup {
  * reach a remote application.
  *
  * Changing `appGatewayId`, `location`, `type`, or `hostType` replaces
- * the gateway. The API has no patch method — display name and labels
+ * the gateway. The API has no patch method -- display name and labels
  * are applied at create only.
  *
  * ### Creating an AppGateway

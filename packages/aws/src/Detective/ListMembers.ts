@@ -6,7 +6,7 @@ import type { Graph } from "./Graph.ts";
 /**
  * Runtime binding for `detective:ListMembers`.
  *
- * Lists the behavior graph's member accounts — invited and enabled alike —
+ * Lists the behavior graph's member accounts -- invited and enabled alike --
  * so an admin-account function can audit coverage of the security fleet.
  * The graph ARN is injected from the bound {@link Graph}.
  * Provide the implementation with

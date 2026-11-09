@@ -38,19 +38,19 @@ export type CryptoKeyVersionProps = {
    * Parent CryptoKey. Full name
    * `projects/{project}/locations/{location}/keyRings/{keyRing}/cryptoKeys/{cryptoKey}`
    * or the crypto key id (combined with `keyRing` / `location`).
-   * Immutable — changing it replaces the version.
+   * Immutable -- changing it replaces the version.
    */
   cryptoKey: string;
   /**
    * Parent KeyRing. Full name
    * `projects/{project}/locations/{location}/keyRings/{keyRing}` or the
-   * key ring id. Used when `cryptoKey` is a bare id. Immutable —
+   * key ring id. Used when `cryptoKey` is a bare id. Immutable --
    * changing it replaces the version.
    */
   keyRing?: string;
   /**
-   * Cloud KMS location (`us-central1`, `global`, `us`, …). Used when
-   * `cryptoKey` is a bare id. Immutable — changing it replaces the
+   * Cloud KMS location (`us-central1`, `global`, `us`, ...). Used when
+   * `cryptoKey` is a bare id. Immutable -- changing it replaces the
    * version. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
@@ -85,7 +85,7 @@ export type CryptoKeyVersionAttrs = {
   cryptoKey: string;
   /** Parent KeyRing resource name. */
   keyRing: string;
-  /** Location id (`us-central1`, `global`, …). */
+  /** Location id (`us-central1`, `global`, ...). */
   location: string;
   /** Project id. */
   project: string;
@@ -142,7 +142,7 @@ export interface CryptoKeyVersionLookup {
    */
   keyRing?: string;
   /**
-   * Cloud KMS location (`us-central1`, `global`, `us`, …). Used when
+   * Cloud KMS location (`us-central1`, `global`, `us`, ...). Used when
    * `cryptoKey` is a bare id. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    */
@@ -162,7 +162,7 @@ export interface CryptoKeyVersionLookup {
 }
 
 /**
- * A Cloud KMS CryptoKeyVersion — one generation of key material under a
+ * A Cloud KMS CryptoKeyVersion -- one generation of key material under a
  * CryptoKey.
  *
  * Parent CryptoKey, KeyRing, location, and version id are identity

@@ -21,7 +21,7 @@ import * as RpcWebSocket from "./RpcWebSocket.ts";
 
 /**
  * Wrap an `RpcDurableObject` implementation: an inner Effect returning a
- * handlers Layer becomes the object's RPC server — HTTP for plain requests,
+ * handlers Layer becomes the object's RPC server -- HTTP for plain requests,
  * the hibernatable WebSocket transport for upgrades. Any other value is
  * served as the object's `fetch`.
  */

@@ -9,7 +9,7 @@ export interface GetObjectLegalHoldRequest extends Omit<S3.GetObjectLegalHoldReq
  * Runtime binding for `s3:GetObjectLegalHold`.
  *
  * Bind this operation to a bucket to get a callable that reads an object's
- * legal-hold status — the bucket name is injected automatically and
+ * legal-hold status -- the bucket name is injected automatically and
  * `s3:GetObjectLegalHold` is granted on the bucket's objects. Requires a
  * bucket created with `objectLockEnabled: true`. Provide the implementation
  * with `Effect.provide(AWS.S3.GetObjectLegalHoldHttp)`.

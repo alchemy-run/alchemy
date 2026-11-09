@@ -15,7 +15,7 @@ export interface SignResult {
 
 /**
  * Sign with a Fly {@link SecretKey} (`nacl_sign`, `hs256`, `es256`,
- * …). The private key never leaves Fly KMS.
+ * ...). The private key never leaves Fly KMS.
  *
  *
  * ### Sign a payload

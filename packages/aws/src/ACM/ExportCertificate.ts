@@ -6,7 +6,7 @@ import type { Certificate } from "./Certificate.ts";
 /**
  * The export request without the injected `CertificateArn`.
  *
- * `Passphrase` encrypts the exported private key and is sensitive — pass it
+ * `Passphrase` encrypts the exported private key and is sensitive -- pass it
  * as `Redacted.make(new TextEncoder().encode(passphrase))` so it never leaks
  * into logs or traces.
  */
@@ -22,16 +22,16 @@ export interface ExportCertificateRequest extends Omit<
  * the certificate, its chain, and the **encrypted private key**. Only
  * exportable certificates can be exported: private-CA certificates, or public
  * certificates requested with `export: "ENABLED"`. The returned `PrivateKey`
- * is sensitive and comes back wrapped in `Redacted` — unwrap it with
+ * is sensitive and comes back wrapped in `Redacted` -- unwrap it with
  * `Redacted.value` only at the point of use. Provide the implementation with
  * `Effect.provide(AWS.ACM.ExportCertificateHttp)`.
  * ### Exporting Certificates
  * **Example:** Export a Certificate and Its Private Key
  * ```typescript
- * // init — bind the operation to the certificate
+ * // init -- bind the operation to the certificate
  * const exportCertificate = yield* AWS.ACM.ExportCertificate(certificate);
  *
- * // runtime — the passphrase encrypts the exported private key
+ * // runtime -- the passphrase encrypts the exported private key
  * const result = yield* exportCertificate({
  *   Passphrase: Redacted.make(new TextEncoder().encode(passphrase)),
  * });

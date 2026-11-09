@@ -6,7 +6,7 @@ export interface CheckDomainAvailabilityRequest
   extends route53domains.CheckDomainAvailabilityRequest {}
 
 /**
- * Runtime binding for `route53domains:CheckDomainAvailability` — check
+ * Runtime binding for `route53domains:CheckDomainAvailability` -- check
  * whether a domain name is available for registration with Route 53.
  *
  * Route 53 Domains is a global registration API with no resource-level IAM:

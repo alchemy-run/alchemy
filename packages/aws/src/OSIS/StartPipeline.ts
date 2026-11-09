@@ -6,7 +6,7 @@ import type { Pipeline } from "./Pipeline.ts";
 /**
  * Runtime binding for `osis:StartPipeline`.
  *
- * Starts the bound {@link Pipeline} after it was stopped — e.g. resuming
+ * Starts the bound {@link Pipeline} after it was stopped -- e.g. resuming
  * ingestion on a schedule or in response to an operational signal. Starting
  * takes several minutes; the response reports the transitional `STARTING`
  * status. The pipeline name is injected from the binding. Provide the
@@ -14,7 +14,7 @@ import type { Pipeline } from "./Pipeline.ts";
  * ### Controlling a Pipeline
  * **Example:** Resume Ingestion
  * ```typescript
- * // init — bind the operation to the pipeline
+ * // init -- bind the operation to the pipeline
  * const startPipeline = yield* AWS.OSIS.StartPipeline(pipeline);
  *
  * // runtime

@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `DescribeProtectedResource` operation (IAM action
  * `backup:DescribeProtectedResource`).
  *
- * Returns backup metadata for a protected resource by its ARN — last backup
+ * Returns backup metadata for a protected resource by its ARN -- last backup
  * time, resource type, and latest recovery point. Provide the implementation
  * with `Effect.provide(AWS.Backup.DescribeProtectedResourceHttp)`.
  * ### Protected Resources

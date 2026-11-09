@@ -1,7 +1,7 @@
 /**
  * Process bootstrap for a `Daytona.Sandbox` with `main` (a Node process in
  * the sandbox serving the bundled program). The generated entry imports this module
- * and the user's `main`, nothing else — see `alchemy/Runtime/Bootstrap`
+ * and the user's `main`, nothing else -- see `alchemy/Runtime/Bootstrap`
  * for why.
  */
 import { NodeServices } from "@effect/platform-node";

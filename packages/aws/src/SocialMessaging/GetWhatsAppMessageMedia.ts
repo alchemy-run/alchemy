@@ -6,7 +6,7 @@ import type { LinkedWhatsAppBusinessAccount } from "./LinkedWhatsAppBusinessAcco
 /**
  * Runtime binding for `social-messaging:GetWhatsAppMessageMedia`.
  *
- * Retrieves a media file received in a WhatsApp message — either just its
+ * Retrieves a media file received in a WhatsApp message -- either just its
  * metadata (`metadataOnly: true`) or a full download into an S3 object or
  * presigned URL.
  *
@@ -18,7 +18,7 @@ import type { LinkedWhatsAppBusinessAccount } from "./LinkedWhatsAppBusinessAcco
  * ### Managing Message Media
  * **Example:** Download Received Media to S3
  * ```typescript
- * // init — bind the operation to the linked WABA
+ * // init -- bind the operation to the linked WABA
  * const getMedia = yield* AWS.SocialMessaging.GetWhatsAppMessageMedia(account);
  *
  * // runtime

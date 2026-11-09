@@ -16,23 +16,23 @@ export interface InvokeDataAutomationRequest extends Omit<
 /**
  * Runtime binding for the synchronous `InvokeDataAutomation` operation (IAM
  * action `bedrock:InvokeDataAutomation` on the project ARN + the account's
- * data automation profiles) — process a file inline against the bound
+ * data automation profiles) -- process a file inline against the bound
  * project from a deployed Function and get the extracted output back in the
  * response.
  *
  * The bound {@link DataAutomationProject} must be created with
  * `projectType: "SYNC"`. Input can be passed inline as `bytes` or as an
  * `s3Uri`; the caller supplies the cross-region data automation profile ARN
- * (e.g. `…:data-automation-profile/us.data-automation-v1`). Provide the
+ * (e.g. `...:data-automation-profile/us.data-automation-v1`). Provide the
  * implementation with
  * `Effect.provide(AWS.BedrockDataAutomation.InvokeDataAutomationHttp)`.
  * ### Invoking Data Automation
  * **Example:** Extract Fields From An Inline Document
  * ```typescript
- * // deploy time — bind the SYNC project
+ * // deploy time -- bind the SYNC project
  * const invoke = yield* AWS.BedrockDataAutomation.InvokeDataAutomation(syncProject);
  *
- * // runtime — process request bytes synchronously
+ * // runtime -- process request bytes synchronously
  * const result = yield* invoke({
  *   inputConfiguration: { bytes: documentBytes },
  *   dataAutomationProfileArn: profileArn,

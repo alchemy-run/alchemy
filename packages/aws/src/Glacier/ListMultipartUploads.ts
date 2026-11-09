@@ -16,7 +16,7 @@ export interface ListMultipartUploadsRequest extends Omit<
  * Runtime binding for the `ListMultipartUploads` operation (IAM action
  * `glacier:ListMultipartUploads` on the vault ARN).
  *
- * Lists the in-progress multipart uploads for the bound {@link Vault} —
+ * Lists the in-progress multipart uploads for the bound {@link Vault} --
  * useful for finding and aborting stale uploads that still accrue
  * storage.
  * Provide the implementation with

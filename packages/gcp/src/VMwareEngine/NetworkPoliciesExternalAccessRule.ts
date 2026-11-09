@@ -53,7 +53,7 @@ export type NetworkPoliciesExternalAccessRuleProps = {
   /**
    * Parent NetworkPolicy resource name
    * (`projects/{project}/locations/{location}/networkPolicies/{networkPolicy}`)
-   * or the policy id. Immutable — changing it replaces the rule.
+   * or the policy id. Immutable -- changing it replaces the rule.
    */
   networkPolicy: string;
   /**
@@ -70,7 +70,7 @@ export type NetworkPoliciesExternalAccessRuleProps = {
    */
   location?: string;
   /**
-   * Rule priority (`100`–`4096`). Lower integers take precedence.
+   * Rule priority (`100`-`4096`). Lower integers take precedence.
    * @default 1000
    */
   priority?: number;
@@ -104,7 +104,7 @@ export type NetworkPoliciesExternalAccessRuleProps = {
   destinationPorts?: string[];
   /**
    * Human-readable description. Rules have no labels field, so Alchemy
-   * stamps ownership into a `[alchemy …]` prefix and strips it from
+   * stamps ownership into a `[alchemy ...]` prefix and strips it from
    * attributes.
    */
   description?: string;

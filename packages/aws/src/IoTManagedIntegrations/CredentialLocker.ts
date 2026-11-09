@@ -56,7 +56,7 @@ export interface CredentialLocker extends Resource<
 > {}
 
 /**
- * An AWS IoT Managed Integrations credential locker — a secured store for the
+ * An AWS IoT Managed Integrations credential locker -- a secured store for the
  * credentials that devices use to onboard and authenticate with Managed
  * integrations.
  *
@@ -147,13 +147,13 @@ export const CredentialLockerProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — cloud state is authoritative; output is only an Id cache.
+          // Observe -- cloud state is authoritative; output is only an Id cache.
           let locker =
             output?.credentialLockerId !== undefined
               ? yield* observeById(output.credentialLockerId)
               : yield* findByName(name);
 
-          // Ensure — create if missing (there is no name-uniqueness conflict
+          // Ensure -- create if missing (there is no name-uniqueness conflict
           // to race against; creation is idempotent via ClientToken).
           if (locker === undefined) {
             const created = yield* mi.createCredentialLocker({
@@ -173,7 +173,7 @@ export const CredentialLockerProvider = () =>
             }
           }
 
-          // Sync tags — diff against OBSERVED cloud tags.
+          // Sync tags -- diff against OBSERVED cloud tags.
           if (locker.Arn !== undefined) {
             yield* syncManagedIntegrationsTags(locker.Arn, toTagRecord(locker.Tags), desiredTags);
           }

@@ -7,14 +7,14 @@ import type { Certificate } from "./Certificate.ts";
  * Runtime binding for `acm:DescribeCertificate`.
  *
  * Bind this operation to a {@link Certificate} to get a callable that reads
- * the certificate's live metadata — status, domain validation state, renewal
- * summary, expiry — from inside a function runtime. Useful for expiry
+ * the certificate's live metadata -- status, domain validation state, renewal
+ * summary, expiry -- from inside a function runtime. Useful for expiry
  * monitors and issuance dashboards. Provide the implementation with
  * `Effect.provide(AWS.ACM.DescribeCertificateHttp)`.
  * ### Inspecting Certificates
  * **Example:** Read a Certificate's Status and Expiry
  * ```typescript
- * // init — bind the operation to the certificate
+ * // init -- bind the operation to the certificate
  * const describeCertificate = yield* AWS.ACM.DescribeCertificate(certificate);
  *
  * // runtime

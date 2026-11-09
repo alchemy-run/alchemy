@@ -57,7 +57,7 @@ export interface PreparedStatement extends Resource<
 > {}
 
 /**
- * An Amazon Athena prepared statement — a named, parameterized SQL statement
+ * An Amazon Athena prepared statement -- a named, parameterized SQL statement
  * saved in a workgroup and run with `EXECUTE name USING ...`. Identity is the
  * `(workGroup, statementName)` pair; the `queryStatement` and `description`
  * are updatable in place.
@@ -87,7 +87,7 @@ export const PreparedStatementProvider = () =>
   Provider.effect(
     PreparedStatement,
     Effect.gen(function* () {
-      // Statement names must match [a-zA-Z_][a-zA-Z0-9_@:]* — generate the
+      // Statement names must match [a-zA-Z_][a-zA-Z0-9_@:]* -- generate the
       // engine name and fold every other character to `_`.
       const toName = (id: string, props: PreparedStatementProps) =>
         props.statementName
@@ -160,11 +160,11 @@ export const PreparedStatementProvider = () =>
           const workGroup = news.workGroup ?? "primary";
           const name = output?.statementName ?? (yield* toName(id, news));
 
-          // Observe — cloud state is authoritative.
+          // Observe -- cloud state is authoritative.
           const ps = yield* getOne(workGroup, name);
 
           if (!ps) {
-            // Ensure — create if missing. CreatePreparedStatement upserts on
+            // Ensure -- create if missing. CreatePreparedStatement upserts on
             // name collision within the workgroup, so a crash-and-retry race
             // converges rather than erroring.
             yield* athena.createPreparedStatement({
@@ -177,7 +177,7 @@ export const PreparedStatementProvider = () =>
             ps.QueryStatement !== news.queryStatement ||
             (news.description !== undefined && ps.Description !== news.description)
           ) {
-            // Sync — statement text and description are updatable in place.
+            // Sync -- statement text and description are updatable in place.
             yield* athena.updatePreparedStatement({
               WorkGroup: workGroup,
               StatementName: name,
@@ -198,7 +198,7 @@ export const PreparedStatementProvider = () =>
               };
         }),
         delete: Effect.fn(function* ({ output }) {
-          // Idempotent — the statement (or its whole workgroup) may already be
+          // Idempotent -- the statement (or its whole workgroup) may already be
           // gone; both surface as typed not-found tags.
           yield* athena
             .deletePreparedStatement({

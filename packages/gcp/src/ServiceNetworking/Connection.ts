@@ -21,13 +21,13 @@ export type ConnectionProps = {
   /**
    * Consumer VPC network. Accepts a name (`main`), a resource path
    * (`projects/{project}/global/networks/{network}`), or a Compute
-   * self-link. Immutable — changing it replaces the connection.
+   * self-link. Immutable -- changing it replaces the connection.
    */
   network: string;
   /**
    * Peering service that manages producer connectivity. For Google
    * services this is `servicenetworking.googleapis.com`. A `services/`
-   * prefix is accepted. Immutable — changing it replaces the connection.
+   * prefix is accepted. Immutable -- changing it replaces the connection.
    * @default "servicenetworking.googleapis.com"
    */
   service?: string;
@@ -423,7 +423,7 @@ export const ConnectionProvider = () =>
       const existing = yield* getByNetwork(parent, consumerNetwork);
       if (existing === undefined) return undefined;
       // Connections have no labels. Existence at (network, service) is
-      // ownership — the API allows only one PSA peering per pair.
+      // ownership -- the API allows only one PSA peering per pair.
       return toAttrs(existing, env.project, projectNumber, consumerNetwork, parent);
     }),
 

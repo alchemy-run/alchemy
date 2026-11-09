@@ -9,7 +9,7 @@ export interface ListApplicationOperationsRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `kinesisanalytics:ListApplicationOperations` — pages
+ * Runtime binding for `kinesisanalytics:ListApplicationOperations` -- pages
  * through the bound application's async operation history (starts, stops,
  * updates, rollbacks and their outcomes).
  * ### Operating the Application

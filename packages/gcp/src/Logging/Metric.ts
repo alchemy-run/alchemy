@@ -37,12 +37,12 @@ export interface MetricLabel {
 export interface MetricDescriptorProps {
   /**
    * Whether the metric records instantaneous values or changes.
-   * Immutable after create — changing it replaces the metric.
+   * Immutable after create -- changing it replaces the metric.
    * @default "DELTA"
    */
   metricKind?: "GAUGE" | "DELTA" | "CUMULATIVE";
   /**
-   * Measurement type. Immutable after create — changing it replaces the
+   * Measurement type. Immutable after create -- changing it replaces the
    * metric. `DISTRIBUTION` requires `valueExtractor` and `bucketOptions`.
    * @default "INT64"
    */
@@ -112,7 +112,7 @@ export type MetricProps = {
   /**
    * Human-readable description. Cloud Logging metrics have no labels, so
    * Alchemy ownership (`alchemy-stack` / `alchemy-stage` / `alchemy-id`)
-   * is stored in a `[alchemy …]` prefix for `list` / nuke.
+   * is stored in a `[alchemy ...]` prefix for `list` / nuke.
    */
   description?: string;
   /**
@@ -206,11 +206,11 @@ export interface MetricLookup {
  * A Cloud Logging logs-based metric.
  *
  * Cloud Logging metrics have no resource labels. Alchemy stamps ownership
- * into the description (`[alchemy alchemy-stack=… alchemy-stage=…
- * alchemy-id=…]`) so `list` / `pnpm nuke:gcp` can find them.
+ * into the description (`[alchemy alchemy-stack=... alchemy-stage=...
+ * alchemy-id=...]`) so `list` / `pnpm nuke:gcp` can find them.
  *
  * `metricId`, `metricDescriptor.metricKind`, and
- * `metricDescriptor.valueType` are immutable — changing them replaces the
+ * `metricDescriptor.valueType` are immutable -- changing them replaces the
  * metric.
  *
  * ### Creating a Metric

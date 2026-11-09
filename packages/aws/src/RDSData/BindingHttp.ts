@@ -2,8 +2,8 @@ import * as Effect from "effect/Effect";
 /**
  * Shared scaffolding for RDS Data API HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, makeRDSDataHttpBinding({ … }))`. Every Data API
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, makeRDSDataHttpBinding({ ... }))`. Every Data API
  * operation follows the same shape: it is scoped to a Data-API-enabled
  * {@link DBCluster} plus the Secrets Manager {@link Secret} holding the
  * database credentials, the deploy-time half grants the `rds-data:*` action
@@ -81,7 +81,7 @@ export const makeRDSDataHttpBinding = <Req, I, A, E, R>(options: {
       }
       return Effect.fn(`${options.tag}(${cluster.LogicalId})`)(function* (
         // optional so zero-arg callables (`BeginTransaction`) conform to
-        // their declared `() => Effect<…>` interface; `makeInput` receives
+        // their declared `() => Effect<...>` interface; `makeInput` receives
         // `undefined` there and builds the request from context alone.
         request?: Req,
       ) {

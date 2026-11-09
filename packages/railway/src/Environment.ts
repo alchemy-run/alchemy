@@ -13,7 +13,7 @@ export class RailwayWorkspaceNotFound extends Data.TaggedError("Railway.Workspac
 
 /**
  * Default Railway workspace for the current token
- * (`me.workspace ?? me.workspaces[0]`). Not a resource — the Environment
+ * (`me.workspace ?? me.workspaces[0]`). Not a resource -- the Environment
  * *resource* is a project-scoped deploy environment.
  */
 export type RailwayWorkspace = { readonly id: string; readonly name: string };

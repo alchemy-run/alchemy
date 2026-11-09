@@ -109,7 +109,7 @@ export const HsmProvider = () =>
   Provider.effect(
     Hsm,
     Effect.gen(function* () {
-      // HSMs are enumerated through their cluster — describeClusters embeds
+      // HSMs are enumerated through their cluster -- describeClusters embeds
       // each cluster's Hsms.
       const findHsm = Effect.fn(function* (clusterId: string, hsmId: string) {
         const cluster = yield* findClusterById(clusterId);
@@ -193,7 +193,7 @@ export const HsmProvider = () =>
         }),
 
         read: Effect.fn(function* ({ output }) {
-          // HSMs have no name, no tags, and an auto-assigned id — without a
+          // HSMs have no name, no tags, and an auto-assigned id -- without a
           // cached id there is nothing to correlate on.
           if (output === undefined) return undefined;
           const hsm = yield* findHsm(output.clusterId, output.hsmId);
@@ -204,11 +204,11 @@ export const HsmProvider = () =>
         reconcile: Effect.fn(function* ({ news, output, session }) {
           const props = news!;
 
-          // 1. Observe — the cached id is only a hint; the cluster's HSM
+          // 1. Observe -- the cached id is only a hint; the cluster's HSM
           //    list is authoritative.
           let observed = output ? yield* findHsm(output.clusterId, output.hsmId) : undefined;
 
-          // 2. Ensure — create if missing.
+          // 2. Ensure -- create if missing.
           if (observed === undefined) {
             const created = yield* cloudhsm.createHsm({
               ClusterId: props.clusterId,
@@ -234,7 +234,7 @@ export const HsmProvider = () =>
             .deleteHsm({ ClusterId: output.clusterId, HsmId: output.hsmId })
             .pipe(Effect.catchTag("CloudHsmResourceNotFoundException", () => Effect.void));
           // Deletion is asynchronous and the parent cluster cannot be
-          // deleted until the HSM is gone — wait it out (bounded).
+          // deleted until the HSM is gone -- wait it out (bounded).
           yield* waitUntilGone(output.clusterId, output.hsmId);
         }),
 

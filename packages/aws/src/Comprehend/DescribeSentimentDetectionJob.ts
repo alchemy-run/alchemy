@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `comprehend:DescribeSentimentDetectionJob` — get the
+ * Runtime binding for `comprehend:DescribeSentimentDetectionJob` -- get the
  * properties (status, input/output config, timings) of an asynchronous
  * sentiment detection job started with {@link StartSentimentDetectionJob}.
  *
@@ -18,7 +18,7 @@ import type * as Effect from "effect/Effect";
  *
  * // runtime
  * const job = yield* describeSentimentDetectionJob({ JobId: jobId });
- * // job.SentimentDetectionJobProperties?.JobStatus: "SUBMITTED" | "IN_PROGRESS" | "COMPLETED" | …
+ * // job.SentimentDetectionJobProperties?.JobStatus: "SUBMITTED" | "IN_PROGRESS" | "COMPLETED" | ...
  * ```
  *
  * @binding

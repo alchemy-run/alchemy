@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `geo-maps:GetGlyphs` — fetch a glyph (font) PBF range
+ * Runtime binding for `geo-maps:GetGlyphs` -- fetch a glyph (font) PBF range
  * used to render map labels for a font stack.
  *
  * geo-maps is a standalone, pay-per-call Amazon Location API with no resource
@@ -21,7 +21,7 @@ import type * as Effect from "effect/Effect";
  * // init
  * const getGlyphs = yield* AWS.GeoMaps.GetGlyphs();
  *
- * // runtime — FontUnicodeRange is a 256-glyph PBF page like "0-255.pbf"
+ * // runtime -- FontUnicodeRange is a 256-glyph PBF page like "0-255.pbf"
  * const glyphs = yield* getGlyphs({
  *   FontStack: "Amazon Ember Regular",
  *   FontUnicodeRange: "0-255.pbf",

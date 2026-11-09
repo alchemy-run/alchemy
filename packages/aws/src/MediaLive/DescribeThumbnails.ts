@@ -7,7 +7,7 @@ import type { Channel } from "./Channel.ts";
  * Runtime binding for `medialive:DescribeThumbnails`.
  *
  * Fetches the latest preview thumbnail (base64 JPEG) from a pipeline of
- * the bound RUNNING {@link Channel} — e.g. a confidence-monitoring
+ * the bound RUNNING {@link Channel} -- e.g. a confidence-monitoring
  * dashboard that renders a live snapshot of what the channel is encoding.
  * Requires thumbnails to be enabled in the channel's encoder settings; a
  * channel that is not running answers with the typed
@@ -17,7 +17,7 @@ import type { Channel } from "./Channel.ts";
  * ### Observing Channels
  * **Example:** Fetch the Latest Preview Thumbnail
  * ```typescript
- * // init — bind the operation to the channel
+ * // init -- bind the operation to the channel
  * const describeThumbnails = yield* AWS.MediaLive.DescribeThumbnails(channel);
  *
  * // runtime

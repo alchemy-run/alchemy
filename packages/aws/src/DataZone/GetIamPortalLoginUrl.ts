@@ -12,7 +12,7 @@ import type { Domain } from "./Domain.ts";
  * ### Portal, Profiles & Notifications
  * **Example:** Mint a Portal URL
  * ```typescript
- * // init — bind the operation to the domain
+ * // init -- bind the operation to the domain
  * const getIamPortalLoginUrl = yield* AWS.DataZone.GetIamPortalLoginUrl(domain);
  *
  * // runtime

@@ -10,12 +10,12 @@ export interface PutResourceSetRequest extends fms.PutResourceSetRequest {}
 /**
  * Runtime binding for `fms:PutResourceSet`.
  *
- * Creates or updates a Firewall Manager resource set — a collection of resources that a Firewall Manager policy can protect as a unit. Provide the
+ * Creates or updates a Firewall Manager resource set -- a collection of resources that a Firewall Manager policy can protect as a unit. Provide the
  * implementation with `Effect.provide(AWS.FMS.PutResourceSetHttp)`.
  * ### Resource Sets
  * **Example:** Create a Resource Set
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const putResourceSet = yield* AWS.FMS.PutResourceSet();
  *
  * // runtime

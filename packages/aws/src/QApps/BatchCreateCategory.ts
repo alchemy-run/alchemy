@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { QApp } from "./QApp.ts";
 
 /**
- * Request for {@link BatchCreateCategory} — `instanceId` is injected from the bound Q App.
+ * Request for {@link BatchCreateCategory} -- `instanceId` is injected from the bound Q App.
  */
 export interface BatchCreateCategoryRequest extends Omit<
   qapps.BatchCreateCategoryInput,
@@ -19,7 +19,7 @@ export interface BatchCreateCategoryRequest extends Omit<
  * ### Categories
  * **Example:** Create Categories
  * ```typescript
- * // init — bind the operation to the Q App
+ * // init -- bind the operation to the Q App
  * const batchCreateCategory = yield* AWS.QApps.BatchCreateCategory(app);
  *
  * // runtime

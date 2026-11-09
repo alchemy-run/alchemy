@@ -5,7 +5,7 @@ import type { WorkerExecutionContextAccess } from "../Workers/WorkerAccess.ts";
 
 /**
  * One-yield accessor for the current request's Cloudflare Access context
- * (`ctx.access`) — sugar over `WorkerExecutionContext`:
+ * (`ctx.access`) -- sugar over `WorkerExecutionContext`:
  *
  * ```typescript
  * fetch: Effect.gen(function* () {

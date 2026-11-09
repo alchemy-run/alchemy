@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
 /**
- * IVS Chat wire tags allow `undefined` values in the record type —
+ * IVS Chat wire tags allow `undefined` values in the record type --
  * flatten to a plain string record, dropping malformed entries.
  */
 export const toTagRecord = (
@@ -17,7 +17,7 @@ export const toTagRecord = (
   );
 
 /**
- * Read the observed tags of an IVS Chat resource. Best-effort — a
+ * Read the observed tags of an IVS Chat resource. Best-effort -- a
  * failure (e.g. a race with deletion) reports no tags.
  */
 export const readIvsChatTags = Effect.fn(function* (arn: string) {
@@ -53,8 +53,8 @@ export const syncIvsChatTags = Effect.fn(function* (
 /**
  * Explicitly-typed pipeable retry helper (inlined `Effect.retry` in a
  * provider op widens the layer type in declaration emit). Retries
- * `ConflictException` — e.g. mutating or deleting a logging
- * configuration while it is mid-state-transition — on a bounded schedule.
+ * `ConflictException` -- e.g. mutating or deleting a logging
+ * configuration while it is mid-state-transition -- on a bounded schedule.
  */
 export const retryWhileConflict = <A, E extends { readonly _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
@@ -67,7 +67,7 @@ export const retryWhileConflict = <A, E extends { readonly _tag: string }, R>(
 /**
  * Retries the `ValidationException` IVS Chat raises while a freshly-added
  * `lambda:InvokeFunction` permission for `ivschat.amazonaws.com` is still
- * propagating — associating a `messageReviewHandler` validates the
+ * propagating -- associating a `messageReviewHandler` validates the
  * permission, and Create/UpdateRoom can race the IAM propagation window
  * ("Request member: uri failed to satisfy the constraints: invalid lambda
  * permission"). Bounded (~30s).

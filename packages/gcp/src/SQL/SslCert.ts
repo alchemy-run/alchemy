@@ -18,7 +18,7 @@ export type SslCertProps = {
   /**
    * Cloud SQL instance id (the `{instance}` segment of
    * `projects/{project}/instances/{instance}`). Full resource names are
-   * accepted and reduced to the last path segment. Immutable — changing
+   * accepted and reduced to the last path segment. Immutable -- changing
    * it replaces the certificate.
    */
   instance: string;
@@ -27,7 +27,7 @@ export type SslCertProps = {
    * unique name is generated from the stack, stage, and logical id.
    * Must be distinct from other certificates on the instance. Constrained
    * to letters, digits, dots, hyphens, underscores, and spaces. Immutable
-   * — changing it replaces the certificate.
+   * -- changing it replaces the certificate.
    */
   commonName?: string;
 };
@@ -48,7 +48,7 @@ export type SslCert = Resource<
     cert: string | undefined;
     /**
      * PEM-encoded private key. Returned only by insert and persisted in
-     * state — subsequent gets omit it.
+     * state -- subsequent gets omit it.
      */
     privateKey: string | undefined;
     /** Serial number extracted from the certificate. */

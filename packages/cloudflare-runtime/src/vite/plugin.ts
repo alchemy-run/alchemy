@@ -77,7 +77,7 @@ const noopHook = (): undefined => undefined;
  * Neutralize official `@cloudflare/vite-plugin` instances already in the
  * Vite plugin list. Vite flattens `config.plugins` into `userPlugins`
  * *before* `config()` hooks run, so splicing the array cannot unregister
- * them — but those entries are the same objects. Replacing their hooks
+ * them -- but those entries are the same objects. Replacing their hooks
  * with no-ops (not `undefined`: `getSortedPluginsByHook("config")` has
  * already captured them) stops the official stack from running alongside
  * Alchemy's `distilled-cloudflare:*` plugins.

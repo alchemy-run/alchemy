@@ -31,7 +31,7 @@ export type DatasetsConsentStoresAttributeDefinitionProps = {
   /**
    * Parent consent store. Full name
    * `.../consentStores/{consentStore}` or the store id (combined with
-   * `dataset` and `location`). Immutable — changing it replaces the
+   * `dataset` and `location`). Immutable -- changing it replaces the
    * definition.
    */
   consentStore: string;
@@ -46,12 +46,12 @@ export type DatasetsConsentStoresAttributeDefinitionProps = {
   location?: string;
   /**
    * Attribute definition id. Must match letters, digits, and
-   * underscores; cannot be a CEL reserved keyword. Immutable — changing
+   * underscores; cannot be a CEL reserved keyword. Immutable -- changing
    * it replaces the definition.
    */
   attributeDefinitionId?: string;
   /**
-   * Attribute category. Immutable — changing it replaces the definition.
+   * Attribute category. Immutable -- changing it replaces the definition.
    */
   category: healthcare.AttributeDefinitionCategoryEnum | (string & {});
   /**
@@ -60,7 +60,7 @@ export type DatasetsConsentStoresAttributeDefinitionProps = {
   allowedValues: string[];
   /**
    * Human-readable description. Attribute definitions have no labels
-   * field, so Alchemy ownership is stored in a `[alchemy …]` prefix and
+   * field, so Alchemy ownership is stored in a `[alchemy ...]` prefix and
    * stripped from attributes.
    */
   description?: string;

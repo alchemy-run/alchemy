@@ -94,7 +94,7 @@ export interface ClusterParameterGroupLookup {
 }
 
 /**
- * An Amazon Redshift cluster parameter group — a named set of database
+ * An Amazon Redshift cluster parameter group -- a named set of database
  * parameters applied to provisioned Redshift clusters.
  *
  * Parameter groups are free and provision instantly. A {@link Cluster}
@@ -220,10 +220,10 @@ export const ClusterParameterGroupProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* readGroup(name);
 
-          // 2. Ensure — create if missing; tolerate AlreadyExists as a race
+          // 2. Ensure -- create if missing; tolerate AlreadyExists as a race
           //    with a peer reconciler by re-reading.
           if (!observed?.ParameterGroupName) {
             yield* redshift
@@ -245,7 +245,7 @@ export const ClusterParameterGroupProvider = () =>
             }
           }
 
-          // 3. Sync parameters — diff OBSERVED user-sourced overrides
+          // 3. Sync parameters -- diff OBSERVED user-sourced overrides
           //    against desired; changed/added values are applied, removed
           //    ones are reset to the engine defaults.
           const observedParameters = yield* readUserParameters(name);
@@ -273,7 +273,7 @@ export const ClusterParameterGroupProvider = () =>
             });
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags (describe
+          // 3b. Sync tags -- diff against OBSERVED cloud tags (describe
           //     surfaces them inline).
           const { accountId, region } = yield* AWSEnvironment.current;
           const arn = redshiftArn(region, accountId, "parametergroup", name);
@@ -302,7 +302,7 @@ export const ClusterParameterGroupProvider = () =>
         list: () =>
           // Top-level account/region collection: exhaustively paginate
           // describeClusterParameterGroups. AWS-managed `default.*` groups
-          // cannot be deleted — don't enumerate them.
+          // cannot be deleted -- don't enumerate them.
           redshift.describeClusterParameterGroups.pages({}).pipe(
             Stream.runCollect,
             Effect.map((chunk) =>

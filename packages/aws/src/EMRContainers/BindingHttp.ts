@@ -7,15 +7,15 @@ import type { VirtualCluster } from "./VirtualCluster.ts";
 /**
  * Shared scaffolding for Amazon EMR on EKS (`emr-containers`) HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the builders
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the builders
  * below. Everything except the operation, the identifier injection, and the
  * IAM action list is boilerplate.
  *
  * EMR on EKS authorizes virtual-cluster-addressed actions against the
- * virtual cluster ARN (`arn:…:/virtualclusters/vc-id`) and sub-resource
+ * virtual cluster ARN (`arn:...:/virtualclusters/vc-id`) and sub-resource
  * actions (job runs, managed endpoints) against child ARNs
- * (`…/virtualclusters/vc-id/jobruns/id`, `…/endpoints/id`), so the
+ * (`.../virtualclusters/vc-id/jobruns/id`, `.../endpoints/id`), so the
  * virtual-cluster builders grant on both the bound cluster's ARN and its
  * sub-resource pattern.
  */
@@ -55,7 +55,7 @@ export const makeEMRContainersVirtualClusterHttpBinding = <
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (virtualCluster: VirtualCluster) {
-      // Outputs yield a DEFERRED effect — resolve again per invocation below.
+      // Outputs yield a DEFERRED effect -- resolve again per invocation below.
       const VirtualClusterId = yield* virtualCluster.virtualClusterId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${virtualCluster})`({
@@ -119,7 +119,7 @@ export const makeEMRContainersJobTemplateHttpBinding = <
 
 /**
  * Build the impl Effect for an account-level operation (e.g. enumerating the
- * account's job templates). The deploy-time half grants `actions` on `*` —
+ * account's job templates). The deploy-time half grants `actions` on `*` --
  * account-level list actions are not scoped to a single resource.
  */
 export const makeEMRContainersAccountHttpBinding = <I, A, E, R>(options: {

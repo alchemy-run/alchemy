@@ -14,7 +14,7 @@ export interface ListAssociationsForLicenseConfigurationRequest extends Omit<
 
 /**
  * Runtime binding for
- * `license-manager:ListAssociationsForLicenseConfiguration` — list the
+ * `license-manager:ListAssociationsForLicenseConfiguration` -- list the
  * resources (instances, AMIs, hosts) currently associated with the bound
  * license configuration.
  *

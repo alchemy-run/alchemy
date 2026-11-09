@@ -13,7 +13,7 @@ import type * as Effect from "effect/Effect";
  * ### Scan Findings
  * **Example:** List Findings for a Pipeline's Builds
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listImageScanFindings =
  *   yield* AWS.ImageBuilder.ListImageScanFindings();
  *

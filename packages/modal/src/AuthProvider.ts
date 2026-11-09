@@ -77,13 +77,14 @@ const tokenFields: ReadonlyArray<ConfigureField> = [
     label: "Modal Token ID",
     description:
       "Create one at https://modal.com/settings/tokens, or run `modal token new` and copy token_id from ~/.modal.toml.",
-    validate: (value) => (value.trim().startsWith("ak-") ? undefined : "Expected an ak-… id"),
+    validate: (value) => (value.trim().startsWith("ak-") ? undefined : "Expected an ak-\u2026 id"),
   },
   {
     name: "tokenSecret",
     label: "Modal Token Secret",
     secret: true,
-    validate: (value) => (value.trim().startsWith("as-") ? undefined : "Expected an as-… secret"),
+    validate: (value) =>
+      value.trim().startsWith("as-") ? undefined : "Expected an as-\u2026 secret",
   },
 ];
 
@@ -101,7 +102,7 @@ const methods: Array<{
   {
     value: "browser",
     label: "Browser login",
-    description: "recommended — approve on modal.com and Modal mints a token",
+    description: "recommended \u2014 approve on modal.com and Modal mints a token",
   },
   {
     value: "stored",
@@ -206,7 +207,7 @@ const resolve = (config: ModalAuthConfig): ModalResolvedCredentials => ({
  *
  * Supported methods:
  * - `browser`: Modal's browser token flow (interactive only).
- * - `stored`: a pasted token pair (`--method stored --set tokenId=… --set tokenSecret=…`).
+ * - `stored`: a pasted token pair (`--method stored --set tokenId=... --set tokenSecret=...`).
  */
 export const ModalAuth = AuthProviderLayer<ModalAuthConfig, ModalResolvedCredentials>()(
   MODAL_AUTH_PROVIDER_NAME,
@@ -281,12 +282,12 @@ export const ModalAuth = AuthProviderLayer<ModalAuthConfig, ModalResolvedCredent
       read: (_profileName: string, config: ModalAuthConfig) => Effect.succeed(resolve(config)),
       readEnvironment,
       environment: [
-        { name: "MODAL_TOKEN_ID", required: true, description: "Modal token id (`ak-…`)." },
+        { name: "MODAL_TOKEN_ID", required: true, description: "Modal token id (`ak-\u2026`)." },
         {
           name: "MODAL_TOKEN_SECRET",
           required: true,
           secret: true,
-          description: "Modal token secret (`as-…`).",
+          description: "Modal token secret (`as-\u2026`).",
         },
         { name: "MODAL_SERVER_URL", required: false, description: "Modal API URL override." },
       ],

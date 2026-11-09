@@ -12,7 +12,7 @@ export const UpdateResourcePositionHttp = Layer.effect(
     capability: "UpdateResourcePosition",
     iamActions: ["iotwireless:UpdateResourcePosition"],
     // IoT Wireless authorizes the position APIs against a type-level ARN
-    // (…:WirelessDevice/WirelessDevice) — the device ARN never matches.
+    // (...:WirelessDevice/WirelessDevice) -- the device ARN never matches.
     resourceScope: "any",
     operation: iotw.updateResourcePosition,
     prepare: (request: UpdateResourcePositionRequest, wirelessDeviceId) => ({

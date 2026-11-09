@@ -9,7 +9,7 @@ export interface StartPipelineExecutionRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `codepipeline:StartPipelineExecution` — lets a
+ * Runtime binding for `codepipeline:StartPipelineExecution` -- lets a
  * workload kick off an execution of a pipeline (optionally overriding
  * pipeline variables or source revisions).
  *

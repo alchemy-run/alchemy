@@ -13,7 +13,7 @@ export type StartWorkflowRunInput = Omit<mwaa.StartWorkflowRunRequest, "Workflow
 /**
  * Runtime binding for `airflow-serverless:StartWorkflowRun`.
  *
- * Starts an on-demand run of the bound {@link Workflow} — the serverless
+ * Starts an on-demand run of the bound {@link Workflow} -- the serverless
  * equivalent of triggering a DAG. The workflow ARN is injected from the
  * binding; the caller can override workflow parameters or pin a specific
  * workflow version. Provide the implementation with
@@ -21,7 +21,7 @@ export type StartWorkflowRunInput = Omit<mwaa.StartWorkflowRunRequest, "Workflow
  * ### Running Workflows
  * **Example:** Start An On-Demand Run
  * ```typescript
- * // init — bind the operation to the workflow
+ * // init -- bind the operation to the workflow
  * const startWorkflowRun = yield* AWS.MWAAServerless.StartWorkflowRun(workflow);
  *
  * // runtime

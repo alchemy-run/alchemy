@@ -42,7 +42,7 @@ export const connectEnvPrefix = (logicalId: string): string =>
  *
  * DSQL clusters expose a **public** Postgres-wire endpoint
  * (`<clusterId>.dsql.<region>.on.aws:5432`) and authenticate exclusively
- * with short-lived IAM auth tokens — there is no password secret and no VPC
+ * with short-lived IAM auth tokens -- there is no password secret and no VPC
  * requirement. The deploy half grants `dsql:DbConnect` (or
  * `dsql:DbConnectAdmin` with `admin: true`) on the cluster to the host
  * Function; the runtime half mints a presigned token client-side (a pure
@@ -51,13 +51,13 @@ export const connectEnvPrefix = (logicalId: string): string =>
  *
  * Token freshness is structural: yielding the returned connection effect
  * re-mints the token, and execution-scoped pools (`Drizzle.Postgres`)
- * rebuild per execution — a ~15-minute token can never outlive its pool.
+ * rebuild per execution -- a ~15-minute token can never outlive its pool.
  *
  * ### Connecting to a Cluster
  * **Example:** Resolve Connection Info inside a Function
  * ```typescript
  * const conn = yield* DSQL.Connect(cluster, { admin: true });
- * // inside a handler — each yield mints a fresh auth token:
+ * // inside a handler -- each yield mints a fresh auth token:
  * const { host, port, username, password, url } = yield* conn;
  * ```
  *

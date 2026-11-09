@@ -6,18 +6,18 @@ import type { Namespace } from "./Namespace.ts";
 /**
  * Shared scaffolding for Amazon Redshift Serverless HTTP bindings.
  *
- * NOT exported from `index.ts` — every snapshot/recovery-point/restore
+ * NOT exported from `index.ts` -- every snapshot/recovery-point/restore
  * `{Op}Http.ts` in this service is a thin
- * `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the builders
+ * `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the builders
  * below. Everything except the operation, the identifier resolver, and the
- * IAM action list is boilerplate. (`ConnectHttp` stays bespoke — it also
+ * IAM action list is boilerplate. (`ConnectHttp` stays bespoke -- it also
  * publishes endpoint environment variables and formats connection URLs.)
  */
 
 /**
  * Build the impl Effect for an account-level operation (snapshot
  * administration, recovery-point reads, table-restore status). The
- * deploy-time half grants `actions` on `*` — these operations span every
+ * deploy-time half grants `actions` on `*` -- these operations span every
  * namespace in the account and the identifiers they filter on are runtime
  * data.
  */
@@ -105,7 +105,7 @@ export const makeServerlessNamespaceHttpBinding = <
   });
 
 /**
- * The `arn:…:{account}` prefix of a Redshift Serverless resource ARN —
+ * The `arn:...:{account}` prefix of a Redshift Serverless resource ARN --
  * used to widen a namespace grant to sibling resource types (`snapshot/*`,
  * `recoverypoint/*`, `workgroup/*`) that snapshot and restore operations
  * also authorize against.

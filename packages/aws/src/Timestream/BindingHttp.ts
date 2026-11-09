@@ -9,8 +9,8 @@ import type { Table } from "./Table.ts";
 /**
  * Shared scaffolding for Amazon Timestream HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the builders
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the builders
  * below. Everything except the operation, the IAM action list, and the
  * injected identifier is boilerplate.
  *
@@ -32,7 +32,7 @@ const describeEndpointsStatement = {
 /**
  * Build the impl Effect for a table-scoped `timestream-write` operation. The
  * deploy-time half grants `actions` on the bound {@link Table}'s ARN (plus
- * its owning database's ARN when `grantDatabaseArn` is set — batch load
+ * its owning database's ARN when `grantDatabaseArn` is set -- batch load
  * authorizes against both); the runtime callable shapes the caller's request
  * via `toRequest`, injecting the table's physical names.
  */
@@ -133,7 +133,7 @@ export const makeQueryTableHttpBinding = <I, A, E, R>(options: {
 
 /**
  * Build the impl Effect for an account-level `timestream-write` operation
- * (batch-load task reads/resume — authorized against `*`, keyed by TaskId in
+ * (batch-load task reads/resume -- authorized against `*`, keyed by TaskId in
  * the request). Invoked with no resource argument; the request passes
  * through as-is.
  */
@@ -171,7 +171,7 @@ export const makeWriteAccountHttpBinding = <I, A, E, R>(options: {
 
 /**
  * Build the impl Effect for an account-level `timestream-query` operation
- * (`CancelQuery` — authorized against `*`, keyed by QueryId in the request).
+ * (`CancelQuery` -- authorized against `*`, keyed by QueryId in the request).
  * Invoked with no resource argument; the request passes through as-is.
  */
 export const makeQueryAccountHttpBinding = <I, A, E, R>(options: {

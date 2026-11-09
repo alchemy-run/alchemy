@@ -12,7 +12,7 @@ export interface ApiGatewayResourceProps {
   /**
    * The `RestApi` this path segment belongs to. Binding via `restApi`
    * registers this resource on the API so that any `Deployment` of the
-   * same API waits for it — and for the methods attached to it — before
+   * same API waits for it -- and for the methods attached to it -- before
    * snapshotting.
    */
   restApi?: RestApi;
@@ -195,7 +195,7 @@ export const ResourceProvider = () =>
           const news = newsIn as Input.ResolveProps<ApiGatewayResourceProps>;
           const restApiId = (output?.restApiId ?? news.restApiId) as string;
 
-          // Observe — fetch the live resource if we have a cached id. We
+          // Observe -- fetch the live resource if we have a cached id. We
           // never trust `output.pathPart` for diffing; we re-read the
           // pathPart from cloud state every reconcile.
           let observed = output?.resourceId
@@ -207,7 +207,7 @@ export const ResourceProvider = () =>
                 .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined))
             : undefined;
 
-          // Ensure — create the resource if missing.
+          // Ensure -- create the resource if missing.
           if (!observed?.id) {
             const created = yield* ag.createResource({
               restApiId: news.restApiId as string,
@@ -226,7 +226,7 @@ export const ResourceProvider = () =>
 
           const resourceId = observed.id!;
 
-          // Sync pathPart — observed ↔ desired. parentId moves are modeled
+          // Sync pathPart -- observed <-> desired. parentId moves are modeled
           // as `replace` in `diff`, so we don't try to patch them here.
           if (news.pathPart !== observed.pathPart) {
             yield* ag.updateResource({

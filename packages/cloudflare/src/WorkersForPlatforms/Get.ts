@@ -11,7 +11,7 @@ import type { DispatchNamespace as DispatchNamespaceResource } from "./DispatchN
  * dynamic-dispatch client (`get`).
  *
  * `Get` is a single identifier that is simultaneously the binding's Context
- * tag, its type, and the callable —
+ * tag, its type, and the callable --
  * `yield* Cloudflare.WorkersForPlatforms.Get(namespace)`.
  *
  * Provide {@link GetBinding} on the Worker's runtime layer to resolve the

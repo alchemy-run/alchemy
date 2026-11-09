@@ -17,16 +17,16 @@ type TypeId = typeof TypeId;
 
 export interface ExpressionProps {
   /**
-   * Zone the custom scan expression belongs to. Stable — moving an
+   * Zone the custom scan expression belongs to. Stable -- moving an
    * expression between zones triggers a replacement.
    */
   zoneId: string;
   /**
    * Ruleset-language expression that locates the content to scan inside
-   * the request — e.g.
+   * the request -- e.g.
    * `lookup_json_string(http.request.body.raw, "file")`.
    *
-   * Immutable — the API has no update endpoint for expressions, so
+   * Immutable -- the API has no update endpoint for expressions, so
    * changing the payload triggers a replacement (create new, delete old).
    */
   payload: string;
@@ -44,14 +44,14 @@ export interface ExpressionAttributes {
 export type Expression = Resource<TypeId, ExpressionProps, ExpressionAttributes, never, Providers>;
 
 /**
- * A custom scan expression ("payload") for WAF Content Scanning — tells the
+ * A custom scan expression ("payload") for WAF Content Scanning -- tells the
  * malicious-uploads scanner where to find encoded or nested content in the
  * request body (`/zones/{zone_id}/content-upload-scan/payloads`).
  *
  * An expression's identity is its `payload` text within the zone: the API
  * offers create/list/delete only (no update), so changing `payload`
  * triggers a replacement. The zone must have Content Scanning enabled (see
- * `Cloudflare.ContentScanning.ContentScanning`) — payload calls on a zone where scanning is
+ * `Cloudflare.ContentScanning.ContentScanning`) -- payload calls on a zone where scanning is
  * disabled fail with the typed `ContentScanningNotEnabled` error.
  *
  * Safety: expressions carry no ownership markers. When there is no prior
@@ -95,7 +95,7 @@ export const isExpression = (value: unknown): value is Expression =>
 
 /**
  * Cloudflare accepted the create call but the expression did not appear in
- * the returned list — an API anomaly that should never happen in practice.
+ * the returned list -- an API anomaly that should never happen in practice.
  */
 export class ExpressionCreateAnomaly extends Data.TaggedError("ExpressionCreateAnomaly")<{
   readonly zoneId: string;
@@ -111,7 +111,7 @@ export const ExpressionProvider = () =>
     // payloads, and hydrate each into the same Attributes shape `read`
     // produces. Zones without Content Scanning enabled (or not entitled) reject
     // payload calls with the typed `ContentScanningNotEnabled`/`Forbidden`
-    // tags, and a deleted zone with `InvalidRoute` — skip all three.
+    // tags, and a deleted zone with `InvalidRoute` -- skip all three.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const allZones = yield* listAllZones(accountId);
@@ -140,7 +140,7 @@ export const ExpressionProvider = () =>
       // zoneId is Input<string>; compare only once both sides are concrete.
       if (!isResolved(news)) return undefined;
       const old = olds !== undefined && isResolved(olds) ? olds : undefined;
-      // The payload is the expression's identity — no update endpoint.
+      // The payload is the expression's identity -- no update endpoint.
       const oldPayload = output?.payload ?? old?.payload;
       if (oldPayload !== undefined && oldPayload !== news.payload) {
         return { action: "replace" } as const;
@@ -157,7 +157,7 @@ export const ExpressionProvider = () =>
       if (!zoneId) return undefined;
 
       const expressions = yield* listExpressions(zoneId);
-      // Scanning disabled or zone gone — no expressions are observable.
+      // Scanning disabled or zone gone -- no expressions are observable.
       if (expressions === undefined) return undefined;
 
       // Owned path: refresh by our persisted expression id.
@@ -168,7 +168,7 @@ export const ExpressionProvider = () =>
 
       // Adoption path: an expression with this payload text may already
       // exist on the zone. Expressions carry no ownership markers, so we
-      // cannot prove we created it — brand it `Unowned` so the engine
+      // cannot prove we created it -- brand it `Unowned` so the engine
       // refuses to take over unless `adopt` is set.
       const payload = output?.payload ?? olds?.payload;
       if (payload !== undefined) {
@@ -182,9 +182,9 @@ export const ExpressionProvider = () =>
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
 
-      // 1. Observe — the expression id cached on `output` is a hint, not
+      // 1. Observe -- the expression id cached on `output` is a hint, not
       //    a guarantee: a missing expression falls through to the payload
-      //    scan and then to create. (Scanning must be enabled here — a
+      //    scan and then to create. (Scanning must be enabled here -- a
       //    disabled zone fails with the typed ContentScanningNotEnabled.)
       const expressionId = output?.expressionId;
       let observed: ObservedExpression | undefined = expressionId
@@ -192,14 +192,14 @@ export const ExpressionProvider = () =>
         : undefined;
 
       // 2. Fall back to matching by payload text. Ownership has already
-      //    been verified upstream — `read` reports existing expressions as
+      //    been verified upstream -- `read` reports existing expressions as
       //    `Unowned` and the engine gates takeover behind the adopt policy
       //    before reconcile ever runs.
       if (!observed) {
         observed = yield* findExpression(zoneId, (e) => e.payload === news.payload);
       }
 
-      // 3. Ensure — create when missing. The create call returns the full
+      // 3. Ensure -- create when missing. The create call returns the full
       //    list of expressions; find ours by payload text.
       if (!observed) {
         const created = yield* contentScanning.createPayload({
@@ -215,13 +215,13 @@ export const ExpressionProvider = () =>
         }
       }
 
-      // 4. No sync step — expressions have nothing mutable beyond identity.
+      // 4. No sync step -- expressions have nothing mutable beyond identity.
       return toAttributes(zoneId, observed);
     }),
 
     delete: Effect.fn(function* ({ output }) {
       const { zoneId, expressionId } = output;
-      // Observe first — scanning disabled / zone gone / already deleted
+      // Observe first -- scanning disabled / zone gone / already deleted
       // all mean there is nothing left to remove.
       const expressions = yield* listExpressions(zoneId);
       if (expressions === undefined) return;

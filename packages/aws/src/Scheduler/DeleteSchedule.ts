@@ -19,7 +19,7 @@ export interface DeleteScheduleRequest extends Omit<scheduler.DeleteScheduleInpu
  *
  * // runtime
  * yield* deleteSchedule({ Name: `reminder-${userId}` }).pipe(
- *   // already gone — cancellation is idempotent
+ *   // already gone -- cancellation is idempotent
  *   Effect.catchTag("ResourceNotFoundException", () => Effect.void),
  * );
  * ```

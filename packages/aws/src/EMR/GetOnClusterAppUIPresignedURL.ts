@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Cluster } from "./Cluster.ts";
 
 /**
- * Runtime binding for `elasticmapreduce:GetOnClusterAppUIPresignedURL` — mints a presigned URL for a live application UI (Spark UI, YARN ResourceManager, Tez) on the bound cluster.
+ * Runtime binding for `elasticmapreduce:GetOnClusterAppUIPresignedURL` -- mints a presigned URL for a live application UI (Spark UI, YARN ResourceManager, Tez) on the bound cluster.
  * ### Application UIs
  * **Example:** Link to the Spark UI
  * ```typescript

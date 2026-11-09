@@ -17,17 +17,17 @@ export interface RevokeSecurityGroupIngressRequest extends Omit<
  * the bound {@link SecurityGroup} (IAM action
  * `ec2:RevokeSecurityGroupIngress` on the security group ARN).
  *
- * Removes an inbound rule from the group at runtime — the cleanup half of the
+ * Removes an inbound rule from the group at runtime -- the cleanup half of the
  * dynamic IP-allowlisting pattern (see
  * {@link AuthorizeSecurityGroupIngress}). Provide the implementation with
  * `Effect.provide(AWS.EC2.RevokeSecurityGroupIngressHttp)`.
  * ### Dynamic Security Group Rules
  * **Example:** Remove a previously allowlisted address
  * ```typescript
- * // init — bind the operation to the security group
+ * // init -- bind the operation to the security group
  * const revokeIngress = yield* AWS.EC2.RevokeSecurityGroupIngress(group);
  *
- * // runtime — close port 22 for the address again
+ * // runtime -- close port 22 for the address again
  * yield* revokeIngress({
  *   IpProtocol: "tcp",
  *   FromPort: 22,

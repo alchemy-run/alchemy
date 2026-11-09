@@ -24,7 +24,7 @@ export type EncryptionSpec = {
 export type MachineSpec = {
   /** Machine type (e.g. `e2-standard-4`, `n1-standard-4`). Immutable. */
   machineType?: string;
-  /** Accelerator type (`NVIDIA_TESLA_T4`, …). Immutable. */
+  /** Accelerator type (`NVIDIA_TESLA_T4`, ...). Immutable. */
   acceleratorType?: string;
   /** Number of accelerators to attach. */
   acceleratorCount?: number;
@@ -44,7 +44,7 @@ export type NetworkSpec = {
 };
 
 export type PersistentDiskSpec = {
-  /** Disk type (`pd-standard`, `pd-ssd`, …). */
+  /** Disk type (`pd-standard`, `pd-ssd`, ...). */
   diskType?: string;
   /** Size in GB (string, e.g. `"100"`). */
   diskSizeGb?: string;

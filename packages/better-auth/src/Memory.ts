@@ -5,7 +5,7 @@ import * as Layer from "effect/Layer";
 import { Database, type DatabaseInput } from "./Database.ts";
 
 /**
- * In-memory database layer for Better Auth — tests and throwaway dev
+ * In-memory database layer for Better Auth -- tests and throwaway dev
  * only. Data lives in the provided (or an internal) record for the
  * lifetime of the process/isolate; nothing is persisted and there is no
  * migration step (tables are seeded from the resolved auth schema).
@@ -35,11 +35,11 @@ export const Memory = (db?: MemoryDB): Layer.Layer<Database> =>
   Layer.effect(
     Database,
     Effect.sync(() => {
-      // One backing store per layer instance — executions share it so data
+      // One backing store per layer instance -- executions share it so data
       // survives across events within the same isolate/process. The memory
       // adapter throws "Model X not found" for absent tables (and its
       // transaction support `structuredClone`s the store, so no Proxy
-      // tricks) — seed an empty array per model from the resolved schema
+      // tricks) -- seed an empty array per model from the resolved schema
       // inside the adapter factory, which receives the full options.
       const store: MemoryDB = db ?? {};
       const adapter: DatabaseInput = (options) => {

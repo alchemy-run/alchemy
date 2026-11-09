@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `mediaconvert:SearchJobs` — search your recent
+ * Runtime binding for `mediaconvert:SearchJobs` -- search your recent
  * transcode jobs by input file, queue, or status from runtime code (e.g.
  * "did we already transcode this upload?").
  *

@@ -5,7 +5,7 @@
  * by ref name: diff and mergeability are computed on read from current ref
  * tips. Merging fast-forwards when possible; otherwise it creates a merge
  * commit iff the three-way tree merge is trivial (no path touched on both
- * sides relative to the merge base) — a conflicting PR is a typed 409, the
+ * sides relative to the merge base) -- a conflicting PR is a typed 409, the
  * server never writes conflict markers.
  */
 import * as HttpApiEndpoint from "effect/http-api/HttpApiEndpoint";
@@ -43,7 +43,7 @@ export const PullPath = Schema.Struct({
 
 /**
  * Opens a PR. `base`/`head` accept short (`main`) or full
- * (`refs/heads/main`) branch names — only branches are legal (no tags).
+ * (`refs/heads/main`) branch names -- only branches are legal (no tags).
  */
 export const CreatePull = HttpApiEndpoint.post("create", "/repos/:owner/:repo/pulls", {
   params: RepoPath,

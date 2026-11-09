@@ -12,7 +12,7 @@ import type * as Effect from "effect/Effect";
  * ### Exploring the Service Topology
  * **Example:** List a Service's Dependencies
  * ```typescript
- * // init — account-level, no resource argument
+ * // init -- account-level, no resource argument
  * const listServiceDependencies =
  *   yield* AWS.ApplicationSignals.ListServiceDependencies();
  *

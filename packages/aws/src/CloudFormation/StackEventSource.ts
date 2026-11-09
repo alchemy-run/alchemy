@@ -82,7 +82,7 @@ export interface StackEventSourceProps extends EventRouteProps {
  * events so it can alert on failed deployments or chain post-deploy
  * automation.
  *
- * CloudFormation publishes to EventBridge automatically — no additional
+ * CloudFormation publishes to EventBridge automatically -- no additional
  * resource is created besides the EventBridge rule targeting the host.
  * Provide the host-specific implementation layer
  * (e.g. `AWS.Lambda.EventSource`) on the Function effect.

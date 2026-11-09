@@ -3,14 +3,14 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Request for {@link DescribeReportDefinitions} — pagination knobs only.
+ * Request for {@link DescribeReportDefinitions} -- pagination knobs only.
  */
 export interface DescribeReportDefinitionsRequest extends cur.DescribeReportDefinitionsRequest {}
 
 /**
  * Runtime binding for `cur:DescribeReportDefinitions`.
  *
- * Lists the Cost and Usage Report definitions in the account — each entry
+ * Lists the Cost and Usage Report definitions in the account -- each entry
  * carries the report's delivery bucket/prefix, granularity, format, and last
  * delivery status, so a Lambda can discover where its billing data lands
  * before reading the report files from S3. Account-level operation (the API
@@ -20,7 +20,7 @@ export interface DescribeReportDefinitionsRequest extends cur.DescribeReportDefi
  * ### Reading Report Definitions
  * **Example:** Find a report's delivery location
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const describeReportDefinitions =
  *   yield* AWS.CostAndUsageReport.DescribeReportDefinitions();
  *

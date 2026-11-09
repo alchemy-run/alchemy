@@ -30,7 +30,7 @@ export interface PresignGetObjectRequest {
  * Mint presigned download (GET) URLs for objects in a {@link Bucket}.
  *
  * Presigning is a pure SigV4 computation performed client-side with the
- * Function's own credentials — no S3 API call is made. Because the URL
+ * Function's own credentials -- no S3 API call is made. Because the URL
  * inherits the signer's IAM permissions, the binding grants `s3:GetObject`
  * and `s3:GetObjectVersion` on the bucket's objects to the host Function.
  * See the [S3 presigned URL
@@ -41,7 +41,7 @@ export interface PresignGetObjectRequest {
  * ```typescript
  * const presignGetObject = yield* S3.PresignGetObject(bucket);
  * const url = yield* presignGetObject({ key: "reports/2026.pdf" });
- * // hand `url` to a browser — it can download the object without AWS credentials
+ * // hand `url` to a browser -- it can download the object without AWS credentials
  * ```
  *
  * ### Downloading a Specific Version

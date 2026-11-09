@@ -8,15 +8,15 @@ export interface ListApplicationsRequest extends appintegrations.ListApplication
  * Lists the AppIntegrations applications in the account
  * (`app-integrations:ListApplications`).
  *
- * An account-level operation — bind it with no resource argument. Provide the
+ * An account-level operation -- bind it with no resource argument. Provide the
  * `ListApplicationsHttp` layer on the Function to satisfy the binding.
  * ### Listing Applications
  * **Example:** List All Applications
  * ```typescript
- * // init — no resource argument (provide AWS.AppIntegrations.ListApplicationsHttp on the Function)
+ * // init -- no resource argument (provide AWS.AppIntegrations.ListApplicationsHttp on the Function)
  * const listApplications = yield* AWS.AppIntegrations.ListApplications();
  *
- * // runtime — page through the applications in the account
+ * // runtime -- page through the applications in the account
  * const { Applications } = yield* listApplications({});
  * ```
  *

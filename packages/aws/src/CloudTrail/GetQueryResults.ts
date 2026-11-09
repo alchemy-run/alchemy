@@ -6,13 +6,13 @@ import type { EventDataStore } from "./EventDataStore.ts";
 /**
  * Runtime binding for `cloudtrail:GetQueryResults`.
  *
- * Reads one page of a finished CloudTrail Lake query's result rows — use
+ * Reads one page of a finished CloudTrail Lake query's result rows -- use
  * `NextToken`/`MaxQueryResults` to paginate large results. Provide the
  * implementation with `Effect.provide(AWS.CloudTrail.GetQueryResultsHttp)`.
  * ### Querying CloudTrail Lake
  * **Example:** Read Query Results
  * ```typescript
- * // init — bind the operation to the event data store
+ * // init -- bind the operation to the event data store
  * const getQueryResults = yield* AWS.CloudTrail.GetQueryResults(store);
  *
  * // runtime

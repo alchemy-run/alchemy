@@ -23,7 +23,7 @@ import {
 export type EnterpriseProps = {
   /**
    * Cloud project that owns the enterprise. Defaults to the stack
-   * project. Immutable — changing it replaces the enterprise.
+   * project. Immutable -- changing it replaces the enterprise.
    */
   projectId?: string;
   /**
@@ -60,7 +60,7 @@ export type EnterpriseProps = {
    */
   pubsubTopic?: string;
   /**
-   * Enabled Pub/Sub notification types (`ENROLLMENT`, `COMMAND`, …).
+   * Enabled Pub/Sub notification types (`ENROLLMENT`, `COMMAND`, ...).
    */
   enabledNotificationTypes?: Array<
     androidmanagement.EnterpriseEnabledNotificationTypesItemEnum | (string & {})

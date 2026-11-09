@@ -9,7 +9,7 @@ export interface ListApplicationVersionsRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `kinesisanalytics:ListApplicationVersions` — pages
+ * Runtime binding for `kinesisanalytics:ListApplicationVersions` -- pages
  * through the bound application's version history (every configuration
  * update creates a version), e.g. to pick a rollback target.
  * ### Observing the Application

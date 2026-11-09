@@ -8,7 +8,7 @@ export interface NuxtProps extends FrameworkSiteProps {
 }
 
 /**
- * Nuxt SSR and prerendered assets on Prisma Compute. The Node target owns Nitro’s node preset; do not override nitro.preset.
+ * Nuxt SSR and prerendered assets on Prisma Compute. The Node target owns Nitro's node preset; do not override nitro.preset.
  *
  * Native framework development and HMR run without Prisma cloud resources.
  * Apply `Alchemy.remote()` to use the live Compute deployment during dev.

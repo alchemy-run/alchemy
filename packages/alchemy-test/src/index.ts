@@ -1,5 +1,5 @@
 /**
- * alchemy-test — a minimal, Effect-native, vitest-compatible test harness.
+ * alchemy-test -- a minimal, Effect-native, vitest-compatible test harness.
  *
  * This entrypoint is safe to import from anywhere (including code that gets
  * bundled into Workers): it only contains the registration API and the

@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { QApp } from "./QApp.ts";
 
 /**
- * Request for {@link PredictQApp} — `instanceId` is injected from the bound Q App.
+ * Request for {@link PredictQApp} -- `instanceId` is injected from the bound Q App.
  */
 export interface PredictQAppRequest extends Omit<qapps.PredictQAppInput, "instanceId"> {}
 
@@ -16,7 +16,7 @@ export interface PredictQAppRequest extends Omit<qapps.PredictQAppInput, "instan
  * ### Generation
  * **Example:** Generate an App Definition from a Prompt
  * ```typescript
- * // init — bind the operation to the Q App
+ * // init -- bind the operation to the Q App
  * const predictQApp = yield* AWS.QApps.PredictQApp(app);
  *
  * // runtime

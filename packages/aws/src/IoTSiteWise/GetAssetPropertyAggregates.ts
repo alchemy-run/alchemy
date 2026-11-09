@@ -13,7 +13,7 @@ export interface GetAssetPropertyAggregatesRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `iotsitewise:GetAssetPropertyAggregates` — read
+ * Runtime binding for `iotsitewise:GetAssetPropertyAggregates` -- read
  * pre-computed aggregates (`AVERAGE`, `MINIMUM`, `MAXIMUM`, `SUM`, `COUNT`,
  * `STANDARD_DEVIATION`) of one property of the bound asset over a time
  * range at a fixed resolution from a deployed Lambda or Task.

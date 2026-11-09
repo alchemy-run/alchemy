@@ -19,7 +19,7 @@ export const fromEnvOrElse = (region: string) =>
 
 // Deferred with `Effect.suspend` so it does not dereference `AWSEnvironment`
 // during module evaluation. `Region.ts` and `Environment.ts` are part of an
-// import cycle (AuthProvider → Region → Environment → AuthProvider); touching
+// import cycle (AuthProvider -> Region -> Environment -> AuthProvider); touching
 // `AWSEnvironment` eagerly at top level hits a temporal-dead-zone error when
 // this module is evaluated mid-cycle.
 export const CurrentRegion = Effect.suspend(() =>

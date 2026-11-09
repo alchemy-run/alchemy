@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Repository } from "./Repository.ts";
 
 /**
- * Request for {@link GetRepositoryEndpoint} — `domain`, `domainOwner`, and
+ * Request for {@link GetRepositoryEndpoint} -- `domain`, `domainOwner`, and
  * `repository` are injected from the bound {@link Repository}.
  */
 export interface GetRepositoryEndpointRequest extends Omit<
@@ -15,7 +15,7 @@ export interface GetRepositoryEndpointRequest extends Omit<
 /**
  * Runtime binding for `codeartifact:GetRepositoryEndpoint`.
  *
- * Resolves the URL package managers (npm, pip, maven, …) use to talk to the bound repository for a given package format. Provide the implementation with
+ * Resolves the URL package managers (npm, pip, maven, ...) use to talk to the bound repository for a given package format. Provide the implementation with
  * `Effect.provide(AWS.CodeArtifact.GetRepositoryEndpointHttp)`.
  * ### Resolving the Registry Endpoint
  * **Example:** Get the npm Endpoint

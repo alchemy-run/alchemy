@@ -17,20 +17,20 @@ export interface LabelProps {
   /**
    * Zone the label is defined on.
    *
-   * Immutable — moving a label between zones triggers a replacement.
+   * Immutable -- moving a label between zones triggers a replacement.
    */
   zoneId: string;
   /**
-   * Name of the label. Must be 1–24 characters. If omitted, a unique
+   * Name of the label. Must be 1-24 characters. If omitted, a unique
    * lowercase name is generated from the app, stage, and logical ID.
    *
-   * Immutable — the name is the label's identity, so changing it triggers
+   * Immutable -- the name is the label's identity, so changing it triggers
    * a replacement.
    * @default ${app}-${id}-${stage}-${suffix} (truncated to 24 characters)
    */
   name?: string;
   /**
-   * Human-readable description of the label. Mutable — patched in place.
+   * Human-readable description of the label. Mutable -- patched in place.
    * @default ""
    */
   description?: string;
@@ -63,7 +63,7 @@ export const isLabel = (value: unknown): value is Label =>
 export type Label = Resource<TypeId, LabelProps, LabelAttributes, never, Providers>;
 
 /**
- * A Cloudflare API Shield user label — a zone-scoped tag that can be
+ * A Cloudflare API Shield user label -- a zone-scoped tag that can be
  * attached to registered API operations to organize and filter them
  * (e.g. by team, service, or sensitivity).
  *
@@ -103,7 +103,7 @@ export const LabelProvider = () =>
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // Labels are zone-scoped — fan out over every zone and list its
+      // Labels are zone-scoped -- fan out over every zone and list its
       // user labels. Only `user`-sourced labels are enumerated;
       // `managed` labels are Cloudflare-curated and not ours to delete.
       const zones = yield* listAllZones(accountId);
@@ -135,7 +135,7 @@ export const LabelProvider = () =>
       const o = olds as LabelProps | undefined;
       const n = news as LabelProps;
       if (o === undefined) return undefined;
-      // The name is the label's identity — compare the resolved physical
+      // The name is the label's identity -- compare the resolved physical
       // names (an omitted name resolves deterministically from the id).
       const oldName = output?.name ?? (yield* createLabelName(id, o.name));
       // Auto-generated names are engine-owned: the deployed name stays
@@ -175,11 +175,11 @@ export const LabelProvider = () =>
       const zoneId = news.zoneId as string;
       const name = output?.name ?? (yield* createLabelName(id, news.name));
 
-      // 1. Observe — read the live label; the attributes cached on
+      // 1. Observe -- read the live label; the attributes cached on
       //    `output` are a hint, not a guarantee.
       let observed = yield* getLabel(zoneId, name);
 
-      // 2. Ensure — create when missing. A concurrent create surfaces as
+      // 2. Ensure -- create when missing. A concurrent create surfaces as
       //    `LabelAlreadyExists` (Cloudflare code 70009): converge by
       //    re-reading the label that won the race.
       if (!observed) {
@@ -200,7 +200,7 @@ export const LabelProvider = () =>
           );
       }
 
-      // 3. Sync — diff the observed description against desired; skip the
+      // 3. Sync -- diff the observed description against desired; skip the
       //    patch call entirely on a no-op.
       const desired = news.description ?? "";
       if (observed.description !== desired) {

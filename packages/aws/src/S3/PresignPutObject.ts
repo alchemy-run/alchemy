@@ -25,7 +25,7 @@ export interface PresignPutObjectRequest {
  * Mint presigned upload (PUT) URLs for objects in a {@link Bucket}.
  *
  * Presigning is a pure SigV4 computation performed client-side with the
- * Function's own credentials — no S3 API call is made. Because the URL
+ * Function's own credentials -- no S3 API call is made. Because the URL
  * inherits the signer's IAM permissions, the binding grants `s3:PutObject`
  * on the bucket's objects to the host Function.
  *
@@ -34,7 +34,7 @@ export interface PresignPutObjectRequest {
  * ```typescript
  * const presignPutObject = yield* S3.PresignPutObject(bucket);
  * const url = yield* presignPutObject({ key: "uploads/avatar.png" });
- * // hand `url` to a browser — it can PUT the object without AWS credentials
+ * // hand `url` to a browser -- it can PUT the object without AWS credentials
  * ```
  *
  * **Example:** Pin the uploaded Content-Type

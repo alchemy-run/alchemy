@@ -6,8 +6,8 @@ import type { Role } from "../IAM/Role.ts";
 /**
  * Shared scaffolding for AWS Transcribe HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the two
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the two
  * builders below. Everything except the operation and the IAM action list is
  * boilerplate: Amazon Transcribe's batch APIs have no resource-level IAM, so
  * every grant is on `*`. The role-bound operations (`StartCallAnalyticsJob`,
@@ -18,7 +18,7 @@ import type { Role } from "../IAM/Role.ts";
 /**
  * Build the impl Effect for a Transcribe operation with no bound resource
  * (start/get/list/delete jobs, vocabulary/filter/category lifecycle, tags).
- * The deploy-time half grants `actions` on `*` — Transcribe batch IAM
+ * The deploy-time half grants `actions` on `*` -- Transcribe batch IAM
  * actions do not support resource-level scoping.
  */
 export const makeTranscribeHttpBinding = <I, A, E, R>(options: {
@@ -59,7 +59,7 @@ export const makeTranscribeHttpBinding = <I, A, E, R>(options: {
  * write results; its trust policy must allow `transcribe.amazonaws.com`).
  * The role's ARN is injected as `DataAccessRoleArn` on every runtime request
  * and the deploy-time half grants `actions` on `*` plus `iam:PassRole` on
- * the role — without the PassRole grant, the operation fails only at runtime
+ * the role -- without the PassRole grant, the operation fails only at runtime
  * with an AccessDenied.
  */
 export const makeTranscribeRoleHttpBinding = <

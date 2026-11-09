@@ -7,14 +7,14 @@ import { connectEnvPrefix } from "./Connect.ts";
 /**
  * Shared scaffolding for the DAX connect bindings.
  *
- * NOT exported from `index.ts` — `ConnectReadHttp.ts` / `ConnectWriteHttp.ts`
+ * NOT exported from `index.ts` -- `ConnectReadHttp.ts` / `ConnectWriteHttp.ts`
  * / `ConnectReadWriteHttp.ts` are thin
- * `Layer.effect(Cap, makeDaxConnectHttpBinding({ … }))` calls over the
+ * `Layer.effect(Cap, makeDaxConnectHttpBinding({ ... }))` calls over the
  * builder below. Only the IAM action list differs per access level.
  */
 
 /**
- * Protocol actions every DAX client needs regardless of access level — the
+ * Protocol actions every DAX client needs regardless of access level -- the
  * client discovers cluster nodes and negotiates the item schema before any
  * item operation.
  */
@@ -68,7 +68,7 @@ export const makeDaxConnectHttpBinding = (options: {
         yield* bind`${options.tag}(${cluster})`({
           env: {
             [`${prefix}_HOST`]: cluster.discoveryEndpointAddress,
-            // Lambda environment variables are strings — stringify the port.
+            // Lambda environment variables are strings -- stringify the port.
             [`${prefix}_PORT`]: Output.interpolate`${cluster.discoveryEndpointPort}`,
             [`${prefix}_URL`]: cluster.discoveryEndpointUrl,
             [`${prefix}_TLS`]: Output.map(cluster.clusterEndpointEncryptionType, (encryption) =>

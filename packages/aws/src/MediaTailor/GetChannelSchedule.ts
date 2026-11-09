@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `mediatailor:GetChannelSchedule` — read the current
+ * Runtime binding for `mediatailor:GetChannelSchedule` -- read the current
  * schedule (programs + ad breaks) of a channel-assembly channel.
  *
  * Channel names are runtime parameters, so the binding is account-level and

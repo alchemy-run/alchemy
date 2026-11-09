@@ -13,10 +13,10 @@ import type { ServiceLevelObjective } from "./ServiceLevelObjective.ts";
  * ### Reading SLOs
  * **Example:** Read the Bound SLO
  * ```typescript
- * // init — bind the operation to the SLO
+ * // init -- bind the operation to the SLO
  * const getSlo = yield* AWS.ApplicationSignals.GetServiceLevelObjective(slo);
  *
- * // runtime — the SLO's ARN is injected automatically
+ * // runtime -- the SLO's ARN is injected automatically
  * const result = yield* getSlo();
  * yield* Effect.log(result.Slo.Goal.AttainmentGoal);
  * ```

@@ -59,17 +59,17 @@ export type AgentsGeneratorProps = {
   /**
    * Parent agent resource name
    * `projects/{project}/locations/{location}/agents/{agent}`.
-   * Immutable — changing it replaces the generator.
+   * Immutable -- changing it replaces the generator.
    */
   agent: string;
   /**
    * Generator id (the `{generator}` segment). Server-assigned when
-   * omitted. Immutable — changing it replaces the generator.
+   * omitted. Immutable -- changing it replaces the generator.
    */
   generatorId?: string;
   /**
    * Location used when `agent` is an id rather than a resource name.
-   * Immutable — changing it replaces the generator.
+   * Immutable -- changing it replaces the generator.
    * @default "global"
    */
   location?: string;
@@ -83,7 +83,7 @@ export type AgentsGeneratorProps = {
    * @default "Say hello."
    */
   promptText?: string;
-  /** Language code for the prompt (`en`, `en-US`, …). */
+  /** Language code for the prompt (`en`, `en-US`, ...). */
   languageCode?: string;
   /** Decoding parameters. */
   modelParameter?: GeneratorModelParameter;
@@ -125,7 +125,7 @@ export type AgentsGenerator = Resource<
 /**
  * A Dialogflow CX generator that produces LLM-backed response text.
  *
- * Generators have no labels field — Alchemy stamps ownership into
+ * Generators have no labels field -- Alchemy stamps ownership into
  * `displayName` so `list` / nuke can find them. Parent agent and id are
  * immutable. Display name, prompt, model parameters, placeholders, and
  * LLM settings update in place.

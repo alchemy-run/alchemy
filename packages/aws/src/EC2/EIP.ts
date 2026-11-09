@@ -127,7 +127,7 @@ export type EIPLookup =
       name: string;
     };
 /**
- * An Elastic IP address — a static, public IPv4 address allocated to your AWS
+ * An Elastic IP address -- a static, public IPv4 address allocated to your AWS
  * account that you can attach to instances, network interfaces, or NAT
  * gateways.
  *
@@ -333,7 +333,7 @@ export const EIPProvider = () =>
 
           const desiredTags = yield* createTags(id, news.tags);
 
-          // Observe — try to find an existing EIP via the cached allocationId.
+          // Observe -- try to find an existing EIP via the cached allocationId.
           // If it was released out-of-band, fall through to allocate.
           let address: ec2.Address | undefined;
           if (output?.allocationId) {
@@ -347,7 +347,7 @@ export const EIPProvider = () =>
             address = lookup.Addresses?.[0];
           }
 
-          // Ensure — allocate a new EIP when none was observed.
+          // Ensure -- allocate a new EIP when none was observed.
           if (address === undefined) {
             yield* session.note("Allocating Elastic IP address...");
             const result = yield* ec2.allocateAddress({
@@ -378,7 +378,7 @@ export const EIPProvider = () =>
 
           const allocationId = address.AllocationId! as AllocationId;
 
-          // Sync tags — observed cloud tags vs desired.
+          // Sync tags -- observed cloud tags vs desired.
           const currentTags = Object.fromEntries(
             (address.Tags ?? []).map((t) => [t.Key!, t.Value!]),
           ) as Record<string, string>;

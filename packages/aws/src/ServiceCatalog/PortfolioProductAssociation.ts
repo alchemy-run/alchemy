@@ -113,7 +113,7 @@ export const PortfolioProductAssociationProvider = () =>
             );
             return associations.flat();
           }),
-        // Existence-only resource — every property is part of its identity.
+        // Existence-only resource -- every property is part of its identity.
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
           if (olds.portfolioId !== news.portfolioId || olds.productId !== news.productId) {
@@ -130,14 +130,14 @@ export const PortfolioProductAssociationProvider = () =>
             ? { portfolioId, productId }
             : undefined;
         }),
-        // Existence-only: observe → if missing, associate. No sync step.
+        // Existence-only: observe -> if missing, associate. No sync step.
         reconcile: Effect.fn(function* ({ news, session }) {
           if (!(yield* isAssociated(news.productId, news.portfolioId))) {
             yield* servicecatalog.associateProductWithPortfolio({
               ProductId: news.productId,
               PortfolioId: news.portfolioId,
             });
-            // The association list is eventually consistent — wait (bounded)
+            // The association list is eventually consistent -- wait (bounded)
             // until it is visible so a subsequent read converges.
             yield* awaitVisible(isAssociated(news.productId, news.portfolioId));
           }

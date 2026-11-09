@@ -105,16 +105,16 @@ export interface SearchJobProps {
    */
   name?: string;
   /**
-   * ARN of the KMS key used to encrypt the search results. Immutable —
+   * ARN of the KMS key used to encrypt the search results. Immutable --
    * changing it replaces the job.
    */
   encryptionKeyArn?: string;
   /**
-   * The recovery points to search. Immutable — changing it replaces the job.
+   * The recovery points to search. Immutable -- changing it replaces the job.
    */
   searchScope: SearchScope;
   /**
-   * Filters applied to the items inside the recovery points. Immutable —
+   * Filters applied to the items inside the recovery points. Immutable --
    * changing them replaces the job.
    */
   itemFilters?: ItemFilters;
@@ -150,7 +150,7 @@ export interface SearchJob extends Resource<
 > {}
 
 /**
- * An AWS Backup Search job — a data-plane search over AWS Backup recovery
+ * An AWS Backup Search job -- a data-plane search over AWS Backup recovery
  * points (S3 and EBS) whose backup indexes are active. A search job is
  * immutable once started: it runs to completion, retains its results for
  * seven days, and can only be stopped while `RUNNING` (destroying the
@@ -284,13 +284,13 @@ export const SearchJobProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // OBSERVE — output is only an identifier cache; the job may be gone.
+          // OBSERVE -- output is only an identifier cache; the job may be gone.
           let job =
             output?.searchJobIdentifier !== undefined
               ? yield* get(output.searchJobIdentifier)
               : undefined;
 
-          // ENSURE — a search job is immutable once started; start it if
+          // ENSURE -- a search job is immutable once started; start it if
           // missing. Any change to the scope/filters is a replacement (diff).
           if (job === undefined) {
             const started = yield* backupsearch.startSearchJob({
@@ -304,7 +304,7 @@ export const SearchJobProvider = () =>
               SearchJobIdentifier: started.SearchJobIdentifier!,
             });
           } else {
-            // SYNC — tags are the only mutable aspect; diff against OBSERVED.
+            // SYNC -- tags are the only mutable aspect; diff against OBSERVED.
             yield* syncBackupSearchTags(job.SearchJobArn, desiredTags);
           }
 
@@ -313,7 +313,7 @@ export const SearchJobProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // A search job cannot be deleted — results age out after 7 days.
+          // A search job cannot be deleted -- results age out after 7 days.
           // Stop it if it is still RUNNING; stopping a job in any other
           // state is a ConflictException and means there is nothing to do.
           yield* backupsearch

@@ -134,7 +134,7 @@ export interface DataLake extends Resource<
 > {}
 
 /**
- * The Amazon Security Lake data lake — the account-wide singleton that
+ * The Amazon Security Lake data lake -- the account-wide singleton that
  * onboards the account to Security Lake. Enabling it creates S3 buckets,
  * registers them with Lake Formation, and configures the Glue metastore in
  * every configured Region.
@@ -204,7 +204,7 @@ const toWireConfiguration = (
   replicationConfiguration: config.replicationConfiguration,
 });
 
-// Normalize a per-Region config for observed↔desired comparison. AWS reports
+// Normalize a per-Region config for observed<->desired comparison. AWS reports
 // SSE-S3 as `S3_MANAGED_KEY`, so an unset kmsKeyId compares equal to it.
 const normalizeConfig = (config: {
   encryptionConfiguration?: securitylake.DataLakeEncryptionConfiguration;
@@ -244,7 +244,7 @@ const observeDataLakes = securitylake
   .pipe(Effect.map((response) => [...(response.dataLakes ?? [])]));
 
 // Observation for read/list: an account that never onboarded Security Lake
-// rejects listDataLakes with AccessDeniedException — that means "no data
+// rejects listDataLakes with AccessDeniedException -- that means "no data
 // lake", not a failure.
 const observeDataLakesIfOnboarded = observeDataLakes.pipe(
   Effect.catchTag(["AccessDeniedException", "UnauthorizedException"], () =>
@@ -308,14 +308,14 @@ export const DataLakeProvider = () =>
           const desiredConfigs = news.configurations.map(toWireConfiguration);
           const desiredRegions = desiredConfigs.map((c) => c.region);
 
-          // 1. OBSERVE — cloud state is authoritative.
+          // 1. OBSERVE -- cloud state is authoritative.
           let lakes = yield* observeDataLakes;
           const observedByRegion = new Map(lakes.map((lake) => [lake.region, lake]));
 
-          // 2. ENSURE — createDataLake is additive per Region, so enabling
+          // 2. ENSURE -- createDataLake is additive per Region, so enabling
           // missing Regions covers both greenfield onboarding and Region
           // expansion. A ConflictException is a race with a concurrent
-          // enable — fall through to observation.
+          // enable -- fall through to observation.
           const missing = desiredConfigs.filter((config) => !observedByRegion.has(config.region));
           if (missing.length > 0) {
             yield* securitylake
@@ -327,7 +327,7 @@ export const DataLakeProvider = () =>
               .pipe(Effect.catchTag("ConflictException", () => Effect.succeed({})));
           }
 
-          // 3. SYNC per-Region settings — observed ↔ desired delta only.
+          // 3. SYNC per-Region settings -- observed <-> desired delta only.
           const changed = desiredConfigs.filter((config) => {
             const observed = observedByRegion.get(config.region);
             return observed !== undefined && normalizeConfig(config) !== normalizeConfig(observed);
@@ -339,7 +339,7 @@ export const DataLakeProvider = () =>
             });
           }
 
-          // 3b. SYNC Region removals — only Regions this resource previously
+          // 3b. SYNC Region removals -- only Regions this resource previously
           // managed (recorded in output) are disabled; foreign Regions that
           // happen to be enabled are left alone.
           const staleRegions = (output?.regions ?? []).filter(
@@ -361,7 +361,7 @@ export const DataLakeProvider = () =>
           const managed = lakes.filter((lake) => desiredRegions.includes(lake.region));
           const attrs = buildAttrs(managed.length > 0 ? managed : lakes, region);
 
-          // 3d. SYNC tags — diff against OBSERVED cloud tags.
+          // 3d. SYNC tags -- diff against OBSERVED cloud tags.
           const observedTags = yield* readSecurityLakeTags(attrs.dataLakeArn);
           const { upsert, removed } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {

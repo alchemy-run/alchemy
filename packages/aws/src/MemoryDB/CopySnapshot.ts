@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for the `CopySnapshot` operation (IAM actions
  * `memorydb:CopySnapshot` + `memorydb:TagResource` on the snapshot ARN
- * wildcard — snapshot names are runtime data).
+ * wildcard -- snapshot names are runtime data).
  *
  * Makes a copy of an existing snapshot, optionally exporting it to an S3
  * bucket via `TargetBucket`. Provide the implementation with
@@ -19,7 +19,7 @@ import type * as Effect from "effect/Effect";
  *   SourceSnapshotName: "pre-migration",
  *   TargetSnapshotName: "pre-migration-archive",
  * });
- * // result.Snapshot.Status → "creating"
+ * // result.Snapshot.Status -> "creating"
  * ```
  *
  * @binding

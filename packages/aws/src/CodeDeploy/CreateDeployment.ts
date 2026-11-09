@@ -9,7 +9,7 @@ export interface CreateDeploymentRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `codedeploy:CreateDeployment` — lets a workload start
+ * Runtime binding for `codedeploy:CreateDeployment` -- lets a workload start
  * a deployment through the bound deployment group (e.g. shifting a Lambda
  * alias or rolling an EC2 fleet to a new revision).
  *

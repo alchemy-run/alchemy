@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `greengrass:ListComponents`.
  *
  * Enumerates the account's component definitions (latest version of each),
- * optionally scoped to `PRIVATE` or `PUBLIC` components — the entry point
+ * optionally scoped to `PRIVATE` or `PUBLIC` components -- the entry point
  * for fleet-software inventory tooling. Provide the implementation with
  * `Effect.provide(AWS.GreengrassV2.ListComponentsHttp)`.
  * ### Reading Components
  * **Example:** List Private Components
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listComponents = yield* AWS.GreengrassV2.ListComponents();
  *
  * // runtime

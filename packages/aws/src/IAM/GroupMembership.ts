@@ -93,7 +93,7 @@ export const GroupMembershipProvider = () =>
       const groupName = news.groupName as string;
       const desiredUsers = news.userNames as string[];
 
-      // Observe — read the actual membership of the group. `getGroup`
+      // Observe -- read the actual membership of the group. `getGroup`
       // both confirms the group exists and returns the current user list
       // in a single call.
       const response = yield* iam
@@ -103,7 +103,7 @@ export const GroupMembershipProvider = () =>
         .map((user) => user.UserName)
         .filter((userName): userName is string => typeof userName === "string");
 
-      // Sync — diff observed against desired and apply only the delta.
+      // Sync -- diff observed against desired and apply only the delta.
       const observedSet = new Set(observedUsers);
       const desiredSet = new Set(desiredUsers);
       for (const userName of desiredUsers) {
@@ -134,7 +134,7 @@ export const GroupMembershipProvider = () =>
     list: Effect.fn(function* () {
       // The membership resource is keyed by groupName and its Attributes are
       // the full set of users in that group, so enumerate every IAM group
-      // and read each group's user list — one item per group, matching the
+      // and read each group's user list -- one item per group, matching the
       // shape `read` produces.
       const groups = yield* iam.listGroups.pages({}).pipe(
         Stream.runCollect,

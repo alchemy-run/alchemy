@@ -9,7 +9,7 @@ export const ListSchedulesHttp = Layer.effect(
     tag: "AWS.Scheduler.ListSchedules",
     operation: scheduler.listSchedules,
     actions: ["scheduler:ListSchedules"],
-    // An absent GroupName on ListSchedules means "all groups" — pin the
+    // An absent GroupName on ListSchedules means "all groups" -- pin the
     // default group so listing stays inside the bound group by default.
     fallbackGroupName: "default",
     // IAM evaluates scheduler:ListSchedules against the account-wide

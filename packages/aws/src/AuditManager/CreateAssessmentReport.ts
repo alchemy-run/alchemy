@@ -12,8 +12,8 @@ export interface CreateAssessmentReportRequest extends Omit<
 /**
  * Runtime binding for `auditmanager:CreateAssessmentReport`.
  *
- * Creates an assessment report — a finalized document generated from
- * the bound assessment's evidence — in the assessment's S3 destination. Provide the
+ * Creates an assessment report -- a finalized document generated from
+ * the bound assessment's evidence -- in the assessment's S3 destination. Provide the
  * implementation with `Effect.provide(AWS.AuditManager.CreateAssessmentReportHttp)`.
  * ### Assessment Reports
  * **Example:** Generate an Assessment Report

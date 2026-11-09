@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { QApp } from "./QApp.ts";
 
 /**
- * Request for {@link ImportDocument} — `instanceId` and `appId` are injected from the bound Q App.
+ * Request for {@link ImportDocument} -- `instanceId` and `appId` are injected from the bound Q App.
  */
 export interface ImportDocumentRequest extends Omit<
   qapps.ImportDocumentInput,
@@ -19,7 +19,7 @@ export interface ImportDocumentRequest extends Omit<
  * ### Files
  * **Example:** Import a Document
  * ```typescript
- * // init — bind the operation to the Q App
+ * // init -- bind the operation to the Q App
  * const importDocument = yield* AWS.QApps.ImportDocument(app);
  *
  * // runtime

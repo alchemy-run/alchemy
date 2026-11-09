@@ -6,14 +6,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `detective:BatchGetMembershipDatasources`.
  *
  * Reads this account's data source ingest history across the behavior
- * graphs it is a member of — the member-side view of what each admin's
+ * graphs it is a member of -- the member-side view of what each admin's
  * graph is ingesting from this account.
  * Provide the implementation with
  * `Effect.provide(AWS.Detective.BatchGetMembershipDatasourcesHttp)`.
  * ### Responding to Invitations
  * **Example:** Inspect Membership Data Sources
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const batchGetMembershipDatasources =
  *   yield* AWS.Detective.BatchGetMembershipDatasources();
  *

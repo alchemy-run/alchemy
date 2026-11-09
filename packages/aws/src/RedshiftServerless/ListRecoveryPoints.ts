@@ -7,13 +7,13 @@ import type * as Effect from "effect/Effect";
  * `redshift-serverless:ListRecoveryPoints`).
  *
  * Lists the automatic recovery points Redshift Serverless created in the
- * last 24 hours, optionally filtered by namespace — the discovery half of
+ * last 24 hours, optionally filtered by namespace -- the discovery half of
  * point-in-time recovery tooling. Provide the implementation with
  * `Effect.provide(AWS.RedshiftServerless.ListRecoveryPointsHttp)`.
  * ### Working with Recovery Points
  * **Example:** List Recovery Points for a Namespace
  * ```typescript
- * // init — resolve the runtime client
+ * // init -- resolve the runtime client
  * const listRecoveryPoints = yield* AWS.RedshiftServerless.ListRecoveryPoints();
  *
  * const { recoveryPoints } = yield* listRecoveryPoints({ namespaceName });

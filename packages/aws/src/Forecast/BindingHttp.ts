@@ -7,15 +7,15 @@ import type { PolicyStatement } from "../IAM/Policy.ts";
  *
  * The runtime-targeted Forecast objects (dataset import jobs, predictors,
  * forecasts) are created *at runtime* with caller-chosen names, so their ARNs
- * are unknowable at deploy time — every binding is account-level and grants
+ * are unknowable at deploy time -- every binding is account-level and grants
  * its action(s) on `Resource: ["*"]`. The only variation between bindings is
  * the distilled operation, the IAM action, and whether the operation passes
  * a data-access role to the service (`CreateDatasetImportJob` /
  * `CreateAutoPredictor`, which additionally need `iam:PassRole` conditioned
  * to `forecast.amazonaws.com`).
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, makeForecastHttpBinding({ … }))`.
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, makeForecastHttpBinding({ ... }))`.
  */
 export const makeForecastHttpBinding = <I, A, E, R>(options: {
   /**

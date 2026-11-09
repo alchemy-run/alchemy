@@ -75,19 +75,19 @@ export interface StreamProps {
    */
   name?: string;
   /**
-   * Structured schema of ingested events — either an explicit field list
+   * Structured schema of ingested events -- either an explicit field list
    * or an Effect Schema (`Schema.Struct` / `Schema.Class`), which is
    * converted to the field list and also types and encodes the records
    * sent through `WriteStream` / `StreamSink`.
    *
-   * Immutable — changing the (derived) field list triggers a replacement,
+   * Immutable -- changing the (derived) field list triggers a replacement,
    * which drops buffered events and dependent pipelines. Equivalent
-   * spellings (a field list ⇄ the matching Effect Schema) are a no-op.
+   * spellings (a field list <-> the matching Effect Schema) are a no-op.
    * When omitted, the stream accepts unstructured JSON events.
    */
   schema?: StreamFieldsSchema | Schema.Top;
   /**
-   * Input format configuration. Immutable — changing it triggers a
+   * Input format configuration. Immutable -- changing it triggers a
    * replacement.
    * @default { type: "json" }
    */
@@ -95,9 +95,9 @@ export interface StreamProps {
   /**
    * HTTP ingest endpoint configuration. Mutable in place.
    *
-   * - omitted / `false` — no public HTTP endpoint (`{ enabled: false }`)
-   * - `true` — endpoint enabled, API-token authentication required
-   * - an object — explicit settings
+   * - omitted / `false` -- no public HTTP endpoint (`{ enabled: false }`)
+   * - `true` -- endpoint enabled, API-token authentication required
+   * - an object -- explicit settings
    * @default false
    */
   http?: boolean | StreamHttp;
@@ -139,7 +139,7 @@ export interface StreamAttributes {
 
 /**
  * A Pipelines stream. `A` is the record type sent through `WriteStream` /
- * `StreamSink` — the Effect Schema's `Type` when the stream was declared
+ * `StreamSink` -- the Effect Schema's `Type` when the stream was declared
  * with one.
  */
 /**
@@ -207,7 +207,7 @@ export type StreamClass = {
  * Convert an Effect Schema `schema` prop into the persisted field list and
  * keep the schema aside for the producer clients. Dies with a clear
  * {@link StreamSchemaUnsupported} when the schema has no stream
- * representation — this runs while the program is constructed, before
+ * representation -- this runs while the program is constructed, before
  * anything is planned.
  */
 const normalizeStreamProps = (
@@ -251,7 +251,7 @@ const constructStream = (id: string, props: unknown) =>
   });
 
 /**
- * A Cloudflare Pipelines stream — the ingestion endpoint of the Pipelines
+ * A Cloudflare Pipelines stream -- the ingestion endpoint of the Pipelines
  * product (also exported as `Cloudflare.Basin.Stream`). Events are sent to
  * a stream from Workers (`WriteStream` / `StreamSink`) or over HTTP,
  * transformed by a SQL {@link Pipeline}, and written to a {@link Sink}.
@@ -261,7 +261,7 @@ const constructStream = (id: string, props: unknown) =>
  * pipelines); the HTTP endpoint and Worker-binding toggles are mutable in
  * place.
  *
- * Pipelines is ingest-only — there is no event source on a stream. To
+ * Pipelines is ingest-only -- there is no event source on a stream. To
  * process data after it lands, subscribe to the sink's bucket with
  * `Cloudflare.R2.BucketEventNotification`.
  *
@@ -337,7 +337,7 @@ const constructStream = (id: string, props: unknown) =>
  * ```
  *
  * ### Wiring into a Pipeline
- * **Example:** Stream → SQL Pipeline → Sink
+ * **Example:** Stream -> SQL Pipeline -> Sink
  * ```typescript
  * const pipeline = yield* Cloudflare.Basin.Pipeline("etl", {
  *   sql: Output.interpolate`INSERT INTO ${sink.name} SELECT * FROM ${stream.name}`,
@@ -400,7 +400,7 @@ export const StreamProvider = () =>
       }
       if (o === undefined) return undefined;
       // Schema and format are immutable. Compare CANONICAL derived values
-      // so equivalent spellings (field list ⇄ Effect Schema, omitted ⇄
+      // so equivalent spellings (field list <-> Effect Schema, omitted <->
       // explicit defaults) never replace.
       const newSchema = yield* canonicalSchema(news.schema);
       const oldSchema = yield* canonicalSchema(o.schema);
@@ -442,7 +442,7 @@ export const StreamProvider = () =>
         const observed = yield* getStream(acct, output.streamId);
         if (observed) return toAttributes(observed, acct);
       }
-      // Cold read — stream names are unique per account, so an exact name
+      // Cold read -- stream names are unique per account, so an exact name
       // match identifies the resource. A generated name embeds the
       // instance id (proof of ownership); a user-provided name does not,
       // so gate takeover behind the adopt policy.
@@ -460,7 +460,7 @@ export const StreamProvider = () =>
       const name = yield* streamName(id, news.name);
       const http = desiredHttp(news.http);
 
-      // 1. Observe — the cached streamId is a hint, not a guarantee; a
+      // 1. Observe -- the cached streamId is a hint, not a guarantee; a
       //    missing stream falls through to a name lookup and then create.
       let observed = output?.streamId
         ? yield* getStream(output.accountId ?? accountId, output.streamId)
@@ -469,7 +469,7 @@ export const StreamProvider = () =>
         observed = yield* findStreamByName(accountId, name);
       }
 
-      // 2. Ensure — create when missing. Stream names are unique, so an
+      // 2. Ensure -- create when missing. Stream names are unique, so an
       //    AlreadyExists is a race (or recovery from a lost state write):
       //    fall back to the name lookup.
       if (!observed) {
@@ -494,7 +494,7 @@ export const StreamProvider = () =>
           );
       }
 
-      // 3. Sync — http and workerBinding are the only mutable aspects.
+      // 3. Sync -- http and workerBinding are the only mutable aspects.
       //    Diff observed cloud state against the declared desired state
       //    and PATCH only the delta; skip the API entirely on a no-op.
       const patch: pipelines.PatchStreamRequest = {
@@ -527,7 +527,7 @@ export const StreamProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      // A dependent pipeline's own deletion may still be propagating —
+      // A dependent pipeline's own deletion may still be propagating --
       // ride out `StreamInUse` (HTTP 422 "still in use") with a bounded
       // retry. A stream that is already gone is success.
       yield* pipelines
@@ -656,7 +656,7 @@ interface DesiredHttp {
 }
 
 /**
- * Desired HTTP ingest settings. Omitted (or `false`) means no endpoint —
+ * Desired HTTP ingest settings. Omitted (or `false`) means no endpoint --
  * Cloudflare's own default is a public, unauthenticated endpoint.
  */
 const desiredHttp = (http: boolean | StreamHttp | undefined): DesiredHttp => {

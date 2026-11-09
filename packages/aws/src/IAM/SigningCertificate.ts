@@ -128,7 +128,7 @@ export const SigningCertificateProvider = () =>
       };
     }),
     reconcile: Effect.fn(function* ({ news, output, session }) {
-      // Observe — certificate ids are AWS-generated; we can only locate
+      // Observe -- certificate ids are AWS-generated; we can only locate
       // the live entry via the prior output. The certificate body is
       // immutable (`diff` triggers replacement on body change), so a
       // missing entry always means we need to upload.
@@ -141,7 +141,7 @@ export const SigningCertificateProvider = () =>
           )
         : undefined;
 
-      // Ensure — upload when missing.
+      // Ensure -- upload when missing.
       let cert = observed;
       if (!cert?.CertificateId) {
         const uploaded = yield* iam.uploadSigningCertificate({
@@ -151,7 +151,7 @@ export const SigningCertificateProvider = () =>
         cert = uploaded.Certificate;
       }
 
-      // Sync — apply the desired status when it differs.
+      // Sync -- apply the desired status when it differs.
       const desiredStatus = news.status ?? cert.Status;
       if (desiredStatus !== cert.Status) {
         yield* iam.updateSigningCertificate({

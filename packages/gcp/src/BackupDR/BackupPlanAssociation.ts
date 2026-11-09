@@ -41,11 +41,11 @@ export type BackupPlanAssociationProps = {
    * Association id (the `{backupPlanAssociation}` segment of
    * `projects/{project}/locations/{location}/backupPlanAssociations/{backupPlanAssociation}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
-   * and logical id. Immutable — changing it replaces the association.
+   * and logical id. Immutable -- changing it replaces the association.
    */
   backupPlanAssociationId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the association. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
@@ -54,12 +54,12 @@ export type BackupPlanAssociationProps = {
   /**
    * Workload resource the plan is applied to. Resource name
    * (`projects/{project}/zones/{zone}/instances/{instance}`) or full URI.
-   * Immutable — changing it replaces the association.
+   * Immutable -- changing it replaces the association.
    */
   resource: string;
   /**
    * Workload resource type, e.g. `compute.googleapis.com/Instance`.
-   * Immutable — changing it replaces the association.
+   * Immutable -- changing it replaces the association.
    */
   resourceType: string;
   /**
@@ -92,7 +92,7 @@ export type BackupPlanAssociation = Resource<
     dataSource: string | undefined;
     /** Backup plan revision name. */
     backupPlanRevisionName: string | undefined;
-    /** User-friendly revision id (`v0`, `v1`, …). */
+    /** User-friendly revision id (`v0`, `v1`, ...). */
     backupPlanRevisionId: string | undefined;
     /** Per-rule backup status. */
     rulesConfigInfo: RuleConfigInfo[];
@@ -114,7 +114,7 @@ export type BackupPlanAssociation = Resource<
 >;
 
 /**
- * A Backup and DR backup plan association — applies a Backup Plan to a
+ * A Backup and DR backup plan association -- applies a Backup Plan to a
  * workload (Compute instance, Cloud SQL, AlloyDB, Filestore, or disk).
  *
  * Associations have no labels field. Nuke discovers them by following the

@@ -16,17 +16,17 @@ export interface SetDesiredCapacityRequest extends Omit<
  * Runtime binding for the `SetDesiredCapacity` operation (IAM action
  * `autoscaling:SetDesiredCapacity` scoped to the group ARN).
  *
- * Manually sets the size of the bound Auto Scaling Group — e.g. a Lambda that
+ * Manually sets the size of the bound Auto Scaling Group -- e.g. a Lambda that
  * scales a fleet up ahead of a known traffic spike or down to zero overnight.
  * Provide the implementation with
  * `Effect.provide(AWS.AutoScaling.SetDesiredCapacityHttp)`.
  * ### Manual Scaling
  * **Example:** Scale the fleet to a fixed size
  * ```typescript
- * // init — bind the operation to the group
+ * // init -- bind the operation to the group
  * const setDesiredCapacity = yield* AWS.AutoScaling.SetDesiredCapacity(group);
  *
- * // runtime — set the fleet size, honoring the group's cooldown
+ * // runtime -- set the fleet size, honoring the group's cooldown
  * yield* setDesiredCapacity({ DesiredCapacity: 4, HonorCooldown: true });
  * ```
  *

@@ -6,8 +6,8 @@ import type { SearchJob } from "./SearchJob.ts";
 /**
  * Shared scaffolding for BackupSearch HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, makeSearchJobScopedHttpBinding({ … }))` over the
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, makeSearchJobScopedHttpBinding({ ... }))` over the
  * builder below. Everything except the operation and the IAM action list is
  * boilerplate.
  *

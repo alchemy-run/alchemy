@@ -13,7 +13,7 @@ import type { EventDataStore } from "./EventDataStore.ts";
  * ### Querying CloudTrail Lake
  * **Example:** Generate SQL from a Prompt
  * ```typescript
- * // init — bind the operation to the event data store
+ * // init -- bind the operation to the event data store
  * const generateQuery = yield* AWS.CloudTrail.GenerateQuery(store);
  *
  * // runtime

@@ -388,7 +388,7 @@ const inferProxyEngineFamily = (engine: string) => {
  * ### Querying from a Function
  * **Example:** Query over the Data API
  * ```typescript
- * // the Data API is enabled by default (dataApi: true) — bind
+ * // the Data API is enabled by default (dataApi: true) -- bind
  * // AWS.RDSData.ExecuteStatement to query without a VPC socket
  * const executeStatement = yield* AWS.RDSData.ExecuteStatement(db.cluster, {
  *   secret: db.secret,

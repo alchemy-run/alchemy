@@ -175,7 +175,7 @@ export const DaytonaAuth = AuthProviderLayer<DaytonaAuthConfig, DaytonaResolvedC
           {
             value: "oauth" as const,
             label: "Sign in",
-            description: "recommended — device login; can also manage the organization",
+            description: "recommended \u2014 device login; can also manage the organization",
           },
           {
             value: "stored" as const,

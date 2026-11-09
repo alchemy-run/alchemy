@@ -6,14 +6,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `b2bi:GenerateMapping`.
  *
  * Generates a mapping template (JSONATA or XSLT) from a sample input and
- * desired output document using AI-assisted mapping — useful for building
+ * desired output document using AI-assisted mapping -- useful for building
  * self-service EDI onboarding flows where trading partners supply sample
  * documents. `mappingAccuracy` reports the model's confidence. Provide the
  * implementation with `Effect.provide(AWS.B2BI.GenerateMappingHttp)`.
  * ### Generating Mappings
  * **Example:** Generate a JSONATA Template from Samples
  * ```typescript
- * // init — account-level, no resource argument
+ * // init -- account-level, no resource argument
  * const generateMapping = yield* AWS.B2BI.GenerateMapping();
  *
  * // runtime

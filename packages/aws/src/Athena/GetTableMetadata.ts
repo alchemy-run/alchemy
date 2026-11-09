@@ -7,13 +7,13 @@ import type { DataCatalog } from "./DataCatalog.ts";
  * Runtime binding for `athena:GetTableMetadata`.
  *
  * Reads a single table's metadata (columns, partition keys, table type) from
- * the bound data catalog — the catalog name is injected automatically.
+ * the bound data catalog -- the catalog name is injected automatically.
  * Provide the implementation with
  * `Effect.provide(AWS.Athena.GetTableMetadataHttp)`.
  * ### Browsing Catalog Metadata
  * **Example:** Read a Table's Columns
  * ```typescript
- * // init — bind the operation to the data catalog
+ * // init -- bind the operation to the data catalog
  * const getTableMetadata = yield* AWS.Athena.GetTableMetadata(catalog);
  *
  * // runtime

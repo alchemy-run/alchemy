@@ -15,7 +15,7 @@ export interface DeleteResourceSetRequest extends fms.DeleteResourceSetRequest {
  * ### Resource Sets
  * **Example:** Delete a Resource Set
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const deleteResourceSet = yield* AWS.FMS.DeleteResourceSet();
  *
  * // runtime

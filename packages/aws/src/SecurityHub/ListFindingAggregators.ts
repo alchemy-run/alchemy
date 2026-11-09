@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `securityhub:ListFindingAggregators`.
  *
  * Lists the cross-Region finding aggregators configured in the account.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.SecurityHub.ListFindingAggregatorsHttp)`.
  * ### Custom Actions, Automation Rules & Aggregation
  * **Example:** List Finding Aggregators
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listFindingAggregators = yield* AWS.SecurityHub.ListFindingAggregators();
  *
  * // runtime

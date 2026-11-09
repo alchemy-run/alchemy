@@ -5,7 +5,7 @@ import type { DataSource } from "./DataSource.ts";
 
 /**
  * The `IngestKnowledgeBaseDocuments` request with the binding-injected
- * `knowledgeBaseId` and `dataSourceId` removed — they are supplied
+ * `knowledgeBaseId` and `dataSourceId` removed -- they are supplied
  * automatically from the bound {@link DataSource}.
  */
 export interface IngestKnowledgeBaseDocumentsRequest extends Omit<
@@ -14,7 +14,7 @@ export interface IngestKnowledgeBaseDocumentsRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `bedrock-agent:IngestKnowledgeBaseDocuments` — ingest
+ * Runtime binding for `bedrock-agent:IngestKnowledgeBaseDocuments` -- ingest
  * documents directly into the bound {@link DataSource}'s knowledge base
  * (inline text or S3 references) without running a full ingestion job.
  * The data source must be of type `CUSTOM` for inline content.

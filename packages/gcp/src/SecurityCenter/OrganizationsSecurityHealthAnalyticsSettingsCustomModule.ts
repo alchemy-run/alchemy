@@ -40,19 +40,19 @@ export type OrganizationsSecurityHealthAnalyticsSettingsCustomModuleProps = {
    * Module id (the `{customModule}` segment of
    * `organizations/{organization}/securityHealthAnalyticsSettings/customModules/{customModule}`).
    * Server-assigned on create. Supply it to target an existing module.
-   * Immutable — changing it replaces the module.
+   * Immutable -- changing it replaces the module.
    */
   moduleId?: string;
   /**
    * Parent organization (`organizations/{organization}` or the numeric id).
    * Defaults to the project's Resource Manager
-   * ancestor. Immutable — changing it replaces the module.
+   * ancestor. Immutable -- changing it replaces the module.
    */
   organization?: string;
   /**
    * Display name. Becomes the finding category. Must start with an
    * uppercase letter, contain only letters, digits, or underscores, and
-   * be at most 128 characters. Immutable — changing it replaces the
+   * be at most 128 characters. Immutable -- changing it replaces the
    * module.
    */
   displayName?: string;
@@ -107,7 +107,7 @@ export type OrganizationsSecurityHealthAnalyticsSettingsCustomModule = Resource<
 /**
  * An organization-scoped Security Health Analytics custom module.
  *
- * Custom modules have no labels field — Alchemy stamps ownership into
+ * Custom modules have no labels field -- Alchemy stamps ownership into
  * `customConfig.description` so `list` / nuke can find them. Module id,
  * organization, and display name are identity (the id is server-assigned).
  * Enablement and custom config update in place.

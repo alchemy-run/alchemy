@@ -7,8 +7,8 @@ import type { AttributeGroup } from "./AttributeGroup.ts";
 /**
  * Shared scaffolding for AppRegistry HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the three
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the three
  * builders below. Everything except the operation, the IAM action list, and
  * the injected identifier is boilerplate.
  *

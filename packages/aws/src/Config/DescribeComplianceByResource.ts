@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `config:DescribeComplianceByResource` — read whether
+ * Runtime binding for `config:DescribeComplianceByResource` -- read whether
  * evaluated resources comply with the Config rules that evaluate them.
  *
  * Provide `Config.DescribeComplianceByResourceHttp` on the hosting Lambda Function to
@@ -11,7 +11,7 @@ import type * as Effect from "effect/Effect";
  * ### Reading Compliance
  * **Example:** Check Resource Compliance
  * ```typescript
- * // init — grants config:DescribeComplianceByResource
+ * // init -- grants config:DescribeComplianceByResource
  * const describeComplianceByResource = yield* AWS.Config.DescribeComplianceByResource();
  *
  * // runtime

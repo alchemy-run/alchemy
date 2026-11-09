@@ -10,7 +10,7 @@ import type { WirelessDevice } from "./WirelessDevice.ts";
 export interface DeleteQueuedMessagesRequest extends Omit<iotw.DeleteQueuedMessagesRequest, "Id"> {}
 
 /**
- * Runtime binding for `iotwireless:DeleteQueuedMessages` — delete queued
+ * Runtime binding for `iotwireless:DeleteQueuedMessages` -- delete queued
  * downlink messages for the bound wireless device from a deployed Lambda or
  * Task.
  *
@@ -24,7 +24,7 @@ export interface DeleteQueuedMessagesRequest extends Omit<iotw.DeleteQueuedMessa
  * // init
  * const deleteQueued = yield* AWS.IoTWireless.DeleteQueuedMessages(device);
  *
- * // runtime — "*" deletes every queued message
+ * // runtime -- "*" deletes every queued message
  * yield* deleteQueued({ MessageId: "*" });
  * // on the Function effect:
  * // .pipe(Effect.provide(AWS.IoTWireless.DeleteQueuedMessagesHttp))

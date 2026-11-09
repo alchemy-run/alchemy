@@ -41,7 +41,7 @@ const DEFAULT_RETRIES = 2;
  * `send()`/`sendBatch()` calls on the `queue` binding (and dead-letter forwards
  * from other brokers) into HTTP requests targeting this service; we forward
  * them unchanged to the queue's singleton broker Durable Object, which is
- * hosted in this same service (a same-service Durable Object binding — direct
+ * hosted in this same service (a same-service Durable Object binding -- direct
  * cross-service Durable Object references are not supported by the runtime).
  */
 export default {

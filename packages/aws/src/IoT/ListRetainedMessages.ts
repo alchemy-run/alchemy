@@ -6,7 +6,7 @@ export interface ListRetainedMessagesRequest extends iotdata.ListRetainedMessage
 
 /**
  * Runtime binding for the IoT data-plane `ListRetainedMessages` operation
- * (IAM action `iot:ListRetainedMessages`, granted on `*` — the action does
+ * (IAM action `iot:ListRetainedMessages`, granted on `*` -- the action does
  * not support resource-level permissions).
  *
  * Returns summaries (topic, payload size, QoS) of all retained MQTT

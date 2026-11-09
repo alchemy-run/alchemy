@@ -24,5 +24,5 @@ export * from "./RuleGroupsNamespace.ts";
 export * from "./Scraper.ts";
 export * from "./ScraperLoggingConfiguration.ts";
 export * from "./Workspace.ts";
-// NOTE: BindingHttp.ts and RemoteWriteCodec.ts are internal scaffolding —
+// NOTE: BindingHttp.ts and RemoteWriteCodec.ts are internal scaffolding --
 // deliberately NOT exported.

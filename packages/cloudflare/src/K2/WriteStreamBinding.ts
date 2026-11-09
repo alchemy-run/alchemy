@@ -9,7 +9,7 @@ import { WriteStream } from "./WriteStream.ts";
 import { makeWriteStreamClient } from "./WriteStreamClient.ts";
 
 /**
- * The runtime shape of a `k2` Worker binding — `env.ORDERS` for a
+ * The runtime shape of a `k2` Worker binding -- `env.ORDERS` for a
  * `K2.Stream` in a Worker's `env`. `@cloudflare/workers-types` does not
  * declare it yet. `send` resolves (does not throw) on API errors; a
  * rejected promise means the append outcome is unknown.

@@ -10,7 +10,7 @@ export interface DescribeThingRequest extends Omit<iot.DescribeThingRequest, "th
  * `iot:DescribeThing`).
  *
  * Bind it to a {@link Thing} to read the thing's registry entry (attributes,
- * thing type, version) at runtime — the thing name is injected
+ * thing type, version) at runtime -- the thing name is injected
  * automatically. Provide the implementation with
  * `Effect.provide(AWS.IoT.DescribeThingHttp)`.
  * ### Registry

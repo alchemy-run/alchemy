@@ -6,7 +6,7 @@ export interface ListThingsRequest extends iot.ListThingsRequest {}
 
 /**
  * Runtime binding for the `ListThings` operation (IAM action
- * `iot:ListThings`, granted on `*` — the action does not support
+ * `iot:ListThings`, granted on `*` -- the action does not support
  * resource-level permissions).
  *
  * Lists things in the registry, optionally filtered by attribute or thing

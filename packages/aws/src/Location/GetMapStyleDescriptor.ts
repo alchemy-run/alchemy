@@ -25,7 +25,7 @@ export interface GetMapStyleDescriptorRequest extends Omit<
  * const getStyle = yield* Location.GetMapStyleDescriptor(map);
  *
  * const style = yield* getStyle();
- * // style.Blob → style JSON bytes, style.ContentType → "application/json"
+ * // style.Blob -> style JSON bytes, style.ContentType -> "application/json"
  * ```
  *
  * @binding

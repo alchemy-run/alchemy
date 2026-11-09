@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 export interface GetInsightImpactGraphRequest extends xray.GetInsightImpactGraphRequest {}
 
 /**
- * Retrieve a structural service graph filtered by insight — which
+ * Retrieve a structural service graph filtered by insight -- which
  * services the insight's anomaly impacted over a time window.
  *
  * Bind the operation in the function's init phase to get a runtime callable;
@@ -17,7 +17,7 @@ export interface GetInsightImpactGraphRequest extends xray.GetInsightImpactGraph
  * ```typescript
  * import * as XRay from "@alchemy.run/aws/XRay";
  *
- * // init — grants xray:GetInsightImpactGraph
+ * // init -- grants xray:GetInsightImpactGraph
  * const getInsightImpactGraph = yield* XRay.GetInsightImpactGraph();
  *
  * // runtime

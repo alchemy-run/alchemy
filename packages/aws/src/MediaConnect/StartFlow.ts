@@ -8,14 +8,14 @@ import type { Flow } from "./Flow.ts";
  *
  * Starts the bound {@link Flow}, transitioning it from `STANDBY` through
  * `STARTING` to `ACTIVE`. An ACTIVE flow ingests and egresses media and
- * bills hourly — pair with {@link StopFlow} to control transport cost
+ * bills hourly -- pair with {@link StopFlow} to control transport cost
  * (e.g. a scheduler Lambda that runs the flow only during broadcast
  * windows). The flow ARN is injected from the binding. Provide the
  * implementation with `Effect.provide(AWS.MediaConnect.StartFlowHttp)`.
  * ### Controlling Flows
  * **Example:** Start the Flow for a Broadcast Window
  * ```typescript
- * // init — bind the operation to the flow
+ * // init -- bind the operation to the flow
  * const startFlow = yield* AWS.MediaConnect.StartFlow(flow);
  *
  * // runtime

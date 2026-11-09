@@ -35,7 +35,7 @@ export type FolderSecurityHealthAnalyticsSettingsCustomModuleProps = {
   /**
    * Parent folder (`folders/{folder}` or the numeric id). Defaults to
    * the project's Resource Manager folder ancestor.
-   * Immutable — changing it replaces the module.
+   * Immutable -- changing it replaces the module.
    */
   folder?: string;
   /**
@@ -102,7 +102,7 @@ export type FolderSecurityHealthAnalyticsSettingsCustomModule = Resource<
 /**
  * A folder-scoped Security Health Analytics custom module.
  *
- * Custom modules have no labels field — Alchemy stamps ownership into
+ * Custom modules have no labels field -- Alchemy stamps ownership into
  * `customConfig.description` so `list` / nuke can find them. The module id
  * is assigned by the API. Folder is identity. Display name, custom config,
  * and enablement update in place.

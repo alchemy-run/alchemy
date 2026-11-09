@@ -32,23 +32,23 @@ export type DatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessageProps = {
   /**
    * Parent feedback thread resource name
    * `projects/{project}/datasets/{dataset}/annotatedDatasets/{annotatedDataset}/feedbackThreads/{feedbackThread}`.
-   * Immutable — changing it replaces the message.
+   * Immutable -- changing it replaces the message.
    */
   parent: string;
   /**
    * Feedback message id (the last path segment). Server-assigned on
-   * create. Immutable — changing it replaces the message.
+   * create. Immutable -- changing it replaces the message.
    */
   feedbackMessageId?: string;
   /**
    * String content of the feedback. Maximum 10,000 characters. Messages
    * have no labels field, so Alchemy stamps ownership into this field.
-   * Immutable — changing it replaces the message.
+   * Immutable -- changing it replaces the message.
    */
   body?: string;
   /**
    * Image payload for this feedback, if the comment is an image.
-   * Immutable — changing it replaces the message.
+   * Immutable -- changing it replaces the message.
    */
   image?: string;
 };
@@ -85,7 +85,7 @@ export type DatasetsAnnotatedDatasetsFeedbackThreadsFeedbackMessage = Resource<
  * A Data Labeling feedback message on a labeling-task feedback thread.
  *
  * Create is a long-running operation. Message ids are server-assigned.
- * Parent thread, body, and image are immutable — changing them replaces
+ * Parent thread, body, and image are immutable -- changing them replaces
  * the message. There is no labels API, so Alchemy stamps ownership into
  * `body` so `list` / nuke can find them.
  *

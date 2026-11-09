@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `osis:ValidatePipeline`.
  *
  * Checks whether a Data Prepper pipeline configuration body is valid prior to
- * creation — the building block of config-authoring tooling (validate a
+ * creation -- the building block of config-authoring tooling (validate a
  * generated configuration before calling `CreatePipeline`, or lint
  * user-submitted configs in a self-service portal). Account-level: no
  * resource argument. Provide the implementation with
@@ -14,7 +14,7 @@ import type * as Effect from "effect/Effect";
  * ### Authoring Pipeline Configurations
  * **Example:** Validate a Configuration Body
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const validatePipeline = yield* AWS.OSIS.ValidatePipeline();
  *
  * // runtime

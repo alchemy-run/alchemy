@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 export interface GetInternetEventRequest extends im.GetInternetEventInput {}
 
 /**
- * Runtime binding for `internetmonitor:GetInternetEvent` — read the detail
+ * Runtime binding for `internetmonitor:GetInternetEvent` -- read the detail
  * (impacted client location, start/end time, type, status) of one global
  * internet event from the outages map Internet Monitor publishes for all
  * AWS customers. Internet events are account-level; no monitor is required.
@@ -15,7 +15,7 @@ export interface GetInternetEventRequest extends im.GetInternetEventInput {}
  * ### Reading Internet Events
  * **Example:** Read an Internet Event by Id
  * ```typescript
- * // init — grants internetmonitor:GetInternetEvent
+ * // init -- grants internetmonitor:GetInternetEvent
  * const getInternetEvent = yield* AWS.InternetMonitor.GetInternetEvent();
  *
  * // runtime

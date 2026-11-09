@@ -7,14 +7,14 @@ import type { CloudControlBindingOptions } from "./BindingOptions.ts";
  * Runtime binding for `cloudformation:ListResources`.
  *
  * Discovers resources of a given CloudFormation type in the account and
- * Region — whether or not they were provisioned through Cloud Control.
+ * Region -- whether or not they were provisioned through Cloud Control.
  * Because Cloud Control invokes the resource type's list handler with the
  * caller's credentials, pass the handler's underlying permissions via
  * {@link CloudControlBindingOptions.handlerPolicyStatements}.
  * ### Reading Resources
  * **Example:** List SSM Parameters
  * ```typescript
- * // init — account-level; grant the list handler's permissions too
+ * // init -- account-level; grant the list handler's permissions too
  * const listResources = yield* CloudControl.ListResources({
  *   handlerPolicyStatements: [
  *     { Effect: "Allow", Action: ["ssm:DescribeParameters"], Resource: ["*"] },

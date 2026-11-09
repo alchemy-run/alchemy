@@ -30,16 +30,16 @@ export interface ViteProps extends FrameworkSiteProps {
 /**
  * Deploy a plain [Vite](https://vite.dev) application to Fly: a Service
  * serving the `vite build` output from a tiny static-file server. For
- * client-only projects — React/Vue/Solid SPAs, `index.html` multi-page
- * apps — whose entire deployable output is static assets.
+ * client-only projects -- React/Vue/Solid SPAs, `index.html` multi-page
+ * apps -- whose entire deployable output is static assets.
  *
  * The build runs through `@alchemy.run/frontend-frameworks/vite` with the
- * `@alchemy.run/frontend-frameworks/vite/node` deploy target — the package
+ * `@alchemy.run/frontend-frameworks/vite/node` deploy target -- the package
  * must be installed in your project. Your project's own `vite.config.*`
  * (plugins included) drives the build.
  *
  * During `alchemy dev` the site is Vite's own dev server (native HMR) and
- * no cloud resources are created — the site's `url` is the dev server's
+ * no cloud resources are created -- the site's `url` is the dev server's
  * local address. `Alchemy.remote()` opts back into the full deployment.
  *
  *

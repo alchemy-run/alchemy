@@ -4,7 +4,7 @@ import { makeLexAliasHttpBinding } from "./BindingHttp.ts";
 import { RecognizeText, type RecognizeTextRequest } from "./RecognizeText.ts";
 
 /**
- * HTTP implementation of {@link RecognizeText} — calls the
+ * HTTP implementation of {@link RecognizeText} -- calls the
  * `lex-runtime-v2` `RecognizeText` operation with the Lambda role's
  * credentials and grants the host `lex:RecognizeText` on the alias.
  */

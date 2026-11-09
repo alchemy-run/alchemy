@@ -844,7 +844,7 @@ const loginGcloud = Effect.fn(function* (args: ReadonlyArray<string>, env: Recor
   );
   yield* Interaction.browserLogin({
     provider: "GCP",
-    waitingLabel: "waiting for browser authorization…",
+    waitingLabel: "waiting for browser authorization\u2026",
     url,
     waitFor: Fiber.join(processFiber),
   });

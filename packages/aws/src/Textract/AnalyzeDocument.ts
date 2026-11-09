@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `textract:AnalyzeDocument` — synchronous analysis of
+ * Runtime binding for `textract:AnalyzeDocument` -- synchronous analysis of
  * relationships in a document: forms (key-value pairs), tables, layout,
  * signatures, and natural-language queries. Pass the document as raw bytes
  * or as an S3 object reference; the caller needs `s3:GetObject` on the

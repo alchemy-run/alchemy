@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `mediatailor:ListAlerts` — read the operational alerts
+ * Runtime binding for `mediatailor:ListAlerts` -- read the operational alerts
  * MediaTailor raises for a channel-assembly resource (channel, source
  * location, VOD/live source) identified by ARN.
  *

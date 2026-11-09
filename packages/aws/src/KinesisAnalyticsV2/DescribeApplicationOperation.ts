@@ -9,7 +9,7 @@ export interface DescribeApplicationOperationRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `kinesisanalytics:DescribeApplicationOperation` —
+ * Runtime binding for `kinesisanalytics:DescribeApplicationOperation` --
  * reads the status of an async operation on the bound application (the
  * `OperationId` returned by start/stop/rollback/update), e.g. to poll a
  * start to completion.

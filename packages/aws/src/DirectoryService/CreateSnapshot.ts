@@ -8,7 +8,7 @@ import type { Directory } from "./Directory.ts";
  * `ds:CreateSnapshot`), scoped to one {@link Directory}.
  *
  * Takes a manual snapshot of the bound Simple AD or Managed Microsoft AD
- * directory — e.g. before a scheduled change — returning the new
+ * directory -- e.g. before a scheduled change -- returning the new
  * `SnapshotId`. Manual snapshots are limited per directory (see
  * {@link GetSnapshotLimits}). The directory id is injected from the binding.
  * Provide the implementation with
@@ -16,7 +16,7 @@ import type { Directory } from "./Directory.ts";
  * ### Managing Snapshots
  * **Example:** Snapshot the Directory Before a Change
  * ```typescript
- * // init — bind the operation to the directory
+ * // init -- bind the operation to the directory
  * const createSnapshot = yield* AWS.DirectoryService.CreateSnapshot(directory);
  *
  * // runtime

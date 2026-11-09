@@ -6,19 +6,19 @@ import type * as NodeVm from "node:vm";
 // Alchemy modifications are licensed under Apache-2.0.
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 /**
- * Next.js dev v2 — real `next dev` (Turbopack HMR) with Cloudflare bindings,
+ * Next.js dev v2 -- real `next dev` (Turbopack HMR) with Cloudflare bindings,
  * wrangler-free.
  *
  * {@link start} runs the documented custom-server API programmatically
  * (`next({ dev: true, dir, hostname, port })` + `prepare()` +
  * `getRequestHandler()` attached to an http.Server we own), so the caller
- * controls the port/URL and shutdown is a clean `app.close()` — no CLI fork,
+ * controls the port/URL and shutdown is a clean `app.close()` -- no CLI fork,
  * no signal handlers, no `process.exit` choreography.
  *
  * Before the dev server starts, a `cloudflare-runtime` platform proxy
  * ({@link PlatformProxy.open}) is opened with the worker's binding hooks and
  * the resulting `{ env, cf, ctx }` is planted on
- * `globalThis[Symbol.for("__cloudflare-context__")]` — the exact contract
+ * `globalThis[Symbol.for("__cloudflare-context__")]` -- the exact contract
  * `@opennextjs/cloudflare`'s `getCloudflareContext()` reads (see upstream
  * `src/api/cloudflare-context.ts`). `vm.runInContext` is additionally patched
  * so Next's edge-runtime sandbox (middleware, edge routes) sees the same
@@ -27,7 +27,7 @@ import type * as NodeVm from "node:vm";
  * without wrangler.
  *
  * Fidelity notes (documented in the package README): app code runs in Node
- * (or Next's edge-runtime VM), not workerd — bindings round-trip through the
+ * (or Next's edge-runtime VM), not workerd -- bindings round-trip through the
  * proxy, but CF-specific runtime behavior (workerd APIs and limits, ISR/cache
  * semantics of the built worker) still needs the preview mode.
  */
@@ -61,8 +61,8 @@ export interface DevServerOptions {
   /** Port to listen on. Defaults to an ephemeral port. */
   readonly port?: number | undefined;
   /**
-   * Bindings to expose through `getCloudflareContext().env` — the same hook
-   * shapes `Runtime.start` accepts (`Text.local`, `KvNamespace.local`, …).
+   * Bindings to expose through `getCloudflareContext().env` -- the same hook
+   * shapes `Runtime.start` accepts (`Text.local`, `KvNamespace.local`, ...).
    */
   readonly bindings?: BindingHooks | undefined;
   /** Compatibility date for the binding-proxy worker. */
@@ -104,7 +104,7 @@ let vmPatched = false;
 /**
  * Mirror of OpenNext's `monkeyPatchVmModuleEdgeContext`: Next dev evaluates
  * edge functions (middleware, edge routes) with `vm.runInContext`, whose
- * sandbox does not inherit `globalThis` symbols — inject the context into
+ * sandbox does not inherit `globalThis` symbols -- inject the context into
  * every contextified object so `getCloudflareContext()` works there too.
  * Patched once per process; a cleared {@link currentContext} makes it a
  * pass-through.
@@ -113,7 +113,7 @@ const patchVmRunInContext = (): void => {
   if (vmPatched) return;
   vmPatched = true;
   // The ESM namespace of "node:vm" is frozen; patch the (shared, mutable)
-  // CJS exports object — the one Next's sandbox `require`s.
+  // CJS exports object -- the one Next's sandbox `require`s.
   const vm = createRequire(import.meta.url)("vm") as typeof NodeVm;
   const original = vm.runInContext.bind(vm);
   const patched: typeof vm.runInContext = (code, contextifiedObject, options) => {
@@ -174,7 +174,7 @@ type CreateNextServer = (options: {
 }) => NextDevApp;
 
 /**
- * Resolve the *project's* `next` (public entry, `dist/server/next.js`) — the
+ * Resolve the *project's* `next` (public entry, `dist/server/next.js`) -- the
  * fixture/app's installed copy is the one driven, never a hoisted sibling.
  * The entry is CJS; unwrap the ESM-interop `default` nesting to the
  * `createServer` function.

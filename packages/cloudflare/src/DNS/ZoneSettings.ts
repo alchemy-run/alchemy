@@ -36,7 +36,7 @@ export interface ZoneDnsNameservers {
 }
 
 /**
- * Components of the zone's SOA record. Every field is optional —
+ * Components of the zone's SOA record. Every field is optional --
  * omitted fields keep their current value.
  */
 export interface ZoneDnsSoa {
@@ -58,7 +58,7 @@ export interface ZoneDnsSoa {
 
 export interface ZoneDnsSettingsProps {
   /**
-   * Zone whose DNS settings are managed. Stable — the settings object
+   * Zone whose DNS settings are managed. Stable -- the settings object
    * is a per-zone singleton, so changing the zone triggers a
    * replacement (the old zone's managed settings are restored to their
    * pre-management values).
@@ -68,7 +68,7 @@ export interface ZoneDnsSettingsProps {
    * Flatten all CNAME records in the zone (a CNAME at the zone apex is
    * always flattened regardless).
    *
-   * Mutable — patched in place.
+   * Mutable -- patched in place.
    *
    * @default false
    */
@@ -76,18 +76,18 @@ export interface ZoneDnsSettingsProps {
   /**
    * Settings for internal zones (Enterprise Internal DNS only).
    *
-   * Mutable — patched in place.
+   * Mutable -- patched in place.
    */
   internalDns?: {
     /** Zone to resolve from when this internal zone has no match. */
     referenceZoneId?: string;
   };
   /**
-   * Enable multi-provider DNS — activates the zone even when
+   * Enable multi-provider DNS -- activates the zone even when
    * non-Cloudflare NS records exist and respects apex NS records during
    * outbound zone transfers.
    *
-   * Mutable — patched in place.
+   * Mutable -- patched in place.
    *
    * @default false
    */
@@ -99,7 +99,7 @@ export interface ZoneDnsSettingsProps {
    * which Cloudflare rejects from 2026-11-23); set
    * `type: "cloudflare.standard"` to turn them off.
    *
-   * Mutable — patched in place.
+   * Mutable -- patched in place.
    *
    * @default { type: "cloudflare.standard" }
    */
@@ -107,7 +107,7 @@ export interface ZoneDnsSettingsProps {
   /**
    * TTL (seconds) of the zone's NS records.
    *
-   * Mutable — patched in place.
+   * Mutable -- patched in place.
    *
    * @default 86400
    */
@@ -116,7 +116,7 @@ export interface ZoneDnsSettingsProps {
    * Allow a secondary zone to use proxied override records and CNAME
    * flattening at the apex (secondary zones only).
    *
-   * Mutable — patched in place.
+   * Mutable -- patched in place.
    *
    * @default false
    */
@@ -125,13 +125,13 @@ export interface ZoneDnsSettingsProps {
    * Components of the zone's SOA record. Only the fields you provide
    * are compared and patched; the rest keep their live values.
    *
-   * Mutable — patched in place.
+   * Mutable -- patched in place.
    */
   soa?: ZoneDnsSoa;
   /**
    * Whether the zone is a regular, CDN-only, or DNS-only zone.
    *
-   * Mutable — patched in place.
+   * Mutable -- patched in place.
    *
    * @default "standard"
    */
@@ -180,7 +180,7 @@ export interface ZoneDnsSettingsAttributes extends ZoneDnsSettingsSnapshot {
   initialSettings: ZoneDnsSettingsSnapshot;
   /**
    * Which top-level settings this resource has managed (union across
-   * all reconciles). Only these are restored on destroy — settings the
+   * all reconciles). Only these are restored on destroy -- settings the
    * user never touched are left alone.
    */
   managedKeys: ReadonlyArray<string>;
@@ -196,10 +196,10 @@ export type ZoneDnsSettings = Resource<
 
 /**
  * The DNS settings of a Cloudflare zone
- * (`/zones/{zone_id}/dns_settings`) — nameserver assignment, NS TTL,
+ * (`/zones/{zone_id}/dns_settings`) -- nameserver assignment, NS TTL,
  * SOA components, CNAME flattening, multi-provider mode, and zone mode.
  *
- * The settings object is a per-zone singleton — it always exists with
+ * The settings object is a per-zone singleton -- it always exists with
  * Cloudflare defaults, so this resource never creates or deletes
  * anything physical. Reconcile patches only the fields you declare
  * (and only when the observed value differs); destroy restores the
@@ -277,7 +277,7 @@ export const ZoneDnsSettingsProvider = () =>
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       // The settings object is a per-zone singleton with no account-wide
-      // list API — enumerate every zone and read its settings (every live
+      // list API -- enumerate every zone and read its settings (every live
       // zone always has one). Unmanaged here, so the observed snapshot is
       // both the current state and the captured baseline.
       const allZones = yield* listAllZones(accountId);
@@ -310,7 +310,7 @@ export const ZoneDnsSettingsProvider = () =>
       const o = olds as ZoneDnsSettingsProps;
       const n = news as ZoneDnsSettingsProps;
       // zoneId is the resource's identity (the settings object is a
-      // zone singleton). Input<string> — compare only once concrete.
+      // zone singleton). Input<string> -- compare only once concrete.
       const oldZoneId = output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
       if (oldZoneId !== undefined && typeof n.zoneId === "string" && oldZoneId !== n.zoneId) {
         return { action: "replace" } as const;
@@ -322,13 +322,13 @@ export const ZoneDnsSettingsProvider = () =>
       const zoneId = output?.zoneId ?? (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
       if (!zoneId) return undefined;
       const observed = yield* dns.getSettingZone({ zoneId }).pipe(
-        // Zone deleted out-of-band — its settings are gone with it.
+        // Zone deleted out-of-band -- its settings are gone with it.
         Effect.catchTag("InvalidRoute", () => Effect.undefined),
       );
       if (observed === undefined) return undefined;
       const snapshot = toSnapshot(observed);
       // Settings are a singleton that always exists with Cloudflare
-      // defaults — there is nothing to "own", so a cold read adopts
+      // defaults -- there is nothing to "own", so a cold read adopts
       // freely (never `Unowned`). The observed snapshot at adoption
       // time becomes the baseline restored on destroy.
       return {
@@ -343,11 +343,11 @@ export const ZoneDnsSettingsProvider = () =>
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
 
-      // 1. Observe — the settings object always exists for a live zone.
+      // 1. Observe -- the settings object always exists for a live zone.
       const observed = yield* dns.getSettingZone({ zoneId });
       let snapshot = toSnapshot(observed);
 
-      // 2. Capture — the pre-management snapshot, restored on destroy.
+      // 2. Capture -- the pre-management snapshot, restored on destroy.
       const initialSettings = output?.initialSettings ?? snapshot;
       // Track every key we have ever managed so destroy restores fields
       // even after the user drops them from props.
@@ -355,7 +355,7 @@ export const ZoneDnsSettingsProvider = () =>
         ...new Set([...(output?.managedKeys ?? []), ...declaredKeys(news)]),
       ].sort();
 
-      // 3. Sync — patch only the declared fields whose observed value
+      // 3. Sync -- patch only the declared fields whose observed value
       //    differs from the desired one; skip the API on no delta.
       const delta = computeDelta(news, snapshot);
       if (delta !== undefined) {
@@ -373,7 +373,7 @@ export const ZoneDnsSettingsProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { zoneId, initialSettings, managedKeys } = output;
-      // Observe — if the zone itself is gone, so are its settings.
+      // Observe -- if the zone itself is gone, so are its settings.
       const observed = yield* dns
         .getSettingZone({ zoneId })
         .pipe(Effect.catchTag("InvalidRoute", () => Effect.undefined));
@@ -471,7 +471,7 @@ const nameserversDiffer = (
   (desired.nsSet !== undefined && desired.nsSet !== observed.nsSet);
 
 /**
- * Build the PATCH body converging observed → desired for the fields the
+ * Build the PATCH body converging observed -> desired for the fields the
  * user declared. Returns `undefined` when nothing differs.
  */
 const computeDelta = (

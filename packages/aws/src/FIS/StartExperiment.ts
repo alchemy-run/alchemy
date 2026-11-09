@@ -7,7 +7,7 @@ import type { ExperimentTemplate } from "./ExperimentTemplate.ts";
  * Runtime binding for `fis:StartExperiment`.
  *
  * Starts a fault-injection experiment from the bound
- * {@link ExperimentTemplate} — the template's id is injected and the
+ * {@link ExperimentTemplate} -- the template's id is injected and the
  * idempotency `clientToken` is generated automatically. The IAM grant covers
  * both the template and the `experiment/*` ARN the started experiment is
  * created under. Provide the implementation with
@@ -15,7 +15,7 @@ import type { ExperimentTemplate } from "./ExperimentTemplate.ts";
  * ### Running Experiments
  * **Example:** Start an Experiment from the Bound Template
  * ```typescript
- * // init — bind the operation to the experiment template
+ * // init -- bind the operation to the experiment template
  * const startExperiment = yield* AWS.FIS.StartExperiment(template);
  *
  * // runtime

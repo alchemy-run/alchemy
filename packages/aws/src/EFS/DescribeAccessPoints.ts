@@ -16,7 +16,7 @@ export interface DescribeAccessPointsRequest extends Omit<
  * Runtime binding for the `DescribeAccessPoints` operation (IAM action
  * `elasticfilesystem:DescribeAccessPoints` on the file system ARN).
  *
- * Lists the bound {@link FileSystem}'s access points — e.g. to enumerate the
+ * Lists the bound {@link FileSystem}'s access points -- e.g. to enumerate the
  * per-tenant entry points created at runtime with
  * {@link CreateAccessPoint}. Provide the implementation with
  * `Effect.provide(AWS.EFS.DescribeAccessPointsHttp)`.

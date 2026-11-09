@@ -6,7 +6,7 @@ import type { Cluster } from "./Cluster.ts";
 /**
  * Runtime binding for `eks:DescribeCapability`.
  *
- * Reads one EKS capability's full state — the managed capability (e.g. Argo CD) installed on the bound cluster, its status, version, and configuration.
+ * Reads one EKS capability's full state -- the managed capability (e.g. Argo CD) installed on the bound cluster, its status, version, and configuration.
  * The cluster `clusterName` is injected from the bound {@link Cluster} and `eks:DescribeCapability` is granted on the cluster's sub-resource ARNs.
  * Provide the implementation with
  * `Effect.provide(AWS.EKS.DescribeCapabilityHttp)`.

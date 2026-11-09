@@ -21,17 +21,17 @@ export interface ExternalAccountBinding {
 export interface AccountProps {
   /**
    * The certificate authority: a preset ({@link LetsEncrypt},
-   * {@link ZeroSSL}, …) or `{ directoryUrl }`. Changing it replaces the
+   * {@link ZeroSSL}, ...) or `{ directoryUrl }`. Changing it replaces the
    * account.
    */
   ca: CertificateAuthority;
   /**
-   * Contact URLs (`mailto:…`) the CA notifies about expiry and incidents.
+   * Contact URLs (`mailto:...`) the CA notifies about expiry and incidents.
    * Updated in place.
    */
   contact?: string[];
   /**
-   * You must agree to the CA's terms of service. Explicit on purpose —
+   * You must agree to the CA's terms of service. Explicit on purpose --
    * never defaulted.
    */
   termsOfServiceAgreed: true;
@@ -55,7 +55,7 @@ export interface Account extends Resource<
     directoryUrl: string;
     /** PEM root trusted for the CA's HTTPS endpoint (private CAs only). */
     trustedRoot: string | undefined;
-    /** The account URL the CA assigned — the `kid` on every later request. */
+    /** The account URL the CA assigned -- the `kid` on every later request. */
     accountUrl: string;
     /** Observed account status (`valid`, `deactivated`, `revoked`). */
     status: string;
@@ -71,7 +71,7 @@ export interface Account extends Resource<
 > {}
 
 /**
- * An ACME account with a certificate authority — the identity that every
+ * An ACME account with a certificate authority -- the identity that every
  * {@link Certificate} and every runtime {@link IssueCertificate} call
  * signs with. One per CA per stack.
  *
@@ -92,7 +92,7 @@ export interface Account extends Resource<
  * ### External Account Binding
  * ZeroSSL and Google Trust Services bind ACME accounts to an existing
  * customer account with a key id + HMAC pair from their dashboard (ZeroSSL
- * also mints them over its REST API — see `@distilled.cloud/zerossl`).
+ * also mints them over its REST API -- see `@distilled.cloud/zerossl`).
  *
  * **Example:** ZeroSSL
  * ```typescript
@@ -154,7 +154,7 @@ const credentialsOf = (
       : { keyId: props.eab.keyId, hmacKey: unwrap(props.eab.hmacKey) },
 });
 
-/** `newAccount` with `onlyReturnExisting` — the account, or `undefined`. */
+/** `newAccount` with `onlyReturnExisting` -- the account, or `undefined`. */
 const observeAccount = (credentials: AccountCredentials) =>
   acme.newAccount({ onlyReturnExisting: true }).pipe(
     Effect.catchTag("AcmeAccountDoesNotExist", () => Effect.undefined),

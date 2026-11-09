@@ -7,7 +7,7 @@ import type * as Effect from "effect/Effect";
  *
  * Marks a sent message's feedback record as `RECEIVED` or `FAILED`. When
  * a message is sent with `MessageFeedbackEnabled: true`, End User
- * Messaging SMS waits for this signal — set `RECEIVED` when your
+ * Messaging SMS waits for this signal -- set `RECEIVED` when your
  * application observes the user acting on the message (e.g. entering the
  * one-time passcode); records not updated within an hour are marked
  * `FAILED`. Account-level: feedback acts on message IDs, so the
@@ -17,10 +17,10 @@ import type * as Effect from "effect/Effect";
  * ### Message Feedback
  * **Example:** Confirm an OTP Was Used
  * ```typescript
- * // init — bind the account-level operation
+ * // init -- bind the account-level operation
  * const putFeedback = yield* AWS.PinpointSMSVoiceV2.PutMessageFeedback();
  *
- * // runtime — after the user enters the code sent in `MessageId`
+ * // runtime -- after the user enters the code sent in `MessageId`
  * yield* putFeedback({
  *   MessageId: messageId,
  *   MessageFeedbackStatus: "RECEIVED",

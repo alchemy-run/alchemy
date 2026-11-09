@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 export interface GetDomainSuggestionsRequest extends route53domains.GetDomainSuggestionsRequest {}
 
 /**
- * Runtime binding for `route53domains:GetDomainSuggestions` — return a list
+ * Runtime binding for `route53domains:GetDomainSuggestions` -- return a list
  * of suggested domain names based on a seed name, optionally restricted to
  * names that are currently available for registration.
  *

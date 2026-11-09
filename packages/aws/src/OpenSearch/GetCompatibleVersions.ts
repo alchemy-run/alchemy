@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `GetCompatibleVersions` operation (IAM action
  * `es:GetCompatibleVersions`).
  *
- * Maps engine versions to the versions they can be upgraded to — for one domain (pass `DomainName`) or for every supported version. Provide the implementation with
+ * Maps engine versions to the versions they can be upgraded to -- for one domain (pass `DomainName`) or for every supported version. Provide the implementation with
  * `Effect.provide(AWS.OpenSearch.GetCompatibleVersionsHttp)`.
  * ### Engine Upgrades
  * **Example:** Find Valid Upgrade Targets
@@ -14,7 +14,7 @@ import type * as Effect from "effect/Effect";
  * const getCompatibleVersions = yield* OpenSearch.GetCompatibleVersions();
  *
  * const result = yield* getCompatibleVersions({ DomainName: name });
- * // result.CompatibleVersions?.[0]?.TargetVersions → upgrade targets
+ * // result.CompatibleVersions?.[0]?.TargetVersions -> upgrade targets
  * ```
  *
  * @binding

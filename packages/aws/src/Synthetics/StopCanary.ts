@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Canary } from "./Canary.ts";
 
 /**
- * Runtime binding for `synthetics:StopCanary` — stop future runs of the
+ * Runtime binding for `synthetics:StopCanary` -- stop future runs of the
  * bound {@link Canary} (an in-flight run completes on its own); the canary
  * name is injected automatically.
  *
@@ -13,10 +13,10 @@ import type { Canary } from "./Canary.ts";
  * ### Controlling the Canary
  * **Example:** Stop the Canary
  * ```typescript
- * // init — grants synthetics:StopCanary on the canary
+ * // init -- grants synthetics:StopCanary on the canary
  * const stopCanary = yield* AWS.Synthetics.StopCanary(canary);
  *
- * // runtime — a ConflictException means it is not currently running
+ * // runtime -- a ConflictException means it is not currently running
  * yield* stopCanary().pipe(
  *   Effect.catchTag("ConflictException", () => Effect.void),
  * );

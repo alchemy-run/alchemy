@@ -15,8 +15,8 @@ import { loadConfigProvider } from "../Util/ConfigProvider.ts";
 /**
  * The stack-specific half of the sidecar environment. One sidecar process
  * serves many stacks (the test harness shares a single child across all
- * test files), so this part travels per RPC session — as a query parameter
- * on the session websocket — rather than being baked into the child's env
+ * test files), so this part travels per RPC session -- as a query parameter
+ * on the session websocket -- rather than being baked into the child's env
  * at spawn time.
  */
 export interface SessionEnvironment {
@@ -86,7 +86,7 @@ export const fromProcessEnv: Effect.Effect<RpcServerEnvironment, unknown> = Conf
  * into the process env at spawn time. Used by children that serve exactly one
  * stack for their whole lifetime (e.g. the Vite dev-server child, which gets
  * an explicit environment from `startViteChild`). RPC sidecars do NOT use
- * this — their sessions each carry a {@link SessionEnvironment}.
+ * this -- their sessions each carry a {@link SessionEnvironment}.
  */
 export const fromEnv = () =>
   Layer.unwrap(
@@ -95,7 +95,7 @@ export const fromEnv = () =>
         environment.stack === undefined || environment.alchemyContext === undefined
           ? Effect.die(
               new Error(
-                `${RPC_SERVER_ENVIRONMENT_KEY} carries no stack/alchemyContext — this child requires the legacy single-stack environment`,
+                `${RPC_SERVER_ENVIRONMENT_KEY} carries no stack/alchemyContext \u2014 this child requires the legacy single-stack environment`,
               ),
             )
           : Effect.succeed(

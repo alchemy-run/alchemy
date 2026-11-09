@@ -136,7 +136,7 @@ export interface App extends Resource<
  * doesn't manage by its id.
  */
 export interface AppLookup {
-  /** Prisma App (Compute service) id, `cps_…`. */
+  /** Prisma App (Compute service) id, `cps_...`. */
   appId: string;
 }
 

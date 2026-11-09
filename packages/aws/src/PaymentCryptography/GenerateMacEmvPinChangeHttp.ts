@@ -9,7 +9,7 @@ import {
 import type { Key } from "./Key.ts";
 
 /**
- * HTTP implementation of {@link GenerateMacEmvPinChange} — bespoke (not
+ * HTTP implementation of {@link GenerateMacEmvPinChange} -- bespoke (not
  * scaffolded): the operation spans three keys (the new PIN PEK plus the
  * secure-messaging integrity and confidentiality keys). Grants the host
  * Function `payment-cryptography:GenerateMacEmvPinChange` on all three key

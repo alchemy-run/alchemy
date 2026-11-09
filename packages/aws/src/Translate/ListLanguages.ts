@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `translate:ListLanguages` — list the languages
+ * Runtime binding for `translate:ListLanguages` -- list the languages
  * (RFC-5646 codes and display names) Amazon Translate supports.
  *
  * ### Discovering Languages
@@ -14,7 +14,7 @@ import type * as Effect from "effect/Effect";
  *
  * // runtime
  * const result = yield* listLanguages({ MaxResults: 100 });
- * // result.Languages -> [{ LanguageCode: "es", LanguageName: "Spanish" }, …]
+ * // result.Languages -> [{ LanguageCode: "es", LanguageName: "Spanish" }, ...]
  * ```
  *
  * @binding

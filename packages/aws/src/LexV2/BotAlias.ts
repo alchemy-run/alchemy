@@ -19,7 +19,7 @@ import {
 } from "./internal.ts";
 
 /**
- * Lambda code hooks per locale (`localeId` → function ARN). Attached to the
+ * Lambda code hooks per locale (`localeId` -> function ARN). Attached to the
  * alias's `botAliasLocaleSettings` as
  * `codeHookSpecification.lambdaCodeHook` with interface version `1.0`.
  */
@@ -27,7 +27,7 @@ export interface BotAliasCodeHooks extends Record<string, string> {}
 
 /**
  * The binding contract of a bot alias: event sources contribute Lambda code
- * hooks (`localeId` → function ARN) that the provider merges with
+ * hooks (`localeId` -> function ARN) that the provider merges with
  * `props.codeHooks` and syncs onto the alias's `botAliasLocaleSettings`.
  */
 export interface BotAliasBinding {
@@ -37,7 +37,7 @@ export interface BotAliasBinding {
 
 /**
  * Two different Lambda functions were registered as the code hook of the
- * same alias locale — Lex supports exactly one dialog/fulfillment function
+ * same alias locale -- Lex supports exactly one dialog/fulfillment function
  * per alias locale.
  */
 export class ConflictingCodeHook extends Data.TaggedError("ConflictingCodeHook")<{
@@ -51,7 +51,7 @@ export interface BotAliasProps {
    */
   botId: string;
   /**
-   * Name of the alias. Mutable — renames update the alias in place (identity
+   * Name of the alias. Mutable -- renames update the alias in place (identity
    * is the generated alias ID).
    * @default ${app}-${id}-${stage}-${suffix}
    */
@@ -67,9 +67,9 @@ export interface BotAliasProps {
    */
   description?: string;
   /**
-   * Lambda code hooks per locale (`localeId` → function ARN). Merged with
+   * Lambda code hooks per locale (`localeId` -> function ARN). Merged with
    * code hook entries injected through the binding contract by
-   * `LexV2.onCodeHook` — prefer the event source over declaring ARNs here,
+   * `LexV2.onCodeHook` -- prefer the event source over declaring ARNs here,
    * since it also creates the invoke Permission and registers the runtime
    * handler.
    */
@@ -123,7 +123,7 @@ export type BotAliasLookup =
     };
 
 /**
- * An alias of an Amazon Lex V2 bot — a stable pointer to a numbered bot
+ * An alias of an Amazon Lex V2 bot -- a stable pointer to a numbered bot
  * version that runtime conversations (e.g. `RecognizeText`) target.
  *
  * ### Creating an Alias
@@ -295,7 +295,7 @@ export const BotAliasProvider = () =>
       return {
         stables: ["botAliasId", "botAliasArn", "botId"],
 
-        // Sub-resource keyed entirely by its bot — nuke reaches it through
+        // Sub-resource keyed entirely by its bot -- nuke reaches it through
         // the parent bot's deletion.
         list: () => Effect.succeed([]),
 
@@ -332,7 +332,7 @@ export const BotAliasProvider = () =>
           const desiredCodeHooks = yield* resolveCodeHooks(news, bindings);
           const desiredLocaleSettings = toLocaleSettings(desiredCodeHooks);
 
-          // 1. OBSERVE — output.botAliasId is only a cache; fall back to name.
+          // 1. OBSERVE -- output.botAliasId is only a cache; fall back to name.
           let observed =
             output?.botAliasId !== undefined
               ? yield* describeAlias(news.botId, output.botAliasId)
@@ -341,7 +341,7 @@ export const BotAliasProvider = () =>
             observed = yield* findAliasByName(news.botId, botAliasName);
           }
 
-          // 2. ENSURE — create when missing.
+          // 2. ENSURE -- create when missing.
           if (observed === undefined) {
             const created = yield* retryWhileConflict(
               lexm.createBotAlias({
@@ -355,7 +355,7 @@ export const BotAliasProvider = () =>
             );
             observed = yield* waitForAliasSettled(news.botId, created.botAliasId!);
           } else if (
-            // 3. SYNC — apply the delta when a declared prop drifted.
+            // 3. SYNC -- apply the delta when a declared prop drifted.
             observed.botAliasName !== botAliasName ||
             (observed.botVersion ?? undefined) !== (news.botVersion ?? undefined) ||
             (observed.description ?? undefined) !== (news.description ?? undefined) ||
@@ -375,7 +375,7 @@ export const BotAliasProvider = () =>
             observed = yield* waitForAliasSettled(news.botId, observed.botAliasId!);
           }
 
-          // 3b. SYNC TAGS — diff against observed cloud tags.
+          // 3b. SYNC TAGS -- diff against observed cloud tags.
           const botAliasArn = yield* aliasArnOf(news.botId, observed.botAliasId!);
           const observedTags = yield* readLexTags(botAliasArn);
           yield* syncLexTags(botAliasArn, observedTags, desiredTags);

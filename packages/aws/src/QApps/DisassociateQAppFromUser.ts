@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { QApp } from "./QApp.ts";
 
 /**
- * Request for {@link DisassociateQAppFromUser} — `instanceId` and `appId` are injected from the bound Q App.
+ * Request for {@link DisassociateQAppFromUser} -- `instanceId` and `appId` are injected from the bound Q App.
  */
 export interface DisassociateQAppFromUserRequest extends Omit<
   qapps.DisassociateQAppFromUserInput,
@@ -19,7 +19,7 @@ export interface DisassociateQAppFromUserRequest extends Omit<
  * ### User Inventory
  * **Example:** Unfavorite the App
  * ```typescript
- * // init — bind the operation to the Q App
+ * // init -- bind the operation to the Q App
  * const disassociateQAppFromUser = yield* AWS.QApps.DisassociateQAppFromUser(app);
  *
  * // runtime

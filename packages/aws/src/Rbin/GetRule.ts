@@ -6,15 +6,15 @@ import type { Rule } from "./Rule.ts";
 /**
  * Runtime binding for `rbin:GetRule`.
  *
- * Reads the bound retention {@link Rule}'s full detail — retention period,
- * resource type, resource/exclusion tags, lock state, and status — so a
+ * Reads the bound retention {@link Rule}'s full detail -- retention period,
+ * resource type, resource/exclusion tags, lock state, and status -- so a
  * function can audit its Recycle Bin coverage or alert on an unexpected
  * unlock at runtime. The rule's identifier is injected from the binding.
  * Provide the implementation with `Effect.provide(AWS.Rbin.GetRuleHttp)`.
  * ### Reading Retention Rules
  * **Example:** Check the bound rule's retention period
  * ```typescript
- * // init — grants rbin:GetRule on the rule's ARN
+ * // init -- grants rbin:GetRule on the rule's ARN
  * const getRule = yield* AWS.Rbin.GetRule(rule);
  *
  * // runtime

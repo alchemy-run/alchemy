@@ -9,7 +9,7 @@ export const TestParsingHttp = Layer.effect(
     tag: "AWS.B2BI.TestParsing",
     operation: b2bi.testParsing,
     // B2BI reads `inputFile` through the caller's session (verified live:
-    // "Access denied when getting object attributes from s3://…" without
+    // "Access denied when getting object attributes from s3://..." without
     // the S3 grants), so the documented companion permissions are granted
     // alongside.
     actions: ["b2bi:TestParsing", "s3:GetObject", "s3:GetObjectAttributes"],

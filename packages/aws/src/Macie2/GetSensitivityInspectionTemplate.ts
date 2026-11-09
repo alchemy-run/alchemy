@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `macie2:GetSensitivityInspectionTemplate`.
  *
  * Retrieves the settings for the sensitivity inspection template for an account.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.Macie2.GetSensitivityInspectionTemplateHttp)`.
  * ### Automated Discovery
  * **Example:** Read a Sensitivity Inspection Template
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getSensitivityInspectionTemplate = yield* AWS.Macie2.GetSensitivityInspectionTemplate();
  *
  * // runtime

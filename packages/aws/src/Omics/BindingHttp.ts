@@ -11,9 +11,9 @@ import type { PolicyStatement } from "../IAM/Policy.ts";
  * (read-set jobs by `sequenceStoreId`, reference jobs by `referenceStoreId`,
  * runs by `workflowId`) or account-level (run control by `runId`, a runtime
  * value). Two builders cover both shapes; every thin `{Op}Http.ts` in this
- * service is a `Layer.effect(Cap, make…HttpBinding({ … }))`.
+ * service is a `Layer.effect(Cap, make...HttpBinding({ ... }))`.
  *
- * NOT exported from `index.ts` — leaking the generic helper names into the
+ * NOT exported from `index.ts` -- leaking the generic helper names into the
  * flat `AWS` namespace would collide across services.
  */
 
@@ -57,11 +57,11 @@ export const makeOmicsResourceHttpBinding = <
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (res: Res) {
-      // Outputs yield a DEFERRED effect — resolve again per invocation below.
+      // Outputs yield a DEFERRED effect -- resolve again per invocation below.
       const Id = yield* options.id(res);
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         // Inline (not a `PolicyStatement[]`-typed local) so the bind data's
-        // `Input<…>` contextual typing accepts the `Output<string>` ARN.
+        // `Input<...>` contextual typing accepts the `Output<string>` ARN.
         yield* bind`${options.tag}(${res})`({
           policyStatements: [
             {

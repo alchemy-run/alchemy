@@ -27,7 +27,7 @@ import { type TunnelAuth } from "./TunnelBinding.ts";
  * @remarks
  *
  * `ReadTunnel` is a single identifier that is simultaneously the binding's
- * Context tag, its type, and the callable — `yield* Cloudflare.Tunnel.ReadTunnel()`.
+ * Context tag, its type, and the callable -- `yield* Cloudflare.Tunnel.ReadTunnel()`.
  *
  * ### Reading tunnels at runtime
  * **Example:** Bind the read client

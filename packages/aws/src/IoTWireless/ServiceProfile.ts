@@ -22,12 +22,12 @@ export interface ServiceProfileProps {
   /**
    * Name of the service profile. If omitted, a deterministic physical name
    * is generated from the app, stage, and logical ID. Service profiles are
-   * immutable — changing the name replaces the profile.
+   * immutable -- changing the name replaces the profile.
    */
   name?: string;
   /**
    * LoRaWAN service profile configuration (data-rate bounds, gateway
-   * metadata, roaming flags, transmission counts). Immutable — changing any
+   * metadata, roaming flags, transmission counts). Immutable -- changing any
    * field replaces the profile.
    */
   loRaWAN?: iotw.LoRaWANServiceProfile;
@@ -64,7 +64,7 @@ export interface ServiceProfileLookup {
 }
 
 /**
- * An AWS IoT Core for LoRaWAN service profile — the network-level parameters
+ * An AWS IoT Core for LoRaWAN service profile -- the network-level parameters
  * (data-rate bounds, gateway metadata reporting, roaming permissions) shared
  * by a fleet of wireless devices.
  *
@@ -128,7 +128,7 @@ export const ServiceProfileProvider = () =>
           .getServiceProfile({ Id: serviceProfileId })
           .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
-      // Service profiles have no name-keyed Get — enumerate and match. The
+      // Service profiles have no name-keyed Get -- enumerate and match. The
       // physical name is deterministic, so this recovers identity after a
       // lost state write.
       const findByName = (name: string) =>
@@ -203,7 +203,7 @@ export const ServiceProfileProvider = () =>
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
-        // There is no UpdateServiceProfile API — name and LoRaWAN config are
+        // There is no UpdateServiceProfile API -- name and LoRaWAN config are
         // create-only, so any change to either replaces the profile. Tags
         // stay update-in-place.
         diff: Effect.fn(function* ({ id, news, olds }) {
@@ -221,10 +221,10 @@ export const ServiceProfileProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — cloud state is authoritative; output is an id cache.
+          // 1. OBSERVE -- cloud state is authoritative; output is an id cache.
           let profile = yield* observe(output, name);
 
-          // 2. ENSURE — create if missing. CreateServiceProfile always mints
+          // 2. ENSURE -- create if missing. CreateServiceProfile always mints
           //    a new profile (names are not unique keys), so re-observing by
           //    name after a Conflict race keeps this idempotent.
           if (profile === undefined) {
@@ -247,7 +247,7 @@ export const ServiceProfileProvider = () =>
             });
           }
 
-          // 3. SYNC — only tags are mutable; diff against OBSERVED tags.
+          // 3. SYNC -- only tags are mutable; diff against OBSERVED tags.
           const attrs = yield* toAttrs(profile, name);
           yield* syncIotWirelessTags(attrs.serviceProfileArn, desiredTags);
 

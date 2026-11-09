@@ -15,7 +15,7 @@ export interface DeleteNotificationChannelRequest extends fms.DeleteNotification
  * ### Notification Channel
  * **Example:** Delete the Notification Channel
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const deleteNotificationChannel = yield* AWS.FMS.DeleteNotificationChannel();
  *
  * // runtime

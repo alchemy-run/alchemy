@@ -5,8 +5,8 @@ import type { Channel } from "./Channel.ts";
 /**
  * Shared scaffolding for Amazon IVS stream data-plane HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service
- * is a `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the two
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service
+ * is a `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the two
  * builders below. Everything except the operation and the IAM action list
  * is boilerplate: channel-scoped bindings inject the bound channel's ARN
  * as the request's `channelArn` and grant `actions` on that ARN;
@@ -57,7 +57,7 @@ export const makeIvsChannelHttpBinding = <I extends { channelArn: string }, A, E
 /**
  * Build the impl Effect for an account-level IVS operation (e.g.
  * enumerating the account's live streams). The deploy-time half grants
- * `actions` on `*` — these list actions are not scoped to a single
+ * `actions` on `*` -- these list actions are not scoped to a single
  * channel resource.
  */
 export const makeIvsAccountHttpBinding = <I, A, E, R>(options: {

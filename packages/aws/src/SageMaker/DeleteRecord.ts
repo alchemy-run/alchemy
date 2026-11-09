@@ -9,7 +9,7 @@ export interface DeleteRecordRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `sagemaker:DeleteRecord` — delete a record from a
+ * Runtime binding for `sagemaker:DeleteRecord` -- delete a record from a
  * `FeatureGroup`'s online store.
  *
  * Bind this operation to a `FeatureGroup` inside a function runtime to get a

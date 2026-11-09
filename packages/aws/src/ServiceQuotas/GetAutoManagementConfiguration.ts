@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `servicequotas:GetAutoManagementConfiguration` — read
+ * Runtime binding for `servicequotas:GetAutoManagementConfiguration` -- read
  * the account's Service Quotas Auto Management opt-in status (opt-in type,
  * notification target, excluded quotas) from inside a Function.
  *
@@ -14,7 +14,7 @@ import type * as Effect from "effect/Effect";
  * const getAutoManagementConfiguration =
  *   yield* AWS.ServiceQuotas.GetAutoManagementConfiguration();
  *
- * // runtime — fails with the typed NoSuchResourceException when the
+ * // runtime -- fails with the typed NoSuchResourceException when the
  * // account has not opted in to Auto Management
  * const config = yield* getAutoManagementConfiguration();
  * const optIn = config.OptInType; // NotifyOnly | NotifyAndAdjust

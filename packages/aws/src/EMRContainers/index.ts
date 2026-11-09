@@ -1,5 +1,5 @@
 // Coverage verdicts for the remaining `emr-containers` operations:
-// - create/describe/list SecurityConfiguration: out of scope as a Resource —
+// - create/describe/list SecurityConfiguration: out of scope as a Resource --
 //   the API has NO DeleteSecurityConfiguration, so a provisioned config can
 //   never be destroyed (violates destroy/zero-orphan semantics); neither
 //   Terraform nor CloudFormation models it. VirtualCluster accepts a

@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `forecast:DescribeWhatIfAnalysis` — poll the status of
+ * Runtime binding for `forecast:DescribeWhatIfAnalysis` -- poll the status of
  * a what-if analysis created with {@link CreateWhatIfAnalysis} until it is
  * `ACTIVE` and scenario forecasts can be created under it.
  *

@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Project } from "./Project.ts";
 
 /**
- * Runtime binding for `codebuild:ListBuildsForProject` — lists the bound
+ * Runtime binding for `codebuild:ListBuildsForProject` -- lists the bound
  * project's build ids, newest first. Page with `nextToken`; resolve ids to
  * statuses with {@link BatchGetBuilds}.
  * ### Listing Builds

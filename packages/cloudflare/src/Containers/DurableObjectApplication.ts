@@ -36,7 +36,7 @@ export interface DurableObjectApplicationBinding {
 }
 
 /**
- * INTERNAL — the one container application of a Durable Object class.
+ * INTERNAL -- the one container application of a Durable Object class.
  *
  * Cloudflare allows exactly one container application per Durable Object
  * namespace. Every `schedulingPolicy: "durable_object"` Container bound to a

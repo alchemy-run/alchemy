@@ -17,7 +17,7 @@ export interface ZoneTransferAclProps {
    * Human-readable name of the ACL. If omitted, a unique name is
    * generated from the app, stage, and logical ID.
    *
-   * Mutable — updated in place (PUT).
+   * Mutable -- updated in place (PUT).
    * @default ${app}-${stage}-${id}
    */
   name?: string;
@@ -30,7 +30,7 @@ export interface ZoneTransferAclProps {
    * normalizes the range to its network address (e.g. `192.0.2.53/28`
    * becomes `192.0.2.48/28`).
    *
-   * Mutable — updated in place (PUT).
+   * Mutable -- updated in place (PUT).
    */
   ipRange: string;
 }
@@ -56,7 +56,7 @@ export type ZoneTransferAcl = Resource<
 
 /**
  * A Secondary DNS zone-transfer ACL
- * (`/accounts/{account_id}/secondary_dns/acls`) — an account-wide
+ * (`/accounts/{account_id}/secondary_dns/acls`) -- an account-wide
  * IPv4/IPv6 range that may receive NOTIFYs for secondary zones and from
  * which Cloudflare accepts AXFR/IXFR requests for outgoing transfers.
  *
@@ -134,7 +134,7 @@ export const ZoneTransferAclProvider = () =>
         const observed = yield* getAcl(acct, output.aclId);
         return observed ? toAttributes(observed, acct) : undefined;
       }
-      // Cold read — recover from lost state by matching the
+      // Cold read -- recover from lost state by matching the
       // deterministic physical name. ACLs carry no ownership markers,
       // so gate takeover behind adoption.
       const name = yield* createAclName(id, olds?.name);
@@ -148,13 +148,13 @@ export const ZoneTransferAclProvider = () =>
       // Inputs are resolved to concrete values by Plan.
       const ipRange = news.ipRange as string;
 
-      // Observe — the id cached on `output` is a hint, not a guarantee.
+      // Observe -- the id cached on `output` is a hint, not a guarantee.
       const observed = output?.aclId
         ? yield* getAcl(output.accountId ?? accountId, output.aclId)
         : undefined;
 
       if (!observed) {
-        // Ensure — greenfield (or out-of-band delete). Names are not
+        // Ensure -- greenfield (or out-of-band delete). Names are not
         // unique on Cloudflare's side, so there is no AlreadyExists
         // race to tolerate.
         const created = yield* dns.createZoneTransferAcl({
@@ -165,7 +165,7 @@ export const ZoneTransferAclProvider = () =>
         return toAttributes(created, accountId);
       }
 
-      // Sync — the update API is a PUT with the full body; skip the
+      // Sync -- the update API is a PUT with the full body; skip the
       // call entirely when nothing differs. Cloudflare normalizes
       // `ipRange` to the network address, so compare against the
       // observed (normalized) value.

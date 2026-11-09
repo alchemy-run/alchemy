@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `securityhub:ListAutomationRules`.
  *
  * Lists the automation rules defined in the account.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.SecurityHub.ListAutomationRulesHttp)`.
  * ### Custom Actions, Automation Rules & Aggregation
  * **Example:** List Automation Rules
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listAutomationRules = yield* AWS.SecurityHub.ListAutomationRules();
  *
  * // runtime

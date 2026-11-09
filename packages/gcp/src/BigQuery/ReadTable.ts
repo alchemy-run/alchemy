@@ -57,10 +57,10 @@ export interface ReadTableClient {
  * jobs. Grants `roles/bigquery.dataViewer` on the table and
  * `roles/bigquery.jobUser` on the project (job creation is project-only).
  *
- * Rows are decoded with the schema: `INTEGER` → `number` (`bigint` beyond
- * the safe range), `FLOAT` → `number`, `BOOLEAN` → `boolean`, `TIMESTAMP` →
- * `Date`, `BYTES` → `Uint8Array`, `JSON` → parsed value, `RECORD` → object,
- * `REPEATED` → array; `NUMERIC`, `DATE`, `DATETIME`, `TIME`, and `GEOGRAPHY`
+ * Rows are decoded with the schema: `INTEGER` -> `number` (`bigint` beyond
+ * the safe range), `FLOAT` -> `number`, `BOOLEAN` -> `boolean`, `TIMESTAMP` ->
+ * `Date`, `BYTES` -> `Uint8Array`, `JSON` -> parsed value, `RECORD` -> object,
+ * `REPEATED` -> array; `NUMERIC`, `DATE`, `DATETIME`, `TIME`, and `GEOGRAPHY`
  * stay strings.
  *
  * ### Reading rows
@@ -68,7 +68,7 @@ export interface ReadTableClient {
  * ```typescript
  * const events = yield* GCP.BigQuery.ReadTable(table);
  * const { rows, nextPageToken } = yield* events.list({ maxResults: 100 });
- * // …provided with Effect.provide(GCP.BigQuery.ReadTableHttp)
+ * // ...provided with Effect.provide(GCP.BigQuery.ReadTableHttp)
  * ```
  *
  * ### Querying

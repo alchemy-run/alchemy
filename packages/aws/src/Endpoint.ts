@@ -18,7 +18,7 @@ export const fromEnvironment: Layer.Layer<never, never, AWSEnvironment> = Layer.
 );
 
 /**
- * Explicitly "no custom endpoint" — the SDK falls back to its default
+ * Explicitly "no custom endpoint" -- the SDK falls back to its default
  * endpoint resolver.
  *
  * Use this (never `Layer.empty`) when an AWS call is made from *inside*

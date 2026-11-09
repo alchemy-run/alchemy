@@ -9,7 +9,7 @@ export interface ExecuteScheduledQueryRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `timestream-query:ExecuteScheduledQuery` — manually
+ * Runtime binding for `timestream-query:ExecuteScheduledQuery` -- manually
  * run a {@link ScheduledQuery} for a given invocation time (e.g. to backfill
  * a window the schedule missed).
  *
@@ -22,10 +22,10 @@ export interface ExecuteScheduledQueryRequest extends Omit<
  * ### Creating Scheduled Queries
  * **Example:** Backfill a missed window
  * ```typescript
- * // init — bind the operation to the scheduled query
+ * // init -- bind the operation to the scheduled query
  * const executeScheduledQuery = yield* Timestream.ExecuteScheduledQuery(rollup);
  *
- * // runtime — re-run the rollup as-of one hour ago
+ * // runtime -- re-run the rollup as-of one hour ago
  * yield* executeScheduledQuery({
  *   InvocationTime: new Date(Date.now() - 60 * 60 * 1000),
  * });

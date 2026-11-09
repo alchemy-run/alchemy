@@ -12,7 +12,7 @@ export { PipelineIngestError } from "./BindingHttp.ts";
 /**
  * Runtime binding for the `osis:Ingest` data plane.
  *
- * Sends events into the bound {@link Pipeline}'s ingest endpoint — the
+ * Sends events into the bound {@link Pipeline}'s ingest endpoint -- the
  * pipeline's actual data plane. There is no SDK operation for ingestion;
  * each batch is a SigV4-signed HTTP POST (service `"osis"`) to the
  * pipeline's ingest endpoint URL, made with the host Function's own
@@ -23,10 +23,10 @@ export { PipelineIngestError } from "./BindingHttp.ts";
  * ### Ingesting Data
  * **Example:** Send a Batch of Log Events
  * ```typescript
- * // init — bind the data plane to the pipeline
+ * // init -- bind the data plane to the pipeline
  * const ingest = yield* AWS.OSIS.Ingest(pipeline);
  *
- * // runtime — path must match the pipeline config's http source path
+ * // runtime -- path must match the pipeline config's http source path
  * yield* ingest({
  *   path: "/logs/ingest",
  *   events: [{ message: "hello", level: "info" }],

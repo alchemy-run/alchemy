@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `servicequotas:ListAWSDefaultServiceQuotas` — list the
+ * Runtime binding for `servicequotas:ListAWSDefaultServiceQuotas` -- list the
  * AWS default values for every quota of a service from inside a Function.
  *
  * ### Listing Quotas

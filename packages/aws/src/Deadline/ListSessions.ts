@@ -13,7 +13,7 @@ import type { Queue } from "./Queue.ts";
  * ### Monitoring Sessions
  * **Example:** List A Job's Sessions
  * ```typescript
- * // init — bind the operation to the queue
+ * // init -- bind the operation to the queue
  * const listSessions = yield* AWS.Deadline.ListSessions(queue);
  *
  * // runtime

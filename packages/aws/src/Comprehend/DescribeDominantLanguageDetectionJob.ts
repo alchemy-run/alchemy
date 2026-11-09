@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `comprehend:DescribeDominantLanguageDetectionJob` — get the
+ * Runtime binding for `comprehend:DescribeDominantLanguageDetectionJob` -- get the
  * properties (status, input/output config, timings) of an asynchronous
  * dominant-language detection job started with {@link StartDominantLanguageDetectionJob}.
  *
@@ -18,7 +18,7 @@ import type * as Effect from "effect/Effect";
  *
  * // runtime
  * const job = yield* describeDominantLanguageDetectionJob({ JobId: jobId });
- * // job.DominantLanguageDetectionJobProperties?.JobStatus: "SUBMITTED" | "IN_PROGRESS" | "COMPLETED" | …
+ * // job.DominantLanguageDetectionJobProperties?.JobStatus: "SUBMITTED" | "IN_PROGRESS" | "COMPLETED" | ...
  * ```
  *
  * @binding

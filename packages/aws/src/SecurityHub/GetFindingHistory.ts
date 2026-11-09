@@ -5,14 +5,14 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `securityhub:GetFindingHistory`.
  *
- * Returns the history of a finding for up to 90 days — every update Security Hub or a provider applied to it.
- * Account-level operation — invoked with the caller's request as-is.
+ * Returns the history of a finding for up to 90 days -- every update Security Hub or a provider applied to it.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.SecurityHub.GetFindingHistoryHttp)`.
  * ### Working with Findings
  * **Example:** Audit a Finding's History
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getFindingHistory = yield* AWS.SecurityHub.GetFindingHistory();
  *
  * // runtime

@@ -6,14 +6,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `guardduty:DeleteInvitations`.
  *
  * Deletes received membership invitations from the given administrator account ids.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.GuardDuty.DeleteInvitationsHttp)`.
  * ### Administrator & Invitations
  * **Example:** Delete Invitations
  * ```typescript
  * // init
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const deleteInvitations = yield* AWS.GuardDuty.DeleteInvitations();
  *
  * // runtime

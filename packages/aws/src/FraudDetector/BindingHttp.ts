@@ -7,8 +7,8 @@ import type { List } from "./List.ts";
 /**
  * Shared scaffolding for Amazon Fraud Detector HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the two builders
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the two builders
  * below. Everything except the operation and the IAM action list is
  * boilerplate.
  */
@@ -37,7 +37,7 @@ export const makeFraudDetectorDetectorHttpBinding = <
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (detector: Detector) {
-      // Output yields a DEFERRED effect — resolve again per invocation below.
+      // Output yields a DEFERRED effect -- resolve again per invocation below.
       const DetectorId = yield* detector.detectorId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${detector})`({
@@ -85,7 +85,7 @@ export const makeFraudDetectorListHttpBinding = <I extends { name: string }, A, 
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (list: List) {
-      // Output yields a DEFERRED effect — resolve again per invocation below.
+      // Output yields a DEFERRED effect -- resolve again per invocation below.
       const ListName = yield* list.name;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${list})`({
@@ -123,7 +123,7 @@ export const makeFraudDetectorEventTypeHttpBinding = <
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (eventType: EventType) {
-      // Output yields a DEFERRED effect — resolve again per invocation below.
+      // Output yields a DEFERRED effect -- resolve again per invocation below.
       const EventTypeName = yield* eventType.name;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${eventType})`({

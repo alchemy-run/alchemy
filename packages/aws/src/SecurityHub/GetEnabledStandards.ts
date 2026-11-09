@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `securityhub:GetEnabledStandards`.
  *
  * Lists the standards subscriptions currently enabled in the account.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.SecurityHub.GetEnabledStandardsHttp)`.
  * ### Standards & Controls
  * **Example:** List Enabled Standards
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getEnabledStandards = yield* AWS.SecurityHub.GetEnabledStandards();
  *
  * // runtime

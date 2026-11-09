@@ -12,7 +12,7 @@ export interface StartVariantImportJobRequest extends Omit<
  * Runtime binding for `omics:StartVariantImportJob`.
  *
  * Bind this operation to a `VariantStore` to get a callable that starts a job
- * importing VCF variant files into the store — the store name is injected
+ * importing VCF variant files into the store -- the store name is injected
  * automatically as `destinationName` and the action is granted on the bound
  * resource (with `iam:PassRole` for the HealthOmics service role). Provide the
  * implementation with `Effect.provide(AWS.Omics.StartVariantImportJobHttp)`.

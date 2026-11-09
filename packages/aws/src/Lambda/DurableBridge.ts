@@ -2,7 +2,7 @@ import { isScopeEjected } from "alchemy/Http";
 import type { FunctionListener } from "alchemy/Runtime/Function";
 import { toSeconds } from "alchemy/Util/Duration";
 /**
- * Internal scaffolding for AWS Lambda Durable Functions — NOT exported from
+ * Internal scaffolding for AWS Lambda Durable Functions -- NOT exported from
  * the Lambda service `index.ts`.
  *
  * A function created with `DurableConfig` receives every invocation as a
@@ -18,14 +18,14 @@ import { toSeconds } from "alchemy/Util/Duration";
  * `host.listen` listener that drives the orchestrator. The replay engine
  * itself is AWS's open-source `@aws/durable-execution-sdk-js`
  * (`withDurableExecution`), wrapped behind the Effect-native `DurableStep`
- * service — the same posture as the Cloudflare `WorkflowBridge` wrapping the
+ * service -- the same posture as the Cloudflare `WorkflowBridge` wrapping the
  * native `step` object.
  *
  * The SDK module is loaded with a dynamic `import()` so it never loads at
  * plan/deploy time. The `DurableFunction` wrapper merges it into
  * `build.install` automatically, which both vendors it into the artifact's
  * `node_modules` and externalizes it from the bundle (install roots are
- * always external) — plain Functions never resolve it.
+ * always external) -- plain Functions never resolve it.
  */
 import type * as lambda from "aws-lambda";
 import * as Cause from "effect/Cause";
@@ -67,7 +67,7 @@ export interface DurableExecutionInvocationEvent {
 }
 
 /**
- * Shape predicate for durable-execution invocations — the durable analogue of
+ * Shape predicate for durable-execution invocations -- the durable analogue of
  * `isSQSEvent`. A durable function's invocations always arrive in this
  * envelope (the durable execution wraps even the first invocation).
  */
@@ -86,8 +86,8 @@ export const isDurableExecutionEvent = (event: any): event is DurableExecutionIn
 /**
  * Lambda has a single exported handler (unlike workerd's named class
  * exports), so when several DurableFunctions share one host the start payload
- * carries a discriminator. Alchemy owns both ends — the `start` client wraps
- * the params, the listener unwraps them — so user code never sees this.
+ * carries a discriminator. Alchemy owns both ends -- the `start` client wraps
+ * the params, the listener unwraps them -- so user code never sees this.
  */
 export interface DurableEnvelope {
   $alchemy: { workflow: string };
@@ -109,7 +109,7 @@ const asDurableEnvelope = (payload: unknown): DurableEnvelope | undefined =>
 
 /**
  * Extract the customer input payload from the checkpoint log's EXECUTION
- * operation (first page — the EXECUTION operation is always the log's first
+ * operation (first page -- the EXECUTION operation is always the log's first
  * entry, so pagination never hides it).
  */
 export const readDurableInputPayload = (event: DurableExecutionInvocationEvent): unknown => {
@@ -125,7 +125,7 @@ export const readDurableInputPayload = (event: DurableExecutionInvocationEvent):
 };
 
 // ---------------------------------------------------------------------------
-// Native SDK surface (structural types only — the SDK's own types never leak
+// Native SDK surface (structural types only -- the SDK's own types never leak
 // into alchemy's public d.ts, keeping the dependency optional)
 // ---------------------------------------------------------------------------
 
@@ -167,7 +167,7 @@ interface NativeDurableSdk {
 /**
  * Load the Durable Execution SDK. The module id is an install root of every
  * DurableFunction bundle (the wrapper merges it into `build.install`), so
- * resolution happens at runtime inside the sandbox — from the artifact's
+ * resolution happens at runtime inside the sandbox -- from the artifact's
  * vendored `node_modules`, otherwise from the managed runtime's bundled
  * copy.
  */
@@ -177,7 +177,7 @@ const loadDurableSdk: Effect.Effect<NativeDurableSdk> = Effect.promise(
   Effect.catchDefect((defect) =>
     Effect.die(
       new Error(
-        `Failed to load "${DURABLE_SDK_MODULE}" — install it in the project ` +
+        `Failed to load "${DURABLE_SDK_MODULE}" \u2014 install it in the project ` +
           `that defines the DurableFunction (npm i ${DURABLE_SDK_MODULE}) so ` +
           `the bundler can vendor it into the artifact.`,
         { cause: defect },
@@ -341,13 +341,13 @@ export const makeDurableListener = (options: {
     // by the Lambda dispatcher, which provides it (and `Scope`) to every
     // listener's returned effect. Cast the listener down to the `Req = never`
     // `FunctionListener` so the requirement never leaks into the host's init
-    // effect — the exact contract `serve`/`makeFunctionHttpHandler` rely on.
+    // effect -- the exact contract `serve`/`makeFunctionHttpHandler` rely on.
     return ((event: any) => {
       if (!isDurableExecutionEvent(event)) return;
       const payload = readDurableInputPayload(event);
       const envelope = asDurableEnvelope(payload);
       if (envelope !== undefined && envelope.$alchemy.workflow !== options.name) {
-        // Addressed to another DurableFunction on this host — decline so its
+        // Addressed to another DurableFunction on this host -- decline so its
         // listener picks it up.
         return;
       }
@@ -361,7 +361,7 @@ export const makeDurableListener = (options: {
         const run = yield* ensureWrapped;
         // The SDK owns the checkpoint protocol from here: it replays the log,
         // runs new work, and returns the SUCCEEDED/FAILED/PENDING envelope
-        // Lambda interprets. A rejection here is a protocol-level failure —
+        // Lambda interprets. A rejection here is a protocol-level failure --
         // let it surface as an invocation error.
         return yield* Effect.promise(() => run(event, context));
       }).pipe(withInvocationDeadline({ interrupt: false }));

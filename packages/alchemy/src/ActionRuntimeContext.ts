@@ -14,13 +14,13 @@ import { type BaseRuntimeContext, RuntimeContext } from "./RuntimeContext.ts";
  *  - {@link makeCaptureContext} is provided while the init Effect runs. Its
  *    `set(key, output)` records the referenced {@link Output} (so the engine can
  *    add a dependency edge and later resolve it) and its `get(key)` hands back a
- *    *deferred* accessor — an Effect that re-reads whatever `RuntimeContext` is
+ *    *deferred* accessor -- an Effect that re-reads whatever `RuntimeContext` is
  *    ambient when it actually runs.
  *  - {@link makeResolveContext} is provided around the Action body at apply
  *    time. Its `get(key)` returns the already-resolved value for that key.
  *
  * Because the accessor produced at init re-reads `RuntimeContext`, yielding it
- * inside the body resolves against the apply-time context — no shared mutable
+ * inside the body resolves against the apply-time context -- no shared mutable
  * state, no infinite recursion (the resolve context's `get` is terminal).
  */
 
@@ -31,7 +31,7 @@ const base = (id: string): Omit<BaseRuntimeContext, "get" | "set"> => ({
 });
 
 /**
- * Capture context — provided while an Action's init Effect runs. Records every
+ * Capture context -- provided while an Action's init Effect runs. Records every
  * Output referenced via `yield* output` into `captures`, keyed by the Output's
  * sanitized key, and returns deferred accessors.
  */
@@ -52,7 +52,7 @@ export const makeCaptureContext = (captures: Record<string, Output>): BaseRuntim
 });
 
 /**
- * Resolve context — provided around an Action body at apply time. `resolved`
+ * Resolve context -- provided around an Action body at apply time. `resolved`
  * maps each captured key to its value (already evaluated against the tracker).
  */
 export const makeResolveContext = (resolved: Record<string, unknown>): BaseRuntimeContext => ({

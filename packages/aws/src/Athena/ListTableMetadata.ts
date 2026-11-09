@@ -6,14 +6,14 @@ import type { DataCatalog } from "./DataCatalog.ts";
 /**
  * Runtime binding for `athena:ListTableMetadata`.
  *
- * Lists table metadata for a database in the bound data catalog — the
+ * Lists table metadata for a database in the bound data catalog -- the
  * catalog name is injected automatically; `Expression` filters table names.
  * Provide the implementation with
  * `Effect.provide(AWS.Athena.ListTableMetadataHttp)`.
  * ### Browsing Catalog Metadata
  * **Example:** List a Database's Tables
  * ```typescript
- * // init — bind the operation to the data catalog
+ * // init -- bind the operation to the data catalog
  * const listTableMetadata = yield* AWS.Athena.ListTableMetadata(catalog);
  *
  * // runtime

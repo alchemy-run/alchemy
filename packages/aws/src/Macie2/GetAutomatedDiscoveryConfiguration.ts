@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `macie2:GetAutomatedDiscoveryConfiguration`.
  *
  * Retrieves the configuration settings and status of automated sensitive data discovery for an organization or standalone account.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.Macie2.GetAutomatedDiscoveryConfigurationHttp)`.
  * ### Automated Discovery
  * **Example:** Read the Automated Discovery Configuration
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getAutomatedDiscoveryConfiguration = yield* AWS.Macie2.GetAutomatedDiscoveryConfiguration();
  *
  * // runtime

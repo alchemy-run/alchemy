@@ -1,5 +1,5 @@
 /**
- * `@alchemy.run/frontend-frameworks/nuxt/node` — the Node container deploy
+ * `@alchemy.run/frontend-frameworks/nuxt/node` -- the Node container deploy
  * target for the Nuxt integration.
  *
  * Nuxt's Node story is nitro's `node` (node-listener) preset:
@@ -9,10 +9,10 @@
  * `clientDirectory` first, then falls through to that handler on `PORT`
  * (default 3000), and answers `GET /health`.
  *
- * - **`nitroPreset`** — `"node"`, enforced as the last word on the
+ * - **`nitroPreset`** -- `"node"`, enforced as the last word on the
  *   resolved nitro config. A user `nitro.preset` mismatch fails the build.
- * - **`entry`** — surfaces `config.main` as the generic user-entry carriage.
- * - **`bundle`** — Node resolve conditions (no `workerd`, no `@aws-sdk/`).
+ * - **`entry`** -- surfaces `config.main` as the generic user-entry carriage.
+ * - **`bundle`** -- Node resolve conditions (no `workerd`, no `@aws-sdk/`).
  */
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
@@ -30,7 +30,7 @@ import { make, type NuxtTarget, type NuxtTargetConfig } from "./Nuxt.ts";
 export const NITRO_PRESET = "node";
 
 /**
- * The importable specifier of nitro's node-listener runtime handler — the
+ * The importable specifier of nitro's node-listener runtime handler -- the
  * module a USER entry re-exports to wrap the framework's handler.
  */
 export const NITRO_HANDLER_SPECIFIER = "nitropack/presets/node/runtime/node-listener";
@@ -50,7 +50,7 @@ const makeNodeAdapterTarget = (config: NuxtNodeTargetConfig = {}): NuxtTarget =>
     entry: config.main !== undefined ? { main: config.main } : undefined,
     nitroPreset: NITRO_PRESET,
     configureNitro: (_nitroConfig, _context) => {
-      // The user entry (context.entry) is deliberately NOT wired here —
+      // The user entry (context.entry) is deliberately NOT wired here --
       // the framework package sets it on the nitro INSTANCE at `nitro:init`
       // (a config-level entry would leak into the prerenderer's Node-preset
       // clone). See the matching note in ./cloudflare.ts.

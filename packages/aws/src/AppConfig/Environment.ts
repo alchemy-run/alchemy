@@ -76,7 +76,7 @@ export interface EnvironmentLookup {
 }
 
 /**
- * An AWS AppConfig environment — a deployment group of AppConfig targets
+ * An AWS AppConfig environment -- a deployment group of AppConfig targets
  * (e.g. `Beta`, `Production`) within an application. CloudWatch alarms
  * attached via `monitors` trigger an automatic rollback if they fire during a
  * deployment.
@@ -221,7 +221,7 @@ export const EnvironmentProvider = () =>
               Tags: desiredTags,
             });
           } else {
-            // 3. Sync — description and monitors are mutable in place.
+            // 3. Sync -- description and monitors are mutable in place.
             observed = yield* appconfig.updateEnvironment({
               ApplicationId: applicationId,
               EnvironmentId: observed.Id,

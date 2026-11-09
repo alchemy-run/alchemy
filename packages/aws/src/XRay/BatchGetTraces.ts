@@ -22,12 +22,12 @@ export interface BatchGetTracesRequest extends xray.BatchGetTracesRequest {}
  * export default MyFunction.make(
  *   { main: import.meta.url, functionUrl: true, tracing: "Active" },
  *   Effect.gen(function* () {
- *     // init — bind the operation (grants xray:BatchGetTraces)
+ *     // init -- bind the operation (grants xray:BatchGetTraces)
  *     const batchGetTraces = yield* XRay.BatchGetTraces();
  *
  *     return {
  *       fetch: Effect.gen(function* () {
- *         // runtime — fetch full segment documents by trace ID
+ *         // runtime -- fetch full segment documents by trace ID
  *         const result = yield* batchGetTraces({
  *           TraceIds: ["1-63a2090f-3f4da4bcd9b1a3e07531423b"],
  *         });

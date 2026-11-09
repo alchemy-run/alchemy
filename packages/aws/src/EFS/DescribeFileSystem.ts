@@ -8,15 +8,15 @@ import type { FileSystem } from "./FileSystem.ts";
  * system (IAM action `elasticfilesystem:DescribeFileSystems` on the file
  * system ARN).
  *
- * Reads the bound {@link FileSystem}'s live description — lifecycle state,
- * size in each storage class, throughput mode, mount target count — from
+ * Reads the bound {@link FileSystem}'s live description -- lifecycle state,
+ * size in each storage class, throughput mode, mount target count -- from
  * inside a function runtime. Useful for storage dashboards and capacity
  * monitors. Provide the implementation with
  * `Effect.provide(AWS.EFS.DescribeFileSystemHttp)`.
  * ### Inspecting File Systems
  * **Example:** Read the file system's size and state
  * ```typescript
- * // init — bind the operation to the file system
+ * // init -- bind the operation to the file system
  * const describeFileSystem = yield* AWS.EFS.DescribeFileSystem(files);
  *
  * // runtime

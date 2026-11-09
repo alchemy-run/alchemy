@@ -11,8 +11,8 @@ import * as AWSBindings from "../AWSBindings.ts";
  * `Resource: ["*"]`. The only variation between bindings is the distilled
  * operation and the IAM action.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, makeObservabilityAdminHttpBinding({ … }))`.
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, makeObservabilityAdminHttpBinding({ ... }))`.
  */
 export const makeObservabilityAdminHttpBinding = <I, A, E, R>(options: {
   /**

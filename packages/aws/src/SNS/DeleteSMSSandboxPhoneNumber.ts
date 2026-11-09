@@ -7,7 +7,7 @@ export interface DeleteSMSSandboxPhoneNumberRequest extends sns.DeleteSMSSandbox
 /**
  * Runtime binding for `sns:DeleteSMSSandboxPhoneNumber`.
  *
- * An account-scoped operation — removes a destination phone number from
+ * An account-scoped operation -- removes a destination phone number from
  * the account's SMS sandbox.
  * Provide the `DeleteSMSSandboxPhoneNumberHttp` layer on the Function to implement the binding.
  * ### SMS Sandbox

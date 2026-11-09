@@ -13,7 +13,7 @@ export class LexOperationFailed extends Data.TaggedError("LexOperationFailed")<{
 
 /**
  * Coerce a generated physical name into Lex's name pattern
- * `^([0-9a-zA-Z][_-]?){1,100}$` — every `-`/`_` must be preceded by an
+ * `^([0-9a-zA-Z][_-]?){1,100}$` -- every `-`/`_` must be preceded by an
  * alphanumeric (no leading or consecutive separators).
  */
 export const toLexName = (name: string): string =>
@@ -33,7 +33,7 @@ export const toTagRecord = (
 
 /**
  * Retry `ConflictException`s on a bounded schedule. Lex serializes most
- * mutations per bot — a concurrent build/version/update surfaces as a
+ * mutations per bot -- a concurrent build/version/update surfaces as a
  * transient conflict.
  *
  * The explicit `Effect.Effect<A, E, R>` return annotation is load-bearing:
@@ -69,7 +69,7 @@ const transientBotStatuses = new Set(["Creating", "Versioning", "Updating", "Imp
 /**
  * Poll `describeBot` until the bot leaves its transient statuses
  * (`Creating`/`Versioning`/`Updating`/`Importing`). Fails typed on `Failed`.
- * Bot mutations settle in seconds — budget ~80s.
+ * Bot mutations settle in seconds -- budget ~80s.
  */
 export const waitForBotSettled = Effect.fn("AWS.LexV2.waitForBotSettled")(function* (
   botId: string,
@@ -164,7 +164,7 @@ export const waitForAliasSettled = Effect.fn("AWS.LexV2.waitForAliasSettled")(fu
 });
 
 /**
- * Read the observed tags of a Lex resource by ARN. Best-effort — a race with
+ * Read the observed tags of a Lex resource by ARN. Best-effort -- a race with
  * deletion reports no tags.
  */
 export const readLexTags = Effect.fn("AWS.LexV2.readLexTags")(function* (arn: string) {

@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 export interface ListInternetEventsRequest extends im.ListInternetEventsInput {}
 
 /**
- * Runtime binding for `internetmonitor:ListInternetEvents` — list the global
+ * Runtime binding for `internetmonitor:ListInternetEvents` -- list the global
  * internet events (performance or availability issues at client locations)
  * from the outages map Internet Monitor publishes for all AWS customers.
  * Internet events are account-level; no monitor is required.
@@ -15,7 +15,7 @@ export interface ListInternetEventsRequest extends im.ListInternetEventsInput {}
  * ### Reading Internet Events
  * **Example:** List Active Internet Events
  * ```typescript
- * // init — grants internetmonitor:ListInternetEvents
+ * // init -- grants internetmonitor:ListInternetEvents
  * const listInternetEvents = yield* AWS.InternetMonitor.ListInternetEvents();
  *
  * // runtime

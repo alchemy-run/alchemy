@@ -18,9 +18,9 @@ import {
 } from "./internal.ts";
 
 /**
- * The deployable artifact of an agent runtime — a container image in ECR or
+ * The deployable artifact of an agent runtime -- a container image in ECR or
  * a managed-runtime code bundle in S3. Passed through to the AgentCore API
- * unchanged — see the AWS SDK `AgentRuntimeArtifact` shape.
+ * unchanged -- see the AWS SDK `AgentRuntimeArtifact` shape.
  */
 export type RuntimeArtifact = control.AgentRuntimeArtifact;
 
@@ -125,7 +125,7 @@ export interface RuntimeLookup {
 }
 
 /**
- * An Amazon Bedrock AgentCore Runtime — serverless hosting for containerized
+ * An Amazon Bedrock AgentCore Runtime -- serverless hosting for containerized
  * AI agents.
  *
  * A runtime deploys an agent (an ECR container image or managed-runtime code
@@ -292,7 +292,7 @@ export const RuntimeProvider = () =>
             runtime = yield* findByName(name);
           }
 
-          // 2. ENSURE — a freshly created IAM role is not instantly
+          // 2. ENSURE -- a freshly created IAM role is not instantly
           // assumable; ride out the transient ValidationException and the
           // name-exists conflict race.
           if (runtime === undefined) {
@@ -333,7 +333,7 @@ export const RuntimeProvider = () =>
             });
           }
 
-          // 3. SYNC — converge mutable settings from OBSERVED state. Each
+          // 3. SYNC -- converge mutable settings from OBSERVED state. Each
           // update publishes a new immutable runtime version.
           const drifted =
             (unredact(runtime.description) ?? undefined) !==

@@ -5,14 +5,14 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `dms:DescribeEvents`.
  *
- * Bind this operation (account-level) to read recent DMS events — instance
- * reboots, failovers, configuration changes — for monitoring and audit
+ * Bind this operation (account-level) to read recent DMS events -- instance
+ * reboots, failovers, configuration changes -- for monitoring and audit
  * workloads. Provide the implementation with
  * `Effect.provide(AWS.DMS.DescribeEventsHttp)`.
  * ### Reading DMS Events
  * **Example:** Read the Last Hour of Instance Events
  * ```typescript
- * // init — account-level, no target resource
+ * // init -- account-level, no target resource
  * const describeEvents = yield* AWS.DMS.DescribeEvents();
  *
  * // runtime

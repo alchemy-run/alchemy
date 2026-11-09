@@ -27,7 +27,7 @@ export const retryWhilePending = <A, E extends { readonly _tag: string }, R>(
   });
 
 /**
- * Bounded retry (3s x 10) on `ConflictException` — MediaLive rejects
+ * Bounded retry (3s x 10) on `ConflictException` -- MediaLive rejects
  * deletes/updates while a dependent resource is still detaching.
  */
 export const retryWhileConflict = <A, E extends { readonly _tag: string }, R>(
@@ -90,7 +90,7 @@ export const toTagRecord = (
 
 /**
  * Read the observed tags of a MediaLive resource by ARN. Tag reads are
- * best-effort — a failure (e.g. a race with deletion) reports no tags.
+ * best-effort -- a failure (e.g. a race with deletion) reports no tags.
  */
 export const readMlTags = Effect.fn(function* (arn: string) {
   const response = yield* medialive

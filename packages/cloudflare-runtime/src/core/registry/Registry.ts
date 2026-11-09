@@ -173,7 +173,7 @@ export const RegistryLive = Layer.effect(
             SubscriptionRef.update(ref, (map) => MutableHashMap.set(map, entry.scriptName, entry)),
           ),
           updateLock.withPermits(1),
-          // Remove the entry from the filesystem when the scope closes — but
+          // Remove the entry from the filesystem when the scope closes -- but
           // only while the file still holds THIS write's content. A
           // replacement instance of the same script re-registers under the
           // same key; a graceful handoff closes the old scope after the new

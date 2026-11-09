@@ -17,7 +17,7 @@ export interface AccessPolicyProps {
    */
   policyName?: string;
   /**
-   * The data access policy document — a JSON array of rules granting principals
+   * The data access policy document -- a JSON array of rules granting principals
    * (IAM roles/users) collection- and index-level permissions such as
    * `aoss:CreateIndex`, `aoss:ReadDocument`, `aoss:WriteDocument`. Supply an
    * array/object or a pre-serialized string.
@@ -57,7 +57,7 @@ export interface AccessPolicy extends Resource<
 /**
  * An Amazon OpenSearch Serverless data access policy. Data access policies
  * grant IAM principals fine-grained permissions on collections and their
- * indexes (create/read/write/delete documents, create indexes, etc.) — they
+ * indexes (create/read/write/delete documents, create indexes, etc.) -- they
  * are the data-plane authorization layer that complements the network and
  * encryption {@link SecurityPolicy | security policies}.
  *

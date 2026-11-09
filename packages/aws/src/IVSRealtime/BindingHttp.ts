@@ -5,8 +5,8 @@ import type { Stage } from "./Stage.ts";
 /**
  * Shared scaffolding for Amazon IVS Real-Time HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, makeIvsRealtime…HttpBinding({ … }))` over one of the
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, makeIvsRealtime...HttpBinding({ ... }))` over one of the
  * builders below. Everything except the operation, the IAM action list, and
  * an optional request-shape mapper is boilerplate.
  */
@@ -37,7 +37,7 @@ export const STORAGE_CONFIGURATION_ARN_WILDCARD = "arn:aws:ivs:*:*:storage-confi
  * addresses the stage as `sourceStageArn`).
  *
  * `prepare` (optional) maps a friendlier public request shape onto the wire
- * request — e.g. `CreateParticipantToken` converts a `Duration.Input` into
+ * request -- e.g. `CreateParticipantToken` converts a `Duration.Input` into
  * the wire `duration` minutes. It defaults to identity.
  */
 export const makeIvsRealtimeStageHttpBinding = <
@@ -66,7 +66,7 @@ export const makeIvsRealtimeStageHttpBinding = <
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (stage: Stage) {
-      // Output yields a DEFERRED effect — resolve again per invocation below.
+      // Output yields a DEFERRED effect -- resolve again per invocation below.
       const StageArn = yield* stage.stageArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${stage})`({
@@ -143,7 +143,7 @@ export const makeIvsRealtimeReplicationHttpBinding = <
 
 /**
  * Build the impl Effect for an account-level IVS Real-Time operation
- * (composition management — compositions are addressed by server-generated
+ * (composition management -- compositions are addressed by server-generated
  * ARNs that are runtime data). The deploy-time half grants `actions` on
  * `resources` (default `*`).
  */

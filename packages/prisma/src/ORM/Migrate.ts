@@ -57,7 +57,7 @@ export type Migrate = Resource<
   MigrateProps,
   {
     /**
-     * The database marker's contract hash after the last apply — the
+     * The database marker's contract hash after the last apply -- the
      * database's current contract identity, equal to the target contract's
      * `contractHash` when converged.
      */
@@ -69,7 +69,7 @@ export type Migrate = Resource<
 
 /**
  * Applies pending Prisma migration packages to a Postgres database
- * during `alchemy deploy` — the deploy-graph equivalent of running
+ * during `alchemy deploy` -- the deploy-graph equivalent of running
  * `prisma db migrate --db $DATABASE_URL` by hand.
  *
  * The apply is idempotent: Prisma records the applied contract in the
@@ -78,7 +78,7 @@ export type Migrate = Resource<
  * provisioned in the same deploy is bootstrapped from empty. Fresh databases
  * that are still coming up are retried briefly (bounded) before failing.
  *
- * Destroying the resource never touches the database — dropping tables is
+ * Destroying the resource never touches the database -- dropping tables is
  * not the IaC engine's call to make.
  *
  * ### Migrating a database on deploy
@@ -135,7 +135,7 @@ export const MigrateProvider = () =>
 
       return {
         // Non-listable: the marker row lives inside an arbitrary database
-        // reachable only through the props' connection string — there is no
+        // reachable only through the props' connection string -- there is no
         // account-level API to enumerate migrated databases.
         list: () => Effect.succeed([]),
         diff: Effect.fn(function* ({ news, output }) {
@@ -167,7 +167,7 @@ export const MigrateProvider = () =>
             ],
             { cwd: configDir(olds) },
           ).pipe(
-            // An unreachable database is not evidence the resource is gone —
+            // An unreachable database is not evidence the resource is gone --
             // keep the last observed state rather than failing refresh.
             Effect.catchTag("Prisma.CliError", () => Effect.undefined),
           );
@@ -201,7 +201,7 @@ export const MigrateProvider = () =>
             { cwd: configDir(news) },
           ).pipe(
             // A database provisioned earlier in this deploy may still be
-            // warming up — retry connection-flavored failures briefly.
+            // warming up -- retry connection-flavored failures briefly.
             Effect.retry({
               while: (error) => isTransientDbError(error),
               schedule: Schedule.exponential("1 second"),
@@ -210,13 +210,13 @@ export const MigrateProvider = () =>
           );
           yield* session.note(
             result.migrationsApplied > 0
-              ? `Applied ${result.migrationsApplied} migration(s) → ${result.markerHash.slice(0, 8)}`
+              ? `Applied ${result.migrationsApplied} migration(s) \u2192 ${result.markerHash.slice(0, 8)}`
               : "Database already up to date",
           );
           return { markerHash: result.markerHash };
         }),
         delete: Effect.fn(function* () {
-          // Never drop tables or unwind migrations on teardown — the
+          // Never drop tables or unwind migrations on teardown -- the
           // database's contents outlive the stack by design.
         }),
       };

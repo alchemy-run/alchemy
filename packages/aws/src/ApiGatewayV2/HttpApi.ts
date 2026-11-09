@@ -11,7 +11,7 @@ import { Route } from "./Route.ts";
 import { Stage } from "./Stage.ts";
 
 /**
- * The Lambda function an {@link HttpApi} fronts. Structural on purpose —
+ * The Lambda function an {@link HttpApi} fronts. Structural on purpose --
  * any resource exposing `functionArn`/`functionName` outputs (an
  * `AWS.Lambda.Function`) qualifies.
  */
@@ -27,7 +27,7 @@ export interface HttpApiHandler {
 export interface HttpApiProps {
   /**
    * The Lambda function that serves every request (`$default` route,
-   * `AWS_PROXY` integration, payload format 2.0 — the same event shape as
+   * `AWS_PROXY` integration, payload format 2.0 -- the same event shape as
    * Lambda Function URLs).
    */
   handler: HttpApiHandler;
@@ -52,7 +52,7 @@ export interface HttpApiProps {
   stageName?: Input<string>;
   /**
    * Integration timeout (e.g. `"29 seconds"`; a bare number is
-   * milliseconds, 50–30000). Sent to the API in whole milliseconds
+   * milliseconds, 50-30000). Sent to the API in whole milliseconds
    * (`TimeoutInMillis`).
    * @default 30 seconds
    */
@@ -62,7 +62,7 @@ export interface HttpApiProps {
 }
 
 /**
- * The flagship HTTP API → Lambda front door: composes an {@link Api}
+ * The flagship HTTP API -> Lambda front door: composes an {@link Api}
  * (HTTP), an `AWS_PROXY` {@link Integration} (payload 2.0), a `$default`
  * {@link Route}, an auto-deployed {@link Stage}, and the API Gateway
  * invoke `Permission` in one call.

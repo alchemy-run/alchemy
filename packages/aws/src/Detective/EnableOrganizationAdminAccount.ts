@@ -6,14 +6,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `detective:EnableOrganizationAdminAccount`.
  *
  * Designates an organization account as the delegated Detective
- * administrator. Callable only from the organization management account —
+ * administrator. Callable only from the organization management account --
  * the org-governance automation hook.
  * Provide the implementation with
  * `Effect.provide(AWS.Detective.EnableOrganizationAdminAccountHttp)`.
  * ### Organization Administration
  * **Example:** Delegate The Security Account
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const enableOrganizationAdminAccount =
  *   yield* AWS.Detective.EnableOrganizationAdminAccount();
  *

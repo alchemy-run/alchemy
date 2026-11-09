@@ -6,14 +6,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `ram:ListPendingInvitationResources`.
  *
  * Lists the resources inside a resource share whose invitation to you is still pending.
- * Account-level operation — the target shares, invitations, and permissions
+ * Account-level operation -- the target shares, invitations, and permissions
  * are chosen per request at runtime, so the binding takes no resource
  * argument. Provide the implementation with
  * `Effect.provide(AWS.RAM.ListPendingInvitationResourcesHttp)`.
  * ### Invitations
  * **Example:** Inspect an Invitation Before Accepting
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listPendingInvitationResources = yield* AWS.RAM.ListPendingInvitationResources();
  *
  * // runtime

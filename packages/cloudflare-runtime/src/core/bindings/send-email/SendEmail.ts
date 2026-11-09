@@ -91,7 +91,7 @@ export const SendEmailLive = Layer.effect(
       Effect.gen(function* () {
         // Workerd does not natively expose the `EmailMessage` class that the
         // Cloudflare Workers runtime provides, so we always ship the
-        // `cloudflare-internal:email` shim (matching upstream Miniflare) —
+        // `cloudflare-internal:email` shim (matching upstream Miniflare) --
         // both the local simulator and the remote proxy rely on user code
         // being able to construct `EmailMessage` instances.
         const emailMessage = yield* formatExtensionModule(EmailMessageWorker);
@@ -180,7 +180,7 @@ export const remote = (props: SendEmailProps): BindingHook<RemoteBindings | Send
  * `From:` header matching the envelope sender) exactly like Miniflare,
  * persists it under `{storage}/email` (`.eml` for raw messages; text/html/
  * attachments from the MessageBuilder API under `text/`, `html/` and
- * `attachment/`) and logs the written file path — instead of delivering real
+ * `attachment/`) and logs the written file path -- instead of delivering real
  * mail. Opt into the real, remote binding with `dev: { remote: true }`.
  *
  * Reuses the `cloudflare-internal:email` `EmailMessage` shim registered by

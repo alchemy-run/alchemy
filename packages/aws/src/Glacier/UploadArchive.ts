@@ -18,7 +18,7 @@ export interface UploadArchiveRequest extends Omit<
  *
  * Uploads an archive to the bound {@link Vault} in a single request (up to
  * 4 GiB; use the multipart bindings for larger archives). The response
- * carries the new `archiveId` — Glacier has no list-archives API outside of
+ * carries the new `archiveId` -- Glacier has no list-archives API outside of
  * inventory jobs, so persist it.
  * Provide the implementation with
  * `Effect.provide(AWS.Glacier.UploadArchiveHttp)`.

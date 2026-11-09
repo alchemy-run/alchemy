@@ -26,7 +26,7 @@ export interface DeleteWhatsAppMessageTemplateRequest extends Omit<
  * ### Managing Message Templates
  * **Example:** Delete a Template
  * ```typescript
- * // init — bind the operation to the linked WABA
+ * // init -- bind the operation to the linked WABA
  * const deleteTemplate = yield* AWS.SocialMessaging.DeleteWhatsAppMessageTemplate(account);
  *
  * // runtime

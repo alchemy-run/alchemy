@@ -16,7 +16,7 @@ import type * as rolldown from "rolldown";
 
 /**
  * `rolldown` and `rolldown/parseAst` load `@rolldown/binding-*` at module
- * scope, so they are imported lazily on first use — importing this module
+ * scope, so they are imported lazily on first use -- importing this module
  * (e.g. via the `alchemy/Bundle` barrel) must never load the native
  * binding (#562).
  */
@@ -57,7 +57,7 @@ export interface PurePluginOptions {
    *
    * Listing a package that declares `"sideEffects": false` (or `[]`)
    * in its `package.json` opts it into full annotation, including
-   * top-level calls whose result is discarded — see {@link purePlugin}.
+   * top-level calls whose result is discarded -- see {@link purePlugin}.
    */
   readonly packages?: ReadonlyArray<string>;
   /**
@@ -88,7 +88,7 @@ const SUPPORTED_FILE_RE = /\.(?:m?[jt]sx?|cjs|cts)$/;
  * packages listed via `packages` are touched. Listing a package that
  * declares `sideEffects: false` / `[]` is a deliberate opt-in to full
  * annotation, including discarded-result statement calls (#949). The
- * package owning the bundle entry gets no special treatment — apps that
+ * package owning the bundle entry gets no special treatment -- apps that
  * want their own bound calls tree-shaken list themselves explicitly.
  */
 export const purePlugin = (options: PurePluginOptions = {}): rolldown.Plugin => {
@@ -120,7 +120,7 @@ export const purePlugin = (options: PurePluginOptions = {}): rolldown.Plugin => 
         const info = await resolvePackageInfo(path.dirname(cleanId), pkgInfoCache);
         // A nameless package.json (e.g. a nested `dist/package.json`
         // holding only `{"type": "module"}`) can't be matched against the
-        // configured patterns — fall back to the path-derived
+        // configured patterns -- fall back to the path-derived
         // `node_modules/<pkg>` name when one exists.
         const name = info?.name ?? packageNameFromId(cleanId);
         if (name === null || !isMatch(name)) return null;
@@ -137,7 +137,7 @@ export const purePlugin = (options: PurePluginOptions = {}): rolldown.Plugin => 
         const anchors = await collectPureAnchorsCached(code, cleanId);
         // Annotating a call whose result is BOUND (variable initializer,
         // export) only lets the minifier drop it when the binding itself
-        // is unused — safe everywhere. Annotating a call whose result is
+        // is unused -- safe everywhere. Annotating a call whose result is
         // DISCARDED (a bare expression statement like `app.get("/", h)`)
         // is an instruction to delete the call under minification, so it
         // is only applied when the owning package explicitly declared
@@ -311,8 +311,8 @@ export function packageNameFromId(id: string): string | null {
  * Process-wide memo of {@link collectPureAnchors} results keyed by module id.
  *
  * Parsing with oxc dominates the plugin's main-thread CPU (it showed up as
- * ~60% of the profile of a test run), and the same modules — effect/alchemy
- * dist files — are re-scanned for EVERY bundle built in the process. The
+ * ~60% of the profile of a test run), and the same modules -- effect/alchemy
+ * dist files -- are re-scanned for EVERY bundle built in the process. The
  * single-process test runner builds dozens of worker bundles per run, so
  * this cache eliminates all repeat parses. The stored `code` is compared on
  * lookup, so a changed file (e.g. dev watch mode) never serves a stale
@@ -346,7 +346,7 @@ const collectPureAnchorsCached = async (
  */
 export interface PureAnchors {
   /**
-   * Calls whose result is bound — variable initializers, exports,
+   * Calls whose result is bound -- variable initializers, exports,
    * assignment right-hand sides. Annotating these only lets the minifier
    * drop the call when the binding itself is unused, so it is safe for
    * any module.
@@ -363,8 +363,8 @@ export interface PureAnchors {
 
 /**
  * Parses `code` and returns the offsets at which `/*#__PURE__*\/` must be
- * inserted — before every top-level `CallExpression` callee / `new`
- * keyword — classified by whether the call result is bound or discarded.
+ * inserted -- before every top-level `CallExpression` callee / `new`
+ * keyword -- classified by whether the call result is bound or discarded.
  * Returns `null` if the file does not need to be modified (parse failure
  * or no annotations needed).
  */
@@ -377,7 +377,7 @@ export async function collectPureAnchors(
   try {
     // Use TS lang so the parser tolerates TS syntax (`as`, `satisfies`,
     // non-null assertions) even when scanning published .js dist files
-    // — TS is a strict superset of JS for our purposes here.
+    // -- TS is a strict superset of JS for our purposes here.
     program = parseAst(code, { sourceType: "module", lang: "ts" }, filename);
   } catch {
     return null;
@@ -477,7 +477,7 @@ export async function collectPureAnchors(
 
   for (const node of program.body) {
     // Directive nodes (e.g. "use strict") have type "ExpressionStatement"
-    // with a `directive` field and a string literal expression — they
+    // with a `directive` field and a string literal expression -- they
     // cannot contain calls, so visiting them is a safe no-op.
     visitTopLevel(node as Statement);
   }

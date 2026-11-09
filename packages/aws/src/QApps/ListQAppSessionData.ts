@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { QApp } from "./QApp.ts";
 
 /**
- * Request for {@link ListQAppSessionData} — `instanceId` is injected from the bound Q App.
+ * Request for {@link ListQAppSessionData} -- `instanceId` is injected from the bound Q App.
  */
 export interface ListQAppSessionDataRequest extends Omit<
   qapps.ListQAppSessionDataInput,
@@ -19,7 +19,7 @@ export interface ListQAppSessionDataRequest extends Omit<
  * ### Sessions
  * **Example:** List Session Data
  * ```typescript
- * // init — bind the operation to the Q App
+ * // init -- bind the operation to the Q App
  * const listQAppSessionData = yield* AWS.QApps.ListQAppSessionData(app);
  *
  * // runtime

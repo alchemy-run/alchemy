@@ -20,12 +20,12 @@ export class QuickSightDashboardUnexpectedResponse extends Data.TaggedError(
 }> {}
 
 /**
- * Properties for an Amazon QuickSight dashboard — a published, read-only view
+ * Properties for an Amazon QuickSight dashboard -- a published, read-only view
  * built from a template, an analysis, or an inline definition.
  */
 export interface DashboardProps {
   /**
-   * Unique id of the dashboard within the account. Stable — changing it
+   * Unique id of the dashboard within the account. Stable -- changing it
    * replaces the dashboard. If omitted, a unique id is generated.
    */
   dashboardId?: string;
@@ -36,7 +36,7 @@ export interface DashboardProps {
   name: string;
 
   /**
-   * Source of the dashboard content — a template or an existing analysis to
+   * Source of the dashboard content -- a template or an existing analysis to
    * clone. Provide either `sourceEntity` or `definition`.
    */
   sourceEntity?: quicksight.DashboardSourceEntity;
@@ -106,7 +106,7 @@ export interface DashboardLookup {
 }
 
 /**
- * An Amazon QuickSight dashboard — a published, read-only view built from a
+ * An Amazon QuickSight dashboard -- a published, read-only view built from a
  * template, an analysis, or an inline definition.
  *
  * QuickSight requires an active account subscription in the region. Without
@@ -214,7 +214,7 @@ export const DashboardProvider = () =>
           // 1. Observe.
           let observed = yield* readDashboard(accountId, dashboardId);
 
-          // 2. Ensure — create if missing.
+          // 2. Ensure -- create if missing.
           if (observed === undefined) {
             yield* quicksight
               .createDashboard({
@@ -232,7 +232,7 @@ export const DashboardProvider = () =>
               })
               .pipe(Effect.catchTag("ResourceExistsException", () => Effect.void));
           } else {
-            // 3. Sync — publish a new version.
+            // 3. Sync -- publish a new version.
             yield* quicksight.updateDashboard({
               AwsAccountId: accountId,
               DashboardId: dashboardId,

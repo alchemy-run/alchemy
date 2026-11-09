@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 
 /**
  * Hetzner label keys cannot contain `:`. Alchemy ownership tags use
- * `alchemy::stack` / `alchemy::stage` / `alchemy::id` — map those onto
+ * `alchemy::stack` / `alchemy::stage` / `alchemy::id` -- map those onto
  * `alchemy.stack` / `alchemy.stage` / `alchemy.id` so they survive the
  * Cloud API, and invert the mapping when reading observed labels back.
  *
@@ -74,8 +74,8 @@ export const hasAlchemyLabels = Effect.fn(function* (id: string, labels: Tags | 
 
 /**
  * Diff observed cloud labels against desired labels. Always pass
- * **observed** labels as `oldLabels` — never `olds.labels` or
- * `output.labels` — so adoption converges.
+ * **observed** labels as `oldLabels` -- never `olds.labels` or
+ * `output.labels` -- so adoption converges.
  */
 export const diffLabels = diffTags;
 

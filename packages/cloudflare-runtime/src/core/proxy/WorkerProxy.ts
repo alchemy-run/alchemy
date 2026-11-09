@@ -37,7 +37,7 @@ import { ConfigError, SystemError } from "../RuntimeError.shared.ts";
  * `net.Socket` (1.3.13) discards bytes that arrive before a `data` listener
  * exists, where Node buffers them, so the proxy never relies on the socket
  * to do the holding. Setting a different upstream destroys the connections
- * spliced to the previous one — with make-before-break the old runtime is
+ * spliced to the previous one -- with make-before-break the old runtime is
  * torn down right after, so an in-flight exchange there would be reset
  * anyway, and a keep-alive connection must not stay pinned to it.
  */
@@ -189,7 +189,7 @@ const makeRelay = (pendingTimeout: Duration.Duration): Relay => {
     socket.on("error", () => {});
 
     // Whatever the client sends before its upstream is connected is held
-    // here and replayed first — see the module doc on Bun. Read from the
+    // here and replayed first -- see the module doc on Bun. Read from the
     // very first tick; past the limit the rest waits in the kernel.
     const held: Array<Buffer> = [];
     let heldBytes = 0n;
@@ -356,7 +356,7 @@ export const WorkerProxyLive = Layer.effect(
     // `localhost` resolves to BOTH 127.0.0.1 and ::1, and browsers prefer
     // IPv6. A proxy bound only on 127.0.0.1 leaves `[::1]:port` free for any
     // other process (e.g. a framework dev server hunting from its default
-    // port) to claim — after which `http://localhost:port` silently serves
+    // port) to claim -- after which `http://localhost:port` silently serves
     // that other process instead of (or interleaved with) the proxy. When
     // serving on the loopback default, bind an additional `[::1]` socket so
     // the proxy owns its port on both address families. Machines without an
@@ -381,7 +381,7 @@ export const WorkerProxyLive = Layer.effect(
               ? // A configured (non-strict) port: a dev-session restart races
                 // the previous session's teardown, and an instant fallback
                 // would silently shift every configured port in the stack up
-                // by one in nondeterministic order — serving the wrong app on
+                // by one in nondeterministic order -- serving the wrong app on
                 // the ports the user knows. Wait out the teardown before
                 // falling back to the hunt (the caller warns on drift).
                 yield* ports
@@ -390,7 +390,7 @@ export const WorkerProxyLive = Layer.effect(
               : yield* ports.find(0),
         host,
         strictPort,
-        // Dual-bind only for the loopback default — an explicit host is
+        // Dual-bind only for the loopback default -- an explicit host is
         // served verbatim.
         ipv6: options.host === undefined && ipv6Loopback,
         pendingTimeout: Duration.fromInputUnsafe(options.pendingTimeout ?? DEFAULT_PENDING_TIMEOUT),
@@ -409,7 +409,7 @@ export const WorkerProxyLive = Layer.effect(
       if (ipv6) {
         // The IPv6 half of `localhost` (see `ipv6Loopback` above). The port
         // was probed across both families by `ports.find`/`check`, so this
-        // bind only fails on a genuine race — handled by `serveWithRetry`
+        // bind only fails on a genuine race -- handled by `serveWithRetry`
         // like any other collision.
         yield* listen(relay, "::1", port);
       }

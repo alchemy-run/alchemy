@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `macie2:GetClassificationExportConfiguration`.
  *
  * Retrieves the configuration settings for storing data classification results.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.Macie2.GetClassificationExportConfigurationHttp)`.
  * ### Classification Jobs & Export
  * **Example:** Read the Export Configuration
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getClassificationExportConfiguration = yield* AWS.Macie2.GetClassificationExportConfiguration();
  *
  * // runtime

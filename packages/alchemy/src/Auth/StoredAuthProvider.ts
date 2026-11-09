@@ -35,7 +35,7 @@ export const storedSecret = (value: StoredValue | undefined) =>
  * structured details.
  *
  * Providers with several auth methods (browser OAuth, SSO) don't fit this
- * factory — they hand-roll the impl and may still reuse
+ * factory -- they hand-roll the impl and may still reuse
  * {@link collectFieldValues} for their token-shaped method.
  */
 export interface StoredAuthProviderConfig<Resolved> {
@@ -44,7 +44,7 @@ export interface StoredAuthProviderConfig<Resolved> {
   /** The fields collected interactively or via `--set`. */
   readonly fields: ReadonlyArray<ConfigureField>;
   /**
-   * Derive additional stored values after input collection — e.g. resolve
+   * Derive additional stored values after input collection -- e.g. resolve
    * an account id with an API call using the entered token. Runs for both
    * the interactive and flag-driven paths, before persistence.
    */
@@ -120,7 +120,7 @@ export const collectFieldValues = (
     for (const field of fields) {
       const description = [
         field.description,
-        field.optional ? "Optional — press Enter to skip." : undefined,
+        field.optional ? "Optional \u2014 press Enter to skip." : undefined,
       ]
         .filter((part): part is string => part !== undefined)
         .join(" ");

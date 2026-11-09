@@ -5,15 +5,15 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `ram:GetResourceShareAssociations`.
  *
- * Retrieves the principal and resource associations of your resource shares — who has access, and to what.
- * Account-level operation — the target shares, invitations, and permissions
+ * Retrieves the principal and resource associations of your resource shares -- who has access, and to what.
+ * Account-level operation -- the target shares, invitations, and permissions
  * are chosen per request at runtime, so the binding takes no resource
  * argument. Provide the implementation with
  * `Effect.provide(AWS.RAM.GetResourceShareAssociationsHttp)`.
  * ### Discovering Shares & Shared Resources
  * **Example:** List the Principals Associated with Your Shares
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getResourceShareAssociations = yield* AWS.RAM.GetResourceShareAssociations();
  *
  * // runtime

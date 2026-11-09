@@ -12,7 +12,7 @@ export interface UpdateAssessmentStatusRequest extends Omit<
 /**
  * Runtime binding for `auditmanager:UpdateAssessmentStatus`.
  *
- * Sets the bound assessment's status — mark it `INACTIVE` to
+ * Sets the bound assessment's status -- mark it `INACTIVE` to
  * complete it and stop evidence collection. Provide the
  * implementation with `Effect.provide(AWS.AuditManager.UpdateAssessmentStatusHttp)`.
  * ### Assessment Workflow

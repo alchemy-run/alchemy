@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `forecast:QueryForecast` — the Forecast Query data
+ * Runtime binding for `forecast:QueryForecast` -- the Forecast Query data
  * plane. Retrieves the predicted time series for a single item from a
  * generated forecast, the call an API or personalization function makes to
  * serve predictions.

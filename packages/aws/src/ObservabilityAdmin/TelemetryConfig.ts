@@ -30,7 +30,7 @@ export interface TelemetryConfig extends Resource<
     status: string;
     /**
      * The status observed before this stack first managed the feature
-     * (`NOT_STARTED`, `RUNNING`, `STOPPED`, ...). Destroy restores this —
+     * (`NOT_STARTED`, `RUNNING`, `STOPPED`, ...). Destroy restores this --
      * a feature that was already running when the stack adopted it is left
      * running.
      */
@@ -42,7 +42,7 @@ export interface TelemetryConfig extends Resource<
 
 /**
  * Account-level CloudWatch **telemetry config** (Observability Admin
- * telemetry evaluation) — an account singleton that audits which AWS
+ * telemetry evaluation) -- an account singleton that audits which AWS
  * resources (VPCs, Lambda functions, ...) have telemetry such as flow
  * logs enabled.
  *
@@ -134,11 +134,11 @@ export const TelemetryConfigProvider = () =>
     TelemetryConfig,
     Effect.gen(function* () {
       return TelemetryConfig.Provider.of({
-        // Account singleton setting — deleting only restores the prior
+        // Account singleton setting -- deleting only restores the prior
         // onboarding state; nuke must not toggle it.
         nuke: { singleton: true },
         stables: ["priorStatus"],
-        // No enumeration API — the singleton is always present as account
+        // No enumeration API -- the singleton is always present as account
         // configuration, never a discrete listable resource.
         list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ output }) {

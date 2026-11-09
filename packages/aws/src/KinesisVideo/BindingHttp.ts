@@ -9,8 +9,8 @@ import type { Stream } from "./Stream.ts";
 /**
  * Shared scaffolding for AWS Kinesis Video HTTP bindings.
  *
- * NOT exported from `index.ts` — every near-identical `{Op}Http.ts` in this
- * service is a thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of
+ * NOT exported from `index.ts` -- every near-identical `{Op}Http.ts` in this
+ * service is a thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of
  * the builders below. Kinesis Video data-plane calls are two-step: discover
  * the per-stream data endpoint (`GetDataEndpoint`) or per-channel signaling
  * endpoint (`GetSignalingChannelEndpoint`), then issue the signed data-plane

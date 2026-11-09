@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `macie2:CreateMember`.
  *
  * Associates an account with an Amazon Macie administrator account.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.Macie2.CreateMemberHttp)`.
  * ### Organization & Members
  * **Example:** Associate a Member Account
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const createMember = yield* AWS.Macie2.CreateMember();
  *
  * // runtime

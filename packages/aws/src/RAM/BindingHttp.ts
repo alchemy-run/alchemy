@@ -11,8 +11,8 @@ import type { PolicyStatement } from "../IAM/Policy.ts";
  * arrive from *other* accounts and are unknowable at deploy time), so every
  * binding is account-level and grants its action(s) on `Resource: ["*"]`.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, makeRAMHttpBinding({ … }))` over the builder below.
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, makeRAMHttpBinding({ ... }))` over the builder below.
  * Everything except the operation and the IAM action list is boilerplate.
  */
 export const makeRAMHttpBinding = <I, A, E, R>(options: {

@@ -5,17 +5,17 @@ import type { Canary } from "./Canary.ts";
 /**
  * Shared scaffolding for CloudWatch Synthetics HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the two
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the two
  * builders below. Everything except the operation and the IAM action is
  * boilerplate:
  *
- * - {@link makeSyntheticsCanaryHttpBinding} — operations scoped to one bound
+ * - {@link makeSyntheticsCanaryHttpBinding} -- operations scoped to one bound
  *   {@link Canary} (`GetCanary`, `GetCanaryRuns`, `StartCanary`,
  *   `StopCanary`). The runtime callable injects the canary's name as the
  *   request's `Name`; the deploy-time half grants `actions` on the canary
  *   ARN.
- * - {@link makeSyntheticsAccountHttpBinding} — account-level operations
+ * - {@link makeSyntheticsAccountHttpBinding} -- account-level operations
  *   (`DescribeCanariesLastRun`), granted on `*`.
  */
 

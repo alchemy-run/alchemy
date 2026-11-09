@@ -15,7 +15,7 @@ import type { WorkerProps } from "./Worker.ts";
  * origin context instead of running in whichever request happens to resolve
  * them. A user pinning an older compatibility date must not silently revert
  * the bridge to the broken semantics, so the flag is forced for
- * alchemy-bundled workers — and explicitly disabling it is a deploy-time
+ * alchemy-bundled workers -- and explicitly disabling it is a deploy-time
  * error.
  */
 const CROSS_REQUEST_PROMISE_RESOLUTION = "handle_cross_request_promise_resolution";

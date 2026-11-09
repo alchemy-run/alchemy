@@ -40,13 +40,13 @@ export interface SandboxEgress {
 /**
  * How a mount shares the disk with other clients.
  *
- * - `exclusive` — this client owns writes to the whole disk (local-disk
+ * - `exclusive` -- this client owns writes to the whole disk (local-disk
  *   speed); other clients can still mount `read-only`.
- * - `shared` — many clients; the disk is read-only until a path is checked
+ * - `shared` -- many clients; the disk is read-only until a path is checked
  *   out with `archil checkout <path>`. FUSE client only.
- * - `conditional` — many writers; writes go to the server unless a path is
+ * - `conditional` -- many writers; writes go to the server unless a path is
  *   checked out (remote-filesystem speed).
- * - `read-only` — no writes.
+ * - `read-only` -- no writes.
  */
 export type MountMode = "exclusive" | "shared" | "conditional" | "read-only";
 

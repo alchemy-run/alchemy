@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `rekognition:GetFaceSearch` — get the results of an asynchronous video face search started by StartFaceSearch.
+ * Runtime binding for `rekognition:GetFaceSearch` -- get the results of an asynchronous video face search started by StartFaceSearch.
  *
  * The binding takes no arguments and grants the function
  * `rekognition:GetFaceSearch` on `*` (Rekognition data-plane resources such

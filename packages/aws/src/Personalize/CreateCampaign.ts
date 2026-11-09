@@ -3,8 +3,8 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `personalize:CreateCampaign` — Deploys a trained solution version as a live campaign that serves
- * real-time recommendations — the final step of the MLOps loop.
+ * Runtime binding for `personalize:CreateCampaign` -- Deploys a trained solution version as a live campaign that serves
+ * real-time recommendations -- the final step of the MLOps loop.
  * Provide the implementation with
  * `Effect.provide(AWS.Personalize.CreateCampaignHttp)`.
  *

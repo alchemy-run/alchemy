@@ -37,11 +37,11 @@ export type LakeProps = {
    * unique name is generated from the stack, stage, and logical id. Must
    * contain only lowercase letters, numbers, and hyphens; start with a
    * letter; end with a letter or number; and be 1-63 characters. Immutable
-   * — changing it replaces the lake.
+   * -- changing it replaces the lake.
    */
   lakeId?: string;
   /**
-   * Region (`us-central1`, …). Immutable — changing it replaces the lake.
+   * Region (`us-central1`, ...). Immutable -- changing it replaces the lake.
    * `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -82,7 +82,7 @@ export type Lake = Resource<
     description: string | undefined;
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;
-    /** Lifecycle state (`ACTIVE`, `CREATING`, …). */
+    /** Lifecycle state (`ACTIVE`, `CREATING`, ...). */
     state: string | undefined;
     /** Lake service account. */
     serviceAccount: string | undefined;
@@ -113,7 +113,7 @@ export interface LakeLookup {
    */
   lakeId: string;
   /**
-   * Region (`us-central1`, …). `US-CENTRAL1` is accepted and normalized to
+   * Region (`us-central1`, ...). `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    */
   location?: string;
@@ -125,7 +125,7 @@ export interface LakeLookup {
 }
 
 /**
- * A Dataplex lake — a regional container for zones, assets, and tasks.
+ * A Dataplex lake -- a regional container for zones, assets, and tasks.
  *
  * Changing `lakeId` or `location` replaces the lake. Display name,
  * description, labels, and metastore association update in place.

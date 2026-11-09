@@ -12,7 +12,7 @@ import type * as Effect from "effect/Effect";
  * ### Restoring Data
  * **Example:** List Table Restores for a Namespace
  * ```typescript
- * // init — resolve the runtime client
+ * // init -- resolve the runtime client
  * const listTableRestoreStatus = yield* AWS.RedshiftServerless.ListTableRestoreStatus();
  *
  * const { tableRestoreStatuses } = yield* listTableRestoreStatus({ namespaceName });

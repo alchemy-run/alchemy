@@ -31,7 +31,7 @@ export type SnapshotProps = {
   /**
    * Subscription whose backlog this snapshot retains. Accepts a full
    * resource name (`projects/{project}/subscriptions/{subscription}`) or
-   * a subscription id. Immutable — changing it replaces the snapshot.
+   * a subscription id. Immutable -- changing it replaces the snapshot.
    */
   subscription: string;
   /**
@@ -85,7 +85,7 @@ export interface SnapshotLookup {
  *
  * Snapshots capture unacked messages at creation time (and subsequent
  * publishes to the topic) so a subscription can later `Seek` back to that
- * point. The source `subscription` is immutable — changing it replaces the
+ * point. The source `subscription` is immutable -- changing it replaces the
  * snapshot. Labels can be updated in place.
  *
  * ### Creating a Snapshot
@@ -289,7 +289,7 @@ export const SnapshotProvider = () =>
         ...(yield* createInternalLabels(id)),
       };
       // Snapshot GET does not return the source subscription. Recreate when
-      // persisted props show it changed — the field is immutable.
+      // persisted props show it changed -- the field is immutable.
       const subscriptionChanged =
         olds?.subscription !== undefined &&
         resourceKey(news.subscription) !== resourceKey(olds.subscription);

@@ -29,11 +29,11 @@ import {
 export type ProductsSfdcInstanceProps = {
   /**
    * Salesforce instance id (the `{sfdcInstance}` segment). Server-assigned
-   * on create. Immutable — changing it replaces the instance.
+   * on create. Immutable -- changing it replaces the instance.
    */
   sfdcInstanceId?: string;
   /**
-   * Location (`us-central1`, …). Immutable — changing it replaces the
+   * Location (`us-central1`, ...). Immutable -- changing it replaces the
    * instance. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile
    *   region, else `us-central1`)
@@ -41,7 +41,7 @@ export type ProductsSfdcInstanceProps = {
   location?: string;
   /**
    * Product id (`IP` for Application Integration, `APIGEE` for Apigee
-   * Integration). Immutable — changing it replaces the instance.
+   * Integration). Immutable -- changing it replaces the instance.
    * @default "IP"
    */
   product?: string;
@@ -51,7 +51,7 @@ export type ProductsSfdcInstanceProps = {
   displayName?: string;
   /**
    * Human-readable description. Salesforce instances have no labels
-   * field, so Alchemy ownership is stored in a `[alchemy …]` prefix and
+   * field, so Alchemy ownership is stored in a `[alchemy ...]` prefix and
    * stripped from attributes.
    */
   description?: string;
@@ -106,7 +106,7 @@ export type ProductsSfdcInstance = Resource<
  * A product-scoped Salesforce instance used by Application Integration
  * (`projects/.../products/{product}/sfdcInstances/{sfdcInstance}`).
  *
- * Instances have no labels field — Alchemy stamps ownership into the
+ * Instances have no labels field -- Alchemy stamps ownership into the
  * description. Location, product, and id are immutable. Display name,
  * description, org id, auth configs, and service authority update in
  * place.

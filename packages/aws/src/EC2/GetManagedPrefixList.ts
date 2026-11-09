@@ -20,7 +20,7 @@ export class ManagedPrefixListNotFound extends Data.TaggedError(
  * origin-facing addresses are `com.amazonaws.global.cloudfront.origin-facing`.
  *
  * As a **data source**, invoke it at plan time via {@link getManagedPrefixList}
- * — the result is an `Output` resolved during plan/deploy. As a **runtime
+ * -- the result is an `Output` resolved during plan/deploy. As a **runtime
  * binding**, bind it inside a Function with
  * `Effect.provide(AWS.EC2.GetManagedPrefixListHttp)`.
  * ### Looking Up Prefix Lists

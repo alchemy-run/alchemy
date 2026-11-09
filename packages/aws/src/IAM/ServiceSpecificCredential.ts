@@ -104,7 +104,7 @@ export const ServiceSpecificCredentialProvider = () =>
       // (`listUsers`) and fan out `listServiceSpecificCredentials` per user
       // (bounded concurrency). Omit `ServiceName` to capture credentials
       // across all services. The credential secret is only returned at
-      // creation, so list cannot recover it — match `read` and leave the
+      // creation, so list cannot recover it -- match `read` and leave the
       // redacted secret fields undefined.
       const users = yield* iam.listUsers.pages({}).pipe(
         Stream.runCollect,
@@ -173,7 +173,7 @@ export const ServiceSpecificCredentialProvider = () =>
       };
     }),
     reconcile: Effect.fn(function* ({ news, output, session }) {
-      // Observe — credential ids are AWS-generated; we can only locate
+      // Observe -- credential ids are AWS-generated; we can only locate
       // the existing record via the prior output. The credential's
       // identity (userName, serviceName, age) is immutable (`diff`
       // triggers replacement on change), so a missing credential always
@@ -195,7 +195,7 @@ export const ServiceSpecificCredentialProvider = () =>
             )
         : undefined;
 
-      // Ensure — create when missing. The secret fields are only
+      // Ensure -- create when missing. The secret fields are only
       // returned on first creation, so adoption preserves the prior
       // redacted values.
       let credentialId =
@@ -241,7 +241,7 @@ export const ServiceSpecificCredentialProvider = () =>
         });
       }
 
-      // Sync — apply the desired status when it differs from observed.
+      // Sync -- apply the desired status when it differs from observed.
       const desiredStatus = news.status ?? observedStatus ?? "Active";
       if (desiredStatus !== observedStatus) {
         yield* iam.updateServiceSpecificCredential({

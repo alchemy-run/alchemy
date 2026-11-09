@@ -6,8 +6,8 @@ import type { Schema } from "./Schema.ts";
 /**
  * Runtime binding for `schemas:DescribeSchema`.
  *
- * Reads the bound {@link Schema}'s document — the content, type, version,
- * and description — so a function can fetch the authoritative event contract
+ * Reads the bound {@link Schema}'s document -- the content, type, version,
+ * and description -- so a function can fetch the authoritative event contract
  * at runtime (e.g. to validate incoming payloads against the registered
  * schema). The registry and schema names are injected from the binding; pass
  * `SchemaVersion` to read a specific version instead of the latest. Provide
@@ -15,7 +15,7 @@ import type { Schema } from "./Schema.ts";
  * ### Reading Schemas
  * **Example:** Fetch The Latest Schema Document
  * ```typescript
- * // init — bind the operation to the schema
+ * // init -- bind the operation to the schema
  * const describeSchema = yield* AWS.Schemas.DescribeSchema(schema);
  *
  * // runtime

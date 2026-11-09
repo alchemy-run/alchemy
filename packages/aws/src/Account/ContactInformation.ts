@@ -61,7 +61,7 @@ export interface ContactInformation extends Resource<
 > {}
 
 /**
- * The primary contact information of an AWS account — the account-global
+ * The primary contact information of an AWS account -- the account-global
  * mailing address and phone number AWS uses to reach the account owner. Every
  * account has exactly one primary contact; this resource upserts it via
  * `account:PutContactInformation`. AWS does not allow deleting the primary
@@ -146,7 +146,7 @@ export const ContactInformationProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ news, session }) {
           // The primary contact is a singleton driven entirely by
-          // `putContactInformation`, which is a full upsert — the request
+          // `putContactInformation`, which is a full upsert -- the request
           // payload *is* the desired state.
           yield* account.putContactInformation({
             ContactInformation: {
@@ -183,7 +183,7 @@ export const ContactInformationProvider = () =>
         }),
         // Account-global singleton: return the one contact if it exists.
         list: () => observe(undefined).pipe(Effect.map((contact) => (contact ? [contact] : []))),
-        // AWS does not allow deleting the primary contact of an account —
+        // AWS does not allow deleting the primary contact of an account --
         // destroy just stops managing it and leaves the last value in place.
         delete: Effect.fn(function* () {}),
       };

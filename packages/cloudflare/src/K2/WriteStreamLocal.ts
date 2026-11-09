@@ -6,7 +6,7 @@ import { WriteStream } from "./WriteStream.ts";
 import { makeWriteStreamHttpClient } from "./WriteStreamHttp.ts";
 
 /**
- * Local implementation of the {@link WriteStream} service — appends records
+ * Local implementation of the {@link WriteStream} service -- appends records
  * through the stream's HTTP input with the **current credentials** instead
  * of a native binding or a scoped token. Provide it on an Action (or any
  * deploy-time Effect) to seed a stream with the same client a Worker uses.
@@ -38,7 +38,7 @@ export const WriteStreamLocal = Layer.effect(
   Effect.gen(function* () {
     const auth = yield* makeK2LocalAuth;
     return Effect.fn(function* (stream: Stream<any>) {
-      // Deferred accessor — resolves the id at apply time. No `host.bind`:
+      // Deferred accessor -- resolves the id at apply time. No `host.bind`:
       // the local variant registers no binding.
       return makeWriteStreamHttpClient(auth, yield* stream.streamId, stream.RecordSchema);
     });

@@ -13,7 +13,7 @@ import type * as Effect from "effect/Effect";
  * ### Inspecting the Landing Zone
  * **Example:** Read the Landing Zone's Drift Status
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const getLandingZone = yield* AWS.ControlTower.GetLandingZone();
  *
  * // runtime

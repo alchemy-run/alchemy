@@ -118,7 +118,7 @@ export const GroupProvider = () =>
         stables: ["groupName", "userPoolId"],
 
         // Sub-resource keyed entirely by its user pool (userPoolId) with no global
-        // enumeration API of its own — nuke reaches it through the parent's
+        // enumeration API of its own -- nuke reaches it through the parent's
         // deletion, so enumeration returns empty per the ProviderService
         // doctrine.
         list: () => Effect.succeed([]),
@@ -151,7 +151,7 @@ export const GroupProvider = () =>
           // 1. OBSERVE
           let observed = yield* getGroup(userPoolId, groupName);
 
-          // 2. ENSURE — tolerate the create race.
+          // 2. ENSURE -- tolerate the create race.
           if (observed === undefined) {
             observed = yield* cip
               .createGroup({
@@ -166,7 +166,7 @@ export const GroupProvider = () =>
                 Effect.catchTag("GroupExistsException", () => getGroup(userPoolId, groupName)),
               );
           } else {
-            // 3. SYNC — description/role/precedence are mutable in place.
+            // 3. SYNC -- description/role/precedence are mutable in place.
             const drift =
               (news.description !== undefined && observed.Description !== news.description) ||
               (news.roleArn !== undefined && observed.RoleArn !== news.roleArn) ||

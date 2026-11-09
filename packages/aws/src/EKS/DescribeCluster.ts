@@ -6,7 +6,7 @@ import type { Cluster } from "./Cluster.ts";
 /**
  * Runtime binding for `eks:DescribeCluster`.
  *
- * Reads the bound cluster's live control-plane state — status, Kubernetes API `endpoint`, `certificateAuthority` data, version, and network config. The building block for constructing a kubeconfig at runtime.
+ * Reads the bound cluster's live control-plane state -- status, Kubernetes API `endpoint`, `certificateAuthority` data, version, and network config. The building block for constructing a kubeconfig at runtime.
  * The cluster `name` is injected from the bound {@link Cluster} and `eks:DescribeCluster` is granted on the cluster's ARN.
  * Provide the implementation with
  * `Effect.provide(AWS.EKS.DescribeClusterHttp)`.

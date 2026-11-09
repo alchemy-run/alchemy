@@ -6,14 +6,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `imagebuilder:ListWaitingWorkflowSteps`.
  *
  * Lists every workflow step in the account that is paused on
- * `WAIT_FOR_ACTION` — the work queue for an approval function, which then
+ * `WAIT_FOR_ACTION` -- the work queue for an approval function, which then
  * resumes or stops each build with `SendWorkflowStepAction`. Provide the
  * implementation with
  * `Effect.provide(AWS.ImageBuilder.ListWaitingWorkflowStepsHttp)`.
  * ### Workflow Monitoring
  * **Example:** List Steps Waiting for Action
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listWaitingWorkflowSteps =
  *   yield* AWS.ImageBuilder.ListWaitingWorkflowSteps();
  *

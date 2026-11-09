@@ -24,13 +24,13 @@ export interface StartParticipantReplicationRequest extends Omit<
 
 /**
  * Replicate a participant's media from the bound source stage into the
- * bound destination stage — e.g. to bring a guest publisher into a second
+ * bound destination stage -- e.g. to bring a guest publisher into a second
  * room without a re-publish.
  *
  * ### Replicating Participants
  * **Example:** Replicate a publisher into another stage
  * ```typescript
- * // init — bound to (source, destination)
+ * // init -- bound to (source, destination)
  * const startParticipantReplication =
  *   yield* IVSRealtime.StartParticipantReplication(mainStage, overflowStage);
  *

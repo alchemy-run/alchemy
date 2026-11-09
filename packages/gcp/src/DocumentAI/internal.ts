@@ -20,7 +20,7 @@ export const DEFAULT_LOCATION = "us";
  * The distilled Document AI client talks to `documentai.googleapis.com`
  * (the US deployment). Listing processors/schemas in `eu` or regional
  * locations against that host returns HTTP 400 INVALID_ARGUMENT
- * (`Invalid location: '…' must match the server deployment 'us'`).
+ * (`Invalid location: '...' must match the server deployment 'us'`).
  */
 export const LIST_LOCATIONS = ["us"] as const;
 export const MAX_PROCESSOR_DISPLAY_NAME_LENGTH = 64;

@@ -22,7 +22,7 @@ export class ComputeBuildError extends Data.TaggedError("ComputeBuildError")<{
   readonly cause?: unknown;
 }> {}
 
-// `@vercel/nft` is an optional peer dependency — loaded lazily so importing
+// `@vercel/nft` is an optional peer dependency -- loaded lazily so importing
 // the Prisma provider never requires it unless a NestJS artifact is traced.
 const importNft = () =>
   import("@vercel/nft").catch((cause) => {

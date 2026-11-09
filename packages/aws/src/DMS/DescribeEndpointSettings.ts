@@ -6,14 +6,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `dms:DescribeEndpointSettings`.
  *
  * Bind this operation (account-level) to enumerate the settings an endpoint
- * engine supports — names, types, enum values, defaults — e.g. to validate
+ * engine supports -- names, types, enum values, defaults -- e.g. to validate
  * user-supplied endpoint configuration before creating endpoints. Provide
  * the implementation with
  * `Effect.provide(AWS.DMS.DescribeEndpointSettingsHttp)`.
  * ### Inspecting Engine Settings
  * **Example:** List the Settings MySQL Endpoints Accept
  * ```typescript
- * // init — account-level, no target resource
+ * // init -- account-level, no target resource
  * const endpointSettings = yield* AWS.DMS.DescribeEndpointSettings();
  *
  * // runtime

@@ -5,13 +5,13 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `devops-guru:ListMonitoredResources`.
  *
- * Lists the resources DevOps Guru is analyzing (or supports analyzing) — an audit of what the resource collection actually covers.
+ * Lists the resources DevOps Guru is analyzing (or supports analyzing) -- an audit of what the resource collection actually covers.
  * Provide the implementation with
  * `Effect.provide(AWS.DevOpsGuru.ListMonitoredResourcesHttp)`.
  * ### Coverage Health
  * **Example:** List Analyzed Resources
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listMonitoredResources = yield* AWS.DevOpsGuru.ListMonitoredResources();
  *
  * // runtime

@@ -26,7 +26,7 @@ export const executeArtifactUpload = (
 ) =>
   Effect.gen(function* () {
     // Prefer the Prisma-scoped upload client (node transport, provided by
-    // live wiring — presigned upload URLs need explicit Content-Length on
+    // live wiring -- presigned upload URLs need explicit Content-Length on
     // file-backed bodies); fall back to the ambient client so tests can
     // stub uploads through `HttpClient.HttpClient`.
     const uploadClient = yield* Effect.serviceOption(PrismaUploadClient);

@@ -17,7 +17,7 @@ export interface ExportDataQuery {
   /**
    * The SQL statement selecting the columns to export, e.g.
    * `SELECT identity_line_item_id, line_item_unblended_cost FROM COST_AND_USAGE_REPORT`.
-   * Data Exports supports a limited subset of SQL — see the AWS Data Exports
+   * Data Exports supports a limited subset of SQL -- see the AWS Data Exports
    * table dictionary for available tables and columns.
    */
   queryStatement: string;
@@ -98,7 +98,7 @@ export interface ExportProps {
    */
   description?: string;
   /**
-   * The SQL data query — the statement plus optional table configurations.
+   * The SQL data query -- the statement plus optional table configurations.
    */
   dataQuery: ExportDataQuery;
   /**
@@ -151,7 +151,7 @@ export interface ExportLookup {
 }
 
 /**
- * An AWS Billing and Cost Management data export (Data Exports / CUR 2.0) —
+ * An AWS Billing and Cost Management data export (Data Exports / CUR 2.0) --
  * delivers billing and cost management data selected by an SQL query to an
  * S3 bucket on a refresh cadence.
  *
@@ -261,8 +261,8 @@ export const ExportProvider = () =>
       });
 
       // Project both the observed and the desired definition through the
-      // same shape (fixed key order, defaults filled) so wire echoes — key
-      // ordering, an echoed S3BucketOwner — never register as drift.
+      // same shape (fixed key order, defaults filled) so wire echoes -- key
+      // ordering, an echoed S3BucketOwner -- never register as drift.
       const normalizeExport = (e: bcm.Export): string => {
         const dest = e.DestinationConfigurations.S3Destination;
         return JSON.stringify({
@@ -289,7 +289,7 @@ export const ExportProvider = () =>
           Frequency: e.RefreshCadence.Frequency,
         });
       };
-      // S3BucketOwner is compared only when the user sets it — AWS may echo
+      // S3BucketOwner is compared only when the user sets it -- AWS may echo
       // the effective owner account on reads even when it was never supplied.
       const sameExport = (live: bcm.Export, desired: bcm.Export): boolean =>
         normalizeExport(live) === normalizeExport(desired) &&
@@ -307,7 +307,7 @@ export const ExportProvider = () =>
       });
 
       // Observe the live export definition. `arnHint` (from cached output)
-      // is verified, not trusted — a stale ARN falls through to name lookup.
+      // is verified, not trusted -- a stale ARN falls through to name lookup.
       const observe = Effect.fn(function* (name: string, arnHint: string | undefined) {
         const arns = arnHint !== undefined ? [arnHint] : [];
         const byName = yield* findArnByName(name);
@@ -358,7 +358,7 @@ export const ExportProvider = () =>
           const tags = yield* fetchObservedTags(live.exportArn);
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
-        // Replacement detection only — the export name is immutable; every
+        // Replacement detection only -- the export name is immutable; every
         // other property updates in place via updateExport.
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return undefined;
@@ -372,13 +372,13 @@ export const ExportProvider = () =>
           const desiredTags = { ...news.tags, ...internalTags };
           const desired = buildExport(name, news);
 
-          // 1. OBSERVE — cloud state is authoritative; output only caches
+          // 1. OBSERVE -- cloud state is authoritative; output only caches
           //    the ARN.
           const live = yield* observe(name, output?.exportArn);
 
           let exportArn: string;
           if (live === undefined) {
-            // 2. ENSURE — create the export with all tags attached.
+            // 2. ENSURE -- create the export with all tags attached.
             yield* session.note(`creating data export ${name}`);
             const created = yield* retryThrottling(
               bcm.createExport({
@@ -389,7 +389,7 @@ export const ExportProvider = () =>
             exportArn = created.ExportArn ?? (yield* findArnByName(name)) ?? name;
           } else {
             exportArn = live.exportArn;
-            // 3. SYNC — updateExport overwrites the full definition; skip
+            // 3. SYNC -- updateExport overwrites the full definition; skip
             //    the call when the observed definition already matches.
             if (!sameExport(live.export, desired)) {
               yield* session.note(`updating data export ${name}`);
@@ -397,7 +397,7 @@ export const ExportProvider = () =>
             }
           }
 
-          // 3b. SYNC TAGS — diff against observed cloud tags.
+          // 3b. SYNC TAGS -- diff against observed cloud tags.
           const observedTags = yield* fetchObservedTags(exportArn);
           const { upsert, removed } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {

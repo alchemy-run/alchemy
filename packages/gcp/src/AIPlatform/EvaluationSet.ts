@@ -28,7 +28,7 @@ export type EvaluationSetProps = {
    */
   evaluationSetId?: string;
   /**
-   * Region. Immutable — changing it replaces the set.
+   * Region. Immutable -- changing it replaces the set.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
@@ -82,7 +82,7 @@ export type EvaluationSet = Resource<
 >;
 
 /**
- * A Vertex AI Evaluation Set — a collection of Evaluation Items evaluated
+ * A Vertex AI Evaluation Set -- a collection of Evaluation Items evaluated
  * together.
  *
  * Evaluation Sets have no labels field, so Alchemy stamps ownership into

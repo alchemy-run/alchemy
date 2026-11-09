@@ -69,8 +69,8 @@ export const isLocalEmulator = AWSEnvironment.isLocalEmulator;
 
 export const Default = Layer.effect(
   AWSEnvironment,
-  // Provider layers are built on every run — before any profile may be
-  // configured — so nothing may resolve at construction. A dev run with
+  // Provider layers are built on every run -- before any profile may be
+  // configured -- so nothing may resolve at construction. A dev run with
   // zero AWS credentials builds this layer too (the ambient environment
   // is the emulator; only `Alchemy.remote()` rows ever need it), so the
   // profile/CI precedence is captured here and evaluated on first use.

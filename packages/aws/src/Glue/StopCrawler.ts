@@ -17,7 +17,7 @@ import type { Crawler } from "./Crawler.ts";
  * // init
  * const stopCrawler = yield* AWS.Glue.StopCrawler(crawler);
  *
- * // runtime — tolerate an idle or already-stopping crawler
+ * // runtime -- tolerate an idle or already-stopping crawler
  * yield* stopCrawler().pipe(
  *   Effect.catchTag(
  *     ["CrawlerNotRunningException", "CrawlerStoppingException"],

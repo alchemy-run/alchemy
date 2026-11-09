@@ -20,7 +20,7 @@ export type ListWorkflowVersionsInput = Omit<mwaa.ListWorkflowVersionsRequest, "
  * ### Observing Workflows
  * **Example:** List Workflow Versions
  * ```typescript
- * // init — bind the operation to the workflow
+ * // init -- bind the operation to the workflow
  * const listWorkflowVersions =
  *   yield* AWS.MWAAServerless.ListWorkflowVersions(workflow);
  *

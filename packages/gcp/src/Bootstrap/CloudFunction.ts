@@ -6,8 +6,8 @@
  * The Node.js Functions Framework owns the HTTP server, so the program's
  * `HttpServer` here is a capture: `serve` records the composed handler
  * (event-source listeners, then the user's `fetch`) and each framework
- * request is bridged into it as a web `Request`. The program — built once
- * per instance, like the Cloud Run bootstrap — runs in the background for
+ * request is bridged into it as a web `Request`. The program -- built once
+ * per instance, like the Cloud Run bootstrap -- runs in the background for
  * the instance's lifetime.
  *
  * Runtime credentials come from the metadata server: the function's

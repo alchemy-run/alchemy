@@ -7,7 +7,7 @@ export interface PublishSmsRequest extends Omit<sns.PublishInput, "TopicArn" | "
 /**
  * Runtime binding for `sns:Publish`.
  *
- * Runtime binding for direct SMS delivery with `sns:Publish` — send a text
+ * Runtime binding for direct SMS delivery with `sns:Publish` -- send a text
  * message straight to a phone number without a topic. Accounts start in the
  * SMS sandbox, where only verified destination numbers are deliverable.
  * Provide the `PublishSmsHttp` layer on the Function to implement the binding.

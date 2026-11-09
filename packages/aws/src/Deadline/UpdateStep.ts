@@ -6,7 +6,7 @@ import type { Queue } from "./Queue.ts";
 /**
  * Runtime binding for `deadline:UpdateStep`.
  *
- * Retargets every task of a step in the bound {@link Queue} — requeue
+ * Retargets every task of a step in the bound {@link Queue} -- requeue
  * (`READY`), cancel (`CANCELED`), suspend (`SUSPENDED`), or force-fail/
  * succeed the step's tasks in one call. The queue's `farmId`/`queueId` are
  * injected from the binding. Provide the implementation with
@@ -14,7 +14,7 @@ import type { Queue } from "./Queue.ts";
  * ### Managing Steps
  * **Example:** Requeue A Step's Tasks
  * ```typescript
- * // init — bind the operation to the queue
+ * // init -- bind the operation to the queue
  * const updateStep = yield* AWS.Deadline.UpdateStep(queue);
  *
  * // runtime

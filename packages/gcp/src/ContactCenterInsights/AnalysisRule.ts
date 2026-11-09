@@ -56,18 +56,18 @@ export type AnalysisRuleProps = {
    * Analysis rule id (the `{analysis_rule}` segment of
    * `projects/{project}/locations/{location}/analysisRules/{analysis_rule}`).
    * Contact Center AI Insights assigns the id on create; set it only to
-   * manage an existing rule. Immutable — changing it replaces the rule.
+   * manage an existing rule. Immutable -- changing it replaces the rule.
    */
   analysisRuleId?: string;
   /**
-   * Location (`us-central1`, …). Immutable — changing it replaces the rule.
+   * Location (`us-central1`, ...). Immutable -- changing it replaces the rule.
    * `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
    * Display name. Analysis rules have no labels field, so Alchemy
-   * ownership is stored in a `[alchemy …]` prefix and stripped from
+   * ownership is stored in a `[alchemy ...]` prefix and stripped from
    * attributes.
    */
   displayName?: string;
@@ -129,7 +129,7 @@ export type AnalysisRule = Resource<
  * A Contact Center AI Insights analysis rule that selects conversations
  * and the annotators to run on them.
  *
- * Analysis rules have no labels field — Alchemy stamps ownership into the
+ * Analysis rules have no labels field -- Alchemy stamps ownership into the
  * display name so `list` / nuke can find them. Location and id are
  * immutable. Filter, active flag, analysis percentage, and annotators
  * update in place.

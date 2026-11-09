@@ -12,7 +12,7 @@ export interface BatchGetPartitionRequest extends Omit<
  * Runtime binding for `glue:BatchGetPartition`.
  *
  * Reads up to 1000 partitions of the bound {@link Table} by their partition
- * values in one call — the bulk variant of `GetPartition`. Values that don't
+ * values in one call -- the bulk variant of `GetPartition`. Values that don't
  * resolve come back in `UnprocessedKeys`. The database/table names and
  * catalog id are injected from the binding. Provide the implementation with
  * `Effect.provide(AWS.Glue.BatchGetPartitionHttp)`.

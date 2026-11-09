@@ -55,9 +55,9 @@ export type CompensationEntry = {
   expectedUnitsPerYear?: number;
   /** Compensation amount. */
   amount?: jobs.Money;
-  /** Compensation type (`BASE`, `BONUS`, …). */
+  /** Compensation type (`BASE`, `BONUS`, ...). */
   type?: jobs.CompensationEntryTypeEnum | (string & {});
-  /** Frequency (`HOURLY`, `ANNUAL`, …). */
+  /** Frequency (`HOURLY`, `ANNUAL`, ...). */
   unit?: jobs.CompensationEntryUnitEnum | (string & {});
 };
 
@@ -76,17 +76,17 @@ export type ProcessingOptions = {
 export type TenantsJobProps = {
   /**
    * Parent tenant resource name `projects/{project}/tenants/{tenant}`
-   * or the tenant id. Immutable — changing it replaces the job.
+   * or the tenant id. Immutable -- changing it replaces the job.
    */
   parent: string;
   /**
    * Company resource name
    * `projects/{project}/tenants/{tenant}/companies/{company}`. Immutable
-   * — changing it replaces the job.
+   * -- changing it replaces the job.
    */
   company: string;
   /**
-   * Server-assigned job id. Leave blank on create. Immutable — changing
+   * Server-assigned job id. Leave blank on create. Immutable -- changing
    * it replaces the job.
    */
   jobId?: string;
@@ -264,7 +264,7 @@ export type TenantsJob = Resource<
  * Jobs have no labels field, so Alchemy stamps ownership into the
  * client-side `requisitionId` for `list` / nuke (never into the
  * seeker-visible title or description). Parent tenant,
- * company, and job id are identity — changing any of them replaces the
+ * company, and job id are identity -- changing any of them replaces the
  * job. Title, description, addresses, and related fields update in
  * place. A company cannot be deleted while it still has jobs.
  *

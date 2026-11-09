@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `macie2:ListClassificationJobs`.
  *
  * Retrieves a subset of information about one or more classification jobs.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.Macie2.ListClassificationJobsHttp)`.
  * ### Classification Jobs & Export
  * **Example:** List Classification Jobs
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listClassificationJobs = yield* AWS.Macie2.ListClassificationJobs();
  *
  * // runtime

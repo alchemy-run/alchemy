@@ -15,7 +15,7 @@ export type WakuProps = FrameworkSiteProps & {
 };
 
 /**
- * Waku RSC and static pages on Neon Functions. The Node target selects Waku’s node adapter; do not set unstable_adapter.
+ * Waku RSC and static pages on Neon Functions. The Node target selects Waku's node adapter; do not set unstable_adapter.
  *
  * Native framework development and HMR run without Neon cloud resources.
  * Apply `Alchemy.remote()` to use the live Function deployment during dev.

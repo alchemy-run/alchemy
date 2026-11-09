@@ -6,7 +6,7 @@ import type { Crawler } from "./Crawler.ts";
 /**
  * Runtime binding for `glue:StartCrawler`.
  *
- * Starts a crawl of the bound {@link Crawler} on demand — the standard way
+ * Starts a crawl of the bound {@link Crawler} on demand -- the standard way
  * to refresh the Data Catalog right after new data lands. Fails with the
  * typed `CrawlerRunningException` if a crawl is already in progress. The
  * crawler name is injected from the binding. Provide the implementation with
@@ -17,7 +17,7 @@ import type { Crawler } from "./Crawler.ts";
  * // init
  * const startCrawler = yield* AWS.Glue.StartCrawler(crawler);
  *
- * // runtime — tolerate an already-running crawl
+ * // runtime -- tolerate an already-running crawl
  * yield* startCrawler().pipe(
  *   Effect.catchTag("CrawlerRunningException", () => Effect.void),
  * );

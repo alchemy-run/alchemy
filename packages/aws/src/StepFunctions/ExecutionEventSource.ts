@@ -14,7 +14,7 @@ import type { StateMachine } from "./StateMachine.ts";
  * time).
  */
 export interface ExecutionEventDetail {
-  /** The execution's ARN (`arn:…:execution:{machine}:{name}`). */
+  /** The execution's ARN (`arn:...:execution:{machine}:{name}`). */
   executionArn?: string;
   /** ARN of the state machine the execution belongs to. */
   stateMachineArn?: string;
@@ -71,7 +71,7 @@ export interface ExecutionEventSourceProps extends EventRouteProps {
  * the host Function to those events so it can alert on `FAILED` executions
  * or chain post-completion automation.
  *
- * Step Functions publishes to EventBridge automatically — no additional
+ * Step Functions publishes to EventBridge automatically -- no additional
  * resource is created besides the EventBridge rule targeting the host.
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.

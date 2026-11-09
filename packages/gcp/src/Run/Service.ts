@@ -102,7 +102,7 @@ export type HttpHeader = {
 
 export type Probe = {
   /**
-   * Perform an HTTP GET; any 2xx–3xx response passes. Exactly one of
+   * Perform an HTTP GET; any 2xx-3xx response passes. Exactly one of
    * `httpGet`, `tcpSocket`, or `grpc` must be set.
    */
   httpGet?: {
@@ -236,7 +236,7 @@ export type TrafficTarget = {
   type?: string;
   /** Revision to send traffic to when allocating by revision. */
   revision?: string;
-  /** Percent of traffic (0–100). */
+  /** Percent of traffic (0-100). */
   percent?: number;
   /** URI tag for this target. */
   tag?: string;
@@ -259,11 +259,11 @@ export type ServiceProps = PlatformProps & {
    * `projects/{project}/locations/{location}/services/{service}`). If
    * omitted, a unique name is generated from the stack, stage, and logical
    * id. Must begin with a letter, not end with a hyphen, and be fewer than
-   * 50 characters. Immutable — changing it replaces the service.
+   * 50 characters. Immutable -- changing it replaces the service.
    */
   serviceId?: string;
   /**
-   * Region (`us-central1`, `europe-west1`, …). Immutable — changing it
+   * Region (`us-central1`, `europe-west1`, ...). Immutable -- changing it
    * replaces the service. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -381,7 +381,7 @@ export type Service = Resource<
     serviceId: string;
     /** Project id. */
     project: string;
-    /** Region (`us-central1`, …). */
+    /** Region (`us-central1`, ...). */
     location: string;
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;
@@ -403,7 +403,7 @@ export type Service = Resource<
     latestCreatedRevision: string | undefined;
     /** Latest Ready revision name. */
     latestReadyRevision: string | undefined;
-    /** Terminal condition state (`CONDITION_SUCCEEDED`, …). */
+    /** Terminal condition state (`CONDITION_SUCCEEDED`, ...). */
     terminalConditionState: string | undefined;
     /** True while Cloud Run is still reconciling the desired state. */
     reconciling: boolean;
@@ -447,7 +447,7 @@ export interface ServiceLookup {
    */
   serviceId: string;
   /**
-   * Region (`us-central1`, `europe-west1`, …). `US-CENTRAL1` is accepted
+   * Region (`us-central1`, `europe-west1`, ...). `US-CENTRAL1` is accepted
    * and normalized to `us-central1`.
    */
   location?: string;
@@ -468,7 +468,7 @@ export type ServiceShape = Main<ServiceServices>;
  * Changing `serviceId` or `location` replaces the service. Updates to
  * `template` create a new revision.
  *
- * This is GCP's effectful HTTP platform — the analog of
+ * This is GCP's effectful HTTP platform -- the analog of
  * `AWS.Lambda.Function` / `Cloudflare.Worker`. Pass `main` plus an
  * Effect implementation; bindings grant IAM onto the runtime service
  * account and inject env, the way AWS `policyStatements` land on the

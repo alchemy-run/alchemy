@@ -8,7 +8,7 @@ import type { DataSet } from "./DataSet.ts";
  *
  * Sends a provider-generated notification about the bound data set to
  * its subscribers (`DATA_UPDATE`, `DATA_DELAY`, `SCHEMA_CHANGE`, or
- * `DEPRECATION`) — delivered to each subscriber's default EventBridge
+ * `DEPRECATION`) -- delivered to each subscriber's default EventBridge
  * bus. The data set id is injected from the binding.
  * Provide the implementation with
  * `Effect.provide(AWS.DataExchange.SendDataSetNotificationHttp)`.
@@ -17,7 +17,7 @@ import type { DataSet } from "./DataSet.ts";
  * ```typescript
  * const notify = yield* AWS.DataExchange.SendDataSetNotification(dataSet);
  *
- * // runtime — after publishing a new revision
+ * // runtime -- after publishing a new revision
  * yield* notify({ Type: "DATA_UPDATE", Comment: "Daily prices refreshed" });
  * ```
  *

@@ -1,5 +1,5 @@
 /**
- * A minimal DER encoder/decoder — just enough ASN.1 for a PKCS#10
+ * A minimal DER encoder/decoder -- just enough ASN.1 for a PKCS#10
  * certificate request (encode) and reading a certificate's serial,
  * validity, issuer and subject alternative names (decode). Pure
  * TypeScript; no native code, no dependency, works on workerd.
@@ -126,7 +126,7 @@ export const decodeOid = (node: Node): string => {
       n = 0;
     }
   }
-  // OIDs under joint-iso-itu-t(2) can have a first arc ≥ 2 with large second arcs.
+  // OIDs under joint-iso-itu-t(2) can have a first arc >= 2 with large second arcs.
   if (first >= 80) {
     parts[0] = 2;
     parts[1] = first - 80;

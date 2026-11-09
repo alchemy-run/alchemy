@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 export interface GetServiceGraphRequest extends xray.GetServiceGraphRequest {}
 
 /**
- * Retrieve the service graph for a time window — a document describing
+ * Retrieve the service graph for a time window -- a document describing
  * the services processing requests and the downstream services they call.
  *
  * Bind the operation in the function's init phase to get a runtime callable;
@@ -17,7 +17,7 @@ export interface GetServiceGraphRequest extends xray.GetServiceGraphRequest {}
  * ```typescript
  * import * as XRay from "@alchemy.run/aws/XRay";
  *
- * // init — grants xray:GetServiceGraph
+ * // init -- grants xray:GetServiceGraph
  * const getServiceGraph = yield* XRay.GetServiceGraph();
  *
  * // runtime

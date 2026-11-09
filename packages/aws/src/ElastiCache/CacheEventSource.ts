@@ -70,13 +70,13 @@ export interface CacheEventSourceProps extends EventRouteProps {
 
 /**
  * Event source connecting ElastiCache notifications to the hosting compute.
- * ElastiCache publishes cache and snapshot lifecycle events — creations,
- * updates, deletions, failures, approaching usage limits — to the account's
+ * ElastiCache publishes cache and snapshot lifecycle events -- creations,
+ * updates, deletions, failures, approaching usage limits -- to the account's
  * default EventBridge bus (source `aws.elasticache`); this subscribes the
  * host Function to those events so it can alert on failed snapshots or a
  * cache nearing its usage limits.
  *
- * ElastiCache publishes to EventBridge automatically — no additional
+ * ElastiCache publishes to EventBridge automatically -- no additional
  * resource is created besides the EventBridge rule targeting the host.
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.

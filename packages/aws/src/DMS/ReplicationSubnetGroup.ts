@@ -74,7 +74,7 @@ export interface ReplicationSubnetGroupLookup {
 }
 
 /**
- * A DMS replication subnet group — the set of VPC subnets a replication
+ * A DMS replication subnet group -- the set of VPC subnets a replication
  * instance can be launched into. Must cover at least two Availability Zones.
  * Free and fast to create.
  * ### Creating a Subnet Group
@@ -178,7 +178,7 @@ export const ReplicationSubnetGroupProvider = () =>
             Tags: [DMS_VPC_ROLE_OWNER_TAG],
           })
           .pipe(Effect.catchTag("EntityAlreadyExistsException", () => Effect.void));
-        // Idempotent — attaching an already-attached managed policy is a no-op.
+        // Idempotent -- attaching an already-attached managed policy is a no-op.
         yield* iam.attachRolePolicy({
           RoleName: DMS_VPC_ROLE_NAME,
           PolicyArn: DMS_VPC_POLICY_ARN,
@@ -318,10 +318,10 @@ export const ReplicationSubnetGroupProvider = () =>
           const desiredTags = { ...internalTags, ...news.tags };
           const description = news.description ?? "Managed by Alchemy";
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* findGroup(name);
 
-          // 2. Ensure — create if missing; tolerate AlreadyExists as a race.
+          // 2. Ensure -- create if missing; tolerate AlreadyExists as a race.
           if (observed === undefined) {
             yield* ensureDmsVpcRole;
             yield* dms
@@ -350,7 +350,7 @@ export const ReplicationSubnetGroupProvider = () =>
               );
             observed = yield* findGroup(name);
           } else {
-            // 3. Sync — modify description / subnet set in place when they drift.
+            // 3. Sync -- modify description / subnet set in place when they drift.
             const observedSubnets = (observed.Subnets ?? [])
               .map((s) => s.SubnetIdentifier)
               .filter((s): s is string => typeof s === "string");
@@ -373,7 +373,7 @@ export const ReplicationSubnetGroupProvider = () =>
             });
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           const arn = yield* toArn(name);
           const observedTags = yield* readTags(arn);
           const { upsert, removed } = diffTags(observedTags, desiredTags);

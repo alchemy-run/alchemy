@@ -13,7 +13,7 @@ import type * as Effect from "effect/Effect";
  * ### Managing Client Devices
  * **Example:** List A Core's Client Devices
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listClientDevices =
  *   yield* AWS.GreengrassV2.ListClientDevicesAssociatedWithCoreDevice();
  *

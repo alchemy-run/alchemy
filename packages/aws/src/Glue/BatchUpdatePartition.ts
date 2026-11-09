@@ -11,7 +11,7 @@ export interface BatchUpdatePartitionRequest extends Omit<
 /**
  * Runtime binding for `glue:BatchUpdatePartition`.
  *
- * Rewrites up to 100 partitions of the bound {@link Table} in one call — the
+ * Rewrites up to 100 partitions of the bound {@link Table} in one call -- the
  * bulk variant of `UpdatePartition`. Per-partition failures come back in the
  * response's `Errors` list. The database/table names and catalog id are
  * injected from the binding. Provide the implementation with

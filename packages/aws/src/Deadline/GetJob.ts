@@ -6,14 +6,14 @@ import type { Queue } from "./Queue.ts";
 /**
  * Runtime binding for `deadline:GetJob`.
  *
- * Reads a job's detail in the bound {@link Queue} — lifecycle status, task
+ * Reads a job's detail in the bound {@link Queue} -- lifecycle status, task
  * run status counts, priority, timing. The queue's `farmId`/`queueId` are
  * injected from the binding. Provide the implementation with
  * `Effect.provide(AWS.Deadline.GetJobHttp)`.
  * ### Monitoring Jobs
  * **Example:** Check A Job's Status
  * ```typescript
- * // init — bind the operation to the queue
+ * // init -- bind the operation to the queue
  * const getJob = yield* AWS.Deadline.GetJob(queue);
  *
  * // runtime

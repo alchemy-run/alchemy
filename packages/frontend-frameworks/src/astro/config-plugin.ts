@@ -58,8 +58,8 @@ export function createConfigPlugin(config: AstroCloudflareConfig): vite.Plugin {
         return [
           ...Object.entries(config).map(([k, v]) => `export const ${k} = ${JSON.stringify(v)};`),
           `export const isPrerender = ${isPrerender};`,
-          // The import edge to the render-scope installer — the one module with
-          // a `node:async_hooks` reference — must only exist in the prerender
+          // The import edge to the render-scope installer -- the one module with
+          // a `node:async_hooks` reference -- must only exist in the prerender
           // worker's module graph, so the thunk is generated per environment.
           `export const loadPrerenderScope = ${isPrerender ? LOAD_PRERENDER_SCOPE : "undefined"};`,
         ].join("\n");

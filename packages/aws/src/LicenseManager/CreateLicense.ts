@@ -8,7 +8,7 @@ import type * as Effect from "effect/Effect";
 export interface CreateLicenseRequest extends licensemanager.CreateLicenseRequest {}
 
 /**
- * Runtime binding for `license-manager:CreateLicense` — issue a
+ * Runtime binding for `license-manager:CreateLicense` -- issue a
  * seller-issued license from the calling application. The core of an ISV
  * ordering/fulfillment backend: when a customer purchases, the backend
  * mints a license with the product SKU, entitlements, validity window,
@@ -20,7 +20,7 @@ export interface CreateLicenseRequest extends licensemanager.CreateLicenseReques
  * ### Issuing Licenses
  * **Example:** Issue a License on Purchase
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const createLicense = yield* AWS.LicenseManager.CreateLicense();
  *
  * // runtime

@@ -1,10 +1,10 @@
 /**
- * The hasher wire protocol (DESIGN §22.7, §22.9) — the part of `Hasher.ts`
+ * The hasher wire protocol (DESIGN §22.7, §22.9) -- the part of `Hasher.ts`
  * a hasher isolate needs and nothing more: no Cloudflare provider imports,
  * so a dynamic worker bundling it stays small.
  *
  * Request: the raw part bytes, coordinates in the query string. Response:
- * `u32 len | frame` repeated — the scan first (`encodeScanResult`: `u32
+ * `u32 len | frame` repeated -- the scan first (`encodeScanResult`: `u32
  * jsonLength | json | blob area`, entries referencing content/zdata as
  * `[offset, length]` into the blob area), then, when a spill was
  * requested, the uploaded part as JSON.
@@ -52,7 +52,7 @@ export const decodeBoundsRequest = (
 /** The internal route the self-binding layer posts to. */
 export const HASH_ROUTE = "/_alchemy/git/hash";
 
-// ── protocol ────────────────────────────────────────────────────────────────
+// -- protocol ----------------------------------------------------------------
 
 interface WireEntry {
   readonly o: string; // oid
@@ -142,7 +142,7 @@ export const decodeScanResult = (bytes: Uint8Array): ScanResult => {
 };
 
 /**
- * Response framing of the hash route: `u32 len | frame` repeated — the
+ * Response framing of the hash route: `u32 len | frame` repeated -- the
  * scan first, then (spill only) the uploaded part as JSON once its upload
  * has finished. The client acts on the scan without waiting for the part.
  */
@@ -199,7 +199,7 @@ export const makeFrameReader = (body: ReadableStream<Uint8Array>) => {
     });
 };
 
-// ── delta batches (DESIGN §22.13) ──────────────────────────────────────────
+// -- delta batches (DESIGN §22.13) ------------------------------------------
 
 /** `u32 jsonLen | json | blobs` with bases and deltas referenced as [offset, length]. */
 export const encodeDeltaBatch = (

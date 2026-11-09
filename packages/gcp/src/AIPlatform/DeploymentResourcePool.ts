@@ -36,7 +36,7 @@ export type MachineSpec = {
 export type AutoscalingMetricSpec = {
   /** Resource metric name. */
   metricName?: string;
-  /** Target utilization percent (1–100). Defaults to 60. */
+  /** Target utilization percent (1-100). Defaults to 60. */
   target?: number;
 };
 
@@ -63,7 +63,7 @@ export type DedicatedResources = {
    */
   autoscalingMetricSpecs?: AutoscalingMetricSpec[];
   /**
-   * Single-machine spec. Immutable — changing it replaces the pool.
+   * Single-machine spec. Immutable -- changing it replaces the pool.
    * @default { machineType: "n1-standard-2" }
    */
   machineSpec?: MachineSpec;
@@ -73,12 +73,12 @@ export type DeploymentResourcePoolProps = {
   /**
    * Pool id (the `{deployment_resource_pool}` segment). If omitted, a
    * unique name is generated. Must match
-   * `[a-z]([a-z0-9-]{0,61}[a-z0-9])?`. Immutable — changing it replaces
+   * `[a-z]([a-z0-9-]{0,61}[a-z0-9])?`. Immutable -- changing it replaces
    * the pool.
    */
   deploymentResourcePoolId?: string;
   /**
-   * Region. Immutable — changing it replaces the pool.
+   * Region. Immutable -- changing it replaces the pool.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
@@ -96,7 +96,7 @@ export type DeploymentResourcePoolProps = {
    */
   serviceAccount?: string;
   /**
-   * Customer-managed encryption. Immutable — changing it replaces the
+   * Customer-managed encryption. Immutable -- changing it replaces the
    * pool.
    */
   encryptionSpec?: EncryptionSpec;
@@ -153,7 +153,7 @@ export interface DeploymentResourcePoolLookup {
 }
 
 /**
- * A Vertex AI DeploymentResourcePool — dedicated machines shared by
+ * A Vertex AI DeploymentResourcePool -- dedicated machines shared by
  * multiple DeployedModels.
  *
  * Deployment resource pools have no labels field. Generated ids are
@@ -324,7 +324,7 @@ const listPools = (project: string, region: string) => {
 /**
  * Look a pool up by name. A pool is invisible while its create operation
  * is pending (minutes on a fresh project), so on a miss wait for any
- * pending create of this pool id and look again — otherwise an
+ * pending create of this pool id and look again -- otherwise an
  * interrupted create's recovery read / delete reports it gone and leaks it.
  */
 const getSettled = (name: string) =>

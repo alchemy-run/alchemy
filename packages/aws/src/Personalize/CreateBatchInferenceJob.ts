@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `personalize:CreateBatchInferenceJob` — Starts a batch inference job that scores a list of users from S3
+ * Runtime binding for `personalize:CreateBatchInferenceJob` -- Starts a batch inference job that scores a list of users from S3
  * against a solution version and writes recommendations back to S3.
  * Grants `personalize:CreateBatchInferenceJob` on `*` plus
  * `iam:PassRole` (conditioned to `personalize.amazonaws.com`) for the

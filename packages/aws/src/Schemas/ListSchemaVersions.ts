@@ -14,7 +14,7 @@ import type { Schema } from "./Schema.ts";
  * ### Reading Schemas
  * **Example:** List All Versions
  * ```typescript
- * // init — bind the operation to the schema
+ * // init -- bind the operation to the schema
  * const listSchemaVersions = yield* AWS.Schemas.ListSchemaVersions(schema);
  *
  * // runtime

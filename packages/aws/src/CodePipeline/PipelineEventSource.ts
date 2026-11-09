@@ -19,7 +19,7 @@ export interface PipelineEventDetail {
   /** Id of the pipeline execution. */
   "execution-id"?: string;
   /**
-   * The new state — `STARTED`, `SUCCEEDED`, `FAILED`, `CANCELED`,
+   * The new state -- `STARTED`, `SUCCEEDED`, `FAILED`, `CANCELED`,
    * `STOPPED`, `STOPPING`, `SUPERSEDED`, or `RESUMED`.
    */
   state?: string;
@@ -71,7 +71,7 @@ export interface PipelineEventSourceProps extends EventRouteProps {
  * `aws.codepipeline`); this subscribes the host Function to those events so
  * it can alert on failed deployments or chain post-release automation.
  *
- * CodePipeline publishes to EventBridge automatically — no additional
+ * CodePipeline publishes to EventBridge automatically -- no additional
  * resource is created besides the EventBridge rule targeting the host.
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.

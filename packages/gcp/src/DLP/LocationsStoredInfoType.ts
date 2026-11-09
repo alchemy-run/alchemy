@@ -35,12 +35,12 @@ export type LocationsStoredInfoTypeProps = {
    * StoredInfoType id (the `{storedInfoType}` segment of
    * `projects/{project}/locations/{location}/storedInfoTypes/{storedInfoType}`).
    * If omitted, a unique name is generated. Must match `[a-zA-Z0-9_-]+` and
-   * is at most 100 characters. Immutable — changing it replaces the
+   * is at most 100 characters. Immutable -- changing it replaces the
    * stored info type.
    */
   storedInfoTypeId?: string;
   /**
-   * Processing location (`us-central1`, `global`, …). Immutable —
+   * Processing location (`us-central1`, `global`, ...). Immutable --
    * changing it replaces the stored info type.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -52,7 +52,7 @@ export type LocationsStoredInfoTypeProps = {
   /**
    * Human-readable description (max 256 characters). Stored info types
    * have no labels field, so Alchemy ownership is stored in a
-   * `[alchemy …]` prefix and stripped from attributes.
+   * `[alchemy ...]` prefix and stripped from attributes.
    */
   description?: string;
   /**
@@ -92,7 +92,7 @@ export type LocationsStoredInfoType = Resource<
     dictionary: StoredInfoTypeDictionary | undefined;
     /** Large custom dictionary, if set. */
     largeCustomDictionary: StoredInfoTypeLargeCustomDictionary | undefined;
-    /** Current version state (`READY`, `PENDING`, …). */
+    /** Current version state (`READY`, `PENDING`, ...). */
     state: string | undefined;
     /** RFC3339 creation timestamp of the current version. */
     createTime: string | undefined;
@@ -116,7 +116,7 @@ export interface LocationsStoredInfoTypeLookup {
    */
   storedInfoTypeId: string;
   /**
-   * Processing location (`us-central1`, `global`, …).
+   * Processing location (`us-central1`, `global`, ...).
    */
   location?: string;
   /**
@@ -132,7 +132,7 @@ export interface LocationsStoredInfoTypeLookup {
  *
  * Stored info types have no labels field, so Alchemy stamps ownership
  * into the config description for `list` / nuke. Location and id are
- * identity — changing them replaces the resource. Display name,
+ * identity -- changing them replaces the resource. Display name,
  * description, and detector config update in place (a new version).
  *
  * ### Creating a Stored Info Type

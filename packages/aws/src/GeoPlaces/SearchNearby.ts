@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `geo-places:SearchNearby` — find places around a
+ * Runtime binding for `geo-places:SearchNearby` -- find places around a
  * geographic position, optionally filtered by radius, bounding box,
  * categories, or food types.
  *

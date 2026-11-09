@@ -85,7 +85,7 @@ export const login = Effect.gen(function* () {
 
   const credentials = yield* Interaction.browserLogin({
     provider: "Doppler",
-    waitingLabel: "Waiting for Doppler authorization (up to 5 minutes)…",
+    waitingLabel: "Waiting for Doppler authorization (up to 5 minutes)\u2026",
     url: authorization.auth_url,
     code: authorization.code,
     waitFor: awaitApproval(authorization),

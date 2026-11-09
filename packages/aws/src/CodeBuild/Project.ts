@@ -30,7 +30,7 @@ export interface ProjectSourceConfig {
   /**
    * Source provider type. `NO_SOURCE` builds run only the inline `buildspec`
    * (nothing is fetched); `S3` pulls an object; the git types
-   * (`CODECOMMIT`/`GITHUB`/`GITLAB`/`BITBUCKET`/…) require a matching
+   * (`CODECOMMIT`/`GITHUB`/`GITLAB`/`BITBUCKET`/...) require a matching
    * source credential or connection.
    */
   type:
@@ -273,7 +273,7 @@ export interface ProjectProps {
    */
   logsConfig?: ProjectLogsConfig;
   /**
-   * Resource policy attached to the project — shares the project with other
+   * Resource policy attached to the project -- shares the project with other
    * AWS accounts by granting them read actions such as
    * `codebuild:BatchGetProjects`. Accepts a typed {@link PolicyDocument} or a
    * raw JSON string (escape hatch / adoption of an existing policy). Omit to
@@ -310,7 +310,7 @@ export interface ProjectLookup {
 }
 
 /**
- * An AWS CodeBuild build project — a reusable definition of how to run a
+ * An AWS CodeBuild build project -- a reusable definition of how to run a
  * build: the source, the build container, the compute size, the IAM role,
  * and where artifacts land.
  *
@@ -426,7 +426,7 @@ const toWireEnvironment = (
  * `InvalidInputException` whose message mentions the role is not authorized.
  * Retry (bounded) through IAM propagation. The explicit return annotation
  * keeps the retry's conditional type out of declaration emit (which would
- * otherwise widen the provider layer — see PATTERNS §7).
+ * otherwise widen the provider layer -- see PATTERNS §7).
  */
 const retryIamPropagation = <A, E extends { readonly _tag: string; readonly message?: string }, R>(
   effect: Effect.Effect<A, E, R>,
@@ -496,7 +496,7 @@ export const ProjectProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* getProject(name);
 
           const spec = {
@@ -515,11 +515,11 @@ export const ProjectProvider = () =>
             tags: toWireTags(desiredTags),
           };
 
-          // 3. Sync — updateProject is a full upsert of the definition and
+          // 3. Sync -- updateProject is a full upsert of the definition and
           // tags; apply the desired spec (project updates are instant). A
-          // delete→redeploy race can leave batchGetProjects returning the
+          // delete->redeploy race can leave batchGetProjects returning the
           // just-deleted project; updateProject then reports the truth with
-          // a typed ResourceNotFoundException — treat it as missing.
+          // a typed ResourceNotFoundException -- treat it as missing.
           if (observed !== undefined) {
             observed = yield* retryIamPropagation(codebuild.updateProject({ name, ...spec })).pipe(
               Effect.map((updated) => updated.project),
@@ -527,7 +527,7 @@ export const ProjectProvider = () =>
             );
           }
 
-          // 2. Ensure — create if missing; tolerate the create/create race.
+          // 2. Ensure -- create if missing; tolerate the create/create race.
           if (observed === undefined) {
             const created = yield* retryIamPropagation(
               codebuild.createProject({ name, ...spec }),
@@ -545,10 +545,10 @@ export const ProjectProvider = () =>
             });
           }
 
-          // 3b. Sync — resource policy. Compare observed against desired in
+          // 3b. Sync -- resource policy. Compare observed against desired in
           // normalized form (keys sorted, no whitespace) so a re-deploy of an
-          // equivalent document — regardless of key order or string vs typed
-          // object — is a no-op that skips the API entirely.
+          // equivalent document -- regardless of key order or string vs typed
+          // object -- is a no-op that skips the API entirely.
           const desiredPolicy =
             news.resourcePolicy === undefined
               ? undefined
@@ -586,7 +586,7 @@ export const ProjectProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // deleteProject is idempotent — a missing project returns success.
+          // deleteProject is idempotent -- a missing project returns success.
           yield* codebuild.deleteProject({ name: output.projectName });
         }),
 

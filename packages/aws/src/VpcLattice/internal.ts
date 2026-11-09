@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
 /**
- * Retry an operation while it fails with a VPC Lattice `ConflictException` —
+ * Retry an operation while it fails with a VPC Lattice `ConflictException` --
  * raised while a resource still has in-flight associations being torn down.
  * Bounded so a genuinely stuck resource fails fast rather than hanging the
  * engine.

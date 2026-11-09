@@ -62,11 +62,11 @@ export type ClientTlsPolicyProps = {
    * `projects/{project}/locations/{location}/clientTlsPolicies/{clientTlsPolicy}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Must be 1-63 characters and not start with a number.
-   * Immutable — changing it replaces the policy.
+   * Immutable -- changing it replaces the policy.
    */
   clientTlsPolicyId?: string;
   /**
-   * Location (`global`, `us-central1`, …). Immutable — changing it
+   * Location (`global`, `us-central1`, ...). Immutable -- changing it
    * replaces the policy. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default "global"
@@ -107,7 +107,7 @@ export type ClientTlsPolicy = Resource<
     clientTlsPolicyId: string;
     /** Project id. */
     project: string;
-    /** Location id (`global`, `us-central1`, …). */
+    /** Location id (`global`, `us-central1`, ...). */
     location: string;
     /** User-provided description. */
     description: string | undefined;
@@ -143,7 +143,7 @@ export interface ClientTlsPolicyLookup {
    */
   clientTlsPolicyId: string;
   /**
-   * Location (`global`, `us-central1`, …). `US-CENTRAL1` is accepted and
+   * Location (`global`, `us-central1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -155,7 +155,7 @@ export interface ClientTlsPolicyLookup {
 }
 
 /**
- * A Network Security ClientTlsPolicy — how a client authenticates
+ * A Network Security ClientTlsPolicy -- how a client authenticates
  * connections to backends. The policy has no effect until it is
  * attached to a backend service.
  *

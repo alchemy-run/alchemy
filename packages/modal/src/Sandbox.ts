@@ -80,7 +80,7 @@ export interface SandboxProps extends PlatformProps {
 }
 
 export interface SandboxAttributes {
-  /** The image with the bundled program (`im-…`). */
+  /** The image with the bundled program (`im-...`). */
   imageId: string;
   /** The App sandboxes run in. */
   appId: string;

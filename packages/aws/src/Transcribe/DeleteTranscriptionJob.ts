@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `transcribe:DeleteTranscriptionJob` — delete a batch transcription job and its transcript from the service-managed output location.
+ * Runtime binding for `transcribe:DeleteTranscriptionJob` -- delete a batch transcription job and its transcript from the service-managed output location.
  *
  * Amazon Transcribe batch actions have no resource-level IAM; the host is
  * granted `transcribe:DeleteTranscriptionJob` on `*`.

@@ -20,8 +20,8 @@ export const makeQueueBinding = <Client>(options: {
     const env = yield* WorkerEnvironment;
     const host = yield* Worker;
     // Deploy-time ambient context (providers, stack). Captured at layer
-    // init so the shim registration below can run inside the callable —
-    // whose contract requires `R = never` — without leaking engine
+    // init so the shim registration below can run inside the callable --
+    // whose contract requires `R = never` -- without leaking engine
     // requirements into the binding's public type. Only dereferenced under
     // the `__ALCHEMY_RUNTIME__` guard, where the context is the stack
     // eval's (at runtime the captured context lacks providers, but the
@@ -31,7 +31,7 @@ export const makeQueueBinding = <Client>(options: {
     return Effect.fn(function* (queue: Queue) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         // A LOCAL host binding a LIVE queue needs the dev-mode
-        // remote-producer shim (see `QueueShim.ts`) — registered here as
+        // remote-producer shim (see `QueueShim.ts`) -- registered here as
         // ordinary engine-managed resources, like the `AccountApiToken`
         // the HTTP capability layers mint.
         // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- deploy-time only; remaining requirements are ambient where the Worker is evaluated

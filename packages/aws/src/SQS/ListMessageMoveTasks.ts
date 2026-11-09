@@ -14,7 +14,7 @@ export interface ListMessageMoveTasksRequest extends Omit<
  *
  * Bind this operation to a dead-letter {@link Queue} inside a function
  * runtime to inspect the most recent message move tasks (up to 10) whose
- * source is that queue — including their status, progress counters, and
+ * source is that queue -- including their status, progress counters, and
  * `TaskHandle` for cancellation. The binding grants the host function
  * `sqs:ListMessageMoveTasks` on the queue. Provide the
  * `ListMessageMoveTasksHttp` layer on the Function to implement the binding.

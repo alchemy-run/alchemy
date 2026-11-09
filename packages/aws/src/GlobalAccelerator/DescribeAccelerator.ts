@@ -6,16 +6,16 @@ import type { Accelerator } from "./Accelerator.ts";
 /**
  * Runtime binding for `globalaccelerator:DescribeAccelerator`.
  *
- * Reads the bound {@link Accelerator}'s live state — deployment status
+ * Reads the bound {@link Accelerator}'s live state -- deployment status
  * (`DEPLOYED` / `IN_PROGRESS`), DNS names, static IP sets, and whether it is
- * enabled — so a function can health-check the accelerator or hand out its
+ * enabled -- so a function can health-check the accelerator or hand out its
  * DNS name at runtime. The accelerator ARN is injected from the binding.
  * Provide the implementation with
  * `Effect.provide(AWS.GlobalAccelerator.DescribeAcceleratorHttp)`.
  * ### Observing Accelerators
  * **Example:** Read the Accelerator's Status and DNS Name
  * ```typescript
- * // init — bind the operation to the accelerator
+ * // init -- bind the operation to the accelerator
  * const describeAccelerator =
  *   yield* AWS.GlobalAccelerator.DescribeAccelerator(accelerator);
  *

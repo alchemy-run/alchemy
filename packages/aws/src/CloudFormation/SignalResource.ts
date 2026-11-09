@@ -8,7 +8,7 @@ import type { Stack } from "./Stack.ts";
  * `cloudformation:SignalResource`).
  *
  * Bind this operation to a {@link Stack} to send SUCCESS/FAILURE signals to a
- * resource with a `CreationPolicy` or a `WaitCondition` in the stack —
+ * resource with a `CreationPolicy` or a `WaitCondition` in the stack --
  * e.g. a function that performs out-of-band initialization and unblocks the
  * stack when done. Provide the implementation with
  * `Effect.provide(AWS.CloudFormation.SignalResourceHttp)`.

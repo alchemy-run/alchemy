@@ -133,7 +133,7 @@ export interface RouteTableAssociation extends Resource<
  * });
  * ```
  * Declaring multiple associations against the same `routeTableId` gives every
- * listed subnet identical routing — a concise way to apply one public (or
+ * listed subnet identical routing -- a concise way to apply one public (or
  * private) routing policy across all subnets in a tier.
  *
  * ### Associating Gateways (Edge Routing)
@@ -150,7 +150,7 @@ export interface RouteTableAssociation extends Resource<
  * });
  * ```
  * Attaches the route table at the gateway rather than at a subnet, so traffic
- * arriving from the internet is steered by this table — typically toward an
+ * arriving from the internet is steered by this table -- typically toward an
  * inspection appliance before reaching its destination subnet.
  *
  * @resource
@@ -166,7 +166,7 @@ export const RouteTableAssociationProvider = () =>
       return {
         stables: ["associationId", "subnetId", "gatewayId"],
 
-        // Associations are embedded in describeRouteTables — each RouteTable
+        // Associations are embedded in describeRouteTables -- each RouteTable
         // carries an Associations[] of {subnet/gateway, routeTable,
         // associationId}. Flatten every page's associations across the region.
         // The implicit "main" association (the VPC default route-table binding)
@@ -255,7 +255,7 @@ export const RouteTableAssociationProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ news, output, session }) {
-          // Observe — try the cached associationId first; if the association
+          // Observe -- try the cached associationId first; if the association
           // was disassociated out-of-band, fall through to AssociateRouteTable.
           let observed:
             | {
@@ -300,7 +300,7 @@ export const RouteTableAssociationProvider = () =>
             }
           }
 
-          // Ensure — no existing association ⇒ AssociateRouteTable.
+          // Ensure -- no existing association => AssociateRouteTable.
           if (observed === undefined) {
             const result = yield* ec2
               .associateRouteTable({
@@ -330,7 +330,7 @@ export const RouteTableAssociationProvider = () =>
             };
           }
 
-          // Sync — drift in routeTableId is patched in place by
+          // Sync -- drift in routeTableId is patched in place by
           // ReplaceRouteTableAssociation. Subnet/gateway changes are
           // intercepted upstream by `diff` as a replacement.
           if (observed.routeTableId !== (news.routeTableId as string)) {
@@ -357,7 +357,7 @@ export const RouteTableAssociationProvider = () =>
             };
           }
 
-          // Already in the desired state — just report it.
+          // Already in the desired state -- just report it.
           return {
             associationId: observed.associationId as RouteTableAssociationId,
             routeTableId: observed.routeTableId as RouteTableId,

@@ -1,12 +1,12 @@
 /**
- * `@alchemy.run/frontend-frameworks/vite/aws` — the AWS deploy target for
+ * `@alchemy.run/frontend-frameworks/vite/aws` -- the AWS deploy target for
  * the plain Vite integration.
  *
  * A plain Vite build is assets-only (client bundle + `index.html`), so
  * there is no server entry to wrap for Lambda and no finishing pass. The
  * target owns exactly one seam: the wholesale `build` hook runs the
  * project's `vite build` in a disposable child process whose working
- * directory IS the project root (see `core/BuildChild.ts`) — `vite.config.*`
+ * directory IS the project root (see `core/BuildChild.ts`) -- `vite.config.*`
  * executes user plugins that may read the cwd, mutate `process.env`, or
  * `process.chdir`, none of which may touch the engine process.
  */
@@ -67,7 +67,7 @@ export const makeAwsTarget = (config: ViteTargetConfig = {}): ViteTarget => ({
 
 /**
  * The deploy-target module contract (`resolveDeployTarget` accepts the
- * default export — or the named `target` export — as a value or factory).
+ * default export -- or the named `target` export -- as a value or factory).
  */
 export const target = makeAwsTarget;
 

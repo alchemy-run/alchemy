@@ -7,7 +7,7 @@ import type * as Effect from "effect/Effect";
  * `rds:DescribeEvents`).
  *
  * Lists recent RDS events (instance/cluster/snapshot/parameter-group
- * lifecycle notifications from the last 14 days) — the pull-based
+ * lifecycle notifications from the last 14 days) -- the pull-based
  * counterpart to {@link consumeRdsEvents}. Provide the implementation with
  * `Effect.provide(AWS.RDS.DescribeEventsHttp)`.
  * ### Monitoring Databases

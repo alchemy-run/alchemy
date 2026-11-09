@@ -9,7 +9,7 @@ export interface ListFlowOperationsRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `network-firewall:ListFlowOperations` — list the flow
+ * Runtime binding for `network-firewall:ListFlowOperations` -- list the flow
  * capture/flush operations that ran on the bound {@link Firewall}; the
  * firewall ARN is injected automatically.
  *
@@ -18,7 +18,7 @@ export interface ListFlowOperationsRequest extends Omit<
  * ### Flow Operations
  * **Example:** List Recent Flow Captures
  * ```typescript
- * // init — grants network-firewall:ListFlowOperations on the firewall
+ * // init -- grants network-firewall:ListFlowOperations on the firewall
  * const listFlowOperations =
  *   yield* AWS.NetworkFirewall.ListFlowOperations(firewall);
  *

@@ -12,7 +12,7 @@ export interface GetRunRequest extends omics.GetRunRequest {}
  * ### Runs
  * **Example:** Call GetRun
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const getRun = yield* AWS.Omics.GetRun();
  * // runtime
  * const result = yield* getRun({ id: runId });

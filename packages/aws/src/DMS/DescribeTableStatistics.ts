@@ -6,14 +6,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `dms:DescribeTableStatistics`.
  *
  * Bind this operation (account-level) to read per-table migration progress
- * for a replication task — rows inserted/updated/deleted, full-load
+ * for a replication task -- rows inserted/updated/deleted, full-load
  * completion, validation state. The data behind migration progress
  * dashboards and cut-over gates. Provide the implementation with
  * `Effect.provide(AWS.DMS.DescribeTableStatisticsHttp)`.
  * ### Monitoring Migration Progress
  * **Example:** Gate a Cut-Over on Full-Load Completion
  * ```typescript
- * // init — account-level, no target resource
+ * // init -- account-level, no target resource
  * const describeTableStatistics = yield* AWS.DMS.DescribeTableStatistics();
  *
  * // runtime

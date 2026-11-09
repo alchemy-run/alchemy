@@ -3,7 +3,7 @@ import * as Namespace from "alchemy/Namespace";
 /**
  * Internal composite: a Kubernetes service account (bound onto the cluster)
  * wired to EKS Pod Identity through an IAM role + `PodIdentityAssociation`.
- * Un-exported — the workload platforms (`Kubernetes.Deployment`,
+ * Un-exported -- the workload platforms (`Kubernetes.Deployment`,
  * `Kubernetes.Job`) provision the same triple through the aws-eks
  * adapter; this helper remains for composition-style stacks that assemble
  * the pieces from resources.

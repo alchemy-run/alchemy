@@ -17,7 +17,7 @@ export type AxiomAuthConfig = StoredAuthConfig;
 /**
  * Resolved Axiom credentials. The provider values are a flat record
  * (token + optional orgId/apiBaseUrl); the `apiToken`/`pat` distinction is
- * derived at resolution time from orgId presence — an org id means the token
+ * derived at resolution time from orgId presence -- an org id means the token
  * is treated as a personal access token, mirroring how the CI environment
  * resolution has always classified `AXIOM_ORG_ID`.
  */

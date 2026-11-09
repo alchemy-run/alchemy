@@ -9,7 +9,7 @@ export interface DescribeRuleGroupSummaryRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `network-firewall:DescribeRuleGroupSummary` — read a
+ * Runtime binding for `network-firewall:DescribeRuleGroupSummary` -- read a
  * per-rule summary (SID, message, metadata) of the bound stateful
  * {@link RuleGroup}; the rule group ARN is injected automatically. Only
  * supported for `STATEFUL` rule groups.
@@ -19,7 +19,7 @@ export interface DescribeRuleGroupSummaryRequest extends Omit<
  * ### Reading Rule Group State
  * **Example:** Summarize the Stateful Rules
  * ```typescript
- * // init — grants network-firewall:DescribeRuleGroupSummary on the rule group
+ * // init -- grants network-firewall:DescribeRuleGroupSummary on the rule group
  * const describeRuleGroupSummary =
  *   yield* AWS.NetworkFirewall.DescribeRuleGroupSummary(ruleGroup);
  *

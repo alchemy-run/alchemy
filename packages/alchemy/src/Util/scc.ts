@@ -1,7 +1,7 @@
 /**
  * Compute the strongly-connected components of a directed graph.
  *
- * Components are emitted in Tarjan completion order — the reverse
+ * Components are emitted in Tarjan completion order -- the reverse
  * topological order of the condensation, so a component appears before
  * every component that has an edge into it.
  *

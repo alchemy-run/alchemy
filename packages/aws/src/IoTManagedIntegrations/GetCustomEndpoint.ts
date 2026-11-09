@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `iotmanagedintegrations:GetCustomEndpoint`
  * (account-level).
  *
- * Reads the account's custom MQTT endpoint address — the address devices
+ * Reads the account's custom MQTT endpoint address -- the address devices
  * connect to for Managed integrations traffic. Provide the implementation
  * with `Effect.provide(AWS.IoTManagedIntegrations.GetCustomEndpointHttp)`.
  *

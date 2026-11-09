@@ -171,7 +171,7 @@ export const WebhookProvider = () =>
             return toAttrs(created);
           }
 
-          // Sync — the signing secret is write-only, so `olds` is the only
+          // Sync -- the signing secret is write-only, so `olds` is the only
           // signal that the stored one already matches.
           const secretChanged =
             olds === undefined ||

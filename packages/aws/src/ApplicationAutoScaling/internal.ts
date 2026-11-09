@@ -35,7 +35,7 @@ export const SERVICE_NAMESPACES: readonly aas.ServiceNamespace[] = [
  * on a short bounded schedule (~20s total).
  *
  * NOTE: the explicit `Effect.Effect<A, E, R>` return annotation is
- * load-bearing — an inlined `Effect.retry` leaks `Retry.Return`'s conditional
+ * load-bearing -- an inlined `Effect.retry` leaks `Retry.Return`'s conditional
  * type into declaration emit and widens the provider layer to
  * `Layer<..., never, unknown>` for downstream consumers.
  */

@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Cluster } from "./Cluster.ts";
 
 /**
- * Runtime binding for `elasticmapreduce:ListSessions` — lists the bound cluster's interactive sessions, optionally filtered by state.
+ * Runtime binding for `elasticmapreduce:ListSessions` -- lists the bound cluster's interactive sessions, optionally filtered by state.
  * ### Interactive Sessions
  * **Example:** List Idle Sessions
  * ```typescript

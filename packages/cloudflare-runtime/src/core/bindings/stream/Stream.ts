@@ -53,7 +53,7 @@ export class Stream extends Plugin.Service<
 /**
  * Worker script for the stream router middleware: serves stored videos at
  * `/cdn-cgi/mf/stream/<id>/watch` through the `StreamBinding` entrypoint and
- * forwards everything else upstream — the equivalent of Miniflare's
+ * forwards everything else upstream -- the equivalent of Miniflare's
  * `CoreBindings.SERVICE_STREAM` routing in its core entry worker
  * (`workers-sdk/packages/miniflare/src/workers/core/entry.worker.ts`).
  */
@@ -82,7 +82,7 @@ export const StreamLive = Layer.effect(
     const enableControlEndpoints = yield* Plugin.UnsafeEnableControlEndpoints;
 
     // The runtime entry URL of the latest started worker with a stream
-    // binding — the equivalent of Miniflare's public URL. Kept node-side and
+    // binding -- the equivalent of Miniflare's public URL. Kept node-side and
     // served through the loopback so the binding always sees the current
     // value, even across worker restarts (workerd sockets get new ports).
     let entryUrl: string | null = null;
@@ -249,7 +249,7 @@ export const StreamLive = Layer.effect(
  * `{storage}/stream` (shared by every worker in the runtime, and across
  * restarts when disk-backed storage is configured). Videos are served
  * unmodified at `{entryUrl}/cdn-cgi/mf/stream/<id>/watch` (each
- * `StreamVideo.preview` URL): this is a local video store only — no
+ * `StreamVideo.preview` URL): this is a local video store only -- no
  * transcoding or HLS ladder (the `hlsPlaybackUrl`/`dashPlaybackUrl` point at
  * a placeholder host), no signed URLs, and no direct creator uploads
  * (`createDirectUpload` throws), matching Miniflare's local fidelity limits.

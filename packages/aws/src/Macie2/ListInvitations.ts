@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `macie2:ListInvitations`.
  *
  * Retrieves information about Amazon Macie membership invitations that were received by an account.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.Macie2.ListInvitationsHttp)`.
  * ### Administrator & Invitations
  * **Example:** List Pending Invitations
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listInvitations = yield* AWS.Macie2.ListInvitations();
  *
  * // runtime

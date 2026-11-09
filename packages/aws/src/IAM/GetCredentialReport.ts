@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `iam:GetCredentialReport` — download the account-wide
+ * Runtime binding for `iam:GetCredentialReport` -- download the account-wide
  * credential report started by {@link GenerateCredentialReport}. The report is
  * base64-encoded CSV of per-user credential hygiene (password age, key
  * rotation, MFA status); it contains no secret material.

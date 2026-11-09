@@ -5,8 +5,8 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `medialive:ListInputs`.
  *
- * Enumerates the account's MediaLive inputs (one page per call — pass
- * `NextToken` from the previous response to continue) — e.g. an
+ * Enumerates the account's MediaLive inputs (one page per call -- pass
+ * `NextToken` from the previous response to continue) -- e.g. an
  * inventory endpoint that maps ingest endpoints to the channels they
  * feed. Account-level: the deploy-time grant is `medialive:ListInputs`
  * on `*`. Provide the implementation with
@@ -14,7 +14,7 @@ import type * as Effect from "effect/Effect";
  * ### Observing Inputs
  * **Example:** Enumerate the Account's Inputs
  * ```typescript
- * // init — bind the account-level operation
+ * // init -- bind the account-level operation
  * const listInputs = yield* AWS.MediaLive.ListInputs();
  *
  * // runtime

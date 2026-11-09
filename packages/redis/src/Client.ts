@@ -124,7 +124,7 @@ export interface WriteClient {
 }
 
 /**
- * Read + write Redis client. {@link send} is the total command surface —
+ * Read + write Redis client. {@link send} is the total command surface --
  * every Redis command is an array of bulk strings on the wire.
  */
 export interface Client extends ReadClient, WriteClient {

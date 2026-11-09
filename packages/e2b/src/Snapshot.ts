@@ -71,7 +71,7 @@ export interface Snapshot extends Resource<
 
 /**
  * A warm base to fork sandboxes from: a template booted, set up with your
- * commands, and snapshotted — memory included, so sandboxes created from it
+ * commands, and snapshotted -- memory included, so sandboxes created from it
  * start exactly where the setup left off.
  *
  * Use a snapshot for work that is too slow to repeat per sandbox and does
@@ -184,7 +184,7 @@ export const SnapshotProvider = () =>
           const name = output?.name ?? (yield* e2bName(id, news.name));
           const setupHash = setupHashOf(news);
 
-          // Observe — an existing ready snapshot of this exact setup is kept.
+          // Observe -- an existing ready snapshot of this exact setup is kept.
           const observed = yield* observe(name);
           if (
             observed !== undefined &&
@@ -194,7 +194,7 @@ export const SnapshotProvider = () =>
             return { ...output, names: [...observed.names], templateId: observed.templateID };
           }
 
-          // Ensure — snapshotting under an existing name adds a new build to
+          // Ensure -- snapshotting under an existing name adds a new build to
           // the same template.
           yield* session.note(`Snapshotting ${name}...`);
           const snapshot = yield* takeSnapshot(name, {

@@ -28,7 +28,7 @@ export const StartTagSyncTaskHttp = Layer.effect(
             },
             // Tag-sync maintains group membership, and the service
             // authorizes that as CreateGroup against the bare group
-            // namespace (`arn:…:group/` — no name), which a specific
+            // namespace (`arn:...:group/` -- no name), which a specific
             // group ARN can never match. Scope to the namespace instead.
             {
               Effect: "Allow",

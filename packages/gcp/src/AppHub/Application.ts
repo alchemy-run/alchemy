@@ -38,12 +38,12 @@ export type ApplicationProps = {
    * Application id (the `{application}` segment of
    * `projects/{project}/locations/{location}/applications/{application}`).
    * Must be lowercase letters, numbers, or hyphens (RFC1035, 63 chars).
-   * If omitted, a unique name is generated. Immutable — changing it
+   * If omitted, a unique name is generated. Immutable -- changing it
    * replaces the application.
    */
   applicationId?: string;
   /**
-   * Region (`us-central1`, …) or `global`. Immutable — changing it
+   * Region (`us-central1`, ...) or `global`. Immutable -- changing it
    * replaces the application. `US-CENTRAL1` is accepted and normalized
    * to `us-central1`. Regional applications use `scope.type = REGIONAL`;
    * global applications use `scope.type = GLOBAL`.
@@ -59,7 +59,7 @@ export type ApplicationProps = {
   /**
    * User-defined description. Maximum length is 2048 characters.
    * Applications have no labels field, so Alchemy stamps ownership into
-   * a `[alchemy …]` prefix and strips it from attributes.
+   * a `[alchemy ...]` prefix and strips it from attributes.
    */
   description?: string;
   /**
@@ -121,7 +121,7 @@ export interface ApplicationLookup {
    */
   applicationId: string;
   /**
-   * Region (`us-central1`, …) or `global`. `US-CENTRAL1` is accepted and
+   * Region (`us-central1`, ...) or `global`. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`. Regional applications use `scope.type =
    * REGIONAL`; global applications use `scope.type = GLOBAL`.
    */
@@ -134,7 +134,7 @@ export interface ApplicationLookup {
 }
 
 /**
- * An App Hub application — the governance boundary for services and
+ * An App Hub application -- the governance boundary for services and
  * workloads that perform a logical end-to-end business function.
  *
  * Applications have no labels field, so Alchemy stamps ownership into

@@ -112,27 +112,27 @@ export type VolumeProps = {
    * Volume id (the `{volume}` segment of
    * `projects/{project}/locations/{location}/volumes/{volume}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
-   * and logical id. Immutable — changing it replaces the volume.
+   * and logical id. Immutable -- changing it replaces the volume.
    */
   volumeId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the volume. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
   location?: string;
   /**
-   * Storage pool name or id. Immutable — changing it replaces the volume.
+   * Storage pool name or id. Immutable -- changing it replaces the volume.
    */
   storagePool: string;
   /**
-   * NFS/SMB share name. Defaults to the volume id. Immutable — changing
+   * NFS/SMB share name. Defaults to the volume id. Immutable -- changing
    * it replaces the volume.
    */
   shareName?: string;
   /**
-   * Protocols. Immutable — changing them replaces the volume.
+   * Protocols. Immutable -- changing them replaces the volume.
    * @default ["NFSV3"]
    */
   protocols?: Array<netapp.VolumeProtocolsItemEnum | (string & {})>;
@@ -146,7 +146,7 @@ export type VolumeProps = {
    */
   unixPermissions?: string;
   /**
-   * Security style. Immutable — changing it replaces the volume.
+   * Security style. Immutable -- changing it replaces the volume.
    */
   securityStyle?: netapp.VolumeSecurityStyleEnum | (string & {});
   /**
@@ -162,7 +162,7 @@ export type VolumeProps = {
    */
   throughputMibps?: number;
   /**
-   * Enable Kerberos. Immutable — changing it replaces the volume.
+   * Enable Kerberos. Immutable -- changing it replaces the volume.
    */
   kerberosEnabled?: boolean;
   /**
@@ -170,7 +170,7 @@ export type VolumeProps = {
    */
   smbSettings?: Array<netapp.VolumeSmbSettingsItemEnum | (string & {})>;
   /**
-   * Restricted actions (`DELETE`, …).
+   * Restricted actions (`DELETE`, ...).
    */
   restrictedActions?: Array<netapp.VolumeRestrictedActionsItemEnum | (string & {})>;
   /**
@@ -325,7 +325,7 @@ export interface VolumeLookup {
    */
   volumeId: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * Region (`us-central1`, `us-east1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;

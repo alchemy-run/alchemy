@@ -9,7 +9,7 @@ export interface DescribeFirewallPolicyRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `network-firewall:DescribeFirewallPolicy` — read the
+ * Runtime binding for `network-firewall:DescribeFirewallPolicy` -- read the
  * bound {@link FirewallPolicy}'s definition (rule group references, default
  * actions, engine options); the policy ARN is injected automatically.
  *
@@ -18,7 +18,7 @@ export interface DescribeFirewallPolicyRequest extends Omit<
  * ### Reading Policy State
  * **Example:** Read the Policy Definition
  * ```typescript
- * // init — grants network-firewall:DescribeFirewallPolicy on the policy
+ * // init -- grants network-firewall:DescribeFirewallPolicy on the policy
  * const describeFirewallPolicy =
  *   yield* AWS.NetworkFirewall.DescribeFirewallPolicy(policy);
  *

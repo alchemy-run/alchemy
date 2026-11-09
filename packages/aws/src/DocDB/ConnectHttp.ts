@@ -42,7 +42,7 @@ export const ConnectHttp = Layer.effect(
           : Output.map(cluster.masterUserSecretArn, (arn) => {
               if (arn === undefined) {
                 throw new Error(
-                  `AWS.DocDB.Connect(${cluster.LogicalId}): the cluster has no managed master user secret — ` +
+                  `AWS.DocDB.Connect(${cluster.LogicalId}): the cluster has no managed master user secret \u2014 ` +
                     `set manageMasterUserPassword: true on the cluster or pass options.secret`,
                 );
               }
@@ -52,7 +52,7 @@ export const ConnectHttp = Layer.effect(
         yield* bind`AWS.DocDB.Connect(${cluster})`({
           env: {
             [`${prefix}_HOST`]: cluster.endpoint,
-            // Lambda environment variables are strings — stringify the port.
+            // Lambda environment variables are strings -- stringify the port.
             [`${prefix}_PORT`]: Output.interpolate`${cluster.port}`,
           },
           policyStatements: [
@@ -80,7 +80,7 @@ export const ConnectHttp = Layer.effect(
         }
         if (!secretArn) {
           return yield* Effect.die(
-            `AWS.DocDB.Connect(${cluster.LogicalId}): the cluster has no managed master user secret — ` +
+            `AWS.DocDB.Connect(${cluster.LogicalId}): the cluster has no managed master user secret \u2014 ` +
               `set manageMasterUserPassword: true on the cluster or pass options.secret`,
           );
         }

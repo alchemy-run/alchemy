@@ -15,7 +15,7 @@ import type { Broker } from "./Broker.ts";
  * const listUsers = yield* MQ.ListUsers(broker);
  *
  * const page = yield* listUsers();
- * // page.Users → [{ Username: "admin" }, { Username: "tenant-42", PendingChange: "CREATE" }]
+ * // page.Users -> [{ Username: "admin" }, { Username: "tenant-42", PendingChange: "CREATE" }]
  * ```
  *
  * @binding

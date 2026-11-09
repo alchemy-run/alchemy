@@ -6,7 +6,7 @@ import type { EndpointGroup } from "./EndpointGroup.ts";
 /**
  * Runtime binding for `globalaccelerator:RemoveEndpoints`.
  *
- * Deregisters endpoints from the bound {@link EndpointGroup} at runtime —
+ * Deregisters endpoints from the bound {@link EndpointGroup} at runtime --
  * e.g. draining an instance before it is terminated. Unlike a full
  * `UpdateEndpointGroup`, removing endpoints leaves the group's other
  * endpoints and health-check configuration untouched. The endpoint group
@@ -15,7 +15,7 @@ import type { EndpointGroup } from "./EndpointGroup.ts";
  * ### Managing Endpoints
  * **Example:** Deregister an Endpoint
  * ```typescript
- * // init — bind the operation to the endpoint group
+ * // init -- bind the operation to the endpoint group
  * const removeEndpoints = yield* AWS.GlobalAccelerator.RemoveEndpoints(group);
  *
  * // runtime

@@ -7,7 +7,7 @@ import type { PrometheusApiError, PrometheusSeries, PrometheusTime } from "./Pro
 import type { Workspace } from "./Workspace.ts";
 
 export interface GetSeriesRequest {
-  /** Series selectors — at least one is required, e.g. `['up', 'job:.*']`. */
+  /** Series selectors -- at least one is required, e.g. `['up', 'job:.*']`. */
   match: string[];
   /** Start of the lookup range. A `Date`, Unix seconds, or RFC 3339 string. */
   start?: PrometheusTime;
@@ -16,7 +16,7 @@ export interface GetSeriesRequest {
 }
 
 /**
- * Runtime binding for `aps:GetSeries` — find series (full label sets) that
+ * Runtime binding for `aps:GetSeries` -- find series (full label sets) that
  * match a selector via an AMP {@link Workspace}'s Prometheus-compatible
  * `api/v1/series` endpoint, SigV4-signed with the host Function's credentials.
  *

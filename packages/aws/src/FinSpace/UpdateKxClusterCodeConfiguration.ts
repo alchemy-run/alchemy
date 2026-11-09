@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { KxEnvironment } from "./KxEnvironment.ts";
 
 /**
- * Runtime binding for `finspace:UpdateKxClusterCodeConfiguration` — deploys new q code (and optionally a new initialization script or command-line arguments) to a running cluster with a rolling, forced, or no-restart strategy.
+ * Runtime binding for `finspace:UpdateKxClusterCodeConfiguration` -- deploys new q code (and optionally a new initialization script or command-line arguments) to a running cluster with a rolling, forced, or no-restart strategy.
  * Provide the implementation with
  * `Effect.provide(AWS.FinSpace.UpdateKxClusterCodeConfigurationHttp)`.
  * ### Deploying to Clusters

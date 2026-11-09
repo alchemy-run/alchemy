@@ -7,7 +7,7 @@ import type * as Effect from "effect/Effect";
  * `route53:ListHostedZones`; list actions do not support resource-level
  * permissions, so it is granted on `*`).
  *
- * Pages through the account's hosted zones — zone discovery for multi-tenant
+ * Pages through the account's hosted zones -- zone discovery for multi-tenant
  * DNS automation that resolves a zone id before editing records. Provide the
  * implementation with `Effect.provide(AWS.Route53.ListHostedZonesHttp)`.
  * ### Discovering Zones

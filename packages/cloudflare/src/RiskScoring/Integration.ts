@@ -20,7 +20,7 @@ export interface IntegrationProps {
   integrationType?: "Okta";
   /**
    * The base URL of the tenant that receives risk-score changes, e.g.
-   * `https://tenant.okta.com`. Mutable — updated in place via PUT.
+   * `https://tenant.okta.com`. Mutable -- updated in place via PUT.
    */
   tenantUrl: string;
   /**
@@ -66,7 +66,7 @@ export type Integration = Resource<
 >;
 
 /**
- * A Cloudflare Zero Trust **risk scoring integration** — a Shared
+ * A Cloudflare Zero Trust **risk scoring integration** -- a Shared
  * Signals Framework (SSF) push integration that exports user risk-score
  * changes to a third-party tenant (currently Okta) so the IdP can react
  * to risky behavior detected by Zero Trust.
@@ -119,7 +119,7 @@ export const IntegrationProvider = () =>
       }
 
       // Cold lookup by tenant URL. Integrations carry no ownership
-      // markers — brand the match `Unowned`.
+      // markers -- brand the match `Unowned`.
       const tenantUrl = olds?.tenantUrl;
       if (tenantUrl === undefined) return undefined;
       const match = yield* findByTenantUrl(acct, tenantUrl);
@@ -130,7 +130,7 @@ export const IntegrationProvider = () =>
     reconcile: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
-      // 1. Observe — cached id is a hint; fall back to a tenant-URL scan
+      // 1. Observe -- cached id is a hint; fall back to a tenant-URL scan
       //    so a crashed prior run converges.
       let observed = output?.integrationId
         ? yield* observeIntegration(accountId, output.integrationId)
@@ -139,7 +139,7 @@ export const IntegrationProvider = () =>
         observed = yield* findByTenantUrl(accountId, news.tenantUrl);
       }
 
-      // 2. Ensure — create when missing. Create always provisions an
+      // 2. Ensure -- create when missing. Create always provisions an
       //    active integration; the sync step below applies `active: false`.
       if (!observed) {
         observed = yield* zeroTrust.createRiskScoringIntegration({
@@ -150,7 +150,7 @@ export const IntegrationProvider = () =>
         });
       }
 
-      // 3. Sync — PUT the full desired state when the observed state
+      // 3. Sync -- PUT the full desired state when the observed state
       //    differs; skip the call on a no-op.
       const desiredActive = news.active ?? true;
       const dirty =
@@ -182,7 +182,7 @@ export const IntegrationProvider = () =>
     // Account collection (pattern b). Enumerate every risk-scoring
     // integration in the ambient account, exhaustively paginating the
     // distilled list op. Accounts lacking the Zero Trust risk-scoring
-    // entitlement reject the route with a typed `Forbidden` — treat that
+    // entitlement reject the route with a typed `Forbidden` -- treat that
     // as "nothing to list" and return [].
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;

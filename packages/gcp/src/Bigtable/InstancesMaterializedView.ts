@@ -25,7 +25,7 @@ import {
 export type InstancesMaterializedViewProps = {
   /**
    * Parent instance. Full name `projects/{project}/instances/{instance}`
-   * or the instance id. Immutable — changing it replaces the view.
+   * or the instance id. Immutable -- changing it replaces the view.
    */
   instance: string;
   /**
@@ -33,13 +33,13 @@ export type InstancesMaterializedViewProps = {
    * `.../instances/{instance}/materializedViews/{materialized_view}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Must be unique among table ids and view ids in the
-   * instance. Immutable — changing it replaces the view.
+   * instance. Immutable -- changing it replaces the view.
    */
   materializedViewId?: string;
   /**
    * GoogleSQL SELECT that defines the continuous materialized view.
    * Must include `GROUP BY` or `ORDER BY` and cannot use `SELECT *`.
-   * Immutable — changing it replaces the view.
+   * Immutable -- changing it replaces the view.
    */
   query: string;
   /**
@@ -103,7 +103,7 @@ export interface InstancesMaterializedViewLookup {
 }
 
 /**
- * A Cloud Bigtable continuous materialized view — a SQL SELECT whose
+ * A Cloud Bigtable continuous materialized view -- a SQL SELECT whose
  * results are precomputed and kept current.
  *
  * The parent instance must already exist. The query must use `GROUP BY`

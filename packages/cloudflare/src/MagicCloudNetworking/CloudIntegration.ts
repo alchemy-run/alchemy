@@ -37,7 +37,7 @@ export interface CloudIntegrationProps {
   /**
    * The cloud provider this integration connects to.
    *
-   * Immutable — changing the cloud type triggers a replacement.
+   * Immutable -- changing the cloud type triggers a replacement.
    */
   cloudType: CloudIntegrationCloudType;
   /**
@@ -54,7 +54,7 @@ export interface CloudIntegrationProps {
   description?: string;
   /**
    * AWS IAM role ARN Cloudflare assumes to discover resources
-   * (`cloudType: "AWS"` only). Mutable — wired after creating the role
+   * (`cloudType: "AWS"` only). Mutable -- wired after creating the role
    * from the integration's setup data.
    */
   awsArn?: string;
@@ -116,9 +116,9 @@ export type CloudIntegration = Resource<
 >;
 
 /**
- * A Magic Cloud Networking cloud integration — registers an AWS, Azure, or
+ * A Magic Cloud Networking cloud integration -- registers an AWS, Azure, or
  * GCP account with Cloudflare so Magic Cloud Networking can discover its
- * networking resources (VPCs, subnets, gateways, …).
+ * networking resources (VPCs, subnets, gateways, ...).
  *
  * Creating an integration returns provider-side setup data; credential
  * wiring (`awsArn`, `azureSubscriptionId`/`azureTenantId`,
@@ -195,7 +195,7 @@ export const CloudIntegrationProvider = () =>
         return undefined;
       }
 
-      // Cold read — recover from lost state by matching the deterministic
+      // Cold read -- recover from lost state by matching the deterministic
       // physical name. Integrations carry no ownership markers, so report
       // a match as Unowned and let the engine gate adoption.
       const name = yield* integrationName(id, olds?.friendlyName);
@@ -207,7 +207,7 @@ export const CloudIntegrationProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* integrationName(id, news.friendlyName);
 
-      // 1. Observe — the id cached on `output` is a hint, not a guarantee:
+      // 1. Observe -- the id cached on `output` is a hint, not a guarantee:
       //    a missing integration falls through to the name scan and create.
       let observed = output?.integrationId
         ? yield* getIntegration(output.accountId ?? accountId, output.integrationId)
@@ -216,7 +216,7 @@ export const CloudIntegrationProvider = () =>
         observed = yield* findByName(accountId, name);
       }
 
-      // 2. Ensure — create when missing. Names are not unique on
+      // 2. Ensure -- create when missing. Names are not unique on
       //    Cloudflare's side so there is no AlreadyExists race to tolerate.
       if (!observed) {
         const created = yield* mcn.createCloudIntegration({
@@ -230,7 +230,7 @@ export const CloudIntegrationProvider = () =>
         );
       }
 
-      // 3. Sync — diff observed cloud state against desired; PATCH only the
+      // 3. Sync -- diff observed cloud state against desired; PATCH only the
       //    delta and skip the call entirely on a no-op.
       const patch: mcn.PatchCloudIntegrationRequest = {
         accountId,
@@ -281,7 +281,7 @@ export const CloudIntegrationProvider = () =>
           ),
         ),
         // Magic Cloud Networking is an entitlement-gated add-on; accounts
-        // without it can't enumerate integrations — treat as empty.
+        // without it can't enumerate integrations -- treat as empty.
         Effect.catchTag("FeatureNotEnabled", () => Effect.succeed([])),
       );
     }),

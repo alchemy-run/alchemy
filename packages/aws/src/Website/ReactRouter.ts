@@ -30,7 +30,7 @@ export type ReactRouterProps = FrameworkSiteProps;
  *
  * The build runs through
  * `@alchemy.run/frontend-frameworks/react-router` with the
- * `@alchemy.run/frontend-frameworks/react-router/aws` deploy target — both
+ * `@alchemy.run/frontend-frameworks/react-router/aws` deploy target -- both
  * must be installed in your project, alongside `@react-router/dev`,
  * `react-router`, and `vite`.
  *
@@ -42,7 +42,7 @@ export type ReactRouterProps = FrameworkSiteProps;
  * Lambda handler.
  *
  * React Server Components (React Router's `unstable` RSC plugin) and
- * multi-environment builds are not supported yet — the build fails with an
+ * multi-environment builds are not supported yet -- the build fails with an
  * actionable error when more than one server entry is emitted.
  *
  * ### Creating React Router Sites

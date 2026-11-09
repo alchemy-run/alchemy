@@ -9,8 +9,8 @@ import type { Stage } from "alchemy/Stage";
  * The extension seam between the cluster-agnostic `Kubernetes.*` workloads
  * and the platform a cluster runs on.
  *
- * A {@link ClusterAdapterService} is registered under a keyed Context tag —
- * `Kubernetes.ClusterAdapter/<auth kind>` — and resolved dynamically from
+ * A {@link ClusterAdapterService} is registered under a keyed Context tag --
+ * `Kubernetes.ClusterAdapter/<auth kind>` -- and resolved dynamically from
  * the ambient provider context by {@link findClusterAdapter}, mirroring how
  * resource providers are resolved by type. `Kubernetes.providers()` ships
  * the built-in adapters (`kubeconfig`, `token`, `client-cert`, `exec`);
@@ -19,17 +19,17 @@ import type { Stage } from "alchemy/Stage";
  *
  * An adapter owns everything platform-specific:
  *
- * - **connect** (required) — resolve the API server endpoint/CA and mint
+ * - **connect** (required) -- resolve the API server endpoint/CA and mint
  *   per-request auth headers.
- * - **identity** (optional) — provision workload identity for a namespace +
+ * - **identity** (optional) -- provision workload identity for a namespace +
  *   service account and translate host bindings into cloud credentials
  *   (EKS Pod Identity, GKE Workload Identity Federation).
- * - **registry** (optional) — build/mirror container images into a managed
+ * - **registry** (optional) -- build/mirror container images into a managed
  *   registry the cluster can pull from (ECR on EKS, Artifact Registry on GKE).
- * - **bootstrap** (optional) — platform-specific generated container
+ * - **bootstrap** (optional) -- platform-specific generated container
  *   entries for Effect-native workloads (e.g. wiring the AWS credential
  *   chain for Pod Identity).
- * - **loadBalancerDefaults** (optional) — platform defaults for
+ * - **loadBalancerDefaults** (optional) -- platform defaults for
  *   `LoadBalancer` Services (EKS Auto Mode's `loadBalancerClass` +
  *   internet-facing scheme).
  */
@@ -43,13 +43,13 @@ import type { Connection } from "./Connection.ts";
  * Per-resource engine services ambient inside every provider lifecycle
  * operation. Adapter methods run inside the workload providers' lifecycle
  * ops, so they may require these (physical-name generation needs the
- * resource's ResourceContext + Stack + Stage) — everything else an adapter
+ * resource's ResourceContext + Stack + Stage) -- everything else an adapter
  * needs is captured at its layer build.
  */
 export type AdapterLifecycleServices = ResourceContext | Stack | Stage;
 
 /**
- * The target cluster no longer exists (definitively — e.g. the managed
+ * The target cluster no longer exists (definitively -- e.g. the managed
  * control plane is deleted or deleting). Distinct from transient
  * unreachability: `read`/`delete` treat this as "everything in-cluster is
  * already gone".
@@ -78,7 +78,7 @@ export interface ClusterTransport {
 
 /**
  * Workload identity state persisted on a workload's attributes, keyed by
- * adapter kind. Cloud providers extend it via module augmentation — AWS
+ * adapter kind. Cloud providers extend it via module augmentation -- AWS
  * registers:
  *
  * ```ts
@@ -145,7 +145,7 @@ export interface WorkloadBindingContract {
 /**
  * Ambient runtime services the workload platforms assume inside the
  * deployed container, keyed by contributor and extended via module
- * augmentation — AWS registers its credential-chain services so inline
+ * augmentation -- AWS registers its credential-chain services so inline
  * impls can use AWS bindings without providing them:
  *
  * ```ts
@@ -197,7 +197,7 @@ export interface WorkloadIdentityReconcileOptions {
   /** Cloud-specific identity options from the workload's `identity` prop. */
   options: WorkloadIdentityOptions | undefined;
   /**
-   * Previously persisted identity state, if any — untyped hints because
+   * Previously persisted identity state, if any -- untyped hints because
    * legacy pre-rename rows carry the old flat attribute shape; adapters
    * narrow structurally and re-observe cloud state as the authority.
    */
@@ -221,13 +221,13 @@ export interface WorkloadIdentityDeleteOptions {
   connection: Connection | undefined;
   /**
    * The persisted identity state. Untyped because legacy pre-rename rows
-   * carry the old flat attribute shape — adapters narrow structurally.
+   * carry the old flat attribute shape -- adapters narrow structurally.
    */
   state: Record<string, unknown> | undefined;
 }
 
 export interface ImageRegistryResolveOptions {
-  /** Logical resource id — keys generated repository names. */
+  /** Logical resource id -- keys generated repository names. */
   id: string;
   /** The image-source props bag. */
   source: WorkloadImageSource;
@@ -242,7 +242,7 @@ export interface ImageRegistryResolveOptions {
   /** Tags for registry-owned cloud resources. */
   tags: Record<string, string>;
   /**
-   * Previously persisted registry state, if any — untyped hints because
+   * Previously persisted registry state, if any -- untyped hints because
    * legacy pre-rename rows carry the old flat attribute shape; adapters
    * narrow structurally.
    */
@@ -271,7 +271,7 @@ export interface ImageRegistryHashOptions {
 export interface ImageRegistryDeleteOptions {
   /**
    * The persisted registry state. Untyped because legacy pre-rename rows
-   * carry the old flat attribute shape — adapters narrow structurally.
+   * carry the old flat attribute shape -- adapters narrow structurally.
    */
   state: Record<string, unknown> | undefined;
 }
@@ -335,7 +335,7 @@ export interface ClusterAdapterService {
 const adapterKey = (authKind: string) => `Kubernetes.ClusterAdapter/${authKind}`;
 
 /**
- * The keyed Context tag for an adapter. Same auth kind → same tag, so a
+ * The keyed Context tag for an adapter. Same auth kind -> same tag, so a
  * layer built with `ClusterAdapter("aws-eks")` is found by any dynamic
  * lookup for that kind.
  */
@@ -347,7 +347,7 @@ export const ClusterAdapter = (
 /**
  * Resolve the {@link ClusterAdapterService} for a connection's auth kind
  * from the ambient context (the stack's composed provider layers). Dies
- * with setup guidance when no adapter is registered — that means the
+ * with setup guidance when no adapter is registered -- that means the
  * provider layer contributing it (e.g. `AWS.providers()` for `aws-eks`)
  * is missing from the stack.
  */
@@ -361,7 +361,7 @@ export const findClusterAdapter = (authKind: string): Effect.Effect<ClusterAdapt
             new Error(
               `No Kubernetes cluster adapter is registered for auth kind ` +
                 `'${authKind}'. Add the provider layer that contributes it ` +
-                `to the stack's providers — e.g. 'aws-eks' ships with ` +
+                `to the stack's providers \u2014 e.g. 'aws-eks' ships with ` +
                 "`AWS.providers()`; the built-in kinds (kubeconfig, token, " +
                 "client-cert, exec) ship with `Kubernetes.providers()`. " +
                 "Compose multiple provider layers with " +

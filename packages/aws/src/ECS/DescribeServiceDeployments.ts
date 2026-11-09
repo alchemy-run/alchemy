@@ -9,7 +9,7 @@ export interface DescribeServiceDeploymentsRequest extends ECS.DescribeServiceDe
  * Runtime binding for `ecs:DescribeServiceDeployments`.
  *
  * Bind this operation to a `Service` inside a function runtime to get a
- * callable that describes the bound service's deployments — rollout state,
+ * callable that describes the bound service's deployments -- rollout state,
  * circuit-breaker status, target service revision. The host is granted
  * `ecs:DescribeServiceDeployments` on the service's deployments (deployment
  * ARNs are only known at runtime, e.g. from `ListServiceDeployments`).

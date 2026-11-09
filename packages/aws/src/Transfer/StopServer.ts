@@ -7,7 +7,7 @@ import type { Server } from "./Server.ts";
  * Runtime binding for `transfer:StopServer`.
  *
  * Takes the bound {@link Server} from `ONLINE` to `OFFLINE` so it stops
- * accepting file transfers — the `ServerId` is injected from the binding.
+ * accepting file transfers -- the `ServerId` is injected from the binding.
  * Server and user configuration are unaffected. Note stopping does NOT
  * pause billing; only deleting the server does. The call is asynchronous:
  * the server passes through `STOPPING`; observe progress with
@@ -17,7 +17,7 @@ import type { Server } from "./Server.ts";
  * ### Controlling Server Availability
  * **Example:** Take the Server Offline
  * ```typescript
- * // init — bind the operation to the server
+ * // init -- bind the operation to the server
  * const stopServer = yield* AWS.Transfer.StopServer(server);
  *
  * // runtime

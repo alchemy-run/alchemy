@@ -15,7 +15,7 @@ export interface BatchGetDocumentStatusRequest extends Omit<
  * Runtime binding for the `BatchGetDocumentStatus` operation (IAM action
  * `kendra:BatchGetDocumentStatus`), scoped to one {@link Index}.
  *
- * Returns the indexing status (`INDEXED`, `PROCESSING`, `FAILED`, …) of
+ * Returns the indexing status (`INDEXED`, `PROCESSING`, `FAILED`, ...) of
  * documents added with {@link BatchPutDocument} or a data-source sync.
  * Provide the implementation with
  * `Effect.provide(AWS.Kendra.BatchGetDocumentStatusHttp)`.

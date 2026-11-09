@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { QApp } from "./QApp.ts";
 
 /**
- * Request for {@link StopQAppSession} — `instanceId` is injected from the bound Q App.
+ * Request for {@link StopQAppSession} -- `instanceId` is injected from the bound Q App.
  */
 export interface StopQAppSessionRequest extends Omit<
   qapps.StopQAppSessionInput,
@@ -19,7 +19,7 @@ export interface StopQAppSessionRequest extends Omit<
  * ### Sessions
  * **Example:** Stop a Session
  * ```typescript
- * // init — bind the operation to the Q App
+ * // init -- bind the operation to the Q App
  * const stopQAppSession = yield* AWS.QApps.StopQAppSession(app);
  *
  * // runtime

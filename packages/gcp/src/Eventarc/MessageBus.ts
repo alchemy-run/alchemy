@@ -45,12 +45,12 @@ export type MessageBusProps = {
    * `projects/{project}/locations/{location}/messageBuses/{messageBus}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Must match `[a-z]([a-z0-9-]*[a-z0-9])?` and be 1-63
-   * characters. Immutable — changing it replaces the bus.
+   * characters. Immutable -- changing it replaces the bus.
    */
   messageBusId?: string;
   /**
-   * Eventarc Advanced location (`us-central1`, `us-east4`, …). Immutable
-   * — changing it replaces the bus. `US-CENTRAL1` is accepted and
+   * Eventarc Advanced location (`us-central1`, `us-east4`, ...). Immutable
+   * -- changing it replaces the bus. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile
    *   region, else `us-central1`)
@@ -91,7 +91,7 @@ export type MessageBus = Resource<
     messageBusId: string;
     /** Project id. */
     project: string;
-    /** Location id (`us-central1`, …). */
+    /** Location id (`us-central1`, ...). */
     location: string;
     /** Display name. */
     displayName: string | undefined;
@@ -130,7 +130,7 @@ export interface MessageBusLookup {
    */
   messageBusId: string;
   /**
-   * Eventarc Advanced location (`us-central1`, `us-east4`, …).
+   * Eventarc Advanced location (`us-central1`, `us-east4`, ...).
    * `US-CENTRAL1` is accepted and normalized to `us-central1`.
    */
   location?: string;
@@ -145,7 +145,7 @@ export interface MessageBusLookup {
  * An Eventarc Advanced message bus that routes published events to
  * enrollments. One bus may exist per project per region.
  *
- * `messageBusId` and `location` are identity — changing either replaces
+ * `messageBusId` and `location` are identity -- changing either replaces
  * the bus. Display name, labels, annotations, logging, and CMEK update
  * in place.
  *

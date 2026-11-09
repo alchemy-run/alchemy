@@ -27,12 +27,12 @@ export type IapDestGroupProps = {
    * Destination group id (the `{dest_group}` segment of
    * `projects/{project}/iap_tunnel/locations/{location}/destGroups/{dest_group}`).
    * If omitted, a unique name is generated. Must be 4-63 characters of
-   * lowercase letters and dashes. Immutable — changing it replaces the
+   * lowercase letters and dashes. Immutable -- changing it replaces the
    * group.
    */
   destGroupId?: string;
   /**
-   * Region of the destination group (`us-central1`, …). Immutable —
+   * Region of the destination group (`us-central1`, ...). Immutable --
    * changing it replaces the group. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -84,7 +84,7 @@ export interface IapDestGroupLookup {
    */
   destGroupId: string;
   /**
-   * Region of the destination group (`us-central1`, …). `US-CENTRAL1` is
+   * Region of the destination group (`us-central1`, ...). `US-CENTRAL1` is
    * accepted and normalized to `us-central1`.
    */
   location?: string;
@@ -101,7 +101,7 @@ export interface IapDestGroupLookup {
  * Destination groups have no labels field, so Alchemy identifies its
  * groups by the generated `destGroupId`: `read` reports a group with an
  * explicit `destGroupId` as unowned (adopt it with `--adopt`), and nuke
- * cannot discover groups. `destGroupId` and `location` are identity —
+ * cannot discover groups. `destGroupId` and `location` are identity --
  * changing either replaces the group. CIDRs and FQDNs update in place.
  *
  * ### Creating a Destination Group

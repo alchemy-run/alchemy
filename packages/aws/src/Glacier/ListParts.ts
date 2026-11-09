@@ -14,7 +14,7 @@ export interface ListPartsRequest extends Omit<glacier.ListPartsInput, "accountI
  * `glacier:ListParts` on the vault ARN).
  *
  * Lists the parts already uploaded for an in-progress multipart upload on
- * the bound {@link Vault}, sorted by byte range — the resume point after a
+ * the bound {@link Vault}, sorted by byte range -- the resume point after a
  * crashed uploader.
  * Provide the implementation with
  * `Effect.provide(AWS.Glacier.ListPartsHttp)`.

@@ -9,7 +9,7 @@ export interface GenerateCardValidationDataRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `payment-cryptography:GenerateCardValidationData` —
+ * Runtime binding for `payment-cryptography:GenerateCardValidationData` --
  * generates card validation values (CVV/CVV2, dCVV, CSC) under a Card
  * Verification Key (CVK) {@link Key}. Provide
  * `GenerateCardValidationDataHttp` on the Function to satisfy this service.

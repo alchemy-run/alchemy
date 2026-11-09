@@ -84,7 +84,7 @@ export interface AutomationRule extends Resource<
 > {}
 
 /**
- * A Security Hub automation rule — automatically updates findings that match
+ * A Security Hub automation rule -- automatically updates findings that match
  * its criteria (suppress, change severity, add notes) as they are ingested.
  *
  * ### Automating Finding Triage
@@ -142,7 +142,7 @@ export const AutomationRuleProvider = () =>
         );
 
       // `ListAutomationRules` is not modeled as paginated in the Smithy spec
-      // (no `.pages` helper) — page manually, bounded (accounts are limited
+      // (no `.pages` helper) -- page manually, bounded (accounts are limited
       // to 100 rules).
       const listRules = Effect.gen(function* () {
         const out: securityhub.AutomationRulesMetadata[] = [];
@@ -188,7 +188,7 @@ export const AutomationRuleProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           let arn = output?.ruleArn;
           if (!arn) {
-            // No prior state — find by (deterministic) name.
+            // No prior state -- find by (deterministic) name.
             const name = yield* toName(id, olds ?? {});
             const all = yield* listRules;
             arn = all.find((r) => r.RuleName === name)?.RuleArn;
@@ -209,7 +209,7 @@ export const AutomationRuleProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — by cached ARN first, then by name.
+          // 1. OBSERVE -- by cached ARN first, then by name.
           let arn = output?.ruleArn;
           let live = arn ? yield* getRule(arn) : undefined;
           if (!live) {
@@ -219,7 +219,7 @@ export const AutomationRuleProvider = () =>
           }
 
           if (!live) {
-            // 2. ENSURE — create with tags applied inline.
+            // 2. ENSURE -- create with tags applied inline.
             const { RuleArn } = yield* securityhub.createAutomationRule({
               RuleName: name,
               Description: news.description,
@@ -233,7 +233,7 @@ export const AutomationRuleProvider = () =>
             arn = RuleArn!;
           } else {
             arn = live.RuleArn!;
-            // 3. SYNC settings — observed ↔ desired.
+            // 3. SYNC settings -- observed <-> desired.
             const desiredStatus = news.ruleStatus ?? "ENABLED";
             const desiredTerminal = news.isTerminal ?? false;
             const drift =
@@ -261,7 +261,7 @@ export const AutomationRuleProvider = () =>
               });
             }
 
-            // 3b. SYNC tags — diff against OBSERVED cloud tags.
+            // 3b. SYNC tags -- diff against OBSERVED cloud tags.
             const currentTags = yield* readTags(arn);
             const { upsert, removed } = diffTags(currentTags, desiredTags);
             if (upsert.length > 0) {
@@ -284,7 +284,7 @@ export const AutomationRuleProvider = () =>
           return buildAttrs(final ?? { RuleArn: arn, RuleName: name });
         }),
         delete: Effect.fn(function* ({ output }) {
-          // Idempotent — an unknown ARN comes back in
+          // Idempotent -- an unknown ARN comes back in
           // UnprocessedAutomationRules rather than as an error.
           yield* securityhub
             .batchDeleteAutomationRules({

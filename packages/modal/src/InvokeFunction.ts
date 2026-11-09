@@ -12,7 +12,7 @@ import type { InvokeOps } from "./InvokeFunctionHttp.ts";
 
 /** A function deployed outside the Stack (`modal deploy`), by name. */
 export interface FunctionRef {
-  /** Name of the deployed App (`modal deploy` / `modal.App("…")`). */
+  /** Name of the deployed App (`modal deploy` / `modal.App("...")`). */
   readonly app: string;
   /** Function name in the App (`"embed"`), or `"Class.method"` for a class method. */
   readonly function: string;

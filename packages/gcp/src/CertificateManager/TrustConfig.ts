@@ -63,11 +63,11 @@ export type TrustConfigProps = {
    * `projects/{project}/locations/{location}/trustConfigs/{trustConfig}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Must be 1-63 characters and match `[a-z0-9-]{1,63}`.
-   * Immutable — changing it replaces the TrustConfig.
+   * Immutable -- changing it replaces the TrustConfig.
    */
   trustConfigId?: string;
   /**
-   * Certificate Manager location (`global`, `us-central1`, …). Immutable —
+   * Certificate Manager location (`global`, `us-central1`, ...). Immutable --
    * changing it replaces the TrustConfig. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    * @default "global"
@@ -83,7 +83,7 @@ export type TrustConfigProps = {
   labels?: Record<string, string>;
   /**
    * Trust stores used with load-balancer mTLS. Only one store is
-   * currently allowed. Not supported for SPIFFE validation — use
+   * currently allowed. Not supported for SPIFFE validation -- use
    * `spiffeTrustStores` instead.
    */
   trustStores?: TrustConfigTrustStore[];
@@ -108,7 +108,7 @@ export type TrustConfig = Resource<
     trustConfigId: string;
     /** Project id. */
     project: string;
-    /** Location id (`global`, `us-central1`, …). */
+    /** Location id (`global`, `us-central1`, ...). */
     location: string;
     /** User-provided description. */
     description: string | undefined;
@@ -145,7 +145,7 @@ export interface TrustConfigLookup {
    */
   trustConfigId: string;
   /**
-   * Certificate Manager location (`global`, `us-central1`, …).
+   * Certificate Manager location (`global`, `us-central1`, ...).
    * `US-CENTRAL1` is accepted and normalized to `us-central1`.
    */
   location?: string;
@@ -157,7 +157,7 @@ export interface TrustConfigLookup {
 }
 
 /**
- * A Certificate Manager TrustConfig — the PKI used to validate client
+ * A Certificate Manager TrustConfig -- the PKI used to validate client
  * certificates in mutual TLS (load balancer or SPIFFE).
  *
  * Changing `trustConfigId` or `location` replaces the resource.

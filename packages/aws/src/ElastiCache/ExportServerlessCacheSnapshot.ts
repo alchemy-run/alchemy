@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `ExportServerlessCacheSnapshot` operation (IAM
  * action `elasticache:ExportServerlessCacheSnapshot`).
  *
- * Exports a serverless cache snapshot's data to an S3 bucket — e.g. shipping
+ * Exports a serverless cache snapshot's data to an S3 bucket -- e.g. shipping
  * a backup out of ElastiCache for offline analysis or cross-account
  * restore. Available for valkey and redis only. The target bucket must grant
  * the ElastiCache service access via its bucket policy. Provide the

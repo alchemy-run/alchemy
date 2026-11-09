@@ -22,7 +22,7 @@ export interface CloudEvent {
   attributes: Record<string, string>;
   /**
    * The payload: parsed JSON for JSON content types, a string for
-   * `text/*`, and the raw bytes (`Uint8Array`) otherwise — e.g. Firestore
+   * `text/*`, and the raw bytes (`Uint8Array`) otherwise -- e.g. Firestore
    * events, which are `application/protobuf`.
    */
   data: unknown;
@@ -33,7 +33,7 @@ export interface EventarcEventSourceProps {
    * CloudEvents attribute filters; a `type` filter is required. Every
    * event must match all filters, e.g.
    * `[{ attribute: "type", value: "google.cloud.storage.object.v1.finalized" },
-   *   { attribute: "bucket", value: bucket.bucketName }]` — values may be
+   *   { attribute: "bucket", value: bucket.bucketName }]` -- values may be
    * deploy-time Outputs.
    */
   eventFilters: Input<EventFilter>[];
@@ -61,9 +61,9 @@ export type EventarcEventSourceService = <Req = never>(
 ) => Effect.Effect<void, never, never>;
 
 /**
- * Event source routing Eventarc events — Cloud Storage, Audit Log
+ * Event source routing Eventarc events -- Cloud Storage, Audit Log
  * (`google.cloud.audit.log.v1.written`, i.e. any Google API call),
- * Firestore, Pub/Sub, and partner channels — to the hosting compute.
+ * Firestore, Pub/Sub, and partner channels -- to the hosting compute.
  *
  * The HTTP implementation is `GCP.Run.EventarcEventSource` for
  * `GCP.Run.Service` / `GCP.Function` and `GCP.CloudFunctions.Function`:
@@ -88,7 +88,7 @@ export type EventarcEventSourceService = <Req = never>(
  *   },
  *   (event) => Effect.log(`${event.type} ${event.subject}`),
  * );
- * // …provided with Effect.provide(GCP.Run.EventarcEventSource)
+ * // ...provided with Effect.provide(GCP.Run.EventarcEventSource)
  * ```
  *
  * @binding

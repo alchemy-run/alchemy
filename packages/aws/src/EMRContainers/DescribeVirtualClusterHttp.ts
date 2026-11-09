@@ -18,7 +18,7 @@ export const DescribeVirtualClusterHttp = Layer.effect(
     const op = yield* AWSBindings.withCredentials(emrc.describeVirtualCluster);
 
     return Effect.fn(function* (virtualCluster: VirtualCluster) {
-      // Outputs yield a DEFERRED effect — resolve again per invocation below.
+      // Outputs yield a DEFERRED effect -- resolve again per invocation below.
       const VirtualClusterId = yield* virtualCluster.virtualClusterId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`AWS.EMRContainers.DescribeVirtualCluster(${virtualCluster})`({

@@ -35,7 +35,7 @@ export const BINDING_SEND_EMAIL_DIRECTORY = "EMAIL_DIRECTORY";
 
 /**
  * Key under which the local `EmailMessage` shim stores the raw MIME message.
- * Matches Miniflare's `RAW_EMAIL` constant (`workers/email/constants.ts`) —
+ * Matches Miniflare's `RAW_EMAIL` constant (`workers/email/constants.ts`) --
  * a plain string (not a symbol) so it survives JSRPC structured clone.
  */
 export const RAW_EMAIL = "EmailMessage::raw";

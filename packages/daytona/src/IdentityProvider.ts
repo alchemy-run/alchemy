@@ -159,7 +159,7 @@ export const IdentityProviderProvider = () =>
           });
           return toAttributes(organizationId, created);
         }
-        // Sync — the client secret can't be read back, so the full
+        // Sync -- the client secret can't be read back, so the full
         // configuration is written on every deploy.
         const updated = yield* organizations.updateOrganizationIdentityProvider({
           organizationId,

@@ -18,7 +18,7 @@ export interface ListStreamSessionsRequest extends Omit<
  * ### Monitoring Live Streams
  * **Example:** List Recent Broadcasts
  * ```typescript
- * // init — bind the operation to the channel
+ * // init -- bind the operation to the channel
  * const listStreamSessions = yield* AWS.IVS.ListStreamSessions(channel);
  *
  * // runtime

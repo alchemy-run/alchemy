@@ -118,7 +118,7 @@ export interface StaticSiteProps {
  * `StaticSite` runs a build command (e.g. `npm run build` / `hugo`),
  * content-hashes the output directory, and deploys a Service that serves
  * those files (plus `/health`). Use this when the site has its own build
- * step — Hugo, Zola, Eleventy, or any custom pipeline.
+ * step -- Hugo, Zola, Eleventy, or any custom pipeline.
  *
  * For Vite-based projects, prefer `Fly.Website.Vite`.
  *

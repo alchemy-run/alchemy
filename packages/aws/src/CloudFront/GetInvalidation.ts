@@ -11,14 +11,14 @@ export interface GetInvalidationRequest extends Omit<
 /**
  * Runtime binding for `cloudfront:GetInvalidation`.
  *
- * Reads the status of a cache invalidation on the bound distribution —
+ * Reads the status of a cache invalidation on the bound distribution --
  * pairs with {@link CreateInvalidation} to poll a purge to `Completed`.
  * Provide the implementation with
  * `Effect.provide(AWS.CloudFront.GetInvalidationHttp)`.
  * ### Inspecting Invalidations
  * **Example:** Poll an Invalidation's Status
  * ```typescript
- * // init — bind the operation to the distribution
+ * // init -- bind the operation to the distribution
  * const getInvalidation = yield* CloudFront.GetInvalidation(distribution);
  *
  * // runtime

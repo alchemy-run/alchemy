@@ -18,22 +18,22 @@ export interface SilenceProps {
   /**
    * The notification policy to silence. References a
    * {@link NotificationPolicy} id. Changing the policy triggers a
-   * replacement — the silence update API cannot move a silence to a
+   * replacement -- the silence update API cannot move a silence to a
    * different policy.
    */
   policyId: string;
   /**
    * When the silence window starts, as an RFC3339/ISO8601 timestamp (e.g.
-   * `2026-07-01T00:00:00Z`). Must be within 90 days of now — Cloudflare
+   * `2026-07-01T00:00:00Z`). Must be within 90 days of now -- Cloudflare
    * rejects windows further out with `InvalidSilence`. Pass an explicit,
    * deterministic value; the provider never derives times from the clock.
-   * Mutable — updated in place.
+   * Mutable -- updated in place.
    */
   startTime: string;
   /**
    * When the silence window ends, as an RFC3339/ISO8601 timestamp. Must be
    * after `startTime` (`InvalidSilence` otherwise).
-   * Mutable — updated in place.
+   * Mutable -- updated in place.
    */
   endTime: string;
 }
@@ -61,7 +61,7 @@ export type Silence = Resource<TypeId, SilenceProps, SilenceAttributes, never, P
  * A Cloudflare Notifications silence window.
  *
  * A silence suppresses notification dispatches for a
- * {@link NotificationPolicy} between `startTime` and `endTime` — e.g.
+ * {@link NotificationPolicy} between `startTime` and `endTime` -- e.g.
  * during a planned maintenance window. The window times are explicit
  * ISO8601 props supplied by you; Cloudflare requires the start time to be
  * within 90 days of now.
@@ -86,7 +86,7 @@ export type Silence = Resource<TypeId, SilenceProps, SilenceAttributes, never, P
  *
  * ### Updating the window
  * **Example:** Extend the silence end time in place
- * Window times are mutable — changing them updates the existing silence.
+ * Window times are mutable -- changing them updates the existing silence.
  * ```typescript
  * yield* Cloudflare.Alerting.Silence("MaintenanceWindow", {
  *   policyId: policy.policyId,
@@ -136,7 +136,7 @@ export const SilenceProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      // The silence update body carries no policyId — a silence cannot be
+      // The silence update body carries no policyId -- a silence cannot be
       // moved to a different policy, so a policy change is a replacement.
       // policyId is Input<string>; compare only once both are concrete.
       const o = olds as SilenceProps;
@@ -163,7 +163,7 @@ export const SilenceProvider = () =>
         return undefined;
       }
 
-      // Cold read: no persisted id (state-persistence failure) — match on
+      // Cold read: no persisted id (state-persistence failure) -- match on
       // the silence identity `(policyId, startTime, endTime)`. Silences
       // carry no ownership markers, so we cannot prove we created a match:
       // brand it `Unowned` so the engine gates takeover behind adoption.
@@ -182,7 +182,7 @@ export const SilenceProvider = () =>
       // reconcile runs.
       const policyId = news.policyId as string;
 
-      // 1. Observe — by cached id first, then by silence identity.
+      // 1. Observe -- by cached id first, then by silence identity.
       let observed: ObservedSilence | undefined;
       if (output?.silenceId) {
         observed = yield* observeSilence(accountId, output.silenceId);
@@ -191,7 +191,7 @@ export const SilenceProvider = () =>
         observed = yield* findSilence(accountId, policyId, news.startTime, news.endTime);
       }
 
-      // 2. Ensure — create when missing. The create response carries no
+      // 2. Ensure -- create when missing. The create response carries no
       //    id, so resolve the created silence by listing and matching on
       //    `(policyId, startTime, endTime)` with a short bounded retry for
       //    read-after-write consistency. A concurrent create of the same
@@ -228,7 +228,7 @@ export const SilenceProvider = () =>
         return toSilenceAttributes(observed, accountId);
       }
 
-      // 3. Sync — diff the observed window against the desired one
+      // 3. Sync -- diff the observed window against the desired one
       //    (instant-equal, so `00:00:00Z` matches `00:00:00+00:00`) and
       //    PUT only on drift.
       if (
@@ -263,7 +263,7 @@ export const SilenceProvider = () =>
     }),
   });
 
-/** Created silence not yet visible in the list — retried internally. */
+/** Created silence not yet visible in the list -- retried internally. */
 class SilencePending extends Data.TaggedError("SilencePending") {}
 
 interface ObservedSilence {

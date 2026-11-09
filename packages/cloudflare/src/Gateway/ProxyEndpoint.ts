@@ -17,7 +17,7 @@ type TypeId = typeof TypeId;
 /**
  * The kind of proxy endpoint. `ip` endpoints admit traffic from a source
  * CIDR allowlist (Enterprise only); `identity` endpoints authenticate
- * per-user. Immutable — changing the kind triggers a replacement.
+ * per-user. Immutable -- changing the kind triggers a replacement.
  */
 export type ProxyEndpointKind = "ip" | "identity";
 
@@ -34,7 +34,7 @@ export interface ProxyEndpointProps {
   /**
    * The proxy endpoint kind. `ip` endpoints (source-CIDR allowlist)
    * require an Enterprise plan; `identity` endpoints work on all Zero
-   * Trust plans. Immutable — changing the kind triggers a replacement.
+   * Trust plans. Immutable -- changing the kind triggers a replacement.
    *
    * @default "ip"
    */
@@ -42,7 +42,7 @@ export interface ProxyEndpointProps {
   /**
    * Source CIDRs allowed to connect through the endpoint (e.g.
    * `203.0.113.1/32`). Required for (and only meaningful on) `ip`-kind
-   * endpoints. Mutable — patched in place.
+   * endpoints. Mutable -- patched in place.
    */
   ips?: string[];
 }
@@ -78,7 +78,7 @@ export type ProxyEndpoint = Resource<
 >;
 
 /**
- * A Cloudflare Zero Trust Gateway proxy endpoint — an agentless HTTP
+ * A Cloudflare Zero Trust Gateway proxy endpoint -- an agentless HTTP
  * proxy for forwarding traffic to Gateway without installing the WARP
  * client, typically wired up via a PAC file pointing at the endpoint's
  * server-assigned `subdomain`.
@@ -143,13 +143,13 @@ export const ProxyEndpointProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
 
-      // Owned path — refresh by the cached endpoint id.
+      // Owned path -- refresh by the cached endpoint id.
       if (output?.proxyEndpointId) {
         const observed = yield* getEndpoint(acct, output.proxyEndpointId);
         if (observed) return toAttributes(observed, acct);
       }
 
-      // Cold read — locate by deterministic name. Proxy endpoints carry no
+      // Cold read -- locate by deterministic name. Proxy endpoints carry no
       // ownership markers, so report the match as Unowned to gate adoption.
       const name = yield* resolveName(id, olds?.name ?? output?.name);
       const match = yield* findByName(acct, name);
@@ -162,7 +162,7 @@ export const ProxyEndpointProvider = () =>
       const name = yield* resolveName(id, news.name);
       const kind = news.kind ?? "ip";
 
-      // 1. Observe — the cached id is a hint; fall back to a name scan.
+      // 1. Observe -- the cached id is a hint; fall back to a name scan.
       //    Accounts are limited to very few proxy endpoints, so converging
       //    onto an existing same-named endpoint matters more than usual.
       let observed = output?.proxyEndpointId
@@ -172,7 +172,7 @@ export const ProxyEndpointProvider = () =>
         observed = yield* findByName(accountId, name);
       }
 
-      // 2. Ensure — create with the full desired body when missing.
+      // 2. Ensure -- create with the full desired body when missing.
       //    `ip`-kind endpoints on a non-Enterprise account fail with the
       //    typed entitlement error IpProxyEndpointsRequireEnterprise
       //    (Cloudflare code 2009), which propagates.
@@ -185,7 +185,7 @@ export const ProxyEndpointProvider = () =>
         });
       }
 
-      // 3. Sync — diff observed name/ips against desired and PATCH only
+      // 3. Sync -- diff observed name/ips against desired and PATCH only
       //    the delta; skip the call entirely on a no-op. `ips` compares as
       //    an unordered set and only applies to ip-kind endpoints.
       const observedIps = observedIpsOf(observed);
@@ -265,7 +265,7 @@ const resolveName = (id: string, name: string | undefined) =>
 
 /**
  * Identity-kind endpoints report `ips: null` on the wire (previously `[]`),
- * so a key-presence check is not enough — only a real array counts.
+ * so a key-presence check is not enough -- only a real array counts.
  */
 const observedIpsOf = (endpoint: ObservedEndpoint): string[] =>
   "ips" in endpoint && Array.isArray(endpoint.ips) ? [...endpoint.ips] : [];

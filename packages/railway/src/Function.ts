@@ -105,7 +105,7 @@ export const FUNCTION_MAX_BYTES = 96 * 1024;
 /**
  * Railway function-runtime images (`ghcr.io/railwayapp/function-*`).
  * Canvas Functions are ordinary Services whose `source.image` uses this
- * prefix — the same check the Railway CLI uses.
+ * prefix -- the same check the Railway CLI uses.
  */
 export const isFunctionImage = (image: string | null | undefined): boolean =>
   image != null && image.startsWith("ghcr.io/railwayapp/function");
@@ -134,7 +134,7 @@ export interface FunctionProps<
   /**
    * Module entrypoint bundled with rolldown into a **single file** and
    * deployed as a canvas Function. Typically `import.meta.url`. No
-   * Docker. No registry — that is {@link Service}. Mutually exclusive
+   * Docker. No registry -- that is {@link Service}. Mutually exclusive
    * with {@link source} / {@link path}.
    */
   main?: string;
@@ -178,7 +178,7 @@ export interface FunctionProps<
    */
   sleepApplication?: boolean;
   /**
-   * Region the function runs in (`us-west2`, `europe-west4-drams3a`, …).
+   * Region the function runs in (`us-west2`, `europe-west4-drams3a`, ...).
    * Railway places replicas with `deploy.multiRegionConfig`. Omit this
    * and the current placement is left alone (the workspace default on
    * first create). Updating it moves the replicas in place and keeps
@@ -196,7 +196,7 @@ export interface FunctionProps<
    * `skipDeploys: true`; this Function owns the subsequent deploy.
    *
    * On an async Function, {@link InferEnv} types the handler's second
-   * argument from these keys. Railway has no native bindings — every
+   * argument from these keys. Railway has no native bindings -- every
    * value is a `string` at runtime (`process.env`).
    */
   env?: Env;
@@ -253,7 +253,7 @@ export type Function<Env extends Record<string, any> = Record<string, any>> = Re
     domainId: string | undefined;
     /** Latest deployment id, if one exists. */
     deploymentId: string | undefined;
-    /** Latest deployment status (`SUCCESS`, `DEPLOYING`, …). */
+    /** Latest deployment status (`SUCCESS`, `DEPLOYING`, ...). */
     deploymentStatus: string | undefined;
     /** Next cron fire time, if scheduled. */
     nextCronRunAt: string | undefined;
@@ -302,7 +302,7 @@ const resolveFunctionProps = (
  * and writes the source as `startCommand` (`./run.sh` + base64).
  *
  * There are two ways to define a Function. Prefer **async** (`main` +
- * `export default { fetch }`, no Effect) — Effect-native canvas
+ * `export default { fetch }`, no Effect) -- Effect-native canvas
  * Functions pull the Effect runtime into the 96KB encoded start-command
  * cap and fail {@link FunctionTooLarge} for anything non-trivial. Use
  * {@link Service} when you need an Effect program or a real image.
@@ -315,7 +315,7 @@ const resolveFunctionProps = (
  *
  * ### Async Functions
  * You don't have to use Effect. Declare the Function with `main`
- * pointing at a file and **no** `Effect.gen` implementation — Alchemy
+ * pointing at a file and **no** `Effect.gen` implementation -- Alchemy
  * bundles that file as-is (no Effect runtime) and deploys it as a
  * canvas Function. The handler is a plain `async fetch`. Use the `env`
  * prop to declare variables, and {@link InferEnv} to type the second
@@ -348,7 +348,7 @@ const resolveFunctionProps = (
  * ### Effect-native Function
  * A Function is a class. Props describe the canvas Function. The Effect
  * is the program that runs in it. `main: import.meta.url` is the bundle
- * entrypoint — Alchemy bundles this file into one JS file and deploys
+ * entrypoint -- Alchemy bundles this file into one JS file and deploys
  * it. No `registry`. Stay tiny: the encoded start command maxes out at
  * 96KB (`effect` plus handlers overflows it).
  *
@@ -491,7 +491,7 @@ export const Function: Platform<
   FunctionRuntimeContext
 > & {
   /**
-   * Async (no-impl) constructor — captures the `env` literal so
+   * Async (no-impl) constructor -- captures the `env` literal so
    * {@link InferEnv} types the handler's second argument.
    */
   <const Env extends Record<string, any>, PropsReq = never>(
@@ -721,7 +721,7 @@ const waitForDeployment = (environmentId: string, serviceId: string) =>
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Railway.FunctionDeployPending",
-      // Queued builds under full-suite load can exceed 3 minutes — allow ~8.
+      // Queued builds under full-suite load can exceed 3 minutes -- allow ~8.
       times: 10,
       schedule: Schedule.spaced("5 seconds"),
     }),
@@ -1058,7 +1058,7 @@ export const FunctionProvider = () =>
           return rows.flat();
         }),
 
-        // Circular Service↔Function RPC binds `dnsName` / `port` / `rpcToken`.
+        // Circular Service<->Function RPC binds `dnsName` / `port` / `rpcToken`.
         // Those are knowable from the physical name and props; the cloud
         // service is created in reconcile (and re-synced in converge).
         precreate: Effect.fn(function* ({ id, news }) {
@@ -1170,7 +1170,7 @@ export const FunctionProvider = () =>
           // domain can be generated. Extra non-fork environments lag.
           let instance = yield* waitForInstance(environmentId, current.id);
 
-          // Domain before PORT — Railway refuses serviceDomainCreate on a
+          // Domain before PORT -- Railway refuses serviceDomainCreate on a
           // service that already has PORT set ("please try again").
           let domain = wantsHttp(props)
             ? yield* ensureServiceDomain({ projectId, environmentId, serviceId: current.id })
@@ -1236,7 +1236,7 @@ export const FunctionProvider = () =>
           // Cron-only Functions sleep until the schedule. Waiting for
           // SUCCESS queues behind sibling Docker builds and can sit in
           // QUEUED/BUILDING for the full retry budget. HTTP Functions
-          // still wait — they have a public URL to serve.
+          // still wait -- they have a public URL to serve.
           if (wantsHttp(props)) {
             instance = (yield* waitForDeployment(environmentId, current.id)) ?? instance;
           } else {

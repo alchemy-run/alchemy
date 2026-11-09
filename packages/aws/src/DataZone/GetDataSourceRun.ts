@@ -17,7 +17,7 @@ export interface GetDataSourceRunRequest extends Omit<
  * ### Data Source Runs
  * **Example:** Poll a Run to Completion
  * ```typescript
- * // init — bind the operation to the domain
+ * // init -- bind the operation to the domain
  * const getDataSourceRun = yield* AWS.DataZone.GetDataSourceRun(domain);
  *
  * // runtime

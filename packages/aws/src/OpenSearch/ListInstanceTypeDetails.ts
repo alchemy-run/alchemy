@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `ListInstanceTypeDetails` operation (IAM action
  * `es:ListInstanceTypeDetails`).
  *
- * Lists the instance types (and their capabilities — encryption, warm storage, app logs) supported by an engine version, e.g. to validate a resize before applying it. Provide the implementation with
+ * Lists the instance types (and their capabilities -- encryption, warm storage, app logs) supported by an engine version, e.g. to validate a resize before applying it. Provide the implementation with
  * `Effect.provide(AWS.OpenSearch.ListInstanceTypeDetailsHttp)`.
  * ### Engine Catalog
  * **Example:** List Instance Types for a Version
@@ -16,7 +16,7 @@ import type * as Effect from "effect/Effect";
  * const result = yield* listInstanceTypeDetails({
  *   EngineVersion: "OpenSearch_2.19",
  * });
- * // result.InstanceTypeDetails → supported instance types
+ * // result.InstanceTypeDetails -> supported instance types
  * ```
  *
  * @binding

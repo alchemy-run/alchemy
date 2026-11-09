@@ -15,7 +15,7 @@ export interface ListArtifactsRequest extends Omit<amplify.ListArtifactsRequest,
  * ### Reading Artifacts
  * **Example:** List a Job's Artifacts
  * ```typescript
- * // init — bind the operation to the app
+ * // init -- bind the operation to the app
  * const listArtifacts = yield* AWS.Amplify.ListArtifacts(app);
  *
  * // runtime

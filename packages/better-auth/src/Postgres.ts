@@ -23,7 +23,7 @@ export interface SqlLayerOptions {
   /**
    * Deploy-resolvable connection source for schema migrations. Defaults to
    * the layer's own `url` when that is deploy-resolvable (a literal or a
-   * resource Output); a runtime-only `url` (Hyperdrive) has no default —
+   * resource Output); a runtime-only `url` (Hyperdrive) has no default --
    * pass the origin URL here, or `false` to disable migration support.
    */
   readonly migrate?: MigrateSource | false;
@@ -51,9 +51,9 @@ export const makeMigrateSupport = (
 ): NonNullable<DatabaseService["migrate"]> => ({
   identity: { urlDigest: connectionSourceDigest(migrateSource) } as Record<string, unknown>,
   connect: Effect.gen(function* () {
-    // Init half — capture the connection-string Output.
+    // Init half -- capture the connection-string Output.
     const urlAccessor = yield* resolveConnectionSource(migrateSource);
-    // Apply half — load the driver and open the pool.
+    // Apply half -- load the driver and open the pool.
     return open(urlAccessor).pipe(
       Effect.catchDefect((cause: unknown) =>
         Effect.fail(new BetterAuthMigrationError({ message: failure, cause })),
@@ -90,7 +90,7 @@ export const makePostgresService = (
             migrate: makeMigrateSupport(
               migrateSource,
               open,
-              "Failed to load `pg` — install it to migrate a Postgres-backed BetterAuth",
+              "Failed to load `pg` \u2014 install it to migrate a Postgres-backed BetterAuth",
             ),
           }),
     } satisfies DatabaseService;
@@ -104,9 +104,9 @@ export const makePostgresService = (
  * PlanetScale Postgres (`role.connectionUrl`), Prisma Postgres
  * (`connection.databaseUrl`), AWS RDS inside a VPC, or any literal URL.
  * One `pg.Pool` is opened per execution and closed when the event settles
- * — the only legal pooling shape on workerd. Prefer `Neon`,
+ * -- the only legal pooling shape on workerd. Prefer `Neon`,
  * `AuroraDataApi`, or `CloudflareHyperdrive` when they match your
- * environment → database pair.
+ * environment -> database pair.
  *
  * On AWS Lambda, add `build: { install: ["pg"] }` to the Function props so
  * the dynamically-imported driver ships in the artifact with an npm layout

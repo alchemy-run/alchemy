@@ -34,7 +34,7 @@ export type OrganizationAddonsConfig = {
 
 export type OrganizationProps = {
   /**
-   * Apigee organization id. Defaults to the current GCP project id —
+   * Apigee organization id. Defaults to the current GCP project id --
    * Apigee X organizations are 1:1 with a Google Cloud project.
    * Immutable.
    */
@@ -58,7 +58,7 @@ export type OrganizationProps = {
   billingType?: apigee.GoogleCloudApigeeV1OrganizationBillingTypeEnum | (string & {});
   /**
    * Human-readable description. Apigee organizations have no labels, so
-   * Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes.
    */
   description?: string;
@@ -145,7 +145,7 @@ export type Organization = Resource<
     portalDisabled: boolean;
     /** Add-on configurations. */
     addonsConfig: OrganizationAddonsConfig | undefined;
-    /** Server-reported state (`ACTIVE`, `CREATING`, …). */
+    /** Server-reported state (`ACTIVE`, `CREATING`, ...). */
     state: string | undefined;
     /** Apigee project id used for PSC allowlisting. */
     apigeeProjectId: string | undefined;
@@ -185,7 +185,7 @@ export interface OrganizationLookup {
 /**
  * An Apigee X organization, 1:1 with a Google Cloud project.
  *
- * Organizations have no labels field — Alchemy stamps ownership into
+ * Organizations have no labels field -- Alchemy stamps ownership into
  * the description so `list` / nuke can find them. Creating an
  * organization is slow and entitlement-gated; live tests skip unless
  * `GCP_TEST_APIGEE=1`.

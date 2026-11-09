@@ -4,8 +4,8 @@
  * layer build every export of an entrypoint shares, the per-export resolver
  * over it, and the RPC exit encoder.
  *
- * The engine supplies what differs — its platform services Layer, its
- * environment record, and any engine-specific services — through
+ * The engine supplies what differs -- its platform services Layer, its
+ * environment record, and any engine-specific services -- through
  * {@link SharedBuildOptions}; nothing here imports an engine runtime.
  *
  * @internal
@@ -39,7 +39,7 @@ export { WorkerEnvironment } from "./WorkerEnvironment.ts";
 /**
  * The isolate-lifetime artifacts produced by a single layer build: the built
  * service Context, the resolved export for this entrypoint, the user's
- * RPC shape (a thunk — the shape is only populated once `serve` has run),
+ * RPC shape (a thunk -- the shape is only populated once `serve` has run),
  * and the telemetry Layer override registered during init (a thunk for the
  * same reason).
  */
@@ -71,11 +71,11 @@ export type Pin = (promise: Promise<unknown>) => unknown;
 /** The engine-supplied half of a shared build. */
 export interface SharedBuildOptions {
   /**
-   * The platform services (file system, path, http client, logger, …) the
+   * The platform services (file system, path, http client, logger, ...) the
    * user's init closure and handlers run against.
    */
   readonly platform: Layer.Layer<any>;
-  /** The runtime environment record — workerd `env`. */
+  /** The runtime environment record -- workerd `env`. */
   readonly env: Effect.Effect<Record<string, unknown>>;
   /**
    * Engine-specific services layered under the entrypoint (e.g. the
@@ -114,7 +114,7 @@ export const getSharedBuild = (
 
   const layer = makeEntrypointLayer(selfTag, entrypoint as any);
 
-  // Private scope for the isolate-lifetime layer build. Never closed —
+  // Private scope for the isolate-lifetime layer build. Never closed --
   // workerd has no isolate-teardown hook, so finalizers attached here can
   // never run. It exists only because `Layer.buildWithMemoMap` requires a
   // scope argument (`Layer.scoped`-style layers attach their finalizers to
@@ -167,7 +167,7 @@ export const getSharedBuild = (
    * event (and every export sharing this entrypoint) reuses the memoized
    * Context.
    *
-   * Only success is memoized — a transient init failure (e.g. a flaky
+   * Only success is memoized -- a transient init failure (e.g. a flaky
    * `Config` read in user init) resets the memo and heals on the next event.
    */
   shared = (pin) => {

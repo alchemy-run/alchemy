@@ -10,7 +10,7 @@ export interface GetUsageRequest extends Omit<ag.GetUsageRequest, "usagePlanId">
  * (`apigateway:GET` on `/usageplans/{id}/usage`).
  *
  * Bind a usage plan inside a function runtime to meter per-key API
- * consumption — the primitive for building billing or quota dashboards.
+ * consumption -- the primitive for building billing or quota dashboards.
  * Provide `ApiGateway.GetUsageHttp` on the Function effect to implement
  * the binding.
  *

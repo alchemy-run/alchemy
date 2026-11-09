@@ -27,18 +27,18 @@ import {
 export type OrganizationsSecurityProfileGroupProps = {
   /**
    * Security profile group id. If omitted, a unique RFC1035 name is
-   * generated from the stack, stage, and logical id. Immutable —
+   * generated from the stack, stage, and logical id. Immutable --
    * changing it replaces the group.
    */
   securityProfileGroupId?: string;
   /**
    * Organization id or `organizations/{organization}`. If omitted,
    * Alchemy uses `GOOGLE_ORGANIZATION_ID` or the project's Resource
-   * Manager parent. Immutable — changing it replaces the group.
+   * Manager parent. Immutable -- changing it replaces the group.
    */
   organization?: string;
   /**
-   * Location. Profile groups live in `global`. Immutable — changing it
+   * Location. Profile groups live in `global`. Immutable -- changing it
    * replaces the group.
    * @default "global"
    */

@@ -23,7 +23,7 @@ export interface GetManagedEndpointSessionCredentialsRequest extends Omit<
  * identifier is injected from the binding; pass the `endpointIdentifier`,
  * the `executionRoleArn` to run as, and the `credentialType`
  * (`TOKEN`). The returned `credentials.token` is a
- * `Redacted` value — call `Redacted.value(...)` at the point of use.
+ * `Redacted` value -- call `Redacted.value(...)` at the point of use.
  * Provide the implementation with
  * `Effect.provide(AWS.EMRContainers.GetManagedEndpointSessionCredentialsHttp)`.
  * ### Managed Endpoints

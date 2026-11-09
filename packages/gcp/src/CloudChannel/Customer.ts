@@ -24,13 +24,13 @@ import {
 export type CustomerProps = {
   /**
    * Reseller Cloud Channel account. Full name `accounts/{account}` or
-   * the account id (typically `C` followed by digits). Immutable —
+   * the account id (typically `C` followed by digits). Immutable --
    * changing it replaces the customer.
    */
   parent: string;
   /**
    * Customer id (last segment of `accounts/{account}/customers/{customer}`).
-   * Server-assigned on create. Immutable — changing it replaces the
+   * Server-assigned on create. Immutable -- changing it replaces the
    * customer.
    */
   customerId?: string;

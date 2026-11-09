@@ -9,7 +9,7 @@ export interface RollbackApplicationRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `kinesisanalytics:RollbackApplication` — reverts the
+ * Runtime binding for `kinesisanalytics:RollbackApplication` -- reverts the
  * bound application to its previous running version (with the state from
  * the latest snapshot when available), e.g. an automated bad-deploy
  * remediation. The `CurrentApplicationVersionId` acts as a compare-and-set

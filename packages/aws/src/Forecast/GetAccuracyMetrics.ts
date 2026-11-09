@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `forecast:GetAccuracyMetrics` — read a trained
+ * Runtime binding for `forecast:GetAccuracyMetrics` -- read a trained
  * (legacy) predictor's backtest accuracy metrics (wQL, RMSE, MAPE, WAPE) so
  * an ops function can gate promotion of a retrained model on its accuracy.
  *

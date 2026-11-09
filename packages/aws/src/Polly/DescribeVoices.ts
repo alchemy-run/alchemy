@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `polly:DescribeVoices` — list the voices available
+ * Runtime binding for `polly:DescribeVoices` -- list the voices available
  * for speech synthesis, optionally filtered by engine or language.
  *
  * Polly voices are account-wide, so the binding takes no arguments and

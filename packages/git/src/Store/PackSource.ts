@@ -1,6 +1,6 @@
 /**
  * A {@link RandomAccess} over a blob-store object, for pack ingestion
- * (DESIGN.md §3.6 upgrade seam) — this is what removes the push size cap.
+ * (DESIGN.md §3.6 upgrade seam) -- this is what removes the push size cap.
  *
  * v1 buffered the whole incoming pack in the isolate, which forced a hard
  * 50 MiB limit: a bigger push could not be held in 128 MB of memory
@@ -25,7 +25,7 @@ import { StoreError } from "../Protocol/Store.ts";
 /** Bytes fetched per window. */
 export const PACK_WINDOW_BYTES = 4 * 1024 * 1024;
 
-/** Windows retained (insertion-ordered LRU) — bounds ingest memory. */
+/** Windows retained (insertion-ordered LRU) -- bounds ingest memory. */
 export const PACK_MAX_WINDOWS = 4;
 
 /**
@@ -104,8 +104,8 @@ export const blobRandomAccess = (options: {
         if (first === last) {
           // A VIEW, not a copy (DESIGN §22.4). The parser probes every
           // entry with a window-sized read and copies only what it keeps;
-          // returning a slice here copied that probe window per entry —
-          // 15k entries × the probe size — which on a spilled 40 MiB push
+          // returning a slice here copied that probe window per entry --
+          // 15k entries × the probe size -- which on a spilled 40 MiB push
           // was the difference between ~6 s and ~40 s of ingest. The slab
           // stays alive as long as any view does, so eviction is safe.
           const slab = yield* fetchWindow(first);
@@ -129,7 +129,7 @@ export const blobRandomAccess = (options: {
 };
 
 /**
- * A view of `source` starting at `start` — used to address the pack that
+ * A view of `source` starting at `start` -- used to address the pack that
  * follows the command section inside a spilled receive-pack body.
  */
 export const sliceRandomAccess = (source: RandomAccess, start: number): RandomAccess => ({

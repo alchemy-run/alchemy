@@ -17,7 +17,7 @@ export interface BatchExecuteStatementRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `rds-data:BatchExecuteStatement` — run one SQL
+ * Runtime binding for `rds-data:BatchExecuteStatement` -- run one SQL
  * statement over many parameter sets in a single Data API call (bulk
  * insert/update/delete).
  *
@@ -27,13 +27,13 @@ export interface BatchExecuteStatementRequest extends Omit<
  * ### Batch Writes
  * **Example:** Bulk Insert Rows
  * ```typescript
- * // init — bind alongside your other Data API operations
+ * // init -- bind alongside your other Data API operations
  * const batchExecuteStatement = yield* AWS.RDSData.BatchExecuteStatement(
  *   db.cluster,
  *   { secret: db.secret, database: "app" },
  * );
  *
- * // runtime — one statement, one parameter set per row
+ * // runtime -- one statement, one parameter set per row
  * const result = yield* batchExecuteStatement({
  *   sql: "INSERT INTO todos (id, title) VALUES (:id, :title)",
  *   parameterSets: rows.map((row) => [

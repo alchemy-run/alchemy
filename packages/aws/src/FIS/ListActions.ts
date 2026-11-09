@@ -5,13 +5,13 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `fis:ListActions`.
  *
- * Enumerates the FIS action catalog — every fault the service can inject
- * (`aws:ec2:stop-instances`, `aws:ssm:send-command`, `aws:fis:wait`, …).
+ * Enumerates the FIS action catalog -- every fault the service can inject
+ * (`aws:ec2:stop-instances`, `aws:ssm:send-command`, `aws:fis:wait`, ...).
  * Provide the implementation with `Effect.provide(AWS.FIS.ListActionsHttp)`.
  * ### Browsing the Action Catalog
  * **Example:** List Available Fault Actions
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listActions = yield* AWS.FIS.ListActions();
  *
  * // runtime

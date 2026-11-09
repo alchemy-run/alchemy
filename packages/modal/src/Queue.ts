@@ -37,7 +37,7 @@ export interface QueueProps {
 }
 
 export interface QueueAttributes {
-  /** Queue ID (`qu-…`). */
+  /** Queue ID (`qu-...`). */
   queueId: string;
   /** Queue name. */
   name: string;

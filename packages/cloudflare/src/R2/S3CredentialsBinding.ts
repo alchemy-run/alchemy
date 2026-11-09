@@ -19,12 +19,12 @@ import type { S3Credentials, S3CredentialsAccess, S3CredentialsValue } from "./S
  * Binds `bindingName` on the host Worker to the JSON-encoded
  * {@link S3CredentialsValue} for `bucket`:
  *
- * - **live** — mints (or extends) the Worker's {@link AccountApiToken} with
+ * - **live** -- mints (or extends) the Worker's {@link AccountApiToken} with
  *   a policy scoped to `bucket` (see {@link s3CredentialsPolicy}) and
  *   injects a `secret_text` binding. R2 derives S3 credentials from any API
  *   token: the access key id is the token id and the secret access key is
  *   the SHA-256 of the token value.
- * - **local** (`alchemy dev`, `dev:` bucket) — injects the dev-only
+ * - **local** (`alchemy dev`, `dev:` bucket) -- injects the dev-only
  *   `r2_s3_credentials` binding. The local runtime lowers it to the Worker's
  *   local S3 endpoint and fixed local credentials, and serves the bucket on
  *   that endpoint. No token or cloud call is involved.
@@ -134,8 +134,8 @@ export const liveEndpoint = (accountId: string, jurisdiction: Bucket.Jurisdictio
 
 /**
  * Whether both the Worker and the bucket are emulated locally in this run.
- * Each resolves its own mode: pinned via `Alchemy.remote()` → live;
- * otherwise the run default (`alchemy dev` → local).
+ * Each resolves its own mode: pinned via `Alchemy.remote()` -> live;
+ * otherwise the run default (`alchemy dev` -> local).
  */
 const isLocal = (host: Worker, bucket: Bucket) =>
   Effect.gen(function* () {
@@ -145,7 +145,7 @@ const isLocal = (host: Worker, bucket: Bucket) =>
 
 /**
  * Whether an env value is a `Cloudflare.R2.S3Credentials` declaration (keyed
- * on the static `~alchemy/Kind` marker — the value is also an Effect, so env
+ * on the static `~alchemy/Kind` marker -- the value is also an Effect, so env
  * resolution must check this before yielding Effects). Lives here, free of
  * value imports from `Worker.ts`, so async env resolution can use it without
  * a module cycle.

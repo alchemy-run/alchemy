@@ -10,7 +10,7 @@ export interface StartJobRunRequest extends Omit<glue.StartJobRunRequest, "JobNa
  *
  * Grants `glue:StartJobRun` and `glue:GetJobRun` on the bound job. Returns the
  * `JobRunId`; poll `getJobRun` for the run's terminal state (`SUCCEEDED`,
- * `FAILED`, `TIMEOUT`, …).
+ * `FAILED`, `TIMEOUT`, ...).
  * ### Running Jobs
  * Provide the `StartJobRunHttp` implementation layer on the Function effect
  * (`.pipe(Effect.provide(AWS.Glue.StartJobRunHttp))`), bind the job in the

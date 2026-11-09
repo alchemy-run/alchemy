@@ -5,8 +5,8 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `medialive:ListChannels`.
  *
- * Enumerates the account's MediaLive channels (one page per call — pass
- * `NextToken` from the previous response to continue) — e.g. a cost
+ * Enumerates the account's MediaLive channels (one page per call -- pass
+ * `NextToken` from the previous response to continue) -- e.g. a cost
  * sentinel that finds channels left RUNNING outside broadcast hours.
  * Account-level: the deploy-time grant is `medialive:ListChannels` on
  * `*`. Provide the implementation with
@@ -14,7 +14,7 @@ import type * as Effect from "effect/Effect";
  * ### Observing Channels
  * **Example:** Find Channels Left Running
  * ```typescript
- * // init — bind the account-level operation
+ * // init -- bind the account-level operation
  * const listChannels = yield* AWS.MediaLive.ListChannels();
  *
  * // runtime

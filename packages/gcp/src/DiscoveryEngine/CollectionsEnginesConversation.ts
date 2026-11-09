@@ -12,7 +12,7 @@ export type CollectionsEnginesConversationProps = {
   /**
    * Parent Engine resource name
    * `projects/{project}/locations/{location}/collections/{collection}/engines/{engine}`.
-   * Immutable — changing it replaces the conversation.
+   * Immutable -- changing it replaces the conversation.
    */
   engine: string;
   /**

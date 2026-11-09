@@ -14,7 +14,7 @@ export const extractValue = (v: string | Redacted.Redacted<string>): string =>
 
 export const withKvsRegion = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   // The distilled Region service value is `Effect<RegionName>`, not a raw
-  // string — providing a bare string makes the client `yield*` a string and
+  // string -- providing a bare string makes the client `yield*` a string and
   // crash. Wrap in Effect.succeed (same as ACM/ECRPublic/WAFv2/GlobalAccelerator).
   effect.pipe(Effect.provideService(AwsRegion, Effect.succeed(KVS_REGION)));
 
@@ -32,7 +32,7 @@ const isKvsNotReady = (error: unknown) => {
  * Bounded KVS retry: exponential backoff with the per-attempt delay capped
  * at 2s and at most 24 recurrences (~45s worst case). NEVER use a bare
  * `Schedule.max([Schedule.exponential(...), Schedule.recurs(n)])` for KVS
- * retries — `recurs` bounds the COUNT, not the TIME, and an uncapped
+ * retries -- `recurs` bounds the COUNT, not the TIME, and an uncapped
  * exponential makes the tail attempts wait minutes-to-hours (24 attempts
  * at 100ms doubling total ~19 days), which reads as a silent hang.
  */

@@ -7,7 +7,7 @@ import type * as Effect from "effect/Effect";
  * `memorydb:DescribeEngineVersions`).
  *
  * Lists the engine versions MemoryDB supports (redis/valkey) and their
- * parameter group families — e.g. upgrade automation that checks whether a
+ * parameter group families -- e.g. upgrade automation that checks whether a
  * newer engine version is available before scheduling a cluster update.
  * Provide the implementation with
  * `Effect.provide(AWS.MemoryDB.DescribeEngineVersionsHttp)`.

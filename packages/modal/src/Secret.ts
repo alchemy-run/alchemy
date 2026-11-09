@@ -45,7 +45,7 @@ export interface SecretProps {
 }
 
 export interface SecretAttributes {
-  /** Secret ID (`st-…`). */
+  /** Secret ID (`st-...`). */
   secretId: string;
   /** Secret name. */
   name: string;

@@ -50,17 +50,17 @@ export type MulticloudDataTransferConfigsDestinationProps = {
   /**
    * Parent `MulticloudDataTransferConfig` resource name
    * `projects/{project}/locations/{location}/multicloudDataTransferConfigs/{config}`.
-   * Immutable — changing it replaces the destination.
+   * Immutable -- changing it replaces the destination.
    */
   parent: string;
   /**
    * Destination id (the `{destination}` segment). If omitted, a unique
-   * name is generated from the stack, stage, and logical id. Immutable —
+   * name is generated from the stack, stage, and logical id. Immutable --
    * changing it replaces the destination.
    */
   destinationId?: string;
   /**
-   * IP prefix that represents the remote workload. Immutable — changing
+   * IP prefix that represents the remote workload. Immutable -- changing
    * it replaces the destination.
    */
   ipPrefix: string;
@@ -118,7 +118,7 @@ export type MulticloudDataTransferConfigsDestination = Resource<
 >;
 
 /**
- * A Data Transfer Essentials `Destination` — an IP prefix plus ASN/CSP
+ * A Data Transfer Essentials `Destination` -- an IP prefix plus ASN/CSP
  * endpoints billed through a `MulticloudDataTransferConfig`.
  *
  * Changing `parent`, `destinationId`, or `ipPrefix` replaces the

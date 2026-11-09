@@ -6,7 +6,7 @@ import type { Rotation } from "./Rotation.ts";
 /**
  * Runtime binding for `ssm-contacts:CreateRotationOverride`.
  *
- * Temporarily override who is on call in the bound rotation — e.g. cover
+ * Temporarily override who is on call in the bound rotation -- e.g. cover
  * a shift while the scheduled contact is unavailable. The rotation's ARN
  * is injected as `RotationId`.
  * Provide the implementation with

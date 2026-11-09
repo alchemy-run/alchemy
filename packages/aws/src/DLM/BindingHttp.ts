@@ -5,8 +5,8 @@ import type { LifecyclePolicy } from "./LifecyclePolicy.ts";
 /**
  * Shared scaffolding for Amazon Data Lifecycle Manager (DLM) HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the two builders
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the two builders
  * below. Everything except the operation and the IAM action list is
  * boilerplate.
  */
@@ -54,7 +54,7 @@ export const makeDlmPolicyHttpBinding = <I extends { PolicyId: string }, A, E, R
 /**
  * Build the impl Effect for an account-level DLM operation (enumerating the
  * account's lifecycle policies). The deploy-time half grants `actions` on
- * `*` — `dlm:GetLifecyclePolicies` is a list action that is not scoped to a
+ * `*` -- `dlm:GetLifecyclePolicies` is a list action that is not scoped to a
  * single policy resource.
  */
 export const makeDlmAccountHttpBinding = <I, A, E, R>(options: {

@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { KxEnvironment } from "./KxEnvironment.ts";
 
 /**
- * Runtime binding for `finspace:GetKxChangeset` — reads one changeset of a kdb database in the bound environment — status, change requests, and error details — so ingestion pipelines can poll a changeset to `COMPLETED`.
+ * Runtime binding for `finspace:GetKxChangeset` -- reads one changeset of a kdb database in the bound environment -- status, change requests, and error details -- so ingestion pipelines can poll a changeset to `COMPLETED`.
  * Provide the implementation with
  * `Effect.provide(AWS.FinSpace.GetKxChangesetHttp)`.
  * ### Ingesting Data

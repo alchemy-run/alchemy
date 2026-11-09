@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `chatbot:ListMicrosoftTeamsConfiguredTeams`.
  *
- * Lists the Microsoft Teams teams onboarded to AWS Chatbot in the account —
+ * Lists the Microsoft Teams teams onboarded to AWS Chatbot in the account --
  * useful for identity/team audit automation. Provide the implementation
  * with `Effect.provide(AWS.Chatbot.ListMicrosoftTeamsConfiguredTeamsHttp)`.
  * ### Microsoft Teams Identity Management

@@ -22,17 +22,17 @@ export type LakesEntitiesPartitionProps = {
   /**
    * Parent entity. Full name
    * `projects/{project}/locations/{location}/lakes/{lake}/zones/{zone}/entities/{entity}`.
-   * Immutable — changing it replaces the partition.
+   * Immutable -- changing it replaces the partition.
    */
   entity: string;
   /**
    * Ordered partition values matching the parent entity's partition
-   * schema. Immutable — changing them replaces the partition.
+   * schema. Immutable -- changing them replaces the partition.
    */
   values: string[];
   /**
    * Location of the partition data (`gs://bucket/path/key=value` or a
-   * BigQuery table). Immutable — changing it replaces the partition.
+   * BigQuery table). Immutable -- changing it replaces the partition.
    */
   location: string;
 };

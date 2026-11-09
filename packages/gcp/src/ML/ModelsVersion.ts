@@ -42,13 +42,13 @@ export type VersionFramework = ml.GoogleCloudMlV1__VersionFrameworkEnum | (strin
 export type ModelsVersionProps = {
   /**
    * Parent model. Full name `projects/{project}/models/{model}` or the
-   * model id. Immutable — changing it replaces the version.
+   * model id. Immutable -- changing it replaces the version.
    */
   model: string;
   /**
    * Version id (the `{version}` segment of
    * `projects/{project}/models/{model}/versions/{version}`). If omitted,
-   * a unique RFC1035 name is generated. Immutable — changing it
+   * a unique RFC1035 name is generated. Immutable -- changing it
    * replaces the version.
    */
   versionId?: string;
@@ -77,7 +77,7 @@ export type ModelsVersionProps = {
   machineType?: string;
   /**
    * Human-readable description. Patchable. Alchemy stamps an
-   * `[alchemy …]` ownership prefix here and strips it from attributes.
+   * `[alchemy ...]` ownership prefix here and strips it from attributes.
    */
   description?: string;
   /**
@@ -100,7 +100,7 @@ export type ModelsVersionProps = {
    */
   container?: ContainerSpec;
   /**
-   * Custom prediction-routine packages (`gs://…`). Immutable.
+   * Custom prediction-routine packages (`gs://...`). Immutable.
    */
   packageUris?: string[];
   /**
@@ -169,7 +169,7 @@ export type ModelsVersion = Resource<
     manualScaling: ManualScaling | undefined;
     /** Whether this is the model's default version. */
     isDefault: boolean;
-    /** Version state (`READY`, `CREATING`, `FAILED`, …). */
+    /** Version state (`READY`, `CREATING`, `FAILED`, ...). */
     state: string | undefined;
     /** Failure details, if the version failed. */
     errorMessage: string | undefined;

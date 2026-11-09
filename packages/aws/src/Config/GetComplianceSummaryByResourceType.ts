@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `config:GetComplianceSummaryByResourceType` — read
+ * Runtime binding for `config:GetComplianceSummaryByResourceType` -- read
  * the count of compliant vs. noncompliant resources, optionally grouped by
  * resource type.
  *
@@ -12,7 +12,7 @@ import type * as Effect from "effect/Effect";
  * ### Reading Compliance
  * **Example:** Summarize Resource Compliance
  * ```typescript
- * // init — grants config:GetComplianceSummaryByResourceType
+ * // init -- grants config:GetComplianceSummaryByResourceType
  * const getComplianceSummaryByResourceType = yield* AWS.Config.GetComplianceSummaryByResourceType();
  *
  * // runtime

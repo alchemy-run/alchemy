@@ -24,7 +24,7 @@ export interface ApiCallDetail {
   eventTime?: string;
   /** Version of the CloudTrail event schema. */
   eventVersion?: string;
-  /** Identity that made the call (IAM user, role session, service, …). */
+  /** Identity that made the call (IAM user, role session, service, ...). */
   userIdentity?: Record<string, unknown>;
   /** The request parameters of the call, as recorded by CloudTrail. */
   requestParameters?: Record<string, any>;
@@ -65,12 +65,12 @@ export interface ApiCallEventsProps extends EventRouteProps {
  * Event source connecting CloudTrail-recorded API calls to the hosting
  * compute. EventBridge receives every **mutating** management API call
  * CloudTrail records (detail-type `AWS API Call via CloudTrail`) on the
- * account's default bus — read-only calls (`Get*`/`List*`/`Describe*`) and
+ * account's default bus -- read-only calls (`Get*`/`List*`/`Describe*`) and
  * data events are not delivered. This subscribes the host Function to those
  * events so it can react to control-plane changes (security automation,
  * config auditing) without polling.
  *
- * EventBridge receives these events automatically — no trail is required and
+ * EventBridge receives these events automatically -- no trail is required and
  * no additional resource is created besides the EventBridge rule targeting
  * the host. Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.

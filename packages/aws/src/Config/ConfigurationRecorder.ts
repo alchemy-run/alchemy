@@ -130,7 +130,7 @@ export interface ConfigurationRecorder extends Resource<
  * your AWS resource configurations.
  *
  * AWS allows only **one** customer managed configuration recorder per
- * account per region — treat this resource as an account-region singleton.
+ * account per region -- treat this resource as an account-region singleton.
  * Starting the recorder (`recording: true`) requires a delivery channel
  * (see `AWS.Config.DeliveryChannel`) and incurs per-configuration-item
  * charges.
@@ -291,10 +291,10 @@ export const ConfigurationRecorderProvider = () =>
           const desiredGroup = toWireRecordingGroup(news.recordingGroup);
           const desiredMode = toWireRecordingMode(news.recordingMode);
 
-          // 1. OBSERVE — cloud state is authoritative.
+          // 1. OBSERVE -- cloud state is authoritative.
           const observed = yield* observeRecorder(name);
 
-          // 2+3. ENSURE + SYNC — PutConfigurationRecorder is a full upsert;
+          // 2+3. ENSURE + SYNC -- PutConfigurationRecorder is a full upsert;
           //    apply when missing or when a user-declared aspect drifted
           //    (fields AWS defaults are only compared when declared).
           const inSync =
@@ -327,7 +327,7 @@ export const ConfigurationRecorderProvider = () =>
           const live = yield* observeRecorder(name);
           const recorderArn = live?.arn ?? output?.recorderArn;
 
-          // 3b. SYNC TAGS — diff against OBSERVED cloud tags.
+          // 3b. SYNC TAGS -- diff against OBSERVED cloud tags.
           if (recorderArn !== undefined) {
             const currentTags = yield* observedTags(recorderArn);
             const { upsert, removed } = diffTags(currentTags, desiredTags);
@@ -345,7 +345,7 @@ export const ConfigurationRecorderProvider = () =>
             }
           }
 
-          // 3c. SYNC RECORDING STATE — only when the user declared a desired
+          // 3c. SYNC RECORDING STATE -- only when the user declared a desired
           //     state; diff against the OBSERVED status.
           if (news.recording !== undefined) {
             const status = yield* config

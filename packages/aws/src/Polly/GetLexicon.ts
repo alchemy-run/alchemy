@@ -4,13 +4,13 @@ import type * as Effect from "effect/Effect";
 import type { Lexicon } from "./Lexicon.ts";
 
 /**
- * Runtime binding for `polly:GetLexicon` — read the PLS content and
+ * Runtime binding for `polly:GetLexicon` -- read the PLS content and
  * attributes of a pronunciation lexicon at runtime.
  *
  * Bind it to a `Lexicon` resource; the deploy-time half grants
  * `polly:GetLexicon` scoped to that lexicon's ARN and the runtime callable
  * injects the lexicon name. The returned `Lexicon.Content` is `Redacted`
- * (distilled models it as sensitive) — unwrap with `Redacted.value(...)` at
+ * (distilled models it as sensitive) -- unwrap with `Redacted.value(...)` at
  * the point of use. Provide the implementation with
  * `Effect.provide(AWS.Polly.GetLexiconHttp)`.
  *

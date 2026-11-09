@@ -34,18 +34,18 @@ import {
 export type NodesNodeProps = {
   /**
    * Parent SAS node, as `nodes/{node}` or
-   * `customers/{customer}/nodes/{node}`. Immutable — changing it
+   * `customers/{customer}/nodes/{node}`. Immutable -- changing it
    * replaces the child node.
    */
   parent: string;
   /**
-   * Server-assigned node resource name. Immutable — changing it
+   * Server-assigned node resource name. Immutable -- changing it
    * replaces the node.
    */
   name?: string;
   /**
    * Display name. SAS Portal nodes have no labels field, so Alchemy
-   * stamps ownership into a `[alchemy …]` prefix and strips it from
+   * stamps ownership into a `[alchemy ...]` prefix and strips it from
    * attributes.
    */
   displayName?: string;

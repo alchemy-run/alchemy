@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Cancels a running Location batch metadata job.
  *
  * Runtime binding for the `CancelJob` operation (IAM action
- * `geo:CancelJob`), account-scoped — batch jobs are created at runtime so the
+ * `geo:CancelJob`), account-scoped -- batch jobs are created at runtime so the
  * grant is on `*`. Provide the implementation with
  * `Effect.provide(AWS.Location.CancelJobHttp)`.
  *

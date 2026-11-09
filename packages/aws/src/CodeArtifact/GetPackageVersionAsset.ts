@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Repository } from "./Repository.ts";
 
 /**
- * Request for {@link GetPackageVersionAsset} — `domain`, `domainOwner`, and
+ * Request for {@link GetPackageVersionAsset} -- `domain`, `domainOwner`, and
  * `repository` are injected from the bound {@link Repository}.
  */
 export interface GetPackageVersionAssetRequest extends Omit<

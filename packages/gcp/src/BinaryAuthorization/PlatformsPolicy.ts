@@ -33,12 +33,12 @@ export type PlatformsPolicyProps = {
   /**
    * Policy id (the `{policy}` segment of
    * `projects/{project}/platforms/{platform}/policies/{policy}`). If omitted,
-   * a unique RFC1035 id is generated. Immutable — changing it replaces the
+   * a unique RFC1035 id is generated. Immutable -- changing it replaces the
    * policy.
    */
   policyId?: string;
   /**
-   * Platform this policy applies to (`gke` or `cloudRun`). Immutable —
+   * Platform this policy applies to (`gke` or `cloudRun`). Immutable --
    * changing it replaces the policy.
    * @default "gke"
    */
@@ -64,7 +64,7 @@ export type PlatformsPolicy = Resource<
     name: string;
     /** Policy id (last path segment). */
     policyId: string;
-    /** Platform id (`gke`, `cloudRun`, …). */
+    /** Platform id (`gke`, `cloudRun`, ...). */
     platform: string;
     /** Project id. */
     project: string;
@@ -110,7 +110,7 @@ export interface PlatformsPolicyLookup {
  * the project-level admission policy.
  *
  * Platform policies have no labels field, so Alchemy stamps ownership into
- * `description` for `list` / nuke. `policyId` and `platform` are identity —
+ * `description` for `list` / nuke. `policyId` and `platform` are identity --
  * changing either replaces the policy. Description and `gkePolicy` update
  * in place via replace.
  *

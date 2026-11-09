@@ -27,7 +27,7 @@ export type BucketProps = {
    */
   bucketName?: string;
   /**
-   * Location of the bucket (`US`, `EU`, `US-CENTRAL1`, …). Immutable —
+   * Location of the bucket (`US`, `EU`, `US-CENTRAL1`, ...). Immutable --
    * changing it replaces the bucket.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -59,7 +59,7 @@ export type BucketProps = {
    */
   uniformBucketLevelAccess?: boolean;
   /**
-   * Enable hierarchical namespace (first-class folders). Immutable —
+   * Enable hierarchical namespace (first-class folders). Immutable --
    * must be set at create time; changing it replaces the bucket.
    * Implies uniform bucket-level access.
    * @default false
@@ -68,7 +68,7 @@ export type BucketProps = {
   /**
    * Static website configuration. Cloud Storage applies it when the bucket
    * is served through a CNAME or an external HTTPS load balancer (backend
-   * bucket) — not on `storage.googleapis.com/{bucket}/…` path-style URLs.
+   * bucket) -- not on `storage.googleapis.com/{bucket}/...` path-style URLs.
    * Omitting it removes the configuration.
    */
   website?: BucketWebsite;

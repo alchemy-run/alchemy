@@ -13,7 +13,7 @@ export interface InstanceRegistrationProps {
    */
   serviceId: string;
   /**
-   * The instance ID — unique within the service. Changing it replaces the
+   * The instance ID -- unique within the service. Changing it replaces the
    * registration.
    */
   instanceId: string;
@@ -21,7 +21,7 @@ export interface InstanceRegistrationProps {
    * Instance attributes. For DNS services these drive record creation:
    * `AWS_INSTANCE_IPV4` (A records), `AWS_INSTANCE_IPV6` (AAAA),
    * `AWS_INSTANCE_PORT` (SRV), `AWS_INSTANCE_CNAME` (CNAME). Custom keys are
-   * returned by `DiscoverInstances`. Mutable — re-registering with the same
+   * returned by `DiscoverInstances`. Mutable -- re-registering with the same
    * instance ID updates the attributes.
    */
   attributes: Record<string, string>;
@@ -45,7 +45,7 @@ export interface InstanceRegistration extends Resource<
 > {}
 
 /**
- * A manual AWS Cloud Map instance registration — registers a static
+ * A manual AWS Cloud Map instance registration -- registers a static
  * endpoint (an IP, port, CNAME, or an arbitrary attribute bag) with a Cloud
  * Map service so it is returned by `DiscoverInstances` and, for DNS
  * services, resolvable via Route 53.
@@ -54,7 +54,7 @@ export interface InstanceRegistration extends Resource<
  * dependencies. ECS registers its own tasks automatically via
  * `serviceRegistries`.
  *
- * `RegisterInstance` is an upsert — reconcile re-registers with the desired
+ * `RegisterInstance` is an upsert -- reconcile re-registers with the desired
  * attributes and Cloud Map converges the records. Registration and
  * deregistration are asynchronous; the provider polls the operations API
  * (bounded) until they complete.
@@ -92,7 +92,7 @@ export const InstanceRegistrationProvider = () =>
       return InstanceRegistration.Provider.of({
         stables: ["serviceId", "instanceId"],
 
-        // Sub-resource keyed by its parent service — there is no
+        // Sub-resource keyed by its parent service -- there is no
         // account-level enumeration without a service id, so listing is
         // handled by the parent's lifecycle.
         list: () => Effect.succeed([]),
@@ -112,7 +112,7 @@ export const InstanceRegistrationProvider = () =>
           if (instance === undefined) {
             return undefined;
           }
-          // instances carry no tags, so ownership can't be branded — treat
+          // instances carry no tags, so ownership can't be branded -- treat
           // presence as ours (identity is fully determined by the props)
           return { serviceId, instanceId };
         }),
@@ -126,7 +126,7 @@ export const InstanceRegistrationProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ news, session }) {
-          // OBSERVE — compare live attributes so an unchanged registration
+          // OBSERVE -- compare live attributes so an unchanged registration
           // is a no-op instead of a Route 53 record churn
           const observed = yield* sd
             .getInstance({
@@ -145,7 +145,7 @@ export const InstanceRegistrationProvider = () =>
             desiredEntries.length === Object.keys(observedAttributes).length &&
             desiredEntries.every(([key, value]) => observedAttributes[key] === value);
 
-          // ENSURE/SYNC — registerInstance is a create-or-update upsert
+          // ENSURE/SYNC -- registerInstance is a create-or-update upsert
           if (!matches) {
             const registered = yield* retryWhileResourceInUse(
               sd.registerInstance({
@@ -173,7 +173,7 @@ export const InstanceRegistrationProvider = () =>
             Effect.catchTag(["InstanceNotFound", "ServiceNotFound"], () =>
               Effect.succeed({ OperationId: undefined }),
             ),
-            // an identical deregistration is already in flight — await THAT
+            // an identical deregistration is already in flight -- await THAT
             // operation instead of silently skipping it
             Effect.catchTag("DuplicateRequest", (e) =>
               Effect.succeed({ OperationId: e.DuplicateOperationId }),

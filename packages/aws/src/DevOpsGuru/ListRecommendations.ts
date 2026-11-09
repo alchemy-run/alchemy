@@ -5,13 +5,13 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `devops-guru:ListRecommendations`.
  *
- * Lists DevOps Guru's remediation recommendations for an insight — the ready-made content of an incident notification or runbook comment.
+ * Lists DevOps Guru's remediation recommendations for an insight -- the ready-made content of an incident notification or runbook comment.
  * Provide the implementation with
  * `Effect.provide(AWS.DevOpsGuru.ListRecommendationsHttp)`.
  * ### Events and Recommendations
  * **Example:** List an Insight's Recommendations
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listRecommendations = yield* AWS.DevOpsGuru.ListRecommendations();
  *
  * // runtime

@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `comprehendmedical:StopICD10CMInferenceJob` — stop an in-progress asynchronous ICD-10-CM ontology linking job.
+ * Runtime binding for `comprehendmedical:StopICD10CMInferenceJob` -- stop an in-progress asynchronous ICD-10-CM ontology linking job.
  *
  * Comprehend Medical has no resource-level IAM, so the binding takes no
  * arguments and grants `comprehendmedical:StopICD10CMInferenceJob` on `*`. Provide the

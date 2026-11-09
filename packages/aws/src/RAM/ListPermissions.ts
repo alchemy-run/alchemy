@@ -6,14 +6,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `ram:ListPermissions`.
  *
  * Lists the AWS managed and customer managed RAM permissions available for the supported resource types.
- * Account-level operation — the target shares, invitations, and permissions
+ * Account-level operation -- the target shares, invitations, and permissions
  * are chosen per request at runtime, so the binding takes no resource
  * argument. Provide the implementation with
  * `Effect.provide(AWS.RAM.ListPermissionsHttp)`.
  * ### Managed Permissions
  * **Example:** List the Customer Managed Permissions
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listPermissions = yield* AWS.RAM.ListPermissions();
  *
  * // runtime

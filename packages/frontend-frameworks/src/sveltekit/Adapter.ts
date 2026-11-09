@@ -4,7 +4,7 @@ import { pathToFileURL } from "node:url";
 // Alchemy modifications are licensed under Apache-2.0.
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 /**
- * In-memory SvelteKit `Adapter` — a wrangler-free fork of
+ * In-memory SvelteKit `Adapter` -- a wrangler-free fork of
  * `@sveltejs/adapter-cloudflare`'s `adapt()`.
  *
  * Differences from upstream:
@@ -28,7 +28,7 @@ import { pathToFileURL } from "node:url";
  *
  * Note: this module runs as a SvelteKit build callback (kit calls `adapt()`
  * inside Vite's `buildApp`), so it uses kit's synchronous `Builder` API and
- * `node:fs` directly like upstream — it is framework-callback code, not an
+ * `node:fs` directly like upstream -- it is framework-callback code, not an
  * Effect service.
  */
 import type { BindingHooks } from "@alchemy.run/cloudflare-runtime/core";
@@ -38,11 +38,11 @@ import { generateWorkerShim } from "./WorkerShim.ts";
 export interface CloudflareAdapterResult {
   /**
    * The static-assets directory (client build + prerendered pages +
-   * `_headers`/`_redirects`/`.assetsignore`) — upload wholesale as the
+   * `_headers`/`_redirects`/`.assetsignore`) -- upload wholesale as the
    * Worker's assets directory; becomes `BuildOutput.clientDirectory`.
    */
   readonly dest: string;
-  /** The generated (unbundled) worker entry — input for the rolldown pass. */
+  /** The generated (unbundled) worker entry -- input for the rolldown pass. */
   readonly workerEntry: string;
 }
 
@@ -100,7 +100,7 @@ export interface CloudflareAdapter extends Adapter {
  * `builder.generateFallback` delegates to a `worker_threads` fork whose
  * ready/args handshake matches messages on the module's `import.meta.url`
  * string. Under bun on Windows the parent and child spell that URL
- * differently, the handshake never completes, and no fallback is written —
+ * differently, the handshake never completes, and no fallback is written --
  * the deployed site then 404s every client route (the assets layer has no
  * shell to fall back to). These are kit's own `core/postbuild/fallback.js`
  * steps, minus the fork; the build process is short-lived in every context
@@ -144,7 +144,9 @@ const generateFallbackInProcess = async (builder: Builder, dest: string): Promis
     read: (file: string) => NodeFs.readFileSync(NodePath.join(kit.files.assets, file)),
   });
   if (!response.ok) {
-    throw new Error(`Could not create a fallback page — failed with status ${response.status}`);
+    throw new Error(
+      `Could not create a fallback page \u2014 failed with status ${response.status}`,
+    );
   }
   NodeFs.writeFileSync(dest, await response.text());
 };
@@ -193,7 +195,7 @@ export const makeCloudflareAdapter = (
       // disk itself instead of returning a manifest string to embed.
       builder.generateServerInstance(NodePath.join(tmp, "server.js"));
 
-      // route manifest module — built from kit's public Builder surface
+      // route manifest module -- built from kit's public Builder surface
       // (`builder.manifest`, `builder.routes`, `builder.getAppPath()`) since
       // the internal SSR manifest is no longer reachable outside the
       // generated server module above.
@@ -365,20 +367,20 @@ _redirects
 export interface CloudflareDevPlatformOptions {
   /**
    * Literal `platform.env` overrides. Applied on top of the proxied binding
-   * values — a same-named literal always wins (back-compat with the phase-1
+   * values -- a same-named literal always wins (back-compat with the phase-1
    * stub platform, whose env was literals only).
    */
   readonly env?: Record<string, unknown> | undefined;
   /**
-   * Bindings to expose on `platform.env` — the same hook shapes
+   * Bindings to expose on `platform.env` -- the same hook shapes
    * `cloudflare-runtime`'s `Runtime.start` accepts (`Text.local`,
-   * `KvNamespace.local`, `D1.local`, remote bindings, …). Typed opaquely
+   * `KvNamespace.local`, `D1.local`, remote bindings, ...). Typed opaquely
    * because the specs travel through the target-agnostic framework half;
    * the values must be `cloudflare-runtime` `BindingHooks`.
    */
   readonly bindings?: ReadonlyArray<unknown> | undefined;
   /**
-   * Pre-built `Context<RuntimeServices>` to host the proxy in (opaque —
+   * Pre-built `Context<RuntimeServices>` to host the proxy in (opaque --
    * travels through the target-agnostic framework half). Enables
    * remote()-lowered bindings, which the proxy's internal local-only layer
    * cannot serve.
@@ -398,7 +400,7 @@ export interface CloudflareDevPlatformOptions {
   /** Name of the proxy workerd service. @default "sveltekit-dev-platform-proxy" */
   readonly name?: string | undefined;
   /**
-   * Override how the platform proxy is opened. A test seam — the default
+   * Override how the platform proxy is opened. A test seam -- the default
    * dynamically imports `cloudflare-runtime`'s `getPlatformProxy`.
    */
   readonly openProxy?: OpenDevPlatformProxy | undefined;
@@ -484,7 +486,7 @@ const guardPrerenderEnv = (env: Record<string, unknown>): Record<string, unknown
 
 /**
  * The dev-platform emulator: serves `platform = { env, ctx, caches, cf }`
- * from `cloudflare-runtime`'s platform proxy — our wrangler-free equivalent
+ * from `cloudflare-runtime`'s platform proxy -- our wrangler-free equivalent
  * of upstream `adapter-cloudflare`'s `getPlatformProxy`-based `emulate()`.
  *
  * - The proxy (a workerd instance hosting the bindings) is opened lazily on
@@ -494,13 +496,13 @@ const guardPrerenderEnv = (env: Record<string, unknown>): Record<string, unknown
  *   (`env.KV.get("key")`, `env.DB.prepare("...").all()`); literal
  *   `options.env` values override same-named proxied values.
  * - `caches` actually round-trips (`put`/`match`/`delete` hit an in-memory
- *   store in the proxy worker — unlike wrangler, whose dev `caches` is a
+ *   store in the proxy worker -- unlike wrangler, whose dev `caches` is a
  *   no-op); `cf` is the same mock object miniflare falls back to; `ctx` is
  *   wrangler's no-op `ExecutionContext` mock.
  * - Inherited proxy limitations: binding methods returning rich class
  *   instances (e.g. `R2Object`) are unsupported, and intermediate values
  *   (e.g. `DurableObjectId`) need an explicit `await` before synchronous use
- *   — see `cloudflare-runtime/platform-proxy`.
+ *   -- see `cloudflare-runtime/platform-proxy`.
  */
 export const makeDevPlatformEmulator = (
   options: CloudflareDevPlatformOptions = {},

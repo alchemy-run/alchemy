@@ -40,7 +40,7 @@ export type AuthorizationPolicySource = {
 export type AuthorizationPolicyHttpHeaderMatch = {
   /** Regular expression matched against the header value. */
   regexMatch?: string;
-  /** HTTP header name (`:authority`, `:method`, `Host`, …). */
+  /** HTTP header name (`:authority`, `:method`, `Host`, ...). */
   headerName?: string;
 };
 
@@ -65,12 +65,12 @@ export type AuthorizationPolicyRule = {
 export type AuthorizationPolicyProps = {
   /**
    * Authorization policy id. If omitted, a unique RFC1035 name is
-   * generated from the stack, stage, and logical id. Immutable —
+   * generated from the stack, stage, and logical id. Immutable --
    * changing it replaces the policy.
    */
   authorizationPolicyId?: string;
   /**
-   * Location (`global`, `us-central1`, …). Immutable — changing it
+   * Location (`global`, `us-central1`, ...). Immutable -- changing it
    * replaces the policy.
    * @default "global"
    */
@@ -136,7 +136,7 @@ export interface AuthorizationPolicyLookup {
    */
   authorizationPolicyId: string;
   /**
-   * Location (`global`, `us-central1`, …).
+   * Location (`global`, `us-central1`, ...).
    */
   location?: string;
   /**

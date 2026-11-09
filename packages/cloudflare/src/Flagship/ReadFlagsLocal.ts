@@ -21,13 +21,13 @@ import {
 import { type FlagshipAuth, makeHttpFlagshipClient } from "./ReadFlagsHttpClient.ts";
 
 /**
- * Local implementation of the {@link ReadFlags} binding — evaluates Flagship
+ * Local implementation of the {@link ReadFlags} binding -- evaluates Flagship
  * feature flags over the Cloudflare HTTP API (`GET .../flagship/apps/{appId}/evaluate`)
  * using the **current credentials** instead of a native Worker binding
  * ({@link ReadFlagsBinding}).
  *
  * Provide it on an {@link Action} (or any deploy-time Effect) so you can read
- * flag values with the same `getBooleanValue`/`getStringValue`/… client you'd
+ * flag values with the same `getBooleanValue`/`getStringValue`/... client you'd
  * use inside a Worker:
  *
  * @example Reading a flag from an Action
@@ -56,15 +56,15 @@ import { type FlagshipAuth, makeHttpFlagshipClient } from "./ReadFlagsHttpClient
  * endpoint only accepts a single `targetingKey` (read from
  * `context.targetingKey`), so attribute-based targeting rules that key off
  * other context fields cannot be exercised. The `raw` runtime binding has no
- * HTTP equivalent and dies if used — see {@link makeHttpFlagshipClient}.
+ * HTTP equivalent and dies if used -- see {@link makeHttpFlagshipClient}.
  */
 export const ReadFlagsLocal = Layer.effect(
   ReadFlags,
   Effect.gen(function* () {
-    // Capture the account resolver without authenticating — only the HTTP
+    // Capture the account resolver without authenticating -- only the HTTP
     // branch evaluates it. Credentials are ambient during stack-eval (the
     // stack's providers layer); capture the full context so the evaluate op
-    // runs with the current credentials — no `host.bind`, no minted token.
+    // runs with the current credentials -- no `host.bind`, no minted token.
     const environment = yield* CloudflareEnvironment;
     const context = yield* Effect.context<Credentials | HttpClient.HttpClient>();
     // Local evaluation reads the simulator's files.
@@ -75,7 +75,7 @@ export const ReadFlagsLocal = Layer.effect(
     };
 
     return Effect.fn(function* (app: App) {
-      // Deferred accessor — resolves the appId against the tracker at apply
+      // Deferred accessor -- resolves the appId against the tracker at apply
       // time (in an Action, that's the engine's resolve context).
       const appId = yield* app.appId;
       return dispatchByMode(appId, makeHttpFlagshipClient(auth, appId), (id) =>
@@ -88,8 +88,8 @@ export const ReadFlagsLocal = Layer.effect(
 /**
  * A client over the local Flagship simulator for a `dev:` app: evaluates the
  * app's flag definitions in-process with the same rules a dev Worker's
- * binding applies. `raw` cannot be satisfied — there is no native binding
- * outside a Worker — so it dies with guidance.
+ * binding applies. `raw` cannot be satisfied -- there is no native binding
+ * outside a Worker -- so it dies with guidance.
  */
 const makeLocalFlagshipClient = (
   appId: string,

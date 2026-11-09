@@ -21,7 +21,7 @@ export interface SyncConfigurationProps {
    */
   repositoryLinkId: string;
   /**
-   * Name of the Amazon Web Services resource kept in sync — for
+   * Name of the Amazon Web Services resource kept in sync -- for
    * `CFN_STACK_SYNC` this is the CloudFormation stack name. Together with
    * `syncType` it identifies the sync configuration; changing it replaces
    * the configuration.
@@ -85,7 +85,7 @@ export interface SyncConfiguration extends Resource<
 > {}
 
 /**
- * An AWS CodeConnections sync configuration — connects a repository link's
+ * An AWS CodeConnections sync configuration -- connects a repository link's
  * branch + deployment file to an Amazon Web Services resource so Git sync
  * keeps the resource updated from the repository (CloudFormation stack
  * sync).
@@ -157,7 +157,7 @@ export const SyncConfigurationProvider = () =>
 
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
-          // (syncType, resourceName) is the configuration's identity —
+          // (syncType, resourceName) is the configuration's identity --
           // replace on change. Everything else is mutable via
           // UpdateSyncConfiguration.
           if (
@@ -168,7 +168,7 @@ export const SyncConfigurationProvider = () =>
           }
         }),
 
-        // Sync configurations carry no tags — ownership is keyed by the
+        // Sync configurations carry no tags -- ownership is keyed by the
         // (syncType, resourceName) identity the caller declares, so `read`
         // returns the observed state as owned.
         read: Effect.fn(function* ({ olds, output }) {
@@ -182,10 +182,10 @@ export const SyncConfigurationProvider = () =>
         reconcile: Effect.fn(function* ({ news, session }) {
           const syncType = news.syncType ?? DEFAULT_SYNC_TYPE;
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* getByIdentity(syncType, news.resourceName);
 
-          // 2. Ensure — create if missing; tolerate the AlreadyExists race.
+          // 2. Ensure -- create if missing; tolerate the AlreadyExists race.
           if (observed === undefined) {
             observed = yield* codeconnections
               .createSyncConfiguration({
@@ -211,7 +211,7 @@ export const SyncConfigurationProvider = () =>
               );
           }
 
-          // 3. Sync — diff every mutable field against OBSERVED cloud state;
+          // 3. Sync -- diff every mutable field against OBSERVED cloud state;
           // skip the API entirely on no-op. Optional prop left undefined
           // keeps the observed value (service-side default).
           const drifted =
@@ -244,7 +244,7 @@ export const SyncConfigurationProvider = () =>
           return toAttrs(observed);
         }),
 
-        // DeleteSyncConfiguration documents no NotFound error — observe
+        // DeleteSyncConfiguration documents no NotFound error -- observe
         // first so a repeat delete (after a state-persistence failure) is a
         // no-op instead of an InvalidInput failure.
         delete: Effect.fn(function* ({ output }) {

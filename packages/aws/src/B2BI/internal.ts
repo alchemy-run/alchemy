@@ -25,7 +25,7 @@ export const toWireTags = (tags: Record<string, string>): b2bi.Tag[] =>
   Object.entries(tags).map(([Key, Value]) => ({ Key, Value }));
 
 /**
- * Read the observed tags of a B2BI resource. Tag reads are best-effort —
+ * Read the observed tags of a B2BI resource. Tag reads are best-effort --
  * a failure (e.g. a race with deletion) reports no tags.
  */
 export const readB2biTags = Effect.fn(function* (arn: string) {

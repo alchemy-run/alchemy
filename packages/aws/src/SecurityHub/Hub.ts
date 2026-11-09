@@ -57,7 +57,7 @@ export interface Hub extends Resource<
 > {}
 
 /**
- * The Security Hub Hub — the account/region singleton that enables AWS Security
+ * The Security Hub Hub -- the account/region singleton that enables AWS Security
  * Hub. Only one Hub can exist per region, so this is a capture-and-restore
  * singleton: adopting a pre-existing Hub that Alchemy did not create requires
  * `--adopt`.
@@ -93,7 +93,7 @@ const buildAttrs = (hub: securityhub.DescribeHubResponse) => ({
 });
 
 // `describeHub` throws `InvalidAccessException` when the account is not
-// subscribed and `ResourceNotFoundException` transiently right after enable —
+// subscribed and `ResourceNotFoundException` transiently right after enable --
 // both mean "no Hub", so collapse them to `undefined`.
 const describeHub = securityhub.describeHub({}).pipe(
   Effect.catchTags({
@@ -121,7 +121,7 @@ export const HubProvider = () =>
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
-        // Security Hub is an account/region singleton — `describeHub` returns
+        // Security Hub is an account/region singleton -- `describeHub` returns
         // the single Hub or throws when unsubscribed.
         list: () => describeHub.pipe(Effect.map((hub) => (hub ? [buildAttrs(hub)] : []))),
 
@@ -133,7 +133,7 @@ export const HubProvider = () =>
           // 1. OBSERVE
           let hub = yield* describeHub;
 
-          // 2. ENSURE — enable Security Hub if not already subscribed.
+          // 2. ENSURE -- enable Security Hub if not already subscribed.
           if (!hub) {
             yield* securityhub.enableSecurityHub({
               Tags: desiredTags,
@@ -145,7 +145,7 @@ export const HubProvider = () =>
 
           const arn = hub.HubArn ?? hubArnFallback(region, accountId);
 
-          // 3. SYNC configuration — observed ↔ desired.
+          // 3. SYNC configuration -- observed <-> desired.
           const configChanged =
             (news.autoEnableControls !== undefined &&
               news.autoEnableControls !== hub.AutoEnableControls) ||
@@ -158,7 +158,7 @@ export const HubProvider = () =>
             });
           }
 
-          // 3b. SYNC tags — diff against OBSERVED cloud tags.
+          // 3b. SYNC tags -- diff against OBSERVED cloud tags.
           const currentTags = yield* readTags(arn);
           const { upsert, removed } = diffTags(currentTags, desiredTags);
           if (upsert.length > 0) {

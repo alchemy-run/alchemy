@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Cluster } from "./Cluster.ts";
 
 /**
- * Runtime binding for `elasticmapreduce:TerminateSession` — terminates an interactive session on the bound cluster.
+ * Runtime binding for `elasticmapreduce:TerminateSession` -- terminates an interactive session on the bound cluster.
  * ### Interactive Sessions
  * **Example:** Terminate a Session
  * ```typescript

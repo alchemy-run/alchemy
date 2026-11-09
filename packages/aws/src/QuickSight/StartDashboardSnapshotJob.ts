@@ -16,7 +16,7 @@ import type { Dashboard } from "./Dashboard.ts";
  * ### Dashboard Snapshots
  * **Example:** Start A PDF Snapshot
  * ```typescript
- * // init — bind the operation to the dashboard
+ * // init -- bind the operation to the dashboard
  * const startSnapshotJob =
  *   yield* AWS.QuickSight.StartDashboardSnapshotJob(dashboard);
  *

@@ -159,9 +159,9 @@ export const getJobTemplate = (name: string) =>
         .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /**
- * Wait (bounded) for a template we know exists — e.g. after a create
+ * Wait (bounded) for a template we know exists -- e.g. after a create
  * reported ALREADY_EXISTS because a retried request had already
- * succeeded — to become readable.
+ * succeeded -- to become readable.
  */
 export const waitUntilExists = (name: string) =>
   getJobTemplate(name).pipe(

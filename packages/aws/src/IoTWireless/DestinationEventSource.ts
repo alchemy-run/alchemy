@@ -5,7 +5,7 @@ import type { Destination } from "./Destination.ts";
 
 /**
  * The JSON envelope AWS IoT Core for LoRaWAN delivers to a `RuleName`
- * destination's IoT rule for every uplink — the raw payload (base64) plus
+ * destination's IoT rule for every uplink -- the raw payload (base64) plus
  * the radio metadata.
  */
 export interface WirelessUplinkMessage {
@@ -46,7 +46,7 @@ export type DestinationEventSourceService = <Req = never>(
 
 /**
  * Event source connecting an IoT Wireless {@link Destination} to the
- * hosting compute — every uplink a wireless device sends through the
+ * hosting compute -- every uplink a wireless device sends through the
  * destination invokes the handler.
  *
  * The destination must use `expressionType: "RuleName"`. At deploy time the

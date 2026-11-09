@@ -1,5 +1,5 @@
 /**
- * INTERNAL — one implementation of ignore-file filtering for every place that
+ * INTERNAL -- one implementation of ignore-file filtering for every place that
  * walks a directory and skips what an ignore file excludes.
  *
  * Two dialects, because the tools they imitate disagree:
@@ -44,7 +44,7 @@ export const normalizeRelativePath = (value: string) =>
   value.replaceAll("\\", "/").replace(/^\.\/+/, "");
 
 const splitLines = (content: string | ReadonlyArray<string>) =>
-  typeof content === "string" ? content.replace(/^﻿/, "").split(/\r?\n/) : content;
+  typeof content === "string" ? content.replace(/^\ufeff/, "").split(/\r?\n/) : content;
 
 export interface ParseIgnoreRulesOptions {
   /**

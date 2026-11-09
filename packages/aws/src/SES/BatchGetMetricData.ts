@@ -5,8 +5,8 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `sesv2:BatchGetMetricData`.
  *
- * Fetches up to 10 aggregated deliverability metric time-series in one call —
- * sends, deliveries, bounces, complaints, opens, clicks — over a date range,
+ * Fetches up to 10 aggregated deliverability metric time-series in one call --
+ * sends, deliveries, bounces, complaints, opens, clicks -- over a date range,
  * optionally sliced by dimension (ISP, configuration set, etc.). Requires VDM
  * (Virtual Deliverability Manager) to be enabled; a malformed query surfaces
  * the typed `BadRequestException`. Account-level operation. Provide the
@@ -14,7 +14,7 @@ import type * as Effect from "effect/Effect";
  * ### Deliverability Insights
  * **Example:** Query Send and Delivery Counts
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getMetrics = yield* SES.BatchGetMetricData();
  *
  * // runtime

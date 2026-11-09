@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `servicecatalog:SyncResource`.
  *
  * Re-syncs a resource's AppRegistry system tags (`awsApplication`) with its
- * associated application — useful in remediation functions that repair
+ * associated application -- useful in remediation functions that repair
  * drifted application tags. The caller additionally needs permission to read
  * and update the target resource itself (e.g. `cloudformation:UpdateStack` +
  * `tag:GetResources` for a CloudFormation stack); grant those on the host
@@ -15,7 +15,7 @@ import type * as Effect from "effect/Effect";
  * ### Syncing Resources
  * **Example:** Re-sync a CloudFormation Stack's Application Tag
  * ```typescript
- * // init — account-level, no resource argument
+ * // init -- account-level, no resource argument
  * const syncResource = yield* AWS.AppRegistry.SyncResource();
  *
  * // runtime

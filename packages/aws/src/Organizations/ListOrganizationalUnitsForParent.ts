@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `organizations:ListOrganizationalUnitsForParent`.
  *
  * Lists the organizational units directly contained by the specified root or parent OU.
- * Account-level operation — Organizations is a management-account-scoped
+ * Account-level operation -- Organizations is a management-account-scoped
  * global service, so the binding takes no resource argument. Provide the
  * implementation with `Effect.provide(AWS.Organizations.ListOrganizationalUnitsForParentHttp)`.
  * ### Reading the Organization Tree
  * **Example:** List Child OUs
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listOrganizationalUnitsForParent = yield* AWS.Organizations.ListOrganizationalUnitsForParent();
  *
  * // runtime

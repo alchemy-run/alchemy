@@ -158,9 +158,9 @@ const plain = (value: unknown) => (Redacted.isRedacted(value) ? Redacted.value(v
  * connection to the engines. A namespace is created for the stage.
  *
  * One engine keeps actor data on its Volume. Several share it through
- * `objectStorage` — Hetzner Object Storage, or any S3-compatible bucket.
+ * `objectStorage` -- Hetzner Object Storage, or any S3-compatible bucket.
  *
- * Pools of nodes anywhere reach it at its public address —
+ * Pools of nodes anywhere reach it at its public address --
  * `RivetHetzner.ServerPool` on Hetzner, or a pool on any other cloud.
  *
  * ### Running a control plane on Hetzner

@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Cluster } from "./Cluster.ts";
 
 /**
- * Runtime binding for `elasticmapreduce:ListInstances` — lists the bound cluster's EC2 instances with state, private/public addresses, and group/fleet membership.
+ * Runtime binding for `elasticmapreduce:ListInstances` -- lists the bound cluster's EC2 instances with state, private/public addresses, and group/fleet membership.
  * ### Inspecting the Cluster
  * **Example:** List Running Core Instances
  * ```typescript

@@ -9,7 +9,7 @@ export interface EncryptDataRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `payment-cryptography:EncryptData` — encrypts
+ * Runtime binding for `payment-cryptography:EncryptData` -- encrypts
  * hex-encoded plaintext under a {@link Key}. Provide `EncryptDataHttp` on
  * the Function to satisfy this service.
  * ### Encrypting Data

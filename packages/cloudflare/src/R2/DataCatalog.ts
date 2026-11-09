@@ -165,7 +165,7 @@ export type DataCatalogAttributes = {
       }
     | undefined;
   /**
-   * Iceberg REST catalog URI for this warehouse — point PyIceberg, Spark, or
+   * Iceberg REST catalog URI for this warehouse -- point PyIceberg, Spark, or
    * any Iceberg REST client at this endpoint.
    */
   catalogUri: string;
@@ -188,7 +188,7 @@ export type DataCatalog = Resource<
  * resource enables it, keeps its maintenance configuration in sync, and
  * disables it on destroy (table data in the bucket is never deleted).
  *
- * Also exported as `Cloudflare.Basin.Catalog` — the catalog of Cloudflare's
+ * Also exported as `Cloudflare.Basin.Catalog` -- the catalog of Cloudflare's
  * Basin product (Pipelines + Catalog + SQL). The warehouse is named
  * `<accountId>_<bucket>` and served at
  * `https://catalog.cloudflarestorage.com/<accountId>/<bucket>`. Pass the
@@ -255,7 +255,7 @@ export const DataCatalogProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      // The catalog is keyed to its bucket — moving buckets is a replacement
+      // The catalog is keyed to its bucket -- moving buckets is a replacement
       // (disable on the old bucket, enable on the new one). bucketName is an
       // Input<string>; compare only once both sides are concrete strings.
       const oldBucket = output?.bucketName ?? catalogBucketName(olds);
@@ -272,7 +272,7 @@ export const DataCatalogProvider = () =>
       if (bucketName === undefined) return undefined;
 
       const observed = yield* getCatalog(acct, bucketName);
-      // `inactive` means the catalog was disabled — for reconciliation
+      // `inactive` means the catalog was disabled -- for reconciliation
       // purposes the resource is gone (re-enable on the next deploy).
       if (!observed || observed.status !== "active") return undefined;
       const attrs = toAttributes(observed, acct);
@@ -285,7 +285,7 @@ export const DataCatalogProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       // R2 Data Catalog is an account-scoped collection: one warehouse per
       // bucket that has the catalog enabled. Only `active` warehouses map to
-      // a live resource — `read` treats `inactive` (disabled) as gone.
+      // a live resource -- `read` treats `inactive` (disabled) as gone.
       return yield* rdc.listR2DataCatalogs({ accountId }).pipe(
         Effect.map(({ warehouses }) =>
           warehouses.filter((w) => w.status === "active").map((w) => toAttributes(w, accountId)),
@@ -301,14 +301,14 @@ export const DataCatalogProvider = () =>
       // bucket's attributes.
       const bucketName = catalogBucketName(news) as string;
 
-      // Observe — `output` is only a cache; a disabled or never-enabled
+      // Observe -- `output` is only a cache; a disabled or never-enabled
       // catalog observes as missing/inactive and falls through to ensure.
       let observed = yield* getCatalog(acct, bucketName);
 
-      // Ensure — enable is a true idempotent upsert (re-running it on an
+      // Ensure -- enable is a true idempotent upsert (re-running it on an
       // active catalog returns the same id), so no AlreadyExists race exists.
       // A freshly-created bucket can briefly 404 the enable endpoint
-      // (`NoSuchBucket`, code 40406) — ride out that consistency lag.
+      // (`NoSuchBucket`, code 40406) -- ride out that consistency lag.
       if (!observed || observed.status !== "active") {
         yield* rdc.enableR2DataCatalog({ accountId: acct, bucketName }).pipe(
           Effect.retry({
@@ -325,7 +325,7 @@ export const DataCatalogProvider = () =>
         );
       }
 
-      // Sync credential before maintenance — Cloudflare rejects maintenance
+      // Sync credential before maintenance -- Cloudflare rejects maintenance
       // updates when the warehouse has no credential registered.
       // The API exposes only present/absent, so `olds` serves as the rotation
       // hint: re-push when the token value changed or no credential is
@@ -344,7 +344,7 @@ export const DataCatalogProvider = () =>
         }
       }
 
-      // Sync maintenance — diff observed config against the fields the user
+      // Sync maintenance -- diff observed config against the fields the user
       // actually specified; skip the API entirely on a no-op.
       let maintenance = observed.maintenanceConfig ?? undefined;
       const observedCompaction = maintenance?.compaction ?? undefined;

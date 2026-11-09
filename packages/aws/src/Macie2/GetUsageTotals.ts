@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `macie2:GetUsageTotals`.
  *
  * Retrieves (queries) aggregated usage data for an account.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.Macie2.GetUsageTotalsHttp)`.
  * ### Usage & Quotas
  * **Example:** Aggregated Usage Totals
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getUsageTotals = yield* AWS.Macie2.GetUsageTotals();
  *
  * // runtime

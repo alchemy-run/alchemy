@@ -15,7 +15,7 @@ export interface DeleteProtocolsListRequest extends fms.DeleteProtocolsListReque
  * ### Protocols Lists
  * **Example:** Delete a Protocols List
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const deleteProtocolsList = yield* AWS.FMS.DeleteProtocolsList();
  *
  * // runtime

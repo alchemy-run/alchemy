@@ -40,7 +40,7 @@ export const listRegions = Effect.fn(function* (projectId?: string) {
 });
 
 /**
- * Resolve a Railway region by code (`us-west2`, `us-east4`, …), display
+ * Resolve a Railway region by code (`us-west2`, `us-east4`, ...), display
  * name, or id.
  */
 export const findRegion = (ref: string) =>
@@ -58,7 +58,7 @@ export const findRegion = (ref: string) =>
 export type RailwayRegion = RegionsResultItem;
 
 /**
- * Workspace audit logs. Query-only — Railway has no audit-log
+ * Workspace audit logs. Query-only -- Railway has no audit-log
  * create/update/delete, so this is not a resource.
  */
 export {

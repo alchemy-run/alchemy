@@ -20,13 +20,13 @@ export class GeofenceCollectionUnexpectedResponse extends Data.TaggedError(
 
 export interface GeofenceCollectionProps {
   /**
-   * Name of the geofence collection. Immutable — changing it replaces the
+   * Name of the geofence collection. Immutable -- changing it replaces the
    * collection.
    * @default ${app}-${stage}-${id}
    */
   collectionName?: string;
   /**
-   * KMS key ID used to encrypt the collection's geofence data. Immutable —
+   * KMS key ID used to encrypt the collection's geofence data. Immutable --
    * changing it replaces the collection.
    */
   kmsKeyId?: string;

@@ -16,17 +16,17 @@ export interface StartInstanceRequest extends Omit<
  * Runtime binding for the `StartInstances` operation scoped to the bound
  * {@link Instance} (IAM action `ec2:StartInstances` on the instance ARN).
  *
- * Starts the stopped instance — the classic scheduled Lambda that powers dev
+ * Starts the stopped instance -- the classic scheduled Lambda that powers dev
  * boxes on in the morning. Starting an already-running instance succeeds
  * without effect. Provide the implementation with
  * `Effect.provide(AWS.EC2.StartInstanceHttp)`.
  * ### Instance Lifecycle Control
  * **Example:** Start the bound instance
  * ```typescript
- * // init — bind the operation to the instance
+ * // init -- bind the operation to the instance
  * const startInstance = yield* AWS.EC2.StartInstance(instance);
  *
- * // runtime — power the instance on
+ * // runtime -- power the instance on
  * const result = yield* startInstance();
  * console.log(result.StartingInstances?.[0]?.CurrentState?.Name);
  * ```

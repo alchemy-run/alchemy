@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { ReportGroup } from "./ReportGroup.ts";
 
 /**
- * Runtime binding for `codebuild:DescribeCodeCoverages` — reads the
+ * Runtime binding for `codebuild:DescribeCodeCoverages` -- reads the
  * per-file line/branch coverage of a coverage report in the bound report
  * group.
  * ### Reading Reports

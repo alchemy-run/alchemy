@@ -84,7 +84,7 @@ export const deliveryAudience = (url: Output.Output<string>, path: string) =>
 
 /**
  * The audience a delivery to `path` must carry. Cloud Run routes on the
- * `Host` header, so it names the URL the sender addressed — the same URL
+ * `Host` header, so it names the URL the sender addressed -- the same URL
  * `deliveryAudience` pinned into the push config.
  */
 const expectedAudience = (request: HttpServerRequest, path: string) =>

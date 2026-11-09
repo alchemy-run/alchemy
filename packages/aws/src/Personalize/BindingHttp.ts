@@ -7,8 +7,8 @@ import type { EventTracker } from "./EventTracker.ts";
 /**
  * Shared HTTP scaffolding for the Amazon Personalize runtime bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the three
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the three
  * builders below. Everything except the distilled operation, the identifier
  * injection, and the IAM action list is boilerplate:
  *
@@ -73,7 +73,7 @@ export const makePersonalizeDatasetHttpBinding = <
  * Build the impl Effect for an event-tracker-scoped Personalize operation:
  * the runtime callable injects the bound {@link EventTracker}'s tracking ID
  * as `trackingId`. The deploy-time half grants `actions` on `Resource: ["*"]`
- * — `personalize:PutEvents` / `personalize:PutActionInteractions` support no
+ * -- `personalize:PutEvents` / `personalize:PutActionInteractions` support no
  * resource types (a tracker-ARN-scoped grant answers AccessDeniedException).
  */
 export const makePersonalizeEventTrackerHttpBinding = <

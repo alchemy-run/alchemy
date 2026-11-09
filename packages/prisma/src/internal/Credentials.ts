@@ -33,8 +33,8 @@ export const fromEnvironment = () =>
  * Resolve Prisma credentials lazily from the configured auth profile.
  *
  * The `Credentials` service holds an *effect*, so nothing is resolved until
- * the first API operation runs. That keeps `alchemy dev` — which only
- * exercises local providers — from ever needing a Prisma token.
+ * the first API operation runs. That keeps `alchemy dev` -- which only
+ * exercises local providers -- from ever needing a Prisma token.
  */
 export const fromAuthProvider = () =>
   Layer.effect(

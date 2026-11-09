@@ -4,7 +4,7 @@ import { makePaymentCryptographyKeyHttpBinding } from "./BindingHttp.ts";
 import { DecryptData } from "./DecryptData.ts";
 
 /**
- * HTTP implementation of {@link DecryptData} — grants the host Function
+ * HTTP implementation of {@link DecryptData} -- grants the host Function
  * `payment-cryptography:DecryptData` on the key and calls the
  * Payment Cryptography Data API at runtime.
  * @example Provide on a Lambda Function

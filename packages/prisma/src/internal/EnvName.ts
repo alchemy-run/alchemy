@@ -1,6 +1,6 @@
 /**
  * Shared name-mangling helpers for Prisma physical names and binding env
- * keys. Internal — not exported from the Prisma package surface.
+ * keys. Internal -- not exported from the Prisma package surface.
  */
 
 export const fnv1a64 = (value: string) => {

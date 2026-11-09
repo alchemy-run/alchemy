@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Sink } from "./Sink.ts";
 
 /**
- * Request for {@link ListAttachedLinks} — the bound sink's ARN is injected
+ * Request for {@link ListAttachedLinks} -- the bound sink's ARN is injected
  * as `SinkIdentifier`, so only pagination knobs remain.
  */
 export interface ListAttachedLinksRequest extends Omit<
@@ -13,7 +13,7 @@ export interface ListAttachedLinksRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `oam:ListAttachedLinks` — enumerate the source-account
+ * Runtime binding for `oam:ListAttachedLinks` -- enumerate the source-account
  * links attached to the bound monitoring-account {@link Sink} (each item
  * carries the link's ARN, resolved label, and shared resource types). The
  * sink's ARN is injected automatically.
@@ -23,7 +23,7 @@ export interface ListAttachedLinksRequest extends Omit<
  * ### Listing Attached Links
  * **Example:** Enumerate the source accounts connected to a sink
  * ```typescript
- * // init — grants oam:ListAttachedLinks on the sink
+ * // init -- grants oam:ListAttachedLinks on the sink
  * const listAttachedLinks = yield* AWS.OAM.ListAttachedLinks(sink);
  *
  * // runtime

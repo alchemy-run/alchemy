@@ -43,7 +43,7 @@ import type { Stream, StreamRecord } from "./Stream.ts";
  * ```typescript
  * yield* orders.send(records).pipe(
  *   // K2Unavailable: the batch was NOT stored. Never retry
- *   // K2AppendOutcomeUnknown — the batch may have been stored.
+ *   // K2AppendOutcomeUnknown -- the batch may have been stored.
  *   Effect.retry({
  *     while: (e) => e._tag === "K2Unavailable",
  *     times: 3,

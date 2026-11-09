@@ -209,7 +209,7 @@ export const R2BucketLive = Layer.effect(
  * disk-backed storage is configured).
  *
  * With `s3Credentials`, the bucket is also served over the local
- * S3-compatible endpoint at `{worker url}/cdn-cgi/local/r2/s3/{id}` —
+ * S3-compatible endpoint at `{worker url}/cdn-cgi/local/r2/s3/{id}` --
  * SigV4-authenticated with those credentials, so S3 clients and presigned
  * URLs (e.g. browser uploads) work against the local bucket.
  */

@@ -24,7 +24,7 @@ export type AbortMultipartUploadsResult = { aborted: number } | { skipped: strin
  * Best-effort: abort every incomplete multipart upload in a bucket.
  *
  * R2 refuses to delete a bucket that holds incomplete multipart uploads, and
- * the Cloudflare REST API cannot list or abort them — only R2's S3 API can.
+ * the Cloudflare REST API cannot list or abort them -- only R2's S3 API can.
  * S3 credentials derive from an API token (access key id = token id, secret
  * = SHA-256 of the token value), so this only works when alchemy is
  * authenticated with an API token that may write the bucket's objects. It

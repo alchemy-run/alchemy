@@ -8,7 +8,7 @@ import type { ApiGatewayV2Stage } from "./Stage.ts";
  * (`apigateway:DELETE` on `/apis/{apiId}/stages/{stageName}/cache/authorizers`).
  *
  * Bind a {@link Stage} inside a function runtime to drop cached Lambda
- * authorizer verdicts — e.g. immediately revoking access after a
+ * authorizer verdicts -- e.g. immediately revoking access after a
  * permission change, without waiting out `authorizerResultTtl`. Provide
  * `ApiGatewayV2.ResetAuthorizersCacheHttp` on the Function effect to
  * implement the binding.

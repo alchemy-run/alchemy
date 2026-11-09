@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { CostCategory } from "./CostCategory.ts";
 
 /**
- * Request for {@link ListCostCategoryResourceAssociations} — the bound cost category's ARN is
+ * Request for {@link ListCostCategoryResourceAssociations} -- the bound cost category's ARN is
  * injected automatically.
  */
 export interface ListCostCategoryResourceAssociationsRequest extends Omit<
@@ -22,7 +22,7 @@ export interface ListCostCategoryResourceAssociationsRequest extends Omit<
  * ### Cost Category Associations
  * **Example:** List a Category's Resource Associations
  * ```typescript
- * // init — bind the operation to the cost category
+ * // init -- bind the operation to the cost category
  * const listCostCategoryResourceAssociations = yield* AWS.CostExplorer.ListCostCategoryResourceAssociations(category);
  *
  * // runtime

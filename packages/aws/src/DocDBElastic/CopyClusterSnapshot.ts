@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `CopyClusterSnapshot` operation (IAM actions
  * `docdb-elastic:CopyClusterSnapshot` + `docdb-elastic:TagResource`).
  *
- * Copies an elastic-cluster snapshot — e.g. re-encrypting under a different
+ * Copies an elastic-cluster snapshot -- e.g. re-encrypting under a different
  * KMS key or fanning a nightly backup out under a retention-tagged name.
  * Provide the implementation with
  * `Effect.provide(AWS.DocDBElastic.CopyClusterSnapshotHttp)`.
@@ -20,7 +20,7 @@ import type * as Effect from "effect/Effect";
  *   targetSnapshotName: "weekly-archive",
  *   copyTags: true,
  * });
- * // result.snapshot.snapshotName → "weekly-archive"
+ * // result.snapshot.snapshotName -> "weekly-archive"
  * ```
  *
  * @binding

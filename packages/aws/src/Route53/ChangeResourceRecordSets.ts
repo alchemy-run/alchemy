@@ -17,7 +17,7 @@ export interface ChangeResourceRecordSetsRequest extends Omit<
  * `route53:ChangeResourceRecordSets` on the hosted zone ARN).
  *
  * Creates, upserts, and deletes DNS record sets in the bound
- * {@link HostedZone} at runtime — the core dynamic-DNS primitive (ACME
+ * {@link HostedZone} at runtime -- the core dynamic-DNS primitive (ACME
  * `dns-01` challenges, service discovery, failover flips). Pair with
  * {@link GetChange} to wait until the change is `INSYNC`. Provide the
  * implementation with

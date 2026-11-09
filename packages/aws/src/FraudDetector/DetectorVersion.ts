@@ -42,7 +42,7 @@ export interface RuleDefinition {
 
 export interface DetectorVersionProps {
   /**
-   * The identifier of the detector this version belongs to. Immutable —
+   * The identifier of the detector this version belongs to. Immutable --
    * changing it replaces the detector version.
    */
   detectorId: string;
@@ -92,11 +92,11 @@ export interface DetectorVersion extends Resource<
 > {}
 
 /**
- * An Amazon Fraud Detector detector version — the deployable revision of a
+ * An Amazon Fraud Detector detector version -- the deployable revision of a
  * detector. It bundles a set of rules (owned inline here) over the detector's
  * event type and, when `ACTIVE`, serves real-time predictions via
  * `getEventPrediction`. Rules and the version are cheap, rule-based
- * configuration objects — no model training is involved.
+ * configuration objects -- no model training is involved.
  *
  * ### Creating a Detector Version
  * **Example:** Active Version with One Rule
@@ -123,7 +123,7 @@ export const DetectorVersionProvider = () =>
   Provider.effect(
     DetectorVersion,
     Effect.gen(function* () {
-      /** Read a detector version by id; typed not-found → undefined. */
+      /** Read a detector version by id; typed not-found -> undefined. */
       const getVersion = Effect.fn(function* (detectorId: string, detectorVersionId: string) {
         return yield* frauddetector
           .getDetectorVersion({ detectorId, detectorVersionId })
@@ -133,7 +133,7 @@ export const DetectorVersionProvider = () =>
       /**
        * Ensure every declared rule exists as a rule version and return the
        * references (create-once by `ruleId`; existing rules reuse their latest
-       * version — rule-expression edits are expressed by changing `ruleId`).
+       * version -- rule-expression edits are expressed by changing `ruleId`).
        */
       const ensureRules = Effect.fn(function* (detectorId: string, rules: RuleDefinition[]) {
         const refs: frauddetector.Rule[] = [];
@@ -172,7 +172,7 @@ export const DetectorVersionProvider = () =>
 
         diff: Effect.fn(function* ({ olds = {}, news }) {
           if (!isResolved(news)) return undefined;
-          // Everything but status is baked into the published version — a
+          // Everything but status is baked into the published version -- a
           // change to the detector, rules, execution mode, or description
           // replaces the version. Status transitions happen in place.
           if (
@@ -208,7 +208,7 @@ export const DetectorVersionProvider = () =>
 
           // 2. OBSERVE the version; create it if missing. Published versions
           //    are immutable, so any content change triggers replacement (see
-          //    diff) — here we only ever create or converge status/tags.
+          //    diff) -- here we only ever create or converge status/tags.
           let detectorVersionId = output?.detectorVersionId;
           let version =
             detectorVersionId !== undefined
@@ -230,7 +230,7 @@ export const DetectorVersionProvider = () =>
             version = yield* getVersion(detectorId, detectorVersionId);
           }
 
-          // 3. SYNC status — a new version is created in DRAFT; move it to the
+          // 3. SYNC status -- a new version is created in DRAFT; move it to the
           //    desired status if it drifts.
           if ((version!.status ?? undefined) !== desiredStatus) {
             yield* frauddetector.updateDetectorVersionStatus({
@@ -240,7 +240,7 @@ export const DetectorVersionProvider = () =>
             });
           }
 
-          // 4. SYNC tags — diff against OBSERVED cloud tags.
+          // 4. SYNC tags -- diff against OBSERVED cloud tags.
           yield* syncFraudDetectorTags(version!.arn!, desiredTags);
 
           yield* session.note(detectorVersionId!);

@@ -22,7 +22,7 @@ export interface MicrosoftTeamsChannelConfigurationProps {
   configurationName?: string;
   /**
    * ID of the Microsoft Teams team authorized with AWS Chatbot. The team
-   * must first be onboarded via the AWS Chatbot console OAuth flow — this
+   * must first be onboarded via the AWS Chatbot console OAuth flow -- this
    * cannot be automated.
    *
    * Changing the team replaces the configuration.
@@ -119,7 +119,7 @@ export interface MicrosoftTeamsChannelConfiguration extends Resource<
  *
  * The Microsoft Teams team must be onboarded to AWS Chatbot beforehand via
  * the console OAuth flow (Chatbot console -> Configure new client ->
- * Microsoft Teams) — team authorization cannot be automated.
+ * Microsoft Teams) -- team authorization cannot be automated.
  *
  * ### Creating Microsoft Teams Channel Configurations
  * **Example:** Notify a Teams channel from an SNS topic
@@ -179,7 +179,7 @@ export const MicrosoftTeamsChannelConfigurationProvider = () =>
         chatbot.getMicrosoftTeamsChannelConfiguration({ ChatConfigurationArn: arn }).pipe(
           inChatbotRegion,
           Effect.map((r) => r.ChannelConfiguration),
-          // Typed via the distilled chatbot patch — the wire error is a
+          // Typed via the distilled chatbot patch -- the wire error is a
           // ResourceNotFoundException outside the Smithy model's union.
           Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
@@ -251,10 +251,10 @@ export const MicrosoftTeamsChannelConfigurationProvider = () =>
             ? [...news.guardrailPolicyArns].sort()
             : undefined;
 
-          // 1. OBSERVE — cloud state is authoritative.
+          // 1. OBSERVE -- cloud state is authoritative.
           let live = yield* observeConfiguration(arn);
 
-          // 2. ENSURE — create when missing; a concurrent create surfaces as
+          // 2. ENSURE -- create when missing; a concurrent create surfaces as
           //    the typed ConflictException, which we treat as a race and
           //    re-observe.
           if (live === undefined) {
@@ -280,7 +280,7 @@ export const MicrosoftTeamsChannelConfigurationProvider = () =>
               );
           }
 
-          // 3. SYNC — diff the OBSERVED mutable aspects against the desired
+          // 3. SYNC -- diff the OBSERVED mutable aspects against the desired
           //    state; update only on drift.
           const inSync =
             live !== undefined &&
@@ -310,7 +310,7 @@ export const MicrosoftTeamsChannelConfigurationProvider = () =>
               );
           }
 
-          // 3b. SYNC TAGS — diff against OBSERVED cloud tags so adoption
+          // 3b. SYNC TAGS -- diff against OBSERVED cloud tags so adoption
           //     converges (create-time Tags only apply on first create).
           const currentTags = yield* observedTags(arn);
           const { upsert, removed } = diffTags(currentTags, desiredTags);
@@ -353,7 +353,7 @@ export const MicrosoftTeamsChannelConfigurationProvider = () =>
             })
             .pipe(
               inChatbotRegion,
-              // Idempotent delete — a missing configuration is not an error.
+              // Idempotent delete -- a missing configuration is not an error.
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             );
         }),

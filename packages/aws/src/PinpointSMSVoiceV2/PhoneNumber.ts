@@ -36,7 +36,7 @@ export interface PhoneNumberProps {
   /**
    * Type of number to lease: `SIMULATOR`, `LONG_CODE`, `TOLL_FREE`, or
    * `TEN_DLC`. `SIMULATOR` numbers only exchange messages with other
-   * simulator destinations and carry the smallest cost — use them for
+   * simulator destinations and carry the smallest cost -- use them for
    * testing. Changing it replaces the phone number.
    */
   numberType: string;
@@ -235,7 +235,7 @@ export const PhoneNumberProvider = () =>
         }),
 
         read: Effect.fn(function* ({ id, output }) {
-          // Phone number IDs are assigned by AWS — without a cached output
+          // Phone number IDs are assigned by AWS -- without a cached output
           // there is no deterministic identity to look up.
           if (output?.phoneNumberId === undefined) return undefined;
           const observed = yield* getById(output.phoneNumberId);
@@ -262,11 +262,11 @@ export const PhoneNumberProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. Observe — the ID cache in `output` is the only identity.
+          // 1. Observe -- the ID cache in `output` is the only identity.
           let observed =
             output?.phoneNumberId === undefined ? undefined : yield* getById(output.phoneNumberId);
 
-          // 2. Ensure — request a number if missing, then wait out PENDING.
+          // 2. Ensure -- request a number if missing, then wait out PENDING.
           if (observed === undefined) {
             const requested = yield* smsvoice
               .requestPhoneNumber({
@@ -293,7 +293,7 @@ export const PhoneNumberProvider = () =>
           }
           const phoneNumberId = observed.PhoneNumberId;
 
-          // 3. Sync — apply a single update carrying only the drifted
+          // 3. Sync -- apply a single update carrying only the drifted
           // aspects (opt-out list, deletion protection). Fields the API
           // couples to unmodeled features (e.g. self-managed opt-outs
           // require a two-way channel) are never sent.
@@ -311,7 +311,7 @@ export const PhoneNumberProvider = () =>
               .pipe(retrySmsVoiceThrottled);
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           yield* syncSmsVoiceTags(observed.PhoneNumberArn, desiredTags);
 
           // 4. Return fresh attributes.
@@ -340,7 +340,7 @@ export const PhoneNumberProvider = () =>
               Effect.forEach(
                 (info) =>
                   toAttrs(info).pipe(
-                    // Tolerate a number missing its ID — drop it.
+                    // Tolerate a number missing its ID -- drop it.
                     Effect.catchTag("SmsVoicePhoneNumberMissing", () => Effect.undefined),
                   ),
                 { concurrency: 5 },

@@ -15,7 +15,7 @@ const registrationKey = Symbol.for("@alchemy.run/node-utils/register-oxc");
  * Installs the Oxc TypeScript loader process-wide. Alchemy starts every
  * Node process with `--import` of a file that calls this; in-process
  * callers (the dev exec child, tests) may call it again and get the same
- * registration back — a second copy of the hooks would only re-run the
+ * registration back -- a second copy of the hooks would only re-run the
  * chain. The marker lives on `globalThis` because a checkout can load this
  * module twice (src/ and lib/).
  *

@@ -13,9 +13,9 @@
  * `send()` validates the sender/recipients against the binding configuration
  * and the MIME message itself (parseable, Message-ID present, `From:` header
  * matching the envelope sender, no `Received:` header), then persists the
- * message through the `send-email:storage` disk service — `.eml` files at the
+ * message through the `send-email:storage` disk service -- `.eml` files at the
  * root of `{storage}/email`, MessageBuilder text/html/attachments under
- * `text/`, `html/` and `attachment/` — and logs the absolute file path.
+ * `text/`, `html/` and `attachment/` -- and logs the absolute file path.
  * (Miniflare writes to `email/`, `email-text/`, `email-html/` and
  * `email-attachment/` under a temporary directory instead; our root is
  * already named `email`, so the redundant prefix is dropped.) Errors and log
@@ -78,7 +78,7 @@ interface EmailSendResult {
 /**
  * Build a Message-ID in the shape the production `send_email` binding returns:
  * `<{36 alphanumeric chars}@{sender domain}>`, brackets included. The body is
- * random — production synthesizes its own id rather than echoing any header
+ * random -- production synthesizes its own id rather than echoing any header
  * present in the submitted email.
  */
 function synthesizeMessageId(senderEmail: string): string {

@@ -30,7 +30,7 @@ export interface AutoStopConfiguration {
    */
   enabled?: boolean;
   /**
-   * Idle time after which the application stops automatically — e.g.
+   * Idle time after which the application stops automatically -- e.g.
    * `"5 minutes"` or `Duration.minutes(5)`. Sent to AWS as whole minutes.
    * @default "15 minutes"
    */
@@ -136,7 +136,7 @@ export type ApplicationLookup =
     };
 
 /**
- * An Amazon EMR Serverless application — a serverless Spark or Hive
+ * An Amazon EMR Serverless application -- a serverless Spark or Hive
  * environment that automatically provisions and scales workers per job,
  * with no cluster to manage. An application in the `CREATED` or `STOPPED`
  * state costs nothing; billing only occurs for workers while the application
@@ -340,7 +340,7 @@ export const ApplicationProvider = () =>
           if ((olds.type ?? "SPARK") !== (news.type ?? "SPARK")) {
             return { action: "replace" } as const;
           }
-          // releaseLabel/capacity/autoStart/autoStop/network/tags → update
+          // releaseLabel/capacity/autoStart/autoStop/network/tags -> update
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session, instanceId }) {
@@ -353,10 +353,10 @@ export const ApplicationProvider = () =>
               ? toWireAutoStop(news.autoStopConfiguration)
               : undefined;
 
-          // 1. OBSERVE — cloud state is authoritative; output is an id cache
+          // 1. OBSERVE -- cloud state is authoritative; output is an id cache
           let application = yield* observe(output?.applicationId, name);
 
-          // 2. ENSURE — create if missing; ~1 min async until CREATED
+          // 2. ENSURE -- create if missing; ~1 min async until CREATED
           if (application === undefined || application.state === "TERMINATED") {
             const created = yield* emr
               .createApplication({
@@ -373,7 +373,7 @@ export const ApplicationProvider = () =>
                 tags: desiredTags,
               })
               .pipe(
-                // a concurrent reconciler already created it — observe instead
+                // a concurrent reconciler already created it -- observe instead
                 Effect.catchTag("ConflictException", () => Effect.undefined),
               );
             const applicationId =
@@ -389,7 +389,7 @@ export const ApplicationProvider = () =>
             application = yield* awaitApplicationCreated(application.applicationId);
           }
 
-          // 3. SYNC — diff each mutable aspect (observed vs desired), apply a
+          // 3. SYNC -- diff each mutable aspect (observed vs desired), apply a
           //    single updateApplication carrying only the drifted fields.
           const drift = {
             releaseLabel:
@@ -426,7 +426,7 @@ export const ApplicationProvider = () =>
                 : undefined,
           };
           if (Object.values(drift).some((v) => v !== undefined)) {
-            // Updates require a CREATED or STOPPED state — stop a started
+            // Updates require a CREATED or STOPPED state -- stop a started
             // application first (autoStart re-starts it on job submission).
             if (application.state === "STARTED" || application.state === "STARTING") {
               yield* emr.stopApplication({
@@ -446,7 +446,7 @@ export const ApplicationProvider = () =>
             application = updated.application;
           }
 
-          // 3b. SYNC TAGS — diff against observed cloud tags
+          // 3b. SYNC TAGS -- diff against observed cloud tags
           yield* syncTags(application, desiredTags);
 
           yield* session.note(application.applicationId);

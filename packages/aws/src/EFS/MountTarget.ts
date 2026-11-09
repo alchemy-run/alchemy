@@ -58,13 +58,13 @@ export interface MountTarget extends Resource<
 > {}
 
 /**
- * An Amazon EFS mount target — the per-subnet network endpoint (an ENI
+ * An Amazon EFS mount target -- the per-subnet network endpoint (an ENI
  * serving NFS on TCP 2049) that compute in a VPC uses to reach a file
  * system.
  *
  * Create one mount target per Availability Zone you run compute in. The
  * reconciler waits for the mount target to reach the `available` state
- * (typically 1–2 minutes), so downstream resources that depend on its
+ * (typically 1-2 minutes), so downstream resources that depend on its
  * attributes deploy only once the endpoint is usable. Deletion likewise
  * waits until the mount target is fully gone, because its ENI must be
  * released before the subnet, security groups, or file system can be
@@ -113,7 +113,7 @@ export class MountTargetStillDeleting extends Data.TaggedError("MountTargetStill
 }> {}
 
 /**
- * Mount-target provisioning takes 1–3 minutes. Bounded poll (5s × 36 ≈
+ * Mount-target provisioning takes 1-3 minutes. Bounded poll (5s × 36 ~
  * 180s), explicitly typed so declaration emit never widens the provider
  * layer (see PATTERNS §7).
  */
@@ -138,8 +138,8 @@ const retryUntilMountTargetAvailable = <E extends { _tag: string }, R>(
   );
 
 /**
- * Deletion releases the mount target's ENI asynchronously (1–3 minutes).
- * Bounded poll (5s × 36 ≈ 180s) until the mount target is observed gone,
+ * Deletion releases the mount target's ENI asynchronously (1-3 minutes).
+ * Bounded poll (5s × 36 ~ 180s) until the mount target is observed gone,
  * explicitly typed (PATTERNS §7).
  */
 const retryUntilMountTargetGone = <A, E extends { _tag: string }, R>(
@@ -195,7 +195,7 @@ export const MountTargetProvider = () =>
 
         // Mount targets are only enumerable per file system, so walk every
         // file system in the account/region. A file system can vanish between
-        // the enumeration and the per-FS describe — drop it.
+        // the enumeration and the per-FS describe -- drop it.
         list: () =>
           Effect.gen(function* () {
             const systems = yield* efs.describeFileSystems.items({}).pipe(
@@ -242,11 +242,11 @@ export const MountTargetProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
-          // undefined → default update path (security-group sync)
+          // undefined -> default update path (security-group sync)
         }),
 
         reconcile: Effect.fn(function* ({ news, output, session }) {
-          // 1. OBSERVE — output.mountTargetId is only a cache; fall through
+          // 1. OBSERVE -- output.mountTargetId is only a cache; fall through
           //    to the (fileSystemId, subnetId) identity if it is stale.
           let mt = output?.mountTargetId ? yield* findById(output.mountTargetId) : undefined;
           if (mt === undefined || mt.LifeCycleState === "deleted") {
@@ -256,8 +256,8 @@ export const MountTargetProvider = () =>
             mt = undefined;
           }
 
-          // 2. ENSURE — create if missing. `MountTargetConflict` means a peer
-          //    created it in the same subnet/AZ concurrently — re-observe.
+          // 2. ENSURE -- create if missing. `MountTargetConflict` means a peer
+          //    created it in the same subnet/AZ concurrently -- re-observe.
           if (mt === undefined) {
             mt = yield* efs
               .createMountTarget({
@@ -286,7 +286,7 @@ export const MountTargetProvider = () =>
 
           const mountTargetId = mt.MountTargetId;
 
-          // Wait for the network endpoint to become usable — dependents
+          // Wait for the network endpoint to become usable -- dependents
           // (e.g. a Lambda with fileSystemConfigs) fail to create against a
           // mount target that is still `creating`.
           yield* session.note(`waiting for ${mountTargetId} to be available`);
@@ -296,7 +296,7 @@ export const MountTargetProvider = () =>
               .pipe(Effect.map((r) => r.MountTargets![0])),
           );
 
-          // 3. SYNC security groups — diff the OBSERVED set against the
+          // 3. SYNC security groups -- diff the OBSERVED set against the
           //    desired one; only call the API on a real delta. When the prop
           //    is omitted the observed groups (VPC default) are left alone.
           if (news.securityGroups !== undefined) {

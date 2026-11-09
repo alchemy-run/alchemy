@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Stop and delete a composition — any broadcast to the composition's
+ * Stop and delete a composition -- any broadcast to the composition's
  * destinations ends. Compositions are addressed by the server-generated
  * ARN returned by `StartComposition`.
  *

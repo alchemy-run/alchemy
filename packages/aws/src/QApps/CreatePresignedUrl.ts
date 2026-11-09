@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { QApp } from "./QApp.ts";
 
 /**
- * Request for {@link CreatePresignedUrl} — `instanceId` and `appId` are injected from the bound Q App.
+ * Request for {@link CreatePresignedUrl} -- `instanceId` and `appId` are injected from the bound Q App.
  */
 export interface CreatePresignedUrlRequest extends Omit<
   qapps.CreatePresignedUrlInput,
@@ -19,7 +19,7 @@ export interface CreatePresignedUrlRequest extends Omit<
  * ### Files
  * **Example:** Create a Presigned Upload URL
  * ```typescript
- * // init — bind the operation to the Q App
+ * // init -- bind the operation to the Q App
  * const createPresignedUrl = yield* AWS.QApps.CreatePresignedUrl(app);
  *
  * // runtime

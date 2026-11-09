@@ -4,13 +4,13 @@ import type * as Effect from "effect/Effect";
 import type { KnowledgeBase } from "./KnowledgeBase.ts";
 
 /**
- * The `Retrieve` request with the binding-injected `knowledgeBaseId` removed —
+ * The `Retrieve` request with the binding-injected `knowledgeBaseId` removed --
  * it is supplied automatically from the bound {@link KnowledgeBase}.
  */
 export interface RetrieveRequest extends Omit<bedrock.RetrieveRequest, "knowledgeBaseId"> {}
 
 /**
- * Runtime binding for `bedrock-agent-runtime:Retrieve` — query a
+ * Runtime binding for `bedrock-agent-runtime:Retrieve` -- query a
  * {@link KnowledgeBase} for the passages most relevant to a natural-language
  * query, without generating an answer.
  *

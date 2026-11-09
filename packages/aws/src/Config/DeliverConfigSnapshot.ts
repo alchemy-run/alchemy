@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { DeliveryChannel } from "./DeliveryChannel.ts";
 
 /**
- * Runtime binding for `config:DeliverConfigSnapshot` — trigger an on-demand
+ * Runtime binding for `config:DeliverConfigSnapshot` -- trigger an on-demand
  * delivery of a configuration snapshot to the bound
  * {@link DeliveryChannel}'s S3 bucket; the channel name is injected
  * automatically. Requires a running configuration recorder.
@@ -14,7 +14,7 @@ import type { DeliveryChannel } from "./DeliveryChannel.ts";
  * ### Delivering Snapshots
  * **Example:** Deliver a Snapshot On Demand
  * ```typescript
- * // init — grants config:DeliverConfigSnapshot
+ * // init -- grants config:DeliverConfigSnapshot
  * const deliverSnapshot = yield* AWS.Config.DeliverConfigSnapshot(channel);
  *
  * // runtime

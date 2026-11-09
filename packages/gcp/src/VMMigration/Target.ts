@@ -31,7 +31,7 @@ export type TargetProps = {
   /**
    * Target project id (the `{targetProject}` segment of
    * `projects/{project}/locations/global/targetProjects/{targetProject}`).
-   * If omitted, a unique RFC1035 name is generated. Immutable — changing
+   * If omitted, a unique RFC1035 name is generated. Immutable -- changing
    * it replaces the target.
    */
   targetProjectId?: string;
@@ -42,7 +42,7 @@ export type TargetProps = {
   project?: string;
   /**
    * Free-text description. Target projects have no labels field, so
-   * Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes.
    */
   description?: string;
@@ -60,7 +60,7 @@ export type Target = Resource<
     hostProject: string;
     /** Compute Engine project this target points at. */
     project: string;
-    /** Location id — always `global`. */
+    /** Location id -- always `global`. */
     location: string;
     /** User description with the Alchemy ownership prefix stripped. */
     description: string | undefined;
@@ -96,7 +96,7 @@ export interface TargetLookup {
  * A VM Migration target project: the Compute Engine project clones and
  * cutovers land in.
  *
- * Target projects are global. They have no labels field — Alchemy stamps
+ * Target projects are global. They have no labels field -- Alchemy stamps
  * ownership into the description so `list` / nuke can find them. The
  * resource id is immutable; `project` and `description` update in place.
  *

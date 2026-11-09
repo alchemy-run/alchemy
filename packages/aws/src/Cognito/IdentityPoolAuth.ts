@@ -11,7 +11,7 @@ export interface GetIdRequest extends Omit<ci.GetIdInput, "IdentityPoolId"> {}
  * remaining calls operate on the returned identity ID.
  */
 export interface IdentityPoolAuthClient {
-  /** Mint (or look up) an identity ID for a set of logins — or for a guest
+  /** Mint (or look up) an identity ID for a set of logins -- or for a guest
    * when the pool allows unauthenticated identities. */
   getId: (request?: GetIdRequest) => Effect.Effect<ci.GetIdResponse, ci.GetIdError>;
   /** Exchange an identity ID (+ logins) for temporary AWS credentials. */
@@ -19,7 +19,7 @@ export interface IdentityPoolAuthClient {
     request: ci.GetCredentialsForIdentityInput,
   ) => Effect.Effect<ci.GetCredentialsForIdentityResponse, ci.GetCredentialsForIdentityError>;
   /** Exchange an identity ID (+ logins) for an OpenID Connect token
-   * (basic/classic flow — requires `allowClassicFlow`). */
+   * (basic/classic flow -- requires `allowClassicFlow`). */
   getOpenIdToken: (
     request: ci.GetOpenIdTokenInput,
   ) => Effect.Effect<ci.GetOpenIdTokenResponse, ci.GetOpenIdTokenError>;
@@ -30,14 +30,14 @@ export interface IdentityPoolAuthClient {
 }
 
 /**
- * Runtime binding for the public (token-based) Cognito identity pool flows —
+ * Runtime binding for the public (token-based) Cognito identity pool flows --
  * the credentials-vending data plane.
  *
  * Bind this to an `IdentityPool` inside a function runtime to exchange user
  * pool / social / OIDC tokens (or nothing, for guest access) for an identity
  * ID and temporary AWS credentials. These operations are unauthenticated
  * (Cognito does not evaluate IAM for them), so the binding grants no IAM
- * policy — it injects the identity pool ID into `getId`.
+ * policy -- it injects the identity pool ID into `getId`.
  * ### Vending AWS Credentials
  * **Example:** Guest (Unauthenticated) Credentials
  * ```typescript

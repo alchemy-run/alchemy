@@ -2,22 +2,22 @@
  * The credential-demand seam for credential-free `alchemy dev`.
  *
  * A dev run whose plan is entirely local must never touch (or prompt for)
- * cloud credentials. When the plan DOES need the cloud — a resource opted
+ * cloud credentials. When the plan DOES need the cloud -- a resource opted
  * out of local emulation via `Alchemy.remote()`, a local Worker binding
  * that proxies to a remote resource (`dev: { remote: true }`), or the
- * deletion of a row that was last reconciled live — credentials are
+ * deletion of a row that was last reconciled live -- credentials are
  * validated up front, BEFORE apply begins: the gate resolves each demanded
  * provider's credentials through the same precedence the run will use. The
  * seam never starts a login flow: missing credentials fail with the typed
  * {@link CredentialsRequired} error naming the demanding resources and
- * pointing at `alchemy profile edit` — the profile command is the only
+ * pointing at `alchemy profile edit` -- the profile command is the only
  * place logins happen.
  *
- * How deep the up-front resolution goes is PROVIDER-DEPENDENT — it runs
+ * How deep the up-front resolution goes is PROVIDER-DEPENDENT -- it runs
  * the provider's `read`, no more:
  *
  * - Cloudflare's `read` eagerly checks OAuth expiry, silently refreshes,
- *   and persists under the profile lock — so a dead refresh token fails
+ *   and persists under the profile lock -- so a dead refresh token fails
  *   here as a typed `NeedsReauth`, and child processes (which only ever
  *   read what a parent persisted) start with a warm token.
  * - AWS's `read` returns a credentials RECIPE whose inner effect stays
@@ -26,7 +26,7 @@
  *   AWS providers carry a floci-scoped environment of their own (see
  *   `AWS/Local/FlociServices.ts`) and ensure the emulator there.
  *
- * The demand scan keys on provider MODE, not plan action — noop live rows
+ * The demand scan keys on provider MODE, not plan action -- noop live rows
  * still demand (their runtime proxies need live credentials to serve), so
  * a watch restart re-runs this resolution even for an unchanged plan.
  *
@@ -56,9 +56,9 @@ import { CredentialsUnavailable, resolveProviderConfig } from "./Resolve.ts";
 export type CredentialDemandReason =
   /** The resource's resolved provider mode is `"live"` (`Alchemy.remote()`). */
   | "remote"
-  /** Binding data carries a truthy `devRemote` entry — the local runtime proxies this binding to the real cloud. */
+  /** Binding data carries a truthy `devRemote` entry -- the local runtime proxies this binding to the real cloud. */
   | "remote-binding"
-  /** The plan deletes a row stamped `providerMode: "live"` — the live provider must run to delete it. */
+  /** The plan deletes a row stamped `providerMode: "live"` -- the live provider must run to delete it. */
   | "live-delete";
 
 export interface DemandingResource {
@@ -70,7 +70,7 @@ export interface DemandingResource {
 /**
  * All the resources of one cloud provider that demand live credentials.
  * `provider` is the auth-provider name, derived from the resource Type's
- * leading namespace segment (`"AWS.S3.Bucket"` → `"AWS"`, matching the
+ * leading namespace segment (`"AWS.S3.Bucket"` -> `"AWS"`, matching the
  * name the cloud's auth provider registers under).
  */
 export interface CredentialDemand {
@@ -138,7 +138,7 @@ const describeReason = (reason: CredentialDemandReason): string => {
   }
 };
 
-/** `"AWS.S3.Bucket"` → `"AWS"` (the auth-provider name). */
+/** `"AWS.S3.Bucket"` -> `"AWS"` (the auth-provider name). */
 const cloudOf = (type: string): string => type.split(".")[0] ?? type;
 
 const resourceLines = (demand: CredentialDemand): string =>
@@ -182,7 +182,7 @@ const decodeRemoteBindingData = Schema.decodeUnknownResult(RemoteBindingData);
 
 const bindingDemandsRemote = (bindings: readonly BindingNode[] | undefined): boolean =>
   (bindings ?? []).some((binding) => {
-    // A binding being REMOVED needs no runtime proxy — the restarted
+    // A binding being REMOVED needs no runtime proxy -- the restarted
     // local instance simply no longer carries it.
     if (binding.action === "delete") return false;
     const data = decodeRemoteBindingData(binding.data);
@@ -201,7 +201,7 @@ const bindingDemandsRemote = (bindings: readonly BindingNode[] | undefined): boo
  *      (the local runtime proxies that binding to the real cloud)
  *   3. planned deletions of rows stamped `providerMode: "live"`
  *
- * Pure and side-effect-free — callers gate on the run being a dev run
+ * Pure and side-effect-free -- callers gate on the run being a dev run
  * (in a live run every dual-provider row resolves `"live"` and the
  * pre-existing lazy credential flow applies instead).
  *
@@ -240,7 +240,7 @@ export const collectCredentialDemands = (plan: Plan): CredentialDemand[] => {
 
 /**
  * Re-fail a warm-up resolution error with the demand attached, so the user
- * sees WHY a dev run wanted cloud credentials. Tags are preserved —
+ * sees WHY a dev run wanted cloud credentials. Tags are preserved --
  * consumers match `NeedsReauth`/`AuthError` by tag, never by message.
  */
 const attachDemandContext =
@@ -266,25 +266,25 @@ const attachDemandContext =
     );
 
 /**
- * Validate credentials for every demand. Never starts a login flow —
+ * Validate credentials for every demand. Never starts a login flow --
  * logging in belongs to `alchemy profile edit` exclusively:
  *
- *   - configured for the active profile → resolve the credentials through
+ *   - configured for the active profile -> resolve the credentials through
  *     the exact precedence the run will use ({@link resolveProviderConfig}:
  *     CI environment, explicit env vars, then the profile). Resolution
- *     runs the provider's `read` — how much that validates and warms is
+ *     runs the provider's `read` -- how much that validates and warms is
  *     provider-dependent (see the module header): Cloudflare eagerly
  *     refreshes and persists so a dead refresh token fails HERE as a
  *     typed {@link NeedsReauth} naming the demanding resources, while
  *     AWS's lazy credential recipe defers SSO-token failures to mid-run.
- *   - missing → typed {@link CredentialsRequired} failure with the exact
+ *   - missing -> typed {@link CredentialsRequired} failure with the exact
  *     `alchemy profile edit` invocation to run
- *   - CI → validates the provider's environment credentials directly,
+ *   - CI -> validates the provider's environment credentials directly,
  *     matching every other CI path without creating profile state
  *
  * Demands whose cloud has no registered auth provider are skipped (bare
  * engine runs with test providers demand nothing). All context is
- * resolved optionally, so the effect is safe to run in any environment —
+ * resolved optionally, so the effect is safe to run in any environment --
  * and a plan with zero demand touches no credentials at all.
  */
 export const demandCredentials = Effect.fn("Alchemy.demandCredentials")(function* (
@@ -329,12 +329,12 @@ export const demandCredentials = Effect.fn("Alchemy.demandCredentials")(function
         if (existing?.providers[auth.name] == null && !envUsable) {
           return yield* credentialsRequired(demand, profileName);
         }
-        // Something IS configured — resolve through the same precedence
+        // Something IS configured -- resolve through the same precedence
         // the run's lazy credential flow uses, so the gate can never
         // pass something resolution would later reject (or vice versa).
         // Suppressed missing-config mode turns a check/resolve race into
         // the typed tag below instead of a generic AuthError; it also
-        // mutes the env-credentials warning here — the run's own
+        // mutes the env-credentials warning here -- the run's own
         // resolution still emits it.
         const resolved = yield* resolveProviderConfig(demand.provider).pipe(
           Effect.provideService(AuthProviders, registry),
@@ -353,13 +353,13 @@ export const demandCredentials = Effect.fn("Alchemy.demandCredentials")(function
 
 /**
  * Plan-time seam for `Alchemy.remote()` rows. The planner probes every new
- * resource with its provider's `read` (engine-level adoption) — for a
+ * resource with its provider's `read` (engine-level adoption) -- for a
  * live-mode row in a dev run that is a real cloud call, made BEFORE
  * {@link demandPlanCredentials} could run in apply. Demanding here first
  * turns "nothing configured" into the typed {@link CredentialsRequired}
  * (naming the rows and the exact `alchemy profile edit` command) instead
  * of whatever raw error the first credential-less read produces. Bindings
- * and live deletions are still gated in apply — nothing reads for them
+ * and live deletions are still gated in apply -- nothing reads for them
  * during plan.
  */
 export const demandRemoteCredentials = (

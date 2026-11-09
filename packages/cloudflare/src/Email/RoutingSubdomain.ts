@@ -19,14 +19,14 @@ export interface RoutingSubdomainProps {
    * Zone the subdomain belongs to. Email Routing must be enabled on the zone
    * (see {@link Routing}).
    *
-   * Stable — moving the subdomain to another zone triggers a replacement.
+   * Stable -- moving the subdomain to another zone triggers a replacement.
    */
   zoneId: string;
   /**
    * The fully-qualified subdomain to receive mail on (e.g.
    * `in.example.com`). Must be within the zone.
    *
-   * Stable — a rename is a delete + create.
+   * Stable -- a rename is a delete + create.
    */
   name: string;
 }

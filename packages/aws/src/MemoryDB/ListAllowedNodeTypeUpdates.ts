@@ -7,7 +7,7 @@ import type { Cluster } from "./Cluster.ts";
  * Runtime binding for the `ListAllowedNodeTypeUpdates` operation (IAM action
  * `memorydb:ListAllowedNodeTypeUpdates`), scoped to one {@link Cluster}.
  *
- * Lists the node types the bound cluster can scale up or down to — e.g.
+ * Lists the node types the bound cluster can scale up or down to -- e.g.
  * right-sizing automation that checks the legal targets before calling
  * `UpdateCluster`. Provide the implementation with
  * `Effect.provide(AWS.MemoryDB.ListAllowedNodeTypeUpdatesHttp)`.

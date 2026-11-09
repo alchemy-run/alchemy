@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `organizations:ListDelegatedServicesForAccount`.
  *
  * Lists the Amazon Web Services services for which the specified account is a delegated administrator.
- * Account-level operation — Organizations is a management-account-scoped
+ * Account-level operation -- Organizations is a management-account-scoped
  * global service, so the binding takes no resource argument. Provide the
  * implementation with `Effect.provide(AWS.Organizations.ListDelegatedServicesForAccountHttp)`.
  * ### Delegated Administration & Trusted Access
  * **Example:** List an Account's Delegated Services
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listDelegatedServicesForAccount = yield* AWS.Organizations.ListDelegatedServicesForAccount();
  *
  * // runtime

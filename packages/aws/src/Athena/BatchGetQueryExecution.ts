@@ -12,7 +12,7 @@ import type { WorkGroup } from "./WorkGroup.ts";
  * ### Inspecting Query Executions
  * **Example:** Read Several Executions at Once
  * ```typescript
- * // init — bind the operation to the workgroup
+ * // init -- bind the operation to the workgroup
  * const batchGetQueryExecution =
  *   yield* AWS.Athena.BatchGetQueryExecution(workGroup);
  *

@@ -1,6 +1,6 @@
 /**
  * The one mapping from plan actions / apply statuses to brand colors and
- * icons — shared by the plan tree, the live progress view, and the plain
+ * icons -- shared by the plan tree, the live progress view, and the plain
  * logging CLI so an action never renders two different hues.
  */
 import type { ApplyStatus } from "../../../Events.ts";
@@ -67,7 +67,7 @@ export const applyStatusColor = (status: ApplyStatus | "no change"): string | un
   }
 };
 
-/** Settled states — the row will not change again. */
+/** Settled states -- the row will not change again. */
 export const isTerminalStatus = (status: ApplyStatus): boolean =>
   status === "created" ||
   status === "updated" ||

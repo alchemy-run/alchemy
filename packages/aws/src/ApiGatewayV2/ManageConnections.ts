@@ -39,7 +39,7 @@ export interface ManageConnectionsClient {
  * (`execute-api:ManageConnections`).
  *
  * Bind this to a WebSocket API {@link Stage} inside a function runtime to
- * push messages to connected clients — the flagship server-push primitive
+ * push messages to connected clients -- the flagship server-push primitive
  * for WebSocket APIs. The binding grants `execute-api:ManageConnections`
  * scoped to the stage's `@connections` ARN and targets the stage's
  * callback endpoint (`https://{apiId}.execute-api.{region}.amazonaws.com/{stage}`).

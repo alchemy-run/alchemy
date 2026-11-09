@@ -70,15 +70,15 @@ export interface DomainEventSourceProps extends EventRouteProps {
 
 /**
  * Event source connecting OpenSearch Service notifications to the hosting
- * compute. OpenSearch publishes domain lifecycle events — available and
+ * compute. OpenSearch publishes domain lifecycle events -- available and
  * completed service software updates, Auto-Tune optimizations, cluster
  * health transitions (e.g. a red cluster or blocked writes), VPC endpoint
- * changes, node retirements, and blue/green update progress — to the
+ * changes, node retirements, and blue/green update progress -- to the
  * account's default EventBridge bus (source `aws.es`); this subscribes the
  * host Function to those events so it can alert on degraded clusters or
  * auto-approve pending software updates.
  *
- * OpenSearch publishes to EventBridge automatically — no additional resource
+ * OpenSearch publishes to EventBridge automatically -- no additional resource
  * is created besides the EventBridge rule targeting the host. Provide the
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.

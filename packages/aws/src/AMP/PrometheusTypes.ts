@@ -54,7 +54,7 @@ export interface PrometheusRangeResult {
   result: PrometheusRangeSample[];
 }
 
-/** A series descriptor returned by `api/v1/series` — a full label set. */
+/** A series descriptor returned by `api/v1/series` -- a full label set. */
 export type PrometheusSeries = Record<string, string>;
 
 /** Metadata about one metric as returned by `api/v1/metadata`. */

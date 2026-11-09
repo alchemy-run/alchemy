@@ -33,7 +33,7 @@ export type MemberProps = {
 };
 
 /**
- * One `role` → `member` edge on a single resource's IAM policy — the GCP
+ * One `role` -> `member` edge on a single resource's IAM policy -- the GCP
  * analog of a Terraform `google_*_iam_member`. Only this edge is managed:
  * other members of the role, other roles, and conditional bindings are
  * left alone. Updates are etag-guarded and retried on concurrent writes.

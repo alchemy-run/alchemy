@@ -9,7 +9,7 @@ export interface GetChannelRequest extends Omit<repostspace.GetChannelInput, "sp
  * Runtime binding for the `GetChannel` operation (IAM action
  * `repostspace:GetChannel` on the space ARN).
  *
- * Reads a channel of the bound {@link Space} — its name, description,
+ * Reads a channel of the bound {@link Space} -- its name, description,
  * status, and per-accessor channel roles.
  * Provide the implementation with
  * `Effect.provide(AWS.RePostSpace.GetChannelHttp)`.

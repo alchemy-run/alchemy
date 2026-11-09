@@ -6,13 +6,13 @@ import type { Activity } from "./Activity.ts";
 export interface GetActivityTaskRequest extends Omit<sfn.GetActivityTaskInput, "activityArn"> {}
 
 /**
- * Runtime binding for `states:GetActivityTask` — the activity worker's
+ * Runtime binding for `states:GetActivityTask` -- the activity worker's
  * long-poll. Bind this operation to an {@link Activity} inside a function
  * runtime to receive scheduled activity tasks with the activity ARN
  * injected automatically.
  *
  * The call blocks for up to 60 seconds when no task is scheduled (an empty
- * `taskToken` means the poll timed out) — size the host's timeout
+ * `taskToken` means the poll timed out) -- size the host's timeout
  * accordingly. Complete the returned task with `SendTaskSuccess` /
  * `SendTaskFailure`, keeping it alive with `SendTaskHeartbeat`.
  * ### Activity Workers

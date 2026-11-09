@@ -26,7 +26,7 @@ export interface DeprecateWhatsAppFlowRequest extends Omit<
  * ### Managing WhatsApp Flows
  * **Example:** Deprecate a Flow
  * ```typescript
- * // init — bind the operation to the linked WABA
+ * // init -- bind the operation to the linked WABA
  * const deprecateFlow = yield* AWS.SocialMessaging.DeprecateWhatsAppFlow(account);
  *
  * // runtime

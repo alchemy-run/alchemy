@@ -4,7 +4,7 @@ import { collectRedactedSecrets, redactJson } from "alchemy/Util/Redaction";
  * Internal Helm rendering for `Kubernetes.HelmChart`.
  *
  * Renders a chart to plain Kubernetes objects with the local `helm` CLI
- * (`helm template` — pure local templating, no cluster connection, no
+ * (`helm template` -- pure local templating, no cluster connection, no
  * in-cluster release records), so the rendered objects flow through the same
  * server-side-apply machinery as `Kubernetes.Manifest` and the workload platforms.
  * Mirrors the `Docker` service's local-CLI dependency: the `helm` binary
@@ -22,7 +22,7 @@ import * as Stream from "effect/Stream";
 import * as YAML from "yaml";
 import type { KubernetesObjectDefinition } from "../Objects.ts";
 
-/** A Helm invocation or render failure (bad chart ref, template error, …). */
+/** A Helm invocation or render failure (bad chart ref, template error, ...). */
 export class HelmError extends Data.TaggedError("HelmError")<{
   readonly message: string;
 }> {}
@@ -131,7 +131,7 @@ export const renderHelmChart = Effect.fn(function* (options: RenderHelmChartOpti
         // an enclosing scope that closes before helm exits.
         Effect.scoped,
         // A spawn failure (almost always ENOENT) means the helm CLI itself is
-        // missing — a machine-setup problem, not a resource error.
+        // missing -- a machine-setup problem, not a resource error.
         Effect.catchCause((cause) =>
           Effect.die(
             new Error(
@@ -158,7 +158,7 @@ export const renderHelmChart = Effect.fn(function* (options: RenderHelmChartOpti
 /**
  * Whether a rendered object is a Helm lifecycle hook (`helm.sh/hook`
  * annotation). Hooks are executed by Helm at release events (pre-install,
- * pre-delete, test, …); HelmChart has no release and no hook lifecycle, so
+ * pre-delete, test, ...); HelmChart has no release and no hook lifecycle, so
  * they are filtered out rather than applied as ordinary objects.
  */
 export const isHelmHook = (object: KubernetesObjectDefinition): boolean =>
@@ -169,7 +169,7 @@ const causeText = (cause: unknown): string =>
 
 /**
  * Parse `helm template` output (multi-document YAML) into definitions.
- * Hook-annotated objects are dropped — `renderHelmChart` already passes
+ * Hook-annotated objects are dropped -- `renderHelmChart` already passes
  * `--no-hooks`, but the parser enforces the invariant independently of the
  * helm CLI's behavior.
  *
@@ -220,7 +220,7 @@ const parseRenderedManifestsSync = (
     }
     const value: unknown = document.toJS();
     // helm renders empty documents for templates that produce no output
-    // (conditionals, whitespace) — skip them.
+    // (conditionals, whitespace) -- skip them.
     if (value === null || value === undefined) continue;
     if (typeof value !== "object" || Array.isArray(value)) {
       fail(`Chart '${chart}' rendered a non-object YAML document: ${JSON.stringify(value)}`);
@@ -234,7 +234,7 @@ const parseRenderedManifestsSync = (
     }
     if (typeof object.metadata?.name !== "string") {
       fail(
-        `Chart '${chart}' rendered a ${object.apiVersion}/${object.kind} without metadata.name — server-side apply requires a concrete name (generateName is not supported)`,
+        `Chart '${chart}' rendered a ${object.apiVersion}/${object.kind} without metadata.name \u2014 server-side apply requires a concrete name (generateName is not supported)`,
       );
     }
     const definition = object as KubernetesObjectDefinition;

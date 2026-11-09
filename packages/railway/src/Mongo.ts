@@ -187,7 +187,7 @@ export interface MongoProps {
   image?: string;
   /**
    * Region for the service instance and volume (`us-west2`, `us-east4`,
-   * …). If omitted, Railway picks the default. Changing it replaces
+   * ...). If omitted, Railway picks the default. Changing it replaces
    * Mongo.
    */
   region?: string;
@@ -261,7 +261,7 @@ export type Mongo = Resource<
     publicConnectionUri: string;
     /** Latest deployment id, if one exists. */
     deploymentId: string | undefined;
-    /** Latest deployment status (`SUCCESS`, `DEPLOYING`, …). */
+    /** Latest deployment status (`SUCCESS`, `DEPLOYING`, ...). */
     deploymentStatus: string | undefined;
   },
   never,
@@ -398,9 +398,9 @@ const MongoResource = Resource<Mongo>("Railway.Mongo");
  * **Example:** Connect to an existing MongoDB
  * ```typescript
  * const db = Railway.Mongo.lookup({
- *   projectId: "a1b2c3d4-…",
- *   environmentId: "e5f6a7b8-…",
- *   serviceId: "c9d0e1f2-…",
+ *   projectId: "a1b2c3d4-...",
+ *   environmentId: "e5f6a7b8-...",
+ *   serviceId: "c9d0e1f2-...",
  * });
  * ```
  *
@@ -1166,7 +1166,7 @@ export const MongoProvider = () =>
 
       instance = (yield* waitForDeployment(environmentId, current.id)) ?? instance;
       let finalStatus = instance?.latestDeployment?.status;
-      // A deployment can wedge in DEPLOYING and never reach SUCCESS — the
+      // A deployment can wedge in DEPLOYING and never reach SUCCESS -- the
       // container may serve, but Railway keeps its per-environment operation
       // lock and the TCP proxy's routing is not committed. Converge: cancel
       // the wedged deployment, redeploy once, and insist on SUCCESS.
@@ -1225,7 +1225,7 @@ export const MongoProvider = () =>
           );
         }
       }
-      // Delete the SERVICE next — its teardown cascades onto the proxies.
+      // Delete the SERVICE next -- its teardown cascades onto the proxies.
       if (serviceId.length > 0) {
         yield* serviceDelete({ id: serviceId }).pipe(
           Effect.catchTag("RailwayNotFound", () => Effect.void),

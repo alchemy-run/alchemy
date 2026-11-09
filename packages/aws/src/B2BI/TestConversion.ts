@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `b2bi:TestConversion`.
  *
  * Synchronously converts an inline JSON or XML document into an outbound
- * X12 EDI document — the inline counterpart of an outbound transformer's
+ * X12 EDI document -- the inline counterpart of an outbound transformer's
  * conversion step. Provide the implementation with
  * `Effect.provide(AWS.B2BI.TestConversionHttp)`.
  * ### Converting Documents to EDI
  * **Example:** Convert JSON to an X12 850
  * ```typescript
- * // init — account-level, no resource argument
+ * // init -- account-level, no resource argument
  * const testConversion = yield* AWS.B2BI.TestConversion();
  *
  * // runtime
@@ -25,7 +25,7 @@ import type * as Effect from "effect/Effect";
  *     },
  *   },
  * });
- * // result.convertedFileContent — the generated X12 document
+ * // result.convertedFileContent -- the generated X12 document
  * ```
  *
  * @binding

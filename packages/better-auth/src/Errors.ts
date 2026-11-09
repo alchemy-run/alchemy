@@ -11,7 +11,7 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 const kAPIErrorHeaders = Symbol.for("better-call:api-error-headers");
 
 /**
- * Structural `APIError` detection. Deliberately not `instanceof` — the
+ * Structural `APIError` detection. Deliberately not `instanceof` -- the
  * error may originate from a different module instance (bundled better-auth
  * vs peer) or realm.
  */
@@ -51,13 +51,13 @@ export const mergeAPIErrorHeaders = (error: APIError): Headers => {
  * Better Auth throws `APIError` from `better-call`; this error carries the
  * same information as first-class fields:
  *
- * - `status` — the better-call status KEY, e.g. `"UNAUTHORIZED"` (a string)
- * - `statusCode` — the numeric HTTP status, e.g. `401`
- * - `body` — the JSON error body (`message`, `code`, ...)
- * - `headers` — merged response headers, INCLUDING the `set-cookie`
+ * - `status` -- the better-call status KEY, e.g. `"UNAUTHORIZED"` (a string)
+ * - `statusCode` -- the numeric HTTP status, e.g. `401`
+ * - `body` -- the JSON error body (`message`, `code`, ...)
+ * - `headers` -- merged response headers, INCLUDING the `set-cookie`
  *   headers better-call hides on a symbol property of the thrown error
  *
- * Match on `statusCode` (or `body.code`) — `status` is a string key, not a
+ * Match on `statusCode` (or `body.code`) -- `status` is a string key, not a
  * number.
  */
 export class BetterAuthApiError extends Data.TaggedError("BetterAuthApiError")<{
@@ -83,7 +83,7 @@ export class BetterAuthApiError extends Data.TaggedError("BetterAuthApiError")<{
 
   /**
    * Render the error as an HTTP response (status + JSON body + merged
-   * headers) — for handlers that want to pass the failure through to the
+   * headers) -- for handlers that want to pass the failure through to the
    * client exactly as Better Auth would have.
    */
   toResponse(): HttpServerResponse.HttpServerResponse {

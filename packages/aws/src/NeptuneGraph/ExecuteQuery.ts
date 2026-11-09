@@ -9,7 +9,7 @@ export interface ExecuteQueryRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `neptune-graph:ExecuteQuery` — run an openCypher query
+ * Runtime binding for `neptune-graph:ExecuteQuery` -- run an openCypher query
  * against a Neptune Analytics {@link Graph}.
  *
  * Bind this operation to a `Graph` inside a function runtime to get a
@@ -17,7 +17,7 @@ export interface ExecuteQueryRequest extends Omit<
  * data-plane query actions (`ReadDataViaQuery`, `WriteDataViaQuery`,
  * `DeleteDataViaQuery`) on the graph.
  *
- * The response `payload` is a streaming body — collect it to parse the JSON
+ * The response `payload` is a streaming body -- collect it to parse the JSON
  * result document.
  * ### Querying a Graph
  * **Example:** Run an openCypher query

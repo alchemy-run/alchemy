@@ -8,7 +8,7 @@ export interface SelectRequest extends Omit<sdb.SelectRequest, "SelectExpression
   /**
    * The select expression (`select output_list from domain [where ...]`).
    *
-   * Pass a function to receive the domain's resolved physical name — useful
+   * Pass a function to receive the domain's resolved physical name -- useful
    * because generated domain names are not known until deploy time:
    * `(domain) => \`select * from \\\`${domain}\\\`\``.
    */

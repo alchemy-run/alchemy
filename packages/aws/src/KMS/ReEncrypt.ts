@@ -13,13 +13,13 @@ export interface ReEncryptRequest extends Omit<
  * Runtime binding for `kms:ReEncrypt`.
  *
  * Re-encrypts a ciphertext under a new key (or a new encryption context)
- * entirely inside KMS — the plaintext never leaves the service. Bind the
+ * entirely inside KMS -- the plaintext never leaves the service. Bind the
  * destination KMS {@link Key} (or `alias/...` name), and optionally the
  * source key when migrating ciphertexts between keys:
  *
- * - `ReEncrypt(key)` — same-key re-encryption (e.g. rotating the encryption
+ * - `ReEncrypt(key)` -- same-key re-encryption (e.g. rotating the encryption
  *   context). Grants `kms:ReEncryptFrom` + `kms:ReEncryptTo` on the key.
- * - `ReEncrypt(destination, source)` — cross-key migration. Grants
+ * - `ReEncrypt(destination, source)` -- cross-key migration. Grants
  *   `kms:ReEncryptTo` on the destination and `kms:ReEncryptFrom` on the
  *   source, and pins `SourceKeyId` in every request.
  *

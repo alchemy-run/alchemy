@@ -9,7 +9,7 @@ export interface ListApplicationRevisionsRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `codedeploy:ListApplicationRevisions` — lists the
+ * Runtime binding for `codedeploy:ListApplicationRevisions` -- lists the
  * revisions registered with the bound application (optionally filtered by
  * S3 bucket/prefix or deployed state).
  * ### Managing Revisions

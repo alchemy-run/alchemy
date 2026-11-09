@@ -6,8 +6,8 @@ import type { Environment } from "./Environment.ts";
 /**
  * Shared scaffolding for Amazon MWAA HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the builders
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the builders
  * below. Everything except the operation and the IAM action list is
  * boilerplate: every MWAA data-plane operation is scoped to one Airflow
  * {@link Environment}, whose name is injected as `Name`.
@@ -19,7 +19,7 @@ import type { Environment } from "./Environment.ts";
  *   `arn:{partition}:airflow:{region}:{account}:environment/{name}`.
  * - Airflow-RBAC-role-scoped actions (`airflow:CreateWebLoginToken`,
  *   `airflow:InvokeRestApi`) are granted on the Airflow role ARN
- *   `arn:{partition}:airflow:{region}:{account}:role/{name}/{airflow-role}` —
+ *   `arn:{partition}:airflow:{region}:{account}:role/{name}/{airflow-role}` --
  *   MWAA maps the calling IAM identity to that Apache Airflow RBAC role.
  */
 
@@ -29,7 +29,7 @@ import type { Environment } from "./Environment.ts";
  */
 export interface AirflowRoleOptions {
   /**
-   * The Apache Airflow RBAC role the IAM grant is scoped to — MWAA maps the
+   * The Apache Airflow RBAC role the IAM grant is scoped to -- MWAA maps the
    * function's identity to this role when it calls the webserver. One of the
    * default Airflow roles (`Admin`, `Op`, `User`, `Viewer`, `Public`) or a
    * custom role defined in the environment.
@@ -81,7 +81,7 @@ export const makeMWAAEnvironmentHttpBinding = <I extends { Name: string }, A, E,
  * (`CreateWebLoginToken`, `InvokeRestApi`): the runtime callable injects the
  * bound {@link Environment}'s name as `Name` and the deploy-time half grants
  * `actions` on the Airflow role ARN
- * `arn:{partition}:airflow:{region}:{account}:role/{name}/{airflowRole}` —
+ * `arn:{partition}:airflow:{region}:{account}:role/{name}/{airflowRole}` --
  * MWAA maps the function's IAM identity to that Apache Airflow RBAC role
  * (default `Admin`).
  */

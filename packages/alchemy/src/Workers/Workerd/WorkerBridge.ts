@@ -64,7 +64,7 @@ export interface WorkerdWorkerBridgeOptions<Runtime extends WorkerRuntimeContext
   readonly entrypoint: any;
   readonly stack: { readonly name: string; readonly stage: string };
   readonly buildOptions: SharedBuildOptions;
-  /** The workerd handler methods the bridge installs (`fetch`, `queue`, …). */
+  /** The workerd handler methods the bridge installs (`fetch`, `queue`, ...). */
   readonly handlers: readonly string[];
   /** Per-event services built from workerd's execution context and env. */
   readonly services: (

@@ -7,7 +7,7 @@ import type { Pipe } from "./Pipe.ts";
  * Runtime binding for `pipes:DescribePipe`.
  *
  * Reads the bound {@link Pipe}'s full definition and live state
- * (`CurrentState`, `DesiredState`, source/enrichment/target parameters) —
+ * (`CurrentState`, `DesiredState`, source/enrichment/target parameters) --
  * e.g. an operational dashboard or a controller that checks whether the
  * pipe settled after a start/stop. The pipe name is injected from the
  * binding. Provide the implementation with
@@ -15,7 +15,7 @@ import type { Pipe } from "./Pipe.ts";
  * ### Observing a Pipe
  * **Example:** Read the Pipe's Live State
  * ```typescript
- * // init — bind the operation to the pipe
+ * // init -- bind the operation to the pipe
  * const describePipe = yield* AWS.Pipes.DescribePipe(pipe);
  *
  * // runtime

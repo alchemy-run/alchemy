@@ -65,7 +65,7 @@ export interface LifecyclePolicyEventSourceProps extends EventRouteProps {
  * default EventBridge bus (source `aws.dlm`); this subscribes the host
  * Function to those events so it can alert on stalled backup policies.
  *
- * DLM publishes to EventBridge automatically — no additional resource is
+ * DLM publishes to EventBridge automatically -- no additional resource is
  * created besides the EventBridge rule targeting the host. Provide the
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on
  * the Function effect.

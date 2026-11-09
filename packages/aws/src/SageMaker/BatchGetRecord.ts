@@ -19,7 +19,7 @@ export interface BatchGetRecordRequest {
 }
 
 /**
- * Runtime binding for `sagemaker:BatchGetRecord` — read a batch of records
+ * Runtime binding for `sagemaker:BatchGetRecord` -- read a batch of records
  * from a `FeatureGroup`'s online store in one call.
  *
  * Bind this operation to a `FeatureGroup` inside a function runtime to get a

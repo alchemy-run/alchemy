@@ -18,7 +18,7 @@ export interface GetAssociatedResourceRequest extends Omit<
  * ### Reading Associated Resources
  * **Example:** Get an Associated CloudFormation Stack
  * ```typescript
- * // init — bind the operation to the application
+ * // init -- bind the operation to the application
  * const getAssociatedResource =
  *   yield* AWS.AppRegistry.GetAssociatedResource(app);
  *

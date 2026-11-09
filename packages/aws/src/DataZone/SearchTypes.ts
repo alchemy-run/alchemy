@@ -14,7 +14,7 @@ export interface SearchTypesRequest extends Omit<datazone.SearchTypesInput, "dom
  * ### Searching the Catalog
  * **Example:** List Managed Asset Types
  * ```typescript
- * // init — bind the operation to the domain
+ * // init -- bind the operation to the domain
  * const searchTypes = yield* AWS.DataZone.SearchTypes(domain);
  *
  * // runtime

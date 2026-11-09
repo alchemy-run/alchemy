@@ -277,7 +277,7 @@ export const ClusterProvider = () =>
           }),
         reconcile: Effect.fn(function* ({ id, news: rawNews, session }) {
           // Every ClusterProps field is optional, so `Cluster("Id")` (no
-          // props object at all) is a legal instantiation — normalize.
+          // props object at all) is a legal instantiation -- normalize.
           const news = rawNews ?? {};
           const { accountId, region } = yield* AWSEnvironment.current;
           const clusterName = yield* toClusterName(id, news);
@@ -286,7 +286,7 @@ export const ClusterProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — fetch live cloud state.
+          // Observe -- fetch live cloud state.
           let described = yield* ecs.describeClusters({
             clusters: [clusterArn],
             include: ["SETTINGS", "TAGS", "CONFIGURATIONS"],
@@ -297,7 +297,7 @@ export const ClusterProvider = () =>
               (c.status === "ACTIVE" || c.status === "PROVISIONING"),
           );
 
-          // Ensure — create if missing. ECS createCluster is idempotent for
+          // Ensure -- create if missing. ECS createCluster is idempotent for
           // identical params and returns the existing cluster on conflict;
           // we always sync below regardless.
           if (!cluster?.clusterArn) {
@@ -339,7 +339,7 @@ export const ClusterProvider = () =>
               }),
             );
 
-          // Sync cluster config — call updateCluster to converge settings,
+          // Sync cluster config -- call updateCluster to converge settings,
           // configuration, and serviceConnectDefaults to desired state.
           yield* ecs
             .updateCluster({
@@ -358,14 +358,14 @@ export const ClusterProvider = () =>
               }),
             );
 
-          // Sync capacity providers — observed ↔ desired.
+          // Sync capacity providers -- observed <-> desired.
           yield* applyCapacityProviders({
             cluster: clusterArn,
             capacityProviders: news.capacityProviders,
             defaultCapacityProviderStrategy: news.defaultCapacityProviderStrategy,
           });
 
-          // Sync tags — diff observed cloud tags against desired.
+          // Sync tags -- diff observed cloud tags against desired.
           const observedTags = Object.fromEntries(
             (cluster?.tags ?? [])
               .filter(
@@ -409,7 +409,7 @@ export const ClusterProvider = () =>
           })).clusters?.find((candidate) => candidate.clusterArn === cluster);
 
           // A cluster cannot be deleted while it still contains services,
-          // running tasks, or registered container instances — empty it
+          // running tasks, or registered container instances -- empty it
           // first so deletion actually converges instead of silently
           // leaving the cluster behind.
 

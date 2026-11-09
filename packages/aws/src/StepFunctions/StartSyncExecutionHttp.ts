@@ -9,7 +9,7 @@ import { StartSyncExecution } from "./StartSyncExecution.ts";
 
 /**
  * `StartSyncExecution` must target the `sync-states.{region}` endpoint
- * (the Smithy `hostPrefix: "sync-"` endpoint trait) — the regular
+ * (the Smithy `hostPrefix: "sync-"` endpoint trait) -- the regular
  * `states.{region}` endpoint rejects it. distilled applies the host
  * prefix itself; the explicit Endpoint here additionally pins the
  * correct host for runtimes bundled against a distilled build that
@@ -24,7 +24,7 @@ const startSyncExecutionOnSyncEndpoint = Effect.gen(function* () {
   );
   const op = yield* sfn.startSyncExecution;
   // The endpoint must be pinned per call, not around the yield: the
-  // yield-time snapshot is only a fallback — the calling fiber's ambient
+  // yield-time snapshot is only a fallback -- the calling fiber's ambient
   // `Endpoint` (e.g. the runtime's `Endpoint.fromEnv`) wins over it.
   return (input: sfn.StartSyncExecutionInput) =>
     op(input).pipe(Effect.provideService(Endpoint.Endpoint, syncStatesEndpoint));

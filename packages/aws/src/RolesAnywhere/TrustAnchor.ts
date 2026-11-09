@@ -14,7 +14,7 @@ import { readRolesAnywhereTags, syncRolesAnywhereTags, toWireTags } from "./inte
 
 /**
  * Raised before any AWS call when the trust anchor's source is misconfigured
- * — exactly one of `certificateBundle` or `acmPcaArn` must be provided.
+ * -- exactly one of `certificateBundle` or `acmPcaArn` must be provided.
  */
 export class TrustAnchorSourceConflict extends Data.TaggedError("TrustAnchorSourceConflict")<{
   readonly message: string;
@@ -123,7 +123,7 @@ export interface TrustAnchorLookup {
 
 /**
  * An IAM Roles Anywhere trust anchor. A trust anchor establishes trust
- * between IAM Roles Anywhere and your certificate authority (CA) — either an
+ * between IAM Roles Anywhere and your certificate authority (CA) -- either an
  * uploaded PEM CA certificate bundle or a reference to an AWS Private CA.
  * Workloads outside AWS authenticate with certificates issued by the CA in
  * exchange for temporary AWS credentials.
@@ -286,12 +286,12 @@ export const TrustAnchorProvider = () =>
           const desiredEnabled = news.enabled ?? true;
           const desiredNotifications = toWireNotificationSettings(news.notificationSettings ?? []);
 
-          // 1. Observe — cloud state is authoritative; output caches the id.
+          // 1. Observe -- cloud state is authoritative; output caches the id.
           let live = output?.trustAnchorId
             ? yield* getById(output.trustAnchorId)
             : yield* findByName(name);
 
-          // 2. Ensure — create if missing.
+          // 2. Ensure -- create if missing.
           if (live === undefined) {
             const created = yield* rolesanywhere.createTrustAnchor({
               name,
@@ -303,7 +303,7 @@ export const TrustAnchorProvider = () =>
             });
             live = created.trustAnchor;
           } else {
-            // 3. Sync — converge name/source, then the enabled flag.
+            // 3. Sync -- converge name/source, then the enabled flag.
             const desiredName = news.trustAnchorName ?? live.name!;
             if (live.name !== desiredName || sourceDrift(live.source, source)) {
               const updated = yield* rolesanywhere.updateTrustAnchor({
@@ -315,7 +315,7 @@ export const TrustAnchorProvider = () =>
             }
           }
 
-          // 3a. Sync notification settings — diff the OBSERVED settings
+          // 3a. Sync notification settings -- diff the OBSERVED settings
           // against the desired set. AWS installs default settings that must
           // not be touched unless the user manages that event/channel, so
           // resets are driven by the settings previously declared in `olds`
@@ -356,7 +356,7 @@ export const TrustAnchorProvider = () =>
           }
 
           if ((live.enabled ?? false) !== desiredEnabled) {
-            // The enable/disable response can echo the pre-toggle state — the
+            // The enable/disable response can echo the pre-toggle state -- the
             // successful call itself is authoritative for the flag.
             yield* desiredEnabled
               ? rolesanywhere.enableTrustAnchor({

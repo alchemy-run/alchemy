@@ -15,7 +15,7 @@ export interface UpdateChatControlsConfigurationRequest extends Omit<
  * Runtime binding for the `UpdateChatControlsConfiguration` operation (IAM action
  * `qbusiness:UpdateChatControlsConfiguration`), scoped to one {@link Application}.
  *
- * Updates the application's chat controls — response scope, blocked
+ * Updates the application's chat controls -- response scope, blocked
  * phrases, topic rules, creator mode, and hallucination reduction.
  * Provide the implementation with
  * `Effect.provide(AWS.QBusiness.UpdateChatControlsConfigurationHttp)`.

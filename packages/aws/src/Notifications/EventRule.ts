@@ -63,7 +63,7 @@ export interface EventRule extends Resource<
 > {}
 
 /**
- * An AWS User Notifications **event rule** — attaches an EventBridge
+ * An AWS User Notifications **event rule** -- attaches an EventBridge
  * source/event-type (optionally narrowed by an event pattern) to a
  * {@link NotificationConfiguration}, across one or more regions.
  *
@@ -111,7 +111,7 @@ const sameRegions = (a: readonly string[], b: readonly string[]): boolean =>
 
 /**
  * Poll a rule until no region is in a transitional state (`CREATING` /
- * `UPDATING` / `DELETING`). Bounded and fail-open — regional propagation
+ * `UPDATING` / `DELETING`). Bounded and fail-open -- regional propagation
  * completes in seconds and a still-pending region is not an error.
  *
  * Expressed as an explicitly-typed helper: inlining `Effect.repeat` in the
@@ -215,7 +215,7 @@ export const EventRuleProvider = () =>
       return EventRule.Provider.of({
         stables: ["eventRuleArn", "notificationConfigurationArn", "source", "eventType"],
 
-        // Sub-resource keyed by its parent notification configuration —
+        // Sub-resource keyed by its parent notification configuration --
         // there is no account-wide enumeration without a parent ARN.
         list: () => Effect.succeed([]),
 
@@ -229,7 +229,7 @@ export const EventRuleProvider = () =>
                   olds.eventType,
                 )
               : undefined;
-          // Event rules are not taggable, so ownership can't be verified —
+          // Event rules are not taggable, so ownership can't be verified --
           // identity via the parent-scoped (source, eventType) signature.
           return found ? toAttrs(found) : undefined;
         }),
@@ -249,7 +249,7 @@ export const EventRuleProvider = () =>
         reconcile: Effect.fn(function* ({ news, output, session }) {
           const desiredPattern = toPatternString(news.eventPattern);
 
-          // OBSERVE — cloud state is authoritative; the cached ARN falls
+          // OBSERVE -- cloud state is authoritative; the cached ARN falls
           // through to a parent-scoped signature scan.
           let live = output?.eventRuleArn
             ? yield* getByArn(output.eventRuleArn)
@@ -259,12 +259,12 @@ export const EventRuleProvider = () =>
                 news.eventType,
               );
 
-          // ENSURE — create when missing; ConflictException means a peer
-          // created the same rule concurrently → re-observe.
+          // ENSURE -- create when missing; ConflictException means a peer
+          // created the same rule concurrently -> re-observe.
           if (live === undefined) {
             // Retry the transitional lock (a sibling rule still DELETING);
             // a conflict that persists past the budget means the same rule
-            // already exists → re-observe by signature.
+            // already exists -> re-observe by signature.
             const created = yield* notifications
               .createEventRule({
                 notificationConfigurationArn: news.notificationConfigurationArn,
@@ -288,7 +288,7 @@ export const EventRuleProvider = () =>
           }
           const arn = live!.arn;
 
-          // SYNC — diff observed eventPattern/regions against desired and
+          // SYNC -- diff observed eventPattern/regions against desired and
           // apply only the delta.
           if (live!.eventPattern !== desiredPattern || !sameRegions(live!.regions, news.regions)) {
             yield* notifications
@@ -311,15 +311,15 @@ export const EventRuleProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // Idempotent — the parent configuration's deletion cascades rules,
+          // Idempotent -- the parent configuration's deletion cascades rules,
           // so the rule may already be gone. A ConflictException means a
-          // sibling mutation is still settling — retry through it.
+          // sibling mutation is still settling -- retry through it.
           yield* notifications.deleteEventRule({ arn: output.eventRuleArn }).pipe(
             pinNotificationsRegion,
             retryWhileConflict,
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
           );
-          // Deletion is asynchronous — wait until the rule is actually gone
+          // Deletion is asynchronous -- wait until the rule is actually gone
           // so follow-up mutations on the configuration don't hit the
           // transitional lock (bounded, fail-open).
           yield* pollUntilGone(getByArn(output.eventRuleArn));

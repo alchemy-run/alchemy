@@ -2,7 +2,7 @@ import * as NodePath from "node:path";
 // Alchemy modifications are licensed under Apache-2.0.
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 /**
- * `@alchemy.run/frontend-frameworks/sveltekit/cloudflare` — the Cloudflare Workers deploy
+ * `@alchemy.run/frontend-frameworks/sveltekit/cloudflare` -- the Cloudflare Workers deploy
  * target for `@alchemy.run/frontend-frameworks/sveltekit`.
  *
  * Everything Cloudflare-specific lives here (and in the modules this file
@@ -14,7 +14,7 @@ import * as NodePath from "node:path";
  *
  * The default export is the target factory the framework package applies to
  * the config it assembles from `SvelteKitOptions`
- * (`resolveDeployTarget(root, target, config)` — a value, a factory, or this
+ * (`resolveDeployTarget(root, target, config)` -- a value, a factory, or this
  * module's specifier).
  */
 import cloudflare from "@alchemy.run/cloudflare-runtime/rolldown";
@@ -51,19 +51,19 @@ const fail = (message: string, cause?: unknown) =>
 /**
  * Create the Cloudflare Workers {@link SvelteKitTarget}:
  *
- * - `adapter(context)` — the in-memory, wrangler-free fork of
+ * - `adapter(context)` -- the in-memory, wrangler-free fork of
  *   `@sveltejs/adapter-cloudflare` (always Workers mode; generates the worker
  *   shim with real relative imports). In dev it supplies the proxy-backed
  *   `platform`: `context.dev.bindings` (cloudflare-runtime binding hooks)
  *   served through `getPlatformProxy`'s workerd instance, `context.dev.env`
  *   literals overriding same-named proxied values, a `caches` that actually
  *   round-trips, and wrangler-parity `cf`/`ctx` mocks.
- * - `finish(output, context)` — re-bundles the adapter's unbundled
+ * - `finish(output, context)` -- re-bundles the adapter's unbundled
  *   `_worker.js` (and the whole `.svelte-kit/output/server` graph it imports)
  *   for workerd, replacing the bundling `wrangler deploy` performs for the
  *   upstream adapter. Produces entry-first `serverModules` plus the external
  *   workspace set.
- * - `bundle` — workerd resolve conditions and the `cloudflare:` externals.
+ * - `bundle` -- workerd resolve conditions and the `cloudflare:` externals.
  */
 export const makeCloudflareTarget = (config: SvelteKitTargetConfig = {}): SvelteKitTarget =>
   makeDeployTarget({
@@ -174,7 +174,7 @@ export const makeCloudflareTarget = (config: SvelteKitTargetConfig = {}): Svelte
 
 /**
  * The deploy-target module contract (`resolveDeployTarget` accepts the
- * default export — or the named `target` export — as a value or factory).
+ * default export -- or the named `target` export -- as a value or factory).
  */
 export const target = makeCloudflareTarget;
 

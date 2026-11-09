@@ -24,13 +24,13 @@ import {
 
 export type SpecialistPoolProps = {
   /**
-   * Region (`us-central1`, …). Immutable — changing it replaces the pool.
+   * Region (`us-central1`, ...). Immutable -- changing it replaces the pool.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
    * User-facing display name. Must be unique per project. Specialist pools
-   * have no labels field, so Alchemy ownership is stored in a `[alchemy …]`
+   * have no labels field, so Alchemy ownership is stored in a `[alchemy ...]`
    * prefix.
    */
   displayName?: string;
@@ -74,7 +74,7 @@ export type SpecialistPool = Resource<
 /**
  * A Vertex AI SpecialistPool of managers and workers for data labeling.
  *
- * Specialist pools have no labels field — Alchemy stamps ownership into
+ * Specialist pools have no labels field -- Alchemy stamps ownership into
  * the display name. Location is immutable. Manager and worker emails
  * update in place.
  *

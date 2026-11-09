@@ -4,8 +4,8 @@ import * as AWSBindings from "../AWSBindings.ts";
 /**
  * Shared HTTP scaffolding for the Polly runtime bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, makePollyHttpBinding({ … }))` over the builder
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, makePollyHttpBinding({ ... }))` over the builder
  * below. Everything except the operation and the IAM action is boilerplate.
  *
  * Per the `polly` service authorization reference, only the lexicon

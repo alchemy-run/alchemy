@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `organizations:DeclineHandshake`.
  *
  * Declines a pending handshake, ending the invitation from the recipient side; the originator can no longer act on it.
- * Account-level operation — Organizations is a management-account-scoped
+ * Account-level operation -- Organizations is a management-account-scoped
  * global service, so the binding takes no resource argument. Provide the
  * implementation with `Effect.provide(AWS.Organizations.DeclineHandshakeHttp)`.
  * ### Handshakes & Invitations
  * **Example:** Decline an Invitation
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const declineHandshake = yield* AWS.Organizations.DeclineHandshake();
  *
  * // runtime

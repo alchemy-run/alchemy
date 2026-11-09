@@ -56,7 +56,7 @@ export interface DeploymentConfigProps {
    */
   deploymentConfigName?: string;
   /**
-   * The compute platform the configuration applies to. Immutable — changing
+   * The compute platform the configuration applies to. Immutable -- changing
    * it replaces the configuration.
    * @default "Server"
    */
@@ -108,7 +108,7 @@ export interface DeploymentConfigLookup {
 }
 
 /**
- * A custom AWS CodeDeploy deployment configuration — the rules for how
+ * A custom AWS CodeDeploy deployment configuration -- the rules for how
  * traffic shifts during a deployment (canary/linear traffic routing for
  * `Lambda`/`ECS`, minimum-healthy-hosts and zonal rollout for `Server`).
  * Deployment configurations are immutable: any change replaces the
@@ -176,7 +176,7 @@ export const DeploymentConfigProvider = () =>
           if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
-          // Deployment configurations are immutable — any settings change
+          // Deployment configurations are immutable -- any settings change
           // replaces the configuration.
           const key = (props: Partial<DeploymentConfigProps>) =>
             JSON.stringify([
@@ -208,7 +208,7 @@ export const DeploymentConfigProvider = () =>
           const config = yield* getConfig(name);
           if (config?.deploymentConfigId === undefined) return undefined;
           // Deployment configurations cannot be tagged, so there is no
-          // ownership marker to check — a name match is treated as ours.
+          // ownership marker to check -- a name match is treated as ours.
           return {
             deploymentConfigName: config.deploymentConfigName ?? name,
             deploymentConfigId: config.deploymentConfigId,
@@ -222,10 +222,10 @@ export const DeploymentConfigProvider = () =>
           const name = output?.deploymentConfigName ?? (yield* toName(id, news));
           const computePlatform = news.computePlatform ?? "Server";
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let config = yield* getConfig(name);
 
-          // 2. Ensure — create if missing (configs are immutable, so there
+          // 2. Ensure -- create if missing (configs are immutable, so there
           //    is nothing to sync). Tolerate an already-exists race.
           if (config?.deploymentConfigId === undefined) {
             yield* codedeploy
@@ -254,7 +254,7 @@ export const DeploymentConfigProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           // A config still referenced by a deployment group fails with
-          // DeploymentConfigInUseException — the engine deletes dependents
+          // DeploymentConfigInUseException -- the engine deletes dependents
           // first, but the reference release is eventually consistent, so
           // retry through it (bounded). Deleting a non-existent config
           // succeeds (no not-found variant in the typed error union).
@@ -282,7 +282,7 @@ export const DeploymentConfigProvider = () =>
             return (
               names
                 // Predefined CodeDeployDefault.* configurations are
-                // AWS-managed and cannot be deleted — never ours.
+                // AWS-managed and cannot be deleted -- never ours.
                 .filter((name) => !name.startsWith("CodeDeployDefault."))
                 .map((name) => ({
                   deploymentConfigName: name,

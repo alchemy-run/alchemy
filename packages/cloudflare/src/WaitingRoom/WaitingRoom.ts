@@ -71,7 +71,7 @@ export interface Route {
 
 export interface Props {
   /**
-   * Zone the waiting room belongs to. Stable — changing the zone triggers
+   * Zone the waiting room belongs to. Stable -- changing the zone triggers
    * a replacement.
    */
   zoneId: string;
@@ -110,7 +110,7 @@ export interface Props {
    */
   description?: string;
   /**
-   * Lifetime of a cookie (in minutes, 1–30) set for users who get access
+   * Lifetime of a cookie (in minutes, 1-30) set for users who get access
    * to the route. Mutable.
    * @default 5
    */
@@ -139,7 +139,7 @@ export interface Props {
    */
   queueingStatusCode?: QueueingStatusCode;
   /**
-   * Suspends the waiting room — traffic flows straight to the route.
+   * Suspends the waiting room -- traffic flows straight to the route.
    * Mutable.
    * @default false
    */
@@ -226,7 +226,7 @@ export interface Attributes {
 export type WaitingRoom = Resource<TypeId, Props, Attributes, never, Providers>;
 
 /**
- * A Cloudflare Waiting Room — places visitors in a virtual queue when
+ * A Cloudflare Waiting Room -- places visitors in a virtual queue when
  * traffic to a host + path exceeds the configured thresholds, protecting
  * the origin from overload.
  *
@@ -239,7 +239,7 @@ export type WaitingRoom = Resource<TypeId, Props, Attributes, never, Providers>;
  *
  * Everything except the zone is mutable in place via a full-body PUT.
  * Waiting rooms carry no ownership markers, so when state is lost `read`
- * matches by name and reports the room as `Unowned` — the engine refuses
+ * matches by name and reports the room as `Unowned` -- the engine refuses
  * to take it over unless `--adopt` (or `adopt(true)`) is set.
  * ### Creating a Waiting Room
  * **Example:** Basic waiting room on a host
@@ -321,7 +321,7 @@ export const WaitingRoomProvider = () =>
         if (observed) return toAttributes(observed, zoneId);
       }
 
-      // Cold read — recover from lost state by matching the deterministic
+      // Cold read -- recover from lost state by matching the deterministic
       // physical name. Waiting rooms carry no ownership markers, so report
       // the match as `Unowned` and let the adopt policy gate takeover.
       const name = yield* createRoomName(id, olds?.name);
@@ -335,7 +335,7 @@ export const WaitingRoomProvider = () =>
       const zoneId = news.zoneId as string;
       const name = yield* createRoomName(id, news.name);
 
-      // 1. Observe — the id cached on `output` is a hint, not a guarantee:
+      // 1. Observe -- the id cached on `output` is a hint, not a guarantee:
       //    a missing room falls through to the name scan and then to create.
       let observed = output?.waitingRoomId
         ? yield* getRoom(zoneId, output.waitingRoomId)
@@ -344,7 +344,7 @@ export const WaitingRoomProvider = () =>
         observed = yield* findByName(zoneId, name);
       }
 
-      // 2. Ensure — create with the full desired body when missing.
+      // 2. Ensure -- create with the full desired body when missing.
       if (!observed) {
         const created = yield* waitingRooms.createWaitingRoom({
           zoneId,
@@ -354,7 +354,7 @@ export const WaitingRoomProvider = () =>
         return toAttributes(created, zoneId);
       }
 
-      // 3. Sync — the update API is a full-body PUT; diff observed cloud
+      // 3. Sync -- the update API is a full-body PUT; diff observed cloud
       //    state against the desired body and skip the call on a no-op.
       const desired = desiredBody(news);
       if (!isDirty(observed, name, desired)) {
@@ -376,10 +376,10 @@ export const WaitingRoomProvider = () =>
           waitingRoomId: output.waitingRoomId,
         })
         .pipe(
-          // Already gone (code 1001) — deletion is idempotent.
+          // Already gone (code 1001) -- deletion is idempotent.
           Effect.catchTags({
             WaitingRoomNotFound: () => Effect.void,
-            // Zone deleted out-of-band — the room is gone with it.
+            // Zone deleted out-of-band -- the room is gone with it.
             InvalidRoute: () => Effect.void,
           }),
         );
@@ -388,7 +388,7 @@ export const WaitingRoomProvider = () =>
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       // Waiting rooms live inside a zone with no account-wide enumeration
-      // API — fan out across every zone and list rooms per zone, then
+      // API -- fan out across every zone and list rooms per zone, then
       // exhaustively paginate each.
       const zones = yield* listAllZones(accountId);
       const rows = yield* Effect.forEach(
@@ -440,7 +440,7 @@ const findByName = (zoneId: string, name: string) =>
     Effect.map((chunk) =>
       Array.from(chunk).find((room): room is ObservedRoom => room.name === name),
     ),
-    // Zone deleted out-of-band — nothing to find.
+    // Zone deleted out-of-band -- nothing to find.
     Effect.catchTag("InvalidRoute", () => Effect.undefined),
   );
 
@@ -455,7 +455,7 @@ const createRoomName = (id: string, name: string | undefined) =>
 /**
  * The full desired body sent on create and PUT update. Optional props are
  * omitted when unspecified so Cloudflare applies (or resets to) its
- * defaults — sending Advanced-only fields explicitly would fail on
+ * defaults -- sending Advanced-only fields explicitly would fail on
  * non-Advanced plans.
  */
 const desiredBody = (news: Props) => ({
@@ -483,7 +483,7 @@ const desiredBody = (news: Props) => ({
 });
 
 /**
- * Cloudflare defaults for props with a documented default — used so that a
+ * Cloudflare defaults for props with a documented default -- used so that a
  * prop the user removed from the program converges back to the default.
  */
 const DEFAULTS = {

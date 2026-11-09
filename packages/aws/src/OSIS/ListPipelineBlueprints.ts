@@ -5,15 +5,15 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `osis:ListPipelineBlueprints`.
  *
- * Lists the available Data Prepper blueprints — AWS-provided configuration
- * templates for common source/sink topologies — so config-authoring tooling
+ * Lists the available Data Prepper blueprints -- AWS-provided configuration
+ * templates for common source/sink topologies -- so config-authoring tooling
  * can offer them as starting points. Account-level: no resource argument.
  * Provide the implementation with
  * `Effect.provide(AWS.OSIS.ListPipelineBlueprintsHttp)`.
  * ### Authoring Pipeline Configurations
  * **Example:** List Available Blueprints
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listPipelineBlueprints = yield* AWS.OSIS.ListPipelineBlueprints();
  *
  * // runtime

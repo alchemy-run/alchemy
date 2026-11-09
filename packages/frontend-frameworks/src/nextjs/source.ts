@@ -5,14 +5,14 @@ import { createRequire } from "node:module";
  * (`@alchemy.run/frontend-frameworks/nextjs/source`).
  *
  * The default export implements alchemy's `WorkerSourceModule` contract
- * (`packages/cloudflare/src/Workers/Source.ts`) **structurally** —
+ * (`packages/cloudflare/src/Workers/Source.ts`) **structurally** --
  * this package deliberately does not import alchemy types. The shapes
  * mirrored here are:
  *
- * - `WorkerSourceModule` — `{ make(options) => Effect<SourceProvider> }`
- * - `SourceProvider` — `{ ownsAssets, build(ctx), hash(ctx, previous), dev(ctx) }`
- * - `SourceBuildOutput` — `{ bundle: { files, hash }, assets: AssetReadResult, hash }`
- * - `AssetReadResult` — the manifest shape alchemy's asset uploader consumes
+ * - `WorkerSourceModule` -- `{ make(options) => Effect<SourceProvider> }`
+ * - `SourceProvider` -- `{ ownsAssets, build(ctx), hash(ctx, previous), dev(ctx) }`
+ * - `SourceBuildOutput` -- `{ bundle: { files, hash }, assets: AssetReadResult, hash }`
+ * - `AssetReadResult` -- the manifest shape alchemy's asset uploader consumes
  *   (per-file hash = sha256 hex truncated to 32 chars, the Workers Assets
  *   API's content-address format)
  *
@@ -20,7 +20,7 @@ import { createRequire } from "node:module";
  * wrangler-free pipeline in `Nextjs.ts`): server modules become the worker
  * bundle (entry first), `.open-next/assets` becomes the static-assets
  * manifest, and the project tree is content-hashed for rebuild-free diffs.
- * `hash()` never builds — it recomputes the input-tree hash (including this
+ * `hash()` never builds -- it recomputes the input-tree hash (including this
  * package's version, so an adapter upgrade busts the memo). `dev()` is v1
  * preview parity: the built worker served under cloudflare-runtime (workerd);
  * ISR revalidation writes are a documented no-op (read-only static-assets
@@ -42,9 +42,9 @@ const packageVersion: string = createRequire(import.meta.url)("../../package.jso
 
 const PROVIDER = "@alchemy.run/frontend-frameworks/nextjs/source";
 
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 // Structural mirrors of alchemy's Source.ts contract
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 
 /**
  * Structural mirror of alchemy's `Cloudflare.Workers.SourceProviderError`
@@ -127,7 +127,7 @@ export interface DevContext extends SourceContext {
     >;
   };
   /**
-   * The host's runtime stack (a `Context.Context<RuntimeServices>`) — the
+   * The host's runtime stack (a `Context.Context<RuntimeServices>`) -- the
    * dev binding proxy is hosted in it instead of the credential-free
    * internal layer, so `Alchemy.remote()` bindings resolve in dev.
    */
@@ -159,9 +159,9 @@ export interface SourceProvider {
   ) => Effect.Effect<SourceDevHandle, SourceError, SourceServices | Scope.Scope>;
 }
 
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 // Options
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 
 /**
  * Controls which project files are content-hashed to decide whether the
@@ -184,7 +184,7 @@ export interface NextjsMemoOptions {
 
 /**
  * The JSON-serializable options of the `@alchemy.run/frontend-frameworks/nextjs/source`
- * descriptor (`WorkerProps.source.options`). Must stay JSON-stable — the
+ * descriptor (`WorkerProps.source.options`). Must stay JSON-stable -- the
  * descriptor persists in state and participates in the Worker metadata hash.
  */
 export interface NextjsSourceOptions {
@@ -213,11 +213,11 @@ export interface NextjsSourceOptions {
     | {
         /**
          * - `"preview"` (default): build the OpenNext worker and serve it
-         *   under `cloudflare-runtime` (workerd) — production parity, no HMR.
+         *   under `cloudflare-runtime` (workerd) -- production parity, no HMR.
          * - `"hmr"`: run the real `next dev` (Turbopack HMR) in Node with the
          *   worker's bindings proxied from `cloudflare-runtime` onto
          *   OpenNext's `getCloudflareContext()` contract. App code runs in
-         *   Node, not workerd — CF-specific runtime behavior and ISR/caching
+         *   Node, not workerd -- CF-specific runtime behavior and ISR/caching
          *   semantics still need `"preview"`.
          * @default "preview"
          */
@@ -226,9 +226,9 @@ export interface NextjsSourceOptions {
     | undefined;
 }
 
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 // Hashing helpers (mirroring alchemy's Memo.ts / Assets.ts semantics)
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 
 const sha256Hex = (input: string | Uint8Array): Effect.Effect<string> =>
   Effect.sync(() => NodeCrypto.createHash("sha256").update(input).digest("hex"));
@@ -285,7 +285,7 @@ const globToRegExp = (glob: string): RegExp => {
 
 /**
  * Directories that are never inputs: VCS metadata and this integration's own
- * build outputs. Pruning them is load-bearing — `build()` writes `.next`,
+ * build outputs. Pruning them is load-bearing -- `build()` writes `.next`,
  * `.open-next`, and `dist` into the project root, so hashing them would make
  * every deploy dirty its own memo.
  */
@@ -437,9 +437,9 @@ const hashInputTree = Effect.fn(function* (
   );
 });
 
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 // Assets (mirror of alchemy's readAssets manifest semantics)
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 
 const MAX_ASSET_SIZE = 1024 * 1024 * 25; // 25MB (Workers Assets limit)
 const MAX_ASSET_COUNT = 20_000;
@@ -527,9 +527,9 @@ const readClientAssets = Effect.fn(function* (
   } satisfies SourceAssets;
 });
 
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 // The provider
-// ─────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 
 const assetsConfigOf = (ctx: SourceContext): Record<string, unknown> | undefined =>
   ctx.assets !== undefined && typeof ctx.assets !== "string"
@@ -557,8 +557,8 @@ const withFramework = <A, E, R>(
  * The production build runs in a disposable child process with
  * `cwd = project root` (see `core/BuildChild.ts`). The OpenNext pipeline
  * itself already runs in its own child (`runner.mjs`, nested inside this
- * one), but the surrounding steps — `open-next.config.ts` handling, the
- * final bundle pass, cache population — execute framework/user code that
+ * one), but the surrounding steps -- `open-next.config.ts` handling, the
+ * final bundle pass, cache population -- execute framework/user code that
  * must not run in the engine process either. The shared `core/BuildChildRunner`
  * entry imports this module in the child and calls the exported
  * {@link buildInChild}.
@@ -673,7 +673,7 @@ const makeProvider = (options: NextjsSourceOptions): SourceProvider => {
     }),
 
     // Rebuild-free: the input-tree hash is the change signal (like the vite
-    // source). `previous` is never consulted — state can be stale/foreign.
+    // source). `previous` is never consulted -- state can be stale/foreign.
     hash: Effect.fn(function* (ctx, _previous) {
       const root = yield* resolveRoot();
       return { input: yield* hashInputTree(root, options, ctx.dotAlchemy) };
@@ -684,7 +684,7 @@ const makeProvider = (options: NextjsSourceOptions): SourceProvider => {
     // (workerd) with the alchemy-managed binding wiring. No HMR; ISR
     // revalidation writes are a no-op.
     // With `options.dev.mode: "hmr"`, the Framework instead runs the real
-    // `next dev` (Turbopack HMR) in Node — the alchemy-managed bindings are
+    // `next dev` (Turbopack HMR) in Node -- the alchemy-managed bindings are
     // proxied through cloudflare-runtime's platform proxy onto OpenNext's
     // getCloudflareContext() contract.
     dev: Effect.fn(function* (ctx) {
@@ -692,7 +692,7 @@ const makeProvider = (options: NextjsSourceOptions): SourceProvider => {
       const queueConsumers = yield* ctx.worker.queueConsumers;
       const devOptions: Nextjs.NextjsFrameworkOptions = {
         ...frameworkOptions(ctx),
-        // The host's runtime stack (includes remote-bindings support) — the
+        // The host's runtime stack (includes remote-bindings support) -- the
         // dev binding proxy is hosted in it instead of the credential-free
         // internal layer, so `Alchemy.remote()` bindings resolve in dev.
         services: ctx.runtimeContext,

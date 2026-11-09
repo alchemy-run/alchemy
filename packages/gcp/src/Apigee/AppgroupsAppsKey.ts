@@ -29,26 +29,26 @@ import {
 export type AppgroupsAppsKeyProps = {
   /**
    * Apigee organization id or `organizations/{org}`. Defaults to the
-   * current GCP project id. Immutable — changing it replaces the key.
+   * current GCP project id. Immutable -- changing it replaces the key.
    */
   organization?: string;
   /**
    * Parent AppGroup name or `organizations/{org}/appgroups/{appgroup}`.
-   * Immutable — changing it replaces the key.
+   * Immutable -- changing it replaces the key.
    */
   appGroup: string;
   /**
-   * Parent AppGroup app name or full resource name. Immutable — changing
+   * Parent AppGroup app name or full resource name. Immutable -- changing
    * it replaces the key.
    */
   app: string;
   /**
-   * Consumer key. If omitted, a unique key is generated. Immutable —
+   * Consumer key. If omitted, a unique key is generated. Immutable --
    * changing it replaces the key.
    */
   consumerKey?: string;
   /**
-   * Consumer secret. If omitted, a unique secret is generated. Immutable —
+   * Consumer secret. If omitted, a unique secret is generated. Immutable --
    * changing it replaces the key.
    */
   consumerSecret?: string;
@@ -115,7 +115,7 @@ export type AppgroupsAppsKey = Resource<
  * A custom consumer key and secret for an Apigee AppGroup app.
  *
  * Apigee keys have no labels field, so Alchemy stamps ownership into
- * custom attributes for `list` / nuke. The consumer key is identity —
+ * custom attributes for `list` / nuke. The consumer key is identity --
  * changing it replaces the key. Scopes, API products, status, and
  * attributes update in place.
  *

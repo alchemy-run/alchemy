@@ -31,7 +31,7 @@ import { waitForOperation } from "./operations.ts";
 export type AppsServicesVersionProps = {
   /**
    * App Engine application id. Defaults to the current GCP project.
-   * Immutable — changing it replaces the version.
+   * Immutable -- changing it replaces the version.
    */
   appsId?: string;
   /**
@@ -42,11 +42,11 @@ export type AppsServicesVersionProps = {
   /**
    * Version id (lowercase letters, numbers, hyphens). Reserved names
    * `default`, `latest`, and `ah-*` are rejected. If omitted, a unique
-   * id is generated. Immutable — changing it replaces the version.
+   * id is generated. Immutable -- changing it replaces the version.
    */
   versionId?: string;
   /**
-   * Runtime (for example `python311`, `nodejs20`). Immutable — changing
+   * Runtime (for example `python311`, `nodejs20`). Immutable -- changing
    * it replaces the version.
    */
   runtime?: string;
@@ -60,7 +60,7 @@ export type AppsServicesVersionProps = {
    */
   servingStatus?: appengine.VersionServingStatusEnum | (string & {});
   /**
-   * Instance class (`F1`, `F2`, `B1`, …).
+   * Instance class (`F1`, `F2`, `B1`, ...).
    */
   instanceClass?: string;
   /**
@@ -70,7 +70,7 @@ export type AppsServicesVersionProps = {
    */
   envVariables?: Record<string, string | undefined>;
   /**
-   * Code and artifacts that make up this version. Immutable — changing
+   * Code and artifacts that make up this version. Immutable -- changing
    * it replaces the version.
    */
   deployment?: appengine.Deployment;
@@ -169,7 +169,7 @@ export type AppsServicesVersion = Resource<
  * App Engine versions have no labels field, so Alchemy stamps ownership
  * into the `ALCHEMY_OWNERSHIP` environment variable for `list` / nuke.
  * Application, service, version id, runtime, environment, and
- * deployment are identity — changing any of them replaces the version.
+ * deployment are identity -- changing any of them replaces the version.
  * Serving status, instance class, and scaling update in place.
  *
  * ### Creating a Version

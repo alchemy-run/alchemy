@@ -13,7 +13,7 @@ type TypeId = typeof TypeId;
 
 export type CustomNameserversProps = {
   /**
-   * Zone whose account-level custom nameserver usage is managed. Stable —
+   * Zone whose account-level custom nameserver usage is managed. Stable --
    * changing the zone triggers a replacement (the old zone's configuration
    * is restored to the value it had before Alchemy managed it).
    */
@@ -23,17 +23,17 @@ export type CustomNameserversProps = {
    * of the Cloudflare-assigned nameservers.
    *
    * Enabling requires an account-level custom nameserver set to already be
-   * configured (Business/Enterprise) — otherwise Cloudflare rejects the
+   * configured (Business/Enterprise) -- otherwise Cloudflare rejects the
    * update with the typed `CustomNameserverSetNotFound` error.
    *
-   * Mutable — applied in place.
+   * Mutable -- applied in place.
    */
   enabled: boolean;
   /**
    * The number of the account custom nameserver set to assign to the zone.
    * Only meaningful when `enabled` is `true`.
    *
-   * Mutable — applied in place.
+   * Mutable -- applied in place.
    *
    * @default 1 (Cloudflare's default nameserver set)
    */
@@ -69,7 +69,7 @@ export type CustomNameservers = Resource<
  * Controls whether a Cloudflare zone uses **account-level custom
  * nameservers** (ACNS, `/zones/{zone_id}/custom_ns`).
  *
- * This configuration is a zone singleton — it always exists on every zone
+ * This configuration is a zone singleton -- it always exists on every zone
  * (disabled by default), so the resource never creates or deletes anything
  * physical. Reconcile applies the desired `enabled`/`nsSet` when the
  * observed configuration differs; destroy restores the configuration the
@@ -125,7 +125,7 @@ export const CustomNameserversProvider = () =>
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // No account-wide API for this zone singleton — enumerate every
+      // No account-wide API for this zone singleton -- enumerate every
       // zone in the account and read its custom-nameserver config.
       const allZones = yield* listAllZones(accountId);
       const rows = yield* Effect.forEach(
@@ -134,7 +134,7 @@ export const CustomNameserversProvider = () =>
           zones.getCustomNameserver({ zoneId }).pipe(
             Effect.map((observed) => {
               // Only zones actively using account custom nameservers are
-              // worth enumerating — a disabled (default) toggle has
+              // worth enumerating -- a disabled (default) toggle has
               // nothing to restore on destroy.
               if (!(observed.enabled ?? false)) return undefined;
               return toAttributes(
@@ -144,7 +144,7 @@ export const CustomNameserversProvider = () =>
                 observed.nsSet ?? undefined,
               );
             }),
-            // ACNS is a Business/Enterprise feature — plan-gated zones
+            // ACNS is a Business/Enterprise feature -- plan-gated zones
             // reject with `Forbidden`; zones deleted out-of-band 404 with
             // `InvalidZoneIdentifier`. Skip both.
             Effect.catchTag(["InvalidZoneIdentifier", "Forbidden"], () => Effect.undefined),
@@ -170,12 +170,12 @@ export const CustomNameserversProvider = () =>
       const zoneId = output?.zoneId ?? (olds?.zoneId as string | undefined);
       if (!zoneId) return undefined;
       const observed = yield* zones.getCustomNameserver({ zoneId }).pipe(
-        // Zone deleted out-of-band — the configuration is gone with it.
+        // Zone deleted out-of-band -- the configuration is gone with it.
         Effect.catchTag("InvalidZoneIdentifier", () => Effect.undefined),
       );
       if (observed === undefined) return undefined;
       // The custom-NS toggle is a singleton that always exists (disabled
-      // by default) — there is nothing to "own", so a cold read adopts
+      // by default) -- there is nothing to "own", so a cold read adopts
       // freely (never `Unowned`). The observed state at adoption time
       // becomes the baseline restored on destroy.
       const initialEnabled =
@@ -189,10 +189,10 @@ export const CustomNameserversProvider = () =>
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
 
-      // 1. Observe — the configuration always exists; read its live state.
+      // 1. Observe -- the configuration always exists; read its live state.
       const observed = yield* zones.getCustomNameserver({ zoneId });
 
-      // 2. Capture — the pre-management state, restored on destroy.
+      // 2. Capture -- the pre-management state, restored on destroy.
       //    `output` (including an adoption read) already carries it;
       //    otherwise this is our first touch and the observed state is
       //    the zone's original.
@@ -201,7 +201,7 @@ export const CustomNameserversProvider = () =>
       const initialNsSet =
         output !== undefined ? output.initialNsSet : (observed.nsSet ?? undefined);
 
-      // 3. Sync — apply only when the observed state differs.
+      // 3. Sync -- apply only when the observed state differs.
       const observedEnabled = observed.enabled ?? false;
       const observedNsSet = observed.nsSet ?? undefined;
       const inSync =
@@ -215,7 +215,7 @@ export const CustomNameserversProvider = () =>
         enabled: news.enabled,
         ...(news.nsSet !== undefined ? { nsSet: news.nsSet } : {}),
       });
-      // The PUT response does not reliably echo the resulting state —
+      // The PUT response does not reliably echo the resulting state --
       // re-read so the attributes reflect the observed cloud state.
       const final = yield* zones.getCustomNameserver({ zoneId });
       return toAttributes(zoneId, final, initialEnabled, initialNsSet);
@@ -223,7 +223,7 @@ export const CustomNameserversProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { zoneId, initialEnabled, initialNsSet } = output;
-      // Observe — if the zone itself is gone, so is the configuration.
+      // Observe -- if the zone itself is gone, so is the configuration.
       const observed = yield* zones
         .getCustomNameserver({ zoneId })
         .pipe(Effect.catchTag("InvalidZoneIdentifier", () => Effect.undefined));
@@ -246,7 +246,7 @@ export const CustomNameserversProvider = () =>
         })
         .pipe(
           // Zone deleted out-of-band, or the account nameserver set the
-          // zone originally referenced no longer exists — nothing left to
+          // zone originally referenced no longer exists -- nothing left to
           // restore.
           Effect.catchTag(
             ["InvalidZoneIdentifier", "CustomNameserverSetNotFound"],

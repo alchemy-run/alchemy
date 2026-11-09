@@ -5,7 +5,7 @@ import type { DataSource } from "./DataSource.ts";
 
 /**
  * The `StopIngestionJob` request with the binding-injected
- * `knowledgeBaseId` and `dataSourceId` removed — they are supplied
+ * `knowledgeBaseId` and `dataSourceId` removed -- they are supplied
  * automatically from the bound {@link DataSource}.
  */
 export interface StopIngestionJobRequest extends Omit<
@@ -14,7 +14,7 @@ export interface StopIngestionJobRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `bedrock-agent:StopIngestionJob` — stop an in-flight
+ * Runtime binding for `bedrock-agent:StopIngestionJob` -- stop an in-flight
  * ingestion job on the bound {@link DataSource}.
  *
  * The binding grants the function `bedrock:StopIngestionJob` scoped to the

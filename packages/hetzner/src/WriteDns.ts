@@ -40,7 +40,7 @@ import type { Zone } from "./Zone.ts";
  * `WriteDns(zone)` so calls take no zone id. Provide {@link WriteDnsHttp}
  * on the Action / Function Effect.
  *
- * Mutating RRSet endpoints are asynchronous — they return an `action`
+ * Mutating RRSet endpoints are asynchronous -- they return an `action`
  * that must reach `success` before a subsequent read is guaranteed to
  * see the change. Poll with {@link waitForZoneAction}.
  *

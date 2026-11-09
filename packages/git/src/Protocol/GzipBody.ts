@@ -2,7 +2,7 @@
  * Request-body gunzip (DESIGN §4, §7).
  *
  * git's remote-curl **gzips POST bodies** (`Content-Encoding: gzip`) whenever
- * the buffered body is under `http.postBuffer` (default 1 MiB) — i.e.
+ * the buffered body is under `http.postBuffer` (default 1 MiB) -- i.e.
  * essentially every fetch negotiation request. Workers do not auto-decompress
  * request bodies, so the server must branch on `Content-Encoding: gzip` and
  * pipe through `DecompressionStream("gzip")`, sniffing the `1f 8b` magic
@@ -51,7 +51,7 @@ const errorReason = (error: unknown): string =>
  * Pipes a byte stream through `DecompressionStream("gzip")`.
  *
  * Upstream failures propagate through the web-stream pipe and surface as
- * {@link GzipBodyError} (the typed upstream error is flattened — acceptable
+ * {@link GzipBodyError} (the typed upstream error is flattened -- acceptable
  * because the caller treats any body failure the same way).
  */
 export const gunzipStream = <E>(
@@ -61,7 +61,7 @@ export const gunzipStream = <E>(
     evaluate: () =>
       Stream.toReadableStream(input).pipeThrough(
         // dom.d.ts types DecompressionStream's writable as BufferSource; the
-        // runtime accepts Uint8Array chunks — bridge the variance mismatch.
+        // runtime accepts Uint8Array chunks -- bridge the variance mismatch.
         new DecompressionStream("gzip") as unknown as ReadableWritablePair<Uint8Array, Uint8Array>,
       ) as ReadableStream<Uint8Array>,
     onError: (error) => GzipBodyError.make({ reason: `gunzip failed: ${errorReason(error)}` }),
@@ -78,7 +78,7 @@ export const gunzipBuffer = (data: Uint8Array): Effect.Effect<Uint8Array, GzipBo
 
 /**
  * Decodes a fully buffered git request body: gunzips when `Content-Encoding`
- * says gzip **or** the body carries the `1f 8b` magic (defensive sniff —
+ * says gzip **or** the body carries the `1f 8b` magic (defensive sniff --
  * pkt-line bodies always start with an ASCII hex digit, so this can never
  * misfire); otherwise returns the bytes unchanged.
  */

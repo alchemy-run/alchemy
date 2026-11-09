@@ -8,7 +8,7 @@ export interface GetJobBookmarkRequest extends Omit<glue.GetJobBookmarkRequest, 
 /**
  * Runtime binding for `glue:GetJobBookmark`.
  *
- * Reads the bound {@link Job}'s bookmark entry — the incremental-processing
+ * Reads the bound {@link Job}'s bookmark entry -- the incremental-processing
  * checkpoint Glue keeps when a job runs with `--job-bookmark-option
  * job-bookmark-enable`. Fails with the typed `EntityNotFoundException` when
  * the job has never recorded a bookmark. The job name is injected from the

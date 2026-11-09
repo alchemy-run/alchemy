@@ -27,24 +27,24 @@ export type DnssecStatus =
   | (string & {});
 
 /**
- * The user-desired DNSSEC state — Cloudflare's PATCH endpoint only
+ * The user-desired DNSSEC state -- Cloudflare's PATCH endpoint only
  * accepts these two values.
  */
 export type DnssecDesiredStatus = "active" | "disabled";
 
 export interface DnssecProps {
   /**
-   * Zone whose DNSSEC configuration is managed. Stable — DNSSEC is a
+   * Zone whose DNSSEC configuration is managed. Stable -- DNSSEC is a
    * per-zone singleton, so changing the zone triggers a replacement
    * (the old zone's DNSSEC is restored to its pre-management state).
    */
   zoneId: string;
   /**
    * Desired DNSSEC state. `"active"` signs the zone; `"disabled"` turns
-   * signing off. Activation is eventually consistent — Cloudflare
+   * signing off. Activation is eventually consistent -- Cloudflare
    * reports `pending` until the registrar-side DS record is in place.
    *
-   * Mutable — patched in place.
+   * Mutable -- patched in place.
    *
    * @default "active"
    */
@@ -54,7 +54,7 @@ export interface DnssecProps {
    * DNSSEC-signed zone at the same time (required for user-managed
    * DNSKEY records).
    *
-   * Mutable — patched in place.
+   * Mutable -- patched in place.
    *
    * @default false
    */
@@ -63,7 +63,7 @@ export interface DnssecProps {
    * Allow Cloudflare to transfer in a pre-signed zone (signatures
    * included) from an external provider without signing on the fly.
    *
-   * Mutable — patched in place.
+   * Mutable -- patched in place.
    *
    * @default false
    */
@@ -73,7 +73,7 @@ export interface DnssecProps {
    * enables NSEC3 records when transferring in from an external
    * provider (live signing with NSEC3 requires Foundation DNS).
    *
-   * Mutable — patched in place.
+   * Mutable -- patched in place.
    *
    * @default false
    */
@@ -85,7 +85,7 @@ export interface DnssecAttributes {
   zoneId: string;
   /**
    * Live DNSSEC status. Stays `pending` until the DS record is
-   * submitted at the registrar — that final hop is outside Cloudflare's
+   * submitted at the registrar -- that final hop is outside Cloudflare's
    * (and Alchemy's) control.
    */
   status: DnssecStatus;
@@ -104,7 +104,7 @@ export interface DnssecAttributes {
   /** Coded digest algorithm type (e.g. `"2"`). */
   digestType: string | undefined;
   /**
-   * Full DS record string — this is what users paste at their registrar
+   * Full DS record string -- this is what users paste at their registrar
    * to complete DNSSEC activation.
    */
   ds: string | undefined;
@@ -138,7 +138,7 @@ export type Dnssec = Resource<TypeId, DnssecProps, DnssecAttributes, never, Prov
  * DNSSEC configuration for a Cloudflare zone
  * (`/zones/{zone_id}/dnssec`).
  *
- * DNSSEC is a per-zone singleton — it always exists in either an
+ * DNSSEC is a per-zone singleton -- it always exists in either an
  * enabled or disabled state, so this resource never creates or deletes
  * anything physical. Reconcile patches the configuration toward the
  * desired state; destroy restores the state the zone had before
@@ -149,7 +149,7 @@ export type Dnssec = Resource<TypeId, DnssecProps, DnssecAttributes, never, Prov
  * reports `pending` until the `ds` attribute (the DS record) is
  * submitted at the domain's registrar. The reconciler polls with
  * bounded retries for the zone to leave the `disabled` state but does
- * not wait for full `active` — that depends on the registrar.
+ * not wait for full `active` -- that depends on the registrar.
  *
  * Safety: when there is no prior state and DNSSEC is already enabled
  * on the zone, `read` reports it as `Unowned` and the engine refuses
@@ -206,7 +206,7 @@ export const DnssecProvider = () =>
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // No account-wide API for this zone singleton — enumerate every
+      // No account-wide API for this zone singleton -- enumerate every
       // zone in the account and read its DNSSEC config (every zone has
       // one). Disabled zones are "not created" for this resource (same
       // as a cold `read`), so they're skipped; the observed state of an
@@ -245,12 +245,12 @@ export const DnssecProvider = () =>
       const zoneId = output?.zoneId ?? (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
       if (!zoneId) return undefined;
       const observed = yield* dns.getDnssec({ zoneId }).pipe(
-        // Zone deleted out-of-band — DNSSEC config is gone with it.
+        // Zone deleted out-of-band -- DNSSEC config is gone with it.
         Effect.catchTag("InvalidRoute", () => Effect.undefined),
       );
       if (observed === undefined) return undefined;
       if (output !== undefined) {
-        // Owned path — refresh, keeping the captured pre-management state.
+        // Owned path -- refresh, keeping the captured pre-management state.
         return toAttributes(zoneId, observed, {
           status: output.initialStatus,
           multiSigner: output.initialMultiSigner,
@@ -261,7 +261,7 @@ export const DnssecProvider = () =>
       // Cold read: DNSSEC disabled means "not created" for this resource.
       if (statusFamily(observed.status) === "disabled") return undefined;
       // DNSSEC is enabled but we have no state and no ownership markers
-      // exist — gate takeover behind the adopt policy.
+      // exist -- gate takeover behind the adopt policy.
       return Unowned(toAttributes(zoneId, observed, captureInitial(observed)));
     }),
 
@@ -270,10 +270,10 @@ export const DnssecProvider = () =>
       const zoneId = news.zoneId as string;
       const desiredStatus: DnssecDesiredStatus = news.status ?? "active";
 
-      // 1. Observe — DNSSEC config always exists for a live zone.
+      // 1. Observe -- DNSSEC config always exists for a live zone.
       let observed = yield* dns.getDnssec({ zoneId });
 
-      // 2. Capture — the pre-management state, restored on destroy.
+      // 2. Capture -- the pre-management state, restored on destroy.
       //    `output` (including an adoption read) already carries it;
       //    otherwise this is our first touch.
       const initial: InitialDnssec =
@@ -286,7 +286,7 @@ export const DnssecProvider = () =>
             }
           : captureInitial(observed);
 
-      // 3. Sync — patch only when the observed state differs from the
+      // 3. Sync -- patch only when the observed state differs from the
       //    desired one.
       if (!matchesDesired(observed, news, desiredStatus)) {
         observed = yield* dns.patchDnssec({
@@ -298,7 +298,7 @@ export const DnssecProvider = () =>
         });
       }
 
-      // 4. Wait — activation/deactivation is eventually consistent.
+      // 4. Wait -- activation/deactivation is eventually consistent.
       //    Poll (bounded) for the status to reach the desired family;
       //    "active" is satisfied by `pending` since full activation
       //    requires the registrar-side DS record.
@@ -317,13 +317,13 @@ export const DnssecProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const zoneId = output.zoneId;
-      // Observe — if the zone itself is gone, so is its DNSSEC config.
+      // Observe -- if the zone itself is gone, so is its DNSSEC config.
       const observed = yield* dns
         .getDnssec({ zoneId })
         .pipe(Effect.catchTag("InvalidRoute", () => Effect.undefined));
       if (observed === undefined) return;
       if (output.initialStatus === "disabled") {
-        // The zone had DNSSEC off before we managed it — deactivate.
+        // The zone had DNSSEC off before we managed it -- deactivate.
         // Cloudflare's DELETE endpoint only clears DNSSEC records *after*
         // signing has been disabled, so deactivation goes through PATCH.
         // Skip the call when it's already off (idempotent re-delete).
@@ -333,7 +333,7 @@ export const DnssecProvider = () =>
           .pipe(Effect.catchTag("InvalidRoute", () => Effect.void));
         return;
       }
-      // The zone had DNSSEC on before we managed it — restore the
+      // The zone had DNSSEC on before we managed it -- restore the
       // enabled state and the flags it had at capture time.
       if (
         statusFamily(observed.status) === "active" &&

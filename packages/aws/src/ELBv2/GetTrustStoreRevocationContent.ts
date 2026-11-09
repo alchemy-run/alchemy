@@ -18,7 +18,7 @@ export interface GetTrustStoreRevocationContentRequest extends Omit<
  * trust-store ARN).
  *
  * Returns a pre-signed S3 URI (active for ten minutes) for a certificate
- * revocation list (CRL) previously added to the bound {@link TrustStore} —
+ * revocation list (CRL) previously added to the bound {@link TrustStore} --
  * e.g. an ops endpoint auditing which client certificates are currently
  * revoked. A missing revocation id surfaces as the typed
  * `RevocationIdNotFoundException`. Provide the implementation with
@@ -26,7 +26,7 @@ export interface GetTrustStoreRevocationContentRequest extends Omit<
  * ### Trust Store Content
  * **Example:** Fetch a revocation list's presigned location
  * ```typescript
- * // init — bind the operation to the trust store
+ * // init -- bind the operation to the trust store
  * const getRevocation = yield* AWS.ELBv2.GetTrustStoreRevocationContent(trustStore);
  *
  * // runtime

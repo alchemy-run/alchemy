@@ -43,7 +43,7 @@ export type ShareResourceProps = {
 
 export type ShareResourceAttributes = {
   /**
-   * Server-assigned share-resource identifier — distinct from the shared
+   * Server-assigned share-resource identifier -- distinct from the shared
    * `resourceId`. Stable across updates.
    */
   shareResourceId: string;
@@ -98,12 +98,12 @@ export type ShareResource = Resource<
 >;
 
 /**
- * A resource entry on an existing Cloudflare share — adds a shareable
- * resource (gateway policy, custom ruleset, …) to a `Share` incrementally.
+ * A resource entry on an existing Cloudflare share -- adds a shareable
+ * resource (gateway policy, custom ruleset, ...) to a `Share` incrementally.
  *
  * Only `meta` is mutable in place; changing the share, type, id, or owning
  * account triggers a replacement. A share must always retain at least one
- * resource — the last entry cannot be deleted (delete the `Share` instead).
+ * resource -- the last entry cannot be deleted (delete the `Share` instead).
  * Do not manage the same entry both inline on `Share.resources` and through
  * this resource.
  * ### Adding a Resource to a Share
@@ -158,7 +158,7 @@ export const ShareResourceProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      // The share is a path parameter — an entry cannot move between
+      // The share is a path parameter -- an entry cannot move between
       // shares in place. By diff time both sides are resolved strings.
       const oldShareId = output?.shareId ?? olds?.shareId;
       if (
@@ -197,7 +197,7 @@ export const ShareResourceProvider = () =>
         const observed = yield* getEntry(acct, shareId, output.shareResourceId);
         return observed ? toAttributes(observed, acct, shareId) : undefined;
       }
-      // Cold read — recover from lost state by matching the natural key
+      // Cold read -- recover from lost state by matching the natural key
       // (resourceType, resourceId) among the share's live entries.
       const resourceType = olds?.resourceType as ShareableResourceType | undefined;
       const resourceId = olds?.resourceId as string | undefined;
@@ -214,7 +214,7 @@ export const ShareResourceProvider = () =>
       const resourceId = news.resourceId as string;
       const desiredMeta = news.meta ?? {};
 
-      // Observe — the id cached on `output` is a hint; fall through to a
+      // Observe -- the id cached on `output` is a hint; fall through to a
       // natural-key lookup so an AlreadyExists race converges instead of
       // failing, then to create.
       const observed =
@@ -223,7 +223,7 @@ export const ShareResourceProvider = () =>
           : undefined) ?? (yield* findEntry(acct, shareId, news.resourceType, resourceId));
 
       if (!observed) {
-        // Ensure — greenfield (or out-of-band delete).
+        // Ensure -- greenfield (or out-of-band delete).
         const created = yield* resourceSharing.createResource({
           accountId: acct,
           shareId,
@@ -235,7 +235,7 @@ export const ShareResourceProvider = () =>
         return toAttributes(created, acct, shareId);
       }
 
-      // Sync — `meta` is the only mutable field; skip the PUT on a no-op.
+      // Sync -- `meta` is the only mutable field; skip the PUT on a no-op.
       if (JSON.stringify(observed.meta ?? {}) !== JSON.stringify(desiredMeta)) {
         const updated = yield* resourceSharing.updateResource({
           accountId: acct,
@@ -288,7 +288,7 @@ export const ShareResourceProvider = () =>
               ),
             ),
             // A share removed out-of-band between enumeration and the
-            // per-share list surfaces as ShareNotFound — skip it.
+            // per-share list surfaces as ShareNotFound -- skip it.
             Effect.catchTag("ShareNotFound", () => Effect.succeed([] as ShareResourceAttributes[])),
           ),
         { concurrency: 10 },
@@ -314,7 +314,7 @@ const getEntry = (accountId: string, shareId: string, shareResourceId: string) =
 
 /**
  * Find a live entry by its natural key (resourceType, resourceId). A missing
- * share surfaces as `ShareNotFound` — treat it as "no entry".
+ * share surfaces as `ShareNotFound` -- treat it as "no entry".
  */
 const findEntry = (
   accountId: string,

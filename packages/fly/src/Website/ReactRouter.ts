@@ -16,7 +16,7 @@ export interface ReactRouterProps extends FrameworkSiteProps {}
  *
  * The build runs through
  * `@alchemy.run/frontend-frameworks/react-router` with the
- * `@alchemy.run/frontend-frameworks/react-router/node` deploy target — both
+ * `@alchemy.run/frontend-frameworks/react-router/node` deploy target -- both
  * must be installed in your project, alongside `@react-router/dev`,
  * `react-router`, and `vite`.
  *
@@ -26,7 +26,7 @@ export interface ReactRouterProps extends FrameworkSiteProps {}
  * the resulting fetch handler as a Node HTTP server on port 3000.
  *
  * React Server Components (React Router's `unstable` RSC plugin) and
- * multi-environment builds are not supported yet — the build fails with an
+ * multi-environment builds are not supported yet -- the build fails with an
  * actionable error when more than one server entry is emitted.
  *
  *

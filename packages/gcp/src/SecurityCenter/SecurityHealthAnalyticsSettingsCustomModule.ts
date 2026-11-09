@@ -74,7 +74,7 @@ export type CustomConfig = {
   /** Finding severity. */
   severity?: SecurityHealthAnalyticsSeverity;
   /**
-   * Finding description. Alchemy ownership is stored in a `[alchemy …]`
+   * Finding description. Alchemy ownership is stored in a `[alchemy ...]`
    * prefix here (custom modules have no labels) and stripped from
    * attributes.
    */
@@ -92,13 +92,13 @@ export type SecurityHealthAnalyticsSettingsCustomModuleProps = {
    * Module id (the `{customModule}` segment of
    * `projects/{project}/securityHealthAnalyticsSettings/customModules/{customModule}`).
    * Server-assigned on create. Supply it to target an existing module.
-   * Immutable — changing it replaces the module.
+   * Immutable -- changing it replaces the module.
    */
   moduleId?: string;
   /**
    * Display name. Becomes the finding category. Must start with an
    * uppercase letter, contain only letters, digits, or underscores, and
-   * be at most 128 characters. Immutable — changing it replaces the
+   * be at most 128 characters. Immutable -- changing it replaces the
    * module.
    */
   displayName?: string;
@@ -149,7 +149,7 @@ export type SecurityHealthAnalyticsSettingsCustomModule = Resource<
 /**
  * A project-scoped Security Health Analytics custom module.
  *
- * Custom modules have no labels field — Alchemy stamps ownership into
+ * Custom modules have no labels field -- Alchemy stamps ownership into
  * `customConfig.description` so `list` / nuke can find them. Module id
  * and display name are identity (the id is server-assigned). Enablement
  * and custom config update in place.

@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `forecast:DescribeDatasetImportJob` — poll an import
+ * Runtime binding for `forecast:DescribeDatasetImportJob` -- poll an import
  * job started by {@link CreateDatasetImportJob} until its `Status` reaches
  * `ACTIVE` (or `CREATE_FAILED`), and read its field statistics.
  *

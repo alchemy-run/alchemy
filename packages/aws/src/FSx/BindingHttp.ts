@@ -6,8 +6,8 @@ import type { FileSystem } from "./FileSystem.ts";
 /**
  * Shared scaffolding for the FSx runtime bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, makeFSx…HttpBinding({ … }))` over one of the two
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, makeFSx...HttpBinding({ ... }))` over one of the two
  * builders below. Everything except the operation, the IAM action list, and
  * (for file-system-scoped operations) the injected file system id is
  * boilerplate.
@@ -42,7 +42,7 @@ export const makeFSxFileSystemHttpBinding = <
    * Additional ARN patterns granted alongside the file system ARN. Used for
    * operations that also authorize on a resource created by the call itself
    * (e.g. `CreateBackup` authorizes on the new backup's ARN, unknowable at
-   * deploy time — grant `arn:aws:fsx:*:*:backup/*`).
+   * deploy time -- grant `arn:aws:fsx:*:*:backup/*`).
    */
   extraResourceArns?: readonly string[];
 }) =>

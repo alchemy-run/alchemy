@@ -25,7 +25,7 @@ export interface ListDevicePositionsRequest extends Omit<
  * const listPositions = yield* Location.ListDevicePositions(tracker);
  *
  * const page = yield* listPositions();
- * // page.Entries → [{ DeviceId, Position, SampleTime }, …]
+ * // page.Entries -> [{ DeviceId, Position, SampleTime }, ...]
  * ```
  *
  * @binding

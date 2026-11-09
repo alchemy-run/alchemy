@@ -12,7 +12,7 @@ import type * as Effect from "effect/Effect";
  * ### Suppression List
  * **Example:** List Bounce-Suppressed Addresses
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listSuppressed = yield* SES.ListSuppressedDestinations();
  *
  * // runtime

@@ -11,7 +11,7 @@ import {
 } from "./K2Types.ts";
 
 /**
- * Record encoding shared by the K2 producer and consumer clients. Internal —
+ * Record encoding shared by the K2 producer and consumer clients. Internal --
  * not exported from the K2 barrel.
  */
 

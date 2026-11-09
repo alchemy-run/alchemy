@@ -23,7 +23,7 @@ export interface NetworkProps {
   labels?: Record<string, string>;
   /**
    * The engine the network is created on: a Docker context name, a
-   * `Docker.Context` resource, or a `Docker.Swarm` — overlay networks
+   * `Docker.Context` resource, or a `Docker.Swarm` -- overlay networks
    * require a swarm manager, and passing the swarm orders the network after
    * the swarm is initialized.
    */

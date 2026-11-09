@@ -61,7 +61,7 @@ export type Product = Resource<
   "Stripe.Product",
   ProductProps,
   {
-    /** Stripe product id (`prod_…`). */
+    /** Stripe product id (`prod_...`). */
     id: string;
     /** Display name of the product. */
     name: string;
@@ -93,7 +93,7 @@ export interface ProductLookup {
 }
 
 /**
- * A Stripe Product — the catalog item that Prices, invoices, and Checkout
+ * A Stripe Product -- the catalog item that Prices, invoices, and Checkout
  * attach to. Name, description, active, images, and metadata are updated
  * in place. Deleting a product is only possible when it has no Prices.
  *

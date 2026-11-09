@@ -29,13 +29,13 @@ export type ActiveLearningConfig = aiplatform.GoogleCloudAiplatformV1ActiveLearn
 
 export type DataLabelingJobProps = {
   /**
-   * Region. Immutable — changing it replaces the job.
+   * Region. Immutable -- changing it replaces the job.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
    * User-facing display name. Defaults to a generated id. Immutable after
-   * create — DataLabelingJob has no update API.
+   * create -- DataLabelingJob has no update API.
    */
   displayName?: string;
   /**
@@ -125,7 +125,7 @@ export type DataLabelingJob = Resource<
 >;
 
 /**
- * A Vertex AI DataLabelingJob — human labeling of Dataset DataItems.
+ * A Vertex AI DataLabelingJob -- human labeling of Dataset DataItems.
  *
  * Creating a job starts labeling immediately. There is no update API, so
  * reconcile is observe-ensure. Delete cancels a running job, then deletes

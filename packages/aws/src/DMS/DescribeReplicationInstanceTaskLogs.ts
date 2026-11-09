@@ -7,13 +7,13 @@ import type { ReplicationInstance } from "./ReplicationInstance.ts";
  * Runtime binding for `dms:DescribeReplicationInstanceTaskLogs`.
  *
  * Bind this operation to a {@link ReplicationInstance} to inspect the size of
- * the task logs accumulated on the instance — useful for storage-pressure
+ * the task logs accumulated on the instance -- useful for storage-pressure
  * monitoring and deciding when to purge logs. Provide the implementation with
  * `Effect.provide(AWS.DMS.DescribeReplicationInstanceTaskLogsHttp)`.
  * ### Inspecting Task Logs
  * **Example:** Report Task Log Sizes
  * ```typescript
- * // init — bind the operation to the instance
+ * // init -- bind the operation to the instance
  * const taskLogs = yield* AWS.DMS.DescribeReplicationInstanceTaskLogs(instance);
  *
  * // runtime

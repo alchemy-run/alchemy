@@ -7,14 +7,14 @@ import type * as Effect from "effect/Effect";
  *
  * Lists the caller's past provisioning records (provision, update, and terminate requests), newest first.
  *
- * Account-level operation — which products the caller can see and act on
+ * Account-level operation -- which products the caller can see and act on
  * is governed by portfolio principal associations, so the binding takes no
  * resource argument. Provide the implementation with
  * `Effect.provide(AWS.ServiceCatalog.ListRecordHistoryHttp)`.
  * ### Tracking Provisioned Products
  * **Example:** List Past Provisioning Records
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listRecordHistory = yield* AWS.ServiceCatalog.ListRecordHistory();
  *
  * // runtime

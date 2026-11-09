@@ -10,14 +10,14 @@ export interface GetDataLakePrincipalRequest extends lf.GetDataLakePrincipalRequ
 /**
  * Runtime binding for `lakeformation:GetDataLakePrincipal`.
  *
- * Returns the identity of the calling principal as Lake Formation sees it —
+ * Returns the identity of the calling principal as Lake Formation sees it --
  * useful for logging/auditing which data-lake principal a function acts as.
  * Provide the implementation with
  * `Effect.provide(AWS.LakeFormation.GetDataLakePrincipalHttp)`.
  * ### Identifying the Caller
  * **Example:** Read the Calling Data Lake Principal
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const getDataLakePrincipal = yield* AWS.LakeFormation.GetDataLakePrincipal();
  *
  * // runtime

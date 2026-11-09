@@ -81,7 +81,7 @@ export const BusSinkHttp = Layer.effect(
           accountId: string;
           region: string;
         }>;
-        // Pass the ARN as an unresolved Output — binding data is resolved
+        // Pass the ARN as an unresolved Output -- binding data is resolved
         // by the engine before the host reconciles (see PutEventsHttp).
         const resource = bus
           ? Output.interpolate`${bus.eventBusArn}`
@@ -107,10 +107,10 @@ export const BusSinkHttp = Layer.effect(
         maxBytes: 262_144,
         sizeOf: entrySize,
         send: (batch) => put({ Entries: [...batch] }),
-        // ThrottlingException / InternalFailure are transient — re-submit
+        // ThrottlingException / InternalFailure are transient -- re-submit
         // them on the bounded schedule.
         unprocessed: (out, batch) => selectFailed(out, batch, true),
-        // Any other per-entry ErrorCode (e.g. MalformedDetail) is permanent —
+        // Any other per-entry ErrorCode (e.g. MalformedDetail) is permanent --
         // drop and surface.
         rejected: (out, batch) => selectFailed(out, batch, false),
       });

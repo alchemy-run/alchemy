@@ -12,7 +12,7 @@ export interface DeleteThingShadowRequest extends Omit<
  * Runtime binding for the IoT data-plane `DeleteThingShadow` operation (IAM
  * action `iot:DeleteThingShadow`).
  *
- * Bind it to a {@link Thing} to delete the thing's device shadow — the thing
+ * Bind it to a {@link Thing} to delete the thing's device shadow -- the thing
  * name is injected automatically. Provide the implementation with
  * `Effect.provide(AWS.IoT.DeleteThingShadowHttp)`.
  * ### Device Shadows

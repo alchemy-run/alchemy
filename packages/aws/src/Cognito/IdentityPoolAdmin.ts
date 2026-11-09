@@ -62,7 +62,7 @@ export interface IdentityPoolAdminClient {
 }
 
 /**
- * Runtime binding for administrative Cognito identity pool operations —
+ * Runtime binding for administrative Cognito identity pool operations --
  * identity management and the developer-authenticated identities flow.
  *
  * Bind this to an `IdentityPool` inside a function runtime to get a typed

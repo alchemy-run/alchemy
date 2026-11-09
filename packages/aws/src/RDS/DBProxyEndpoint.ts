@@ -108,7 +108,7 @@ export interface DBProxyEndpointLookup {
 }
 
 /**
- * An additional RDS Proxy endpoint — a second DNS name on an existing
+ * An additional RDS Proxy endpoint -- a second DNS name on an existing
  * `DBProxy`, typically read-only for reader traffic or placed in a
  * different VPC.
  *
@@ -209,7 +209,7 @@ export const DBProxyEndpointProvider = () =>
             // Endpoints are keyed under a parent proxy. Enumerate every proxy,
             // then fan out `describeDBProxyEndpoints` per proxy (bounded
             // concurrency) and flatten. `describe` does not surface tags
-            // inline, so each item hydrates with `tags: {}` — the same shape
+            // inline, so each item hydrates with `tags: {}` -- the same shape
             // `read` returns when no prior tags are recorded.
             const proxyNames = yield* rds.describeDBProxies.pages({}).pipe(
               Stream.runCollect,
@@ -282,13 +282,13 @@ export const DBProxyEndpointProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — fetch live endpoint state.
+          // Observe -- fetch live endpoint state.
           let observed = yield* readEndpoint({
             dbProxyName: output?.dbProxyName ?? news.dbProxyName,
             dbProxyEndpointName,
           });
 
-          // Ensure — create if missing. Tolerate
+          // Ensure -- create if missing. Tolerate
           // `DBProxyEndpointAlreadyExistsFault` as a race with a peer
           // reconciler.
           if (!observed?.DBProxyEndpointArn) {
@@ -312,7 +312,7 @@ export const DBProxyEndpointProvider = () =>
               dbProxyEndpointName,
             });
           } else {
-            // Sync mutable endpoint config — security groups + rename. The
+            // Sync mutable endpoint config -- security groups + rename. The
             // rename argument is a no-op when desired matches observed.
             yield* rds.modifyDBProxyEndpoint({
               DBProxyEndpointName: dbProxyEndpointName,
@@ -333,7 +333,7 @@ export const DBProxyEndpointProvider = () =>
 
           const dbProxyEndpointArn = observed.DBProxyEndpointArn ?? "";
 
-          // Sync tags — diff prior recorded tags against desired (describe
+          // Sync tags -- diff prior recorded tags against desired (describe
           // does not surface tags inline).
           const observedTags = output?.tags ?? {};
           const { removed, upsert } = diffTags(observedTags, desiredTags);

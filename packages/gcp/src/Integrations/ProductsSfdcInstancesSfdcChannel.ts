@@ -30,23 +30,23 @@ export type ProductsSfdcInstancesSfdcChannelProps = {
   /**
    * Parent Salesforce instance resource name
    * `projects/{project}/locations/{location}/products/{product}/sfdcInstances/{sfdcInstance}`.
-   * Immutable — changing it replaces the channel.
+   * Immutable -- changing it replaces the channel.
    */
   sfdcInstance: string;
   /**
    * Channel id (the `{sfdcChannel}` segment). Server-assigned on create.
-   * Immutable — changing it replaces the channel.
+   * Immutable -- changing it replaces the channel.
    */
   sfdcChannelId?: string;
   /**
-   * Location used when `sfdcInstance` is a bare id. Immutable —
+   * Location used when `sfdcInstance` is a bare id. Immutable --
    * changing it replaces the channel.
    * @default the stack's GCP region (`GCP.Region`, else the profile
    *   region, else `us-central1`)
    */
   location?: string;
   /**
-   * Product id used when `sfdcInstance` is a bare id. Immutable —
+   * Product id used when `sfdcInstance` is a bare id. Immutable --
    * changing it replaces the channel.
    * @default "IP"
    */
@@ -57,7 +57,7 @@ export type ProductsSfdcInstancesSfdcChannelProps = {
   displayName?: string;
   /**
    * Human-readable description. Salesforce channels have no labels
-   * field, so Alchemy ownership is stored in a `[alchemy …]` prefix and
+   * field, so Alchemy ownership is stored in a `[alchemy ...]` prefix and
    * stripped from attributes.
    */
   description?: string;
@@ -104,7 +104,7 @@ export type ProductsSfdcInstancesSfdcChannel = Resource<
  * A product-scoped Salesforce CDC or Platform Event channel
  * (`.../sfdcInstances/{sfdcInstance}/sfdcChannels/{sfdcChannel}`).
  *
- * Channels have no labels field — Alchemy stamps ownership into the
+ * Channels have no labels field -- Alchemy stamps ownership into the
  * description. Parent instance and id are immutable. Display name,
  * description, and topic update in place.
  *

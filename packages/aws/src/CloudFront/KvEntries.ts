@@ -18,7 +18,7 @@ export interface KvEntriesProps {
   store: string;
   /** Namespace prefix for all keys. Keys are stored as `{namespace}:{key}`. */
   namespace: string;
-  /** Map of key → value entries to manage. */
+  /** Map of key -> value entries to manage. */
   entries: Record<string, Input<string>>;
   /**
    * Whether to delete keys under this namespace that are not in `entries`.
@@ -141,7 +141,7 @@ export const KvEntriesProvider = () =>
 
           // A precondition failure means a concurrent writer (another
           // KvEntries / KvRoutesUpdate on the same store) advanced the
-          // etag between our read and this batch — the retry MUST re-read
+          // etag between our read and this batch -- the retry MUST re-read
           // the etag or it can never succeed. `stale` drops the cached
           // etag on the failed attempt so the retried generator fetches a
           // fresh one.
@@ -262,7 +262,7 @@ export const KvEntriesProvider = () =>
               Effect.gen(function* () {
                 const entries = resolveEntries(news.entries);
 
-                // Observe — diff against the live entries so we only `Put`
+                // Observe -- diff against the live entries so we only `Put`
                 // keys whose values actually differ.
                 const priorEntries = yield* observeEntries(
                   news.store,
@@ -271,10 +271,10 @@ export const KvEntriesProvider = () =>
                   false,
                 );
 
-                // Sync entries — push the changed keys.
+                // Sync entries -- push the changed keys.
                 yield* upload(news.store, news.namespace, entries, priorEntries);
 
-                // Sync stale keys — when `purge` is set, list every key
+                // Sync stale keys -- when `purge` is set, list every key
                 // under the namespace and delete anything not in the
                 // desired set. This converges adopted/drifted state.
                 if (news.purge) {

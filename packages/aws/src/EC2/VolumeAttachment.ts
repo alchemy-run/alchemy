@@ -55,7 +55,7 @@ export interface VolumeAttachmentProps {
 
   /**
    * Whether to force-detach the volume on delete if a normal detach does not
-   * complete. Forcing can corrupt data if the volume is still mounted — use
+   * complete. Forcing can corrupt data if the volume is still mounted -- use
    * only when the instance is unresponsive.
    * @default true
    */
@@ -95,7 +95,7 @@ export interface VolumeAttachment extends Resource<
  * volume is detached (and force-detached as a fallback) before the resource is
  * removed.
  *
- * This is an existence-style resource — its identity is the
+ * This is an existence-style resource -- its identity is the
  * `volumeId`/`instanceId`/`device` triple. Changing any of them replaces the
  * attachment.
  *
@@ -110,7 +110,7 @@ export interface VolumeAttachment extends Resource<
  * ```
  *
  * The volume appears to the instance as a block device at `device`. On modern
- * Linux AMIs the kernel may rename `/dev/sdf` to `/dev/xvdf` — check
+ * Linux AMIs the kernel may rename `/dev/sdf` to `/dev/xvdf` -- check
  * `lsblk` inside the instance. The volume and instance must share an AZ.
  *
  * @resource
@@ -136,7 +136,7 @@ export const VolumeAttachmentProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ news, session }) {
-          // 1. OBSERVE — attachments are embedded in the volume; find one for
+          // 1. OBSERVE -- attachments are embedded in the volume; find one for
           //    this instance.
           const lookup = yield* ec2
             .describeVolumes({ VolumeIds: [news.volumeId] })
@@ -147,7 +147,7 @@ export const VolumeAttachmentProvider = () =>
               a.InstanceId === news.instanceId && a.State !== "detaching" && a.State !== "detached",
           );
 
-          // 2. ENSURE — attach the volume when it is not already attached to
+          // 2. ENSURE -- attach the volume when it is not already attached to
           //    this instance.
           if (attachment === undefined) {
             const result = yield* ec2
@@ -159,7 +159,7 @@ export const VolumeAttachmentProvider = () =>
               })
               .pipe(
                 // The volume can briefly report VolumeInUse while a prior
-                // detach settles — retry until it frees up.
+                // detach settles -- retry until it frees up.
                 retryWhileVolumeInUse,
               );
             yield* session.note(
@@ -173,7 +173,7 @@ export const VolumeAttachmentProvider = () =>
             };
           }
 
-          // 3. WAIT — until the attachment is fully attached.
+          // 3. WAIT -- until the attachment is fully attached.
           const state = yield* waitForAttachmentState(
             news.volumeId,
             news.instanceId,
@@ -214,7 +214,7 @@ export const VolumeAttachmentProvider = () =>
           }
 
           // Normal detach, retrying while the volume is still in a transient
-          // state (attaching / busy → IncorrectState).
+          // state (attaching / busy -> IncorrectState).
           yield* ec2
             .detachVolume({
               VolumeId: volumeId,

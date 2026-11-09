@@ -215,7 +215,7 @@ export interface PresignPutOptions {
 
 /**
  * Accessors for the values a bound `Prisma.BucketAccessKey` carries into the
- * host runtime — each is an Effect that resolves the value where it runs
+ * host runtime -- each is an Effect that resolves the value where it runs
  * (deploy-time output or the host environment at runtime).
  *
  * This is what a bucket binding hands to its `makeClient`, so an embedder can

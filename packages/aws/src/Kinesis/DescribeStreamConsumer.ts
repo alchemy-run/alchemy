@@ -12,7 +12,7 @@ export interface DescribeStreamConsumerRequest extends Omit<
  * Runtime binding for `kinesis:DescribeStreamConsumer`.
  *
  * Bind this operation to a `StreamConsumer` to read the enhanced fan-out
- * consumer's status and ARN — the consumer ARN is injected automatically.
+ * consumer's status and ARN -- the consumer ARN is injected automatically.
  * Provide the implementation with
  * `Effect.provide(AWS.Kinesis.DescribeStreamConsumerHttp)`.
  * ### Enhanced Fan-Out

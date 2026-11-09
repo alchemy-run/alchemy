@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Budget } from "./Budget.ts";
 
 /**
- * Request for {@link DescribeBudgetActionsForBudget} — the bound budget's
+ * Request for {@link DescribeBudgetActionsForBudget} -- the bound budget's
  * `AccountId` and `BudgetName` are injected automatically.
  */
 export interface DescribeBudgetActionsForBudgetRequest extends Omit<
@@ -16,13 +16,13 @@ export interface DescribeBudgetActionsForBudgetRequest extends Omit<
  * Runtime binding for `budgets:DescribeBudgetActionsForBudget`.
  *
  * Bind this operation to a {@link Budget} to list its budget actions and
- * their execution status — e.g. to check whether a cost kill-switch has
+ * their execution status -- e.g. to check whether a cost kill-switch has
  * fired. Provide the implementation with
  * `Effect.provide(AWS.Budgets.DescribeBudgetActionsForBudgetHttp)`.
  * ### Reading Budget Actions
  * **Example:** List a Budget's Actions and Statuses
  * ```typescript
- * // init — bind the operation to the budget
+ * // init -- bind the operation to the budget
  * const listActions = yield* AWS.Budgets.DescribeBudgetActionsForBudget(budget);
  *
  * // runtime

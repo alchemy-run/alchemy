@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `polly:StartSpeechSynthesisStream` — bidirectional
+ * Runtime binding for `polly:StartSpeechSynthesisStream` -- bidirectional
  * streaming synthesis: send text incrementally as `TextEvent`s on the input
  * `ActionStream` and receive `AudioEvent` chunks on the output `EventStream`
  * as they become available.
@@ -13,7 +13,7 @@ import type * as Effect from "effect/Effect";
  * `Effect.provide(AWS.Polly.StartSpeechSynthesisStreamHttp)`.
  *
  * NOTE: the distilled HTTP transport does not yet support bidirectional
- * (input) event-stream request bodies — a live call currently hangs waiting
+ * (input) event-stream request bodies -- a live call currently hangs waiting
  * for response headers (probed 2026-07; same transport gap leaves
  * transcribe-streaming and lex StartConversation unbound). Prefer
  * `SynthesizeSpeech` (request-response) until distilled core ships

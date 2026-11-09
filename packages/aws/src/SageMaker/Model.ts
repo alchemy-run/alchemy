@@ -92,12 +92,12 @@ export interface ModelLookup {
 }
 
 /**
- * An Amazon SageMaker Model — the immutable pairing of an inference
+ * An Amazon SageMaker Model -- the immutable pairing of an inference
  * container image (and optional S3 model artifacts) with an execution role.
  * A model is pure configuration: it costs nothing until it is deployed to an
  * endpoint via an `EndpointConfig` + `Endpoint`.
  *
- * SageMaker models are immutable — any change other than tags replaces the
+ * SageMaker models are immutable -- any change other than tags replaces the
  * model.
  * ### Creating Models
  * **Example:** Model from an ECR image
@@ -125,7 +125,7 @@ export interface ModelLookup {
  * });
  * ```
  *
- * **Example:** Serverless deployment (Model → EndpointConfig → Endpoint)
+ * **Example:** Serverless deployment (Model -> EndpointConfig -> Endpoint)
  * ```typescript
  * const config = yield* AWS.SageMaker.EndpointConfig("MyConfig", {
  *   productionVariants: [{
@@ -225,7 +225,7 @@ export const ModelProvider = () =>
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return;
           if (olds === undefined) return;
-          // SageMaker models are immutable — everything except tags replaces.
+          // SageMaker models are immutable -- everything except tags replaces.
           const identity = (props: ModelProps) => [
             props.primaryContainer,
             props.containers,
@@ -251,10 +251,10 @@ export const ModelProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — cloud state is authoritative.
+          // Observe -- cloud state is authoritative.
           let attrs = yield* readModel(modelName);
 
-          // Ensure — create if missing; tolerate the already-exists race.
+          // Ensure -- create if missing; tolerate the already-exists race.
           if (attrs === undefined) {
             yield* retryThroughIamPropagation(
               sagemaker.createModel({
@@ -279,7 +279,7 @@ export const ModelProvider = () =>
             }
           }
 
-          // Sync tags — diff against OBSERVED cloud tags.
+          // Sync tags -- diff against OBSERVED cloud tags.
           const currentTags = yield* fetchModelTags(attrs.modelArn);
           const { removed, upsert } = diffTags(currentTags, desiredTags);
           if (removed.length > 0) {

@@ -68,7 +68,7 @@ export interface KafkaEventSourceProps {
  *       subnetIds,
  *     });
  *
- *     // init — registers the event source mapping and the record handler
+ *     // init -- registers the event source mapping and the record handler
  *     yield* AWS.Kafka.consumeKafkaTopic(
  *       cluster,
  *       { topics: ["orders"], consumerGroupId: "my-service" },

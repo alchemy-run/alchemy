@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 /**
  * Shared scaffolding for the S3 Vectors data-plane HTTP bindings.
  *
- * NOT exported from `index.ts` — the per-level `Vectors{Read,Write,}Http.ts`
+ * NOT exported from `index.ts` -- the per-level `Vectors{Read,Write,}Http.ts`
  * layers are thin compositions over this builder. Everything except the
  * distilled operations and the IAM action set is boilerplate:
  *

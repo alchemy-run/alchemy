@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `forecast:DescribeForecastExportJob` — poll the status
+ * Runtime binding for `forecast:DescribeForecastExportJob` -- poll the status
  * of a forecast export started with {@link CreateForecastExportJob} until
  * the files land in S3.
  *

@@ -18,10 +18,10 @@ export interface PutSecretValueRequest extends Omit<
  * ### Writing Secret Values
  * **Example:** Rotate a Secret's Value
  * ```typescript
- * // init — bind the operation to the secret
+ * // init -- bind the operation to the secret
  * const putSecretValue = yield* AWS.SecretsManager.PutSecretValue(secret);
  *
- * // runtime — write a new version; the response carries its VersionId
+ * // runtime -- write a new version; the response carries its VersionId
  * const result = yield* putSecretValue({
  *   SecretString: newPassword,
  * });

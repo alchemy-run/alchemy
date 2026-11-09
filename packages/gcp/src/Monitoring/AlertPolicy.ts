@@ -32,11 +32,11 @@ export type Aggregation = {
    */
   alignmentPeriod?: string;
   /**
-   * Per-series aligner (`ALIGN_MEAN`, `ALIGN_RATE`, `ALIGN_MAX`, …).
+   * Per-series aligner (`ALIGN_MEAN`, `ALIGN_RATE`, `ALIGN_MAX`, ...).
    */
   perSeriesAligner?: string;
   /**
-   * Cross-series reducer (`REDUCE_MEAN`, `REDUCE_SUM`, …).
+   * Cross-series reducer (`REDUCE_MEAN`, `REDUCE_SUM`, ...).
    */
   crossSeriesReducer?: string;
   /**
@@ -54,7 +54,7 @@ export type Trigger = {
 
 export type ForecastOptions = {
   /**
-   * How far ahead to forecast a threshold violation (1h–60h).
+   * How far ahead to forecast a threshold violation (1h-60h).
    */
   forecastHorizon?: string;
 };
@@ -174,11 +174,11 @@ export type PrometheusQueryLanguageCondition = {
 export type SqlCondition = {
   /** Log Analytics GoogleSQL query. */
   query?: string;
-  /** Run every N minutes (5–1440). */
+  /** Run every N minutes (5-1440). */
   minutes?: { periodicity?: number };
-  /** Run every N hours (1–48). */
+  /** Run every N hours (1-48). */
   hourly?: { periodicity?: number; minuteOffset?: number };
-  /** Run every N days (1–31). */
+  /** Run every N days (1-31). */
   daily?: {
     periodicity?: number;
     executionTime?: {
@@ -270,7 +270,7 @@ export type AlertPolicyProps = {
    */
   combiner?: AlertPolicyCombiner;
   /**
-   * Conditions that open an incident. A policy has 1–6 conditions.
+   * Conditions that open an incident. A policy has 1-6 conditions.
    */
   conditions: AlertCondition[];
   /**
@@ -335,7 +335,7 @@ export type AlertPolicy = Resource<
 >;
 
 /**
- * A Cloud Monitoring alerting policy — conditions that open incidents
+ * A Cloud Monitoring alerting policy -- conditions that open incidents
  * and optional notification channels.
  *
  * Policy ids are assigned by the API. Alchemy stamps ownership into

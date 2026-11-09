@@ -246,7 +246,7 @@ const runFrameworkSite = Effect.fn("GCP.Website.FrameworkSite")(function* (
   }
 
   // The build runs at apply time (`Website.Server` is a resource), so its
-  // attributes are Outputs here — derive every deploy input lazily.
+  // attributes are Outputs here -- derive every deploy input lazily.
   const buildOut = Output.mapEffect(
     ([serverEntry, distDir]: [string | undefined, string | undefined]) =>
       Effect.gen(function* () {
@@ -309,7 +309,7 @@ const runFrameworkSite = Effect.fn("GCP.Website.FrameworkSite")(function* (
  * Callers pipe `Namespace.push(id)` themselves (the composites do).
  *
  * Composite-level tagged errors (`FrameworkSiteError`, filesystem) are
- * defects — `Alchemy.Stack` only admits `ConfigError` on the user effect.
+ * defects -- `Alchemy.Stack` only admits `ConfigError` on the user effect.
  */
 export const makeFrameworkSite = (
   id: string,

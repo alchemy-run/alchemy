@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Repository } from "./Repository.ts";
 
 /**
- * Request for {@link GetPackageVersionReadme} — `domain`, `domainOwner`, and
+ * Request for {@link GetPackageVersionReadme} -- `domain`, `domainOwner`, and
  * `repository` are injected from the bound {@link Repository}.
  */
 export interface GetPackageVersionReadmeRequest extends Omit<

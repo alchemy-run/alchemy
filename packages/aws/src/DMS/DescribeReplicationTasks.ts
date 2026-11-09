@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `dms:DescribeReplicationTasks`.
  *
  * Bind this operation (account-level) to look up replication tasks and
- * their status/progress — filter by `replication-task-id`,
+ * their status/progress -- filter by `replication-task-id`,
  * `replication-task-arn`, `endpoint-arn`, or `replication-instance-arn`.
  * The building block of migration monitoring and start/stop automation
  * (pair with {@link StartReplicationTask} / {@link StopReplicationTask}).
@@ -15,14 +15,14 @@ import type * as Effect from "effect/Effect";
  * ### Orchestrating Replication Tasks
  * **Example:** Check a Task's Status Before Starting It
  * ```typescript
- * // init — account-level, no target resource
+ * // init -- account-level, no target resource
  * const describeReplicationTasks = yield* AWS.DMS.DescribeReplicationTasks();
  *
  * // runtime
  * const { ReplicationTasks } = yield* describeReplicationTasks({
  *   Filters: [{ Name: "replication-task-arn", Values: [taskArn] }],
  * });
- * // ReplicationTasks[0].Status: "ready" | "running" | "stopped" | …
+ * // ReplicationTasks[0].Status: "ready" | "running" | "stopped" | ...
  * ```
  *
  * @binding

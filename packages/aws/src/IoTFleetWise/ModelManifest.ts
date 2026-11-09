@@ -88,7 +88,7 @@ export interface ModelManifestLookup {
 }
 
 /**
- * An AWS IoT FleetWise model manifest (vehicle model) — the subset of
+ * An AWS IoT FleetWise model manifest (vehicle model) -- the subset of
  * signal-catalog nodes that describes one vehicle type.
  *
  * A manifest is created in `DRAFT` status; set `status: "ACTIVE"` to make
@@ -204,10 +204,10 @@ export const ModelManifestProvider = () =>
           const desiredTags = { ...internalTags, ...news.tags };
           const desiredStatus = news.status ?? "DRAFT";
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* readManifest(name);
 
-          // 2. Ensure — create if missing; tolerate the AlreadyExists race.
+          // 2. Ensure -- create if missing; tolerate the AlreadyExists race.
           if (observed === undefined) {
             yield* iotfleetwise
               .createModelManifest({
@@ -235,7 +235,7 @@ export const ModelManifestProvider = () =>
             );
           }
 
-          // 3. Sync nodes + description — diff OBSERVED node FQNs against
+          // 3. Sync nodes + description -- diff OBSERVED node FQNs against
           //    the desired list. Node changes require DRAFT status, so they
           //    are applied before any DRAFT -> ACTIVE transition.
           const observedFqns = yield* readNodeFqns(name);
@@ -296,7 +296,7 @@ export const ModelManifestProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           // Idempotent: deleting a missing manifest succeeds. Decoder
-          // manifests still detaching surface as ConflictException — retry
+          // manifests still detaching surface as ConflictException -- retry
           // through the window (bounded).
           yield* iotfleetwise.deleteModelManifest({ name: output.modelManifestName }).pipe(
             inFleetWiseRegion,

@@ -42,7 +42,7 @@ export interface AppProps {
 }
 
 export interface AppAttributes {
-  /** App ID (`ap-…`). */
+  /** App ID (`ap-...`). */
   appId: string;
   /** App name. */
   name: string;

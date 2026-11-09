@@ -37,7 +37,7 @@ export type RepositoriesHookProps = {
   /**
    * Parent repository. Full name
    * `projects/{project}/locations/{location}/repositories/{repository}`
-   * or the repository id (combined with `location`). Immutable —
+   * or the repository id (combined with `location`). Immutable --
    * changing it replaces the hook.
    */
   repository: string;
@@ -48,7 +48,7 @@ export type RepositoriesHookProps = {
   location?: string;
   /**
    * Hook id (the `{hook}` segment). If omitted, a unique RFC1035 name is
-   * generated. Immutable — changing it replaces the hook.
+   * generated. Immutable -- changing it replaces the hook.
    */
   hookId?: string;
   /**

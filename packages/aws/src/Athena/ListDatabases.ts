@@ -6,13 +6,13 @@ import type { DataCatalog } from "./DataCatalog.ts";
 /**
  * Runtime binding for `athena:ListDatabases`.
  *
- * Lists the databases in the bound data catalog — the catalog name is
+ * Lists the databases in the bound data catalog -- the catalog name is
  * injected automatically. Provide the implementation with
  * `Effect.provide(AWS.Athena.ListDatabasesHttp)`.
  * ### Browsing Catalog Metadata
  * **Example:** List Databases in the Catalog
  * ```typescript
- * // init — bind the operation to the data catalog
+ * // init -- bind the operation to the data catalog
  * const listDatabases = yield* AWS.Athena.ListDatabases(catalog);
  *
  * // runtime

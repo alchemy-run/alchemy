@@ -4,7 +4,7 @@ import { makeIotClientHttpBinding } from "./BindingHttp.ts";
 import { GetConnection } from "./GetConnection.ts";
 
 /**
- * HTTP implementation of the {@link GetConnection} capability — grants
+ * HTTP implementation of the {@link GetConnection} capability -- grants
  * `iot:GetConnection` on the bound client filter and calls the IoT
  * data-plane `GetConnection` API.
  */

@@ -86,7 +86,7 @@ export type AndroidKeySettings = {
 
 export type WebActionSettings = {
   /**
-   * Challenge is triggered when the score is below this threshold (0–1).
+   * Challenge is triggered when the score is below this threshold (0-1).
    */
   scoreThreshold?: number;
 };
@@ -108,7 +108,7 @@ export type WebKeySettings = {
    */
   allowedDomains?: string[];
   /**
-   * How the key is integrated with the site. Immutable — changing it
+   * How the key is integrated with the site. Immutable -- changing it
    * replaces the key.
    * @default "SCORE"
    */
@@ -124,7 +124,7 @@ export type WebKeySettings = {
    */
   allowAllDomains?: boolean;
   /**
-   * Allow AMP pages. SCORE keys only. Immutable — changing it replaces
+   * Allow AMP pages. SCORE keys only. Immutable -- changing it replaces
    * the key.
    */
   allowAmpTraffic?: boolean;
@@ -137,12 +137,12 @@ export type WebKeySettings = {
 export type WafSettings = {
   /**
    * WAF service that uses this key (`CA`, `FASTLY`, `CLOUDFLARE`,
-   * `AKAMAI`). Immutable — changing it replaces the key.
+   * `AKAMAI`). Immutable -- changing it replaces the key.
    */
   wafService?: string;
   /**
    * WAF feature (`CHALLENGE_PAGE`, `SESSION_TOKEN`, `ACTION_TOKEN`,
-   * `EXPRESS`). Immutable — changing it replaces the key.
+   * `EXPRESS`). Immutable -- changing it replaces the key.
    */
   wafFeature?: string;
 };
@@ -151,7 +151,7 @@ export type KeyProps = {
   /**
    * Server-assigned key id (the `{key}` segment of
    * `projects/{project}/keys/{key}`). This is also the site key used by
-   * client libraries. Immutable — changing it replaces the key.
+   * client libraries. Immutable -- changing it replaces the key.
    */
   keyId?: string;
   /**
@@ -188,7 +188,7 @@ export type KeyProps = {
    */
   expressSettings?: Record<string, never> | {};
   /**
-   * Web Application Firewall settings. Immutable — changing them
+   * Web Application Firewall settings. Immutable -- changing them
    * replaces the key.
    */
   wafSettings?: WafSettings;

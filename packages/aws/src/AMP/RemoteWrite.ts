@@ -31,11 +31,11 @@ export interface RemoteWriteRequest {
 }
 
 /**
- * Runtime binding for `aps:RemoteWrite` — push metric samples into an AMP
+ * Runtime binding for `aps:RemoteWrite` -- push metric samples into an AMP
  * {@link Workspace} via its Prometheus remote-write endpoint
  * (`api/v1/remote_write`), SigV4-signed with the host Function's credentials.
  *
- * The protobuf + snappy remote-write body is encoded internally — callers
+ * The protobuf + snappy remote-write body is encoded internally -- callers
  * pass plain metric names, labels, and samples.
  *
  * ### Writing Metrics

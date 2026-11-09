@@ -4,9 +4,9 @@ import type * as Effect from "effect/Effect";
 
 /**
  * Runtime binding for the `ListImports` operation (IAM action
- * `cloudformation:ListImports` on `*` — imports are account-scoped).
+ * `cloudformation:ListImports` on `*` -- imports are account-scoped).
  *
- * Lists the stacks importing a given exported output value — e.g. impact
+ * Lists the stacks importing a given exported output value -- e.g. impact
  * analysis before rotating a shared value. Provide the implementation with
  * `Effect.provide(AWS.CloudFormation.ListImportsHttp)`.
  * ### Cross-Stack Exports

@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `DescribeBackupJob` operation (IAM action
  * `backup:DescribeBackupJob`).
  *
- * Returns the details of a backup job by its ID — poll a job started with
+ * Returns the details of a backup job by its ID -- poll a job started with
  * `StartBackupJob` until it completes. Provide the implementation with
  * `Effect.provide(AWS.Backup.DescribeBackupJobHttp)`.
  * ### Monitoring Backup Jobs

@@ -2,7 +2,7 @@ import type * as FileSystem from "effect/FileSystem";
 import type * as Layer from "effect/Layer";
 import type * as Path from "effect/Path";
 /**
- * `@alchemy.run/frontend-frameworks/octane` — OctaneJS integration implementing
+ * `@alchemy.run/frontend-frameworks/octane` -- OctaneJS integration implementing
  * framework-core's `Framework` service, with the deploy target passed as a
  * value (Cloudflare Workers by default, via the
  * `@alchemy.run/frontend-frameworks/octane/cloudflare` subpath module).
@@ -10,7 +10,7 @@ import type * as Path from "effect/Path";
  * Octane wraps Vite: the project's own `vite build` (with
  * `@octanejs/vite-plugin` in its `vite.config.ts` and `adapter:
  * cloudflare()` in its `octane.config.ts`) already produces the deployable
- * output — client assets in `dist/client` and a self-contained Worker entry
+ * output -- client assets in `dist/client` and a self-contained Worker entry
  * at `dist/server/worker.js`. This package just drives that build
  * programmatically and maps the on-disk output onto the `BuildOutput`
  * contract; there are no adapter forks and no bundler-plugin injection.
@@ -22,8 +22,8 @@ import type * as Path from "effect/Path";
  * options.
  *
  * This module (and `Octane.ts`) is target-agnostic by contract: it must not
- * import anything Cloudflare-specific. The Cloudflare half — the adapter
- * validation constants — lives behind `@alchemy.run/frontend-frameworks/octane/cloudflare`.
+ * import anything Cloudflare-specific. The Cloudflare half -- the adapter
+ * validation constants -- lives behind `@alchemy.run/frontend-frameworks/octane/cloudflare`.
  */
 import type { Framework } from "../core/index.ts";
 import { layer, type OctaneOptions } from "./Octane.ts";

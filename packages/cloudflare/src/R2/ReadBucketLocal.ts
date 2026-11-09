@@ -6,7 +6,7 @@ import { makeRead } from "./ReadBucketBinding.ts";
 import { makeReadR2HttpClient } from "./ReadBucketHttp.ts";
 
 /**
- * Local implementation of the {@link ReadBucket} binding — reads R2 objects
+ * Local implementation of the {@link ReadBucket} binding -- reads R2 objects
  * over the Cloudflare HTTP API using the **current credentials** instead of a
  * native Worker binding (`ReadBucketBinding`) or a scoped API token
  * (`ReadBucketHttp`).

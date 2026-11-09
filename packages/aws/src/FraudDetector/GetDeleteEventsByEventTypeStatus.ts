@@ -14,7 +14,7 @@ export interface GetDeleteEventsByEventTypeStatusRequest extends Omit<
 
 /**
  * Check the status of an asynchronous bulk event delete started by
- * `DeleteEventsByEventType` on a bound Amazon Fraud Detector event type — the
+ * `DeleteEventsByEventType` on a bound Amazon Fraud Detector event type -- the
  * effectful status poll made from a deployed Lambda or Task.
  *
  * ### Purging Stored Events

@@ -77,7 +77,7 @@ export interface DataSetEventSourceProps extends EventRouteProps {
    */
   kinds?: readonly DataSetEventKind[];
   /**
-   * Raw EventBridge detail-types to subscribe to in addition to `kinds` —
+   * Raw EventBridge detail-types to subscribe to in addition to `kinds` --
    * the escape hatch for the long tail of asset-type-specific detail-types
    * (Redshift datashare, API Gateway API, S3 data access, Lake Formation).
    */
@@ -92,13 +92,13 @@ export interface DataSetEventSourceProps extends EventRouteProps {
 /**
  * Event source connecting AWS Data Exchange notifications to the hosting
  * compute. Data Exchange publishes subscriber-facing events to the
- * account's default EventBridge bus (source `aws.dataexchange`) — most
+ * account's default EventBridge bus (source `aws.dataexchange`) -- most
  * importantly `Revision Published To Data Set` when a provider publishes
- * fresh data to an entitled data set — and this subscribes the host
+ * fresh data to an entitled data set -- and this subscribes the host
  * Function to those events so it can trigger export jobs or downstream
  * pipelines the moment new data arrives.
  *
- * Data Exchange publishes to EventBridge automatically — no additional
+ * Data Exchange publishes to EventBridge automatically -- no additional
  * resource is created besides the EventBridge rule targeting the host.
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.

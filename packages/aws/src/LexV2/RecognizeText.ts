@@ -6,7 +6,7 @@ import type { BotAlias } from "./BotAlias.ts";
 /**
  * The `RecognizeText` request with the binding-injected `botId` and
  * `botAliasId` removed. `localeId` selects the conversation language and
- * `sessionId` identifies the conversation — both remain caller-supplied.
+ * `sessionId` identifies the conversation -- both remain caller-supplied.
  */
 export interface RecognizeTextRequest extends Omit<
   lexr.RecognizeTextRequest,
@@ -14,7 +14,7 @@ export interface RecognizeTextRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `lex:RecognizeText` — send user text to an Amazon Lex
+ * Runtime binding for `lex:RecognizeText` -- send user text to an Amazon Lex
  * V2 bot alias and receive the interpreted intent and response messages.
  *
  * The alias must point at a built bot version (see `BotVersion`).

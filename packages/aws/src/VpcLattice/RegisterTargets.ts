@@ -16,7 +16,7 @@ export interface RegisterTargetsRequest extends Omit<
  * Runtime binding for the `RegisterTargets` operation (IAM action
  * `vpc-lattice:RegisterTargets` on the target group ARN).
  *
- * Registers targets with the bound {@link TargetGroup} at runtime — the
+ * Registers targets with the bound {@link TargetGroup} at runtime -- the
  * self-registration data plane for workloads that join a lattice service
  * dynamically. Provide the implementation with
  * `Effect.provide(AWS.VpcLattice.RegisterTargetsHttp)`.

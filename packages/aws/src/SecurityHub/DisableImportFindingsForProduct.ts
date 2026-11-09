@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `securityhub:DisableImportFindingsForProduct`.
  *
  * Disables a product integration so its findings no longer flow into Security Hub.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.SecurityHub.DisableImportFindingsForProductHttp)`.
  * ### Product Integrations
  * **Example:** Disable a Product Integration
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const disableImportFindingsForProduct = yield* AWS.SecurityHub.DisableImportFindingsForProduct();
  *
  * // runtime

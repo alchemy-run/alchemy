@@ -5,16 +5,16 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `servicecatalog:DescribeRecord`.
  *
- * Gets a provisioning record — the result of a provision, update, or terminate request. Poll it until the record status is `SUCCEEDED` or `FAILED`.
+ * Gets a provisioning record -- the result of a provision, update, or terminate request. Poll it until the record status is `SUCCEEDED` or `FAILED`.
  *
- * Account-level operation — which products the caller can see and act on
+ * Account-level operation -- which products the caller can see and act on
  * is governed by portfolio principal associations, so the binding takes no
  * resource argument. Provide the implementation with
  * `Effect.provide(AWS.ServiceCatalog.DescribeRecordHttp)`.
  * ### Tracking Provisioned Products
  * **Example:** Poll a Provisioning Record to Completion
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const describeRecord = yield* AWS.ServiceCatalog.DescribeRecord();
  *
  * // runtime

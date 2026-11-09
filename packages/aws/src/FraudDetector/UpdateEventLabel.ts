@@ -14,7 +14,7 @@ export interface UpdateEventLabelRequest extends Omit<
 > {}
 
 /**
- * Label a stored event in Amazon Fraud Detector — the effectful feedback
+ * Label a stored event in Amazon Fraud Detector -- the effectful feedback
  * call made from a deployed Lambda or Task when ground truth arrives (e.g. a
  * chargeback confirms fraud). Labeled events improve future model training.
  *
@@ -31,7 +31,7 @@ export interface UpdateEventLabelRequest extends Omit<
  *
  * return {
  *   fetch: Effect.gen(function* () {
- *     // runtime — a chargeback arrived for this order
+ *     // runtime -- a chargeback arrived for this order
  *     yield* updateEventLabel({
  *       eventId: "order-123",
  *       assignedLabel: "fraud",

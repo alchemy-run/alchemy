@@ -17,7 +17,7 @@ import { makeProxyBucketHelpers } from "./LocalR2Gateway.ts";
  * (resolved at apply time) and builds the client per resolved name:
  *
  * - a REAL name gets the HTTP client (same builders as the `*Http` variant,
- *   authorized with the current CLI credentials — no minted token);
+ *   authorized with the current CLI credentials -- no minted token);
  * - a `dev:` name (local emulation under `alchemy dev`) gets the native
  *   binding client (same builders as the `*Binding` variant) over a scoped
  *   platform-proxy gateway (see `LocalR2Gateway.ts`).
@@ -52,7 +52,7 @@ export const makeLocalBucketBinding = <Client extends object>(options: {
     };
 
     return Effect.fn(function* (bucket: Bucket) {
-      // Deferred accessors — resolved against the tracker at apply time. No
+      // Deferred accessors -- resolved against the tracker at apply time. No
       // `host.bind`: the local variant registers no binding.
       const bucketName = yield* bucket.bucketName;
       const jurisdiction = yield* bucket.jurisdiction;

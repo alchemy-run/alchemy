@@ -6,13 +6,13 @@ import type { Environment } from "./Environment.ts";
 /**
  * Runtime binding for `datazone:GetEnvironmentCredentials`.
  *
- * Fetches the short-lived AWS credentials of the bound environment's provisioned user role. The `secretAccessKey` and `sessionToken` are `Redacted` — unwrap with `Redacted.value` only at the point of use. The domain and environment ids are injected from the binding.
+ * Fetches the short-lived AWS credentials of the bound environment's provisioned user role. The `secretAccessKey` and `sessionToken` are `Redacted` -- unwrap with `Redacted.value` only at the point of use. The domain and environment ids are injected from the binding.
  * Provide the implementation with
  * `Effect.provide(AWS.DataZone.GetEnvironmentCredentialsHttp)`.
  * ### Environment Credentials
  * **Example:** Assume the Environment's Role
  * ```typescript
- * // init — bind the operation to the environment
+ * // init -- bind the operation to the environment
  * const getEnvironmentCredentials = yield* AWS.DataZone.GetEnvironmentCredentials(environment);
  *
  * // runtime

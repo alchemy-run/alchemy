@@ -1,5 +1,5 @@
 import type { LibSQLConfig, LibSQLSource } from "@alchemy.run/sql/SQLite";
-// `@effect/sql-libsql` (and @libsql/client underneath) are optional peers —
+// `@effect/sql-libsql` (and @libsql/client underneath) are optional peers --
 // value imports are deferred to first use so `@alchemy.run/drizzle` resolves
 // without them installed.
 import type * as LibsqlClient from "@effect/sql-libsql/LibsqlClient";
@@ -15,8 +15,8 @@ import * as Layer from "effect/Layer";
  * Open a Drizzle database over a libSQL database (e.g. Turso) using the
  * `drizzle-orm/effect-libsql` integration.
  *
- * Accepts the client returned by `Turso.Connect(db)` — or any
- * `{ url, authToken }` — and returns a chainable Proxy over
+ * Accepts the client returned by `Turso.Connect(db)` -- or any
+ * `{ url, authToken }` -- and returns a chainable Proxy over
  * `EffectLibsqlDatabase` (via `proxyChain`): every property read records a
  * step, every call records args, and the chain is replayed against the
  * resolved drizzle db when it's finally yielded as an Effect. Callers don't
@@ -33,8 +33,8 @@ import * as Layer from "effect/Layer";
  *
  * The client is built lazily on the first query and memoized on the
  * current execution's `Scope` (via {@link makeExecutionMemo}), so it is
- * created at most once per execution — a Worker `fetch`/`queue`/`scheduled`
- * event, a Durable Object call, a Workflow run, or a Lambda invocation —
+ * created at most once per execution -- a Worker `fetch`/`queue`/`scheduled`
+ * event, a Durable Object call, a Workflow run, or a Lambda invocation --
  * and closed when that execution settles. Resolving the URL and token is
  * likewise deferred, so deploy / plan-time invocations never connect.
  *

@@ -7,7 +7,7 @@ import type { Broker } from "./Broker.ts";
  * Runtime binding for the `UpdateUser` operation (IAM action
  * `mq:UpdateUser`), scoped to one {@link Broker}.
  *
- * Updates a broker user's password, console access, or groups — e.g.
+ * Updates a broker user's password, console access, or groups -- e.g.
  * rotating credentials at runtime. On ActiveMQ the change is staged and
  * applied at the next broker reboot or maintenance window; on RabbitMQ it
  * takes effect immediately. Provide the implementation with

@@ -8,7 +8,7 @@ import type * as Effect from "effect/Effect";
 export interface CheckoutLicenseRequest extends licensemanager.CheckoutLicenseRequest {}
 
 /**
- * Runtime binding for `license-manager:CheckoutLicense` — check out
+ * Runtime binding for `license-manager:CheckoutLicense` -- check out
  * entitlements from a seller-issued license for the calling application.
  * The returned `LicenseConsumptionToken` is used to check in or extend the
  * consumption; `PROVISIONAL` checkouts expire and must be extended with
@@ -19,7 +19,7 @@ export interface CheckoutLicenseRequest extends licensemanager.CheckoutLicenseRe
  * ### License Checkout Data Plane
  * **Example:** Check Out an Entitlement
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const checkoutLicense = yield* AWS.LicenseManager.CheckoutLicense();
  *
  * // runtime

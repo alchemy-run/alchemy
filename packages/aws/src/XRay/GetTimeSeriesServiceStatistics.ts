@@ -19,7 +19,7 @@ export interface GetTimeSeriesServiceStatisticsRequest
  * ```typescript
  * import * as XRay from "@alchemy.run/aws/XRay";
  *
- * // init — grants xray:GetTimeSeriesServiceStatistics
+ * // init -- grants xray:GetTimeSeriesServiceStatistics
  * const getTimeSeriesServiceStatistics =
  *   yield* XRay.GetTimeSeriesServiceStatistics();
  *

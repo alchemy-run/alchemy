@@ -19,7 +19,7 @@ export interface StartMedicalScribeJobRequest extends Omit<
 }
 
 /**
- * Runtime binding for `transcribe:StartMedicalScribeJob` — start an AWS HealthScribe job that transcribes a patient-clinician conversation and generates preliminary clinical notes.
+ * Runtime binding for `transcribe:StartMedicalScribeJob` -- start an AWS HealthScribe job that transcribes a patient-clinician conversation and generates preliminary clinical notes.
  *
  * The binding is constructed with the **data-access role** (the IAM role
  * Amazon Transcribe assumes to read your Amazon S3 data and write results;
@@ -31,7 +31,7 @@ export interface StartMedicalScribeJobRequest extends Omit<
  * ### Medical Scribe Jobs
  * **Example:** Start a Medical Scribe Job
  * ```typescript
- * // init — bind the Transcribe data-access role
+ * // init -- bind the Transcribe data-access role
  * const startMedicalScribeJob = yield* AWS.Transcribe.StartMedicalScribeJob(dataAccessRole);
  *
  * // runtime

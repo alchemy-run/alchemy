@@ -6,8 +6,8 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `DescribeVolumes` operation (IAM action
  * `fsx:DescribeVolumes` on `*`).
  *
- * Lists FSx for ONTAP / OpenZFS volumes — optionally filtered by
- * `file-system-id` or `storage-virtual-machine-id` — from inside a function
+ * Lists FSx for ONTAP / OpenZFS volumes -- optionally filtered by
+ * `file-system-id` or `storage-virtual-machine-id` -- from inside a function
  * runtime. Useful for discovering the volume ids that the snapshot bindings
  * operate on. Provide the implementation with
  * `Effect.provide(AWS.FSx.DescribeVolumesHttp)`.

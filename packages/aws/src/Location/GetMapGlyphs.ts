@@ -25,7 +25,7 @@ export interface GetMapGlyphsRequest extends Omit<location.GetMapGlyphsRequest, 
  *   FontStack: "Arial Regular",
  *   FontUnicodeRange: "0-255.pbf",
  * });
- * // glyphs.Blob → protobuf-encoded glyph bytes
+ * // glyphs.Blob -> protobuf-encoded glyph bytes
  * ```
  *
  * @binding

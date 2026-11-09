@@ -40,7 +40,7 @@ export const resolveProfileName = Effect.fn(function* (
  * The shared preamble of every per-cloud `fromAuthProvider` /
  * `fromEnvironment` layer. Precedence: environment credentials (process
  * environment plus `.env` / `--env-file`) whenever the provider's declared
- * contract is fully present — CI or not, selected profile or not — then, in
+ * contract is fully present -- CI or not, selected profile or not -- then, in
  * CI, the provider's environment resolution alone (profiles do not exist
  * there), otherwise the selected profile.
  */
@@ -111,7 +111,7 @@ export const resolveProviderConfig = <C extends { method: string } = any, Creden
  *
  * The `ConfigProvider` is a reference, so it is not part of `R`; capture it
  * too. Otherwise the first use reads config through whatever provider is
- * ambient there — e.g. a Function's init, which binds every key it loads into
+ * ambient there -- e.g. a Function's init, which binds every key it loads into
  * the Function's env and would ship the deployer's credentials (#1842).
  */
 export const deferUntilFirstUse = <A, E, R>(resolve: Effect.Effect<A, E, R>) =>

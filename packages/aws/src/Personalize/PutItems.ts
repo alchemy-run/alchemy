@@ -9,9 +9,9 @@ import type { Dataset } from "./Dataset.ts";
 export interface PutItemsRequest extends Omit<personalizeevents.PutItemsRequest, "datasetArn"> {}
 
 /**
- * Runtime binding for `personalize:PutItems`, scoped to one {@link Dataset} —
+ * Runtime binding for `personalize:PutItems`, scoped to one {@link Dataset} --
  * Adds or updates items incrementally in the bound Items {@link Dataset}
- * — the streaming alternative to a bulk dataset import job for keeping
+ * -- the streaming alternative to a bulk dataset import job for keeping
  * the catalog fresh.
  * Provide the implementation with
  * `Effect.provide(AWS.Personalize.PutItemsHttp)`.

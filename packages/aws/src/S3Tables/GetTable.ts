@@ -7,7 +7,7 @@ import type { Table } from "./Table.ts";
  * Runtime binding for the `GetTable` operation (IAM action
  * `s3tables:GetTable` on the table ARN).
  *
- * Reads the bound {@link Table}'s details — its current `versionToken`,
+ * Reads the bound {@link Table}'s details -- its current `versionToken`,
  * `metadataLocation`, `warehouseLocation`, and format. The version token and
  * metadata location are the inputs to the Iceberg commit protocol (see
  * {@link UpdateTableMetadataLocation}). Provide the implementation with

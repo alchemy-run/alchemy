@@ -33,12 +33,12 @@ export type BackendAuthenticationConfigWellKnownRoots =
 export type BackendAuthenticationConfigProps = {
   /**
    * Backend authentication config id. If omitted, a unique RFC1035 name
-   * is generated from the stack, stage, and logical id. Immutable —
+   * is generated from the stack, stage, and logical id. Immutable --
    * changing it replaces the config.
    */
   backendAuthenticationConfigId?: string;
   /**
-   * Location (`global`, `us-central1`, …). Immutable — changing it
+   * Location (`global`, `us-central1`, ...). Immutable -- changing it
    * replaces the config.
    * @default "global"
    */
@@ -113,7 +113,7 @@ export interface BackendAuthenticationConfigLookup {
    */
   backendAuthenticationConfigId: string;
   /**
-   * Location (`global`, `us-central1`, …).
+   * Location (`global`, `us-central1`, ...).
    */
   location?: string;
   /**
@@ -124,7 +124,7 @@ export interface BackendAuthenticationConfigLookup {
 }
 
 /**
- * A Network Security BackendAuthenticationConfig — how a load balancer
+ * A Network Security BackendAuthenticationConfig -- how a load balancer
  * authenticates to backends (TrustConfig, public roots, optional mTLS
  * client certificate).
  *

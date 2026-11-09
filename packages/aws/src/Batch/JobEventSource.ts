@@ -13,7 +13,7 @@ import {
  * optional (the schema grows over time).
  */
 export interface BatchJobEventDetail {
-  /** The job's ARN (`arn:…:job/{jobId}`). */
+  /** The job's ARN (`arn:...:job/{jobId}`). */
   jobArn?: string;
   /** The job id. */
   jobId?: string;
@@ -27,7 +27,7 @@ export interface BatchJobEventDetail {
   statusReason?: string;
   /** Revision-qualified job definition ARN the job runs. */
   jobDefinition?: string;
-  /** Container detail (image, exit code, log stream, …) on state changes. */
+  /** Container detail (image, exit code, log stream, ...) on state changes. */
   container?: Record<string, unknown>;
   /** `Ref::` parameter substitutions supplied at submission. */
   parameters?: Record<string, string>;
@@ -66,7 +66,7 @@ export interface JobEventSourceProps extends EventRouteProps {
  * `aws.batch`); this subscribes the host Function to those events so it can
  * alert on `FAILED` jobs or chain post-completion automation.
  *
- * AWS Batch publishes to EventBridge automatically — no additional resource
+ * AWS Batch publishes to EventBridge automatically -- no additional resource
  * is created besides the EventBridge rule targeting the host. Provide the
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.

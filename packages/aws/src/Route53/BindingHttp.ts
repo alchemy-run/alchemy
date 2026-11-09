@@ -7,8 +7,8 @@ import type { HostedZone } from "./HostedZone.ts";
 /**
  * Shared scaffolding for the Route 53 runtime bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, makeRoute53…HttpBinding({ … }))` over one of the
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, makeRoute53...HttpBinding({ ... }))` over one of the
  * three builders below. Everything except the operation, the IAM action
  * list, and (for scoped operations) the injected zone / health check id is
  * boilerplate.
@@ -37,7 +37,7 @@ export const makeRoute53ZoneHttpBinding = <I, A, E, R>(options: {
    */
   requestKey?: "HostedZoneId" | "Id";
   /**
-   * Grant on `*` instead of the zone ARN — for actions without
+   * Grant on `*` instead of the zone ARN -- for actions without
    * resource-level permission support (e.g. `route53:TestDNSAnswer`).
    */
   wildcardIam?: boolean;

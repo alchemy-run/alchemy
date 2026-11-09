@@ -5,7 +5,7 @@ import { CancelJob } from "./CancelJob.ts";
 
 export const CancelJobHttp = Layer.effect(
   CancelJob,
-  // Job ARNs (arn:…:job/{jobId}) are only known at runtime, so the statement
+  // Job ARNs (arn:...:job/{jobId}) are only known at runtime, so the statement
   // cannot enumerate them at deploy time.
   makeBatchJobHttpBinding({
     tag: "AWS.Batch.CancelJob",

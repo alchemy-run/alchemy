@@ -5,14 +5,14 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `servicecatalog:ListAttributeGroups`.
  *
- * Enumerates all AppRegistry attribute groups the caller can access —
+ * Enumerates all AppRegistry attribute groups the caller can access --
  * useful in discovery/governance functions that inventory application
  * metadata. Account-level: no resource argument. Provide the implementation
  * with `Effect.provide(AWS.AppRegistry.ListAttributeGroupsHttp)`.
  * ### Discovering Attribute Groups
  * **Example:** List the Account's Attribute Groups
  * ```typescript
- * // init — account-level, no resource argument
+ * // init -- account-level, no resource argument
  * const listAttributeGroups = yield* AWS.AppRegistry.ListAttributeGroups();
  *
  * // runtime

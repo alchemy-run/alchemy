@@ -33,12 +33,12 @@ export type CatalogProps = {
   /**
    * Catalog id (the `{catalog}` segment of
    * `projects/{project}/locations/{location}/catalogs/{catalog}`). If
-   * omitted, a unique id is generated. Immutable — changing it replaces
+   * omitted, a unique id is generated. Immutable -- changing it replaces
    * the catalog.
    */
   catalogId?: string;
   /**
-   * Location (`us-central1`, `US`, …). Immutable — changing it replaces
+   * Location (`us-central1`, `US`, ...). Immutable -- changing it replaces
    * the catalog. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -72,7 +72,7 @@ export type Catalog = Resource<
 >;
 
 /**
- * A BigLake Metastore catalog — the top-level container for Hive
+ * A BigLake Metastore catalog -- the top-level container for Hive
  * databases and tables.
  *
  * Catalogs have no labels, description, or annotations, and Alchemy does

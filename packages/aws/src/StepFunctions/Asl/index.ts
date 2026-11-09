@@ -1,11 +1,11 @@
 /**
- * `Sfn` — a typed Step Functions program DSL that compiles to ASL.
+ * `Sfn` -- a typed Step Functions program DSL that compiles to ASL.
  *
  * Mirrors Effect's names and semantics (`Sfn.gen`, `Sfn.retry`,
- * `Sfn.catchTag`, `Sfn.all`, `Sfn.forEach`, `Sfn.sleep`, …) over a
+ * `Sfn.catchTag`, `Sfn.all`, `Sfn.forEach`, `Sfn.sleep`, ...) over a
  * shallow-embedded AST. Compile with `StateMachine.fromProgram` /
  * {@link compileProgram}; run locally with {@link simulate}. The raw
- * `StateMachine({ definition })` ASL path remains first-class underneath —
+ * `StateMachine({ definition })` ASL path remains first-class underneath --
  * the compiler is sugar that produces a plain definition object.
  */
 export {

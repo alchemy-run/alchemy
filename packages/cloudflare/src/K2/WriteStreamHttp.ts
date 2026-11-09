@@ -15,7 +15,7 @@ import { makeWriteStreamClient } from "./WriteStreamClient.ts";
  * (`POST https://<id>.k2.cloudflarestorage.com/produce`).
  *
  * The stream must have its HTTP input enabled (`http: true`). Works on any
- * host — Workers, containers, Lambda.
+ * host -- Workers, containers, Lambda.
  * ### Providing the Layer
  * **Example:** Produce over HTTP
  * ```typescript

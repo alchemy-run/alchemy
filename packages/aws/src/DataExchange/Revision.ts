@@ -23,7 +23,7 @@ export interface RevisionProps {
   comment?: string;
   /**
    * Whether the revision is finalized. A revision can only be finalized once
-   * it contains at least one asset (imported via a DataExchange job) —
+   * it contains at least one asset (imported via a DataExchange job) --
    * finalizing an empty revision fails with a `ValidationException`.
    * @default false
    */
@@ -60,7 +60,7 @@ export interface Revision extends Resource<
 > {}
 
 /**
- * A revision of an AWS Data Exchange data set — a versioned container of
+ * A revision of an AWS Data Exchange data set -- a versioned container of
  * assets. Providers import assets into a revision (via DataExchange jobs) and
  * then finalize it to make the snapshot available to subscribers.
  *
@@ -101,7 +101,7 @@ export const RevisionProvider = () =>
   Provider.effect(
     Revision,
     Effect.gen(function* () {
-      /** Get a revision by ids; typed not-found → undefined. */
+      /** Get a revision by ids; typed not-found -> undefined. */
       const getById = Effect.fn(function* (dataSetId: string, revisionId: string) {
         return yield* dataexchange
           .getRevision({ DataSetId: dataSetId, RevisionId: revisionId })
@@ -161,7 +161,7 @@ export const RevisionProvider = () =>
           const desiredTags = { ...news.tags, ...internalTags };
           const desiredFinalized = news.finalized ?? false;
 
-          // 1. Observe — output ids are only a cache; fall back to a
+          // 1. Observe -- output ids are only a cache; fall back to a
           //    tag-ownership scan of the data set's revisions.
           let revision = output?.revisionId
             ? yield* getById(dataSetId, output.revisionId)
@@ -170,7 +170,7 @@ export const RevisionProvider = () =>
             revision = yield* findByTags(id, dataSetId);
           }
 
-          // 2. Ensure — create when missing.
+          // 2. Ensure -- create when missing.
           if (revision === undefined) {
             revision = yield* dataexchange.createRevision({
               DataSetId: dataSetId,
@@ -179,7 +179,7 @@ export const RevisionProvider = () =>
             });
           }
 
-          // 3. Sync — comment and finalized are mutable in one call. Only
+          // 3. Sync -- comment and finalized are mutable in one call. Only
           //    call the API on an actual delta.
           if (
             (revision.Comment ?? undefined) !== (news.comment ?? undefined) ||

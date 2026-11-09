@@ -7,12 +7,12 @@ import type { Datastore } from "./Datastore.ts";
 /**
  * Shared scaffolding for AWS HealthImaging (medical-imaging) HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the builders
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the builders
  * below. Everything except the operation and the IAM action list is
  * boilerplate: every HealthImaging data-plane operation is scoped to one
  * data store, whose id is injected as `datastoreId` and whose ARN (plus its
- * `…/imageset/*` children — image-set operations are authorized against the
+ * `.../imageset/*` children -- image-set operations are authorized against the
  * image set sub-resource) receives the grant. `StartDICOMImportJob`
  * additionally injects the bound data-access role and a scoped
  * `iam:PassRole` grant.
@@ -23,7 +23,7 @@ import type { Datastore } from "./Datastore.ts";
  * (image set reads/writes, search, import job describes/lists): the runtime
  * callable injects the bound {@link Datastore}'s id as `datastoreId` and the
  * deploy-time half grants `actions` on the data store ARN and its
- * `…/imageset/*` sub-resources.
+ * `.../imageset/*` sub-resources.
  */
 export const makeMedicalImagingDatastoreHttpBinding = <
   I extends { datastoreId: string },
@@ -35,7 +35,7 @@ export const makeMedicalImagingDatastoreHttpBinding = <
   tag: string;
   /** The distilled operation; `datastoreId` is injected from the data store. */
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
-  /** IAM actions granted on the data store ARN + `…/imageset/*`. */
+  /** IAM actions granted on the data store ARN + `.../imageset/*`. */
   actions: readonly string[];
 }) =>
   Effect.gen(function* () {
@@ -77,7 +77,7 @@ export const makeMedicalImagingDatastoreHttpBinding = <
  * allow `medical-imaging.amazonaws.com`). The runtime callable injects the
  * data store id as `datastoreId` and the role's ARN as `dataAccessRoleArn`;
  * the deploy-time half grants `actions` on the data store ARN plus
- * `iam:PassRole` on the role — without the PassRole grant, the import fails
+ * `iam:PassRole` on the role -- without the PassRole grant, the import fails
  * only at runtime with an AccessDeniedException.
  */
 export const makeMedicalImagingStartJobHttpBinding = <

@@ -20,7 +20,7 @@ import { WriteQueue, type WriteQueueClient } from "./WriteQueue.ts";
  * JSON value as the message `body` (the single-message endpoint
  * expects a pre-encoded string), so it round-trips arbitrary
  * JSON-serializable payloads the same way the native producer binding
- * does — `send` is just a batch of one.
+ * does -- `send` is just a batch of one.
  */
 export const WriteQueueHttp = Layer.effect(
   WriteQueue,
@@ -49,7 +49,7 @@ const toMessage = (message: SendMessage) =>
  * Build the producer client over the Queues bulk-push HTTP API.
  *
  * Shared by {@link WriteQueueHttp} (scoped token auth) and
- * `WriteQueueLocal` (current-credentials auth) — they differ only in the
+ * `WriteQueueLocal` (current-credentials auth) -- they differ only in the
  * {@link QueueAuth} they inject.
  */
 export const makeWriteQueueHttpClient = (

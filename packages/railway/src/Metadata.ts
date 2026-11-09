@@ -12,7 +12,7 @@ export const RAILWAY_NAME_MAX_LENGTH = 32;
 
 /**
  * Railway generates `{serviceName}-{environmentName}.up.railway.app` on
- * `serviceDomainCreate`. That first DNS label must be ≤ 63 characters
+ * `serviceDomainCreate`. That first DNS label must be <= 63 characters
  * (`32 + 1 + 32 = 65` fails with "please try again"). Extra environments
  * stay shorter so a 32-char service name still fits.
  */
@@ -73,7 +73,7 @@ export const sanitize = sanitizeRailwayName;
  * True when `name` matches the `createPhysicalName` + leading-letter shape
  * used for alchemy-owned Railway resources.
  *
- * Untruncated names end with a hyphen plus an 8–16 char RFC4648 base32
+ * Untruncated names end with a hyphen plus an 8-16 char RFC4648 base32
  * instance suffix. Truncated 32-char names keep that suffix (the human
  * prefix is what gets cut).
  */

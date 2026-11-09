@@ -5,7 +5,7 @@ import * as Schedule from "effect/Schedule";
 
 /**
  * Read the observed tags for any Mail Manager resource ARN. Tag reads are
- * best-effort — a race with deletion (or a missing-tags edge) degrades to an
+ * best-effort -- a race with deletion (or a missing-tags edge) degrades to an
  * empty record rather than failing the lifecycle operation.
  */
 export const readMailManagerTags = (arn: string) =>
@@ -33,7 +33,7 @@ export const syncMailManagerTags = Effect.fn(function* (
 });
 
 /**
- * Retry an operation while Mail Manager reports a ConflictException — e.g.
+ * Retry an operation while Mail Manager reports a ConflictException -- e.g.
  * deleting an ingress point that is still PROVISIONING. Explicitly typed so
  * `Retry.Return`'s conditional type never leaks into declaration emit.
  */

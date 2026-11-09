@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `signer:GetSigningPlatform`.
  *
- * Reads one AWS-managed signing platform by id — its signing configuration
+ * Reads one AWS-managed signing platform by id -- its signing configuration
  * (encryption/hash algorithms), image format, size limit, and whether it
  * supports revocation. Account-level operation over the AWS-managed platform
  * catalog, so the binding takes no resource argument. Provide the
@@ -13,7 +13,7 @@ import type * as Effect from "effect/Effect";
  * ### Discovering Platforms
  * **Example:** Check Revocation Support
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getSigningPlatform = yield* AWS.Signer.GetSigningPlatform();
  *
  * // runtime

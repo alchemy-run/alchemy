@@ -1,5 +1,5 @@
 /**
- * `@alchemy.run/frontend-frameworks/astro/node` — the Node container deploy
+ * `@alchemy.run/frontend-frameworks/astro/node` -- the Node container deploy
  * target for the Astro integration.
  *
  * Astro's Node story is a plain Node SSR bundle behind a long-running HTTP
@@ -10,16 +10,16 @@
  * program that serves `clientDirectory` first, then falls through to that
  * handler on `PORT` (default 3000), and answers `GET /health`.
  *
- * - **`integration`** — the adapter integration: registers itself via
+ * - **`integration`** -- the adapter integration: registers itself via
  *   `setAdapter` at `astro:config:done` (rejecting a user-declared adapter
  *   with an actionable error) and pins the `node-server` entrypoint.
- * - **`finish`** — a fully-static build (`output: "static"`) writes the
+ * - **`finish`** -- a fully-static build (`output: "static"`) writes the
  *   same Node static serve entry Vite uses. Otherwise writes the HTTP
  *   serve entry (static files then the Astro fetch handler) and pins it
  *   as `serverModules[0]`.
- * - **`selectServerEntry`** — pins the adapter's entry chunk as
+ * - **`selectServerEntry`** -- pins the adapter's entry chunk as
  *   `serverModules[0]` before the finishing pass wraps it.
- * - **`bundle`** — Node resolve conditions (no `workerd`, no `@aws-sdk/`).
+ * - **`bundle`** -- Node resolve conditions (no `workerd`, no `@aws-sdk/`).
  */
 import type { AstroInlineConfig, AstroIntegration } from "astro";
 import * as Effect from "effect/Effect";
@@ -38,7 +38,7 @@ import { make } from "./Astro.ts";
 import type { AstroTarget, AstroTargetBuildContext } from "./Target.ts";
 
 /**
- * The importable specifier of this package's Node server entrypoint — the
+ * The importable specifier of this package's Node server entrypoint -- the
  * module the adapter pins as `serverEntrypoint`. It exports a fetch
  * `handler`.
  */
@@ -99,7 +99,7 @@ export const distilledNode = (options: DistilledNodeOptions = {}): AstroIntegrat
           throw new Error(
             `@alchemy.run/frontend-frameworks/astro/node: the Astro config declares the adapter "${config.adapter.name}", ` +
               "but the deploy target already provides the Node adapter. " +
-              "Remove `adapter` from your astro.config file — user integrations " +
+              "Remove `adapter` from your astro.config file \u2014 user integrations " +
               "(react, mdx, tailwind, ...) are honored, and the adapter is injected by the toolchain.",
           );
         }

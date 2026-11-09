@@ -42,25 +42,25 @@ export type OrganizationsLocationsDiscoveryConfigProps = {
    * Config id (the `{discoveryConfig}` segment of
    * `organizations/{organization}/locations/{location}/discoveryConfigs/{discoveryConfig}`).
    * If omitted, a unique id is generated. Letters, digits, hyphens, and
-   * underscores; max 100 characters. Immutable — changing it replaces
+   * underscores; max 100 characters. Immutable -- changing it replaces
    * the config.
    */
   configId?: string;
   /**
    * Parent organization (`organizations/{organization}` or the numeric
    * id). Defaults to `GOOGLE_ORGANIZATION_ID` or the project's Resource
-   * Manager ancestor. Immutable — changing it replaces the config.
+   * Manager ancestor. Immutable -- changing it replaces the config.
    */
   organization?: string;
   /**
-   * Processing location (`us-central1`, `global`, `us`, …). Immutable —
+   * Processing location (`us-central1`, `global`, `us`, ...). Immutable --
    * changing it replaces the config.
    * @default "global"
    */
   location?: string;
   /**
    * Display name (max 100 characters). Discovery configs have no labels
-   * field, so Alchemy ownership is stored in a `[alchemy …]` prefix and
+   * field, so Alchemy ownership is stored in a `[alchemy ...]` prefix and
    * stripped from attributes.
    */
   displayName?: string;
@@ -137,7 +137,7 @@ export type OrganizationsLocationsDiscoveryConfig = Resource<
  * An organization-scoped Sensitive Data Protection discovery config that
  * scans storage and builds data profiles.
  *
- * Discovery configs have no labels field — Alchemy stamps ownership into
+ * Discovery configs have no labels field -- Alchemy stamps ownership into
  * the display name so `list` / nuke can find them. Config id, organization,
  * and location are identity. Status, targets, and org config update in
  * place. Keep `status` as `PAUSED` unless the organization should be

@@ -29,7 +29,7 @@ export interface WriteTopicClient {
 /**
  * Publish access to a Pub/Sub {@link Topic}: `publish`, `publishBatch`.
  * Grants `roles/pubsub.publisher` on the topic only. Topics have no runtime
- * read — consume through a subscription with `ReadSubscription`.
+ * read -- consume through a subscription with `ReadSubscription`.
  *
  * ### Publishing messages
  * **Example:** Publish one message
@@ -39,7 +39,7 @@ export interface WriteTopicClient {
  *   data: JSON.stringify({ type: "signup" }),
  *   attributes: { source: "api" },
  * });
- * // …provided with Effect.provide(GCP.PubSub.WriteTopicHttp)
+ * // ...provided with Effect.provide(GCP.PubSub.WriteTopicHttp)
  * ```
  *
  * **Example:** Publish a batch

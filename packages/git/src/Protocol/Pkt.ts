@@ -3,14 +3,14 @@
  *
  * Every protocol message except raw pack bytes is a stream of pkt-lines:
  * 4 lowercase hex digits (total length INCLUDING the 4 length bytes) followed
- * by the payload. Max total length 65520 ⇒ max payload 65516.
+ * by the payload. Max total length 65520 => max payload 65516.
  *
  * Special packets whose length field is not a length:
  *
  * | bytes  | meaning                                    |
  * |--------|--------------------------------------------|
- * | `0000` | flush-pkt — end of message/request/response |
- * | `0001` | delim-pkt — section separator (v2)          |
+ * | `0000` | flush-pkt -- end of message/request/response |
+ * | `0001` | delim-pkt -- section separator (v2)          |
  * | `0002` | response-end-pkt (v2, stateless)            |
  *
  * Readers MUST strip an optional trailing LF from text payloads; writers
@@ -26,7 +26,7 @@ import * as Stream from "effect/Stream";
 import { concatBytes, utf8Decode, utf8Encode } from "./ObjectCodec.ts";
 
 /**
- * Maximum pkt-line payload: 65520 total − 4 length bytes.
+ * Maximum pkt-line payload: 65520 total - 4 length bytes.
  */
 export const MAX_PKT_PAYLOAD = 65516;
 
@@ -80,7 +80,7 @@ const encodeLength = (n: number): Uint8Array => {
 
 /**
  * Encodes a data pkt-line around a binary payload (no LF appended). Throws
- * {@link PktLineError} when the payload exceeds {@link MAX_PKT_PAYLOAD} —
+ * {@link PktLineError} when the payload exceeds {@link MAX_PKT_PAYLOAD} --
  * an internal invariant violation, since all writers cap their payloads.
  */
 export const pktLine = (payload: Uint8Array): Uint8Array => {

@@ -6,14 +6,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `dms:ReloadTables`.
  *
  * Bind this operation (account-level) to re-run the full load for specific
- * tables of a running replication task — the standard remediation when
+ * tables of a running replication task -- the standard remediation when
  * {@link DescribeTableStatistics} reports table errors or validation
  * failures. Provide the implementation with
  * `Effect.provide(AWS.DMS.ReloadTablesHttp)`.
  * ### Monitoring Migration Progress
  * **Example:** Reload a Failed Table
  * ```typescript
- * // init — account-level, no target resource
+ * // init -- account-level, no target resource
  * const reloadTables = yield* AWS.DMS.ReloadTables();
  *
  * // runtime

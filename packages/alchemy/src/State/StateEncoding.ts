@@ -23,7 +23,7 @@ export const DURATION_MARKER = "__duration__";
  * JSON marker used to tag a `Date` value when writing state. The reviver
  * recognises objects with exactly this key and rebuilds a real `Date`
  * instance on read, so a Date-typed prop read back out of persisted state
- * (`olds` in provider `diff`/`delete`/`read`) is a `Date` again — not the
+ * (`olds` in provider `diff`/`delete`/`read`) is a `Date` again -- not the
  * bare ISO string `JSON.stringify` would otherwise leave behind.
  */
 export const DATE_MARKER = "__date__";
@@ -32,7 +32,7 @@ export const DATE_MARKER = "__date__";
  * JSON marker used to tag a byte array (`Uint8Array`) when writing state.
  * The reviver rebuilds a real `Uint8Array`, so a byte-valued prop (a WAF
  * byte-match string, a zip) read back out of persisted state is the same
- * value the program declares — instead of an index-keyed object.
+ * value the program declares -- instead of an index-keyed object.
  */
 export const BYTES_MARKER = "__bytes__";
 
@@ -45,7 +45,7 @@ const decodeDate = (encoded: unknown): Date | undefined => {
 /**
  * Rebuild a {@link Duration.Duration} from `Duration.toJSON`'s
  * `{_id,_tag,millis?,nanos?}` shape. Shared by state persistence and the
- * RPC sidecar — that JSON is not a valid `Duration.Input`.
+ * RPC sidecar -- that JSON is not a valid `Duration.Input`.
  */
 export const decodeDuration = (encoded: unknown): Duration.Duration | undefined => {
   if (encoded === null || typeof encoded !== "object") return undefined;
@@ -96,7 +96,7 @@ export const encodeState = (value: unknown): unknown => {
     // `JSON.stringify(Duration.seconds(N))` already invokes Duration.toJSON,
     // but encodeState is also called for code paths that don't go through
     // `JSON.stringify` (e.g. the HTTP state-store). Tag with our marker so
-    // the reviver can unambiguously rebuild a real Duration instance —
+    // the reviver can unambiguously rebuild a real Duration instance --
     // Duration.toJSON's `{_id,_tag,...}` shape is NOT a valid Duration.Input.
     return {
       [DURATION_MARKER]: value.toJSON(),
@@ -104,7 +104,7 @@ export const encodeState = (value: unknown): unknown => {
   }
   // Dates are serializable leaves and must round-trip: walking one
   // structurally would persist `{}` (`Object.entries(new Date())` is empty)
-  // — and every later plan would then diff the empty object against the
+  // -- and every later plan would then diff the empty object against the
   // program's Date and churn a phantom update forever. Tag with our marker
   // so the reviver rebuilds a real Date instance; rows written before the
   // marker carry a bare ISO string, which `canonicalize` in Diff.ts still
@@ -148,7 +148,7 @@ export const reviveState = (_key: string, value: unknown): unknown => {
       const decoded = decodeDuration(obj[DURATION_MARKER]);
       if (decoded !== undefined) return decoded;
     }
-    // Exact single-key match only — unlike the legacy REDACTED/DURATION
+    // Exact single-key match only -- unlike the legacy REDACTED/DURATION
     // markers there is no pre-marker data to tolerate, so a user object
     // that merely CONTAINS the key alongside other fields is never
     // collapsed into a Date (mirrors reviveStateRecursive's strictness).

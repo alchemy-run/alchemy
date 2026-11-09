@@ -66,7 +66,7 @@ export type RepositoriesReleaseConfigProps = {
   /**
    * Parent repository. Full name
    * `projects/{project}/locations/{location}/repositories/{repository}`
-   * or the repository id (combined with `location`). Immutable —
+   * or the repository id (combined with `location`). Immutable --
    * changing it replaces the release config.
    */
   repository: string;
@@ -77,7 +77,7 @@ export type RepositoriesReleaseConfigProps = {
   location?: string;
   /**
    * Release config id. If omitted, a unique RFC1035 name is generated.
-   * Immutable — changing it replaces the release config.
+   * Immutable -- changing it replaces the release config.
    */
   releaseConfigId?: string;
   /**
@@ -170,7 +170,7 @@ export interface RepositoriesReleaseConfigLookup {
 }
 
 /**
- * A Dataform release configuration — compiles a Git commitish on a
+ * A Dataform release configuration -- compiles a Git commitish on a
  * schedule (or on demand) into a compilation result.
  *
  * Release configs have no labels field, so Alchemy stamps ownership

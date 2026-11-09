@@ -5,15 +5,15 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `signer:RevokeSignature`.
  *
- * Permanently invalidates the signature produced by a single signing job —
+ * Permanently invalidates the signature produced by a single signing job --
  * the surgical alternative to revoking a whole profile version when one
- * artifact is compromised. Account-level operation — job ids are chosen per
+ * artifact is compromised. Account-level operation -- job ids are chosen per
  * request at runtime, so the binding takes no resource argument. Provide the
  * implementation with `Effect.provide(AWS.Signer.RevokeSignatureHttp)`.
  * ### Revoking Signatures
  * **Example:** Revoke One Job's Signature
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const revokeSignature = yield* AWS.Signer.RevokeSignature();
  *
  * // runtime

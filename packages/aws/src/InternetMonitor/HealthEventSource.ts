@@ -49,7 +49,7 @@ export interface HealthEventSourceProps extends EventRouteProps {
   id?: string;
   /**
    * Restrict to health events emitted by the given monitors (matched
-   * against the event's `resources` — the monitor ARNs). Pass
+   * against the event's `resources` -- the monitor ARNs). Pass
    * `monitor.monitorArn`.
    * @default all monitors in the account
    */
@@ -76,7 +76,7 @@ export interface HealthEventSourceProps extends EventRouteProps {
  * Function to those events so it can page, reroute traffic, or annotate
  * incidents.
  *
- * Internet Monitor publishes to EventBridge automatically — no additional
+ * Internet Monitor publishes to EventBridge automatically -- no additional
  * resource is created besides the EventBridge rule targeting the host.
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.

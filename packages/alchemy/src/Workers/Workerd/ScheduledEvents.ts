@@ -9,7 +9,7 @@ import type { SqlStorageValue } from "./DurableObjectStorage.ts";
 import { inStorageTransaction } from "./internal/StorageTransaction.ts";
 
 // ---------------------------------------------------------------------------
-// Scheduled Events — SQLite-backed cron/timer for Durable Objects
+// Scheduled Events -- SQLite-backed cron/timer for Durable Objects
 // ---------------------------------------------------------------------------
 
 export interface ScheduledEvent {

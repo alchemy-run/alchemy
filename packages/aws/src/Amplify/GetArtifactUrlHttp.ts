@@ -7,7 +7,7 @@ import type { App } from "./App.ts";
 import { GetArtifactUrl, type GetArtifactUrlRequest } from "./GetArtifactUrl.ts";
 
 // Bespoke (not via makeAmplifyHttpBinding): GetArtifactUrl addresses the
-// artifact by its globally-unique `artifactId` alone — there is no `appId`
+// artifact by its globally-unique `artifactId` alone -- there is no `appId`
 // to inject. The app is still bound for the IAM grant over its artifacts.
 export const GetArtifactUrlHttp = Layer.effect(
   GetArtifactUrl,

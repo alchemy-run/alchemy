@@ -14,17 +14,17 @@ import { listOwnedInstances } from "./org.ts";
 export type InstancesAttachmentProps = {
   /**
    * Apigee organization id. Defaults to the current GCP project id.
-   * Immutable — changing it replaces the attachment.
+   * Immutable -- changing it replaces the attachment.
    */
   organization?: string;
   /**
    * Parent instance id or full name
-   * (`organizations/{org}/instances/{instance}`). Immutable — changing it
+   * (`organizations/{org}/instances/{instance}`). Immutable -- changing it
    * replaces the attachment.
    */
   instance: string;
   /**
-   * Environment id to attach. Immutable — changing it replaces the
+   * Environment id to attach. Immutable -- changing it replaces the
    * attachment.
    */
   environment: string;
@@ -56,7 +56,7 @@ export type InstancesAttachment = Resource<
  *
  * Attachments have no labels or description. `list` enumerates
  * attachments on alchemy-owned instances so `pnpm nuke:gcp` can find
- * leaked rows. Organization, instance, and environment are identity —
+ * leaked rows. Organization, instance, and environment are identity --
  * changing them replaces the attachment. There is nothing else to
  * update in place.
  *

@@ -19,7 +19,7 @@ type TypeId = typeof TypeId;
 
 /**
  * The mutable Cloudflare Registrar settings on a registered domain. These
- * are the only fields the Registrar API can change — everything else about
+ * are the only fields the Registrar API can change -- everything else about
  * a registration (contacts, nameservers, renewal) is managed in the
  * Cloudflare dashboard.
  */
@@ -43,26 +43,26 @@ export interface DomainProps {
   /**
    * The fully-qualified domain name of a domain that is **already
    * registered** with Cloudflare Registrar on this account (e.g.
-   * `example.com`). Domains cannot be registered or released via the API —
+   * `example.com`). Domains cannot be registered or released via the API --
    * registration happens in the Cloudflare dashboard.
    *
-   * The domain name is the resource's identity — changing it triggers a
+   * The domain name is the resource's identity -- changing it triggers a
    * replacement (the old domain's settings are restored to the values they
    * had before Alchemy managed them).
    */
   domainName: string;
   /**
-   * Whether the registration auto-renews before it expires. Mutable —
+   * Whether the registration auto-renews before it expires. Mutable --
    * updated in place. When omitted, the current value is left untouched.
    */
   autoRenew?: boolean;
   /**
-   * Whether the registrar transfer lock is in place. Mutable — updated in
+   * Whether the registrar transfer lock is in place. Mutable -- updated in
    * place. When omitted, the current value is left untouched.
    */
   locked?: boolean;
   /**
-   * Whether WHOIS information is redacted. Mutable — updated in place.
+   * Whether WHOIS information is redacted. Mutable -- updated in place.
    * When omitted, the current value is left untouched.
    */
   privacy?: boolean;
@@ -98,7 +98,7 @@ export interface DomainAttributes {
   /**
    * The settings the domain had before Alchemy first managed it. Restored
    * on destroy, so deleting the resource puts the registration back the
-   * way it was found — the domain itself is never released.
+   * way it was found -- the domain itself is never released.
    */
   initialSettings: DomainSettings;
 }
@@ -110,7 +110,7 @@ export type Domain = Resource<TypeId, DomainProps, DomainAttributes, never, Prov
  * `privacy`) on a domain that is already registered with Cloudflare
  * Registrar.
  *
- * Domains cannot be registered or released through the API — purchases,
+ * Domains cannot be registered or released through the API -- purchases,
  * transfers, and renewals happen in the Cloudflare dashboard. This resource
  * therefore never creates or deletes a registration: reconcile adopts the
  * existing domain and converges only the settings you declare, and destroy
@@ -193,7 +193,7 @@ export const DomainProvider = () =>
       const observed = yield* findDomain(acct, domainName);
       if (!observed) return undefined;
       // The underlying registration always pre-exists (it can only be
-      // created in the dashboard) — there is no notion of creating it
+      // created in the dashboard) -- there is no notion of creating it
       // ourselves, so a cold read adopts freely (never `Unowned`). The
       // observed settings at adoption time become the `initialSettings`
       // restored on destroy.
@@ -206,7 +206,7 @@ export const DomainProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const domainName = news.domainName;
 
-      // 1. Observe — the registration must already exist on the account;
+      // 1. Observe -- the registration must already exist on the account;
       //    the API cannot create one.
       const observed = yield* findDomain(accountId, domainName);
       if (!observed) {
@@ -214,19 +214,19 @@ export const DomainProvider = () =>
           message:
             `Domain "${domainName}" is not registered with Cloudflare Registrar ` +
             `on account ${accountId}. Cloudflare.Registrar.Domain only manages ` +
-            `settings on an existing registration — register or transfer the ` +
+            `settings on an existing registration \u2014 register or transfer the ` +
             `domain in the Cloudflare dashboard first.`,
         });
       }
 
-      // 2. Capture — the pre-management settings, restored on destroy.
+      // 2. Capture -- the pre-management settings, restored on destroy.
       //    `output` (including an adoption read) already carries them;
       //    otherwise this is our first touch and the observed settings are
       //    the registration's originals.
       const initialSettings =
         output !== undefined ? output.initialSettings : captureSettings(observed);
 
-      // 3. Sync — diff the observed settings against the declared props and
+      // 3. Sync -- diff the observed settings against the declared props and
       //    PUT only on a delta. Omitted props are left untouched.
       const delta = settingsDelta(observed, news);
       if (delta === undefined) {
@@ -234,7 +234,7 @@ export const DomainProvider = () =>
       }
       yield* registrar.putDomain({ accountId, domainName, ...delta });
 
-      // 4. Return — re-read so attributes reflect live state; registrar
+      // 4. Return -- re-read so attributes reflect live state; registrar
       //    updates can apply asynchronously, so overlay the desired
       //    settings on what we just put.
       const fresh = (yield* findDomain(accountId, domainName)) ?? observed;
@@ -243,16 +243,16 @@ export const DomainProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { domainName, accountId, initialSettings } = output;
-      // Never release the registration — destroy only restores the
+      // Never release the registration -- destroy only restores the
       // settings the domain had before Alchemy managed it.
       const observed = yield* findDomain(accountId, domainName);
-      // Domain gone (transferred out / expired out-of-band) — nothing to
+      // Domain gone (transferred out / expired out-of-band) -- nothing to
       // restore.
       if (!observed) return;
       const delta = settingsDelta(observed, initialSettings);
       if (delta === undefined) return;
       yield* registrar.putDomain({ accountId, domainName, ...delta }).pipe(
-        // Lost ownership between the observe and the put — gone is done.
+        // Lost ownership between the observe and the put -- gone is done.
         Effect.catchTag("RegistrarDomainNotOwned", () => Effect.void),
       );
     }),
@@ -260,8 +260,8 @@ export const DomainProvider = () =>
     // Account-scoped collection: enumerate every domain registered with
     // Cloudflare Registrar on the account, exhaustively paginated, and
     // hydrate each into the exact `read` Attributes shape. There is no prior
-    // managed state for an enumerated domain, so — exactly like a cold
-    // adoption read — the observed settings become the `initialSettings`.
+    // managed state for an enumerated domain, so -- exactly like a cold
+    // adoption read -- the observed settings become the `initialSettings`.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       return yield* registrar.listDomains.pages({ accountId }).pipe(
@@ -344,7 +344,7 @@ const toAttributes = (
 ): DomainAttributes => ({
   domainName,
   accountId,
-  // Registrar setting updates can apply asynchronously — overlay the
+  // Registrar setting updates can apply asynchronously -- overlay the
   // settings we just PUT over the (possibly lagging) observed values.
   autoRenew: desired?.autoRenew ?? observed.autoRenew ?? undefined,
   locked: desired?.locked ?? observed.locked ?? undefined,

@@ -5,15 +5,15 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `ram:ListSourceAssociations`.
  *
- * Lists the source associations of your resource shares — the sources that service-managed shares draw resources from.
- * Account-level operation — the target shares, invitations, and permissions
+ * Lists the source associations of your resource shares -- the sources that service-managed shares draw resources from.
+ * Account-level operation -- the target shares, invitations, and permissions
  * are chosen per request at runtime, so the binding takes no resource
  * argument. Provide the implementation with
  * `Effect.provide(AWS.RAM.ListSourceAssociationsHttp)`.
  * ### Discovering Shares & Shared Resources
  * **Example:** List Source Associations
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listSourceAssociations = yield* AWS.RAM.ListSourceAssociations();
  *
  * // runtime

@@ -37,7 +37,7 @@ export type AppsGuardrailProps = {
   /**
    * Parent CES app. Full name
    * `projects/{project}/locations/{location}/apps/{app}` or the app id
-   * (combined with `location`). Immutable — changing it replaces the
+   * (combined with `location`). Immutable -- changing it replaces the
    * guardrail.
    */
   app: string;
@@ -47,7 +47,7 @@ export type AppsGuardrailProps = {
    */
   location?: string;
   /**
-   * Guardrail id. If omitted, a unique name is generated. Immutable —
+   * Guardrail id. If omitted, a unique name is generated. Immutable --
    * changing it replaces the guardrail.
    */
   guardrailId?: string;
@@ -165,10 +165,10 @@ export interface AppsGuardrailLookup {
 }
 
 /**
- * A Customer Engagement Suite guardrail — content filter, LLM policy,
+ * A Customer Engagement Suite guardrail -- content filter, LLM policy,
  * model safety, or callback checks attached to an app or agent.
  *
- * Guardrails have no labels field — Alchemy stamps ownership into
+ * Guardrails have no labels field -- Alchemy stamps ownership into
  * `description` so `list` / nuke can find them. Parent app, location,
  * and guardrail id are immutable.
  *

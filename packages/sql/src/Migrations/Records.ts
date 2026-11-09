@@ -69,7 +69,7 @@ export const readDrizzleDirRecords = (dir: string) =>
 
 /**
  * Read a flat directory of `.sql` files into records keyed by relative file
- * path — the convention wrangler and legacy Alchemy state share. Nested
+ * path -- the convention wrangler and legacy Alchemy state share. Nested
  * `dir/migration.sql` paths are included (via `listSqlFiles`'s recursive
  * listing) so legacy state written against drizzle-layout dirs keeps
  * resolving.

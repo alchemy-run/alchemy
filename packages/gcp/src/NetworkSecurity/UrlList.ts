@@ -29,11 +29,11 @@ export type UrlListProps = {
    * `projects/{project}/locations/{location}/urlLists/{urlList}`). If
    * omitted, a unique RFC1035 name is generated from the stack, stage,
    * and logical id. Must match `^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$`.
-   * Immutable — changing it replaces the list.
+   * Immutable -- changing it replaces the list.
    */
   urlListId?: string;
   /**
-   * Location (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Location (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the list. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
@@ -45,7 +45,7 @@ export type UrlListProps = {
   values: string[];
   /**
    * Human-readable description. UrlList has no labels field, so Alchemy
-   * ownership is stored in a `[alchemy …]` prefix and stripped from
+   * ownership is stored in a `[alchemy ...]` prefix and stripped from
    * attributes.
    */
   description?: string;
@@ -61,7 +61,7 @@ export type UrlList = Resource<
     urlListId: string;
     /** Project id. */
     project: string;
-    /** Location id (`us-central1`, …). */
+    /** Location id (`us-central1`, ...). */
     location: string;
     /** FQDNs and URLs currently configured. */
     values: string[];
@@ -90,7 +90,7 @@ export interface UrlListLookup {
    */
   urlListId: string;
   /**
-   * Location (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * Location (`us-central1`, `us-east1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;

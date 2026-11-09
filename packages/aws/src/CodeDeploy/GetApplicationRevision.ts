@@ -9,7 +9,7 @@ export interface GetApplicationRevisionRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `codedeploy:GetApplicationRevision` — reads a
+ * Runtime binding for `codedeploy:GetApplicationRevision` -- reads a
  * registered revision's metadata (description, deployment groups it was
  * deployed to, first-seen time).
  * ### Managing Revisions

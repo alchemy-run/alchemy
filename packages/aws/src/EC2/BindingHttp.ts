@@ -8,8 +8,8 @@ import type { Volume } from "./Volume.ts";
 /**
  * Shared scaffolding for EC2 HTTP bindings.
  *
- * NOT exported from `index.ts` — every single-operation `{Op}Http.ts` in this
- * service is a thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of
+ * NOT exported from `index.ts` -- every single-operation `{Op}Http.ts` in this
+ * service is a thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of
  * the three builders below (one per bound resource kind). Everything except
  * the operation, the IAM action list, and the injected identifier is
  * boilerplate. Genuinely-different bindings (custom response shaping like
@@ -20,7 +20,7 @@ import type { Volume } from "./Volume.ts";
  * Build the impl Effect for an operation scoped to a bound {@link Instance}.
  * The runtime callable injects the instance id (as the scalar `InstanceId` or
  * the single-element `InstanceIds` array, per `requestKey`) and the
- * deploy-time half grants `actions` on the instance ARN — or on `*` for
+ * deploy-time half grants `actions` on the instance ARN -- or on `*` for
  * `Describe*` actions, which do not support resource-level permissions.
  */
 export const makeInstanceHttpBinding = <I extends object, A, E, R>(options: {

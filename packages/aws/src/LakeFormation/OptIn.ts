@@ -16,7 +16,7 @@ export interface OptInProps {
    */
   principal: string;
   /**
-   * The Data Catalog resource (database, table, …) to enforce Lake
+   * The Data Catalog resource (database, table, ...) to enforce Lake
    * Formation permissions on for the principal. Changing it replaces the
    * opt-in.
    */
@@ -35,7 +35,7 @@ export interface OptIn extends Resource<
 > {}
 
 /**
- * A Lake Formation opt-in — enforces Lake Formation permissions for one
+ * A Lake Formation opt-in -- enforces Lake Formation permissions for one
  * principal on one Data Catalog resource while the account is in hybrid
  * access mode (where IAM/S3 policies otherwise govern access).
  *
@@ -106,7 +106,7 @@ export const OptInProvider = () =>
           }
           const found = yield* observe(principal, resource);
           if (found === undefined) return undefined;
-          // Opt-ins are not taggable — ownership cannot be verified.
+          // Opt-ins are not taggable -- ownership cannot be verified.
           return { principal, resource };
         }),
 
@@ -117,7 +117,7 @@ export const OptInProvider = () =>
             JSON.stringify(toWireResource(news.resource)) !==
               JSON.stringify(toWireResource(olds.resource))
           ) {
-            // an opt-in has no mutable body — any change replaces it
+            // an opt-in has no mutable body -- any change replaces it
             return { action: "replace" } as const;
           }
         }),
@@ -128,7 +128,7 @@ export const OptInProvider = () =>
           // 1. OBSERVE
           const found = yield* observe(news.principal, resource);
 
-          // 2. ENSURE — existence-only resource, nothing to sync. A freshly
+          // 2. ENSURE -- existence-only resource, nothing to sync. A freshly
           //    created IAM principal takes ~10s to propagate before Lake
           //    Formation accepts it, so retry through the typed rejection.
           if (found === undefined) {

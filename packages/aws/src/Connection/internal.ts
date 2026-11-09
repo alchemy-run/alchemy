@@ -3,7 +3,7 @@ import * as Redacted from "effect/Redacted";
 /**
  * Connection descriptor shared by every SQL-wire `Connect` binding
  * (RDS/Aurora, DSQL, Redshift, ...). The `url` field is the RFC-3986
- * connection URL — it feeds `Drizzle.Postgres` / a Hyperdrive origin
+ * connection URL -- it feeds `Drizzle.Postgres` / a Hyperdrive origin
  * directly, so consumers need zero per-engine glue.
  */
 export interface SqlConnectionInfo {
@@ -23,7 +23,7 @@ export interface SqlConnectionInfo {
   /** Whether the connection requires TLS. */
   ssl: boolean;
   /**
-   * RFC-3986 connection URL — feeds `Drizzle.Postgres` / Hyperdrive
+   * RFC-3986 connection URL -- feeds `Drizzle.Postgres` / Hyperdrive
    * origin directly.
    */
   url: Redacted.Redacted<string>;
@@ -62,9 +62,9 @@ export interface SqlConnectionUrlOptions {
   /**
    * `sslmode` value appended when {@link SqlConnectionUrlOptions.ssl} is
    * `true`. `node-pg`'s URL parser treats `require` as full-verification
-   * TLS against Node's trust store — endpoints whose certificates chain to
+   * TLS against Node's trust store -- endpoints whose certificates chain to
    * a private CA (RDS/Aurora) must use `no-verify` (TLS on, identity
-   * verification off — libpq `require` semantics) unless the CA bundle is
+   * verification off -- libpq `require` semantics) unless the CA bundle is
    * provided out-of-band.
    * @default "require"
    */

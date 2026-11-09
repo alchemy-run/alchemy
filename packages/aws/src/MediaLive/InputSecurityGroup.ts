@@ -74,7 +74,7 @@ export interface InputSecurityGroupLookup {
 }
 
 /**
- * An AWS Elemental MediaLive input security group — an IP allowlist that
+ * An AWS Elemental MediaLive input security group -- an IP allowlist that
  * gates which source networks may push content to attached PUSH inputs
  * (RTMP_PUSH, RTP_PUSH, UDP_PUSH).
  *
@@ -131,7 +131,7 @@ export const InputSecurityGroupProvider = () =>
           .filter((cidr): cidr is string => cidr !== undefined),
       });
 
-      /** Describe by id; typed not-found (or tombstone state) → undefined. */
+      /** Describe by id; typed not-found (or tombstone state) -> undefined. */
       const getGroup = Effect.fn(function* (id: string) {
         const isg = yield* medialive
           .describeInputSecurityGroup({ InputSecurityGroupId: id })
@@ -194,7 +194,7 @@ export const InputSecurityGroupProvider = () =>
           return (yield* hasAlchemyTags(id, toTagRecord(isg.Tags))) ? attrs : Unowned(attrs);
         }),
 
-        // No immutable props — every drift is an in-place update.
+        // No immutable props -- every drift is an in-place update.
         diff: Effect.fn(function* () {}),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -202,13 +202,13 @@ export const InputSecurityGroupProvider = () =>
           const desiredTags = { ...internalTags, ...news.tags };
           const rules = desiredRules(news);
 
-          // 1. Observe — cloud state is authoritative; output is an id cache.
+          // 1. Observe -- cloud state is authoritative; output is an id cache.
           let isg =
             output?.inputSecurityGroupId !== undefined
               ? yield* getGroup(output.inputSecurityGroupId)
               : yield* findByTags(id);
 
-          // 2. Ensure — create if missing.
+          // 2. Ensure -- create if missing.
           if (isg === undefined) {
             const created = yield* medialive.createInputSecurityGroup({
               WhitelistRules: rules,
@@ -219,7 +219,7 @@ export const InputSecurityGroupProvider = () =>
               "CreateInputSecurityGroup SecurityGroup Id/Arn",
             );
           } else {
-            // 3. Sync — apply whitelist rules only when they drift.
+            // 3. Sync -- apply whitelist rules only when they drift.
             const observed = (isg.WhitelistRules ?? [])
               .map((r) => r.Cidr)
               .filter((cidr): cidr is string => cidr !== undefined)
@@ -240,7 +240,7 @@ export const InputSecurityGroupProvider = () =>
             }
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           yield* syncMlTags(isg.Arn, desiredTags);
 
           yield* session.note(isg.Id);

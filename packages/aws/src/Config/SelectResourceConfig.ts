@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `config:SelectResourceConfig` — run a SQL `SELECT`
+ * Runtime binding for `config:SelectResourceConfig` -- run a SQL `SELECT`
  * query (AWS Config advanced query) against the current configuration
  * state of recorded resources.
  *
@@ -12,7 +12,7 @@ import type * as Effect from "effect/Effect";
  * ### Querying with SQL
  * **Example:** Query Resource State with SQL
  * ```typescript
- * // init — grants config:SelectResourceConfig
+ * // init -- grants config:SelectResourceConfig
  * const selectResourceConfig = yield* AWS.Config.SelectResourceConfig();
  *
  * // runtime

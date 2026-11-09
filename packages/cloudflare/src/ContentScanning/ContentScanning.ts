@@ -16,13 +16,13 @@ type ContentScanningStatus = "enabled" | "disabled";
 
 export interface Props {
   /**
-   * Zone to manage WAF Content Scanning on. Stable — changing the zone
+   * Zone to manage WAF Content Scanning on. Stable -- changing the zone
    * triggers a replacement (the old zone's status is restored to the
    * value it had before Alchemy managed it).
    */
   zoneId: string;
   /**
-   * Whether Content Scanning is enabled on the zone. Mutable — toggled
+   * Whether Content Scanning is enabled on the zone. Mutable -- toggled
    * in place via the settings endpoint.
    *
    * Enabling requires the WAF Content Scanning Enterprise add-on;
@@ -52,7 +52,7 @@ export interface Attributes {
 export type ContentScanning = Resource<TypeId, Props, Attributes, never, Providers>;
 
 /**
- * WAF Content Scanning (malicious uploads detection) on a Cloudflare zone —
+ * WAF Content Scanning (malicious uploads detection) on a Cloudflare zone --
  * the `/zones/{zone_id}/content-upload-scan/settings` singleton toggle.
  *
  * Content Scanning is a zone singleton: the setting always exists (default
@@ -118,7 +118,7 @@ export const ContentScanningProvider = () =>
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // No account-wide API for this zone singleton — enumerate every
+      // No account-wide API for this zone singleton -- enumerate every
       // zone in the account and read its status (every zone has one).
       const allZones = yield* listAllZones(accountId);
       const rows = yield* Effect.forEach(
@@ -149,12 +149,12 @@ export const ContentScanningProvider = () =>
       const zoneId = output?.zoneId ?? (olds?.zoneId as string | undefined);
       if (!zoneId) return undefined;
       const observed = yield* contentScanning.getContentScanning({ zoneId }).pipe(
-        // Zone deleted out-of-band — the setting is gone with it.
+        // Zone deleted out-of-band -- the setting is gone with it.
         Effect.catchTag("InvalidRoute", () => Effect.undefined),
       );
       if (observed === undefined) return undefined;
       // The setting is a singleton that always exists with a Cloudflare
-      // default — there is nothing to "own", so a cold read adopts freely
+      // default -- there is nothing to "own", so a cold read adopts freely
       // (never `Unowned`). The observed status at adoption time becomes
       // the `initialValue` restored on destroy.
       const initialValue = output !== undefined ? output.initialValue : statusOf(observed);
@@ -165,16 +165,16 @@ export const ContentScanningProvider = () =>
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
 
-      // 1. Observe — the setting always exists; read its live status.
+      // 1. Observe -- the setting always exists; read its live status.
       const observed = yield* contentScanning.getContentScanning({ zoneId });
 
-      // 2. Capture — the pre-management status, restored on destroy.
+      // 2. Capture -- the pre-management status, restored on destroy.
       //    `output` (including an adoption read) already carries it;
       //    otherwise this is our first touch and the observed status is
       //    the zone's original.
       const initialValue = output !== undefined ? output.initialValue : statusOf(observed);
 
-      // 3. Sync — PUT only when the observed status differs.
+      // 3. Sync -- PUT only when the observed status differs.
       const desired: ContentScanningStatus = news.enabled === false ? "disabled" : "enabled";
       if (statusOf(observed) === desired) {
         return toAttributes(zoneId, observed, initialValue);
@@ -188,7 +188,7 @@ export const ContentScanningProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { zoneId, initialValue } = output;
-      // Observe — if the zone itself is gone, so is the setting.
+      // Observe -- if the zone itself is gone, so is the setting.
       const observed = yield* contentScanning
         .getContentScanning({ zoneId })
         .pipe(Effect.catchTag("InvalidRoute", () => Effect.undefined));

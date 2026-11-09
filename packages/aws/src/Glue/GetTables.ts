@@ -12,7 +12,7 @@ export interface GetTablesRequest extends Omit<
  * Runtime binding for `glue:GetTables`.
  *
  * Lists the table definitions of the bound {@link Database} (optionally
- * filtered by an `Expression` pattern, paginated via `NextToken`) — runtime
+ * filtered by an `Expression` pattern, paginated via `NextToken`) -- runtime
  * schema discovery over the Data Catalog. The database name and catalog id
  * are injected from the binding. Provide the implementation with
  * `Effect.provide(AWS.Glue.GetTablesHttp)`.

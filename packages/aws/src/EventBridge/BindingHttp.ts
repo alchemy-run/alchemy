@@ -8,23 +8,23 @@ import type { Rule } from "./Rule.ts";
 /**
  * Shared scaffolding for the EventBridge runtime bindings.
  *
- * NOT exported from `index.ts` — every single-operation `{Op}Http.ts` in
- * this service is a thin `Layer.effect(Cap, makeEventBridge…HttpBinding({ … }))`
+ * NOT exported from `index.ts` -- every single-operation `{Op}Http.ts` in
+ * this service is a thin `Layer.effect(Cap, makeEventBridge...HttpBinding({ ... }))`
  * over one of the three builders below. Everything except the operation, the
  * IAM action list, and the injected identifier(s) is boilerplate:
  *
- * - {@link makeEventBridgeAccountHttpBinding} — account-level operations
+ * - {@link makeEventBridgeAccountHttpBinding} -- account-level operations
  *   (`ListEventBuses`, `TestEventPattern`, `ListRuleNamesByTarget`, replay
  *   reads). The runtime callable passes the caller's request through
  *   unchanged; the deploy-time half grants `actions` on `resources`
- *   (default `*` — most EventBridge list/test actions do not support
+ *   (default `*` -- most EventBridge list/test actions do not support
  *   resource-level permissions).
- * - {@link makeEventBridgeBusHttpBinding} — operations scoped to an optional
+ * - {@link makeEventBridgeBusHttpBinding} -- operations scoped to an optional
  *   bound {@link EventBus} (`DescribeEventBus`, `ListRules`). The runtime
  *   callable injects the bus name under `busNameKey` (omitted for the
  *   default bus); the deploy-time half grants `actions` on the bus ARN, or
  *   the account default bus ARN when no bus is bound.
- * - {@link makeEventBridgeRuleHttpBinding} — operations scoped to a bound
+ * - {@link makeEventBridgeRuleHttpBinding} -- operations scoped to a bound
  *   {@link Rule} (`DescribeRule`, `ListTargetsByRule`, `EnableRule`,
  *   `DisableRule`). The runtime callable injects the rule name under
  *   `ruleNameKey` and the bus name under `EventBusName` (omitted for the
@@ -114,7 +114,7 @@ export const makeEventBridgeBusHttpBinding = <I, A, E, R>(options: {
           accountId: string;
           region: string;
         }>;
-        // Pass the ARN as an unresolved Output — binding data is resolved
+        // Pass the ARN as an unresolved Output -- binding data is resolved
         // by the engine before the host reconciles. Eagerly yielding here
         // (during plan) produces a deferred object that serializes into an
         // invalid IAM policy (MalformedPolicyDocumentException).

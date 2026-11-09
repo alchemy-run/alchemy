@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `comprehendmedical:StopPHIDetectionJob` — stop an in-progress asynchronous protected health information (PHI) detection job.
+ * Runtime binding for `comprehendmedical:StopPHIDetectionJob` -- stop an in-progress asynchronous protected health information (PHI) detection job.
  *
  * Comprehend Medical has no resource-level IAM, so the binding takes no
  * arguments and grants `comprehendmedical:StopPHIDetectionJob` on `*`. Provide the

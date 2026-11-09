@@ -31,7 +31,7 @@ export type TopicSinkError = sns.PublishBatchError | BatchRetryExhaustedError<To
  * const sink = yield* SNS.TopicSink(topic);
  *
  * // runtime: batching, size limits, and transient-failure retry are handled
- * // by the sink — each element is a PublishBatchRequestEntry minus `Id`.
+ * // by the sink -- each element is a PublishBatchRequestEntry minus `Id`.
  * yield* Stream.fromIterable(messages).pipe(
  *   Stream.map((message) => ({ Message: message })),
  *   Stream.run(sink),

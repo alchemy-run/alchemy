@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `imagebuilder:ListImageScanFindingAggregations`.
  *
- * Returns Amazon Inspector finding counts grouped by severity — for the
+ * Returns Amazon Inspector finding counts grouped by severity -- for the
  * whole account, or grouped by one key (`imagePipelineArn`,
  * `imageBuildVersionArn`, `accountId`, `vulnerabilityId`) when a filter is
  * supplied. Provide the implementation with
@@ -13,7 +13,7 @@ import type * as Effect from "effect/Effect";
  * ### Scan Findings
  * **Example:** Aggregate Findings by Pipeline
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listImageScanFindingAggregations =
  *   yield* AWS.ImageBuilder.ListImageScanFindingAggregations();
  *

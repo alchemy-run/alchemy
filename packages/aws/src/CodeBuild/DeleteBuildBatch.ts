@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Project } from "./Project.ts";
 
 /**
- * Runtime binding for `codebuild:DeleteBuildBatch` — deletes a batch build
+ * Runtime binding for `codebuild:DeleteBuildBatch` -- deletes a batch build
  * of the bound project (and its child builds) by batch id.
  * ### Batch Builds
  * **Example:** Delete a Batch Build

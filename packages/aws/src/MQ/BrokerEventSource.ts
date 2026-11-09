@@ -6,7 +6,7 @@ import type { Broker } from "./Broker.ts";
 
 /**
  * A single message delivered by an Amazon MQ event source. The shape differs
- * slightly between ActiveMQ (`aws:mq`) and RabbitMQ (`aws:rmq`) — the common
+ * slightly between ActiveMQ (`aws:mq`) and RabbitMQ (`aws:rmq`) -- the common
  * fields are typed here and the raw payload is available for engine-specific
  * access.
  */
@@ -86,13 +86,13 @@ type MessagesHandler<Req> = (stream: Stream.Stream<MQMessage>) => Effect.Effect<
  * messages.
  *
  * Call it in the function's init phase and provide the host implementation
- * layer (`Lambda.BrokerEventSource`) on the function Effect — the
+ * layer (`Lambda.BrokerEventSource`) on the function Effect -- the
  * event-source mapping, IAM grants, and runtime dispatch are registered
  * automatically.
  *
  * @example
  * ```typescript
- * // init — inside the Lambda function's setup Effect
+ * // init -- inside the Lambda function's setup Effect
  * const broker = yield* MQ.Broker("Orders", {
  *   engineType: "ACTIVEMQ",
  *   engineVersion: "5.18",

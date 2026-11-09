@@ -131,7 +131,7 @@ export interface BranchLookup {
  * ```typescript
  * const branch = yield* Prisma.Branch("preview", {
  *   project: project.projectId,
- *   gitName: "feature/search", // optional — omitted, a stable name is generated
+ *   gitName: "feature/search", // optional -- omitted, a stable name is generated
  * });
  *
  * branch.role;      // "preview"

@@ -39,7 +39,7 @@ export interface WebhookProps {
 }
 
 export interface WebhookAttributes {
-  /** Boat's webhook id (`wh_…`). */
+  /** Boat's webhook id (`wh_...`). */
   webhookId: string;
   name: string;
   url: string;
@@ -131,7 +131,7 @@ export const WebhookProvider = () =>
             return toAttributes(created.webhook, redact(created.secret));
           }
 
-          // Sync — name, URL and events, against what Boat reports.
+          // Sync -- name, URL and events, against what Boat reports.
           if (
             webhook.name !== name ||
             webhook.url !== news.url ||

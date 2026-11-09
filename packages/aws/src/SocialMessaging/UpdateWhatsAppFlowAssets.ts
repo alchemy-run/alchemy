@@ -26,7 +26,7 @@ export interface UpdateWhatsAppFlowAssetsRequest extends Omit<
  * ### Managing WhatsApp Flows
  * **Example:** Upload Flow JSON
  * ```typescript
- * // init — bind the operation to the linked WABA
+ * // init -- bind the operation to the linked WABA
  * const updateFlowAssets = yield* AWS.SocialMessaging.UpdateWhatsAppFlowAssets(account);
  *
  * // runtime

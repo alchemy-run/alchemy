@@ -4,7 +4,7 @@ import { makeIotAccountHttpBinding } from "./BindingHttp.ts";
 import { ListRetainedMessages } from "./ListRetainedMessages.ts";
 
 /**
- * HTTP implementation of the {@link ListRetainedMessages} capability —
+ * HTTP implementation of the {@link ListRetainedMessages} capability --
  * grants `iot:ListRetainedMessages` on `*` and calls the IoT data-plane
  * `ListRetainedMessages` API.
  */

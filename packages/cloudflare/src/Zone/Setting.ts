@@ -11,7 +11,7 @@ const TypeId = "Cloudflare.Zone.Setting" as const;
 type TypeId = typeof TypeId;
 
 /**
- * Identifier of a Cloudflare zone setting — every value Cloudflare
+ * Identifier of a Cloudflare zone setting -- every value Cloudflare
  * recognises on `/zones/{zone_id}/settings/{settingId}`. The open
  * `(string & {})` tail keeps the type forward-compatible with settings
  * Cloudflare adds later.
@@ -155,14 +155,14 @@ const KNOWN_ZONE_SETTING_IDS = [
 
 export type SettingProps = {
   /**
-   * Zone the setting belongs to. Stable — changing the zone triggers a
+   * Zone the setting belongs to. Stable -- changing the zone triggers a
    * replacement (the old zone's setting is restored to the value it had
    * before Alchemy managed it).
    */
   zoneId: string;
   /**
    * Which zone setting to manage (e.g. `always_online`,
-   * `browser_cache_ttl`, `min_tls_version`). Stable — the setting id is
+   * `browser_cache_ttl`, `min_tls_version`). Stable -- the setting id is
    * the resource's identity, so changing it triggers a replacement.
    *
    * Declared as plain `string` (narrowed to {@link SettingId}) so
@@ -170,12 +170,12 @@ export type SettingProps = {
    */
   settingId: SettingId;
   /**
-   * Desired value of the setting. The shape depends on `settingId` —
+   * Desired value of the setting. The shape depends on `settingId` --
    * on/off toggles take `"on"`/`"off"`, `browser_cache_ttl` takes a
    * number of seconds, structured settings (e.g. `ciphers`,
    * `security_header`) take arrays/objects.
    *
-   * Mutable — patched in place.
+   * Mutable -- patched in place.
    */
   value: unknown;
 };
@@ -208,13 +208,13 @@ export type Setting = Resource<TypeId, SettingProps, SettingAttributes, never, P
  * A single Cloudflare zone setting (`/zones/{zone_id}/settings/{settingId}`)
  * pinned to a desired value.
  *
- * Zone settings are singletons — every setting always exists on every zone
+ * Zone settings are singletons -- every setting always exists on every zone
  * (with a Cloudflare default), so this resource never creates or deletes
  * anything physical. Reconcile patches the setting when the observed value
  * differs from the desired one; destroy restores the value the setting had
  * before Alchemy first managed it (captured as `initialValue`).
  *
- * Many settings are plan-gated (`editable: false` on lower plans — e.g.
+ * Many settings are plan-gated (`editable: false` on lower plans -- e.g.
  * `image_resizing`, `polish` need Pro+; `advanced_ddos` is Enterprise).
  * Patching a non-editable setting fails with Cloudflare's "setting not
  * editable" error.
@@ -296,12 +296,12 @@ export const SettingProvider = () =>
       const settingId = output?.settingId ?? olds?.settingId;
       if (!zoneId || !settingId) return undefined;
       const observed = yield* zones.getSetting({ zoneId, settingId }).pipe(
-        // Zone deleted out-of-band — the setting is gone with it.
+        // Zone deleted out-of-band -- the setting is gone with it.
         Effect.catchTag("InvalidZoneIdentifier", () => Effect.undefined),
       );
       if (observed === undefined) return undefined;
       // Settings are singletons that always exist with a Cloudflare
-      // default — there is nothing to "own", so a cold read adopts
+      // default -- there is nothing to "own", so a cold read adopts
       // freely (never `Unowned`). The observed value at adoption time
       // becomes the `initialValue` restored on destroy.
       const initialValue = output !== undefined ? output.initialValue : settingValue(observed);
@@ -313,16 +313,16 @@ export const SettingProvider = () =>
       const zoneId = news.zoneId as string;
       const settingId = news.settingId;
 
-      // 1. Observe — the setting always exists; read its live value.
+      // 1. Observe -- the setting always exists; read its live value.
       const observed = yield* zones.getSetting({ zoneId, settingId });
 
-      // 2. Capture — the pre-management value, restored on destroy.
+      // 2. Capture -- the pre-management value, restored on destroy.
       //    `output` (including an adoption read) already carries it;
       //    otherwise this is our first touch and the observed value is
       //    the zone's original.
       const initialValue = output !== undefined ? output.initialValue : settingValue(observed);
 
-      // 3. Sync — patch only when the observed value differs.
+      // 3. Sync -- patch only when the observed value differs.
       if (deepValueEquals(settingValue(observed), news.value)) {
         return toAttributes(zoneId, settingId, observed, initialValue);
       }
@@ -336,7 +336,7 @@ export const SettingProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { zoneId, settingId, initialValue } = output;
-      // Observe — if the zone itself is gone, so is the setting.
+      // Observe -- if the zone itself is gone, so is the setting.
       const observed = yield* zones
         .getSetting({ zoneId, settingId })
         .pipe(Effect.catchTag("InvalidZoneIdentifier", () => Effect.undefined));
@@ -352,13 +352,13 @@ export const SettingProvider = () =>
     // Zone settings are keyed by (zoneId, settingId): every setting exists on
     // every zone with a Cloudflare default. There is no account-wide list, so
     // enumerate every zone via `listAllZones` and read each known setting with
-    // the same `getSetting` call `read` uses — emitting one Attributes per
+    // the same `getSetting` call `read` uses -- emitting one Attributes per
     // (zone, setting), exactly matching `read`'s keying.
     //
     // The distilled `zones` service exposes only a per-setting `getSetting`
     // (no bulk `/zones/{id}/settings` list op), so we fan out across the known
     // setting ids. Adding a bulk-list operation to distilled would collapse
-    // each zone's N gets into one call — see the agent report's neededPatch.
+    // each zone's N gets into one call -- see the agent report's neededPatch.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const allZones = yield* listAllZones(accountId);
@@ -378,7 +378,7 @@ export const SettingProvider = () =>
               toAttributes(zoneId, settingId, observed, settingValue(observed)),
             ),
             // Zone removed out-of-band or the setting is plan-gated / not
-            // exposed to this token — skip it rather than fail the listing.
+            // exposed to this token -- skip it rather than fail the listing.
             Effect.catchTag(["InvalidZoneIdentifier", "Forbidden"], () => Effect.undefined),
             // A handful of structured settings (e.g.
             // `automatic_platform_optimization`) can return a scalar value
@@ -386,7 +386,7 @@ export const SettingProvider = () =>
             // model, surfacing as an untyped `CloudflareHttpError` (status
             // 200, "Schema decode failed"). The Cloudflare patch system only
             // types errors, not response schemas, so this can't be patched
-            // here — skip the undecodable setting rather than failing the
+            // here -- skip the undecodable setting rather than failing the
             // whole listing. See the agent report's neededPatch (widen the
             // `GetSettingResponse` member to accept the scalar form).
             Effect.orElseSucceed(() => undefined),
@@ -427,7 +427,7 @@ const toAttributes = (
 };
 
 /**
- * Structural equality for setting values — primitives, arrays, and plain
+ * Structural equality for setting values -- primitives, arrays, and plain
  * objects (`null`-tolerant). Setting values are plain JSON, so this is
  * sufficient and avoids key-order false negatives that `JSON.stringify`
  * comparison would produce.

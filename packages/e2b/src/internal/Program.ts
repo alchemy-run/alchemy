@@ -18,7 +18,7 @@ export const DEFAULT_PORT = 3000;
 /**
  * The generated entry: raises the runtime flag BEFORE the user's module is
  * evaluated (hence the dynamic import), then boots the program. It imports
- * only `@alchemy.run/e2b/Bootstrap` and `main` — see `alchemy/Runtime/Bootstrap`.
+ * only `@alchemy.run/e2b/Bootstrap` and `main` -- see `alchemy/Runtime/Bootstrap`.
  */
 export const makeBootstrap =
   (handler: string) =>

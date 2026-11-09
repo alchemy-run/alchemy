@@ -6,15 +6,15 @@ import type { Pipeline } from "./Pipeline.ts";
 /**
  * Runtime binding for `osis:StopPipeline`.
  *
- * Stops the bound {@link Pipeline} — ingestion halts and OCU billing stops
- * (persistent-buffer storage is retained) — e.g. pausing a non-production
+ * Stops the bound {@link Pipeline} -- ingestion halts and OCU billing stops
+ * (persistent-buffer storage is retained) -- e.g. pausing a non-production
  * pipeline outside working hours. The pipeline name is injected from the
  * binding. Provide the implementation with
  * `Effect.provide(AWS.OSIS.StopPipelineHttp)`.
  * ### Controlling a Pipeline
  * **Example:** Pause Ingestion
  * ```typescript
- * // init — bind the operation to the pipeline
+ * // init -- bind the operation to the pipeline
  * const stopPipeline = yield* AWS.OSIS.StopPipeline(pipeline);
  *
  * // runtime

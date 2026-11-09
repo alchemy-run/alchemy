@@ -8,7 +8,7 @@ import type { HealthCheck } from "./HealthCheck.ts";
  * `route53:GetHealthCheckStatus` on the health check ARN).
  *
  * Reads the bound {@link HealthCheck}'s current status as reported by each
- * Route 53 checker — drive dashboards or failover decisions from the same
+ * Route 53 checker -- drive dashboards or failover decisions from the same
  * signal Route 53 routes on. Endpoint checks only (not `CALCULATED` /
  * `RECOVERY_CONTROL`). Provide the implementation with
  * `Effect.provide(AWS.Route53.GetHealthCheckStatusHttp)`.

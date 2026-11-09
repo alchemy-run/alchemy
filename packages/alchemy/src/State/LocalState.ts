@@ -51,11 +51,11 @@ export const makeLocalState = () =>
     // Directory-level NotFound recovery with a trust-but-verify twist.
     //
     // `list` and `deleteStack` treat a missing stage/stack directory as
-    // "no state" — the legitimate shape for a never-deployed (or fully
+    // "no state" -- the legitimate shape for a never-deployed (or fully
     // destroyed) stack. But a FALSE NotFound here is catastrophic: a
     // destroy that cannot see its state plans "no changes" and silently
     // leaks every cloud resource of the stack. So before recovering, the
-    // async result is cross-checked with a synchronous `existsSync` — a
+    // async result is cross-checked with a synchronous `existsSync` -- a
     // deliberately independent code path (`node:fs`, not the FileSystem
     // service) so a misbehaving async fs answer cannot vouch for itself.
     // If the directory actually exists, fail loudly instead of degrading
@@ -73,7 +73,7 @@ export const makeLocalState = () =>
                 ? Effect.fail(
                     new StateStoreError({
                       message:
-                        `state store reported NotFound for '${dir}', but the directory exists — ` +
+                        `state store reported NotFound for '${dir}', but the directory exists \u2014 ` +
                         `refusing to treat the stack's state as empty (a destroy acting on this ` +
                         `answer would leak every resource of the stack)`,
                       cause: e,
@@ -95,7 +95,7 @@ export const makeLocalState = () =>
 
     // Write state files atomically so a concurrent `get` (e.g. a parallel
     // test reading shared `.alchemy/state`) never observes a truncated,
-    // mid-write file — which would otherwise surface as `JSON.parse("")` →
+    // mid-write file -- which would otherwise surface as `JSON.parse("")` ->
     // "Unexpected end of JSON input".
     const writeAtomic = (file: string, contents: string) => writeFileAtomic(fs, file, contents);
 
@@ -158,7 +158,7 @@ export const makeLocalState = () =>
             (eff) => recoverMissingDir(dir, eff),
             // Drop cached `ensure`d directories under the removed tree, or a
             // later `set` for the same (stack, stage) skips makeDirectory and
-            // its write fails with NotFound — silently swallowed by `recover`.
+            // its write fails with NotFound -- silently swallowed by `recover`.
             Effect.tap(() =>
               Effect.sync(() => {
                 for (const cached of created) {
@@ -196,7 +196,7 @@ export const makeLocalState = () =>
           Effect.map((files) =>
             (files ?? [])
               // Only decode committed state files. Exclude:
-              //  - the `__stack_output__.json` bookkeeping file — `decodeFqn`
+              //  - the `__stack_output__.json` bookkeeping file -- `decodeFqn`
               //    turns `__` into `/`, which would slip the literal name past
               //    a bare-name filter and make the engine look up a
               //    non-existent resource;

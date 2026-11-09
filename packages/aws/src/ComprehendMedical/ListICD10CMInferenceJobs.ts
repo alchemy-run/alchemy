@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `comprehendmedical:ListICD10CMInferenceJobs` — list the asynchronous ICD-10-CM ontology linking jobs you have submitted.
+ * Runtime binding for `comprehendmedical:ListICD10CMInferenceJobs` -- list the asynchronous ICD-10-CM ontology linking jobs you have submitted.
  *
  * Comprehend Medical has no resource-level IAM, so the binding takes no
  * arguments and grants `comprehendmedical:ListICD10CMInferenceJobs` on `*`. Provide the

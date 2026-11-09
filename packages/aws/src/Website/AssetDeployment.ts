@@ -76,7 +76,7 @@ export interface AssetDeployment extends Resource<
      */
     prefix: string;
     /**
-     * Content hash of the uploaded file set — changes whenever any file body,
+     * Content hash of the uploaded file set -- changes whenever any file body,
      * content type, or cache-control changes. Useful as an invalidation token.
      */
     version: string;
@@ -115,7 +115,7 @@ export interface AssetDeployment extends Resource<
  * files in a directory, infers content types, applies cache-control defaults
  * (HTML is never cached; everything else is immutable), and can optionally
  * purge stale files under a prefix. `StaticSite` and `SsrSite` use it
- * internally — reach for it directly when you manage the bucket and CDN
+ * internally -- reach for it directly when you manage the bucket and CDN
  * yourself.
  * ### Deploying Files
  * **Example:** Upload A Build Directory
@@ -265,8 +265,8 @@ export const AssetDeploymentProvider = () =>
         // Non-listable: an AssetDeployment is an action (uploading a local
         // directory into a bucket under a prefix), keyed by {bucketName,
         // prefix}, not a standalone cloud resource. There is no AWS API that
-        // enumerates "asset deployments" — the uploaded objects are plain S3
-        // objects owned by their bucket — so there is nothing to enumerate.
+        // enumerates "asset deployments" -- the uploaded objects are plain S3
+        // objects owned by their bucket -- so there is nothing to enumerate.
         list: () => Effect.succeed([]),
         // The uploaded objects are the managed state: report each file's
         // live hash (and, with purge, any stray keys) so drift sees edits

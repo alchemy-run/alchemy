@@ -2,10 +2,10 @@
  * Phantom-typed JSONata value references for the Step Functions program DSL.
  *
  * An {@link Expr} is a *typed reference to a value that will exist at
- * execution time* — the execution input, the result of a previous state
+ * execution time* -- the execution input, the result of a previous state
  * (an ASL variable), the current Map item, etc. Property access is a Proxy
  * that builds up a JSONata path (`$states.context.Execution.Input.customerId`
- * style); comparator helpers (`eq`, `gt`, `and`, …) build boolean
+ * style); comparator helpers (`eq`, `gt`, `and`, ...) build boolean
  * expressions for Choice states.
  *
  * The same expression AST has two interpreters:
@@ -31,7 +31,7 @@ export type ExprRoot =
 export type ExprOperator = "=" | "!=" | ">" | ">=" | "<" | "<=" | "and" | "or";
 
 /**
- * The untyped expression AST behind an {@link Expr} proxy. Plain data — both
+ * The untyped expression AST behind an {@link Expr} proxy. Plain data -- both
  * the ASL printer and the local simulator interpret it structurally.
  */
 export type ExprNode =
@@ -45,7 +45,7 @@ export type ExprNode =
       readonly right: ExprNode;
     }
   | { readonly _: "not"; readonly inner: ExprNode }
-  /** Raw JSONata escape hatch — compiles verbatim, unsupported by simulate. */
+  /** Raw JSONata escape hatch -- compiles verbatim, unsupported by simulate. */
   | { readonly _: "raw"; readonly jsonata: string };
 
 interface ExprBrand<T> {
@@ -58,7 +58,7 @@ interface ExprBrand<T> {
 /**
  * A typed JSONata value reference. Property access is typed: given
  * `input: Expr<{ order: { total: number } }>`, `input.order.total` is an
- * `Expr<number>` that renders as `….order.total`.
+ * `Expr<number>` that renders as `....order.total`.
  *
  * Arrays are opaque references (pass them to `Sfn.forEach`); primitives are
  * leaf references usable in comparators and payloads.
@@ -108,7 +108,7 @@ export const makeExpr = <T>(node: ExprNode): Expr<T> => {
         // `toJSON`/`then` lookups happen when host code probes values
         // (JSON.stringify, await). Treat them as path segments would be
         // wrong; renderers detect Exprs *before* serialization, so any
-        // such probe reaching here is a misuse — return a child expr
+        // such probe reaching here is a misuse -- return a child expr
         // anyway (harmless, typed access never sees these names).
         return makeExpr({ _: "prop", parent: node, name: prop });
       },
@@ -186,7 +186,7 @@ export const variableExpr = <T>(name: string): Expr<T> =>
   makeExpr({ _: "root", root: { kind: "variable", name } });
 
 /**
- * The callback task token (`$states.context.Task.Token`) — embed inside
+ * The callback task token (`$states.context.Task.Token`) -- embed inside
  * `Sfn.waitForTaskToken` arguments so the callback side can complete the
  * task via `SendTaskSuccess`/`SendTaskFailure`.
  */

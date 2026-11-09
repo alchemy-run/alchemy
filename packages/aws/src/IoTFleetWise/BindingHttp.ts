@@ -7,12 +7,12 @@ import { inFleetWiseRegion } from "./internal.ts";
 /**
  * Shared scaffolding for AWS IoT FleetWise HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, makeFleetWise…HttpBinding({ … }))` over one of the two
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, makeFleetWise...HttpBinding({ ... }))` over one of the two
  * builders below. Everything except the operation, the injected identifier,
  * and the IAM action list + granted ARNs is boilerplate. Every runtime call
  * is piped through {@link inFleetWiseRegion} because AWS IoT FleetWise is
- * offered only in `us-east-1`/`eu-central-1` — a Lambda running anywhere else
+ * offered only in `us-east-1`/`eu-central-1` -- a Lambda running anywhere else
  * transparently calls the service's home region.
  */
 
@@ -81,7 +81,7 @@ export const makeFleetWiseResourceHttpBinding = <
 /**
  * Build the impl Effect for an account-level FleetWise operation (no bound
  * resource): the deploy-time half grants `actions` on `resources`
- * (default `*` — batch vehicle operations authorize on vehicle ARNs that
+ * (default `*` -- batch vehicle operations authorize on vehicle ARNs that
  * only exist at runtime), and the runtime callable passes the caller's
  * request through unchanged.
  */

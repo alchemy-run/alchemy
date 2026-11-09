@@ -5,7 +5,7 @@ import * as Data from "effect/Data";
  *
  * The hand-rolled client raised this as a protocol error; distilled returns
  * the page as the server sent it, so every walk raises it inline instead of
- * reading the malformed page as the end of the list — a truncated listing
+ * reading the malformed page as the end of the list -- a truncated listing
  * would make the adoption and uniqueness guards mint duplicates or miss live
  * resources.
  */

@@ -38,11 +38,11 @@ export type BackupPolicyProps = {
    * Backup policy id (the `{backupPolicy}` segment of
    * `projects/{project}/locations/{location}/backupPolicies/{backupPolicy}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
-   * and logical id. Immutable — changing it replaces the policy.
+   * and logical id. Immutable -- changing it replaces the policy.
    */
   backupPolicyId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the policy. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
@@ -127,7 +127,7 @@ export interface BackupPolicyLookup {
    */
   backupPolicyId: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * Region (`us-central1`, `us-east1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;

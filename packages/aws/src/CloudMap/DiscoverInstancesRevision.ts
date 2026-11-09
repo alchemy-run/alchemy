@@ -13,7 +13,7 @@ export interface DiscoverInstancesRevisionRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `servicediscovery:DiscoverInstancesRevision` — the
+ * Runtime binding for `servicediscovery:DiscoverInstancesRevision` -- the
  * Cloud Map data-plane query that returns the monotonically-increasing
  * revision of the bound {@link Service}'s instance set. Poll it as a cheap
  * change detector and re-call `DiscoverInstances` only when the revision
@@ -27,7 +27,7 @@ export interface DiscoverInstancesRevisionRequest extends Omit<
  *
  * const { InstancesRevision } = yield* discoverInstancesRevision();
  * if (InstancesRevision !== lastSeenRevision) {
- *   // instance set changed — re-run DiscoverInstances
+ *   // instance set changed -- re-run DiscoverInstances
  * }
  * ```
  *

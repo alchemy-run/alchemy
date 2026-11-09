@@ -8,13 +8,13 @@
  *
  * The v1 accepted fat (DESIGN.md §2.3): tree/blob closures of boundary
  * (common) commits are **not** subtracted, so an incremental fetch may
- * resend up to ~one snapshot's worth of trees/blobs — harmless to clients,
+ * resend up to ~one snapshot's worth of trees/blobs -- harmless to clients,
  * cheap to compute. Generation numbers are used soundly in one place: the
  * common-marking walk from haves never expands ancestors whose `gen` is
  * below the minimum generation seen in the want walk (such commits can
  * never be candidates, so the subtraction is unaffected).
  *
- * Manifest entries are ordered commits → tags → trees → blobs, and the
+ * Manifest entries are ordered commits -> tags -> trees -> blobs, and the
  * total is capped at {@link MANIFEST_CAP} objects (the documented v1
  * limit; larger repos wait for v1.1 whole-pack streaming).
  */
@@ -39,12 +39,12 @@ import {
 } from "../Protocol/Store.ts";
 import type { SqlClient } from "./Sql.ts";
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Constants & errors
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /**
- * Maximum number of objects in one fetch manifest — 1 M for v1 (≈ 25 MB of
+ * Maximum number of objects in one fetch manifest -- 1 M for v1 (~ 25 MB of
  * visited-set memory; DESIGN.md §3.5). Larger repos are a documented v1
  * limit until v1.1 whole-pack streaming.
  */
@@ -61,9 +61,9 @@ export class ManifestTooLarge extends Schema.TaggedError<ManifestTooLarge>()("Ma
   cap: Schema.Number,
 }) {}
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Options
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /**
  * The object-store surface the closure walk needs: the read contract plus
@@ -75,7 +75,7 @@ export interface ClosureStore extends ObjectSource {
   readonly getMetaBatch: (
     oids: ReadonlyArray<Oid>,
   ) => Effect.Effect<ReadonlyMap<Oid, ObjectMeta>, StoreError>;
-  /** Batched inflated content — one statement per tree LEVEL (DESIGN §22). */
+  /** Batched inflated content -- one statement per tree LEVEL (DESIGN §22). */
   readonly readContentBatch: (
     oids: ReadonlyArray<Oid>,
   ) => Effect.Effect<ReadonlyMap<Oid, Uint8Array>, StoreError>;
@@ -97,9 +97,9 @@ export interface ClosureOptions {
   readonly manifestCap?: number | undefined;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Commit-graph reads (batched, chunked-IN)
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 interface CommitNode {
   readonly oid: Oid;
@@ -172,17 +172,17 @@ const loadParents = (
     return map;
   });
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Closure computation
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 const dedup = (oids: ReadonlyArray<Oid>): Array<Oid> => Array.from(new Set(oids));
 
-/** Maximum tag→target indirections tolerated before declaring corruption. */
+/** Maximum tag->target indirections tolerated before declaring corruption. */
 const MAX_TAG_CHAIN = 16;
 
 /**
- * Computes the fetch closure (DESIGN.md §3.5) with the full error surface —
+ * Computes the fetch closure (DESIGN.md §3.5) with the full error surface --
  * {@link ManifestTooLarge} kept as its own tag so `UploadPack` can turn it
  * into a clean in-band `ERR`. Use {@link makeClosureSource} when only the
  * narrow `ClosureSource` contract is needed.
@@ -193,7 +193,7 @@ export const computeClosure = (options: ClosureOptions) =>
     const cap = options.manifestCap ?? MANIFEST_CAP;
     const depth = request.depth;
 
-    // ── 1. Classify wants (peeling tag chains) ──────────────────────────────
+    // -- 1. Classify wants (peeling tag chains) ------------------------------
     const commitSeeds: Array<Oid> = [];
     const tagOrder: Array<Oid> = [];
     const tagSet = new Set<Oid>();
@@ -254,7 +254,7 @@ export const computeClosure = (options: ClosureOptions) =>
       }
     }
 
-    // ── 2. Boundaries ───────────────────────────────────────────────────────
+    // -- 2. Boundaries -------------------------------------------------------
     // Haves are boundaries only if we actually have them as commits.
     const repoShallowSet = new Set<Oid>(request.repoShallow ?? []);
     const haveNodes = yield* loadCommitNodes(sql, dedup(request.haves));
@@ -263,17 +263,17 @@ export const computeClosure = (options: ClosureOptions) =>
     // Without a deepen request the client's existing shallow tips are hard
     // walk boundaries (the client has the tips; keep its boundary in place).
     // With `deepen <n>` we re-walk by depth from the tips so previously
-    // shallow history can be completed (→ `unshallow`).
+    // shallow history can be completed (-> `unshallow`).
     const shallowStopsActive = depth === undefined && clientShallowSet.size > 0;
 
-    // ── 3. Want-BFS over the commit graph ───────────────────────────────────
+    // -- 3. Want-BFS over the commit graph -----------------------------------
     const candidateOrder: Array<CommitNode> = [];
     const candidateSet = new Set<Oid>();
     const parentsOf = new Map<Oid, ReadonlyArray<Oid>>();
     const depthOf = new Map<Oid, number>();
     let minCandidateGen = Number.POSITIVE_INFINITY;
 
-    // A `have` normally implies the client holds its whole ancestry — but
+    // A `have` normally implies the client holds its whole ancestry -- but
     // NOT when that have is one of the client's shallow boundary tips and
     // this is a deepen request: the whole point of `deepen <n>` is to fetch
     // commits BEHIND those tips. Such seeds are walked through (so their
@@ -303,10 +303,10 @@ export const computeClosure = (options: ClosureOptions) =>
         parentsOf.set(oid, ps);
         const d = depthOf.get(oid) ?? 1;
         if (depth !== undefined && d >= depth) {
-          continue; // depth cut — do not expand parents
+          continue; // depth cut -- do not expand parents
         }
         if (repoShallowSet.has(oid)) {
-          continue; // repo-shallow boundary — parents were never ingested
+          continue; // repo-shallow boundary -- parents were never ingested
         }
         for (const parent of ps) {
           if (
@@ -327,11 +327,11 @@ export const computeClosure = (options: ClosureOptions) =>
       frontier = next;
     }
 
-    // ── 4. Common marking (have ancestry, generation-bounded) ───────────────
+    // -- 4. Common marking (have ancestry, generation-bounded) ---------------
     const common = new Set<Oid>(haveSet);
     if (haveSet.size > 0 && candidateOrder.length > 0) {
       // Client-shallow haves contribute themselves to `common` but NOT
-      // their ancestry — the client does not hold anything behind its
+      // their ancestry -- the client does not hold anything behind its
       // shallow boundary (that is what a deepen fetches).
       let hFrontier = Array.from(haveSet).filter((oid) => !clientShallowSet.has(oid));
       while (hFrontier.length > 0) {
@@ -358,7 +358,7 @@ export const computeClosure = (options: ClosureOptions) =>
       }
     }
 
-    // ── 5. New commits & shallow bookkeeping ────────────────────────────────
+    // -- 5. New commits & shallow bookkeeping --------------------------------
     const newCommits = candidateOrder.filter((c) => !common.has(c.oid));
     const included = new Set<Oid>(newCommits.map((c) => c.oid));
 
@@ -383,7 +383,7 @@ export const computeClosure = (options: ClosureOptions) =>
       (oid) => (included.has(oid) || candidateSet.has(oid)) && !shallowSet.has(oid),
     );
 
-    // ── 6. Tree/blob closure (shared visited set — the v1 fat) ──────────────
+    // -- 6. Tree/blob closure (shared visited set -- the v1 fat) --------------
     const treeOrder: Array<Oid> = [];
     const blobOrder: Array<Oid> = [];
     const visitedObjects = new Set<Oid>();
@@ -410,7 +410,7 @@ export const computeClosure = (options: ClosureOptions) =>
     }
     // Level-order BFS (DESIGN §22): each level's trees are read with ONE
     // batched statement and inflated together, instead of one SQL round
-    // trip per tree. Visitation order — and therefore the manifest — is the
+    // trip per tree. Visitation order -- and therefore the manifest -- is the
     // same breadth-first order the queue produced.
     let level: Array<Oid> = treeQueue;
     while (level.length > 0) {
@@ -451,7 +451,7 @@ export const computeClosure = (options: ClosureOptions) =>
               }
               break;
             case "commit":
-              // gitlink (submodule) — the target commit lives in another repo
+              // gitlink (submodule) -- the target commit lives in another repo
               break;
           }
         }
@@ -460,7 +460,7 @@ export const computeClosure = (options: ClosureOptions) =>
       level = next;
     }
 
-    // ── 7. Materialize the manifest (commits → tags → trees → blobs) ────────
+    // -- 7. Materialize the manifest (commits -> tags -> trees -> blobs) --------
     const orderedOids: Array<Oid> = [
       ...newCommits.map((c) => c.oid),
       ...tagOrder,

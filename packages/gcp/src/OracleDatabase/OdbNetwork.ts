@@ -35,11 +35,11 @@ export type OdbNetworkProps = {
    * ODB Network id (the `{odb_network}` segment of
    * `projects/{project}/locations/{location}/odbNetworks/{odb_network}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
-   * and logical id. Immutable — changing it replaces the network.
+   * and logical id. Immutable -- changing it replaces the network.
    */
   odbNetworkId?: string;
   /**
-   * Region (`us-central1`, `us-east4`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east4`, ...). Immutable -- changing it
    * replaces the network. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -48,14 +48,14 @@ export type OdbNetworkProps = {
   /**
    * VPC network used for Oracle Database@Google Cloud connectivity.
    * Accepts a name (`default`) or
-   * `projects/{project}/global/networks/{network}`. Immutable —
+   * `projects/{project}/global/networks/{network}`. Immutable --
    * changing it replaces the network.
    * @default "default"
    */
   network?: string;
   /**
    * GCP Oracle zone (e.g. `us-east4-b-r2`). If omitted, the service
-   * picks a zone. Immutable — changing it replaces the network.
+   * picks a zone. Immutable -- changing it replaces the network.
    */
   gcpOracleZone?: string;
   /**
@@ -106,7 +106,7 @@ export interface OdbNetworkLookup {
    */
   odbNetworkId: string;
   /**
-   * Region (`us-central1`, `us-east4`, …). `US-CENTRAL1` is accepted and
+   * Region (`us-central1`, `us-east4`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -118,7 +118,7 @@ export interface OdbNetworkLookup {
 }
 
 /**
- * An Oracle Database@Google Cloud ODB Network — the private network that
+ * An Oracle Database@Google Cloud ODB Network -- the private network that
  * connects a VPC to Oracle Database resources in a region.
  *
  * Changing `odbNetworkId`, `location`, `network`, or `gcpOracleZone`

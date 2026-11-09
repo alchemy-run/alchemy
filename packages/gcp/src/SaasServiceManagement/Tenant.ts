@@ -36,12 +36,12 @@ export type TenantProps = {
   /**
    * Tenant id (the `{tenant}` segment of
    * `projects/{project}/locations/{location}/tenants/{tenant}`). If
-   * omitted, a unique RFC1035 name is generated. Immutable — changing
+   * omitted, a unique RFC1035 name is generated. Immutable -- changing
    * it replaces the tenant.
    */
   tenantId?: string;
   /**
-   * Region of the tenant (`us-central1`, …). Immutable — changing it
+   * Region of the tenant (`us-central1`, ...). Immutable -- changing it
    * replaces the tenant. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -49,12 +49,12 @@ export type TenantProps = {
   location?: string;
   /**
    * SaaS this tenant belongs to. Accepts a SaaS id or a full resource
-   * name. Immutable — changing it replaces the tenant.
+   * name. Immutable -- changing it replaces the tenant.
    */
   saas: string;
   /**
    * Consumer resource this tenant represents, e.g. a Cloud resource
-   * handed to the customer. Immutable — changing it replaces the
+   * handed to the customer. Immutable -- changing it replaces the
    * tenant.
    */
   consumerResource?: string;
@@ -116,7 +116,7 @@ export interface TenantLookup {
    */
   tenantId: string;
   /**
-   * Region of the tenant (`us-central1`, …). `US-CENTRAL1` is accepted and
+   * Region of the tenant (`us-central1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -128,7 +128,7 @@ export interface TenantLookup {
 }
 
 /**
- * An App Lifecycle Manager tenant — the producer-side instance of a
+ * An App Lifecycle Manager tenant -- the producer-side instance of a
  * SaaS created for one consumer.
  *
  * `tenantId`, `location`, `saas`, and `consumerResource` replace the

@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Cluster } from "./Cluster.ts";
 
 /**
- * Runtime binding for `elasticmapreduce:GetClusterSessionCredentials` — mints temporary HTTP basic credentials for the bound cluster's endpoints (runtime-role / fine-grained access control clusters). The returned `Password` is `Redacted` — unwrap with `Redacted.value`.
+ * Runtime binding for `elasticmapreduce:GetClusterSessionCredentials` -- mints temporary HTTP basic credentials for the bound cluster's endpoints (runtime-role / fine-grained access control clusters). The returned `Password` is `Redacted` -- unwrap with `Redacted.value`.
  * ### Connecting to the Cluster
  * **Example:** Mint Session Credentials
  * ```typescript

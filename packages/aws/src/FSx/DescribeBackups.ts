@@ -6,8 +6,8 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `DescribeBackups` operation (IAM action
  * `fsx:DescribeBackups` on `*`).
  *
- * Lists FSx backups — optionally filtered by `file-system-id`,
- * `backup-type`, or explicit `BackupIds` — from inside a function runtime.
+ * Lists FSx backups -- optionally filtered by `file-system-id`,
+ * `backup-type`, or explicit `BackupIds` -- from inside a function runtime.
  * Pairs with {@link CreateBackup} to poll a runtime-initiated backup until
  * it reaches `AVAILABLE`. Provide the implementation with
  * `Effect.provide(AWS.FSx.DescribeBackupsHttp)`.

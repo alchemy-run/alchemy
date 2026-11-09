@@ -5,7 +5,7 @@ import type { AutoScalingGroup } from "./AutoScalingGroup.ts";
 
 /**
  * `TerminateInstanceInAutoScalingGroup` request. The operation is
- * instance-scoped — EC2 Auto Scaling resolves the instance's owning group for
+ * instance-scoped -- EC2 Auto Scaling resolves the instance's owning group for
  * authorization, which the binding grants on the bound
  * {@link AutoScalingGroup}'s ARN.
  */
@@ -18,18 +18,18 @@ export interface TerminateInstanceRequest
  * group ARN).
  *
  * Requests termination of a specific instance, optionally decrementing the
- * desired capacity — e.g. recycling a wedged worker (the group launches a
+ * desired capacity -- e.g. recycling a wedged worker (the group launches a
  * replacement) or retiring the instance it runs on. Provide the
  * implementation with
  * `Effect.provide(AWS.AutoScaling.TerminateInstanceInAutoScalingGroupHttp)`.
  * ### Manual Scaling
  * **Example:** Recycle a wedged instance
  * ```typescript
- * // init — bind the operation to the group
+ * // init -- bind the operation to the group
  * const terminateInstance =
  *   yield* AWS.AutoScaling.TerminateInstanceInAutoScalingGroup(group);
  *
- * // runtime — terminate and let the group launch a replacement
+ * // runtime -- terminate and let the group launch a replacement
  * const { Activity } = yield* terminateInstance({
  *   InstanceId: instanceId,
  *   ShouldDecrementDesiredCapacity: false,

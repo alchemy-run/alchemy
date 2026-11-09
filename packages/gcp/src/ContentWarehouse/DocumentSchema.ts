@@ -36,12 +36,12 @@ export type DocumentSchemaProps = {
   /**
    * Document schema id (the `{documentSchema}` segment of
    * `projects/{project}/locations/{location}/documentSchemas/{documentSchema}`).
-   * Assigned by the API on create. Immutable — changing it replaces the
+   * Assigned by the API on create. Immutable -- changing it replaces the
    * schema. Supply it to adopt an existing schema.
    */
   documentSchemaId?: string;
   /**
-   * Multi-region location (`us` or `eu`). Immutable — changing it
+   * Multi-region location (`us` or `eu`). Immutable -- changing it
    * replaces the schema. `US` is accepted and normalized to `us`.
    * @default "us"
    */
@@ -52,7 +52,7 @@ export type DocumentSchemaProps = {
   displayName?: string;
   /**
    * Schema description. Document schemas have no labels field, so Alchemy
-   * stamps ownership into a `[alchemy …]` prefix and strips it from
+   * stamps ownership into a `[alchemy ...]` prefix and strips it from
    * attributes.
    */
   description?: string;
@@ -62,7 +62,7 @@ export type DocumentSchemaProps = {
    */
   documentIsFolder?: boolean;
   /**
-   * Property definitions. Updates may only append new properties — existing
+   * Property definitions. Updates may only append new properties -- existing
    * definitions cannot be mutated in place.
    */
   propertyDefinitions?: PropertyDefinition[];
@@ -100,7 +100,7 @@ export type DocumentSchema = Resource<
 /**
  * A Document AI Warehouse document schema describing document structure.
  *
- * Schemas have no labels field — Alchemy stamps ownership into the
+ * Schemas have no labels field -- Alchemy stamps ownership into the
  * description so `list` / nuke can find them. Location is immutable.
  * Description and newly appended properties update in place; existing
  * property definitions cannot be rewritten.

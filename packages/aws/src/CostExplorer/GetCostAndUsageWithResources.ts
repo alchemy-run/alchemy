@@ -18,7 +18,7 @@ export interface GetCostAndUsageWithResourcesRequest
  * ### Querying Cost and Usage
  * **Example:** Query Resource-Level Cost
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const getCostAndUsageWithResources = yield* AWS.CostExplorer.GetCostAndUsageWithResources();
  *
  * // runtime

@@ -8,15 +8,15 @@ export interface ListDataIntegrationsRequest extends appintegrations.ListDataInt
  * Lists the AppIntegrations data integrations in the account
  * (`app-integrations:ListDataIntegrations`).
  *
- * An account-level operation — bind it with no resource argument. Provide the
+ * An account-level operation -- bind it with no resource argument. Provide the
  * `ListDataIntegrationsHttp` layer on the Function to satisfy the binding.
  * ### Listing Data Integrations
  * **Example:** List All Data Integrations
  * ```typescript
- * // init — no resource argument (provide AWS.AppIntegrations.ListDataIntegrationsHttp on the Function)
+ * // init -- no resource argument (provide AWS.AppIntegrations.ListDataIntegrationsHttp on the Function)
  * const listDataIntegrations = yield* AWS.AppIntegrations.ListDataIntegrations();
  *
- * // runtime — page through the data integrations in the account
+ * // runtime -- page through the data integrations in the account
  * const { DataIntegrations } = yield* listDataIntegrations({});
  * ```
  *

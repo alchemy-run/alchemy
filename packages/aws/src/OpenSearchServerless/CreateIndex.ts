@@ -8,7 +8,7 @@ import type { Collection } from "./Collection.ts";
  * (IAM actions `aoss:CreateIndex` + `aoss:APIAccessAll` on the collection ARN).
  *
  * Creates an index in the bound {@link Collection} from inside a function
- * runtime — the control-plane path for the multi-tenant pattern where each
+ * runtime -- the control-plane path for the multi-tenant pattern where each
  * tenant gets its own (vector) index. The calling principal must also be
  * granted `aoss:CreateIndex` on the index pattern by a data
  * {@link AccessPolicy}. Provide the implementation with
@@ -16,7 +16,7 @@ import type { Collection } from "./Collection.ts";
  * ### Managing Indexes at Runtime
  * **Example:** Create a tenant's vector index
  * ```typescript
- * // init — bind the operation to the collection
+ * // init -- bind the operation to the collection
  * const createIndex = yield* AWS.OpenSearchServerless.CreateIndex(collection);
  *
  * // runtime

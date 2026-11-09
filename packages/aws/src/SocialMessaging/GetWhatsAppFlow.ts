@@ -12,8 +12,8 @@ export interface GetWhatsAppFlowRequest extends Omit<socialmessaging.GetWhatsApp
 /**
  * Runtime binding for `social-messaging:GetWhatsAppFlow`.
  *
- * Retrieves a WhatsApp Flow's details — status, categories, validation
- * errors, health status — from the bound account.
+ * Retrieves a WhatsApp Flow's details -- status, categories, validation
+ * errors, health status -- from the bound account.
  *
  * The deploy-time half grants `social-messaging:GetWhatsAppFlow` on the
  * bound WABA's ARN and the runtime half injects the linked account id
@@ -23,7 +23,7 @@ export interface GetWhatsAppFlowRequest extends Omit<socialmessaging.GetWhatsApp
  * ### Managing WhatsApp Flows
  * **Example:** Read a Flow
  * ```typescript
- * // init — bind the operation to the linked WABA
+ * // init -- bind the operation to the linked WABA
  * const getFlow = yield* AWS.SocialMessaging.GetWhatsAppFlow(account);
  *
  * // runtime

@@ -13,7 +13,7 @@ import type { AddressList } from "./AddressList.ts";
  * ### Managing Address List Members
  * **Example:** Block a Sender
  * ```typescript
- * // init — bind the operation to the address list
+ * // init -- bind the operation to the address list
  * const registerMember = yield* MailManager.RegisterMemberToAddressList(blockList);
  *
  * // runtime

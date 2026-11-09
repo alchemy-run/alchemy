@@ -8,14 +8,14 @@ import type { Cluster } from "./Cluster.ts";
  * `redshift:PauseCluster`).
  *
  * Pauses the bound {@link Cluster} (compute billing stops, storage
- * persists) — e.g. a scheduled ops function that parks the warehouse
+ * persists) -- e.g. a scheduled ops function that parks the warehouse
  * overnight to save cost. The cluster identifier is injected from the
  * binding. Provide the implementation with
  * `Effect.provide(AWS.Redshift.PauseClusterHttp)`.
  * ### Operating a Cluster
  * **Example:** Pause the Warehouse Overnight
  * ```typescript
- * // init — bind the operation to the cluster
+ * // init -- bind the operation to the cluster
  * const pauseCluster = yield* AWS.Redshift.PauseCluster(cluster);
  *
  * // runtime

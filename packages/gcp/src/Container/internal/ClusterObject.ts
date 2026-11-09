@@ -8,7 +8,7 @@ import {
  * Internal helpers for binding Kubernetes objects onto a
  * `GCP.Container.Cluster` through its `KubernetesObjectBinding` contract.
  * The cluster's reconciler server-side-applies every bound object after
- * the control plane is RUNNING. Not exported from the Container index —
+ * the control plane is RUNNING. Not exported from the Container index --
  * the public path for raw manifests is `Kubernetes.Manifest`.
  */
 import * as Effect from "effect/Effect";

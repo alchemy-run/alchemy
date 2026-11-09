@@ -12,19 +12,19 @@ import type { Stream, StreamRecord } from "./Stream.ts";
  * from a Worker's (or Action's) runtime Effect. Also exported as
  * `Cloudflare.Basin.WriteStream`.
  *
- * Producer-only — `send` ingests a batch of records into the stream. When
+ * Producer-only -- `send` ingests a batch of records into the stream. When
  * the stream was declared with an Effect Schema, the client is typed by
  * it (`send(records: PageView[])`) and every record is validated and
- * encoded with `Schema.toCodecJson` before it is sent — Cloudflare
+ * encoded with `Schema.toCodecJson` before it is sent -- Cloudflare
  * accepts schema-violating records and silently drops them later, so
  * this is the only validation. Without a schema, `send` takes plain JSON
  * objects.
  *
  * Provide one implementation layer:
- * - {@link WriteStreamBinding} — native Worker `pipelines` binding
- * - `WriteStreamHttp` — the stream's HTTP ingest endpoint with a scoped
+ * - {@link WriteStreamBinding} -- native Worker `pipelines` binding
+ * - `WriteStreamHttp` -- the stream's HTTP ingest endpoint with a scoped
  *   `Pipelines Send` API token (the stream needs `http` enabled)
- * - `WriteStreamLocal` — the HTTP ingest endpoint with the current
+ * - `WriteStreamLocal` -- the HTTP ingest endpoint with the current
  *   credentials, for Actions and other deploy-time Effects
  * ### Sending Events
  * **Example:** Typed producer route

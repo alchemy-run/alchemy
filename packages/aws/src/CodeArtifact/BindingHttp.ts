@@ -7,8 +7,8 @@ import type { Repository } from "./Repository.ts";
 /**
  * Shared scaffolding for CodeArtifact HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, makeRepositoryHttpBinding({ … }))`. Everything except
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, makeRepositoryHttpBinding({ ... }))`. Everything except
  * the operation, the IAM action list, and the granted ARNs is boilerplate:
  * the runtime callable injects `domain`, `domainOwner`, and `repository`
  * from the bound {@link Repository}.
@@ -28,7 +28,7 @@ export const repositoryArns = (repository: Repository): OutputType<string>[] => 
 
 /**
  * ARN matching every package in the bound repository
- * (`arn:…:package/{domain}/{repository}/*`) — package-level actions like
+ * (`arn:...:package/{domain}/{repository}/*`) -- package-level actions like
  * `codeartifact:DescribePackage` authorize against the package resource,
  * not the repository.
  */
@@ -40,7 +40,7 @@ export const packageArns = (repository: Repository): OutputType<string>[] => [
 
 /**
  * ARNs matching every repository and every package in the bound repository's
- * domain — for operations like `codeartifact:CopyPackageVersions` that read
+ * domain -- for operations like `codeartifact:CopyPackageVersions` that read
  * from a sibling repository in the same domain.
  */
 export const domainWideArns = (repository: Repository): OutputType<string>[] =>

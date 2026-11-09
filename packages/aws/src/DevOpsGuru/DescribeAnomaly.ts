@@ -5,13 +5,13 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `devops-guru:DescribeAnomaly`.
  *
- * Returns the details of a single anomaly — severity, status, time ranges, and the CloudWatch/Performance Insights metrics that triggered it.
+ * Returns the details of a single anomaly -- severity, status, time ranges, and the CloudWatch/Performance Insights metrics that triggered it.
  * Provide the implementation with
  * `Effect.provide(AWS.DevOpsGuru.DescribeAnomalyHttp)`.
  * ### Inspecting Anomalies
  * **Example:** Read an Anomaly's Detail
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const describeAnomaly = yield* AWS.DevOpsGuru.DescribeAnomaly();
  *
  * // runtime

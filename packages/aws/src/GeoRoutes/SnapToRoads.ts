@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `geo-routes:SnapToRoads` — match a GPS trace (a list of
+ * Runtime binding for `geo-routes:SnapToRoads` -- match a GPS trace (a list of
  * possibly-noisy trace points) to the roads most likely traveled on, e.g.
  * clean up vehicle telemetry before computing distance driven.
  *
@@ -22,7 +22,7 @@ import type * as Effect from "effect/Effect";
  * // init
  * const snapToRoads = yield* AWS.GeoRoutes.SnapToRoads();
  *
- * // runtime — positions are [longitude, latitude]
+ * // runtime -- positions are [longitude, latitude]
  * const result = yield* snapToRoads({
  *   TracePoints: [
  *     { Position: [-122.339, 47.61] },

@@ -37,7 +37,7 @@ export interface ArchiveProps {
    */
   retentionPeriod?: mm.RetentionPeriod;
   /**
-   * ARN of the KMS key used to encrypt the archived emails. Immutable —
+   * ARN of the KMS key used to encrypt the archived emails. Immutable --
    * changing it replaces the archive.
    * @default an AWS-owned key
    */
@@ -77,7 +77,7 @@ export interface ArchiveLookup {
 }
 
 /**
- * An SES Mail Manager email archive — durable storage for emails captured
+ * An SES Mail Manager email archive -- durable storage for emails captured
  * by an `Archive` rule action, searchable and exportable for compliance.
  *
  * Deleting an archive puts it into `PENDING_DELETION` for 30 days before
@@ -105,7 +105,7 @@ export interface ArchiveLookup {
  * ### Searching the Archive at Runtime
  * **Example:** Search Archived Mail from a Lambda
  * ```typescript
- * // init — bind the search capabilities to the archive
+ * // init -- bind the search capabilities to the archive
  * const startSearch = yield* MailManager.StartArchiveSearch(archive);
  * const getSearchResults = yield* MailManager.GetArchiveSearchResults(archive);
  *
@@ -140,14 +140,14 @@ export const ArchiveProvider = () =>
       });
 
       // A PENDING_DELETION archive is irrevocably deleted (contents already
-      // inaccessible) — treat it as gone everywhere.
+      // inaccessible) -- treat it as gone everywhere.
       const getById = (archiveId: string) =>
         mm.getArchive({ ArchiveId: archiveId }).pipe(
           Effect.map((a) => (a.ArchiveState === "PENDING_DELETION" ? undefined : a)),
           Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
 
-      // Archives have no name-keyed Get — enumerate and match, skipping
+      // Archives have no name-keyed Get -- enumerate and match, skipping
       // tombstones in PENDING_DELETION.
       const findByName = (name: string) =>
         mm.listArchives.pages({}).pipe(
@@ -210,7 +210,7 @@ export const ArchiveProvider = () =>
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
-        // The KMS key is create-only — changing it replaces the archive.
+        // The KMS key is create-only -- changing it replaces the archive.
         // Name and retention update in place via UpdateArchive.
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
@@ -226,10 +226,10 @@ export const ArchiveProvider = () =>
           const desiredTags = { ...news.tags, ...internalTags };
           const desiredRetention: mm.RetentionPeriod = news.retentionPeriod ?? "PERMANENT";
 
-          // 1. OBSERVE — cloud state is authoritative; output is an id cache.
+          // 1. OBSERVE -- cloud state is authoritative; output is an id cache.
           let archive = yield* observe(output, name);
 
-          // 2. ENSURE — create if missing; a Conflict race re-observes by
+          // 2. ENSURE -- create if missing; a Conflict race re-observes by
           //    name instead of failing.
           if (archive === undefined) {
             yield* session.note(`creating archive ${name}`);
@@ -252,7 +252,7 @@ export const ArchiveProvider = () =>
             });
           }
 
-          // 3. SYNC — diff OBSERVED name/retention against desired; apply
+          // 3. SYNC -- diff OBSERVED name/retention against desired; apply
           //    only the delta.
           if (
             archive.ArchiveName !== name ||
@@ -266,7 +266,7 @@ export const ArchiveProvider = () =>
             archive = (yield* getById(archive.ArchiveId)) ?? archive;
           }
 
-          // 3b. SYNC TAGS — against observed cloud tags.
+          // 3b. SYNC TAGS -- against observed cloud tags.
           yield* syncMailManagerTags(archive.ArchiveArn, desiredTags);
 
           yield* session.note(archive.ArchiveId);
@@ -274,9 +274,9 @@ export const ArchiveProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // DeleteArchive's error union carries no not-found tag — deletion
+          // DeleteArchive's error union carries no not-found tag -- deletion
           // is natively idempotent (the archive moves to PENDING_DELETION).
-          // An in-flight search or export reports Conflict — retry through.
+          // An in-flight search or export reports Conflict -- retry through.
           yield* retryWhileMailManagerConflict(
             mm.deleteArchive({ ArchiveId: output.archiveId }),
           ).pipe(Effect.asVoid);

@@ -7,7 +7,7 @@ import type * as Effect from "effect/Effect";
  * `memorydb:DescribeEvents`).
  *
  * Returns events related to clusters, security groups, and parameter groups
- * from the last hour (up to 14 days with an explicit time window) — snapshot
+ * from the last hour (up to 14 days with an explicit time window) -- snapshot
  * completions, failovers, configuration changes. Provide the implementation
  * with `Effect.provide(AWS.MemoryDB.DescribeEventsHttp)`.
  * ### Monitoring Clusters

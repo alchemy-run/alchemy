@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `elasticmapreduce:ListReleaseLabels` — lists the EMR release labels available in the region, newest first.
+ * Runtime binding for `elasticmapreduce:ListReleaseLabels` -- lists the EMR release labels available in the region, newest first.
  * ### Release Catalog
  * **Example:** Find the Latest Release
  * ```typescript

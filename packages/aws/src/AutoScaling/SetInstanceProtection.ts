@@ -16,18 +16,18 @@ export interface SetInstanceProtectionRequest extends Omit<
  * Runtime binding for the `SetInstanceProtection` operation (IAM action
  * `autoscaling:SetInstanceProtection` scoped to the group ARN).
  *
- * Toggles scale-in protection on instances — e.g. a worker protects itself
+ * Toggles scale-in protection on instances -- e.g. a worker protects itself
  * while it processes a long-running job, then removes protection when idle so
  * the group may reclaim it. Provide the implementation with
  * `Effect.provide(AWS.AutoScaling.SetInstanceProtectionHttp)`.
  * ### Scale-In Protection
  * **Example:** Protect a busy worker from scale-in
  * ```typescript
- * // init — bind the operation to the group
+ * // init -- bind the operation to the group
  * const setInstanceProtection =
  *   yield* AWS.AutoScaling.SetInstanceProtection(group);
  *
- * // runtime — protect while working, release when idle
+ * // runtime -- protect while working, release when idle
  * yield* setInstanceProtection({
  *   InstanceIds: [instanceId],
  *   ProtectedFromScaleIn: true,

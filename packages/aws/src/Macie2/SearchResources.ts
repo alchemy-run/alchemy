@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `macie2:SearchResources`.
  *
  * Retrieves (queries) statistical data and other information about Amazon Web Services resources that Amazon Macie monitors and analyzes for an account.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.Macie2.SearchResourcesHttp)`.
  * ### S3 Bucket Inventory
  * **Example:** Search Buckets by Sensitivity
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const searchResources = yield* AWS.Macie2.SearchResources();
  *
  * // runtime

@@ -7,10 +7,10 @@ import * as Effect from "effect/Effect";
  * itself provisions (and what `test/AWS/DefaultVpc.ts` deliberately
  * recreates as standing infrastructure).
  *
- * All fields are `undefined` when the account has no default VPC — callers
+ * All fields are `undefined` when the account has no default VPC -- callers
  * must then exclude nothing that depends on these ids.
  *
- * Internal scaffolding — NOT exported from the EC2 service `index.ts`.
+ * Internal scaffolding -- NOT exported from the EC2 service `index.ts`.
  */
 export interface DefaultVpcScope {
   /** The default VPC's id, if the account has one. */
@@ -55,7 +55,7 @@ export const getDefaultVpcDefaultSecurityGroupId = (vpcId: string | undefined) =
  * the default VPC the first time a cluster launches there without explicit
  * security groups. EMR owns and reuses them for every later cluster in the
  * VPC (like Glue's shared `/aws-glue/*` log groups), and their mutual
- * references make them undeletable piecemeal — they are default-VPC
+ * references make them undeletable piecemeal -- they are default-VPC
  * furniture, not leaks. Empty when the account has no default VPC.
  */
 export const getDefaultVpcEmrManagedSecurityGroupIds = (vpcId: string | undefined) =>

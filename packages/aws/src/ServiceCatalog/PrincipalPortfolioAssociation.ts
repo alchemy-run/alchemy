@@ -16,7 +16,7 @@ export interface PrincipalPortfolioAssociationProps {
    */
   portfolioId: string;
   /**
-   * ARN of the IAM principal (user, group, or role) — or an ARN pattern
+   * ARN of the IAM principal (user, group, or role) -- or an ARN pattern
    * with wildcards when `principalType` is `IAM_PATTERN`. Changing it
    * replaces the association.
    */
@@ -147,7 +147,7 @@ export const PrincipalPortfolioAssociationProvider = () =>
             );
             return associations.flat();
           }),
-        // Existence-only resource — every property is part of its identity.
+        // Existence-only resource -- every property is part of its identity.
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
           if (
@@ -172,7 +172,7 @@ export const PrincipalPortfolioAssociationProvider = () =>
               }
             : undefined;
         }),
-        // Existence-only: observe → if missing, associate. No sync step.
+        // Existence-only: observe -> if missing, associate. No sync step.
         reconcile: Effect.fn(function* ({ news, session }) {
           const principalType = news.principalType ?? "IAM";
           if (!(yield* isAssociated(news.portfolioId, news.principalArn))) {
@@ -181,7 +181,7 @@ export const PrincipalPortfolioAssociationProvider = () =>
               PrincipalARN: news.principalArn,
               PrincipalType: principalType,
             });
-            // The principal list is eventually consistent — wait (bounded)
+            // The principal list is eventually consistent -- wait (bounded)
             // until the association is visible so a subsequent read converges.
             yield* awaitVisible(isAssociated(news.portfolioId, news.principalArn));
           }

@@ -10,8 +10,8 @@ import type { EmailTemplate } from "./EmailTemplate.ts";
 /**
  * Shared scaffolding for Amazon SES v2 HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the builders
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the builders
  * below. Everything except the operation, the IAM action list, and the
  * injected identifier is boilerplate.
  */
@@ -104,7 +104,7 @@ export const makeTemplateScopedHttpBinding = <
  *
  * Unlike passing an {@link EmailIdentity} resource this creates no resource
  * edge and no ownership: nothing is created, adopted, or destroyed. That
- * matters when the identity is managed outside the stack — binding to a
+ * matters when the identity is managed outside the stack -- binding to a
  * resource would mean owning it, and owning it would mean `destroy` deleting
  * it.
  */
@@ -114,7 +114,7 @@ export interface EmailIdentityRef {
 }
 
 // Discriminate on the REF side: a resource's `emailIdentity` is an Output, not
-// a string. Testing for a resource key with `in` does not work — the resource
+// a string. Testing for a resource key with `in` does not work -- the resource
 // is an Output proxy, so every property "exists".
 const isEmailIdentityRef = (
   identity: EmailIdentity | EmailIdentityRef,
@@ -125,15 +125,15 @@ const isEmailIdentityRef = (
  * identity being VERIFIED.
  *
  * Unlike the send bindings, SES authorizes this action against the identity
- * of the address in the request — the recipient the verification email starts
- * verification for — not against the template's FROM identity. Confirmed
+ * of the address in the request -- the recipient the verification email starts
+ * verification for -- not against the template's FROM identity. Confirmed
  * live: a policy granting only the sender identity is refused with
  * "not authorized to perform: ses:SendCustomVerificationEmail on resource:
  * arn:aws:ses:<region>:<account>:identity/<RECIPIENT>".
  *
  * So the bound identity names what the function is allowed to verify: a
  * single address, or a domain, in which case addresses at that domain are
- * covered. That is the constraint worth enforcing — it stops a leaked binding
+ * covered. That is the constraint worth enforcing -- it stops a leaked binding
  * being used to send verification mail to arbitrary addresses.
  *
  * Accepts a managed {@link EmailIdentity} or an {@link EmailIdentityRef}; the
@@ -273,7 +273,7 @@ export const makeSendScopedHttpBinding = <
         );
         // For a domain identity, SES authorizes the send against the
         // identity ARN of the FROM address (identity/user@domain), not the
-        // domain identity ARN — grant addresses at the domain too.
+        // domain identity ARN -- grant addresses at the domain too.
         const addressArns = Output.all(identity.identityArn).pipe(
           Output.map(([identityArn]) =>
             identityArn.includes("@")

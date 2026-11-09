@@ -39,29 +39,29 @@ export type ApplicationsAuthorizedCertificateRawData = {
 
 export type ApplicationsAuthorizedCertificateProps = {
   /**
-   * GCP project id. Defaults to the current project. Immutable —
+   * GCP project id. Defaults to the current project. Immutable --
    * changing it replaces the certificate.
    */
   project?: string;
   /**
-   * App Engine location (`us-central`, `us-east1`, …). Defaults to the
-   * application's `locationId`. Immutable — changing it replaces the
+   * App Engine location (`us-central`, `us-east1`, ...). Defaults to the
+   * application's `locationId`. Immutable -- changing it replaces the
    * certificate.
    */
   location?: string;
   /**
    * Application id (usually the project id). Defaults to the current
-   * project. Immutable — changing it replaces the certificate.
+   * project. Immutable -- changing it replaces the certificate.
    */
   applicationsId?: string;
   /**
-   * Server-assigned certificate id. Immutable — changing it replaces
+   * Server-assigned certificate id. Immutable -- changing it replaces
    * the certificate.
    */
   certificateId?: string;
   /**
    * User-specified display name. App Engine certificates have no labels
-   * field, so Alchemy ownership is stored in a `[alchemy …]` prefix and
+   * field, so Alchemy ownership is stored in a `[alchemy ...]` prefix and
    * stripped from attributes.
    */
   displayName?: string;

@@ -5,14 +5,14 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `organizations:ListPolicies`.
  *
- * Lists all policies of the specified type (service control, tag, backup, AI-services opt-out, …) in the organization.
- * Account-level operation — Organizations is a management-account-scoped
+ * Lists all policies of the specified type (service control, tag, backup, AI-services opt-out, ...) in the organization.
+ * Account-level operation -- Organizations is a management-account-scoped
  * global service, so the binding takes no resource argument. Provide the
  * implementation with `Effect.provide(AWS.Organizations.ListPoliciesHttp)`.
  * ### Policies & Effective Policy
  * **Example:** List Service Control Policies
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listPolicies = yield* AWS.Organizations.ListPolicies();
  *
  * // runtime

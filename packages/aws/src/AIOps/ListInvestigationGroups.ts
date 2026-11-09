@@ -13,7 +13,7 @@ import type * as Effect from "effect/Effect";
  * ### Listing Investigation Groups
  * **Example:** Discover the Region's Investigation Group
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listInvestigationGroups = yield* AWS.AIOps.ListInvestigationGroups();
  *
  * // runtime

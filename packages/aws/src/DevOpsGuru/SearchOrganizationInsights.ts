@@ -12,7 +12,7 @@ import type * as Effect from "effect/Effect";
  * ### Organization Visibility
  * **Example:** Search Insights Across Accounts
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const searchOrganizationInsights = yield* AWS.DevOpsGuru.SearchOrganizationInsights();
  *
  * // runtime

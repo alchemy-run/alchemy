@@ -16,7 +16,7 @@ export interface SecretRotationEvent {
   /** ARN of the secret being rotated. */
   SecretId: string;
   /**
-   * Request token that becomes the `VersionId` of the new secret version —
+   * Request token that becomes the `VersionId` of the new secret version --
    * pass it as `ClientRequestToken` to `PutSecretValue` and as
    * `MoveToVersionId` to `UpdateSecretVersionStage`.
    */
@@ -103,7 +103,7 @@ export function onSecretRotation<S extends Secret, Req = never>(
  * hosting Lambda function.
  *
  * The contract is a `Binding.Service`; the Lambda implementation layer is
- * `Lambda.SecretRotationEventSource` — at deploy time it grants Secrets
+ * `Lambda.SecretRotationEventSource` -- at deploy time it grants Secrets
  * Manager permission to invoke the function, attaches the rotation-protocol
  * IAM actions for the secret, and provisions the
  * {@link RotationSchedule}; at runtime it narrows incoming invocations to

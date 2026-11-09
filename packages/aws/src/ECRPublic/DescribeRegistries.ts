@@ -8,7 +8,7 @@ export interface DescribeRegistriesRequest extends ecrpublic.DescribeRegistriesR
 /**
  * Runtime binding for `ecr-public:DescribeRegistries`.
  *
- * Reads the account's public registry details — most usefully the registry
+ * Reads the account's public registry details -- most usefully the registry
  * aliases that form public pull URIs (`public.ecr.aws/<alias>/<repo>`).
  * Provide the implementation with
  * `Effect.provide(AWS.ECRPublic.DescribeRegistriesHttp)`.
@@ -16,7 +16,7 @@ export interface DescribeRegistriesRequest extends ecrpublic.DescribeRegistriesR
  * ### Registry Access
  * **Example:** Look Up The Registry Alias
  * ```typescript
- * // init — registry-level binding takes no resource
+ * // init -- registry-level binding takes no resource
  * const describeRegistries = yield* AWS.ECRPublic.DescribeRegistries();
  *
  * // runtime

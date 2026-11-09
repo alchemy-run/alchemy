@@ -30,7 +30,7 @@ export type GSuitePrincipal = cloudsearch.GSuitePrincipal;
 export type SettingsDatasourceProps = {
   /**
    * Datasource id (`{source_id}` or `datasources/{source_id}`). Server
-   * assigned on create. Immutable — changing it replaces the datasource.
+   * assigned on create. Immutable -- changing it replaces the datasource.
    */
   datasourceId?: string;
   /**
@@ -42,7 +42,7 @@ export type SettingsDatasourceProps = {
   /**
    * Short operator name used as `source:<value>`. Alphanumeric, max 32
    * characters, unique across datasources. Cannot start with `google` or
-   * equal a reserved Workspace source (mail, gmail, docs, drive, …).
+   * equal a reserved Workspace source (mail, gmail, docs, drive, ...).
    */
   shortName?: string;
   /**
@@ -107,7 +107,7 @@ export type SettingsDatasource = Resource<
  *
  * Cloud Search datasources have no labels field, so without state Alchemy
  * finds one by `displayName` and reports it unowned unless the name is
- * generated. The server-assigned datasource id is identity — changing
+ * generated. The server-assigned datasource id is identity -- changing
  * `datasourceId` replaces the source. Display name, short name, serving
  * flags, indexing accounts, and visibility update in place. Admin
  * credentials are required.

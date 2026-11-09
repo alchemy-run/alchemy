@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `macie2:UpdateOrganizationConfiguration`.
  *
  * Updates the Amazon Macie configuration settings for an organization in Organizations.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.Macie2.UpdateOrganizationConfigurationHttp)`.
  * ### Organization & Members
  * **Example:** Auto-Enable Macie for New Accounts
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const updateOrganizationConfiguration = yield* AWS.Macie2.UpdateOrganizationConfiguration();
  *
  * // runtime

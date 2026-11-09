@@ -4,10 +4,10 @@ import type * as Effect from "effect/Effect";
 
 /**
  * Runtime binding for the `DeleteBackup` operation (IAM action
- * `fsx:DeleteBackup` on `*` — runtime-created backups have ARNs unknowable
+ * `fsx:DeleteBackup` on `*` -- runtime-created backups have ARNs unknowable
  * at deploy time).
  *
- * Deletes an FSx backup by id — the teardown half of a runtime backup
+ * Deletes an FSx backup by id -- the teardown half of a runtime backup
  * rotation built with {@link CreateBackup}. Deleting an already-deleted
  * backup surfaces the typed `BackupNotFound`. Provide the implementation
  * with `Effect.provide(AWS.FSx.DeleteBackupHttp)`.

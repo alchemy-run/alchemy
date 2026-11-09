@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `macie2:DeleteMember`.
  *
  * Deletes the association between an Amazon Macie administrator account and an account.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.Macie2.DeleteMemberHttp)`.
  * ### Organization & Members
  * **Example:** Delete a Member Association
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const deleteMember = yield* AWS.Macie2.DeleteMember();
  *
  * // runtime

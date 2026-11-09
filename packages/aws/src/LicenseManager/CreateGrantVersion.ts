@@ -8,7 +8,7 @@ import type * as Effect from "effect/Effect";
 export interface CreateGrantVersionRequest extends licensemanager.CreateGrantVersionRequest {}
 
 /**
- * Runtime binding for `license-manager:CreateGrantVersion` — publish a new
+ * Runtime binding for `license-manager:CreateGrantVersion` -- publish a new
  * version of an existing grant. This is also how a recipient **activates**
  * an accepted grant: create a version with `Status: "ACTIVE"` (and how a
  * grantor amends allowed operations or deactivates a grant).
@@ -21,7 +21,7 @@ export interface CreateGrantVersionRequest extends licensemanager.CreateGrantVer
  * // init
  * const createGrantVersion = yield* AWS.LicenseManager.CreateGrantVersion();
  *
- * // runtime — after acceptGrant({ GrantArn })
+ * // runtime -- after acceptGrant({ GrantArn })
  * yield* createGrantVersion({
  *   GrantArn: grantArn,
  *   Status: "ACTIVE",

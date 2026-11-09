@@ -13,13 +13,13 @@ import { listAlchemyBuckets, toFolderName, withTrailingSlash } from "./internal.
 export type FolderProps = {
   /**
    * Name of the hierarchical-namespace bucket that contains this folder.
-   * Immutable — changing it replaces the folder.
+   * Immutable -- changing it replaces the folder.
    */
   bucketName: string;
   /**
    * Folder path. A trailing slash is added if omitted. If omitted
    * entirely, a unique name is generated from the stack, stage, and
-   * logical id. Immutable — changing it replaces the folder.
+   * logical id. Immutable -- changing it replaces the folder.
    */
   folderName?: string;
 };

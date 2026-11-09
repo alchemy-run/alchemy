@@ -5,8 +5,8 @@ import type { ResponsePlan } from "./ResponsePlan.ts";
 /**
  * Shared scaffolding for AWS Systems Manager Incident Manager HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the two builders
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the two builders
  * below. Everything except the operation and the IAM action list is
  * boilerplate.
  */
@@ -61,8 +61,8 @@ export const makeIncidentsResponsePlanHttpBinding = <
 /**
  * Build the impl Effect for an incident-record-plane operation (incident
  * records, timeline events, related items, findings). Incident records are
- * runtime entities — their ARNs embed the response-plan name plus a UUID
- * minted when the incident starts — so there is no deployed resource to
+ * runtime entities -- their ARNs embed the response-plan name plus a UUID
+ * minted when the incident starts -- so there is no deployed resource to
  * scope the grant to and the deploy-time half grants `actions` on `*`. The
  * runtime callable passes the caller's request through unchanged.
  */

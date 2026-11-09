@@ -73,7 +73,7 @@ export const ResolverRuleAssociation = Resource<ResolverRuleAssociation>(
  * Re-associating a (rule, VPC) pair whose previous association is still
  * draining (`DELETING`) surfaces `InvalidRequestException` or
  * `ResourceExistsException`; the rule itself may also still be settling
- * (`ResourceUnavailableException`). All are bounded races — retry (~60s).
+ * (`ResourceUnavailableException`). All are bounded races -- retry (~60s).
  *
  * Explicitly typed: inlining `Effect.retry` in provider lifecycle code can
  * widen the provider layer to `unknown` in declaration emit.
@@ -132,7 +132,7 @@ const untilAssociationGone = <A, E, R>(
 
 /**
  * Disassociating an association that is still `CREATING` transiently fails
- * with `InvalidRequestException` — retry briefly until it settles.
+ * with `InvalidRequestException` -- retry briefly until it settles.
  *
  * @internal
  */
@@ -169,7 +169,7 @@ export const ResolverRuleAssociationProvider = () =>
           ),
         );
 
-      // Any association record at all — used by delete to wait until the
+      // Any association record at all -- used by delete to wait until the
       // (rule, VPC) pair has fully drained, DELETING entries included.
       const observeAny = (resolverRuleId: string, vpcId: string) =>
         listAssociations(resolverRuleId, vpcId).pipe(Effect.map((associations) => associations[0]));
@@ -219,7 +219,7 @@ export const ResolverRuleAssociationProvider = () =>
             vpcId,
           };
         }),
-        // Existence-only resource — every identifying property change
+        // Existence-only resource -- every identifying property change
         // replaces the association.
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
@@ -231,7 +231,7 @@ export const ResolverRuleAssociationProvider = () =>
             return { action: "replace" } as const;
           }
         }),
-        // Existence-only: observe → if missing, associate. There is no
+        // Existence-only: observe -> if missing, associate. There is no
         // sync step (an association has no mutable aspects).
         reconcile: Effect.fn(function* ({ news, session }) {
           let association = yield* observe(news.resolverRuleId, news.vpcId);
@@ -267,7 +267,7 @@ export const ResolverRuleAssociationProvider = () =>
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
           );
           // Disassociation is asynchronous and the parent rule cannot be
-          // deleted until the association has fully drained — wait
+          // deleted until the association has fully drained -- wait
           // (bounded ~2 min) for it to disappear.
           yield* untilAssociationGone(observeAny(output.resolverRuleId, output.vpcId));
         }),

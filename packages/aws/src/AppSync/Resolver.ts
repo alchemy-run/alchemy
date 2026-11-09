@@ -51,11 +51,11 @@ export interface ResolverProps {
   /** VTL response mapping template (legacy alternative to `code`). */
   responseMappingTemplate?: string;
   /**
-   * Pipeline function IDs executed in order — required for `PIPELINE`
+   * Pipeline function IDs executed in order -- required for `PIPELINE`
    * resolvers. Pass `fn.functionId` outputs from {@link Function}.
    */
   pipelineFunctionIds?: string[];
-  /** Maximum batch size for batched Lambda invocations (0–2000). */
+  /** Maximum batch size for batched Lambda invocations (0-2000). */
   maxBatchSize?: number;
   /** Per-resolver caching config (requires an API cache). */
   cachingConfig?: appsync.CachingConfig;
@@ -83,7 +83,7 @@ export interface AppSyncResolver extends Resource<
 > {}
 
 /**
- * An AppSync resolver — attaches request/response logic to a schema field.
+ * An AppSync resolver -- attaches request/response logic to a schema field.
  *
  * `UNIT` resolvers target a single data source; `PIPELINE` resolvers run a
  * sequence of {@link Function}s. The modern default is `APPSYNC_JS` code
@@ -242,7 +242,7 @@ export const ResolverProvider = () =>
         stables: ["apiId", "typeName", "fieldName", "resolverArn"],
 
         // Sub-resource keyed entirely by its GraphQL API (apiId/typeName) with no global
-        // enumeration API of its own — nuke reaches it through the parent's
+        // enumeration API of its own -- nuke reaches it through the parent's
         // deletion, so enumeration returns empty per the ProviderService
         // doctrine.
         list: () => Effect.succeed([]),

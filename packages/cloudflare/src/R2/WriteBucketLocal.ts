@@ -6,7 +6,7 @@ import { makeWrite } from "./WriteBucketBinding.ts";
 import { makeWriteR2HttpClient } from "./WriteBucketHttp.ts";
 
 /**
- * Local implementation of the {@link WriteBucket} binding — writes R2 objects
+ * Local implementation of the {@link WriteBucket} binding -- writes R2 objects
  * over the Cloudflare HTTP API using the **current credentials** instead of a
  * native Worker binding (`WriteBucketBinding`) or a scoped API token
  * (`WriteBucketHttp`).

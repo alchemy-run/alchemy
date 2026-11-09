@@ -1,5 +1,5 @@
 /**
- * `@alchemy.run/frontend-frameworks/astro/entrypoints/aws-server` — the AWS
+ * `@alchemy.run/frontend-frameworks/astro/entrypoints/aws-server` -- the AWS
  * Lambda server entrypoint the AWS deploy target pins as the adapter's
  * `serverEntrypoint`.
  *
@@ -8,8 +8,8 @@
  * the serialized manifest and exports the Lambda `handler`:
  *
  * - **streaming** (`awslambda.streamifyResponse`, requires a Function URL
- *   with `invokeMode: RESPONSE_STREAM`) when the `awslambda` global exists —
- *   i.e. on the AWS Lambda Node.js runtime — and streaming is enabled
+ *   with `invokeMode: RESPONSE_STREAM`) when the `awslambda` global exists --
+ *   i.e. on the AWS Lambda Node.js runtime -- and streaming is enabled
  *   (the deploy target's default);
  * - **buffered** (a complete payload-v2 response object) otherwise, so the
  *   module stays importable outside the Lambda sandbox (local invocation

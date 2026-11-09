@@ -156,7 +156,7 @@ export const InstanceProvider = () =>
         reconcile: Effect.fn(function* ({ news, output, session }) {
           const mode = output?.mode ?? news.mode ?? "existing";
 
-          // Observe — try to find a visible instance, preferring an
+          // Observe -- try to find a visible instance, preferring an
           // explicit ARN (from output or props) and otherwise scanning
           // the account.
           const existing = yield* readInstance({
@@ -171,7 +171,7 @@ export const InstanceProvider = () =>
             };
           }
 
-          // Ensure — for `existing` mode we cannot create one; fail.
+          // Ensure -- for `existing` mode we cannot create one; fail.
           // Organization instances must be enabled manually in the
           // management account.
           if (mode !== "account") {
@@ -181,7 +181,7 @@ export const InstanceProvider = () =>
             });
           }
 
-          // Ensure — `account` mode creates an account instance.
+          // Ensure -- `account` mode creates an account instance.
           const response = yield* retryIdentityCenter(
             ssoAdmin.createInstance({
               Name: news.name,

@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `translate:ListParallelData` — list the parallel data
+ * Runtime binding for `translate:ListParallelData` -- list the parallel data
  * resources in the account and region.
  *
  * ### Reading Parallel Data
@@ -14,7 +14,7 @@ import type * as Effect from "effect/Effect";
  *
  * // runtime
  * const result = yield* listParallelData({ MaxResults: 50 });
- * // result.ParallelDataPropertiesList -> [{ Name, Arn, Status, … }, …]
+ * // result.ParallelDataPropertiesList -> [{ Name, Arn, Status, ... }, ...]
  * ```
  *
  * @binding

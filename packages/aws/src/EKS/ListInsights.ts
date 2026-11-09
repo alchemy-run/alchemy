@@ -6,7 +6,7 @@ import type { Cluster } from "./Cluster.ts";
 /**
  * Runtime binding for `eks:ListInsights`.
  *
- * Enumerates EKS upgrade/configuration insights for the bound cluster — findings that block or degrade a Kubernetes version upgrade.
+ * Enumerates EKS upgrade/configuration insights for the bound cluster -- findings that block or degrade a Kubernetes version upgrade.
  * The cluster `clusterName` is injected from the bound {@link Cluster} and `eks:ListInsights` is granted on the cluster's ARN.
  * Provide the implementation with
  * `Effect.provide(AWS.EKS.ListInsightsHttp)`.

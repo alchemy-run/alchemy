@@ -2,12 +2,12 @@ import type { Function as LambdaFunction } from "@alchemy.run/aws/Lambda/Functio
 import { InvokeFunction } from "@alchemy.run/aws/Lambda/InvokeFunction";
 /**
  * `Hasher` over an AWS Lambda (DESIGN §22.11). Each chunk is one
- * `InvokeFunction` call — a JSON payload with the chunk in base64 — signed
+ * `InvokeFunction` call -- a JSON payload with the chunk in base64 -- signed
  * from the Worker with the cross-cloud identity `AWS.Lambda.InvokeFunctionHttp`
  * provisions for a Worker host (an IAM user, key and assume-role Role,
  * once per Worker). Chunks are 4 MiB (the 6 MB invoke limit) and the pump
  * writes the spill parts itself (`writesSpill: false`). Any failure on the
- * Lambda side — throttling, a cold-start timeout, an oversize response —
+ * Lambda side -- throttling, a cold-start timeout, an oversize response --
  * falls back to hashing that chunk inline, so a push never fails because
  * the hasher did.
  */
@@ -29,7 +29,7 @@ export const HasherLambda = (
   Layer.effect(
     Hasher,
     Effect.gen(function* () {
-      // A class-style declaration (`HasherFunction`) is yielded here — at
+      // A class-style declaration (`HasherFunction`) is yielded here -- at
       // deploy that registers the function, at runtime it resolves it.
       const func = Effect.isEffect(fn) ? yield* fn as Effect.Effect<LambdaFunction> : fn;
       const invoke = yield* InvokeFunction(func);

@@ -22,7 +22,7 @@ import {
 export type LienProps = {
   /**
    * Resource this lien attaches to, e.g. `projects/{project}`. Defaults
-   * to the current project (numeric form). Immutable — changing it
+   * to the current project (numeric form). Immutable -- changing it
    * replaces the lien.
    */
   parent?: string;
@@ -68,7 +68,7 @@ export type Lien = Resource<
 >;
 
 /**
- * A Cloud Resource Manager lien — an encumbrance that blocks selected
+ * A Cloud Resource Manager lien -- an encumbrance that blocks selected
  * operations on a project (most commonly project deletion).
  *
  * Liens have no update API, id, or labels: the lien on `parent` with the

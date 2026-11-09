@@ -10,7 +10,7 @@ import * as HttpApiGroup from "effect/http-api/HttpApiGroup";
  */
 import { RepoPath, RepoNotFound, PushDenied } from "./Schema.ts";
 
-/** `GET /:owner/:repo/info/refs?service=…`: the ref advertisement. */
+/** `GET /:owner/:repo/info/refs?service=...`: the ref advertisement. */
 export const InfoRefs = HttpApiEndpoint.get("infoRefs", "/:owner/:repo/info/refs", {
   params: RepoPath,
   error: [RepoNotFound, PushDenied],

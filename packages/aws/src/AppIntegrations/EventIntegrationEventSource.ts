@@ -24,7 +24,7 @@ export interface IntegrationEventsProps {
   /**
    * The partner event source that pushes events to the EventBridge bus,
    * e.g. `aws.partner/examplepartner.com`. Also used as the literal
-   * EventBridge rule pattern (`source`), so it must be a plain string —
+   * EventBridge rule pattern (`source`), so it must be a plain string --
    * Output values cannot appear in event patterns because the pattern is
    * also matched inside the deployed bundle at runtime.
    */
@@ -65,7 +65,7 @@ export interface IntegrationEventsProps {
  * import * as AWS from "@alchemy.run/aws";
  * import { consumeIntegrationEvents } from "@alchemy.run/aws/AppIntegrations";
  *
- * // init — creates the EventIntegration + EventBridge rule and registers
+ * // init -- creates the EventIntegration + EventBridge rule and registers
  * // the runtime handler (provide AWS.Lambda.EventSource on the Function)
  * const integration = yield* consumeIntegrationEvents(
  *   "PartnerEvents",

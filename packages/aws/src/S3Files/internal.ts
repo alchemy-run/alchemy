@@ -14,7 +14,7 @@ export class S3FilesNotConverged extends Data.TaggedError("S3FilesNotConverged")
 }> {}
 
 /**
- * Bounded retry through transient `ConflictException` states — e.g. deleting
+ * Bounded retry through transient `ConflictException` states -- e.g. deleting
  * a file system or access point whose previous lifecycle transition is still
  * settling.
  *
@@ -32,7 +32,7 @@ export const retryWhileConflict = <A, E extends { readonly _tag: string }, R>(
   });
 
 /**
- * Repeat an observe poll until `done` holds (bounded — file systems and
+ * Repeat an observe poll until `done` holds (bounded -- file systems and
  * access points typically become `available` within seconds). Explicitly
  * typed for the declaration-emit reason above.
  */

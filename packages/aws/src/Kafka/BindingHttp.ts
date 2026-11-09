@@ -6,14 +6,14 @@ import type { ServerlessCluster } from "./ServerlessCluster.ts";
 /**
  * Shared scaffolding for AWS MSK (Kafka) HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, makeKafkaClusterHttpBinding({ … }))` over the
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, makeKafkaClusterHttpBinding({ ... }))` over the
  * builder below. Everything except the operation and the IAM action list is
  * boilerplate.
  */
 
 /**
- * The cluster ARN is `arn:…:cluster/name/uuid`. Topic resources live under a
+ * The cluster ARN is `arn:...:cluster/name/uuid`. Topic resources live under a
  * sibling `topic/` namespace scoped to the same cluster path; both the
  * `kafka:*Topic*` control-plane actions and the `kafka-cluster:*` data-plane
  * actions authorize against these ARNs.
@@ -33,7 +33,7 @@ export const transactionalIdArnGlob = (clusterArn: string) =>
  * Build the impl Effect for a cluster-scoped MSK control-plane operation: the
  * runtime callable injects the bound {@link ServerlessCluster}'s ARN as
  * `ClusterArn` and the deploy-time half grants `actions` on the cluster ARN
- * (plus the cluster's `topic/` ARN namespace when `topicScoped` is set —
+ * (plus the cluster's `topic/` ARN namespace when `topicScoped` is set --
  * topic-management actions authorize against topic ARNs).
  */
 export const makeKafkaClusterHttpBinding = <I extends { ClusterArn: string }, A, E, R>(options: {
@@ -43,7 +43,7 @@ export const makeKafkaClusterHttpBinding = <I extends { ClusterArn: string }, A,
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** IAM actions granted on the cluster ARN (and topic glob, if scoped). */
   actions: readonly string[];
-  /** Also grant `actions` on the cluster's `topic/…/*` ARN namespace. */
+  /** Also grant `actions` on the cluster's `topic/.../*` ARN namespace. */
   topicScoped?: boolean;
 }) =>
   Effect.gen(function* () {

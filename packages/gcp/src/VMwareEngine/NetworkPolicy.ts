@@ -51,7 +51,7 @@ export type NetworkPolicyProps = {
    */
   networkPolicyId?: string;
   /**
-   * Region. Immutable — changing it replaces the policy.
+   * Region. Immutable -- changing it replaces the policy.
    * @default the stack's GCP region (`GCP.Region`, else the profile
    *   region, else `us-central1`)
    */
@@ -79,7 +79,7 @@ export type NetworkPolicyProps = {
   externalIp?: NetworkService;
   /**
    * Human-readable description. Network policies have no labels field, so
-   * Alchemy stamps ownership into a `[alchemy …]` prefix and strips it
+   * Alchemy stamps ownership into a `[alchemy ...]` prefix and strips it
    * from attributes.
    */
   description?: string;

@@ -6,8 +6,8 @@ import type { Cluster } from "./Cluster.ts";
 /**
  * Shared scaffolding for Amazon EMR HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the two
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the two
  * builders below. Everything except the operation, the IAM action list, and
  * the injected cluster identifier is boilerplate.
  */
@@ -18,9 +18,9 @@ import type { Cluster } from "./Cluster.ts";
  * cluster-addressed actions against the cluster ARN); the runtime callable
  * injects the cluster's identifier into the request as `inject`:
  *
- * - `"ClusterId"` (default) / `"JobFlowId"` — the cluster id (`j-…`)
- * - `"TargetResourceArn"` — the cluster ARN (persistent app UIs)
- * - `"none"` — pass the caller's request through unchanged (id-addressed
+ * - `"ClusterId"` (default) / `"JobFlowId"` -- the cluster id (`j-...`)
+ * - `"TargetResourceArn"` -- the cluster ARN (persistent app UIs)
+ * - `"none"` -- pass the caller's request through unchanged (id-addressed
  *   companions like `DescribePersistentAppUI` that EMR still authorizes
  *   against the cluster the target belongs to)
  */
@@ -40,7 +40,7 @@ export const makeEmrClusterHttpBinding = <I, A, E, R>(options: {
     const inject = options.inject ?? "ClusterId";
 
     return Effect.fn(function* <C extends Cluster>(cluster: C) {
-      // Outputs yield a DEFERRED effect — resolve again per invocation below.
+      // Outputs yield a DEFERRED effect -- resolve again per invocation below.
       const Injected = yield* inject === "TargetResourceArn"
         ? cluster.clusterArn
         : cluster.clusterId;
@@ -67,7 +67,7 @@ export const makeEmrClusterHttpBinding = <I, A, E, R>(options: {
 
 /**
  * Build the impl Effect for an account-level operation (cluster inventory,
- * release-label catalog). The deploy-time half grants `actions` on `*` —
+ * release-label catalog). The deploy-time half grants `actions` on `*` --
  * these read-only discovery actions span every cluster/release label in the
  * account and support no resource-level scoping.
  */

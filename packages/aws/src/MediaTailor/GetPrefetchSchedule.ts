@@ -13,7 +13,7 @@ export interface GetPrefetchScheduleRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `mediatailor:GetPrefetchSchedule` — read a prefetch
+ * Runtime binding for `mediatailor:GetPrefetchSchedule` -- read a prefetch
  * schedule on the bound {@link PlaybackConfiguration} by name.
  *
  * Provide the implementation with

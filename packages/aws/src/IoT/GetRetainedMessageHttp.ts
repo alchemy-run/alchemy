@@ -4,7 +4,7 @@ import { makeIotTopicHttpBinding } from "./BindingHttp.ts";
 import { GetRetainedMessage } from "./GetRetainedMessage.ts";
 
 /**
- * HTTP implementation of the {@link GetRetainedMessage} capability — grants
+ * HTTP implementation of the {@link GetRetainedMessage} capability -- grants
  * `iot:GetRetainedMessage` on the bound topic filter and calls the IoT
  * data-plane `GetRetainedMessage` API.
  */

@@ -31,16 +31,16 @@ const namespaceOf = (resource: VariableRefSource): string => {
 /**
  * Emit a Railway variable-reference template (`${{Service.KEY}}` or
  * `${{shared.NAME}}`). Distinct from the unexported resource-prop
- * `Ref<T>` — never export that `Ref`.
+ * `Ref<T>` -- never export that `Ref`.
  *
  * `Railway.ref(Db, "DATABASE_URL")` returns `${{LogicalName.DATABASE_URL}}`
- * where `LogicalName` is `resource.LogicalId` (`Postgres("Db")` → `Db`).
+ * where `LogicalName` is `resource.LogicalId` (`Postgres("Db")` -> `Db`).
  * Shared variables use the `"shared"` namespace:
  * `Railway.ref("shared", "SENTRY_DSN")` returns `${{shared.SENTRY_DSN}}`.
  *
  * Store the string as a {@link Variable} `value` (or on `Service.env`).
  * Railway keeps the template (`unrendered: true`) and interpolates it at
- * build/runtime — it is not a resolved URI. Use {@link ConnectPostgres}
+ * build/runtime -- it is not a resolved URI. Use {@link ConnectPostgres}
  * when you want a typed client inside an Effect-native Service.
  *
  * Railway interpolates by service name. Set `name` on Postgres/Service to

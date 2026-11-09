@@ -54,7 +54,7 @@ export const FetchBinding = Layer.effect(
           });
         }
       }
-      // Lazy — the `WorkerEnvironment` bindings are only populated at exec
+      // Lazy -- the `WorkerEnvironment` bindings are only populated at exec
       // phase, so the fetcher must be resolved per call, not at bind time.
       const fetcher = Effect.sync(
         () => (env as Record<string, runtime.Fetcher>)[worker.LogicalId]!,

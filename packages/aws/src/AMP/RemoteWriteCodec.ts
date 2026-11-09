@@ -14,10 +14,10 @@
  * ```
  *
  * The snappy encoder emits literal-only blocks (no back-references), which is
- * valid snappy — decoders don't require compressed output. Remote-write
+ * valid snappy -- decoders don't require compressed output. Remote-write
  * payloads are small enough that the size cost is irrelevant.
  *
- * NOT exported from `index.ts` — internal to the RemoteWrite binding.
+ * NOT exported from `index.ts` -- internal to the RemoteWrite binding.
  */
 
 /** One sample of a series being remote-written; timestamp in epoch millis. */

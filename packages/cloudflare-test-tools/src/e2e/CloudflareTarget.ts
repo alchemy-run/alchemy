@@ -15,7 +15,7 @@ import type * as Options from "./Options.ts";
  * value whose `serve` boots miniflare over a `BuildOutput` (the
  * preview-parity engine the harness has always used for `e2e preview` / the
  * Playwright `live` mode). Serving built output is *architecturally* the
- * target's concern — the implementation lives in the harness for now because
+ * target's concern -- the implementation lives in the harness for now because
  * miniflare is a harness dependency.
  */
 export interface CloudflareTarget extends DeployTarget<Options.CloudflareTargetOptions> {
@@ -27,13 +27,13 @@ export interface CloudflareTarget extends DeployTarget<Options.CloudflareTargetO
  * Miniflare requires a script even for an assets-only deploy, so when a
  * `BuildOutput` carries no server modules (and the preview config hand-rolls
  * none), this stub stands in behind `routerConfig.has_user_worker: false`.
- * Every real request must be answered by the asset layer — a request reaching
+ * Every real request must be answered by the asset layer -- a request reaching
  * the stub means the routing is misconfigured, so it 500s loudly.
  */
 const ASSETS_ONLY_STUB: MiniflareModule = {
   type: "ESModule",
   path: "__assets-only-stub.js",
-  contents: `export default { fetch: () => new Response("assets-only build: no user worker — a request reached the stub, so asset routing is misconfigured", { status: 500 }) }`,
+  contents: `export default { fetch: () => new Response("assets-only build: no user worker \u2014 a request reached the stub, so asset routing is misconfigured", { status: 500 }) }`,
 };
 
 export const makeCloudflareTarget = (config: Options.CloudflareTargetOptions): CloudflareTarget =>
@@ -65,7 +65,7 @@ export const makeCloudflareTarget = (config: Options.CloudflareTargetOptions): C
         // Assets-only build: no server modules in the BuildOutput and none
         // hand-rolled in the preview config. The harness synthesizes the
         // stub script miniflare requires and routes every request to the
-        // asset layer (`has_user_worker: false`) — fixtures don't hand-roll
+        // asset layer (`has_user_worker: false`) -- fixtures don't hand-roll
         // stubs.
         const resolvedModules = modules ?? preview.modules;
         const assetsOnly = resolvedModules === undefined || resolvedModules.length === 0;

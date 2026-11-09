@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `transcribe:UpdateVocabulary` — replace a custom vocabulary's phrases (the vocabulary re-enters `PENDING` while it reprocesses).
+ * Runtime binding for `transcribe:UpdateVocabulary` -- replace a custom vocabulary's phrases (the vocabulary re-enters `PENDING` while it reprocesses).
  *
  * Amazon Transcribe batch actions have no resource-level IAM; the host is
  * granted `transcribe:UpdateVocabulary` on `*`.

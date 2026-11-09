@@ -17,7 +17,7 @@ export interface PostTimeSeriesDataPointsRequest extends Omit<
  * ### Time Series Metadata
  * **Example:** Record Data Quality Metrics
  * ```typescript
- * // init — bind the operation to the domain
+ * // init -- bind the operation to the domain
  * const postTimeSeriesDataPoints = yield* AWS.DataZone.PostTimeSeriesDataPoints(domain);
  *
  * // runtime

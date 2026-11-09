@@ -10,17 +10,17 @@ export interface StartDeploymentRequest extends Omit<amplify.StartDeploymentRequ
  *
  * Bind an {@link App} in the function's init phase to get a callable that
  * releases a manual deployment on a branch of an app with no connected
- * repository — either a deployment staged with {@link CreateDeployment}
+ * repository -- either a deployment staged with {@link CreateDeployment}
  * (`jobId`) or content fetched from a public `sourceUrl` (zip URL or S3
  * prefix). Provide the implementation with
  * `Effect.provide(AWS.Amplify.StartDeploymentHttp)`.
  * ### Manual Deployments
  * **Example:** Release a Staged Deployment
  * ```typescript
- * // init — bind the operation to the app
+ * // init -- bind the operation to the app
  * const startDeployment = yield* AWS.Amplify.StartDeployment(app);
  *
- * // runtime — release the artifact uploaded via CreateDeployment
+ * // runtime -- release the artifact uploaded via CreateDeployment
  * const { jobSummary } = yield* startDeployment({
  *   branchName: "main",
  *   jobId,

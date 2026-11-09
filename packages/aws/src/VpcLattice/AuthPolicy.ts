@@ -10,7 +10,7 @@ import type { Providers } from "../Providers.ts";
 export interface AuthPolicyProps {
   /**
    * The ID or ARN of the service network or service the auth policy applies
-   * to. Immutable — changing it replaces the resource.
+   * to. Immutable -- changing it replaces the resource.
    */
   resourceIdentifier: string;
   /**
@@ -34,7 +34,7 @@ export interface AuthPolicy extends Resource<
      */
     policy: string;
     /**
-     * Policy state reported by the API (`Active` or `Inactive` — `Inactive`
+     * Policy state reported by the API (`Active` or `Inactive` -- `Inactive`
      * when the target's `authType` is `NONE`).
      */
     state: string | undefined;
@@ -44,7 +44,7 @@ export interface AuthPolicy extends Resource<
 > {}
 
 /**
- * An auth policy for a VPC Lattice service network or service — the IAM
+ * An auth policy for a VPC Lattice service network or service -- the IAM
  * resource policy evaluated on every request when the target's `authType`
  * is `AWS_IAM`.
  *
@@ -90,7 +90,7 @@ export const AuthPolicyProvider = () =>
     AuthPolicy,
     Effect.gen(function* () {
       // A missing parent and a parent without an auth policy are both
-      // "no policy" — getAuthPolicy answers with an empty body for the
+      // "no policy" -- getAuthPolicy answers with an empty body for the
       // latter, so treat an absent `policy` as non-existence.
       const observe = (resourceIdentifier: string) =>
         vpclattice.getAuthPolicy({ resourceIdentifier }).pipe(
@@ -124,7 +124,7 @@ export const AuthPolicyProvider = () =>
           const resourceIdentifier = news.resourceIdentifier;
           const desired = toDesired(news.policy);
 
-          // Observe — putAuthPolicy is an upsert. Compare the canonicalized
+          // Observe -- putAuthPolicy is an upsert. Compare the canonicalized
           // live document against the canonicalized desired one so a
           // re-deploy of an equivalent policy (key order, whitespace) skips
           // the API call entirely.
@@ -145,7 +145,7 @@ export const AuthPolicyProvider = () =>
           return { resourceIdentifier, policy: desired, state };
         }),
         // Auth policies are sub-resources keyed entirely by their parent
-        // service network / service — there is no enumeration API.
+        // service network / service -- there is no enumeration API.
         list: () => Effect.succeed([] as AuthPolicy["Attributes"][]),
         delete: Effect.fn(function* ({ output }) {
           yield* vpclattice

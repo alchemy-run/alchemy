@@ -12,7 +12,7 @@ import type * as Effect from "effect/Effect";
  * ### Inspecting Insights
  * **Example:** Search Insights by Severity
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const searchInsights = yield* AWS.DevOpsGuru.SearchInsights();
  *
  * // runtime

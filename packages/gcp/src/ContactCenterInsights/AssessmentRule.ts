@@ -58,18 +58,18 @@ export type AssessmentRuleProps = {
    * Assessment rule id (the `{assessment_rule}` segment of
    * `projects/{project}/locations/{location}/assessmentRules/{assessment_rule}`).
    * If omitted, a unique id is generated. Must match `^[A-Za-z0-9]{4,64}$`
-   * (no dashes). Immutable — changing it replaces the rule.
+   * (no dashes). Immutable -- changing it replaces the rule.
    */
   assessmentRuleId?: string;
   /**
-   * Location (`us-central1`, …). Immutable — changing it replaces the rule.
+   * Location (`us-central1`, ...). Immutable -- changing it replaces the rule.
    * `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
    * Display name. Assessment rules have no labels field, so Alchemy
-   * ownership is stored in a `[alchemy …]` prefix and stripped from
+   * ownership is stored in a `[alchemy ...]` prefix and stripped from
    * attributes.
    */
   displayName?: string;
@@ -128,7 +128,7 @@ export interface AssessmentRuleLookup {
    */
   assessmentRuleId: string;
   /**
-   * Location (`us-central1`, …). `US-CENTRAL1` is accepted and normalized
+   * Location (`us-central1`, ...). `US-CENTRAL1` is accepted and normalized
    * to `us-central1`.
    */
   location?: string;
@@ -143,7 +143,7 @@ export interface AssessmentRuleLookup {
  * A Contact Center AI Insights assessment rule that samples conversations
  * on a schedule for quality assessment.
  *
- * Assessment rules have no labels field — Alchemy stamps ownership into
+ * Assessment rules have no labels field -- Alchemy stamps ownership into
  * the display name. Location and id are immutable. Active flag, sample
  * rule, and schedule update in place.
  *

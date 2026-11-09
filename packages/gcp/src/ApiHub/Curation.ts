@@ -45,12 +45,12 @@ export type CurationProps = {
   /**
    * Curation id (the `{curation}` segment of
    * `projects/{project}/locations/{location}/curations/{curation}`). If
-   * omitted, a unique id is generated. Immutable — changing it replaces
+   * omitted, a unique id is generated. Immutable -- changing it replaces
    * the curation.
    */
   curationId?: string;
   /**
-   * Location (`us-central1`, …). Immutable — changing it replaces the
+   * Location (`us-central1`, ...). Immutable -- changing it replaces the
    * curation.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -61,12 +61,12 @@ export type CurationProps = {
   displayName?: string;
   /**
    * Human-readable description. Curations have no labels field, so Alchemy
-   * stamps ownership into a `[alchemy …]` prefix and strips it from
+   * stamps ownership into a `[alchemy ...]` prefix and strips it from
    * attributes.
    */
   description?: string;
   /**
-   * Endpoint invoked with API metadata. Immutable — changing it replaces
+   * Endpoint invoked with API metadata. Immutable -- changing it replaces
    * the curation.
    */
   endpoint: CurationEndpoint;
@@ -120,7 +120,7 @@ export interface CurationLookup {
    */
   curationId: string;
   /**
-   * Location (`us-central1`, …).
+   * Location (`us-central1`, ...).
    */
   location?: string;
   /**
@@ -135,7 +135,7 @@ export interface CurationLookup {
  * with API metadata and receive curated metadata back.
  *
  * Location, id, and endpoint are immutable. Display name and description
- * update in place. Curations have no labels field — Alchemy stamps
+ * update in place. Curations have no labels field -- Alchemy stamps
  * ownership into the description.
  *
  * ### Creating a Curation

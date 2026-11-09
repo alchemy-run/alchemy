@@ -7,14 +7,14 @@ import type { WorkGroup } from "./WorkGroup.ts";
  * Runtime binding for `athena:GetQueryResults`.
  *
  * Reads one page of a completed query's result set (raw rows + column
- * metadata) — use `NextToken`/`MaxResults` to paginate large results. For the
+ * metadata) -- use `NextToken`/`MaxResults` to paginate large results. For the
  * common run-and-decode flow, prefer the composite {@link Query} binding.
  * Provide the implementation with
  * `Effect.provide(AWS.Athena.GetQueryResultsHttp)`.
  * ### Reading Results
  * **Example:** Page Through Query Results
  * ```typescript
- * // init — bind the operation to the workgroup
+ * // init -- bind the operation to the workgroup
  * const getQueryResults = yield* AWS.Athena.GetQueryResults(workGroup);
  *
  * // runtime

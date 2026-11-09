@@ -680,7 +680,7 @@ export const providers = () =>
       ),
     ),
     Layer.provideMerge(DockerLive),
-    // Note: `localRuntimeServices()` is no longer provided globally — each
+    // Note: `localRuntimeServices()` is no longer provided globally -- each
     // local provider composes it into its `ProviderLayer.dual` local thunk,
     // so workerd machinery only builds when a local variant is actually
     // demanded (dev runs, or deleting a local-mode row during deploy).
@@ -692,7 +692,7 @@ export const providers = () =>
 
 /**
  * The foundation every effect tree that talks to the Cloudflare API
- * shares — credentials resolved through the Alchemy auth provider,
+ * shares -- credentials resolved through the Alchemy auth provider,
  * account environment, Access, profile + credential store.
  *
  * Used by {@link providers} and the Cloudflare state store

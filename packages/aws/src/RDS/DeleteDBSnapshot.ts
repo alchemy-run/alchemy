@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `DeleteDBSnapshot` operation (IAM action
  * `rds:DeleteDBSnapshot`).
  *
- * Deletes a manual DB instance snapshot — the pruning half of a
+ * Deletes a manual DB instance snapshot -- the pruning half of a
  * snapshot-rotation function. Provide the implementation with
  * `Effect.provide(AWS.RDS.DeleteDBSnapshotHttp)`.
  * ### Managing Instance Snapshots

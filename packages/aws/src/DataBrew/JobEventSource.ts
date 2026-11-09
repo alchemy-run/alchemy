@@ -14,10 +14,10 @@ import {
 export interface JobEventDetail {
   /** Name of the job the run belongs to. */
   jobName?: string;
-  /** The run's id (`db_…`). */
+  /** The run's id (`db_...`). */
   jobRunId?: string;
   /**
-   * The new run state — `RUNNING`, `SUCCEEDED`, `FAILED`, `STOPPED`, or
+   * The new run state -- `RUNNING`, `SUCCEEDED`, `FAILED`, `STOPPED`, or
    * `TIMEOUT`.
    */
   state?: string;
@@ -58,7 +58,7 @@ export interface JobEventSourceProps extends EventRouteProps {
  * `DataBrew Job State Change`); this subscribes the host Function to those
  * events so it can alert on failed runs or chain post-run automation.
  *
- * DataBrew publishes to EventBridge automatically — no additional resource
+ * DataBrew publishes to EventBridge automatically -- no additional resource
  * is created besides the EventBridge rule targeting the host. Provide the
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.

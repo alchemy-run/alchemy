@@ -4,11 +4,11 @@ import type * as Effect from "effect/Effect";
 
 /**
  * Runtime binding for the `ValidateTemplate` operation (IAM action
- * `cloudformation:ValidateTemplate` on `*` — validation is not
+ * `cloudformation:ValidateTemplate` on `*` -- validation is not
  * resource-scoped).
  *
  * Validates a template body or URL and reports its parameters, capabilities,
- * and declaration errors — e.g. a platform service that lints user-submitted
+ * and declaration errors -- e.g. a platform service that lints user-submitted
  * templates before deploying them. Provide the implementation with
  * `Effect.provide(AWS.CloudFormation.ValidateTemplateHttp)`.
  * ### Validating Templates

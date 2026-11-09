@@ -6,7 +6,7 @@ import type { Pipe } from "./Pipe.ts";
 /**
  * Runtime binding for `pipes:StopPipe`.
  *
- * Stops the bound {@link Pipe} without deleting it — e.g. pausing source
+ * Stops the bound {@link Pipe} without deleting it -- e.g. pausing source
  * polling during a maintenance window or in response to a poison-pill
  * backlog. The response reports the transitional `STOPPING`/desired
  * `STOPPED` states; use {@link DescribePipe} to observe when the pipe
@@ -15,7 +15,7 @@ import type { Pipe } from "./Pipe.ts";
  * ### Controlling a Pipe
  * **Example:** Pause a Running Pipe
  * ```typescript
- * // init — bind the operation to the pipe
+ * // init -- bind the operation to the pipe
  * const stopPipe = yield* AWS.Pipes.StopPipe(pipe);
  *
  * // runtime

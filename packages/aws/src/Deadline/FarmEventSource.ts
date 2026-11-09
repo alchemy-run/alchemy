@@ -91,7 +91,7 @@ export interface FarmEventSourceProps extends EventRouteProps {
  * this subscribes the host Function to those events so it can react to
  * finished renders or runaway spend.
  *
- * Deadline Cloud publishes to EventBridge automatically — no additional
+ * Deadline Cloud publishes to EventBridge automatically -- no additional
  * resource is created besides the EventBridge rule targeting the host.
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.

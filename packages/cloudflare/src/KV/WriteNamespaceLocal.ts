@@ -6,7 +6,7 @@ import { makeWriteKVClient } from "./WriteNamespaceBinding.ts";
 import { makeWriteKVHttpClient } from "./WriteNamespaceHttp.ts";
 
 /**
- * Local implementation of the {@link WriteNamespace} binding — writes KV
+ * Local implementation of the {@link WriteNamespace} binding -- writes KV
  * values over the Cloudflare HTTP API using the **current credentials**
  * instead of a native Worker binding (`WriteNamespaceBinding`) or a scoped API
  * token (`WriteNamespaceHttp`).

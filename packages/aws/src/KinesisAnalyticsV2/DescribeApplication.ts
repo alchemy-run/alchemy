@@ -9,7 +9,7 @@ export interface DescribeApplicationRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `kinesisanalytics:DescribeApplication` — reads the
+ * Runtime binding for `kinesisanalytics:DescribeApplication` -- reads the
  * bound application's full detail (status, version, runtime environment,
  * configuration), the building block of ops automation that reacts to the
  * Flink job's lifecycle state.

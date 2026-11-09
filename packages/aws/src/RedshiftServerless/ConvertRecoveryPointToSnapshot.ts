@@ -13,7 +13,7 @@ import type * as Effect from "effect/Effect";
  * ### Working with Recovery Points
  * **Example:** Preserve a Recovery Point as a Snapshot
  * ```typescript
- * // init — resolve the runtime client
+ * // init -- resolve the runtime client
  * const convert = yield* AWS.RedshiftServerless.ConvertRecoveryPointToSnapshot();
  *
  * yield* convert({ recoveryPointId, snapshotName: `preserved-${runId}` });

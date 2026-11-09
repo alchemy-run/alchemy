@@ -21,7 +21,7 @@ export type EncryptionConfig = {
   kmsKeyName?: string;
   /** Full CMEK key version currently in use. */
   kmsKeyNameVersion?: string;
-  /** CMEK key status (`VALID`, `REVOKED`, …). */
+  /** CMEK key status (`VALID`, `REVOKED`, ...). */
   kmsKeyState?: string;
 };
 
@@ -29,13 +29,13 @@ export type InstancesBackupProps = {
   /**
    * Parent Looker instance. Full name
    * `projects/{project}/locations/{location}/instances/{instance}` or
-   * the instance id (combined with `location`). Immutable — changing it
+   * the instance id (combined with `location`). Immutable -- changing it
    * replaces the backup.
    */
   instance: string;
   /**
    * Region of the parent instance when `instance` is a bare id.
-   * Ignored when `instance` is a full resource name. Immutable —
+   * Ignored when `instance` is a full resource name. Immutable --
    * changing it replaces the backup. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
@@ -46,7 +46,7 @@ export type InstancesBackupProps = {
    * `.../instances/{instance}/backups/{backup}`). If omitted, a unique
    * RFC1035 name is generated with an `alch-` prefix so `list` / nuke
    * can find it. The backups API has no labels or description field;
-   * ownership is stamped in the backup id. Immutable — changing it
+   * ownership is stamped in the backup id. Immutable -- changing it
    * replaces the backup. The API may ignore a requested id and assign
    * a UUID; Alchemy then tracks the server-assigned name.
    */
@@ -67,9 +67,9 @@ export type InstancesBackup = Resource<
     instanceId: string;
     /** Project id. */
     project: string;
-    /** Region id (`us-central1`, …). */
+    /** Region id (`us-central1`, ...). */
     location: string;
-    /** Server-reported state (`ACTIVE`, `CREATING`, `FAILED`, …). */
+    /** Server-reported state (`ACTIVE`, `CREATING`, `FAILED`, ...). */
     state: string | undefined;
     /** Customer-managed encryption status, if any. */
     encryptionConfig: EncryptionConfig | undefined;

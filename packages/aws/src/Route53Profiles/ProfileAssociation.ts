@@ -58,7 +58,7 @@ export interface ProfileAssociation extends Resource<
  *
  * A VPC can have only one Profile associated with it; a Profile can be
  * associated with thousands of VPCs. The association is created immediately
- * but completes asynchronously — the returned `status` is typically still
+ * but completes asynchronously -- the returned `status` is typically still
  * `CREATING` when the deploy finishes.
  * ### Associating a Profile
  * **Example:** Apply a Profile to a VPC
@@ -97,10 +97,10 @@ const retryConflict = <A, E extends { _tag: string }, R>(
 
 /**
  * Bounded wait (~2 min) for a disassociation to drain. Disassociation was
- * observed to take ~1–2 minutes; waiting here keeps teardown ordering sound
+ * observed to take ~1-2 minutes; waiting here keeps teardown ordering sound
  * (the Profile and the VPC both reject deletion while the association
  * exists). If the association is still draining after the budget we proceed
- * — the Profile and VPC providers absorb the residual with their own
+ * -- the Profile and VPC providers absorb the residual with their own
  * bounded conflict/dependency retries.
  *
  * @internal
@@ -196,7 +196,7 @@ export const ProfileAssociationProvider = () =>
             status: association.Status ?? "COMPLETE",
           };
         }),
-        // Existence-only resource — every identifying property change
+        // Existence-only resource -- every identifying property change
         // replaces the association (there is no update API).
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return undefined;
@@ -210,8 +210,8 @@ export const ProfileAssociationProvider = () =>
             return { action: "replace" } as const;
           }
         }),
-        // Existence-only: observe → if missing, associate. There is no sync
-        // step. We deliberately do NOT wait for `COMPLETE` — the association
+        // Existence-only: observe -> if missing, associate. There is no sync
+        // step. We deliberately do NOT wait for `COMPLETE` -- the association
         // takes a couple of minutes to propagate and is usable as a
         // reference immediately.
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -238,7 +238,7 @@ export const ProfileAssociationProvider = () =>
               }),
             ).pipe(
               Effect.map((r) => r.ProfileAssociation!),
-              // A concurrent reconcile won the race — re-observe.
+              // A concurrent reconcile won the race -- re-observe.
               Effect.catchTag("ResourceExistsException", () =>
                 observeByPair(news.profileId, news.resourceId).pipe(
                   Effect.map((existing) => existing!),
@@ -266,7 +266,7 @@ export const ProfileAssociationProvider = () =>
             Effect.asVoid,
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
           );
-          // Disassociation drains asynchronously (~1–2 min). Wait (bounded)
+          // Disassociation drains asynchronously (~1-2 min). Wait (bounded)
           // so the Profile and VPC can be deleted right after.
           yield* untilAssociationGone(observeById(output.profileAssociationId));
         }),

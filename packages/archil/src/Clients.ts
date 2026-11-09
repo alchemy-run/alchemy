@@ -116,13 +116,13 @@ export type ShareError =
 
 /** Write the disk's files as objects. */
 export interface WriteDiskClient {
-  /** Write a file (≤ 5 GiB). */
+  /** Write a file (<= 5 GiB). */
   put(
     key: string,
     body: Uint8Array | string,
     options?: { readonly contentType?: string } & Objects.PosixAttributes,
   ): Effect.Effect<{ etag: string | undefined }, Objects.ObjectsFailure | ObjectsTransportError, R>;
-  /** Append to a file, creating it when missing (≤ 1 MiB per call). */
+  /** Append to a file, creating it when missing (<= 1 MiB per call). */
   append(
     key: string,
     body: Uint8Array | string,

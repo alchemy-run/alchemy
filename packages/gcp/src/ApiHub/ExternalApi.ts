@@ -34,12 +34,12 @@ export type ExternalApiProps = {
   /**
    * External API id (the `{externalApi}` segment of
    * `projects/{project}/locations/{location}/externalApis/{externalApi}`).
-   * If omitted, a unique id is generated. Immutable — changing it replaces
+   * If omitted, a unique id is generated. Immutable -- changing it replaces
    * the External API.
    */
   externalApiId?: string;
   /**
-   * Location of the API Hub instance (`us-central1`, …). Immutable —
+   * Location of the API Hub instance (`us-central1`, ...). Immutable --
    * changing it replaces the External API.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -50,7 +50,7 @@ export type ExternalApiProps = {
   displayName?: string;
   /**
    * Human-readable description. External APIs have no labels field, so
-   * Alchemy stamps ownership into a `[alchemy …]` prefix and strips it
+   * Alchemy stamps ownership into a `[alchemy ...]` prefix and strips it
    * from attributes.
    */
   description?: string;
@@ -118,7 +118,7 @@ export interface ExternalApiLookup {
    */
   externalApiId: string;
   /**
-   * Location of the API Hub instance (`us-central1`, …).
+   * Location of the API Hub instance (`us-central1`, ...).
    */
   location?: string;
   /**
@@ -129,11 +129,11 @@ export interface ExternalApiLookup {
 }
 
 /**
- * An API Hub External API — a third-party API modeled so it can be
+ * An API Hub External API -- a third-party API modeled so it can be
  * referenced from dependencies.
  *
  * External APIs have no labels, so Alchemy stamps ownership into the
- * description for `list` / nuke. Location and id are identity — changing
+ * description for `list` / nuke. Location and id are identity -- changing
  * them replaces the resource. Display name, description, documentation,
  * endpoints, and paths update in place.
  *

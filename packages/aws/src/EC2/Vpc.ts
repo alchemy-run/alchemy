@@ -211,7 +211,7 @@ export type VpcLookup =
       isDefault: true;
     };
 /**
- * An Amazon VPC (Virtual Private Cloud) — an isolated virtual network that is
+ * An Amazon VPC (Virtual Private Cloud) -- an isolated virtual network that is
  * the root of any custom AWS networking topology. Subnets, route tables,
  * gateways, security groups, and instances are all created inside a VPC.
  *
@@ -230,7 +230,7 @@ export type VpcLookup =
  * });
  * ```
  *
- * A `/16` gives you 65,536 addresses to carve into subnets — enough headroom
+ * A `/16` gives you 65,536 addresses to carve into subnets -- enough headroom
  * for a multi-AZ, multi-tier network. This is the minimal config every other
  * networking resource builds on.
  *
@@ -273,7 +273,7 @@ export type VpcLookup =
  * ```
  *
  * Forcing `"dedicated"` tenancy ensures every instance launched in the VPC runs
- * on single-tenant hardware — required by some compliance regimes, but more
+ * on single-tenant hardware -- required by some compliance regimes, but more
  * expensive than the `"default"` shared tenancy. This property cannot be
  * changed after creation without replacing the VPC.
  *
@@ -324,7 +324,7 @@ export type VpcLookup =
  * });
  * ```
  *
- * Passing `vpc.vpcId` into a `Subnet` is how you build out a topology — the
+ * Passing `vpc.vpcId` into a `Subnet` is how you build out a topology -- the
  * subnet's CIDR must fall within the VPC's `cidrBlock`. Add route tables,
  * gateways, and security groups the same way.
  *
@@ -374,7 +374,7 @@ export const Vpc = Resource<Vpc>("AWS.EC2.VPC");
  * Map a raw EC2 VPC (as returned by `describeVpcs`) plus its tags to the
  * resource's `Attributes` shape. DNS support/hostnames are not part of the
  * `Attributes` contract, so the full shape is derivable from the describe
- * response alone — no per-VPC `describeVpcAttribute` call is required.
+ * response alone -- no per-VPC `describeVpcAttribute` call is required.
  */
 const vpcToAttributes = (
   vpc: EC2.Vpc,
@@ -523,7 +523,7 @@ export const VpcProvider = () =>
             "alchemy::instance": instanceId,
           };
 
-          // Observe — find the VPC if we already have its id, else describe
+          // Observe -- find the VPC if we already have its id, else describe
           // returns empty and we fall through to create. We don't trust
           // `output.vpcId` blindly: a VPC deleted out of band shows up as
           // missing and we recreate.
@@ -583,7 +583,7 @@ export const VpcProvider = () =>
 
           const vpcId = vpc.VpcId! as VpcId;
 
-          // Sync DNS attributes — observed cloud state vs desired. The default
+          // Sync DNS attributes -- observed cloud state vs desired. The default
           // values DNS support/hostnames default to differ across new vs
           // existing VPCs, so we always read first and only modify on a real
           // delta to avoid pointless API calls.
@@ -616,7 +616,7 @@ export const VpcProvider = () =>
             yield* session.note(`Updated DNS hostnames: ${desiredDnsHostnames}`);
           }
 
-          // Sync tags — observed cloud tags vs desired.
+          // Sync tags -- observed cloud tags vs desired.
           const currentTags = Object.fromEntries(
             (vpc.Tags ?? []).map((tag: EC2.Tag) => [tag.Key!, tag.Value!]),
           ) as Record<string, string>;

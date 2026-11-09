@@ -360,7 +360,7 @@ await bootstrap(entrypoint);
     const bucket = yield* Assets.BucketName;
     if (image) return renderImageUserData({ unitName, appDir, bucket, bundleKey, envKey, region });
     // User-data runs once via cloud-init's `scripts-user` (once-per-instance),
-    // and is skipped on any subsequent boot — so it must NOT carry the work
+    // and is skipped on any subsequent boot -- so it must NOT carry the work
     // that can fail transiently (bun install over the network, S3 sync). It
     // only writes the setup script + unit and enables the service. The systemd
     // service (Restart=always) runs the setup on every start, so a flaky bun
@@ -375,20 +375,20 @@ cat >/usr/local/bin/${unitName}-setup.sh <<'SETUP_EOF'
 set -uo pipefail
 export HOME=/root
 
-# unzip (needed below) — install if missing.
+# unzip (needed below) \u2014 install if missing.
 command -v unzip >/dev/null 2>&1 || {
   (command -v dnf >/dev/null 2>&1 && dnf install -y unzip) \
     || (command -v yum >/dev/null 2>&1 && yum install -y unzip) \
     || (command -v apt-get >/dev/null 2>&1 && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y unzip) || true
 }
 
-# AWS CLI — preinstalled on Amazon Linux 2023; install v2 otherwise.
+# AWS CLI \u2014 preinstalled on Amazon Linux 2023; install v2 otherwise.
 command -v aws >/dev/null 2>&1 || {
   curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o /tmp/awscliv2.zip \
     && (cd /tmp && unzip -q -o awscliv2.zip && ./aws/install) || true
 }
 
-# bun — retry the network install a few times.
+# bun \u2014 retry the network install a few times.
 if [ ! -x /root/.bun/bin/bun ]; then
   for attempt in 1 2 3 4 5; do
     curl -fsSL https://bun.sh/install | bash && break
@@ -419,7 +419,7 @@ ExecStartPre=/usr/local/bin/${unitName}-setup.sh
 EnvironmentFile=-${appDir}/env
 # --no-install: the uploaded bundle is self-contained; bun must never fall
 # into its auto-install path (which hangs startup on network package
-# resolution) — fail fast if the bundle is incomplete instead.
+# resolution) \u2014 fail fast if the bundle is incomplete instead.
 ExecStart=/root/.bun/bin/bun --no-install ${appDir}/index.mjs
 Restart=always
 RestartSec=5
@@ -461,7 +461,7 @@ cat >/usr/local/bin/${unitName}-setup.sh <<'SETUP_EOF'
 set -uo pipefail
 export HOME=/root
 
-# Docker — install if missing, and start it.
+# Docker \u2014 install if missing, and start it.
 command -v docker >/dev/null 2>&1 || {
   (command -v dnf >/dev/null 2>&1 && dnf install -y docker) \
     || (command -v yum >/dev/null 2>&1 && yum install -y docker) \
@@ -469,7 +469,7 @@ command -v docker >/dev/null 2>&1 || {
 }
 systemctl enable --now docker
 
-# AWS CLI — preinstalled on Amazon Linux 2023; install v2 otherwise.
+# AWS CLI \u2014 preinstalled on Amazon Linux 2023; install v2 otherwise.
 command -v aws >/dev/null 2>&1 || {
   command -v unzip >/dev/null 2>&1 || (apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y unzip) || true
   curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o /tmp/awscliv2.zip \

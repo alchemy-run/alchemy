@@ -48,12 +48,12 @@ export interface InstanceStateEventSourceProps {
 
 /**
  * Deliver EC2 instance state-change events to the host Function via
- * EventBridge — e.g. to deregister a host from an external system when it
+ * EventBridge -- e.g. to deregister a host from an external system when it
  * stops, or alert when a critical box is terminated.
  *
  * The EventBridge pattern matches every instance state-change in the account
  * (narrowed to `states` when given); inspect `event.detail["instance-id"]` in
- * the handler if the Function should only react to specific instances — the
+ * the handler if the Function should only react to specific instances -- the
  * bound instance's id is an Output and cannot appear in the deploy-time rule
  * pattern.
  *
@@ -81,7 +81,7 @@ export const consumeInstanceStateEvents = <StreamReq = never, Req = never>(
 ) =>
   // The pattern uses only literal strings so it round-trips through both the
   // deploy-time rule and the runtime matcher (Output values cannot appear in
-  // the pattern — they don't resolve inside the deployed bundle).
+  // the pattern -- they don't resolve inside the deployed bundle).
   consumeBusEvents(
     `${props.id ?? instance.LogicalId}-InstanceState`,
     {

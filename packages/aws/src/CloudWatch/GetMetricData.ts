@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 export interface GetMetricDataRequest extends cloudwatch.GetMetricDataInput {}
 
 /**
- * Runtime binding for `cloudwatch:GetMetricData` — run metric-math queries
+ * Runtime binding for `cloudwatch:GetMetricData` -- run metric-math queries
  * over one or more metrics in a single call.
  *
  * Provide `CloudWatch.GetMetricDataHttp` on the hosting Lambda Function to
@@ -13,7 +13,7 @@ export interface GetMetricDataRequest extends cloudwatch.GetMetricDataInput {}
  * ### Querying Metrics
  * **Example:** Query the Last Hour of a Custom Metric
  * ```typescript
- * // init — grants cloudwatch:GetMetricData
+ * // init -- grants cloudwatch:GetMetricData
  * const getMetricData = yield* AWS.CloudWatch.GetMetricData();
  *
  * // runtime

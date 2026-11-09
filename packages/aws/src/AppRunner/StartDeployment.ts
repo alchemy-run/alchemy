@@ -5,7 +5,7 @@ import type { Service } from "./Service.ts";
 
 /**
  * Start a manual deployment of an App Runner {@link Service} from a Lambda
- * (or other AWS runtime) — App Runner re-pulls the latest image (or commit)
+ * (or other AWS runtime) -- App Runner re-pulls the latest image (or commit)
  * and rolls a new container fleet. The call is asynchronous; pair with
  * {@link ListOperations} to track the returned `OperationId` to completion.
  *

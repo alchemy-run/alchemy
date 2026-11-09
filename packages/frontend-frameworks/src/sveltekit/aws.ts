@@ -7,7 +7,7 @@ import * as Path from "effect/Path";
 import { rolldown } from "rolldown";
 import { runBuildChild } from "../core/BuildChild.ts";
 /**
- * `@alchemy.run/frontend-frameworks/sveltekit/aws` — the AWS Lambda deploy
+ * `@alchemy.run/frontend-frameworks/sveltekit/aws` -- the AWS Lambda deploy
  * target for `@alchemy.run/frontend-frameworks/sveltekit`.
  *
  * SvelteKit's AWS story mirrors adapter-node: kit's server graph
@@ -17,16 +17,16 @@ import { runBuildChild } from "../core/BuildChild.ts";
  * (`awslambda.streamifyResponse` behind a Function URL with
  * `invokeMode: RESPONSE_STREAM`). What this target owns:
  *
- * - **`adapter(context)`** — an in-memory kit `Adapter` that writes client
+ * - **`adapter(context)`** -- an in-memory kit `Adapter` that writes client
  *   assets + prerendered pages into the static-assets directory (uploaded
  *   wholesale to S3), generates the route manifest module, and emits an
  *   unbundled Lambda entry importing kit's server from
  *   `.svelte-kit/output/server`.
- * - **`finish(output, context)`** — re-bundles the entry (and the whole
+ * - **`finish(output, context)`** -- re-bundles the entry (and the whole
  *   server graph it imports, including the aws-lambda adapter) for Node
- *   with rolldown into `dist/server` — a self-contained deployment unit
+ *   with rolldown into `dist/server` -- a self-contained deployment unit
  *   the Lambda ships as-is (`bundle: false`).
- * - **`bundle`** — Node resolve conditions and the `@aws-sdk/` externals
+ * - **`bundle`** -- Node resolve conditions and the `@aws-sdk/` externals
  *   (the Lambda Node.js runtime ships SDK v3).
  *
  * No dev platform: `dev` runs kit's own Vite dev server (Node SSR), which
@@ -113,7 +113,7 @@ export const makeAwsAdapter = (options: {
       builder.mkdirp(dest);
       builder.mkdirp(tmp);
 
-      // client assets and prerendered pages — uploaded wholesale to S3;
+      // client assets and prerendered pages -- uploaded wholesale to S3;
       // the CloudFront edge router serves them by exact match.
       const assetsDest = dest + builder.config.paths.base;
       builder.mkdirp(assetsDest);
@@ -161,7 +161,7 @@ export const makeAwsAdapter = (options: {
 };
 
 /**
- * The adapter-driven target — the shape the framework's regular
+ * The adapter-driven target -- the shape the framework's regular
  * build/finish pipeline consumes. Used directly in the build child (where
  * `cwd === root` holds); {@link makeAwsTarget} wraps it with the wholesale
  * `build` hook that spawns the child.
@@ -295,7 +295,7 @@ export const makeAwsTarget = (config: SvelteKitAwsTargetConfig = {}): SvelteKitT
 
 /**
  * The deploy-target module contract (`resolveDeployTarget` accepts the
- * default export — or the named `target` export — as a value or factory).
+ * default export -- or the named `target` export -- as a value or factory).
  */
 export const target = makeAwsTarget;
 

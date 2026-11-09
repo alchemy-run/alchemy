@@ -26,12 +26,12 @@ export type SearchTokenProps = {
   /**
    * Id of the underlying Cloudflare API token AI Search authenticates
    * with when syncing the data source. The token must carry the
-   * "AI Search Index Engine" permission group — Cloudflare validates it
+   * "AI Search Index Engine" permission group -- Cloudflare validates it
    * on create/update and rejects tokens without it.
    */
   cfApiId: string;
   /**
-   * Plaintext value of the underlying Cloudflare API token. Write-only —
+   * Plaintext value of the underlying Cloudflare API token. Write-only --
    * Cloudflare never returns it, so rotation is detected against the
    * previously-persisted props rather than observed cloud state.
    */
@@ -89,13 +89,13 @@ export type TokenAttributes = {
 export type SearchToken = Resource<TypeId, SearchTokenProps, TokenAttributes, never, Providers>;
 
 /**
- * A Cloudflare.AI. Search service token — the credential AI Search uses to
+ * A Cloudflare.AI. Search service token -- the credential AI Search uses to
  * access your data source (R2 bucket, Vectorize index, Workers AI) when
  * indexing.
  *
  * The token wraps an existing Cloudflare API token (`cfApiId` +
  * `cfApiKey`). That API token must carry the "AI Search Index Engine"
- * permission group — Cloudflare validates the credential on create and
+ * permission group -- Cloudflare validates the credential on create and
  * update and rejects tokens without it. Pair it with
  * `Cloudflare.ApiToken.AccountApiToken` to mint the underlying API token in the
  * same stack, then reference the service token's `id` from an AI Search
@@ -152,7 +152,7 @@ export const SearchTokenProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      // Everything (name, credentials, legacy flag) is mutable via PUT —
+      // Everything (name, credentials, legacy flag) is mutable via PUT --
       // let the engine apply its default update logic.
       return undefined;
     }),
@@ -171,7 +171,7 @@ export const SearchTokenProvider = () =>
       const acct = output?.accountId ?? accountId;
       const name = yield* createTokenName(id, news.name);
 
-      // Observe — `output.id` is a cache, not a guarantee: a missing
+      // Observe -- `output.id` is a cache, not a guarantee: a missing
       // token falls through to "missing" and we recreate. Without an id
       // (greenfield or adoption-by-name), scan the list for the
       // deterministic display name.
@@ -185,14 +185,14 @@ export const SearchTokenProvider = () =>
         cfApiKey: Redacted.value(news.cfApiKey as Redacted.Redacted<string>),
         // Cloudflare defaults an omitted `legacy` to `true`, and legacy
         // (account-level instance) tokens cannot be managed via the per-token
-        // routes — GET/DELETE `/ai-search/tokens/{id}` return 401, so they can
+        // routes -- GET/DELETE `/ai-search/tokens/{id}` return 401, so they can
         // never be read or deleted, leaking on every teardown. Force
         // non-legacy unless the caller explicitly opts in.
         legacy: news.legacy ?? false,
       };
 
       if (!observed) {
-        // Ensure — create with the full desired body. A freshly minted
+        // Ensure -- create with the full desired body. A freshly minted
         // underlying API token propagates eventually-consistently, so a
         // transient `InvalidTokenCredentials` (code 7012) is retried
         // briefly before being treated as a real validation failure.
@@ -202,7 +202,7 @@ export const SearchTokenProvider = () =>
         return toAttributes(created, acct);
       }
 
-      // Sync — Cloudflare never returns `cfApiKey`, so the secret cannot
+      // Sync -- Cloudflare never returns `cfApiKey`, so the secret cannot
       // be diffed against observed state; fall back to the previously
       // persisted props for the key only. Everything else diffs against
       // the observed cloud state.
@@ -228,7 +228,7 @@ export const SearchTokenProvider = () =>
     }),
     list: () =>
       // Service tokens are account-scoped (`/accounts/{id}/ai-search/tokens`),
-      // not nested under an instance — one paginated list per account.
+      // not nested under an instance -- one paginated list per account.
       Effect.gen(function* () {
         const { accountId } = yield* yield* CloudflareEnvironment;
         return yield* aisearch.listTokens.pages({ accountId, perPage: 50 }).pipe(
@@ -241,7 +241,7 @@ export const SearchTokenProvider = () =>
               (page.result ?? []).map((t) => toAttributes(t, accountId)),
             ),
           ),
-          // AI Search isn't enabled on every account — the route is gated
+          // AI Search isn't enabled on every account -- the route is gated
           // rather than returning an empty list. Treat it as "none".
           Effect.catchTag("InvalidRoute", () => Effect.succeed([])),
         );
@@ -249,7 +249,7 @@ export const SearchTokenProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       // A missing token (already deleted) is success. An AI Search
       // instance that referenced this token may still be deleting
-      // asynchronously — Cloudflare rejects the delete with
+      // asynchronously -- Cloudflare rejects the delete with
       // `token_in_use_by_instances` until the instance is gone, so ride
       // that out briefly.
       yield* aisearch.deleteToken({ accountId: output.accountId, id: output.id }).pipe(
@@ -308,7 +308,7 @@ const createTokenName = (id: string, name: string | undefined) =>
 
 /**
  * A freshly minted underlying API token may not have propagated yet when
- * AI Search validates it — ride out transient `InvalidTokenCredentials`
+ * AI Search validates it -- ride out transient `InvalidTokenCredentials`
  * (code 7012) with a short, bounded retry. Genuinely invalid credentials
  * still fail after the retries are exhausted.
  */

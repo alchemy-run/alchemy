@@ -6,14 +6,14 @@ import type { EmailContact } from "./EmailContact.ts";
 /**
  * Shared scaffolding for the AWS User Notifications Contacts HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, makeEmailContactHttpBinding({ … }))` over the builder
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, makeEmailContactHttpBinding({ ... }))` over the builder
  * below. Everything except the operation and the IAM action list is
  * boilerplate.
  *
  * User Notifications Contacts is a global service managed from a single
- * control-plane region (`us-east-1`) — like its sibling `notifications`
- * service — so every operation is resolved with the Region pinned.
+ * control-plane region (`us-east-1`) -- like its sibling `notifications`
+ * service -- so every operation is resolved with the Region pinned.
  */
 const US_EAST_1 = "us-east-1";
 const pinContactsRegion = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -44,7 +44,7 @@ export const makeEmailContactHttpBinding = <
     const op = yield* options.operation.pipe(pinContactsRegion, AWSBindings.withCredentials);
 
     return Effect.fn(function* (contact: EmailContact) {
-      // Output yields a DEFERRED effect — resolve again per invocation below.
+      // Output yields a DEFERRED effect -- resolve again per invocation below.
       const ContactArn = yield* contact.emailContactArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${contact})`({
@@ -60,7 +60,7 @@ export const makeEmailContactHttpBinding = <
       return Effect.fn(`${options.tag}(${contact.LogicalId})`)(function* (request?: Req) {
         const arn = yield* ContactArn;
         // The region must also be pinned at the call site: the yield-time
-        // snapshot is only a fallback — the calling fiber's ambient Region
+        // snapshot is only a fallback -- the calling fiber's ambient Region
         // (the host Function's own region) wins over it.
         return yield* pinContactsRegion(op({ ...(request as object), arn } as I));
       });

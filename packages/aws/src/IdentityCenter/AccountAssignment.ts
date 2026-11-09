@@ -159,7 +159,7 @@ export const AccountAssignmentProvider = () =>
           return yield* readAssignment(olds);
         }),
         reconcile: Effect.fn(function* ({ news, output, session }) {
-          // Observe — look up the assignment between (principal,
+          // Observe -- look up the assignment between (principal,
           // permissionSet, target). All identifying fields are stable;
           // diff() forces a replace on any change, so this reconcile is
           // existence-only.
@@ -174,7 +174,7 @@ export const AccountAssignmentProvider = () =>
             return existing;
           }
 
-          // Ensure — create the assignment if missing.
+          // Ensure -- create the assignment if missing.
           const instance = yield* resolveInstance(news.instanceArn);
           const response = yield* retryIdentityCenter(
             ssoAdmin.createAccountAssignment({

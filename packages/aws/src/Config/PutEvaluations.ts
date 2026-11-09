@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `config:PutEvaluations` — report evaluation results
+ * Runtime binding for `config:PutEvaluations` -- report evaluation results
  * to AWS Config from inside a custom Config rule's Lambda function, using
  * the `resultToken` the rule invocation delivered.
  *
@@ -12,7 +12,7 @@ import type * as Effect from "effect/Effect";
  * ### Reporting Evaluations (Custom Rules)
  * **Example:** Report Evaluations from a Custom Rule
  * ```typescript
- * // init — grants config:PutEvaluations
+ * // init -- grants config:PutEvaluations
  * const putEvaluations = yield* AWS.Config.PutEvaluations();
  *
  * // runtime

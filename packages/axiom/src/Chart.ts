@@ -7,7 +7,7 @@
  * interfaces give callers compile-time safety when building the
  * payload by hand.
  *
- * `chart.id` is a free-form string the author picks — Axiom
+ * `chart.id` is a free-form string the author picks -- Axiom
  * doesn't validate the format. It joins to the matching
  * `LayoutCell.i` in `dashboard.layout`.
  */
@@ -66,7 +66,7 @@ export interface LogStreamChart extends BaseChart {
 
 /**
  * A free-form markdown note. Unlike data charts, `Note` has no `query`
- * or `name` — Axiom's payload is strictly `{ id, type, text, variant? }`.
+ * or `name` -- Axiom's payload is strictly `{ id, type, text, variant? }`.
  */
 export interface NoteChart {
   readonly id: string;
@@ -82,7 +82,7 @@ export interface NoteChart {
  * be referenced from other charts' APL via
  * `declare query_parameters (<filter-id>:string = "")`.
  *
- * Unlike data charts, `SmartFilter` has no top-level `query` field —
+ * Unlike data charts, `SmartFilter` has no top-level `query` field --
  * each filter inside `filters` may carry its own option-source APL.
  */
 export interface SmartFilterChart {

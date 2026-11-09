@@ -4,7 +4,7 @@ import * as Layer from "effect/Layer";
 import * as AWSBindings from "../AWSBindings.ts";
 import { GetManagedPrefixList } from "./GetManagedPrefixList.ts";
 
-// Bespoke (not the shared scaffold): the binding is account-scoped — there
+// Bespoke (not the shared scaffold): the binding is account-scoped -- there
 // is no resource to bind, only a name to look up.
 export const GetManagedPrefixListHttp = Layer.effect(
   GetManagedPrefixList,

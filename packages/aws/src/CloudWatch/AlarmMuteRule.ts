@@ -57,7 +57,7 @@ export interface AlarmMuteRule extends Resource<
 > {}
 
 /**
- * A CloudWatch alarm mute rule — suppresses alarm actions on a recurring
+ * A CloudWatch alarm mute rule -- suppresses alarm actions on a recurring
  * schedule (e.g. maintenance windows) instead of manually disabling and
  * re-enabling alarm actions.
  * ### Creating Mute Rules
@@ -76,7 +76,7 @@ export interface AlarmMuteRule extends Resource<
  * ### Reading Mute Rules at Runtime
  * **Example:** Read the Mute Rule from a Function
  * ```typescript
- * // init — bind the rule to the function (see GetAlarmMuteRule)
+ * // init -- bind the rule to the function (see GetAlarmMuteRule)
  * const getAlarmMuteRule = yield* AWS.CloudWatch.GetAlarmMuteRule(rule);
  *
  * // runtime
@@ -167,11 +167,11 @@ export const AlarmMuteRuleProvider = () =>
             return rows.filter((row): row is NonNullable<typeof row> => row !== undefined);
           }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          // Observe — pin the physical name from `output` if we already
+          // Observe -- pin the physical name from `output` if we already
           // have one; otherwise derive it from desired props.
           const name = output?.alarmMuteRuleName ?? (yield* createMuteRuleName(id, news));
 
-          // Ensure — `putAlarmMuteRule` is an upsert. The CloudWatch API
+          // Ensure -- `putAlarmMuteRule` is an upsert. The CloudWatch API
           // accepts `Tags` on every put, so we send the full managed tag
           // set every reconcile and let the API converge it.
           const tags = yield* createManagedTags(id, news.tags);

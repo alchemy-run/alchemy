@@ -54,7 +54,7 @@ export const makeCloudflareTarget = (config: OctaneTargetConfig = {}): OctaneTar
 
 /**
  * The deploy-target module contract (`resolveDeployTarget` accepts the
- * default export — or the named `target` export — as a value or factory).
+ * default export -- or the named `target` export -- as a value or factory).
  */
 export const target = makeCloudflareTarget;
 

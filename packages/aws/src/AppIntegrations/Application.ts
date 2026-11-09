@@ -76,8 +76,8 @@ export type ApplicationLookup =
 
 /**
  * An Amazon AppIntegrations application. Applications register external
- * (iframe-hosted) apps — most commonly Amazon Connect agent workspace
- * third-party applications — with a name, namespace, and the URL they are
+ * (iframe-hosted) apps -- most commonly Amazon Connect agent workspace
+ * third-party applications -- with a name, namespace, and the URL they are
  * served from.
  *
  * The namespace is immutable; changing it replaces the application. The
@@ -244,7 +244,7 @@ export const ApplicationProvider = () =>
             },
           };
 
-          // 1. Observe — prefer the cached ARN; fall back to enumerating by
+          // 1. Observe -- prefer the cached ARN; fall back to enumerating by
           //    the unique namespace so a lost-state re-run converges even
           //    though the generated physical name changed.
           let arn = output?.applicationArn;
@@ -254,9 +254,9 @@ export const ApplicationProvider = () =>
             live = arn === undefined ? undefined : yield* observe(arn);
           }
 
-          // 2. Ensure — create if missing. A concurrent create can win the
+          // 2. Ensure -- create if missing. A concurrent create can win the
           //    unique namespace between observe and create ("Namespace
-          //    already in use" InvalidRequestException) — treat it as a race
+          //    already in use" InvalidRequestException) -- treat it as a race
           //    and re-observe; rethrow if the namespace holder still can't
           //    be found.
           if (live === undefined) {
@@ -290,7 +290,7 @@ export const ApplicationProvider = () =>
           }
           const attrs = yield* toAttrs(live);
 
-          // 3. Sync mutable aspects — compare observed cloud state against
+          // 3. Sync mutable aspects -- compare observed cloud state against
           //    desired and push a single update with only the changed fields.
           const update: Omit<appintegrations.UpdateApplicationRequest, "Arn"> = {};
           if (live.Name !== name) {
@@ -321,7 +321,7 @@ export const ApplicationProvider = () =>
             });
           }
 
-          // 4. Sync tags — diff against OBSERVED cloud tags so adoption
+          // 4. Sync tags -- diff against OBSERVED cloud tags so adoption
           //    converges.
           const observedTags = definedTags(live.Tags);
           const { upsert, removed } = diffTags(observedTags, desiredTags);

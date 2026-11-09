@@ -26,13 +26,13 @@ import {
 
 export type DomainsUserProps = {
   /**
-   * Parent domain (`domains/{domain}` or the FQDN). Immutable —
+   * Parent domain (`domains/{domain}` or the FQDN). Immutable --
    * changing it replaces the user.
    */
   parent: string;
   /**
    * User email. If omitted, a unique `alchemy-*@example.com` address is
-   * generated. Immutable — changing it replaces the user. Users have no
+   * generated. Immutable -- changing it replaces the user. Users have no
    * labels field, so Alchemy stamps ownership into the generated local
    * part for `list` / nuke.
    */

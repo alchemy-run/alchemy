@@ -33,7 +33,7 @@ export interface ReadBucket extends Binding.Service<
 
 /**
  * Read-only client for a Prisma Object Store bucket. It deliberately exposes
- * no write operations — see the role caveat on {@link ReadBucketBinding}.
+ * no write operations -- see the role caveat on {@link ReadBucketBinding}.
  */
 export interface ReadBucketClient {
   /**
@@ -54,7 +54,7 @@ export interface ReadBucketClient {
   list(options?: ListOptions): Effect.Effect<ListResult, BucketError, RuntimeContext>;
   /**
    * Mint a presigned download URL, so a browser can read the object without
-   * credentials. Pure client-side SigV4 — no request is made to the store.
+   * credentials. Pure client-side SigV4 -- no request is made to the store.
    */
   presignGet(
     key: string,
@@ -113,7 +113,7 @@ export const readBucketOperations = (access: BucketAccess): ReadBucketClient => 
     access.bucketName.pipe(
       Effect.flatMap((Bucket) => access.authorize(S3.headObject({ Bucket, Key: key }))),
       Effect.map((response) => objectFrom(key, response)),
-      // A missing key is absence, not a failure — mirror the native bucket
+      // A missing key is absence, not a failure -- mirror the native bucket
       // clients that resolve `null`.
       Effect.catchTag("NotFound", () => Effect.succeed(null)),
       Effect.mapError(toBucketError),

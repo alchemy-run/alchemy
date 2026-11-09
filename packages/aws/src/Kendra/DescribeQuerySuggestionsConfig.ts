@@ -8,7 +8,7 @@ import type { Index } from "./SearchIndex.ts";
  * `kendra:DescribeQuerySuggestionsConfig`), scoped to one {@link Index}.
  *
  * Reads the index's query-suggestions settings (mode, query-log look-back
- * window, attribute-suggestions config, …).
+ * window, attribute-suggestions config, ...).
  * Provide the implementation with
  * `Effect.provide(AWS.Kendra.DescribeQuerySuggestionsConfigHttp)`.
  *

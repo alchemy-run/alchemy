@@ -5,8 +5,8 @@ import type { Asset } from "./Asset.ts";
 /**
  * Shared HTTP scaffolding for the AWS IoT SiteWise runtime bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the builders
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the builders
  * below. Everything except the operation, the IAM action, and the request
  * shaping is boilerplate.
  */
@@ -39,7 +39,7 @@ export const makeSiteWiseAssetHttpBinding = <I, A, E, R, Req>(options: {
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (asset: Asset) {
-      // Output yields a DEFERRED effect — resolve again per invocation below.
+      // Output yields a DEFERRED effect -- resolve again per invocation below.
       const AssetId = yield* asset.assetId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`AWS.IoTSiteWise.${options.capability}(${asset})`({

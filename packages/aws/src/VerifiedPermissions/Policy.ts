@@ -32,7 +32,7 @@ export interface PolicyProps {
   policyStoreId: string;
   /**
    * The Cedar policy statement for a **static** policy, e.g.
-   * `permit(principal, action == Action::"view", resource);`. Mutable —
+   * `permit(principal, action == Action::"view", resource);`. Mutable --
    * updating re-submits the statement via `UpdatePolicy` (only annotations
    * and conditions may change; the principal/resource scope is fixed).
    *
@@ -47,7 +47,7 @@ export interface PolicyProps {
   /**
    * The ID of a {@link PolicyTemplate} to instantiate as a
    * **template-linked** policy. Template-linked policies cannot be updated
-   * in place — changing `templateId`, `principal`, or `resource` replaces
+   * in place -- changing `templateId`, `principal`, or `resource` replaces
    * the policy (the template itself is the mutable part).
    */
   templateId?: string;
@@ -125,7 +125,7 @@ export interface Policy extends Resource<
  */
 export const Policy = Resource<Policy>("AWS.VerifiedPermissions.Policy");
 
-/** Desired props → the wire `PolicyDefinition` union. */
+/** Desired props -> the wire `PolicyDefinition` union. */
 const toDefinition = (news: PolicyProps) =>
   Effect.gen(function* () {
     if (news.templateId !== undefined && news.statement !== undefined) {
@@ -166,7 +166,7 @@ export const PolicyProvider = () =>
       return Policy.Provider.of({
         stables: ["policyStoreId", "policyId"],
 
-        // child of a policy store — not enumerable account-wide
+        // child of a policy store -- not enumerable account-wide
         list: () => Effect.succeed([]),
 
         read: Effect.fn(function* ({ olds, output }) {
@@ -199,13 +199,13 @@ export const PolicyProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
-          // static statement / description are mutable → default update path
+          // static statement / description are mutable -> default update path
         }),
 
         reconcile: Effect.fn(function* ({ news, output, session }) {
           const definition = yield* toDefinition(news);
 
-          // 1. OBSERVE — cloud state is authoritative
+          // 1. OBSERVE -- cloud state is authoritative
           const existing =
             output?.policyId !== undefined
               ? yield* observe(news.policyStoreId, output.policyId)
@@ -227,7 +227,7 @@ export const PolicyProvider = () =>
             });
             policyId = updated.policyId;
           } else {
-            // template-linked policies have no in-place update — diff replaces
+            // template-linked policies have no in-place update -- diff replaces
             // on any change, so the observed policy is already converged
             policyId = existing.policyId;
           }

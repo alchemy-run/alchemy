@@ -47,12 +47,12 @@ export type EntryTypeProps = {
    * `projects/{project}/locations/{location}/entryTypes/{entryType}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Must be 1-63 characters, start with a letter, and match
-   * `[a-z]([a-z0-9-]*[a-z0-9])?`. Immutable — changing it replaces the
+   * `[a-z]([a-z0-9-]*[a-z0-9])?`. Immutable -- changing it replaces the
    * entry type.
    */
   entryTypeId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the entry type. `US-CENTRAL1` is accepted and normalized
    * to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -71,7 +71,7 @@ export type EntryTypeProps = {
    */
   labels?: Record<string, string>;
   /**
-   * Classes this type belongs to (`TABLE`, `DATABASE`, `MODEL`, …).
+   * Classes this type belongs to (`TABLE`, `DATABASE`, `MODEL`, ...).
    */
   typeAliases?: string[];
   /**
@@ -79,7 +79,7 @@ export type EntryTypeProps = {
    */
   platform?: string;
   /**
-   * System that Entries of this type belong to (`CloudSQL`, `MariaDB`, …).
+   * System that Entries of this type belong to (`CloudSQL`, `MariaDB`, ...).
    */
   system?: string;
   /**
@@ -87,7 +87,7 @@ export type EntryTypeProps = {
    */
   requiredAspects?: EntryTypeAspectInfo[];
   /**
-   * Authorization for this type. Immutable — changing it replaces the
+   * Authorization for this type. Immutable -- changing it replaces the
    * entry type.
    */
   authorization?: EntryTypeAuthorization;
@@ -149,7 +149,7 @@ export interface EntryTypeLookup {
    */
   entryTypeId: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * Region (`us-central1`, `us-east1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -161,7 +161,7 @@ export interface EntryTypeLookup {
 }
 
 /**
- * A Dataplex Universal Catalog Entry Type — a template for creating
+ * A Dataplex Universal Catalog Entry Type -- a template for creating
  * Entries.
  *
  * Changing `entryTypeId`, `location`, or `authorization` replaces the

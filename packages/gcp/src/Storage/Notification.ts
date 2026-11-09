@@ -30,14 +30,14 @@ export type NotificationPayloadFormat = "JSON_API_V1" | "NONE";
 export type NotificationProps = {
   /**
    * Name of the Cloud Storage bucket this notification is attached to.
-   * Immutable — changing it replaces the notification.
+   * Immutable -- changing it replaces the notification.
    */
   bucketName: string;
   /**
    * Cloud Pub/Sub topic to publish events to. Accepts a topic id, a
    * resource name (`projects/{project}/topics/{topic}`), or the canonical
    * URI (`//pubsub.googleapis.com/projects/{project}/topics/{topic}`).
-   * Immutable — changing it replaces the notification.
+   * Immutable -- changing it replaces the notification.
    */
   topic: string;
   /**
@@ -48,18 +48,18 @@ export type NotificationProps = {
   /**
    * Event types to publish. Omit (or pass an empty list) to receive every
    * event (`OBJECT_FINALIZE`, `OBJECT_METADATA_UPDATE`, `OBJECT_DELETE`,
-   * `OBJECT_ARCHIVE`). Immutable — changing it replaces the notification.
+   * `OBJECT_ARCHIVE`). Immutable -- changing it replaces the notification.
    */
   eventTypes?: string[];
   /**
    * If set, only objects whose names start with this prefix generate
-   * notifications. Immutable — changing it replaces the notification.
+   * notifications. Immutable -- changing it replaces the notification.
    */
   objectNamePrefix?: string;
   /**
    * Extra attributes attached to every published Pub/Sub message. Alchemy
    * writes no ownership markers here (they would reach every subscriber);
-   * the config is tracked by its server-assigned id. Immutable — changing
+   * the config is tracked by its server-assigned id. Immutable -- changing
    * attributes replaces the notification.
    */
   customAttributes?: Record<string, string>;
@@ -99,7 +99,7 @@ export type Notification = Resource<
 /**
  * A Cloud Storage Pub/Sub notification configuration on a bucket.
  *
- * GCS has no update API for notifications — every user-facing field is
+ * GCS has no update API for notifications -- every user-facing field is
  * immutable and changing it replaces the config. The Cloud Storage
  * service account is granted `roles/pubsub.publisher` on the topic
  * during reconcile so events can actually be published.

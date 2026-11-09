@@ -11,7 +11,7 @@ import type * as Effect from "effect/Effect";
  * ### Inspecting Anomalies
  * **Example:** List an Insight's Anomalous Log Groups
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listAnomalousLogGroups = yield* AWS.DevOpsGuru.ListAnomalousLogGroups();
  *
  * // runtime

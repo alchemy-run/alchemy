@@ -7,7 +7,7 @@ import {
 } from "../EventBridge/EventSource.ts";
 
 /**
- * The documented AWS Control Tower lifecycle event names — one per
+ * The documented AWS Control Tower lifecycle event names -- one per
  * completed Control Tower action (account provisioning, guardrail
  * enablement, landing zone setup, OU registration).
  */
@@ -64,15 +64,15 @@ export interface LifecycleEventSourceProps extends EventRouteProps {
 
 /**
  * Event source connecting AWS Control Tower lifecycle events to the hosting
- * compute. Control Tower publishes every completed lifecycle action —
+ * compute. Control Tower publishes every completed lifecycle action --
  * account provisioning (`CreateManagedAccount`), guardrail changes
  * (`EnableGuardrail`), landing zone setup/upgrade (`SetupLandingZone`,
- * `UpdateLandingZone`), and OU registration — to the management account's
+ * `UpdateLandingZone`), and OU registration -- to the management account's
  * default EventBridge bus in the home region (source `aws.controltower`);
  * this subscribes the host Function to those events so it can trigger
  * account-customization or notification automation.
  *
- * Control Tower publishes to EventBridge automatically — no additional
+ * Control Tower publishes to EventBridge automatically -- no additional
  * resource is created besides the EventBridge rule targeting the host.
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.

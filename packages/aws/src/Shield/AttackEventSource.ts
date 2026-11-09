@@ -25,7 +25,7 @@ export interface AttackEventDetail {
   service?: string;
   /** The event type code, e.g. `AWS_SHIELD_DDOS_ATTACK_DETECTED`. */
   eventTypeCode?: string;
-  /** The event type category — Shield attack events are `issue`s. */
+  /** The event type category -- Shield attack events are `issue`s. */
   eventTypeCategory?: string;
   /** When the attack event started (ISO timestamp). */
   startTime?: string;
@@ -66,11 +66,11 @@ export interface AttackEventSourceProps extends EventRouteProps {
  * Event source connecting Shield Advanced DDoS attack notifications to the
  * hosting compute. When Shield Advanced detects an attack against a protected
  * resource it posts an event to AWS Health, which delivers it to the
- * account's default EventBridge bus (source `aws.health`, service `SHIELD` —
+ * account's default EventBridge bus (source `aws.health`, service `SHIELD` --
  * or `ROUTE53` for hosted-zone attacks); this subscribes the host Function to
  * those events so it can page, annotate dashboards, or trigger mitigations.
  *
- * Shield publishes through AWS Health automatically — no additional resource
+ * Shield publishes through AWS Health automatically -- no additional resource
  * is created besides the EventBridge rule targeting the host, but events only
  * fire for accounts with an active Shield Advanced subscription. Provide the
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the

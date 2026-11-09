@@ -12,7 +12,7 @@ import type { DataSet } from "./DataSet.ts";
  * ### Refreshing SPICE Data
  * **Example:** Cancel A Running Refresh
  * ```typescript
- * // init — bind the operation to the dataset
+ * // init -- bind the operation to the dataset
  * const cancelIngestion = yield* AWS.QuickSight.CancelIngestion(dataSet);
  *
  * // runtime

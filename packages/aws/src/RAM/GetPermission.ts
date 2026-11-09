@@ -6,14 +6,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `ram:GetPermission`.
  *
  * Retrieves the contents of a managed permission in JSON format, including its policy template.
- * Account-level operation — the target shares, invitations, and permissions
+ * Account-level operation -- the target shares, invitations, and permissions
  * are chosen per request at runtime, so the binding takes no resource
  * argument. Provide the implementation with
  * `Effect.provide(AWS.RAM.GetPermissionHttp)`.
  * ### Managed Permissions
  * **Example:** Read a Managed Permission
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getPermission = yield* AWS.RAM.GetPermission();
  *
  * // runtime

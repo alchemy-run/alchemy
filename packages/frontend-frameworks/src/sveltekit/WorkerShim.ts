@@ -26,15 +26,15 @@
  * invoke the worker (e.g. plain `fetch` without `Sec-Fetch-Mode`).
  *
  * With `notFoundHandling: "single-page-application"` the shim therefore
- * defers to `env.ASSETS.fetch(req)` — where the asset worker applies the
+ * defers to `env.ASSETS.fetch(req)` -- where the asset worker applies the
  * configured `not_found_handling` and serves the generated `index.html`
- * fallback — when ALL of:
+ * fallback -- when ALL of:
  *
  * - `server.respond` returned a 404, AND
  * - the request is navigation-shaped: `GET`/`HEAD` with `Accept`
  *   containing `text/html` (deliberately excluding kit data/route-resolution
  *   requests and API `fetch`es), AND
- * - no kit route *pattern* matches the pathname — the most conservative
+ * - no kit route *pattern* matches the pathname -- the most conservative
  *   available signal that the 404 is kit's router-level "no route" error
  *   rather than an intentional endpoint- or page-produced 404 (upstream has
  *   no deferral, so there are no upstream semantics to mirror; kit marks
@@ -48,8 +48,8 @@
  * deferral): upstream documents the `404.html` page as covering asset-layer
  * misses only, with router-level 404s still rendered by kit.
  *
- * The emitted module is *unbundled* — its imports reach into
- * `.svelte-kit/output/server/**` — and is the input for the rolldown pass
+ * The emitted module is *unbundled* -- its imports reach into
+ * `.svelte-kit/output/server/**` -- and is the input for the rolldown pass
  * that produces the final workerd-ready modules.
  */
 export interface WorkerShimOptions {
@@ -79,7 +79,7 @@ export interface WorkerShimOptions {
  */
 const spaRouteProbe = /* js */ `
 // Router-level match probe for the SPA not-found deferral: mirrors kit's
-// find_route pattern test (without param matchers — a pattern match whose
+// find_route pattern test (without param matchers \u2014 a pattern match whose
 // matchers fail keeps kit's own 404 rendering).
 const matches_kit_route = (pathname) => {
   let path = pathname;
@@ -95,7 +95,7 @@ const matches_kit_route = (pathname) => {
 `;
 
 const spaDeferral = (assetsBinding: string): string => /* js */ `
-      // not_found_handling: "single-page-application" — defer router-level
+      // not_found_handling: "single-page-application" \u2014 defer router-level
       // not-founds on navigation-shaped requests (GET/HEAD accepting
       // text/html) to the assets layer, which serves the generated
       // index.html fallback. Intentional endpoint/page 404s (matched

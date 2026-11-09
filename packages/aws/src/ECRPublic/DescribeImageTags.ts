@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 import type { PublicRepository } from "./Repository.ts";
 
-/** Request for {@link DescribeImageTags} — `repositoryName` is injected. */
+/** Request for {@link DescribeImageTags} -- `repositoryName` is injected. */
 export interface DescribeImageTagsRequest extends Omit<
   ecrpublic.DescribeImageTagsRequest,
   "repositoryName"

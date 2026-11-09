@@ -6,7 +6,7 @@ import type { MetricStream } from "./MetricStream.ts";
 type MetricStreams = [MetricStream, ...MetricStream[]];
 
 /**
- * Runtime binding for `cloudwatch:StartMetricStreams` — resume streaming
+ * Runtime binding for `cloudwatch:StartMetricStreams` -- resume streaming
  * for the bound metric streams after they were paused with
  * {@link StopMetricStreams}. Bind it to one or more {@link MetricStream}
  * resources; the stream names are injected automatically.
@@ -16,7 +16,7 @@ type MetricStreams = [MetricStream, ...MetricStream[]];
  * ### Managing Metric Streams
  * **Example:** Resume a Paused Metric Stream
  * ```typescript
- * // init — grants cloudwatch:StartMetricStreams on the stream
+ * // init -- grants cloudwatch:StartMetricStreams on the stream
  * const startMetricStreams = yield* AWS.CloudWatch.StartMetricStreams(stream);
  *
  * // runtime

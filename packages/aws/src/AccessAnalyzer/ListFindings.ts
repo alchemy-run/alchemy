@@ -9,7 +9,7 @@ export interface ListFindingsRequest extends Omit<aa.ListFindingsRequest, "analy
 /**
  * Runtime binding for `access-analyzer:ListFindings`.
  *
- * Lists the analyzer's external-access findings (V1 API — prefer {@link
+ * Lists the analyzer's external-access findings (V1 API -- prefer {@link
  * ListFindingsV2}, which also returns unused-access findings). Provide the
  * implementation with `Effect.provide(AWS.AccessAnalyzer.ListFindingsHttp)`.
  * ### Reading Findings

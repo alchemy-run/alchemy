@@ -9,7 +9,7 @@ export interface PutApprovalResultRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `codepipeline:PutApprovalResult` — answers a manual
+ * Runtime binding for `codepipeline:PutApprovalResult` -- answers a manual
  * approval action with `Approved` or `Rejected`. The approval `token` comes
  * from the action's `latestExecution` in {@link GetPipelineState}.
  * ### Approvals

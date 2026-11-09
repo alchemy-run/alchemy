@@ -18,13 +18,13 @@ export class AnalysisUnexpectedResponse extends Data.TaggedError("AnalysisUnexpe
 }> {}
 
 /**
- * Properties for an Amazon QuickSight analysis — an editable workspace built
+ * Properties for an Amazon QuickSight analysis -- an editable workspace built
  * from a template or an inline definition, which can be published as a
  * dashboard.
  */
 export interface AnalysisProps {
   /**
-   * Unique id of the analysis within the account. Stable — changing it
+   * Unique id of the analysis within the account. Stable -- changing it
    * replaces the analysis. If omitted, a unique id is generated.
    */
   analysisId?: string;
@@ -35,7 +35,7 @@ export interface AnalysisProps {
   name: string;
 
   /**
-   * Source of the analysis content — a template to clone. Provide either
+   * Source of the analysis content -- a template to clone. Provide either
    * `sourceEntity` or `definition`.
    */
   sourceEntity?: quicksight.AnalysisSourceEntity;
@@ -103,7 +103,7 @@ export interface AnalysisLookup {
 }
 
 /**
- * An Amazon QuickSight analysis — an editable workspace built from a template
+ * An Amazon QuickSight analysis -- an editable workspace built from a template
  * or an inline definition, which can be published as a dashboard.
  *
  * QuickSight requires an active account subscription in the region. Without
@@ -209,7 +209,7 @@ export const AnalysisProvider = () =>
           // 1. Observe.
           let observed = yield* readAnalysis(accountId, analysisId);
 
-          // 2. Ensure — create if missing.
+          // 2. Ensure -- create if missing.
           if (observed === undefined) {
             yield* quicksight
               .createAnalysis({

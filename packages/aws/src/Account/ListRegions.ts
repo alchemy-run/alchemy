@@ -6,14 +6,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `account:ListRegions`.
  *
  * Lists every Region available to the calling account together with its
- * opt-in status (`ENABLED`, `DISABLED`, `ENABLED_BY_DEFAULT`, …), optionally
+ * opt-in status (`ENABLED`, `DISABLED`, `ENABLED_BY_DEFAULT`, ...), optionally
  * filtered by `RegionOptStatusContains`. Account Management is an account
  * singleton, so the binding takes no resource argument. Provide the
  * implementation with `Effect.provide(AWS.Account.ListRegionsHttp)`.
  * ### Reading Region Opt Status
  * **Example:** List the Enabled-by-Default Regions
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listRegions = yield* AWS.Account.ListRegions();
  *
  * // runtime

@@ -25,7 +25,7 @@ export interface ObservedIdp {
 /**
  * IdP types that can exist at most once per scope (the managed Cloudflare
  * WARP login method and the built-in one-time PIN). They are located by
- * type — their display name is user-irrelevant and often empty (`""` for
+ * type -- their display name is user-irrelevant and often empty (`""` for
  * the dashboard-provisioned `cloudflare` IdP).
  */
 export const isSingletonType = (
@@ -34,7 +34,7 @@ export const isSingletonType = (
 
 /**
  * Read an identity provider by id, mapping "gone"
- * (`AccessIdentityProviderNotFound`, Cloudflare error code 12135 —
+ * (`AccessIdentityProviderNotFound`, Cloudflare error code 12135 --
  * `access.api.error.not_found`) to `undefined`. Zone-level when `zoneId`
  * is set, account-level otherwise.
  */
@@ -73,7 +73,7 @@ export const findByName = (zoneId: string | undefined, accountId: string, name: 
   findFirst(zoneId, accountId, (idp) => idp.name === name);
 
 /**
- * Find an identity provider by type within the scope — the identity of
+ * Find an identity provider by type within the scope -- the identity of
  * the {@link isSingletonType singleton} types, whose display name carries
  * no information.
  */
@@ -96,7 +96,7 @@ export const toAttributes = (
   type: idp.type as IdentityProviderType,
   scimBaseUrl: idp.scimConfig?.scimBaseUrl ?? undefined,
   // The SCIM secret is returned once when SCIM is enabled; afterwards the
-  // API masks it — carry the prior value forward.
+  // API masks it -- carry the prior value forward.
   scimSecret: idp.scimConfig?.secret ? Redacted.make(idp.scimConfig.secret) : priorSecret,
   scimEnabled: idp.scimConfig?.enabled ?? false,
 });

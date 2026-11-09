@@ -68,12 +68,12 @@ export type Group = Resource<
 >;
 
 /**
- * A Cloud Monitoring group — a dynamic collection of monitored
+ * A Cloud Monitoring group -- a dynamic collection of monitored
  * resources selected by a filter.
  *
  * Group ids are assigned by the API. Groups have no labels field, so
  * Alchemy stamps ownership into `displayName` (`[alchemy
- * alchemy-stack=… alchemy-stage=… alchemy-id=…]`) so `list` /
+ * alchemy-stack=... alchemy-stage=... alchemy-id=...]`) so `list` /
  * `pnpm nuke:gcp` can find them. Display name, filter, parent, and
  * cluster flag update in place.
  *

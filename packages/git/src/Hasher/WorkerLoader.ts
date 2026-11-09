@@ -5,7 +5,7 @@ import { WorkerLoader } from "@alchemy.run/cloudflare/Workers/WorkerLoader";
  * `WorkerLoader` binding on the Git Worker instantiates the hasher module
  * (`WorkerLoaderModule.ts`, bundled into a string at build time by the `?worker`
  * import) under a few fixed names; each name is its own isolate with its
- * own 128 MB, and — measured — distinct isolates run in parallel with
+ * own 128 MB, and -- measured -- distinct isolates run in parallel with
  * the caller, up to the runtime's four concurrent dynamic invocations per
  * request. No cross-cloud hop, no credentials, no network for the hasher.
  *

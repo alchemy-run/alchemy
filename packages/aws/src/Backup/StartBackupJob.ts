@@ -22,7 +22,7 @@ export interface StartBackupJobRequest extends Omit<
 /**
  * Runtime binding for the `StartBackupJob` operation (IAM actions
  * `backup:StartBackupJob` on the vault ARN + `iam:PassRole` on the backup
- * role) — take an on-demand backup of any supported resource from a deployed
+ * role) -- take an on-demand backup of any supported resource from a deployed
  * Function.
  *
  * The binding is constructed with the target {@link BackupVault} and the
@@ -34,10 +34,10 @@ export interface StartBackupJobRequest extends Omit<
  * ### Starting Backups
  * **Example:** On-Demand Backup Of A DynamoDB Table
  * ```typescript
- * // deploy time — bind the vault and the backup role
+ * // deploy time -- bind the vault and the backup role
  * const startBackupJob = yield* AWS.Backup.StartBackupJob(vault, backupRole);
  *
- * // runtime — snapshot the table before a risky migration
+ * // runtime -- snapshot the table before a risky migration
  * const tableArn = yield* table.tableArn;
  * const job = yield* startBackupJob({
  *   ResourceArn: tableArn,

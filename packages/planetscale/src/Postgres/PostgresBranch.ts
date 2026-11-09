@@ -30,7 +30,7 @@ export interface PostgresBranchProps extends BaseBranchProps {
   replicas?: number;
 
   /**
-   * Parent branch — either a string name or another {@link PostgresBranch}.
+   * Parent branch -- either a string name or another {@link PostgresBranch}.
    * @default "main"
    */
   parentBranch?: string | PostgresBranch;

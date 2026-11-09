@@ -29,7 +29,7 @@ export interface AnomalyDetector extends Resource<
 > {}
 
 /**
- * A CloudWatch anomaly detector — trains a model on a metric's historical
+ * A CloudWatch anomaly detector -- trains a model on a metric's historical
  * data and computes an expected-value band, which alarms can use via the
  * `ANOMALY_DETECTION_BAND` metric-math function.
  * ### Creating Detectors
@@ -55,7 +55,7 @@ export interface AnomalyDetector extends Resource<
  * ### Reading Detectors at Runtime
  * **Example:** List Detectors from a Function
  * ```typescript
- * // init — see DescribeAnomalyDetectors
+ * // init -- see DescribeAnomalyDetectors
  * const describeAnomalyDetectors = yield* AWS.CloudWatch.DescribeAnomalyDetectors();
  *
  * // runtime
@@ -199,7 +199,7 @@ export const AnomalyDetectorProvider = () =>
       };
     }),
     reconcile: Effect.fn(function* ({ news, session }) {
-      // Ensure — `putAnomalyDetector` is an upsert keyed by the detector's
+      // Ensure -- `putAnomalyDetector` is an upsert keyed by the detector's
       // identity (Namespace+MetricName+Dimensions+Stat or MetricMath
       // expression). Sending desired props every reconcile converges the
       // cloud regardless of whether this is first-create or an update.
@@ -207,7 +207,7 @@ export const AnomalyDetectorProvider = () =>
       const detectorId = detectorIdentity(news);
       yield* session.note(detectorId);
 
-      // Sync — describe the detector after the put. CloudWatch is
+      // Sync -- describe the detector after the put. CloudWatch is
       // eventually consistent for `DescribeAnomalyDetectors`, so we retry
       // until the detector matching our identity is visible.
       let attempt = 0;

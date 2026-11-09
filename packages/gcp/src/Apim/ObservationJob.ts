@@ -38,12 +38,12 @@ export type ObservationJobProps = {
    * Observation job id (the `{observation_job}` segment of
    * `projects/{project}/locations/{location}/observationJobs/{observation_job}`).
    * Must be 4-63 lowercase letters, digits, or hyphens. If omitted, a
-   * unique `alch-` prefixed name is generated. Immutable — changing it
+   * unique `alch-` prefixed name is generated. Immutable -- changing it
    * replaces the job.
    */
   observationJobId?: string;
   /**
-   * Region of the job (`us-central1`, …). Immutable — changing it
+   * Region of the job (`us-central1`, ...). Immutable -- changing it
    * replaces the job.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -52,7 +52,7 @@ export type ObservationJobProps = {
    * Observation source names
    * (`projects/{project}/locations/{location}/observationSources/{source}`)
    * or bare source ids in the same location. Sources must be the same
-   * kind. Immutable — changing them replaces the job.
+   * kind. Immutable -- changing them replaces the job.
    */
   sources?: string[];
   /**
@@ -91,7 +91,7 @@ export type ObservationJob = Resource<
 >;
 
 /**
- * An API Observation job — configuration that collects data about APIs
+ * An API Observation job -- configuration that collects data about APIs
  * from attached observation sources. Jobs have no labels, description,
  * or patch API; Alchemy stamps ownership into generated ids (`alch-`)
  * so `list` / nuke can find them. Identity, location, and sources

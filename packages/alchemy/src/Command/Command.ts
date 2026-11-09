@@ -47,7 +47,7 @@ export interface CommandProps {
   shell?: string | boolean;
   /**
    * Extra environment variables passed to the command on top of `process.env`.
-   * Entries whose value is `undefined` are dropped — this lets website
+   * Entries whose value is `undefined` are dropped -- this lets website
    * composites forward optional values (e.g. an `Output` service URL that
    * resolves to `undefined`) without filtering first.
    */

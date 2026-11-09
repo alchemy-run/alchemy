@@ -13,7 +13,7 @@ type ClientIdField = Pick<cip.SignUpRequest, "ClientId">;
 /**
  * HTTP implementation of {@link UserPoolAuth}. The token-based auth-flow
  * operations are unauthenticated (Cognito does not evaluate IAM for them),
- * so the deploy-time half only records the binding — no policy statements
+ * so the deploy-time half only records the binding -- no policy statements
  * are attached.
  */
 export const UserPoolAuthHttp = Layer.effect(
@@ -60,7 +60,7 @@ export const UserPoolAuthHttp = Layer.effect(
         Effect.map(ClientId, (id): ClientIdField => ({ ClientId: id })),
       );
       const authClient: UserPoolAuthClient = {
-        // client-scoped flows — the app client ID is injected
+        // client-scoped flows -- the app client ID is injected
         signUp: withClient("signUp", signUp),
         confirmSignUp: withClient("confirmSignUp", confirmSignUp),
         resendConfirmationCode: withClient("resendConfirmationCode", resendConfirmationCode),
@@ -73,7 +73,7 @@ export const UserPoolAuthHttp = Layer.effect(
           "getTokensFromRefreshToken",
           getTokensFromRefreshToken,
         ),
-        // token-scoped self-service — authorized by the access token itself
+        // token-scoped self-service -- authorized by the access token itself
         getUser: methods.plain("getUser", getUser),
         globalSignOut: methods.plain("globalSignOut", globalSignOut),
         changePassword: methods.plain("changePassword", changePassword),

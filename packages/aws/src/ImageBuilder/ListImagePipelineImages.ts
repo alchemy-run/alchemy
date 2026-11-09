@@ -7,14 +7,14 @@ import type { ImagePipeline } from "./ImagePipeline.ts";
  * Runtime binding for `imagebuilder:ListImagePipelineImages`.
  *
  * Enumerates the image build versions the bound {@link ImagePipeline} has
- * produced — the building block of a "latest AMI from this pipeline" lookup
+ * produced -- the building block of a "latest AMI from this pipeline" lookup
  * or a build-history dashboard. The pipeline's ARN is injected from the
  * binding. Provide the implementation with
  * `Effect.provide(AWS.ImageBuilder.ListImagePipelineImagesHttp)`.
  * ### Observing Pipelines
  * **Example:** List the Pipeline's Builds
  * ```typescript
- * // init — bind the operation to the pipeline
+ * // init -- bind the operation to the pipeline
  * const listBuilds = yield* AWS.ImageBuilder.ListImagePipelineImages(
  *   pipeline,
  * );

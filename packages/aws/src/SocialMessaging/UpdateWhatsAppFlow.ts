@@ -25,7 +25,7 @@ export interface UpdateWhatsAppFlowRequest extends Omit<
  * ### Managing WhatsApp Flows
  * **Example:** Rename a Flow
  * ```typescript
- * // init — bind the operation to the linked WABA
+ * // init -- bind the operation to the linked WABA
  * const updateFlow = yield* AWS.SocialMessaging.UpdateWhatsAppFlow(account);
  *
  * // runtime

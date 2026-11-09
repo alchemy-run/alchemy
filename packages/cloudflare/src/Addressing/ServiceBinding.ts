@@ -45,7 +45,7 @@ export interface ServiceBindingAttributes {
   serviceName: string | undefined;
   /**
    * Deployment status of the binding on the Cloudflare network.
-   * Provisioning is asynchronous — `state` flips from `provisioning` to
+   * Provisioning is asynchronous -- `state` flips from `provisioning` to
    * `active` after a few minutes.
    */
   provisioning: { state: string | undefined };
@@ -63,7 +63,7 @@ export type ServiceBinding = Resource<
  * Binds part of a BYOIP prefix to a Cloudflare service (CDN, Spectrum, or
  * Magic Transit), routing traffic for the bound CIDR to that service.
  *
- * Bindings are create/delete only — every prop change forces a
+ * Bindings are create/delete only -- every prop change forces a
  * replacement. Provisioning to the edge is asynchronous: the binding is
  * returned immediately with `provisioning.state: "provisioning"` and flips
  * to `"active"` on Cloudflare's side; the resource does not wait for it.
@@ -98,7 +98,7 @@ export const ServiceBindingProvider = () =>
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (olds === undefined) return undefined;
       if (!isResolved(news) || !isResolved(olds)) return undefined;
-      // Create/delete only — any change forces a replacement.
+      // Create/delete only -- any change forces a replacement.
       const oldPrefixId = output?.prefixId ?? olds.prefixId;
       if (
         typeof oldPrefixId === "string" &&
@@ -132,7 +132,7 @@ export const ServiceBindingProvider = () =>
         const observed = yield* getBinding(acct, prefixId, output.bindingId);
         return observed ? toAttributes(observed, prefixId, acct) : undefined;
       }
-      // Cold read — (cidr, serviceId) identify a binding uniquely.
+      // Cold read -- (cidr, serviceId) identify a binding uniquely.
       const cidr = output?.cidr ?? olds?.cidr;
       if (typeof cidr !== "string") return undefined;
       const match = yield* findByCidr(acct, prefixId, cidr);
@@ -140,7 +140,7 @@ export const ServiceBindingProvider = () =>
     }),
 
     // Service bindings are children of a BYOIP prefix with no account-wide
-    // enumeration API — fan out across every account prefix and list each
+    // enumeration API -- fan out across every account prefix and list each
     // prefix's bindings, hydrating into the exact `read` shape.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -174,7 +174,7 @@ export const ServiceBindingProvider = () =>
       const prefixId = news.prefixId as string;
       const serviceId = news.serviceId as string;
 
-      // 1. Observe — by cached id, then by CIDR.
+      // 1. Observe -- by cached id, then by CIDR.
       let observed = output?.bindingId
         ? yield* getBinding(acct, prefixId, output.bindingId)
         : undefined;
@@ -182,7 +182,7 @@ export const ServiceBindingProvider = () =>
         observed = yield* findByCidr(acct, prefixId, news.cidr);
       }
 
-      // 2. Ensure — nothing is mutable, so an observed binding is already
+      // 2. Ensure -- nothing is mutable, so an observed binding is already
       //    converged (a serviceId mismatch is a replacement, handled by
       //    diff). Provisioning is async; return immediately.
       if (observed) {
@@ -220,7 +220,7 @@ const getBinding = (accountId: string, prefixId: string, bindingId: string) =>
     .pipe(Effect.catchTag(["BindingNotFound", "PrefixNotFound"], () => Effect.undefined));
 
 /**
- * Find a service binding by exact CIDR — unique within a parent prefix.
+ * Find a service binding by exact CIDR -- unique within a parent prefix.
  * The parent prefix being gone reads as "no match".
  */
 const findByCidr = (accountId: string, prefixId: string, cidr: string) =>

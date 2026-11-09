@@ -11,14 +11,14 @@ import { forwardWorkerRequest, workerRequestUrl } from "./worker-request.ts";
 /**
  * Preview mode: serve the freshly built worker through workerd.
  *
- * `vite preview` (and any framework that drives it programmatically — e.g.
+ * `vite preview` (and any framework that drives it programmatically -- e.g.
  * waku's SSG step, which boots a preview server mid-`buildApp` and renders
  * every static page through it) resolves the same plugins as the build. This
  * plugin's `configurePreviewServer` hook reads the built worker output from
  * the entry environment's `build.outDir`, boots workerd over it via
  * `cloudflare-runtime`, and registers a proxy middleware ahead of Vite's
- * internal middlewares so every request — static assets included, via the
- * runtime's assets plugin — is handled exactly as on the deployed worker.
+ * internal middlewares so every request -- static assets included, via the
+ * runtime's assets plugin -- is handled exactly as on the deployed worker.
  *
  * This mirrors what upstream `@cloudflare/vite-plugin` provides via its own
  * `configurePreviewServer` (miniflare over the built output), and is what
@@ -41,7 +41,7 @@ export function preview(options: CloudflareVitePluginOptions): vite.Plugin {
       const input = optionsApi.input();
       const inputNames = Object.keys(input);
       if (inputNames.length === 0) {
-        // SPA mode: no worker entry — leave the preview server to Vite's
+        // SPA mode: no worker entry -- leave the preview server to Vite's
         // static file serving.
         return;
       }
@@ -86,7 +86,7 @@ export function preview(options: CloudflareVitePluginOptions): vite.Plugin {
       // Registered directly (not via the returned post hook), so the proxy
       // runs ahead of Vite's internal static-file middlewares and of any
       // middleware a framework appends afterwards (e.g. waku's Node SSG
-      // fallback) — the worker handles every request, like in production.
+      // fallback) -- the worker handles every request, like in production.
       server.middlewares.use(function distilledCloudflarePreviewMiddleware(req, res) {
         const url = workerRequestUrl(req.url, address);
         forwardWorkerRequest(req, res, url, handle.proxySharedSecret, server.config.logger);

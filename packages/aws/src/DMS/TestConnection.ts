@@ -9,18 +9,18 @@ import type { ReplicationInstance } from "./ReplicationInstance.ts";
  *
  * Bind this operation to a ({@link ReplicationInstance}, {@link Endpoint})
  * pair to initiate a connectivity test from the instance to the endpoint's
- * database. The test runs asynchronously — poll the result with
+ * database. The test runs asynchronously -- poll the result with
  * {@link DescribeConnections}. Provide the implementation with
  * `Effect.provide(AWS.DMS.TestConnectionHttp)`.
  * ### Testing Connectivity
  * **Example:** Kick Off a Connection Test
  * ```typescript
- * // init — bind the operation to the instance + endpoint
+ * // init -- bind the operation to the instance + endpoint
  * const testConnection = yield* AWS.DMS.TestConnection(instance, source);
  *
  * // runtime
  * const { Connection } = yield* testConnection();
- * // Connection.Status === "testing" — poll DescribeConnections for the result
+ * // Connection.Status === "testing" -- poll DescribeConnections for the result
  * ```
  *
  * @binding

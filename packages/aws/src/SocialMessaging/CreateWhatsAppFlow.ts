@@ -27,7 +27,7 @@ export interface CreateWhatsAppFlowRequest extends Omit<
  * ### Managing WhatsApp Flows
  * **Example:** Create a Flow
  * ```typescript
- * // init — bind the operation to the linked WABA
+ * // init -- bind the operation to the linked WABA
  * const createFlow = yield* AWS.SocialMessaging.CreateWhatsAppFlow(account);
  *
  * // runtime

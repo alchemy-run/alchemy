@@ -9,7 +9,7 @@ export interface ListDataIntegrationAssociationsRequest extends Omit<
 > {}
 
 /**
- * Lists the associations of an AppIntegrations {@link DataIntegration} — the
+ * Lists the associations of an AppIntegrations {@link DataIntegration} -- the
  * clients (e.g. Amazon Connect / Amazon Q) it has been associated with
  * (`app-integrations:ListDataIntegrationAssociations`).
  *
@@ -22,7 +22,7 @@ export interface ListDataIntegrationAssociationsRequest extends Omit<
  * const listDataIntegrationAssociations =
  *   yield* AWS.AppIntegrations.ListDataIntegrationAssociations(integration);
  *
- * // runtime — the DataIntegrationIdentifier is injected automatically
+ * // runtime -- the DataIntegrationIdentifier is injected automatically
  * const { DataIntegrationAssociations } =
  *   yield* listDataIntegrationAssociations();
  * ```

@@ -147,7 +147,7 @@ const startApplySession = Effect.fn(function* <P extends Plan>(
   progress.subscribe(() => {
     preferences.planExpanded = progress.snapshot().expanded;
   });
-  // The session outlives this effect — the caller settles it via `done` on
+  // The session outlives this effect -- the caller settles it via `done` on
   // every exit path (Apply.ts's onExit). live.open is Scope-bound, so give
   // it a manually managed scope. One-shot operations close it in `done`;
   // dev retains it after `done` and tears it down through `close` when the

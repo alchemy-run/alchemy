@@ -81,7 +81,7 @@ export interface ThreatIntelSet extends Resource<
     format: string;
     /** S3 URI of the hosted list. */
     location: string;
-    /** Current status (`ACTIVE`, `INACTIVE`, `ACTIVATING`, `ERROR`, …). */
+    /** Current status (`ACTIVE`, `INACTIVE`, `ACTIVATING`, `ERROR`, ...). */
     status: string;
   },
   never,
@@ -108,7 +108,7 @@ export type ThreatIntelSetLookup =
     };
 
 /**
- * A GuardDuty threat intelligence set — an S3-hosted list of known malicious
+ * A GuardDuty threat intelligence set -- an S3-hosted list of known malicious
  * IP addresses that GuardDuty generates findings for. The list file must
  * exist in S3 before activation; name, location, and activation are
  * updatable in place, while format changes replace the set.
@@ -258,7 +258,7 @@ export const ThreatIntelSetProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — output.threatIntelSetId is only a cache; fall back
+          // 1. OBSERVE -- output.threatIntelSetId is only a cache; fall back
           // to a name search so a crash-and-retry converges.
           let threatIntelSetId = output?.threatIntelSetId;
           let live = threatIntelSetId ? yield* getSet(detectorId, threatIntelSetId) : undefined;
@@ -268,7 +268,7 @@ export const ThreatIntelSetProvider = () =>
           }
 
           if (!live || !threatIntelSetId) {
-            // 2. ENSURE — create with tags applied inline.
+            // 2. ENSURE -- create with tags applied inline.
             const created = yield* guardduty.createThreatIntelSet({
               DetectorId: detectorId,
               Name: name,
@@ -280,7 +280,7 @@ export const ThreatIntelSetProvider = () =>
             });
             threatIntelSetId = created.ThreatIntelSetId;
           } else {
-            // 3. SYNC settings — observed ↔ desired.
+            // 3. SYNC settings -- observed <-> desired.
             const observedActive = ACTIVE_STATUSES.includes(live.Status);
             const drift =
               live.Name !== name ||
@@ -297,7 +297,7 @@ export const ThreatIntelSetProvider = () =>
               });
             }
 
-            // 3b. SYNC tags — diff against OBSERVED cloud tags.
+            // 3b. SYNC tags -- diff against OBSERVED cloud tags.
             const { accountId, region } = yield* AWSEnvironment.current;
             const arn = threatIntelSetArn(region, accountId, detectorId, threatIntelSetId);
             const { upsert, removed } = diffTags(tagRecord(live.Tags), desiredTags);
@@ -324,7 +324,7 @@ export const ThreatIntelSetProvider = () =>
           return yield* buildAttrs(detectorId, threatIntelSetId, final);
         }),
         delete: Effect.fn(function* ({ output }) {
-          // Idempotent — the set (or its whole detector) may already be
+          // Idempotent -- the set (or its whole detector) may already be
           // gone; both surface as BadRequestException.
           yield* guardduty
             .deleteThreatIntelSet({

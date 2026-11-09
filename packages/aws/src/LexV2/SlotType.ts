@@ -35,7 +35,7 @@ export interface SlotTypeProps {
    */
   localeId: string;
   /**
-   * Name of the slot type. Mutable — renames update the slot type in place
+   * Name of the slot type. Mutable -- renames update the slot type in place
    * (identity is the generated slot type ID).
    * @default ${app}-${id}-${stage}-${suffix}
    */
@@ -71,7 +71,7 @@ export interface SlotType extends Resource<
     slotTypeName: string;
     /** ID of the bot the slot type belongs to. */
     botId: string;
-    /** Bot version the slot type lives on — always `DRAFT`. */
+    /** Bot version the slot type lives on -- always `DRAFT`. */
     botVersion: string;
     /** Locale the slot type lives under. */
     localeId: string;
@@ -81,7 +81,7 @@ export interface SlotType extends Resource<
 > {}
 
 /**
- * A custom slot type on the DRAFT locale of an Amazon Lex V2 bot — the set of
+ * A custom slot type on the DRAFT locale of an Amazon Lex V2 bot -- the set of
  * values a slot can take, with optional synonyms and resolution strategy.
  *
  * ### Creating Slot Types
@@ -175,7 +175,7 @@ export const SlotTypeProvider = () =>
       return {
         stables: ["slotTypeId", "botId", "botVersion", "localeId"],
 
-        // Sub-resource keyed entirely by its bot locale — nuke reaches it
+        // Sub-resource keyed entirely by its bot locale -- nuke reaches it
         // through the parent bot's deletion.
         list: () => Effect.succeed([]),
 
@@ -205,7 +205,7 @@ export const SlotTypeProvider = () =>
           const slotTypeName = yield* createSlotTypeName(id, news);
           const desiredValues = news.slotTypeValues ?? [];
 
-          // 1. OBSERVE — output.slotTypeId is only a cache; fall back to name.
+          // 1. OBSERVE -- output.slotTypeId is only a cache; fall back to name.
           let observed =
             output?.slotTypeId !== undefined
               ? yield* describeSlotType(news.botId, news.localeId, output.slotTypeId)
@@ -214,7 +214,7 @@ export const SlotTypeProvider = () =>
             observed = yield* findSlotTypeByName(news.botId, news.localeId, slotTypeName);
           }
 
-          // 2. ENSURE — create when missing.
+          // 2. ENSURE -- create when missing.
           if (observed === undefined) {
             const created = yield* retryWhileConflict(
               lexm.createSlotType({
@@ -235,7 +235,7 @@ export const SlotTypeProvider = () =>
               });
             }
           } else if (
-            // 3. SYNC — UpdateSlotType replaces the declared aspects; skip
+            // 3. SYNC -- UpdateSlotType replaces the declared aspects; skip
             //    the call when nothing drifted.
             observed.slotTypeName !== slotTypeName ||
             (observed.description ?? undefined) !== (news.description ?? undefined) ||

@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { RuleGroup } from "./RuleGroup.ts";
 
 /**
- * Runtime binding for `wafv2:GetPermissionPolicy` — read the IAM policy
+ * Runtime binding for `wafv2:GetPermissionPolicy` -- read the IAM policy
  * that shares the bound {@link RuleGroup} with other accounts; the rule
  * group ARN is injected automatically. A rule group with no policy
  * attached fails with the typed `WAFNonexistentItemException`.
@@ -14,7 +14,7 @@ import type { RuleGroup } from "./RuleGroup.ts";
  * ### Sharing Rule Groups
  * **Example:** Read the Sharing Policy
  * ```typescript
- * // init — grants wafv2:GetPermissionPolicy on the rule group
+ * // init -- grants wafv2:GetPermissionPolicy on the rule group
  * const getPermissionPolicy = yield* AWS.WAFv2.GetPermissionPolicy(group);
  *
  * // runtime

@@ -13,7 +13,7 @@ import type { Instance } from "./Instance.ts";
  * ### Looking Up Groups
  * **Example:** Enumerate Groups
  * ```typescript
- * // init — bind the operation to the Identity Center instance
+ * // init -- bind the operation to the Identity Center instance
  * const listGroups = yield* AWS.IdentityCenter.ListGroups(instance);
  *
  * // runtime

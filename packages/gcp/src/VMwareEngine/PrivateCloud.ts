@@ -62,7 +62,7 @@ export type ManagementCluster = {
   stretchedClusterConfig?: StretchedClusterConfig;
   /**
    * Map of node type id to config. Keys are canonical node type ids
-   * (`standard-72`, …).
+   * (`standard-72`, ...).
    */
   nodeTypeConfigs?: Record<string, NodeTypeConfig | undefined>;
   /** User-provided cluster id for the management cluster. Immutable. */
@@ -134,7 +134,7 @@ export type PrivateCloudProps = {
   encryptionConfig?: EncryptionConfig;
   /**
    * Human-readable description. Private clouds have no labels field, so
-   * Alchemy stamps ownership into a `[alchemy …]` prefix and strips it
+   * Alchemy stamps ownership into a `[alchemy ...]` prefix and strips it
    * from attributes. Description is the only in-place update.
    */
   description?: string;

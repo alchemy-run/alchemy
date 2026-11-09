@@ -11,13 +11,13 @@ export interface GetCostComparisonDriversRequest extends ce.GetCostComparisonDri
  * Runtime binding for `ce:GetCostComparisonDrivers`.
  *
  * Retrieve the top cost drivers explaining the change between two
- * billing periods — which services, accounts, or usage types moved the
+ * billing periods -- which services, accounts, or usage types moved the
  * bill. Provide the implementation with
  * `Effect.provide(AWS.CostExplorer.GetCostComparisonDriversHttp)`.
  * ### Querying Cost and Usage
  * **Example:** Find What Drove a Cost Change
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const getCostComparisonDrivers = yield* AWS.CostExplorer.GetCostComparisonDrivers();
  *
  * // runtime

@@ -19,7 +19,7 @@ export interface PutLifecycleConfigurationRequest extends Omit<
  * Replaces the bound {@link FileSystem}'s lifecycle management rules at
  * runtime; an empty `LifecyclePolicies` array disables lifecycle management.
  * For declarative control, prefer the FileSystem resource's
- * `lifecyclePolicies` prop — this binding is for operational tooling that
+ * `lifecyclePolicies` prop -- this binding is for operational tooling that
  * tunes storage tiering on demand. Provide the implementation with
  * `Effect.provide(AWS.EFS.PutLifecycleConfigurationHttp)`.
  * ### Lifecycle Management

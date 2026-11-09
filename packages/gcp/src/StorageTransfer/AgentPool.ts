@@ -44,13 +44,13 @@ export type AgentPoolProps = {
    * `projects/{project}/agentPools/{agent_pool}`). If omitted, a unique
    * name is generated from the stack, stage, and logical id. Must match
    * `^(?!goog)[a-z]([a-z0-9-._~]*[a-z0-9])?$` and is at most 128
-   * characters. Immutable — changing it replaces the pool.
+   * characters. Immutable -- changing it replaces the pool.
    */
   agentPoolId?: string;
   /**
    * Client-specified description (combined with Alchemy ownership, max
    * 127 characters). Agent pools have no labels field, so ownership is
-   * stored in a `[alchemy …]` prefix and stripped from attributes.
+   * stored in a `[alchemy ...]` prefix and stripped from attributes.
    */
   displayName?: string;
   /**
@@ -105,7 +105,7 @@ export interface AgentPoolLookup {
  * A Storage Transfer Service agent pool for on-premises (POSIX) agents.
  *
  * Agent pools have no labels field, so Alchemy stamps ownership into
- * `displayName` for `list` / nuke. Name is identity — changing
+ * `displayName` for `list` / nuke. Name is identity -- changing
  * `agentPoolId` replaces the pool. `displayName` and `bandwidthLimit`
  * update in place.
  *

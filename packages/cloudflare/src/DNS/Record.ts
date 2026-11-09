@@ -41,7 +41,7 @@ export type KnownRecordType =
   | "TLSA"
   | "URI";
 
-/** DNS record type literal — a known type, or any other string. */
+/** DNS record type literal -- a known type, or any other string. */
 export type RecordType = KnownRecordType | (string & {});
 
 /**
@@ -79,7 +79,7 @@ export interface RecordCommonProps {
    */
   name: string;
   /**
-   * TTL in seconds (`60`–`86400`), or `"1"` for Cloudflare's "automatic"
+   * TTL in seconds (`60`-`86400`), or `"1"` for Cloudflare's "automatic"
    * setting. Must be `"1"` when `proxied` is `true`.
    *
    * @default "1"
@@ -112,7 +112,7 @@ type StringRecordType = Exclude<KnownRecordType, keyof RecordDataByType | "MX">;
 type StringRecordProps = {
   /** Record type. Changing it updates the record in place. */
   type: StringRecordType;
-  /** Formatted record value. Mutable — patched in place. */
+  /** Formatted record value. Mutable -- patched in place. */
   content: string;
   priority?: never;
 };
@@ -120,7 +120,7 @@ type StringRecordProps = {
 interface MxRecordProps {
   /** Record type. Changing it updates the record in place. */
   type: "MX";
-  /** Mail server hostname. Mutable — patched in place. */
+  /** Mail server hostname. Mutable -- patched in place. */
   content: string;
   /**
    * Mail server priority; lower values are preferred. Required by
@@ -135,7 +135,7 @@ type StructuredRecordProps = {
     type: Type;
     /**
      * Record value as formatted DNS content or typed Cloudflare components.
-     * Mutable — patched in place.
+     * Mutable -- patched in place.
      */
     content: string | RecordDataByType[Type];
   } & (Type extends "URI"
@@ -273,7 +273,7 @@ export const RecordProvider = () =>
     // with no account-wide enumeration API. Fan out over every zone in the
     // account, exhaustively paginate each zone's records, and hydrate each into
     // the same `Attributes` shape `read` produces. A fresh scoped token can 403
-    // a zone (eventual consistency) or a zone may be partially provisioned —
+    // a zone (eventual consistency) or a zone may be partially provisioned --
     // skip those zones (-> []) rather than failing the whole enumeration.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -339,7 +339,7 @@ export const RecordProvider = () =>
       }
 
       // 2. Fall back to scanning the zone for a (name, type) match.
-      //    Ownership has already been verified upstream — `read` reports
+      //    Ownership has already been verified upstream -- `read` reports
       //    existing records as `Unowned` and the engine gates takeover
       //    behind the adopt policy before reconcile ever runs.
       //    Only an exact match is this record; any other record at the
@@ -369,7 +369,7 @@ export const RecordProvider = () =>
               }) as const,
           ),
           // A record with this `(name, type)` can already exist that the
-          // scan above missed — a leftover from an interrupted run, or a
+          // scan above missed -- a leftover from an interrupted run, or a
           // concurrent reconcile that won the create race. Cloudflare
           // answers `An identical record already exists.`
           // (`DnsRecordAlreadyExists`). Self-heal: re-scan and adopt the
@@ -405,7 +405,7 @@ export const RecordProvider = () =>
         if (created.raced) foundByScan = true;
       }
 
-      // 4. Sync — Cloudflare's update endpoint is PUT-style; resend
+      // 4. Sync -- Cloudflare's update endpoint is PUT-style; resend
       //    the full desired body when any mutable field differs.
       if (!observed.id) {
         return yield* new RecordUnexpectedResponse({
@@ -418,7 +418,7 @@ export const RecordProvider = () =>
         observed.name === body.name ||
         observed.name === normalizeRecordName(body.name, (yield* zones.getZone({ zoneId })).name);
       if (!sameName || observed.type !== body.type || !bodyEqualsObserved(body, observed)) {
-        // Suppress noise when we just created the record above — the
+        // Suppress noise when we just created the record above -- the
         // server echo already matches and any diff is a CF-side
         // normalisation we shouldn't fight on the very first reconcile.
         const justCreated = !output?.recordId && !foundByScan;
@@ -467,7 +467,7 @@ export const RecordProvider = () =>
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
-      // Owned path: we have persisted state (our own recordId) — refresh it.
+      // Owned path: we have persisted state (our own recordId) -- refresh it.
       if (output?.recordId) {
         const observed = yield* observeById(output.zoneId, output.recordId);
         const attrs = toAttributes(observed, output.zoneId);
@@ -476,7 +476,7 @@ export const RecordProvider = () =>
       // Adoption path: no state of our own, but a record with this
       // `(zoneId, name, type)` may already exist. DNS records carry no
       // ownership markers we can inspect, so we cannot prove we created
-      // it — brand it `Unowned` so the engine refuses to take over
+      // it -- brand it `Unowned` so the engine refuses to take over
       // unless `adopt` is set. Only a record whose `content`/`priority`
       // match the declaration is this one; any other is a sibling. A
       // CNAME is exclusive at its name, so the one there is this record.
@@ -513,7 +513,7 @@ const observeById = (zoneId: string, dnsRecordId: string) =>
 
 /**
  * Property match used to disambiguate between several records sharing
- * `(name, type)` — MX fallbacks, multiple TXT records, round-robin A
+ * `(name, type)` -- MX fallbacks, multiple TXT records, round-robin A
  * records are all legitimate Cloudflare configurations.
  */
 interface RecordMatch {
@@ -524,7 +524,7 @@ interface RecordMatch {
 
 /**
  * Raised when several DNS records share `(name, type)` and the declared
- * `content`/`data`/`priority` do not select exactly one of them — adoption must
+ * `content`/`data`/`priority` do not select exactly one of them -- adoption must
  * never pick a record arbitrarily.
  */
 export class AmbiguousDnsRecordError extends Data.TaggedError("AmbiguousDnsRecordError")<{
@@ -545,7 +545,7 @@ export class AmbiguousDnsRecordError extends Data.TaggedError("AmbiguousDnsRecor
 // name first and then its zone-qualified form. Used both for the adoption path
 // and to surface a conflict when the caller hasn't opted into adoption.
 //
-// `(name, type)` alone is NOT a unique identity — several records may share
+// `(name, type)` alone is NOT a unique identity -- several records may share
 // it, so the desired record value/priority must select the record (a CNAME,
 // exclusive at its name, matches whatever its content):
 //   - exactly one exact match -> that record

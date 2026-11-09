@@ -7,7 +7,7 @@ import * as Effect from "effect/Effect";
  * not-found race (the resource can vanish between observation and this call)
  * by returning an empty map.
  *
- * NOT exported from the service barrel — shared scaffolding for the Omics
+ * NOT exported from the service barrel -- shared scaffolding for the Omics
  * resource providers only.
  */
 export const fetchOmicsTags = Effect.fn(function* (resourceArn: string) {

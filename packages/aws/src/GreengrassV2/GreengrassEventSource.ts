@@ -66,13 +66,13 @@ export interface GreengrassEventSourceProps extends EventRouteProps {
 /**
  * Event source connecting IoT Greengrass V2 notifications to the hosting
  * compute. Greengrass publishes per-core-device deployment execution status
- * (`SUCCEEDED`, `FAILED`, …) and installed-component lifecycle changes (most
+ * (`SUCCEEDED`, `FAILED`, ...) and installed-component lifecycle changes (most
  * importantly a component dropping into `BROKEN`) to the account's default
  * EventBridge bus (source `aws.greengrass`); this subscribes the host
  * Function to those events so it can alert on failed rollouts or broken
  * edge software.
  *
- * Greengrass publishes to EventBridge automatically — no additional resource
+ * Greengrass publishes to EventBridge automatically -- no additional resource
  * is created besides the EventBridge rule targeting the host. Provide the
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.

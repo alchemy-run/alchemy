@@ -109,8 +109,8 @@ export type VpcServiceLookup =
  * A Cloudflare VPC service that exposes a private host (IP or hostname)
  * reachable through a Cloudflare Tunnel for Workers VPC.
  *
- * `VpcService` creates HTTP services. For a TCP service — e.g. a private
- * database that Hyperdrive connects to — use
+ * `VpcService` creates HTTP services. For a TCP service -- e.g. a private
+ * database that Hyperdrive connects to -- use
  * `Cloudflare.Connectivity.DirectoryService` with `type: "tcp"`.
  * ### Creating a VPC Service
  * **Example:** Hostname through a tunnel
@@ -222,7 +222,7 @@ export const VpcServiceProvider = () =>
       const name = news.name ?? output?.serviceName ?? (yield* createServiceName(id, news.name));
       const acct = output?.accountId ?? accountId;
 
-      // Observe — re-fetch the cached service; fall back to a name
+      // Observe -- re-fetch the cached service; fall back to a name
       // scan so we recover from out-of-band deletes or partial state
       // persistence failures.
       let observed: connectivity.GetDirectoryServiceResponse | undefined;
@@ -239,7 +239,7 @@ export const VpcServiceProvider = () =>
         observed = match as connectivity.GetDirectoryServiceResponse | undefined;
       }
 
-      // Ensure — create if missing. Cloudflare rejects a duplicate
+      // Ensure -- create if missing. Cloudflare rejects a duplicate
       // name with a generic error; tolerate by adopting the existing
       // service (when the caller opted in) and re-applying the
       // desired configuration.
@@ -276,7 +276,7 @@ export const VpcServiceProvider = () =>
         return formatVpcService(result, acct);
       }
 
-      // Sync — the Cloudflare update API replaces all mutable fields
+      // Sync -- the Cloudflare update API replaces all mutable fields
       // (name, ports, host) atomically, so always issue it so
       // adoption and routine updates converge.
       const result = yield* connectivity.updateDirectoryService({

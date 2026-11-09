@@ -7,7 +7,7 @@ import type * as Effect from "effect/Effect";
  * `aoss:UpdateAccountSettings`; the action does not support resource-level
  * scoping, so the grant is on `*`).
  *
- * Updates the account-level OCU capacity limits — the cost-control automation
+ * Updates the account-level OCU capacity limits -- the cost-control automation
  * path (e.g. a budget alarm handler capping search capacity). Provide the
  * implementation with
  * `Effect.provide(AWS.OpenSearchServerless.UpdateAccountSettingsHttp)`.

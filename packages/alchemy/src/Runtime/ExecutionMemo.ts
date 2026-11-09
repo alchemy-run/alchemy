@@ -14,7 +14,7 @@ const caches = new WeakMap<Scope.Scope, Map<symbol, Effect.Effect<any, any, any>
  * `build` at most once per execution scope (Worker fetch/queue/scheduled
  * event, DO call, Workflow run, Lambda invoke) and builds it WITH that scope
  * (`Layer.build` / `Scope`-requiring acquires see the execution scope), so
- * release finalizers fire when the event settles — never held across events.
+ * release finalizers fire when the event settles -- never held across events.
  * This is the only legal pooling shape on workerd (sockets are
  * IoContext-pinned) and the correct one on Lambda (the instance scope must
  * not own disposables).
@@ -29,7 +29,7 @@ const caches = new WeakMap<Scope.Scope, Map<symbol, Effect.Effect<any, any, any>
  * nested `Effect.scoped` narrows both the memo and the resource's lifetime
  * to that block.
  *
- * The accessor's `Scope` requirement is erased from its type — every runtime
+ * The accessor's `Scope` requirement is erased from its type -- every runtime
  * bridge provides a fresh execution `Scope`, exactly like
  * `Drizzle.Postgres` before this primitive was extracted. Evaluating the
  * accessor outside an execution scope is a defect.
@@ -48,8 +48,8 @@ export const makeExecutionMemo = <A, E, R>(
       }
       let memo = cache.get(symbol);
       if (memo === undefined) {
-        // `Effect.cached` only allocates the memo cell — the build runs
-        // on first evaluation — so this yield is synchronous and the
+        // `Effect.cached` only allocates the memo cell -- the build runs
+        // on first evaluation -- so this yield is synchronous and the
         // fiber cannot be interleaved between the miss check and the
         // set: a concurrent first access joins this memo (evaluating the
         // same cached effect) instead of building a second resource.

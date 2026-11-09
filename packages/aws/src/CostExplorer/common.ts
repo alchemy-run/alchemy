@@ -7,7 +7,7 @@ import { Region } from "../Region.ts";
 // Cost Explorer is a global service served exclusively from the us-east-1
 // endpoint. Every control-plane call must target that region regardless of
 // the ambient stack region, so we pin it on every distilled operation. The
-// distilled Region service value is `Effect<RegionName>`, not a raw string —
+// distilled Region service value is `Effect<RegionName>`, not a raw string --
 // providing a bare string makes the client `yield*` a string and crash
 // (same pattern as CloudFront KVS / ECR Public / WAFv2 / GlobalAccelerator).
 export const CE_REGION = "us-east-1" as const;
@@ -42,7 +42,7 @@ export const toTagRecord = (tags: readonly ce.ResourceTag[] | undefined): Record
 
 /**
  * Fetch the observed tags for a Cost Explorer resource ARN. Tolerates the
- * resource disappearing mid-read (`ResourceNotFoundException` → `{}`).
+ * resource disappearing mid-read (`ResourceNotFoundException` -> `{}`).
  */
 export const fetchCeTags = Effect.fn(function* (resourceArn: string) {
   const listed = yield* pinCe(ce.listTagsForResource({ ResourceArn: resourceArn })).pipe(

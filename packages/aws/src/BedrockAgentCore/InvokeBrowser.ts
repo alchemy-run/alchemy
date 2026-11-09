@@ -11,7 +11,7 @@ export interface InvokeBrowserRequest extends Omit<
 /**
  * Performs an OS-level browser action (mouse, keyboard, screenshot) in a session.
  *
- * OS-level actions cover interactions the Chrome DevTools Protocol cannot reach — print dialogs, context menus, and JavaScript alerts.
+ * OS-level actions cover interactions the Chrome DevTools Protocol cannot reach -- print dialogs, context menus, and JavaScript alerts.
  *
  * Bind a {@link BrowserCustom} inside a function runtime to call the
  * AgentCore data-plane API against it. Provide `AgentCore.InvokeBrowserHttp`

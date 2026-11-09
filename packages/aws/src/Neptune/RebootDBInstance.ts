@@ -7,14 +7,14 @@ import type { DBInstance } from "./DBInstance.ts";
  * Runtime binding for the `RebootDBInstance` operation (IAM action
  * `rds:RebootDBInstance`).
  *
- * Reboots the bound {@link DBInstance} — e.g. to apply a static parameter
+ * Reboots the bound {@link DBInstance} -- e.g. to apply a static parameter
  * change from an ops function. The instance identifier is injected from the
  * binding. Provide the implementation with
  * `Effect.provide(AWS.Neptune.RebootDBInstanceHttp)`.
  * ### Operating a Cluster
  * **Example:** Reboot an Instance
  * ```typescript
- * // init — bind the operation to the instance
+ * // init -- bind the operation to the instance
  * const rebootDBInstance = yield* AWS.Neptune.RebootDBInstance(instance);
  *
  * // runtime

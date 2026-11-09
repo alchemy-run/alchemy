@@ -17,7 +17,7 @@ export const toTagList = (tags: Record<string, string>): smsvoice.Tag[] =>
 
 /**
  * Read the observed tags of an End User Messaging SMS resource.
- * Best-effort — a failure (e.g. a race with deletion) reports no tags.
+ * Best-effort -- a failure (e.g. a race with deletion) reports no tags.
  */
 export const readSmsVoiceTags = Effect.fn(function* (arn: string) {
   const response = yield* smsvoice
@@ -49,7 +49,7 @@ export const syncSmsVoiceTags = Effect.fn(function* (
 /**
  * Explicitly-typed pipeable retry helper (inlining `Effect.retry` in a
  * provider op widens the layer type in declaration emit). Retries
- * `ThrottlingException` on a bounded exponential schedule — the End User
+ * `ThrottlingException` on a bounded exponential schedule -- the End User
  * Messaging SMS control plane has low per-account TPS limits.
  */
 export const retrySmsVoiceThrottled = <A, E extends { readonly _tag: string }, R>(

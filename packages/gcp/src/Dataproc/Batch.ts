@@ -35,12 +35,12 @@ export type BatchProps = {
   /**
    * Batch id (the `{batch}` segment of
    * `projects/{project}/locations/{location}/batches/{batch}`). If omitted,
-   * a unique RFC1035 name is generated. 4-63 characters. Immutable —
+   * a unique RFC1035 name is generated. 4-63 characters. Immutable --
    * changing it replaces the batch.
    */
   batchId?: string;
   /**
-   * Location (`us-central1`, …). Immutable — changing it replaces the
+   * Location (`us-central1`, ...). Immutable -- changing it replaces the
    * batch. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
@@ -94,7 +94,7 @@ export type Batch = Resource<
     location: string;
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;
-    /** Server-reported state (`PENDING`, `RUNNING`, `SUCCEEDED`, …). */
+    /** Server-reported state (`PENDING`, `RUNNING`, `SUCCEEDED`, ...). */
     state: string | undefined;
     /** Extra status text, if any. */
     stateMessage: string | undefined;
@@ -123,7 +123,7 @@ export interface BatchLookup {
    */
   batchId: string;
   /**
-   * Location (`us-central1`, …). `US-CENTRAL1` is accepted and normalized
+   * Location (`us-central1`, ...). `US-CENTRAL1` is accepted and normalized
    * to `us-central1`.
    */
   location?: string;

@@ -9,7 +9,7 @@ export interface TranslatePinDataRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `payment-cryptography:TranslatePinData` — translates
+ * Runtime binding for `payment-cryptography:TranslatePinData` -- translates
  * an encrypted PIN block from one PIN encryption {@link Key} (and ISO 9564
  * format) to another without the PIN ever leaving the service. This is the
  * core acquirer operation for forwarding PIN blocks between networks.

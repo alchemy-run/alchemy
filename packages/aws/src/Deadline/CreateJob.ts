@@ -6,7 +6,7 @@ import type { Queue } from "./Queue.ts";
 /**
  * Runtime binding for `deadline:CreateJob`.
  *
- * Submits a render job to the bound {@link Queue} — the data-plane entry
+ * Submits a render job to the bound {@link Queue} -- the data-plane entry
  * point of Deadline Cloud. The job template is an Open Job Description
  * (OJD) document (`JSON` or `YAML`). The queue's `farmId`/`queueId` are
  * injected from the binding. Provide the implementation with
@@ -14,7 +14,7 @@ import type { Queue } from "./Queue.ts";
  * ### Submitting Jobs
  * **Example:** Submit A Job From A Template
  * ```typescript
- * // init — bind the operation to the queue
+ * // init -- bind the operation to the queue
  * const createJob = yield* AWS.Deadline.CreateJob(queue);
  *
  * // runtime

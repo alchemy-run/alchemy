@@ -32,7 +32,7 @@ export interface VinextProps<Bindings extends WorkerBindingProps = {}> extends O
 > {
   /**
    * Worker entry that delegates to vinext. Defaults to
-   * `worker/index.ts` — the official vinext Cloudflare layout:
+   * `worker/index.ts` -- the official vinext Cloudflare layout:
    *
    * ```typescript
    * import handler from "vinext/server/fetch-handler";
@@ -60,7 +60,7 @@ export interface VinextProps<Bindings extends WorkerBindingProps = {}> extends O
    *
    * vinext's App Router build emits `rsc` + `ssr` + `client`. The
    * default points the Worker entry at `rsc` and bundles `ssr`
-   * alongside it — the same shape vinext's official
+   * alongside it -- the same shape vinext's official
    * `@cloudflare/vite-plugin` config uses (`viteEnvironment: { name:
    * "rsc", childEnvironments: ["ssr"] }`).
    *
@@ -70,7 +70,7 @@ export interface VinextProps<Bindings extends WorkerBindingProps = {}> extends O
   /**
    * Optional configuration for static asset routing behavior.
    * Defaults to assets-first (`runWorkerFirst` unset) with
-   * `htmlHandling` / `notFoundHandling` set to `"none"` — the same
+   * `htmlHandling` / `notFoundHandling` set to `"none"` -- the same
    * shape official vinext writes into `wrangler.jsonc`. Hashed
    * `/_next/static/*` chunks are served by the asset layer; the
    * Worker only `ASSETS.fetch`es files the RSC handler marks with
@@ -99,12 +99,12 @@ type VinextInput<Bindings extends WorkerBindingProps> = InputProps<
  *
  * This is **not** `Cloudflare.Website.Nextjs`. That resource runs
  * `next build` through OpenNext. vinext never consumes `next build`
- * output — mixing the two stacks will fail.
+ * output -- mixing the two stacks will fail.
  *
  * Install `vinext`, `@vitejs/plugin-rsc`,
  * `react-server-dom-webpack`, and `@alchemy.run/frontend-frameworks`
  * in the deploying project. Do **not** also register
- * `@cloudflare/vite-plugin` in `vite.config.ts` — Alchemy injects its
+ * `@cloudflare/vite-plugin` in `vite.config.ts` -- Alchemy injects its
  * own Cloudflare plugin (`vite-plugin-cloudflare:alchemy`; vinext
  * matches the `vite-plugin-cloudflare:` prefix) and no-ops an official
  * plugin if one is still present. The Worker source is

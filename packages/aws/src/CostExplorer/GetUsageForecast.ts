@@ -16,7 +16,7 @@ export interface GetUsageForecastRequest extends ce.GetUsageForecastRequest {}
  * ### Forecasting
  * **Example:** Forecast Usage Quantity
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const getUsageForecast = yield* AWS.CostExplorer.GetUsageForecast();
  *
  * // runtime

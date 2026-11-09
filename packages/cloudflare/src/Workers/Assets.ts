@@ -25,7 +25,7 @@ export const isAssets = (value: any): value is Assets =>
   value?.kind === "Cloudflare.Workers.Assets";
 
 /**
- * Routing configuration for a Worker's static assets — sent to Cloudflare
+ * Routing configuration for a Worker's static assets -- sent to Cloudflare
  * as `metadata.assets.config` on script upload. Declared explicitly (not
  * derived from the distilled API schema) so alchemy owns and documents its
  * public surface.
@@ -54,7 +54,7 @@ export interface AssetsConfig {
    *
    * Assets-first by default: a request matching a file is served directly
    * and never invokes the Worker. `true` routes every request through the
-   * Worker ahead of the asset layer — serve files yourself via the
+   * Worker ahead of the asset layer -- serve files yourself via the
    * `ASSETS` binding. A path-rule array routes only matching paths
    * worker-first (e.g. `["/api/*"]`): glob (`*`) and negative (`!`) rules
    * are supported, rules must start with `/` or `!/`, and negative rules
@@ -68,12 +68,12 @@ export interface AssetsConfig {
    */
   serveDirectly?: boolean;
   /**
-   * Raw contents of a `_headers` file — header rules applied by the asset
+   * Raw contents of a `_headers` file -- header rules applied by the asset
    * layer. Overrides a `_headers` file read from the assets directory.
    */
   headers?: string;
   /**
-   * Raw contents of a `_redirects` file — redirect rules applied by the
+   * Raw contents of a `_redirects` file -- redirect rules applied by the
    * asset layer. Overrides a `_redirects` file read from the assets
    * directory.
    */
@@ -99,7 +99,7 @@ export interface AssetReadResult {
 export interface AssetsProps extends AssetsConfig {
   directory: string;
   /**
-   * The path this site is served from, when it is not the origin root —
+   * The path this site is served from, when it is not the origin root --
    * e.g. `"/docs"` for a Worker on the route `example.com/docs*`. Matches
    * Vite's `base`, and `Website.Vite` fills it in from the resolved Vite
    * config automatically; set it by hand when you bring your own build.
@@ -110,7 +110,7 @@ export interface AssetsProps extends AssetsConfig {
    * `dist/app.js` is uploaded as `/docs/app.js`, leaving the build output
    * on disk untouched.
    *
-   * Bases that name no path — `"/"`, `"./"`, `"https://cdn.example.com/"` —
+   * Bases that name no path -- `"/"`, `"./"`, `"https://cdn.example.com/"` --
    * are ignored, as an absolute base means the assets are served by a CDN
    * rather than by this Worker.
    *
@@ -125,7 +125,7 @@ export interface AssetsProps extends AssetsConfig {
 }
 
 /**
- * `base` → manifest path prefix. Only a root-relative base names a path
+ * `base` -> manifest path prefix. Only a root-relative base names a path
  * this Worker serves; `"/"`, `"./"`, protocol-relative and absolute URLs
  * all mean "no prefix".
  */
@@ -245,7 +245,7 @@ export const readAssetsConfigFiles = Effect.fn(function* (directory: string | un
     return { _headers: undefined, _redirects: undefined };
   }
   const path = yield* Path.Path;
-  // Anchored: see `readAssets` — the directory may be initial-cwd-relative
+  // Anchored: see `readAssets` -- the directory may be initial-cwd-relative
   // and live cwd reads race concurrent tools' transient chdir.
   const resolvedDirectory = path.resolve(initialCwd, directory);
   const [_headers, _redirects] = yield* Effect.all([
@@ -281,7 +281,7 @@ export const readAssets = Effect.fn(function* ({ directory, base, ...config }: A
   const path = yield* Path.Path;
   // `base` nests the *manifest* paths (what Cloudflare matches request
   // pathnames against) under a prefix; files stay where they are on disk.
-  // It is deliberately excluded from the `config` sent to Cloudflare — it
+  // It is deliberately excluded from the `config` sent to Cloudflare -- it
   // is not part of the API's asset config shape.
   const pathPrefix = getAssetsPathPrefix(base);
   // Anchored: `directory` may be a relative path persisted by
@@ -336,7 +336,7 @@ export const readAssets = Effect.fn(function* ({ directory, base, ...config }: A
       }
       // Hash content + extension (matching wrangler): the upload API stores
       // one blob + content type per hash, so two identical bodies under
-      // different extensions must not collapse into a single entry — the
+      // different extensions must not collapse into a single entry -- the
       // second file would serve with the first file's content type.
       const extension = name.slice(name.lastIndexOf(".") + 1).toLowerCase();
       const hash = yield* fs.readFile(file).pipe(
@@ -371,7 +371,7 @@ export const readAssets = Effect.fn(function* ({ directory, base, ...config }: A
   );
   // Cloudflare's SPA fallback is hard-coded to `/index.html` at the
   // manifest root, so prefixing every key would 404 every client-side
-  // route under the base. Alias the shell back to the root — one extra
+  // route under the base. Alias the shell back to the root -- one extra
   // manifest line, zero extra uploads, since entries are content-addressed.
   const indexHtml = manifest.get(`${pathPrefix}/index.html`);
   if (
@@ -384,12 +384,12 @@ export const readAssets = Effect.fn(function* ({ directory, base, ...config }: A
   const sortedManifest = Object.fromEntries(
     Array.from(manifest.entries()).sort((a, b) => a[0].localeCompare(b[0])),
   );
-  // Hash only inputs that affect what gets uploaded — the file
+  // Hash only inputs that affect what gets uploaded -- the file
   // manifest, asset config, and the special `_headers` / `_redirects`
   // files. `directory` is deliberately excluded: identical bytes at a
   // different absolute path must produce the same hash, otherwise
-  // diffing across machines (CI runner → local laptop, monorepo
-  // root → workspace root, etc.) spuriously reports "changed" and
+  // diffing across machines (CI runner -> local laptop, monorepo
+  // root -> workspace root, etc.) spuriously reports "changed" and
   // causes both unnecessary re-uploads and `NotFound` failures when
   // the previously-recorded path is gone.
   const hash = yield* sha256Object({
@@ -416,7 +416,7 @@ export const readAssets = Effect.fn(function* ({ directory, base, ...config }: A
 });
 
 /**
- * Bulk buckets (up to ~50 MiB of base64 each) go up this many at a time —
+ * Bulk buckets (up to ~50 MiB of base64 each) go up this many at a time --
  * the same number wrangler uses.
  */
 const BULK_UPLOAD_CONCURRENCY = 3;
@@ -537,7 +537,7 @@ export const uploadAssets = Effect.fn(function* (
   // upload each bucket, and return the completion JWT that putWorker
   // must redeem. The session JWT can expire mid-upload on very large
   // asset sets (Unauthorized), and the final bucket response has been
-  // observed in the wild to omit the completion JWT — both cases are
+  // observed in the wild to omit the completion JWT -- both cases are
   // retried below with a fresh session. Already-uploaded assets are
   // not re-bucketed, so a retry resumes where the last session
   // stopped, and a fresh session with nothing left to upload returns
@@ -577,7 +577,7 @@ export const uploadAssets = Effect.fn(function* (
     yield* note(`Uploaded ${uploaded} of ${total} assets...`);
     // Cloudflare only returns the completion JWT on the last bucket it
     // receives, which under concurrency is not necessarily the last one
-    // in the list — so every response is checked.
+    // in the list -- so every response is checked.
     let jwt: string | undefined | null;
     yield* Effect.forEach(
       session.buckets,

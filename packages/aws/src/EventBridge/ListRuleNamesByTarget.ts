@@ -15,10 +15,10 @@ export interface ListRuleNamesByTargetRequest extends eventbridge.ListRuleNamesB
  * ### Listing Rules
  * **Example:** List Rules Feeding a Target
  * ```typescript
- * // init — bind the operation (provide AWS.EventBridge.ListRuleNamesByTargetHttp on the Function)
+ * // init -- bind the operation (provide AWS.EventBridge.ListRuleNamesByTargetHttp on the Function)
  * const listRuleNamesByTarget = yield* AWS.EventBridge.ListRuleNamesByTarget();
  *
- * // runtime — find every rule routing to the target
+ * // runtime -- find every rule routing to the target
  * const { RuleNames } = yield* listRuleNamesByTarget({
  *   TargetArn: "arn:aws:lambda:us-east-1:123456789012:function:my-fn",
  * });

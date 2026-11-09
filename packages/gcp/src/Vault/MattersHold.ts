@@ -41,34 +41,34 @@ export type HeldOrgUnit = {
 
 export type MattersHoldProps = {
   /**
-   * Parent matter id. Immutable — changing it replaces the hold.
+   * Parent matter id. Immutable -- changing it replaces the hold.
    */
   matterId: string;
   /**
-   * Server-assigned hold id. Leave blank on create. Immutable —
+   * Server-assigned hold id. Leave blank on create. Immutable --
    * changing it replaces the hold.
    */
   holdId?: string;
   /**
    * Hold name (max 100 characters including Alchemy's ownership marker).
    * Vault holds have no labels field, so ownership is stored in a
-   * `[alchemy …]` prefix and stripped from attributes. Immutable —
+   * `[alchemy ...]` prefix and stripped from attributes. Immutable --
    * changing it replaces the hold.
    */
   name?: string;
   /**
-   * Workspace service covered by the hold. Immutable — changing it
+   * Workspace service covered by the hold. Immutable -- changing it
    * replaces the hold.
    */
   corpus: vault.HoldCorpusEnum | (string & {});
   /**
    * Individual accounts covered by the hold. Mutually exclusive with
-   * `orgUnit` — switching scope replaces the hold.
+   * `orgUnit` -- switching scope replaces the hold.
    */
   accounts?: HeldAccount[];
   /**
    * Organizational unit covered by the hold. Mutually exclusive with
-   * `accounts` — switching scope replaces the hold.
+   * `accounts` -- switching scope replaces the hold.
    */
   orgUnit?: HeldOrgUnit;
   /**

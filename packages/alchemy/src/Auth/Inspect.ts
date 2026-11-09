@@ -12,12 +12,12 @@ import { ProfileStore, reloadProviderConfig, type ProviderConfig } from "./Profi
 /**
  * What a connected provider looks like right now. Establishing this means
  * decoding the stored config and asking the provider to describe itself,
- * either of which can fail — which is the point: a profile listing has to
+ * either of which can fail -- which is the point: a profile listing has to
  * show a broken connection rather than fail because of one.
  */
 export interface ProviderConnection {
   readonly name: string;
-  /** How credentials were supplied (`oauth`, `api-token`, …). */
+  /** How credentials were supplied (`oauth`, `api-token`, ...). */
   readonly method: string;
   readonly status: "connected" | "needs-reauth" | "needs-reconfigure" | "invalid" | "unavailable";
   readonly details: ReadonlyArray<ProviderDetailLine>;
@@ -107,7 +107,7 @@ export const inspectProvider = Effect.fn("inspectProvider")(function* (
   }
 
   // A provider that can no longer prove who it is has expired credentials,
-  // which the user can fix by re-authenticating — not a broken config.
+  // which the user can fix by re-authenticating -- not a broken config.
   const needsReauth = Predicate.isTagged("NeedsReauth")(details.failure);
   return broken(
     name,

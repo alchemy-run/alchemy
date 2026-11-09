@@ -497,7 +497,7 @@ export const TemplateProvider = () =>
           return undefined;
         }),
         lookup: Effect.fn(function* ({ name }) {
-          // E2B's public defaults (`base`, `code-interpreter-v1`, …) can't be
+          // E2B's public defaults (`base`, `code-interpreter-v1`, ...) can't be
           // read by alias (403 "You don't have access to this template
           // alias"); they are listed instead.
           const defaults = yield* templates.listDefaultTemplates({});
@@ -550,7 +550,7 @@ export const TemplateProvider = () =>
               ? plan.hash
               : (yield* planOf(name, news, undefined)).plan.hash;
 
-          // Ensure — build when there is no ready build of these exact inputs.
+          // Ensure -- build when there is no ready build of these exact inputs.
           let attrs: TemplateAttributes;
           const upToDate =
             observed !== undefined &&
@@ -587,7 +587,7 @@ export const TemplateProvider = () =>
             };
           }
 
-          // Sync — visibility.
+          // Sync -- visibility.
           const desiredPublic = news.public ?? false;
           if (attrs.public !== desiredPublic) {
             yield* templates.updateTemplate({

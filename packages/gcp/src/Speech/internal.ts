@@ -337,7 +337,7 @@ export const listProjectPhraseSets = (project: string) =>
 
 /**
  * Classes and phrase sets have no labels. Only ones stamped with a legacy
- * `alc …` ownership item by earlier Alchemy versions are discoverable here;
+ * `alc ...` ownership item by earlier Alchemy versions are discoverable here;
  * current ones are tracked through state alone.
  */
 export const listOwnedCustomClasses = (project: string) =>

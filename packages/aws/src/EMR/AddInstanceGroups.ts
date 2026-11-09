@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Cluster } from "./Cluster.ts";
 
 /**
- * Runtime binding for `elasticmapreduce:AddInstanceGroups` — adds task instance groups to the bound cluster (instance-group clusters only). The cluster id is injected as `JobFlowId`.
+ * Runtime binding for `elasticmapreduce:AddInstanceGroups` -- adds task instance groups to the bound cluster (instance-group clusters only). The cluster id is injected as `JobFlowId`.
  * ### Scaling the Cluster
  * **Example:** Add a Task Group
  * ```typescript

@@ -9,7 +9,7 @@ export interface ListApplicationSnapshotsRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `kinesisanalytics:ListApplicationSnapshots` — pages
+ * Runtime binding for `kinesisanalytics:ListApplicationSnapshots` -- pages
  * through the bound application's snapshots, e.g. to find the newest
  * savepoint or prune old ones with {@link DeleteApplicationSnapshot}.
  * ### Managing Snapshots

@@ -25,7 +25,7 @@ import type { EncryptionSpec } from "./shared.ts";
 
 export type TensorboardProps = {
   /**
-   * Region (`us-central1`, …). Immutable — changing it replaces the
+   * Region (`us-central1`, ...). Immutable -- changing it replaces the
    * Tensorboard.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -97,7 +97,7 @@ export type Tensorboard = Resource<
  */
 export interface TensorboardLookup {
   /**
-   * Region (`us-central1`, …).
+   * Region (`us-central1`, ...).
    */
   location?: string;
   /**

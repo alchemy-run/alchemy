@@ -533,7 +533,7 @@ const fetchDeployLogs = (deploymentId: string | undefined) =>
         Effect.orElseSucceed(() => ""),
       );
 
-// Railway builds routinely take 60–90s and exceed 90s when its build queue is
+// Railway builds routinely take 60-90s and exceed 90s when its build queue is
 // busy (observed 2026-10: a small bundled service stuck BUILDING past 90s), so
 // a 90s cap failed healthy deploys. Allow up to 150 seconds while bounding
 // both the retry count and time spent in API requests.
@@ -610,7 +610,7 @@ const waitForDeploymentById = (input: {
     // `serviceInstance.latestDeployment` is the same record the rest of
     // reconcile already uses. The placeholder `hashicorp/http-echo`
     // deploy often FAILED (wrong port / no `/health`) before `railway up`
-    // replaces it — do not inherit that FAILED onto this wait.
+    // replaces it -- do not inherit that FAILED onto this wait.
     const instance = yield* getInstance(input.environmentId, input.serviceId);
     const match =
       matchUploadedDeployment(instance, input.deploymentId) ??
@@ -999,7 +999,7 @@ export const ServiceProvider = () =>
           return rows.flat();
         }),
 
-        // Circular Service↔Function RPC binds `dnsName` / `port` / `rpcToken`.
+        // Circular Service<->Function RPC binds `dnsName` / `port` / `rpcToken`.
         // Those are knowable from the physical name and props; the cloud
         // service is created in reconcile (and re-synced in converge).
         precreate: Effect.fn(function* ({ id, news }) {
@@ -1159,7 +1159,7 @@ export const ServiceProvider = () =>
           let domain: ServiceDomainRecord | undefined;
           if (publicDomain) {
             // Railway's generated-domain API refuses a service that already
-            // has PORT (or other env) set — it returns "please try again"
+            // has PORT (or other env) set -- it returns "please try again"
             // forever. Create the hostname on a bare service, then sync env.
             yield* (session?.note ?? ((_message: string) => Effect.void))(
               `Creating service domain for ${id}...`,
@@ -1173,7 +1173,7 @@ export const ServiceProvider = () =>
           } else {
             // Only the recorded generated domain belongs to this resource.
             // Adoption does not populate domainId/domain, so a foreign
-            // domain stays. Null the environment-config key — GraphQL
+            // domain stays. Null the environment-config key -- GraphQL
             // delete alone is not enough; Railway recreates from config.
             yield* deleteOwnedServiceDomain({
               projectId,
@@ -1219,7 +1219,7 @@ export const ServiceProvider = () =>
               ...props,
               dockerfilePath,
               // Effect-native images must answer HTTP before Railway
-              // stamps SUCCESS — otherwise waitForDeploymentById returns
+              // stamps SUCCESS -- otherwise waitForDeploymentById returns
               // while `/up` is still building and public GET hangs.
               // Default `/health`, not `/`: user fetch handlers often 404
               // `/` (BucketApi) and Railway treats that as FAILED.

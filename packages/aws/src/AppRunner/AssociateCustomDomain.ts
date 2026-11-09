@@ -10,7 +10,7 @@ export interface AssociateCustomDomainRequest extends Omit<
 
 /**
  * Associate a custom domain with an App Runner {@link Service} from a
- * Lambda (or other AWS runtime) — the multi-tenant SaaS "bring your own
+ * Lambda (or other AWS runtime) -- the multi-tenant SaaS "bring your own
  * domain" flow: a customer adds their domain, the platform associates it at
  * runtime and hands back the DNS validation records App Runner returns.
  * Track validation with {@link DescribeCustomDomains}.

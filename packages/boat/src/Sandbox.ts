@@ -168,10 +168,10 @@ export interface SandboxProps extends PlatformProps {
 }
 
 export interface SandboxAttributes {
-  /** Boat's sandbox id (`bx_…`). */
+  /** Boat's sandbox id (`bx_...`). */
   sandboxId: string;
   name: string;
-  /** `ready`, `running`, `idle`, `archived` (stopped), … */
+  /** `ready`, `running`, `idle`, `archived` (stopped), ... */
   state: SandboxState;
   type: SandboxType | undefined;
   /** vCPUs and RAM (GB) the machine size guarantees. */
@@ -495,7 +495,7 @@ export const SandboxProvider = () =>
           // A program serves for as long as the sandbox runs: don't stop it on a timer.
           const ttlSeconds = ttlSecondsOf(news.autoStop, program);
 
-          // Observe — `output` caches the id; the sandbox may be gone.
+          // Observe -- `output` caches the id; the sandbox may be gone.
           let sandbox = output === undefined ? undefined : yield* observeSandbox(output.sandboxId);
 
           // Ensure
@@ -519,14 +519,14 @@ export const SandboxProvider = () =>
             sandbox = created.sandbox;
           }
 
-          // Sync — a stopped program sandbox is resumed, so the program can run.
+          // Sync -- a stopped program sandbox is resumed, so the program can run.
           if (program && sandbox.state === "archived") {
             yield* session.note(`Resuming sandbox ${name}...`);
             const resumed = yield* boat.resumeSandbox({ sandboxId: sandbox.id });
             sandbox = resumed.sandbox ?? sandbox;
           }
 
-          // Sync — name, subdomain and auto-stop, against what Boat reports.
+          // Sync -- name, subdomain and auto-stop, against what Boat reports.
           const ttlChanged =
             ttlSeconds !== undefined && (sandbox.ttlSeconds ?? null) !== ttlSeconds;
           const subdomainChanged =

@@ -4,8 +4,8 @@ import * as AWSBindings from "../AWSBindings.ts";
 /**
  * Shared HTTP scaffolding for the Service Quotas runtime bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, makeServiceQuotasHttpBinding({ … }))` over the
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, makeServiceQuotasHttpBinding({ ... }))` over the
  * builder below. Everything except the operation and the IAM action is
  * boilerplate.
  *
@@ -37,7 +37,7 @@ export const makeServiceQuotasHttpBinding = <I extends object, A, E, R>(options:
               Effect: "Allow",
               Action: [...options.iamActions],
               // Service Quotas actions have no deploy-time scopeable
-              // resource — quota ARNs are only known at runtime.
+              // resource -- quota ARNs are only known at runtime.
               Resource: ["*"],
             },
           ],

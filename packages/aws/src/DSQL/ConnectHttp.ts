@@ -15,7 +15,7 @@ const DSQL_PORT = 5432;
  * IAM-token implementation of {@link Connect}. At deploy time it grants
  * `dsql:DbConnect` (or `dsql:DbConnectAdmin`) on the cluster to the host
  * Function and publishes the endpoint as `DSQL_{LOGICAL_ID}_HOST`; at runtime
- * it presigns a fresh auth token (client-side SigV4 — no API call) with the
+ * it presigns a fresh auth token (client-side SigV4 -- no API call) with the
  * Function's own credentials and formats the full connection descriptor.
  */
 export const ConnectHttp = Layer.effect(
@@ -23,7 +23,7 @@ export const ConnectHttp = Layer.effect(
   Effect.gen(function* () {
     const bind = yield* AWSBindings.Bind;
     // Captured at layer build so the runtime callable only requires
-    // RuntimeContext — the presign resolves credentials lazily from the
+    // RuntimeContext -- the presign resolves credentials lazily from the
     // service on every mint, so refreshed execution-role creds are honored.
     const services = yield* AWSBindings.withCredentials(
       Effect.context<Credentials.Credentials | Region.Region>(),

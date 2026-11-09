@@ -48,7 +48,7 @@ export const MetricSinkHttp = Layer.effect(
             Namespace: props.Namespace,
             MetricData: [...batch],
           }),
-        // PutMetricData is all-or-nothing — no per-datum partial failures to
+        // PutMetricData is all-or-nothing -- no per-datum partial failures to
         // extract, so there is no `unprocessed`/`rejected` handling here.
       });
     });

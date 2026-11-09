@@ -27,14 +27,14 @@ import {
 
 export type TeamProps = {
   /**
-   * Region (`us-central1`, …). Immutable — changing it replaces the team
+   * Region (`us-central1`, ...). Immutable -- changing it replaces the team
    * folder. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
    * User-friendly display name. Required by the API. Team folders have no
-   * labels field, so Alchemy stamps ownership into a `[alchemy …]`
+   * labels field, so Alchemy stamps ownership into a `[alchemy ...]`
    * prefix and strips it from attributes. If omitted, only the ownership
    * marker is stored.
    */
@@ -67,7 +67,7 @@ export type Team = Resource<
 >;
 
 /**
- * A Dataform team folder — a project-level container for repositories
+ * A Dataform team folder -- a project-level container for repositories
  * and folders with hierarchical access control.
  *
  * Team folders have no labels API, so Alchemy stamps ownership into

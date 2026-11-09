@@ -18,10 +18,10 @@ export interface ListTargetsByRuleRequest extends Omit<
  * ### Listing Targets
  * **Example:** List a Rule's Targets
  * ```typescript
- * // init — bind the rule (provide AWS.EventBridge.ListTargetsByRuleHttp on the Function)
+ * // init -- bind the rule (provide AWS.EventBridge.ListTargetsByRuleHttp on the Function)
  * const listTargets = yield* AWS.EventBridge.ListTargetsByRule(rule);
  *
- * // runtime — enumerate the rule's targets
+ * // runtime -- enumerate the rule's targets
  * const { Targets } = yield* listTargets();
  * ```
  *

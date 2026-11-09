@@ -11,7 +11,7 @@ export interface ListShardsRequest extends Omit<
 /**
  * Runtime binding for `kinesis:ListShards`.
  *
- * Bind this operation to a `Stream` to enumerate its shards — typically the
+ * Bind this operation to a `Stream` to enumerate its shards -- typically the
  * first step before obtaining a shard iterator and reading records. Provide
  * the implementation with `Effect.provide(AWS.Kinesis.ListShardsHttp)`.
  * ### Inspecting Streams

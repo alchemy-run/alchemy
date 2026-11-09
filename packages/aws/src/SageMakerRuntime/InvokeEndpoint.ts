@@ -9,7 +9,7 @@ import type * as Effect from "effect/Effect";
  * exactly those).
  *
  * `Body` is the raw, model-specific inference payload (the container behind
- * the endpoint decides the shape) — there is no auto-marshalling. Set
+ * the endpoint decides the shape) -- there is no auto-marshalling. Set
  * `ContentType`/`Accept` to match your container's serializer.
  */
 export interface InvokeEndpointRequest extends Omit<sagemaker.InvokeEndpointInput, "EndpointName"> {
@@ -22,14 +22,14 @@ export interface InvokeEndpointRequest extends Omit<sagemaker.InvokeEndpointInpu
 }
 
 /**
- * Runtime binding for `sagemaker:InvokeEndpoint` — run real-time inference
+ * Runtime binding for `sagemaker:InvokeEndpoint` -- run real-time inference
  * against a deployed SageMaker endpoint with a model-native request body.
  *
  * SageMaker Runtime is a pure pay-per-call data-plane API: the endpoint
- * itself is provisioned out of band (a deployed SageMaker model/endpoint —
+ * itself is provisioned out of band (a deployed SageMaker model/endpoint --
  * costly to keep running). The binding takes one or more endpoint names and
  * grants the function `sagemaker:InvokeEndpoint` scoped to exactly those
- * endpoint ARNs. Pass the request/response bodies as raw bytes — the
+ * endpoint ARNs. Pass the request/response bodies as raw bytes -- the
  * container behind the endpoint owns the payload shape, no marshalling.
  *
  * ### Invoking an Endpoint
@@ -40,7 +40,7 @@ export interface InvokeEndpointRequest extends Omit<sagemaker.InvokeEndpointInpu
  *   "my-model-endpoint",
  * );
  *
- * // runtime — Body is the raw payload the container expects
+ * // runtime -- Body is the raw payload the container expects
  * const result = yield* invokeEndpoint({
  *   ContentType: "application/json",
  *   Accept: "application/json",

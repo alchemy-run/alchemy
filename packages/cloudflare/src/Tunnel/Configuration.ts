@@ -22,7 +22,7 @@ export type OriginRequest = NonNullable<
  * incoming connection against these in order; the first match wins.
  *
  * Omit `hostname` (and `path`) on the *final* rule to make it the catch-all
- * — by convention a `service: "http_status:404"` entry. If you don't author
+ * -- by convention a `service: "http_status:404"` entry. If you don't author
  * a catch-all, the provider appends one for you so the tunnel config stays
  * valid (Cloudflare rejects PUTs whose last rule has a hostname).
  */
@@ -34,10 +34,10 @@ export interface IngressRule {
   hostname?: string;
   /**
    * Upstream URL or pseudo-service. Common values:
-   * - `http://service.namespace.svc.cluster.local:80` — forward to a K8s Service
-   * - `https://10.0.0.5:8443` — forward to a private IP
-   * - `http_status:404` — return a literal status code (used for the catch-all)
-   * - `hello_world` — cloudflared's built-in test page
+   * - `http://service.namespace.svc.cluster.local:80` -- forward to a K8s Service
+   * - `https://10.0.0.5:8443` -- forward to a private IP
+   * - `http_status:404` -- return a literal status code (used for the catch-all)
+   * - `hello_world` -- cloudflared's built-in test page
    */
   service: string;
   /**
@@ -58,7 +58,7 @@ export interface ConfigurationProps {
    * has a single configuration document, so this both identifies the
    * resource and gates lifecycle operations.
    *
-   * Stable — changing the tunnel triggers replacement.
+   * Stable -- changing the tunnel triggers replacement.
    *
    * Declared as plain `string` (not `string`) so it is statically
    * knowable inside `diff` for the replacement check.
@@ -66,7 +66,7 @@ export interface ConfigurationProps {
   tunnelId: string;
   /**
    * Ordered ingress rules. cloudflared evaluates them top-down and the
-   * first match wins. The catch-all rule is appended automatically — do
+   * first match wins. The catch-all rule is appended automatically -- do
    * not include a trailing `{ service: "http_status:404" }` here unless
    * you want it to land mid-list.
    */
@@ -94,7 +94,7 @@ export interface ConfigurationAttributes {
   accountId: string;
   /**
    * Cloudflare-side config version. Bumped on every PUT, even when the
-   * payload is unchanged — surface it so downstream consumers can wait
+   * payload is unchanged -- surface it so downstream consumers can wait
    * on a specific revision if needed.
    */
   version: number | undefined;
@@ -112,13 +112,13 @@ export type Configuration = Resource<
  * Routing configuration for a remotely-managed Cloudflare Tunnel.
  *
  * Cloudflare exposes the cfd_tunnel configuration as a single PUT-style
- * document per tunnel — `ingress` rules in order, plus optional default
+ * document per tunnel -- `ingress` rules in order, plus optional default
  * `originRequest` settings. This resource owns that document; it is the
  * declarative equivalent of editing a tunnel's Public Hostname or Private
  * Hostname rules in the Zero Trust dashboard.
  *
  * The catch-all rule (final ingress entry with no hostname) is appended
- * automatically — Cloudflare rejects PUTs whose last rule has a hostname,
+ * automatically -- Cloudflare rejects PUTs whose last rule has a hostname,
  * and forgetting it is a common foot-gun. Override the auto-appended
  * service via {@link ConfigurationProps.catchAllService}.
  * ### Routing a private hostname through a tunnel
@@ -223,7 +223,7 @@ const buildIngress = (
 ): Array<IngressRule> => {
   const out: Array<IngressRule> = [];
   for (const r of rules) {
-    // Drop any catch-all the caller threaded into the middle — we always
+    // Drop any catch-all the caller threaded into the middle -- we always
     // append exactly one trailing catch-all of our own, and a mid-list
     // catch-all would short-circuit every following rule anyway.
     if (r.hostname === undefined && r.path === undefined) continue;
@@ -273,7 +273,7 @@ export const ConfigurationProvider = () =>
       const observe = (accountId: string, tunnelId: string) =>
         Effect.gen(function* () {
           // A tunnel with no configuration yet surfaces as the tagged
-          // `TunnelConfigurationNotFound` (code 1055) — swallow into "missing".
+          // `TunnelConfigurationNotFound` (code 1055) -- swallow into "missing".
           const r = yield* getConfig({ accountId, tunnelId }).pipe(
             Effect.catchTag("TunnelConfigurationNotFound", () => Effect.undefined),
           );
@@ -302,10 +302,10 @@ export const ConfigurationProvider = () =>
           const catchAllService = news.catchAllService ?? DEFAULT_CATCH_ALL_SERVICE;
           const desiredIngress = buildIngress(news.ingress, catchAllService);
 
-          // Observe — falls through to a PUT if the tunnel has no config yet.
+          // Observe -- falls through to a PUT if the tunnel has no config yet.
           let observed = yield* observe(accountId, tunnelId);
 
-          // Sync — skip the PUT entirely when observed equals desired.
+          // Sync -- skip the PUT entirely when observed equals desired.
           if (
             observed === undefined ||
             !configsEqual(desiredIngress, news.originRequest, observed)
@@ -334,7 +334,7 @@ export const ConfigurationProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // Cloudflare's API has no DELETE for the configuration document —
+          // Cloudflare's API has no DELETE for the configuration document --
           // PUT the catch-all-only shape so the tunnel stops routing
           // anything and idempotently converges.
           yield* putConfig({
@@ -358,7 +358,7 @@ export const ConfigurationProvider = () =>
         }),
 
         // The configuration is a per-tunnel singleton with no account-wide
-        // enumeration API — fan out from the parent. Enumerate every
+        // enumeration API -- fan out from the parent. Enumerate every
         // (non-deleted) cfd_tunnel in the account, then read each tunnel's
         // configuration document with bounded concurrency. Tunnels without a
         // config (`TunnelConfigurationNotFound`, handled inside `observe`) are

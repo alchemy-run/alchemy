@@ -1,7 +1,7 @@
 /**
  * Scans pack entries out of a BUFFER that starts at an entry boundary and
  * may end mid-entry (DESIGN §22.7): the unit of work a hashing Worker
- * receives from the receive-pack pipeline — one spilled part plus the
+ * receives from the receive-pack pipeline -- one spilled part plus the
  * carry-over of the previous part's incomplete tail.
  *
  * Everything that can be settled inside the buffer is settled here:
@@ -49,14 +49,14 @@ export interface ScannedEntry {
   readonly size: number;
   /** Absolute pack offset of the entry's zdata (its header precedes it). */
   readonly dataOffset: number;
-  /** Compressed span at `dataOffset` — verbatim for non-delta entries. */
+  /** Compressed span at `dataOffset` -- verbatim for non-delta entries. */
   readonly span: number;
   /** Set for delta-resolved entries: a fresh deflate to store as the row. */
   readonly zdata?: Uint8Array | undefined;
   /** Inflated content for commits, trees and tags (the store parses them). */
   readonly content?: Uint8Array | undefined;
   /**
-   * For a delta-resolved entry, its base reference — so a hasher that must
+   * For a delta-resolved entry, its base reference -- so a hasher that must
    * bound its response can demote the entry back to `unresolved`.
    */
   readonly baseOffset?: number | undefined;
@@ -106,7 +106,7 @@ export const scanPart = (
     /**
      * `buf` does NOT necessarily start at an entry boundary (a raw chunk of
      * a pack, DESIGN §22.9): find the first boundary with {@link findBoundary}
-     * and scan from there. No boundary within the chunk ⇒ no entries.
+     * and scan from there. No boundary within the chunk => no entries.
      */
     readonly resync?: boolean | undefined;
   },
@@ -209,7 +209,7 @@ export const scanPart = (
         expectedSize: header.size,
       });
       if (inflated === undefined) {
-        // The compressed stream runs past the buffer (or is corrupt — the
+        // The compressed stream runs past the buffer (or is corrupt -- the
         // next attempt, with more bytes, decides): carry from this entry.
         break;
       }
@@ -300,7 +300,7 @@ export const scanPart = (
 export interface EntryBounds {
   /** Absolute pack offset of the entry header. */
   readonly offset: number;
-  /** 1–4 for full objects, 6/7 for OFS/REF deltas. */
+  /** 1-4 for full objects, 6/7 for OFS/REF deltas. */
   readonly type: number;
   /** Declared (uncompressed) size. */
   readonly size: number;
@@ -319,7 +319,7 @@ export interface BoundsResult {
 
 /**
  * Boundary-only scan (DESIGN §22.8): finds every entry's compressed span in
- * `buf` without hashing or resolving anything — the one inherently
+ * `buf` without hashing or resolving anything -- the one inherently
  * sequential step of pack ingest (a stream's end is only known by inflating
  * it). With spans known, hashing every part can run in parallel and can
  * inflate exact slices with the cheap one-shot path. Same contract as
@@ -518,14 +518,14 @@ export const hashBounds = (
  * answer to "where does an entry start?", so chunks of a pack can be scanned
  * independently. A position is a boundary when it decodes as an entry
  * header, its stream inflates to exactly the declared size, AND the entry
- * that follows does too — two consecutive coincidences on arbitrary bytes
+ * that follows does too -- two consecutive coincidences on arbitrary bytes
  * are not a realistic false positive, and the pack trailer plus per-object
  * hashing verify everything downstream regardless.
  *
  * Candidates are filtered cheaply: a deflate stream from git starts with
  * the zlib header `0x78` followed by one of four FLG bytes, right after a
- * 1–10 byte varint header. Returns the offset into `buf`, or `undefined`
- * when no boundary lies within `maxSearch` bytes — the whole chunk by
+ * 1-10 byte varint header. Returns the offset into `buf`, or `undefined`
+ * when no boundary lies within `maxSearch` bytes -- the whole chunk by
  * default: a part whose head is inside one large entry still has its own
  * entries to hash, and a part that reports no boundary is hashed serially
  * as a region by the caller (a 10 MB blob spanning three parts once cost
@@ -584,7 +584,7 @@ export const findBoundary = (
     if (!plausible) continue;
     const next = parses(pos);
     if (next === undefined) continue;
-    // Second entry must parse too (or the buffer ends right after — accept
+    // Second entry must parse too (or the buffer ends right after -- accept
     // only if the first entry ended cleanly inside the buffer).
     const after = parses(next);
     if (after !== undefined) return pos;
@@ -592,7 +592,7 @@ export const findBoundary = (
   return undefined;
 };
 
-// ── delta resolution as a job (DESIGN §22.13) ──────────────────────────────
+// -- delta resolution as a job (DESIGN §22.13) ------------------------------
 
 /** One base a batch of delta jobs refers to: zlib bytes, or already-inflated content. */
 export interface DeltaBase {
@@ -618,7 +618,7 @@ export interface DeltaResolved {
 }
 
 /**
- * Applies a batch of deltas whose bases the caller supplies — the work the
+ * Applies a batch of deltas whose bases the caller supplies -- the work the
  * receiver would otherwise do itself for every delta whose base lies in
  * another chunk. Pure over its inputs, so a hasher isolate can run it.
  */

@@ -7,8 +7,8 @@ import type { Archive } from "./Archive.ts";
 /**
  * Shared scaffolding for SES Mail Manager HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the builders
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the builders
  * below. Everything except the operation, the injected identifier, and the
  * IAM action list is boilerplate.
  */

@@ -33,17 +33,17 @@ const DEFAULT_RESOURCE_TYPE = "KeyStore";
 export type EnvironmentsReferenceProps = {
   /**
    * Apigee organization id or `organizations/{org}`. Defaults to the
-   * current GCP project id. Immutable — changing it replaces the reference.
+   * current GCP project id. Immutable -- changing it replaces the reference.
    */
   organization?: string;
   /**
-   * Environment id or `organizations/{org}/environments/{env}`. Immutable —
+   * Environment id or `organizations/{org}/environments/{env}`. Immutable --
    * changing it replaces the reference.
    */
   environment: string;
   /**
    * Reference id. If omitted, a unique name is generated from the stack,
-   * stage, and logical id. Immutable — changing it replaces the reference.
+   * stage, and logical id. Immutable -- changing it replaces the reference.
    */
   referenceId?: string;
   /**
@@ -58,7 +58,7 @@ export type EnvironmentsReferenceProps = {
   resourceType?: string;
   /**
    * Human-readable description. Alchemy stamps ownership into a
-   * `[alchemy …]` prefix because references have no labels field.
+   * `[alchemy ...]` prefix because references have no labels field.
    */
   description?: string;
 };

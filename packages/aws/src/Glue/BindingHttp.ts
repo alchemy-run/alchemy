@@ -9,8 +9,8 @@ import type { Table } from "./Table.ts";
 /**
  * Shared scaffolding for AWS Glue HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the builders
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the builders
  * below. Everything except the operation, the identifier injection, and the
  * IAM action list is boilerplate.
  *
@@ -22,10 +22,10 @@ import type { Table } from "./Table.ts";
 /**
  * Build the impl Effect for a Glue operation addressed to a {@link Job} by
  * `JobName`: the runtime callable injects the bound job's name and the
- * deploy-time half grants `actions` on the job ARN — or on `*` when
+ * deploy-time half grants `actions` on the job ARN -- or on `*` when
  * `anyResource` is set, for the handful of Glue actions that do not support
  * resource-level permissions (verified live: `glue:GetJobBookmark` /
- * `glue:ResetJobBookmark` are evaluated with no resource — an ARN-scoped
+ * `glue:ResetJobBookmark` are evaluated with no resource -- an ARN-scoped
  * Allow never matches and IAM implicit-denies).
  */
 export const makeGlueJobHttpBinding = <I extends { JobName: string }, A, E, R>(options: {
@@ -36,7 +36,7 @@ export const makeGlueJobHttpBinding = <I extends { JobName: string }, A, E, R>(o
   /** IAM actions granted on the job ARN. */
   actions: readonly string[];
   /**
-   * Grant on `Resource: "*"` instead of the job ARN — required for actions
+   * Grant on `Resource: "*"` instead of the job ARN -- required for actions
    * Glue evaluates without a resource (job bookmarks).
    */
   anyResource?: boolean;
@@ -46,7 +46,7 @@ export const makeGlueJobHttpBinding = <I extends { JobName: string }, A, E, R>(o
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (job: Job) {
-      // Outputs yield a DEFERRED effect — resolve again per invocation below.
+      // Outputs yield a DEFERRED effect -- resolve again per invocation below.
       const JobName = yield* job.jobName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${job})`({
@@ -139,12 +139,12 @@ export const makeGlueDatabaseHttpBinding = <
               Effect: "Allow",
               Action: [...options.actions],
               Resource: [
-                // arn:…:database/{db} → arn:…:catalog
+                // arn:...:database/{db} -> arn:...:catalog
                 Output.map(database.databaseArn, (arn) =>
                   arn.replace(/:database\/.*$/, ":catalog"),
                 ),
                 database.databaseArn,
-                // arn:…:database/{db} → arn:…:table/{db}/*
+                // arn:...:database/{db} -> arn:...:table/{db}/*
                 Output.map(
                   database.databaseArn,
                   (arn) => `${arn.replace(":database/", ":table/")}/*`,
@@ -171,7 +171,7 @@ export const makeGlueDatabaseHttpBinding = <
  * {@link Table}: the runtime callable injects `DatabaseName` + the table
  * name (+ `CatalogId`) and the deploy-time half grants `actions` on the
  * catalog, database, and table ARNs. Most table-addressed inputs carry the
- * table name as `TableName`; `GetTable` uses `Name` — pick with
+ * table name as `TableName`; `GetTable` uses `Name` -- pick with
  * `tableNameKey`.
  */
 export const makeGlueTableHttpBinding = <
@@ -207,9 +207,9 @@ export const makeGlueTableHttpBinding = <
               Effect: "Allow",
               Action: [...options.actions],
               Resource: [
-                // arn:…:table/{db}/{tbl} → arn:…:catalog
+                // arn:...:table/{db}/{tbl} -> arn:...:catalog
                 Output.map(table.tableArn, (arn) => arn.replace(/:table\/.*$/, ":catalog")),
-                // arn:…:table/{db}/{tbl} → arn:…:database/{db}
+                // arn:...:table/{db}/{tbl} -> arn:...:database/{db}
                 Output.map(table.tableArn, (arn) =>
                   arn.replace(/:table\/([^/]+)\/.*$/, ":database/$1"),
                 ),

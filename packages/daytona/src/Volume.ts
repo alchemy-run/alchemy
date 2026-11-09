@@ -213,7 +213,7 @@ export const VolumeProvider = () =>
         // Observe by id first: the name may already be taken by a peer.
         const name = yield* resolveName(id, news.name, output?.name);
         const byId = output ? yield* getVolumeById(output.volumeId) : undefined;
-        // Ensure — volumes have nothing mutable beyond existence.
+        // Ensure -- volumes have nothing mutable beyond existence.
         const volume =
           byId && byId.name === name
             ? byId.state === "ready"

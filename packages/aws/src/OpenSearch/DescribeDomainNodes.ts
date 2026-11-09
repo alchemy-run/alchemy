@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `DescribeDomainNodes` operation (IAM action
  * `es:DescribeDomainNodes`).
  *
- * Lists a domain's individual nodes — type (data/master/UltraWarm), Availability Zone, instance type, and storage — for node-level diagnostics. Provide the implementation with
+ * Lists a domain's individual nodes -- type (data/master/UltraWarm), Availability Zone, instance type, and storage -- for node-level diagnostics. Provide the implementation with
  * `Effect.provide(AWS.OpenSearch.DescribeDomainNodesHttp)`.
  * ### Monitoring Domains
  * **Example:** List a Domain's Nodes
@@ -14,7 +14,7 @@ import type * as Effect from "effect/Effect";
  * const describeDomainNodes = yield* OpenSearch.DescribeDomainNodes();
  *
  * const result = yield* describeDomainNodes({ DomainName: name });
- * // result.DomainNodesStatusList → one entry per node
+ * // result.DomainNodesStatusList -> one entry per node
  * ```
  *
  * @binding

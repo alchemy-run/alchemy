@@ -33,7 +33,7 @@ export interface ConnectOptions {
   /**
    * Database user to mint temporary credentials for via
    * `redshift:GetClusterCredentials`. When omitted, credentials are minted
-   * with `redshift:GetClusterCredentialsWithIAM` instead — the database
+   * with `redshift:GetClusterCredentialsWithIAM` instead -- the database
    * user is mapped 1:1 to the Function's IAM identity.
    */
   dbUser?: string;
@@ -94,9 +94,9 @@ export const connectEnvPrefix = (logicalId: string): string =>
  * directly.
  *
  * The Redshift Data API ({@link RedshiftData.Statements}) remains the
- * recommended default — it needs no driver, no VPC reach, and no credential
+ * recommended default -- it needs no driver, no VPC reach, and no credential
  * plumbing. Use `Connect` when you want a real pgwire connection (e.g.
- * Drizzle). Redshift speaks the postgres wire protocol on port 5439 —
+ * Drizzle). Redshift speaks the postgres wire protocol on port 5439 --
  * configure Drizzle with `prepare: false` and avoid `RETURNING` (Redshift
  * does not support either). The host Function must be able to reach the
  * cluster endpoint (attach it to the cluster's VPC, or make the cluster
@@ -107,7 +107,7 @@ export const connectEnvPrefix = (logicalId: string): string =>
  * **Example:** Resolve Connection Info inside a Function (IAM identity)
  * ```typescript
  * const connect = yield* Redshift.Connect(cluster);
- * // inside a handler — mints fresh temporary credentials:
+ * // inside a handler -- mints fresh temporary credentials:
  * const { host, port, username, password, url } = yield* connect;
  * ```
  *

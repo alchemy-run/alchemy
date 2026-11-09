@@ -16,7 +16,7 @@ type TypeId = typeof TypeId;
 export type GatewayProviderProps = {
   /**
    * The AI Gateway the provider config (BYOK key) belongs to. The gateway
-   * must have its `storeId` set to a Secrets Store id — Cloudflare resolves
+   * must have its `storeId` set to a Secrets Store id -- Cloudflare resolves
    * the key inside that store. Changing the gateway triggers a replacement.
    */
   gatewayId: string;
@@ -125,7 +125,7 @@ export type GatewayProvider = Resource<
  * providers (OpenAI, Anthropic, Workers AI, ...) with your own API key,
  * stored in Cloudflare Secrets Store. Cloudflare exposes no update API for
  * provider configs, so every prop change replaces the config (the old one
- * is deleted first — a gateway allows only one config per provider slug
+ * is deleted first -- a gateway allows only one config per provider slug
  * and alias).
  *
  * Cloudflare imposes a strict naming contract: the gateway must reference a
@@ -197,7 +197,7 @@ export const GatewayProviderProvider = () =>
         return { action: "replace", deleteFirst: true } as const;
       }
       if (output === undefined) return undefined;
-      // Provider configs have no update API — any change is a replacement.
+      // Provider configs have no update API -- any change is a replacement.
       // Delete first: a gateway rejects a second config for the same
       // provider slug/alias with "already exists".
       // Auto-generated aliases are engine-owned: the deployed alias stays
@@ -224,7 +224,7 @@ export const GatewayProviderProvider = () =>
       if (gatewayId === undefined) return undefined;
 
       const configs = yield* listProviderConfigs(acct, gatewayId);
-      // Cold read — recover from lost state by matching the
+      // Cold read -- recover from lost state by matching the
       // deterministic alias.
       const findConfigByAlias = Effect.gen(function* () {
         const alias = yield* createAlias(id, olds?.alias);
@@ -264,7 +264,7 @@ export const GatewayProviderProvider = () =>
           id: output.providerConfigId,
         })
         // Cloudflare reports both a missing config and a missing parent
-        // gateway with code 7002 — either way it's already gone.
+        // gateway with code 7002 -- either way it's already gone.
         .pipe(Effect.catchTag("ProviderConfigNotFound", () => Effect.void));
     }),
     // Provider configs are nested under an AI Gateway, with no account-wide
@@ -306,14 +306,14 @@ export const GatewayProviderProvider = () =>
  *
  * A gateway allows only ONE config per (providerSlug, alias). There is no
  * update API and no get endpoint, so we observe through the list and:
- *   - already-desired occupant → adopt it (idempotent no-op / re-run)
- *   - stale occupant           → delete it, then create the desired one
- *   - no occupant              → create the desired one
+ *   - already-desired occupant -> adopt it (idempotent no-op / re-run)
+ *   - stale occupant           -> delete it, then create the desired one
+ *   - no occupant              -> create the desired one
  *
  * `createProviderConfig` can still race and fail with
  * `ProviderConfigAlreadyExists` when a leftover/sibling config the list had
  * not yet surfaced (eventual consistency) occupies the slot. Retrying the
- * whole observe→delete→create flow re-observes the now-visible occupant and
+ * whole observe->delete->create flow re-observes the now-visible occupant and
  * converges it, so re-runs and leftover state self-heal instead of failing.
  * Bounded so the engine never hangs.
  */
@@ -360,14 +360,14 @@ const reconcileProviderConfig = (desired: {
       if (matchesDesired(attrs)) {
         return attrs;
       }
-      // No update API — delete the stale occupant before recreating.
+      // No update API -- delete the stale occupant before recreating.
       yield* aiGateway
         .deleteProviderConfig({ accountId, gatewayId, id: observed.id })
         .pipe(Effect.catchTag("ProviderConfigNotFound", () => Effect.void));
     }
 
-    // Ensure — create. The referenced Secrets Store secret deploys
-    // asynchronously (status `pending` → `active`), so retry the typed
+    // Ensure -- create. The referenced Secrets Store secret deploys
+    // asynchronously (status `pending` -> `active`), so retry the typed
     // "secret was not found" error with bounded backoff.
     const created = yield* aiGateway
       .createProviderConfig({
@@ -424,7 +424,7 @@ const toAttributes = (
   providerSlug: config.providerSlug,
   secretId: config.secretId,
   secretPreview: config.secretPreview,
-  // Cloudflare returns 0/1 here, not booleans — normalize at the boundary.
+  // Cloudflare returns 0/1 here, not booleans -- normalize at the boundary.
   defaultConfig: Boolean(config.defaultConfig),
   rateLimit: config.rateLimit ?? undefined,
   rateLimitPeriod: config.rateLimitPeriod ?? undefined,

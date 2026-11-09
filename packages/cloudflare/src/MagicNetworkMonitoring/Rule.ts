@@ -35,14 +35,14 @@ export interface RuleProps {
   accountId?: string;
   /**
    * The name of the rule. Must be unique within the account. Supports
-   * `A-Z`, `a-z`, `0-9`, underscore, dash, period, and tilde — no spaces.
+   * `A-Z`, `a-z`, `0-9`, underscore, dash, period, and tilde -- no spaces.
    * Max 256 characters. If omitted, a unique name is generated from the
    * app, stage, and logical ID. Mutable in place.
    * @default ${app}-${stage}-${id}
    */
   name?: string;
   /**
-   * MNM rule type. Immutable — the rule's alerting semantics differ
+   * MNM rule type. Immutable -- the rule's alerting semantics differ
    * entirely per type, so changing it triggers a replacement.
    */
   type: RuleType;
@@ -119,12 +119,12 @@ export interface RuleAttributes {
 export type Rule = Resource<TypeId, RuleProps, RuleAttributes, never, Providers>;
 
 /**
- * A Magic Network Monitoring (MNM) rule — alerts when traffic to a set of
+ * A Magic Network Monitoring (MNM) rule -- alerts when traffic to a set of
  * IPv4 prefixes exceeds a static threshold (`threshold`), deviates from the
  * learned baseline (`zscore`), or matches advanced DDoS criteria
  * (`advanced_ddos`, Magic Transit only).
  *
- * Rules require the account's MNM configuration to exist first — pass the
+ * Rules require the account's MNM configuration to exist first -- pass the
  * Config resource's `accountId` output as this rule's `accountId` to
  * sequence the deployment. Rule names are unique per account; the rule
  * `type` is immutable and changing it triggers a replacement.
@@ -186,7 +186,7 @@ export const RuleProvider = () =>
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;
-      // The rule type is immutable — alerting semantics differ entirely.
+      // The rule type is immutable -- alerting semantics differ entirely.
       const oldType =
         output?.type ?? (olds !== undefined && isResolved(olds) ? olds.type : undefined);
       if (oldType !== undefined && oldType !== news.type) {
@@ -216,7 +216,7 @@ export const RuleProvider = () =>
       }
 
       // Cold read: rule names are unique per account, so an exact name
-      // match identifies the rule. We cannot prove we created it — brand
+      // match identifies the rule. We cannot prove we created it -- brand
       // it `Unowned` so takeover is gated behind the adopt policy.
       const name = yield* createRuleName(id, olds?.name);
       const match = yield* findByName(acct, name);
@@ -233,7 +233,7 @@ export const RuleProvider = () =>
       const accountId = (news.accountId as string | undefined) ?? defaultAccountId;
       const name = yield* createRuleName(id, news.name);
 
-      // 1. Observe — the rule id cached on `output` is a hint, not a
+      // 1. Observe -- the rule id cached on `output` is a hint, not a
       //    guarantee: a missing rule falls through to the name scan and
       //    then to create.
       let observed = output?.ruleId ? yield* getRule(accountId, output.ruleId) : undefined;
@@ -241,7 +241,7 @@ export const RuleProvider = () =>
         observed = yield* findByName(accountId, name);
       }
 
-      // 2. Ensure — create when missing. A concurrent create surfaces as
+      // 2. Ensure -- create when missing. A concurrent create surfaces as
       //    `DuplicateMnmRuleName` (Cloudflare code 1008): converge by
       //    re-scanning for the rule that won the race.
       if (!observed) {
@@ -279,7 +279,7 @@ export const RuleProvider = () =>
         return toAttributes(observed, accountId);
       }
 
-      // 3. Sync — diff observed cloud state against desired; the PATCH
+      // 3. Sync -- diff observed cloud state against desired; the PATCH
       //    takes a full body, so send everything but skip the call
       //    entirely on a no-op.
       const dirty =
@@ -312,14 +312,14 @@ export const RuleProvider = () =>
         zscoreTarget: news.zscoreTarget,
         prefixMatch: news.prefixMatch,
       });
-      // Cloudflare omits `id` from the PATCH response body — carry the
+      // Cloudflare omits `id` from the PATCH response body -- carry the
       // observed id through.
       return toAttributes({ ...patched, id: patched.id ?? ruleId }, accountId);
     }),
 
     delete: Effect.fn(function* ({ output }) {
       yield* mnm.deleteRule({ accountId: output.accountId, ruleId: output.ruleId }).pipe(
-        // Already gone (`MnmRuleNotFound`, Cloudflare code 1009) — also
+        // Already gone (`MnmRuleNotFound`, Cloudflare code 1009) -- also
         // covers Cloudflare cascading rule deletion when the account's
         // MNM config is deleted first.
         Effect.catchTag("MnmRuleNotFound", () => Effect.void),
@@ -330,7 +330,7 @@ export const RuleProvider = () =>
     // account. `listRules` paginates in "single" mode, so collect every
     // page and flatten its `result` array, hydrating each item into the
     // exact `read` Attributes shape. Accounts not onboarded to Magic
-    // Network Monitoring reject the route with `Forbidden` (HTTP 403) —
+    // Network Monitoring reject the route with `Forbidden` (HTTP 403) --
     // treat that as "nothing to list" rather than an error.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -385,8 +385,8 @@ const samePrefixes = (observed: readonly string[], desired: readonly string[]) =
   [...observed].sort().join(",") === [...desired].sort().join(",");
 
 /**
- * Cloudflare normalizes durations to Go notation on read (`1m` → `1m0s`,
- * `60m` → `1h0m0s`) — map the observed value back to the prop vocabulary
+ * Cloudflare normalizes durations to Go notation on read (`1m` -> `1m0s`,
+ * `60m` -> `1h0m0s`) -- map the observed value back to the prop vocabulary
  * for diffing.
  */
 const normalizeDuration = (duration: string | null | undefined): RuleDuration | undefined => {

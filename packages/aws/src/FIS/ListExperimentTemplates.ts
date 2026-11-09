@@ -5,13 +5,13 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `fis:ListExperimentTemplates`.
  *
- * Enumerates the account's experiment templates — the catalog a chaos
+ * Enumerates the account's experiment templates -- the catalog a chaos
  * orchestrator picks its next run from. Provide the implementation with
  * `Effect.provide(AWS.FIS.ListExperimentTemplatesHttp)`.
  * ### Inspecting Templates
  * **Example:** List the Account's Templates
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listExperimentTemplates = yield* AWS.FIS.ListExperimentTemplates();
  *
  * // runtime

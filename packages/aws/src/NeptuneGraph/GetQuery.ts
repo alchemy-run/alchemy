@@ -15,7 +15,7 @@ import type { Graph } from "./Graph.ts";
  * const getQuery = yield* NeptuneGraph.GetQuery(graph);
  *
  * const status = yield* getQuery({ queryId });
- * // status.state → "RUNNING" | "WAITING" | "CANCELLING"
+ * // status.state -> "RUNNING" | "WAITING" | "CANCELLING"
  * ```
  *
  * @binding

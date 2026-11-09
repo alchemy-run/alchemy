@@ -53,12 +53,12 @@ export type StreamProps = {
   /**
    * Stream id (the `{stream}` segment of
    * `projects/{project}/locations/{location}/streams/{stream}`). If
-   * omitted, a unique RFC1035 name is generated. Immutable — changing it
+   * omitted, a unique RFC1035 name is generated. Immutable -- changing it
    * replaces the stream.
    */
   streamId?: string;
   /**
-   * Region (`us-central1`, …). Immutable — changing it replaces the
+   * Region (`us-central1`, ...). Immutable -- changing it replaces the
    * stream. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -97,7 +97,7 @@ export type StreamProps = {
   backfillNone?: Record<string, never>;
   /**
    * Customer-managed Cloud KMS key used to encrypt stream data.
-   * Immutable — changing it replaces the stream.
+   * Immutable -- changing it replaces the stream.
    */
   customerManagedEncryptionKey?: string;
   /**
@@ -105,7 +105,7 @@ export type StreamProps = {
    */
   ruleSets?: ReadonlyArray<RuleSet>;
   /**
-   * Desired stream state (`NOT_STARTED`, `RUNNING`, `PAUSED`, …).
+   * Desired stream state (`NOT_STARTED`, `RUNNING`, `PAUSED`, ...).
    */
   state?: StreamState;
   /**
@@ -178,7 +178,7 @@ export interface StreamLookup {
    */
   streamId: string;
   /**
-   * Region (`us-central1`, …). `US-CENTRAL1` is accepted and normalized to
+   * Region (`us-central1`, ...). `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    */
   location?: string;

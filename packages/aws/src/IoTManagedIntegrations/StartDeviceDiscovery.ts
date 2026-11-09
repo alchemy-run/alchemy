@@ -19,7 +19,7 @@ export interface StartDeviceDiscoveryRequest extends mi.StartDeviceDiscoveryRequ
  * ### Discovering Devices
  * **Example:** Start a Zigbee Discovery Scan
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const startDiscovery = yield* IoTManagedIntegrations.StartDeviceDiscovery();
  *
  * // runtime

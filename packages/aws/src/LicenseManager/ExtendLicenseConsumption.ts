@@ -9,7 +9,7 @@ export interface ExtendLicenseConsumptionRequest
   extends licensemanager.ExtendLicenseConsumptionRequest {}
 
 /**
- * Runtime binding for `license-manager:ExtendLicenseConsumption` — extend
+ * Runtime binding for `license-manager:ExtendLicenseConsumption` -- extend
  * a `PROVISIONAL` checkout's expiration before it lapses, keeping a
  * long-running consumer's entitlement active.
  *

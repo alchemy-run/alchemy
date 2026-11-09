@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `mediatailor:StopChannel` — stop a running
+ * Runtime binding for `mediatailor:StopChannel` -- stop a running
  * channel-assembly channel.
  *
  * Channel names are runtime parameters, so the binding is account-level and

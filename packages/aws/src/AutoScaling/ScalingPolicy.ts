@@ -144,8 +144,8 @@ export const ScalingPolicyProvider = () =>
 
       // Derive the group name from either spelling of `autoScalingGroup`. A
       // whole AutoScalingGroup resource resolves to its bare Attributes
-      // before reaching the provider — the resource `Type` marker does not
-      // survive resolution — so narrow on the attributes shape, never on
+      // before reaching the provider -- the resource `Type` marker does not
+      // survive resolution -- so narrow on the attributes shape, never on
       // `Type`. May also receive `undefined`: an Output-valued
       // `autoScalingGroup` doesn't survive a `creating`-state round-trip
       // (it deserializes as `undefined`), and recovery paths hand those
@@ -211,7 +211,7 @@ export const ScalingPolicyProvider = () =>
           const news = _news as typeof olds;
           const oldName = yield* toName(id, olds ?? {});
           const newName = yield* toName(id, news ?? {});
-          // ASG change → replace, but only when both sides are known — a
+          // ASG change -> replace, but only when both sides are known -- a
           // half-created state row may have lost an Output-valued
           // `autoScalingGroup`, and an unknown old ASG must fall through to
           // the create/update recovery path rather than force a replacement.
@@ -248,7 +248,7 @@ export const ScalingPolicyProvider = () =>
             output?.autoScalingGroupName ?? toAutoScalingGroupName(news.autoScalingGroup);
           const policyName = output?.policyName ?? (yield* toName(id, news));
 
-          // Ensure + Sync — `putScalingPolicy` is the single
+          // Ensure + Sync -- `putScalingPolicy` is the single
           // create-or-update API for a scaling policy. It's idempotent on
           // matching params and overwrites policy type / target tracking
           // config / estimated warmup on differences, so we issue it
@@ -267,7 +267,7 @@ export const ScalingPolicyProvider = () =>
             EstimatedInstanceWarmup: toSeconds(news.estimatedInstanceWarmup),
           } as any);
 
-          // Observe final state — re-read so the returned attributes
+          // Observe final state -- re-read so the returned attributes
           // reflect the live cloud state (including the generated
           // policyArn and any associated alarm names).
           const policy = yield* describePolicy({

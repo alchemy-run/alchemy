@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `personalize:DescribeDatasetImportJob` — Polls a bulk dataset import job for completion — pairs with
+ * Runtime binding for `personalize:DescribeDatasetImportJob` -- Polls a bulk dataset import job for completion -- pairs with
  * {@link CreateDatasetImportJob} in the MLOps retraining loop.
  * Provide the implementation with
  * `Effect.provide(AWS.Personalize.DescribeDatasetImportJobHttp)`.

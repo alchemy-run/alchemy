@@ -75,7 +75,7 @@ export const HostServiceAccountProvider = () =>
       return toAttrs(existing, env.project);
     }),
 
-    // Host accounts are minted by their host (`GCP.Run.Service`, …); this
+    // Host accounts are minted by their host (`GCP.Run.Service`, ...); this
     // resource only exists so `nuke` can list and delete leaked ones.
     reconcile: Effect.fn(function* ({ id, output }) {
       const env = yield* GcpEnvironment.current;

@@ -17,7 +17,7 @@ export interface RepositoryLinkProps {
    */
   connectionArn: string;
   /**
-   * Owner ID of the repository — the GitHub organization/user or GitLab
+   * Owner ID of the repository -- the GitHub organization/user or GitLab
    * group/user that owns the repository. Changing the owner replaces the
    * link.
    */
@@ -78,7 +78,7 @@ export type RepositoryLinkLookup =
     };
 
 /**
- * An AWS CodeConnections repository link — associates a connection with a
+ * An AWS CodeConnections repository link -- associates a connection with a
  * specific external Git repository so Git sync can monitor and sync changes
  * (e.g. CloudFormation git sync).
  *
@@ -131,7 +131,7 @@ export const RepositoryLinkProvider = () =>
       });
 
       /**
-       * Find a repository link by its identity — owner + repository name
+       * Find a repository link by its identity -- owner + repository name
        * (getRepositoryLink only accepts an ID).
        */
       const findByIdentity = Effect.fn(function* (ownerId: string, repositoryName: string) {
@@ -165,7 +165,7 @@ export const RepositoryLinkProvider = () =>
 
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
-          // The linked repository is the link's identity — replace on change.
+          // The linked repository is the link's identity -- replace on change.
           // Connection and encryption key are mutable via UpdateRepositoryLink.
           if (
             (news?.ownerId ?? undefined) !== (olds?.ownerId ?? undefined) ||
@@ -198,12 +198,12 @@ export const RepositoryLinkProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = output?.repositoryLinkId
             ? yield* getById(output.repositoryLinkId)
             : yield* findByIdentity(news.ownerId, news.repositoryName);
 
-          // 2. Ensure — create if missing; tolerate the AlreadyExists race.
+          // 2. Ensure -- create if missing; tolerate the AlreadyExists race.
           if (observed === undefined) {
             observed = yield* codeconnections
               .createRepositoryLink({
@@ -219,7 +219,7 @@ export const RepositoryLinkProvider = () =>
                   findByIdentity(news.ownerId, news.repositoryName).pipe(
                     Effect.flatMap((link) =>
                       link === undefined
-                        ? // The race lost and the winner is not visible yet —
+                        ? // The race lost and the winner is not visible yet --
                           // surface the typed conflict; the engine retries.
                           Effect.fail(error)
                         : Effect.succeed(link),
@@ -229,7 +229,7 @@ export const RepositoryLinkProvider = () =>
               );
           }
 
-          // 3. Sync — connection + encryption key, diffed against OBSERVED
+          // 3. Sync -- connection + encryption key, diffed against OBSERVED
           // cloud state; skip the API entirely on no-op.
           if (
             observed.ConnectionArn !== news.connectionArn ||
@@ -243,7 +243,7 @@ export const RepositoryLinkProvider = () =>
             observed = updated.RepositoryLinkInfo;
           }
 
-          // 4. Sync tags — diff against OBSERVED cloud tags.
+          // 4. Sync tags -- diff against OBSERVED cloud tags.
           yield* syncResourceTags(observed.RepositoryLinkArn, desiredTags);
 
           yield* session.note(`${news.ownerId}/${news.repositoryName}`);
@@ -251,7 +251,7 @@ export const RepositoryLinkProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // Sync configurations on the link must be deleted first — retry
+          // Sync configurations on the link must be deleted first -- retry
           // the dependency violation while downstream deletions land.
           yield* codeconnections
             .deleteRepositoryLink({

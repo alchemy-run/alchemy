@@ -108,11 +108,11 @@ export type AutonomousDatabaseProps = {
    * Autonomous Database id (the `{autonomous_database}` segment of
    * `projects/{project}/locations/{location}/autonomousDatabases/{autonomous_database}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
-   * and logical id. Immutable — changing it replaces the database.
+   * and logical id. Immutable -- changing it replaces the database.
    */
   autonomousDatabaseId?: string;
   /**
-   * Region (`us-central1`, `us-east4`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east4`, ...). Immutable -- changing it
    * replaces the database. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -171,7 +171,7 @@ export type AutonomousDatabaseProps = {
   labels?: Record<string, string>;
   /**
    * Database properties. Flattened aliases (`licenseType`,
-   * `dbWorkload`, …) are also accepted on the resource and win over
+   * `dbWorkload`, ...) are also accepted on the resource and win over
    * this nested object when both are set.
    */
   properties?: AutonomousDatabasePropertiesInput;
@@ -273,7 +273,7 @@ export interface AutonomousDatabaseLookup {
    */
   autonomousDatabaseId: string;
   /**
-   * Region (`us-central1`, `us-east4`, …). `US-CENTRAL1` is accepted and
+   * Region (`us-central1`, `us-east4`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;

@@ -26,7 +26,7 @@ export interface CreateWhatsAppMessageTemplateFromLibraryRequest extends Omit<
  * ### Managing Message Templates
  * **Example:** Create a Template from Meta's Library
  * ```typescript
- * // init — bind the operation to the linked WABA
+ * // init -- bind the operation to the linked WABA
  * const createFromLibrary = yield* AWS.SocialMessaging.CreateWhatsAppMessageTemplateFromLibrary(account);
  *
  * // runtime

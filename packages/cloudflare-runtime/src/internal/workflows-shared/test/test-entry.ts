@@ -3,7 +3,7 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
 import type { WorkflowEvent, WorkflowStep } from "cloudflare:workers";
 
-// Test entry point — re-exports everything from src/index.ts and adds
+// Test entry point -- re-exports everything from src/index.ts and adds
 // a TestWorkflow class that can be bound as USER_WORKFLOW via serviceBindings.
 // This allows the workflow entrypoint to survive DO aborts (unlike the old
 // setWorkflowEntrypoint pattern which manually mutated instance.env).
@@ -37,7 +37,7 @@ export class TestWorkflow extends WorkerEntrypoint {
   async run(event: Readonly<WorkflowEvent<unknown>>, step: WorkflowStep): Promise<unknown> {
     if (!__testWorkflowCallback) {
       throw new Error(
-        "TestWorkflow callback not set — call setTestWorkflowCallback() before running the workflow",
+        "TestWorkflow callback not set \u2014 call setTestWorkflowCallback() before running the workflow",
       );
     }
     return await __testWorkflowCallback(event, step);

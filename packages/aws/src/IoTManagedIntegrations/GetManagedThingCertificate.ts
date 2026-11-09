@@ -8,7 +8,7 @@ import type { ManagedThing } from "./ManagedThing.ts";
  * action `iotmanagedintegrations:GetManagedThingCertificate`), scoped to
  * one {@link ManagedThing}.
  *
- * Reads the (public) certificate PEM the bound device authenticates with —
+ * Reads the (public) certificate PEM the bound device authenticates with --
  * useful for fleet audit and certificate-rotation tooling. Provide the
  * implementation with
  * `Effect.provide(AWS.IoTManagedIntegrations.GetManagedThingCertificateHttp)`.

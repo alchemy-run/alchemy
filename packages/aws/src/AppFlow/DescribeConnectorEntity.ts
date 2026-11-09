@@ -20,11 +20,11 @@ export interface DescribeConnectorEntityRequest extends Omit<
  * ### Discovering Connector Entities
  * **Example:** Describe an Entity's Fields
  * ```typescript
- * // init — bind the operation to the connector profile
+ * // init -- bind the operation to the connector profile
  * const describeConnectorEntity =
  *   yield* AWS.AppFlow.DescribeConnectorEntity(profile);
  *
- * // runtime — read the entity's field metadata
+ * // runtime -- read the entity's field metadata
  * const result = yield* describeConnectorEntity({
  *   connectorEntityName: "Account",
  * });

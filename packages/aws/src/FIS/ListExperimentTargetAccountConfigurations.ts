@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `fis:ListExperimentTargetAccountConfigurations`.
  *
  * Lists the target account configurations a multi-account experiment
- * resolved — every account the experiment injects faults into. Provide the
+ * resolved -- every account the experiment injects faults into. Provide the
  * implementation with
  * `Effect.provide(AWS.FIS.ListExperimentTargetAccountConfigurationsHttp)`.
  * ### Multi-Account Experiments
  * **Example:** List an Experiment's Target Accounts
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listTargetAccounts =
  *   yield* AWS.FIS.ListExperimentTargetAccountConfigurations();
  *

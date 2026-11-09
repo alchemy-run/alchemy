@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `textract:StartLendingAnalysis` — start an
+ * Runtime binding for `textract:StartLendingAnalysis` -- start an
  * asynchronous lending-document analysis job (classifies pages and routes
  * them to the right extraction model) for a document stored in S3. Poll
  * the returned `JobId` with `GetLendingAnalysis` /

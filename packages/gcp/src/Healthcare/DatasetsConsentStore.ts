@@ -30,7 +30,7 @@ export type DatasetsConsentStoreProps = {
   /**
    * Parent dataset. Full name
    * `projects/{project}/locations/{location}/datasets/{dataset}` or the
-   * dataset id (combined with `location`). Immutable — changing it
+   * dataset id (combined with `location`). Immutable -- changing it
    * replaces the consent store.
    */
   dataset: string;
@@ -41,7 +41,7 @@ export type DatasetsConsentStoreProps = {
   location?: string;
   /**
    * Consent store id. Must match letters, numbers, underscores, hyphens,
-   * and periods; 1-256 characters. Immutable — changing it replaces the
+   * and periods; 1-256 characters. Immutable -- changing it replaces the
    * store.
    */
   consentStoreId?: string;

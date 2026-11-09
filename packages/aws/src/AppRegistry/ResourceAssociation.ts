@@ -133,7 +133,7 @@ export const ResourceAssociationProvider = () =>
 
       return ResourceAssociation.Provider.of({
         stables: ["applicationId", "applicationArn", "resourceType", "resourceName", "resourceArn"],
-        // The application/resource pair IS the association's identity —
+        // The application/resource pair IS the association's identity --
         // changing either side replaces it. `options` is synced in place.
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
@@ -172,7 +172,7 @@ export const ResourceAssociationProvider = () =>
           };
         }),
         reconcile: Effect.fn(function* ({ news, session }) {
-          // 1. OBSERVE — resolve the application; a missing parent surfaces
+          // 1. OBSERVE -- resolve the application; a missing parent surfaces
           // its typed ResourceNotFoundException.
           const application = yield* appregistry.getApplication({
             application: news.application,
@@ -190,12 +190,12 @@ export const ResourceAssociationProvider = () =>
 
           let observed = yield* observeAssociation(applicationId, news.resourceType, news.resource);
 
-          // 2. ENSURE — associate when missing; tolerate a concurrent
+          // 2. ENSURE -- associate when missing; tolerate a concurrent
           // associate race (ConflictException).
           if (observed?.resource === undefined) {
             yield* associate;
           } else if (news.options !== undefined && !sameOptions(observed.options, news.options)) {
-            // 3. SYNC options — the API has no update; converge by
+            // 3. SYNC options -- the API has no update; converge by
             // re-creating the association in place.
             yield* appregistry
               .disassociateResource({
@@ -207,7 +207,7 @@ export const ResourceAssociationProvider = () =>
             yield* associate;
           }
 
-          // 4. RETURN — re-read with a bounded wait for the association to
+          // 4. RETURN -- re-read with a bounded wait for the association to
           // become visible.
           observed = yield* observeAssociation(
             applicationId,

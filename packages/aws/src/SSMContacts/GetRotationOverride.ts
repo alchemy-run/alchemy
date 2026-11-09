@@ -6,7 +6,7 @@ import type { Rotation } from "./Rotation.ts";
 /**
  * Runtime binding for `ssm-contacts:GetRotationOverride`.
  *
- * Read a rotation override of the bound rotation — its replacement
+ * Read a rotation override of the bound rotation -- its replacement
  * contacts and time window. The rotation's ARN is injected as
  * `RotationId`.
  * Provide the implementation with

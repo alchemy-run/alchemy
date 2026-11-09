@@ -30,7 +30,7 @@ import { type TunnelAuth } from "./TunnelBinding.ts";
  * @remarks
  *
  * `WriteTunnel` is a single identifier that is simultaneously the binding's
- * Context tag, its type, and the callable — `yield* Cloudflare.Tunnel.WriteTunnel()`.
+ * Context tag, its type, and the callable -- `yield* Cloudflare.Tunnel.WriteTunnel()`.
  *
  * ### Mutating tunnels at runtime
  * **Example:** Bind the write client

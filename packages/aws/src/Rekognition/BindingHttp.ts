@@ -4,13 +4,13 @@ import * as AWSBindings from "../AWSBindings.ts";
 /**
  * Shared scaffolding for AWS Rekognition HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, makeRekognitionHttpBinding({ … }))` over the
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, makeRekognitionHttpBinding({ ... }))` over the
  * builder below. Everything except the operation and the IAM action list is
  * boilerplate: Rekognition's image/video analysis and collection data-plane
  * IAM actions are granted on `*` because the resources they touch
- * (collections, users, jobs) are routinely created at runtime — e.g. a
- * collection per application tenant — so their identifiers are unknown at
+ * (collections, users, jobs) are routinely created at runtime -- e.g. a
+ * collection per application tenant -- so their identifiers are unknown at
  * deploy time.
  */
 export const makeRekognitionHttpBinding = <I, A, E, R>(options: {

@@ -59,7 +59,7 @@ export const DEFAULT_LOCAL_ENDPOINT = `http://localhost:${Floci.DEFAULT_FLOCI_PO
 
 /**
  * Dummy account stamped on every floci environment.
- * A custom `AWS_ENDPOINT_URL` on env/sso/login credentials does NOT use this —
+ * A custom `AWS_ENDPOINT_URL` on env/sso/login credentials does NOT use this --
  * those keep the real account from STS / `AWS_ACCOUNT_ID`.
  */
 export const LOCAL_ACCOUNT_ID = "000000000000";
@@ -193,7 +193,7 @@ interface AwsCredentials {
 /**
  * An explicitly-set `AWS_REGION` env var wins over the region recorded in an
  * AWS CLI profile (`~/.aws/config`) or in stored credentials. `AWS_DEFAULT_REGION`
- * deliberately does NOT override — it is a *default* for when no region is
+ * deliberately does NOT override -- it is a *default* for when no region is
  * configured anywhere, and the profile's region is explicit configuration.
  */
 export const applyEnvRegionOverride = <C extends { region: string }>(
@@ -234,8 +234,8 @@ export const getAccountId = ({
         Region.of(region),
         // Provide `Endpoint.none` rather than leaving it unset: falling
         // through to the ambient `Endpoint.fromEnvironment` reads it off
-        // AWSEnvironment — the very service this STS call is
-        // constructing — and deadlocks the fiber on its own in-flight
+        // AWSEnvironment -- the very service this STS call is
+        // constructing -- and deadlocks the fiber on its own in-flight
         // cache (no I/O, no timer, no output). Same reason as
         // `Region.of` above.
         Endpoint.none,
@@ -359,7 +359,7 @@ export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>(
 
     // The declared requirements are the union of the interactive path
     // (ChildProcessSpawner for `aws sso login`) and `configureWith`'s
-    // (FileSystem/Path for ~/.aws/config probing) — the contract shares one
+    // (FileSystem/Path for ~/.aws/config probing) -- the contract shares one
     // ConfigureReq type parameter between the two entry points.
     const configureCredentials = (): Effect.Effect<
       AwsAuthConfig,
@@ -446,7 +446,7 @@ export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>(
                 message: `AWS SSO profile '${ssoProfile}' was not found in ~/.aws/config. Configure it with \`aws configure sso\` first, then log in. ${refreshHint(AWS_AUTH_PROVIDER_NAME, profileName)}`,
               });
             }
-            // Nothing is persisted for SSO — credentials come from the AWS
+            // Nothing is persisted for SSO -- credentials come from the AWS
             // SSO cache. `aws sso login` is interactive, so it is NOT run
             // here; the user runs `alchemy profile refresh` afterwards.
             return { method: "sso" as const, ssoProfile };
@@ -461,7 +461,7 @@ export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>(
             );
             const loginProfile = storedValueText(values.loginProfile) ?? "";
             yield* loadLoginProfile(loginProfile);
-            // Nothing is persisted — the AWS CLI owns the console session.
+            // Nothing is persisted -- the AWS CLI owns the console session.
             // `aws login` is interactive, so it is NOT run here; the user
             // runs `alchemy profile refresh` afterwards.
             return { method: "console-login" as const, loginProfile };
@@ -998,8 +998,8 @@ const loginSSO = (
         provider: "AWS",
         waitingLabel:
           authorizationMethod === "device"
-            ? "waiting for device authorization (up to 5 minutes)…"
-            : "waiting for browser authorization (up to 5 minutes)…",
+            ? "waiting for device authorization (up to 5 minutes)\u2026"
+            : "waiting for browser authorization (up to 5 minutes)\u2026",
         url,
         code,
         waitFor: Fiber.join(processFiber),
@@ -1014,7 +1014,7 @@ const loginSSO = (
  * CLI's URL prompt into the same authorization screen as SSO login and
  * passes `--region` so the CLI does not take over the terminal to ask.
  * The profile's region is written afterwards when it did not already
- * have one — `aws login` only persists a region it prompted for itself.
+ * have one -- `aws login` only persists a region it prompted for itself.
  */
 const loginConsole = (config: Extract<AwsAuthConfig, { method: "console-login" }>) =>
   Effect.scoped(
@@ -1092,7 +1092,7 @@ const loginConsole = (config: Extract<AwsAuthConfig, { method: "console-login" }
       );
       yield* Interaction.browserLogin({
         provider: "AWS",
-        waitingLabel: "waiting for browser authorization (up to 10 minutes)…",
+        waitingLabel: "waiting for browser authorization (up to 10 minutes)\u2026",
         url,
         waitFor: Fiber.join(processFiber),
       });
@@ -1104,7 +1104,7 @@ const loginConsole = (config: Extract<AwsAuthConfig, { method: "console-login" }
   );
 
 /**
- * `aws sso logout` only clears AWS CLI's own caches — it does not know about the
+ * `aws sso logout` only clears AWS CLI's own caches -- it does not know about the
  * `<sha1(sso_session)>.credentials.json` file that `@distilled.cloud/aws`
  * writes alongside the SSO token. Without this cleanup, `loadProfileCredentials`
  * short-circuits on the stale distilled cache file after logout and appears to

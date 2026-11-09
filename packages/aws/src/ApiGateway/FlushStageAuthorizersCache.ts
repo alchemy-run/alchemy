@@ -8,7 +8,7 @@ import type { ApiGatewayStage } from "./Stage.ts";
  * (`apigateway:DELETE` on `/restapis/{id}/stages/{name}/cache/authorizers`).
  *
  * Bind a {@link Stage} inside a function runtime to drop cached authorizer
- * verdicts — e.g. immediately revoking access after a permission change,
+ * verdicts -- e.g. immediately revoking access after a permission change,
  * without waiting out `authorizerResultTtl`. Provide
  * `ApiGateway.FlushStageAuthorizersCacheHttp` on the Function effect to
  * implement the binding.

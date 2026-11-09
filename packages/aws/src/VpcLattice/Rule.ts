@@ -33,16 +33,16 @@ export type RuleAction = vpclattice.RuleAction;
 export interface RuleProps {
   /**
    * ID or ARN of the lattice service the rule's listener belongs to.
-   * Immutable — changing it replaces the rule.
+   * Immutable -- changing it replaces the rule.
    */
   serviceIdentifier: string;
   /**
-   * ID or ARN of the listener the rule belongs to. Immutable — changing it
+   * ID or ARN of the listener the rule belongs to. Immutable -- changing it
    * replaces the rule.
    */
   listenerIdentifier: string;
   /**
-   * Name of the rule. If omitted, a unique name is generated. Immutable —
+   * Name of the rule. If omitted, a unique name is generated. Immutable --
    * changing it replaces the rule.
    */
   name?: string;
@@ -52,7 +52,7 @@ export interface RuleProps {
    */
   match: RuleMatch;
   /**
-   * Rule priority (1–100). Lower numbers are evaluated first; each rule on a
+   * Rule priority (1-100). Lower numbers are evaluated first; each rule on a
    * listener must have a unique priority.
    */
   priority: number;
@@ -105,7 +105,7 @@ export interface Rule extends Resource<
 > {}
 
 /**
- * An Amazon VPC Lattice listener rule — matches HTTP requests by method,
+ * An Amazon VPC Lattice listener rule -- matches HTTP requests by method,
  * path, or headers and forwards them to target groups (or answers with a
  * fixed response), evaluated in priority order before the listener's default
  * action.
@@ -243,12 +243,12 @@ export const RuleProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — prefer the stable id cache, fall back to name lookup.
+          // Observe -- prefer the stable id cache, fall back to name lookup.
           let rule = output?.ruleId
             ? yield* observe(news.serviceIdentifier, news.listenerIdentifier, output.ruleId)
             : yield* findByName(news.serviceIdentifier, news.listenerIdentifier, name);
 
-          // Ensure — create if missing.
+          // Ensure -- create if missing.
           if (!rule?.arn || !rule.id) {
             rule = yield* retryOnConflict(
               vpclattice.createRule({
@@ -274,7 +274,7 @@ export const RuleProvider = () =>
             rule.priority !== news.priority ||
             JSON.stringify(rule.action) !== JSON.stringify(news.action)
           ) {
-            // Sync match/priority/action — all mutable in place.
+            // Sync match/priority/action -- all mutable in place.
             yield* retryOnConflict(
               vpclattice.updateRule({
                 serviceIdentifier: news.serviceIdentifier,

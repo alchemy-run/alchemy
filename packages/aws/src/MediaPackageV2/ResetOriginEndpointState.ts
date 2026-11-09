@@ -6,7 +6,7 @@ import type { OriginEndpoint } from "./OriginEndpoint.ts";
 /**
  * Runtime binding for `mediapackagev2:ResetOriginEndpointState`.
  *
- * Resets the packaging state of the bound {@link OriginEndpoint} — clearing
+ * Resets the packaging state of the bound {@link OriginEndpoint} -- clearing
  * its manifests and cached segments so playback restarts clean after the
  * channel's content was reset or replaced. The endpoint's group, channel,
  * and name are injected from the binding. Provide the implementation with
@@ -14,7 +14,7 @@ import type { OriginEndpoint } from "./OriginEndpoint.ts";
  * ### Resetting Ingest State
  * **Example:** Reset an Endpoint After Resetting Its Channel
  * ```typescript
- * // init — bind the operation to the endpoint
+ * // init -- bind the operation to the endpoint
  * const resetEndpoint =
  *   yield* AWS.MediaPackageV2.ResetOriginEndpointState(endpoint);
  *

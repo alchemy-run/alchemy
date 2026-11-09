@@ -14,7 +14,7 @@ export type KeyConfigurationProps = {
    * The number of days between automatic Access service key rotations.
    * Cloudflare accepts values between 21 and 372 days.
    *
-   * Mutable — converged in place via PUT.
+   * Mutable -- converged in place via PUT.
    */
   keyRotationIntervalDays: number;
 };
@@ -32,7 +32,7 @@ export type KeyConfigurationAttributes = {
    * The rotation interval the account had before Alchemy first managed it.
    * Restored on destroy, so deleting the resource puts the account back
    * the way it was found. `undefined` when Cloudflare reported no interval
-   * at adoption time — destroy then leaves the current interval in place.
+   * at adoption time -- destroy then leaves the current interval in place.
    */
   initialKeyRotationIntervalDays: number | undefined;
 };
@@ -49,7 +49,7 @@ export type KeyConfiguration = Resource<
  * The Cloudflare Zero Trust Access service-key rotation configuration for an
  * account (`/accounts/{account_id}/access/keys`).
  *
- * The key configuration is an account singleton — it always exists, so this
+ * The key configuration is an account singleton -- it always exists, so this
  * resource never creates or deletes anything physical. Reconcile PUTs the
  * rotation interval when the observed value differs from the desired one;
  * destroy restores the interval the account had before Alchemy first managed
@@ -92,7 +92,7 @@ export const KeyConfigurationProvider = () =>
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       // Per-account singleton: the key configuration always exists with a
-      // Cloudflare default and there is no enumeration API — read the one
+      // Cloudflare default and there is no enumeration API -- read the one
       // instance and return it as a one-element array. The observed
       // interval becomes the value restored on destroy (adoption read).
       const observed = yield* zeroTrust.getAccessKey({ accountId });
@@ -100,7 +100,7 @@ export const KeyConfigurationProvider = () =>
     }),
 
     diff: Effect.fn(function* ({ output }) {
-      // The configuration is an account singleton — its identity is the
+      // The configuration is an account singleton -- its identity is the
       // account. Moving accounts replaces (old account's interval is
       // restored as the old instance deletes).
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -115,7 +115,7 @@ export const KeyConfigurationProvider = () =>
       const acct = output?.accountId ?? accountId;
       const observed = yield* zeroTrust.getAccessKey({ accountId: acct });
       // The configuration is a singleton that always exists with a
-      // Cloudflare default — there is nothing to "own", so a cold read
+      // Cloudflare default -- there is nothing to "own", so a cold read
       // adopts freely (never `Unowned`). The observed interval at adoption
       // time becomes the value restored on destroy.
       const initial =
@@ -128,10 +128,10 @@ export const KeyConfigurationProvider = () =>
     reconcile: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
-      // 1. Observe — the configuration always exists; read the live value.
+      // 1. Observe -- the configuration always exists; read the live value.
       const observed = yield* zeroTrust.getAccessKey({ accountId });
 
-      // 2. Capture — the pre-management interval, restored on destroy.
+      // 2. Capture -- the pre-management interval, restored on destroy.
       //    `output` (including an adoption read) already carries it;
       //    otherwise this is our first touch and the observed interval is
       //    the account's original.
@@ -140,7 +140,7 @@ export const KeyConfigurationProvider = () =>
           ? output.initialKeyRotationIntervalDays
           : (observed.keyRotationIntervalDays ?? undefined);
 
-      // 3. Sync — PUT only when the observed interval differs.
+      // 3. Sync -- PUT only when the observed interval differs.
       if (observed.keyRotationIntervalDays === news.keyRotationIntervalDays) {
         return toAttributes(accountId, observed, initial);
       }
@@ -153,7 +153,7 @@ export const KeyConfigurationProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { accountId, initialKeyRotationIntervalDays } = output;
-      // Nothing physical to delete — restore the pre-management interval.
+      // Nothing physical to delete -- restore the pre-management interval.
       // If Cloudflare reported no interval at adoption time there is
       // nothing to restore to; leave the current value in place.
       if (initialKeyRotationIntervalDays === undefined) return;

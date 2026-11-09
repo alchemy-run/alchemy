@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Repository } from "./Repository.ts";
 
 /**
- * Request for {@link PutPackageOriginConfiguration} — `domain`, `domainOwner`, and
+ * Request for {@link PutPackageOriginConfiguration} -- `domain`, `domainOwner`, and
  * `repository` are injected from the bound {@link Repository}.
  */
 export interface PutPackageOriginConfigurationRequest extends Omit<
@@ -15,7 +15,7 @@ export interface PutPackageOriginConfigurationRequest extends Omit<
 /**
  * Runtime binding for `codeartifact:PutPackageOriginConfiguration`.
  *
- * Sets a package's origin controls — whether new versions can be published directly and whether versions can be ingested from upstream/external sources. Provide the implementation with
+ * Sets a package's origin controls -- whether new versions can be published directly and whether versions can be ingested from upstream/external sources. Provide the implementation with
  * `Effect.provide(AWS.CodeArtifact.PutPackageOriginConfigurationHttp)`.
  * ### Managing Package Origins
  * **Example:** Block Upstream Ingestion

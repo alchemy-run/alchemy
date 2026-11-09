@@ -36,7 +36,7 @@ export interface EnvironmentBlueprintConfigurationProps {
    */
   domainId: string;
   /**
-   * The managed environment blueprint to configure — a blueprint name
+   * The managed environment blueprint to configure -- a blueprint name
    * (e.g. `"DefaultDataLake"`, `"DefaultDataWarehouse"`) or a raw blueprint
    * identifier. Changing it triggers a replacement.
    */
@@ -105,7 +105,7 @@ export interface EnvironmentBlueprintConfiguration extends Resource<
 
 /**
  * The account/domain configuration of an Amazon DataZone environment
- * blueprint — enables a managed blueprint (like `DefaultDataLake`) in
+ * blueprint -- enables a managed blueprint (like `DefaultDataLake`) in
  * specific regions with the IAM roles DataZone should provision with.
  *
  * The blueprint itself is an AWS-managed definition; this resource owns only
@@ -248,7 +248,7 @@ export const EnvironmentBlueprintConfigurationProvider = () =>
         return { id: match.id, name: match.name };
       });
 
-      // A deleted configuration — or one inside a deleted domain — is
+      // A deleted configuration -- or one inside a deleted domain -- is
       // reported as AccessDeniedException, NOT ResourceNotFoundException:
       // DataZone evaluates domain-scoped authorization before existence.
       // Both mean "absent".
@@ -272,7 +272,7 @@ export const EnvironmentBlueprintConfigurationProvider = () =>
       return EnvironmentBlueprintConfiguration.Provider.of({
         stables: ["domainId", "environmentBlueprintId"],
 
-        // Configurations are keyed by their parent domain — there is no
+        // Configurations are keyed by their parent domain -- there is no
         // account-level enumeration without a domain identifier.
         list: () => Effect.succeed([]),
 
@@ -289,7 +289,7 @@ export const EnvironmentBlueprintConfigurationProvider = () =>
                   Effect.catchTags({
                     "AWS.DataZone.EnvironmentBlueprintNotFound": () => Effect.undefined,
                     // the domain itself may already be gone (reported as
-                    // NotFound or as AccessDenied — auth precedes existence)
+                    // NotFound or as AccessDenied -- auth precedes existence)
                     ResourceNotFoundException: () => Effect.undefined,
                     AccessDeniedException: () => Effect.undefined,
                   }),
@@ -297,7 +297,7 @@ export const EnvironmentBlueprintConfigurationProvider = () =>
               : undefined;
           if (blueprint === undefined) return undefined;
           const config = yield* getConfigurationOrUndefined(domainId, blueprint.id);
-          // An un-configured blueprint returns an empty configuration shell —
+          // An un-configured blueprint returns an empty configuration shell --
           // treat "no enabled regions and no roles" as absent.
           if (
             config === undefined ||
@@ -307,7 +307,7 @@ export const EnvironmentBlueprintConfigurationProvider = () =>
           ) {
             return undefined;
           }
-          // Blueprint configurations have no tags — ownership is tracked
+          // Blueprint configurations have no tags -- ownership is tracked
           // purely by identity.
           return {
             domainId: config.domainId,
@@ -359,7 +359,7 @@ export const EnvironmentBlueprintConfigurationProvider = () =>
           }
 
           // Observe, before DataZone can add it, where each role is not yet an
-          // administrator — those entries are ours to remove.
+          // administrator -- those entries are ours to remove.
           const lakeFormationAdmins = yield* Effect.filter(candidates, (entry) =>
             previous.some(same(entry))
               ? Effect.succeed(true)
@@ -368,7 +368,7 @@ export const EnvironmentBlueprintConfigurationProvider = () =>
                 ),
           );
 
-          // PutEnvironmentBlueprintConfiguration is a true upsert — one call
+          // PutEnvironmentBlueprintConfiguration is a true upsert -- one call
           // converges greenfield, update, and adoption alike.
           const config = yield* retryWhileRoleAssumeFails(
             datazone.putEnvironmentBlueprintConfiguration({
@@ -413,7 +413,7 @@ export const EnvironmentBlueprintConfigurationProvider = () =>
               Effect.catchTags({
                 ResourceNotFoundException: () => Effect.void,
                 // deleting a configuration whose domain is already gone
-                // surfaces as AccessDenied — auth is checked before existence.
+                // surfaces as AccessDenied -- auth is checked before existence.
                 AccessDeniedException: () => Effect.void,
               }),
             );

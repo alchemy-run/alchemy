@@ -41,7 +41,7 @@ export interface ModuleLoggingConfig {
    */
   enabled: boolean;
   /**
-   * Airflow log level — one of `CRITICAL`, `ERROR`, `WARNING`, `INFO`, `DEBUG`.
+   * Airflow log level -- one of `CRITICAL`, `ERROR`, `WARNING`, `INFO`, `DEBUG`.
    */
   logLevel: string;
 }
@@ -135,7 +135,7 @@ export interface EnvironmentProps {
    */
   schedulers?: number;
   /**
-   * Apache Airflow web server access mode — `PRIVATE_ONLY` (VPC-only endpoint)
+   * Apache Airflow web server access mode -- `PRIVATE_ONLY` (VPC-only endpoint)
    * or `PUBLIC_ONLY` (internet-accessible). Updateable in place.
    * @default "PRIVATE_ONLY"
    */
@@ -160,7 +160,7 @@ export interface EnvironmentProps {
   /**
    * Apache Airflow configuration overrides, keyed by
    * `section.option`, e.g. `{ "core.default_task_retries": "3" }`. Values
-   * carrying secrets (SMTP passwords, connection URIs, …) may be passed as
+   * carrying secrets (SMTP passwords, connection URIs, ...) may be passed as
    * `Redacted.Redacted<string>` so they never appear in logs. Updateable in
    * place.
    */
@@ -251,7 +251,7 @@ export interface EnvironmentLookup {
 }
 
 /**
- * An Amazon Managed Workflows for Apache Airflow (MWAA) environment — a fully
+ * An Amazon Managed Workflows for Apache Airflow (MWAA) environment -- a fully
  * managed Apache Airflow deployment that runs your DAGs.
  *
  * Environments take roughly 20-30 minutes to create and are billed hourly for
@@ -361,7 +361,7 @@ const configValue = (v: string | Redacted.Redacted<string> | undefined): string 
 
 // Compare desired Airflow configuration options against the observed ones.
 // Both sides may carry Redacted values (the props by choice, the observed
-// options because distilled decodes them as SensitiveString) — unwrap for the
+// options because distilled decodes them as SensitiveString) -- unwrap for the
 // comparison only.
 const sameConfigOptions = (
   a: Record<string, string | Redacted.Redacted<string>> | undefined,
@@ -506,10 +506,10 @@ export const EnvironmentProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...props.tags };
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* readEnvironment(name);
 
-          // 2. Ensure — create if missing. Create errors (invalid subnets,
+          // 2. Ensure -- create if missing. Create errors (invalid subnets,
           //    role, etc.) propagate so misconfiguration surfaces directly
           //    rather than as a confusing "not found" after the wait below.
           if (observed === undefined) {
@@ -546,7 +546,7 @@ export const EnvironmentProvider = () =>
               })
               .pipe(
                 // A freshly created execution role is not yet assumable by
-                // airflow-env.amazonaws.com (IAM eventual consistency) —
+                // airflow-env.amazonaws.com (IAM eventual consistency) --
                 // CreateEnvironment rejects it with "Failed to assume role" for
                 // several seconds. Retry bounded.
                 Effect.retry({
@@ -562,7 +562,7 @@ export const EnvironmentProvider = () =>
           // calls do not hit a conflict.
           observed = yield* waitForAvailable(name);
 
-          // 3. Sync — compute an update delta from OBSERVED state.
+          // 3. Sync -- compute an update delta from OBSERVED state.
           const update: mwaa.UpdateEnvironmentInput = { Name: name };
           let mutated = false;
           if (
@@ -685,7 +685,7 @@ export const EnvironmentProvider = () =>
             observed = yield* waitForAvailable(name);
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           const arn = observed.Arn;
           if (arn) {
             const observedTags = yield* readTags(arn);

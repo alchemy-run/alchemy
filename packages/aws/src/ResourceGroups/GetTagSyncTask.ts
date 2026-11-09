@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `resource-groups:GetTagSyncTask`.
  *
- * Reads one tag-sync task's detail — the synced tag key/value, the role it
+ * Reads one tag-sync task's detail -- the synced tag key/value, the role it
  * runs as, and its `ACTIVE`/`ERROR` status with the error message. The task
  * ARN is chosen per request (typically the `TaskArn` returned by
  * {@link StartTagSyncTask} or found via {@link ListTagSyncTasks}), so the

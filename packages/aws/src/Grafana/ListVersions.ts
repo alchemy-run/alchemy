@@ -6,8 +6,8 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `ListVersions` operation (IAM action
  * `grafana:ListVersions`).
  *
- * Lists the Grafana versions available when creating a workspace, or — with
- * a `workspaceId` — the versions an existing workspace can be upgraded to.
+ * Lists the Grafana versions available when creating a workspace, or -- with
+ * a `workspaceId` -- the versions an existing workspace can be upgraded to.
  * Provide the implementation with
  * `Effect.provide(AWS.Grafana.ListVersionsHttp)`.
  * ### Managing Configuration
@@ -16,7 +16,7 @@ import type * as Effect from "effect/Effect";
  * const listVersions = yield* Grafana.ListVersions();
  *
  * const { grafanaVersions } = yield* listVersions();
- * // grafanaVersions → ["10.4", "9.4", ...]
+ * // grafanaVersions -> ["10.4", "9.4", ...]
  * ```
  *
  * @binding

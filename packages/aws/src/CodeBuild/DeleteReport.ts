@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { ReportGroup } from "./ReportGroup.ts";
 
 /**
- * Runtime binding for `codebuild:DeleteReport` — deletes a report of the
+ * Runtime binding for `codebuild:DeleteReport` -- deletes a report of the
  * bound report group by report ARN.
  * ### Reading Reports
  * **Example:** Delete an Old Report

@@ -17,7 +17,7 @@ export interface CreateAccessControlConfigurationRequest extends Omit<
  *
  * Creates a named access-control configuration (user/group ACLs) on the
  * index. Kendra designed this for runtime use: re-apply access changes
- * to documents at query time without re-indexing them — e.g. revoke a
+ * to documents at query time without re-indexing them -- e.g. revoke a
  * departed user's access, then reference the returned `Id` from a
  * document's `AccessControlConfigurationId`.
  * Provide the implementation with

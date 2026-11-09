@@ -64,7 +64,7 @@ export type FirewallAction = {
 export type FirewallpolicyProps = {
   /**
    * Server-assigned policy id (the `{firewallpolicy}` segment of
-   * `projects/{project}/firewallpolicies/{firewallpolicy}`). Immutable —
+   * `projects/{project}/firewallpolicies/{firewallpolicy}`). Immutable --
    * changing it replaces the policy.
    */
   firewallpolicyId?: string;
@@ -117,7 +117,7 @@ export type Firewallpolicy = Resource<
  * A reCAPTCHA Enterprise firewall policy.
  *
  * Policies have no labels field and a server-assigned id, so only a
- * recorded policy can be read back. The policy id is assigned by Google —
+ * recorded policy can be read back. The policy id is assigned by Google --
  * changing `firewallpolicyId` replaces the policy. Path, description,
  * condition, and actions update in place.
  *

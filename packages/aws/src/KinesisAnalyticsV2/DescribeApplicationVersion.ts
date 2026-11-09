@@ -9,7 +9,7 @@ export interface DescribeApplicationVersionRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `kinesisanalytics:DescribeApplicationVersion` — reads
+ * Runtime binding for `kinesisanalytics:DescribeApplicationVersion` -- reads
  * the configuration of a specific version of the bound application, e.g. to
  * inspect what a rollback target looked like.
  * ### Observing the Application

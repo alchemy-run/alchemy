@@ -8,7 +8,7 @@ import type * as Effect from "effect/Effect";
 export interface CreateLicenseVersionRequest extends licensemanager.CreateLicenseVersionRequest {}
 
 /**
- * Runtime binding for `license-manager:CreateLicenseVersion` — publish a new
+ * Runtime binding for `license-manager:CreateLicenseVersion` -- publish a new
  * version of an existing seller-issued license (changed entitlements,
  * extended validity, a status flip to `AVAILABLE`/`DEACTIVATED`). Pass the
  * current version as `SourceVersion`.
@@ -21,7 +21,7 @@ export interface CreateLicenseVersionRequest extends licensemanager.CreateLicens
  * // init
  * const createLicenseVersion = yield* AWS.LicenseManager.CreateLicenseVersion();
  *
- * // runtime — read the current definition, publish an amended version
+ * // runtime -- read the current definition, publish an amended version
  * const { License } = yield* getLicense({ LicenseArn: licenseArn });
  * yield* createLicenseVersion({
  *   LicenseArn: licenseArn,

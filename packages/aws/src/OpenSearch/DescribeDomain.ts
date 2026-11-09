@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `DescribeDomain` operation (IAM action
  * `es:DescribeDomain`).
  *
- * Reads a domain's current status — endpoint, engine version, creation and processing state — e.g. an operational health check that verifies a domain is active before routing search traffic. Provide the implementation with
+ * Reads a domain's current status -- endpoint, engine version, creation and processing state -- e.g. an operational health check that verifies a domain is active before routing search traffic. Provide the implementation with
  * `Effect.provide(AWS.OpenSearch.DescribeDomainHttp)`.
  * ### Monitoring Domains
  * **Example:** Check a Domain's Status
@@ -14,7 +14,7 @@ import type * as Effect from "effect/Effect";
  * const describeDomain = yield* OpenSearch.DescribeDomain();
  *
  * const result = yield* describeDomain({ DomainName: name });
- * // result.DomainStatus.Processing → false
+ * // result.DomainStatus.Processing -> false
  * ```
  *
  * @binding

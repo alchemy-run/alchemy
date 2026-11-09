@@ -16,7 +16,7 @@ export const RAW_RE: RegExp = /(\?|&)raw(?:&|$)/;
  *
  * ```ts
  * import sql from "./schema.sql?raw";
- * //         ^ string — the file contents read as UTF-8
+ * //         ^ string -- the file contents read as UTF-8
  * ```
  *
  * This plugin only implements `?raw`. Vite's `?url` and `?inline`
@@ -51,7 +51,7 @@ export const rawPlugin = (): rolldown.Plugin => ({
         // out of source-map generation without making rolldown synthesize
         // a default one from the loaded code.
         map: { mappings: "" },
-        // NOTE: matches Vite — avoids a double `export default` if the
+        // NOTE: matches Vite -- avoids a double `export default` if the
         // file extension would otherwise be picked up by another loader
         // (e.g. `?raw&.json`).
         moduleType: "js",

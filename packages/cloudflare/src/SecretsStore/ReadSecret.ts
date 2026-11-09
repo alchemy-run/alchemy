@@ -12,7 +12,7 @@ import type { Secret } from "./Secret.ts";
  * current value.
  *
  * `ReadSecret` is a single identifier that is simultaneously the binding's
- * Context tag, its type, and the callable —
+ * Context tag, its type, and the callable --
  * `yield* Cloudflare.SecretsStore.ReadSecret(ApiKey)`.
  *
  * **Example:** Reading a secret at runtime

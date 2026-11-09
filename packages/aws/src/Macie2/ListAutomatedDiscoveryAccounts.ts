@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `macie2:ListAutomatedDiscoveryAccounts`.
  *
  * Retrieves the status of automated sensitive data discovery for one or more accounts.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.Macie2.ListAutomatedDiscoveryAccountsHttp)`.
  * ### Automated Discovery
  * **Example:** List Automated Discovery Accounts
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listAutomatedDiscoveryAccounts = yield* AWS.Macie2.ListAutomatedDiscoveryAccounts();
  *
  * // runtime

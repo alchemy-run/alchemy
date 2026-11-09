@@ -433,7 +433,7 @@ const hashOf = ({ source, id }: SourceRef): string => {
     hash = Math.imul(hash, 0x01000193) >>> 0;
   }
   // FNV-1a barely moves the high bits for ids that differ in their last characters
-  // (`b0`, `b1`, …): mix them in (murmur3's finalizer), so the tree fills evenly.
+  // (`b0`, `b1`, ...): mix them in (murmur3's finalizer), so the tree fills evenly.
   hash ^= hash >>> 16;
   hash = Math.imul(hash, 0x85ebca6b);
   hash ^= hash >>> 13;

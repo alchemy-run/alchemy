@@ -23,7 +23,7 @@ import { routePatternHost, routePatternUrl } from "./RoutePattern.ts";
 
 export interface WorkerRouteProps {
   /**
-   * Zone the route lives in. Stable — routes are scoped to a zone, so
+   * Zone the route lives in. Stable -- routes are scoped to a zone, so
    * changing the zone triggers a replacement.
    */
   zoneId: string;
@@ -32,7 +32,7 @@ export interface WorkerRouteProps {
    * `api.example.com/*`. The pattern must match a hostname inside the
    * zone identified by {@link zoneId}.
    *
-   * Mutable — Cloudflare's PUT endpoint accepts a new pattern in place.
+   * Mutable -- Cloudflare's PUT endpoint accepts a new pattern in place.
    * Declared as plain `string` (not `string`) so the reconciler
    * can locate an existing route by pattern after state loss.
    */
@@ -43,7 +43,7 @@ export interface WorkerRouteProps {
    * route disables Workers for matching requests (useful to opt a path
    * out of a broader wildcard route).
    *
-   * Mutable — updated in place.
+   * Mutable -- updated in place.
    */
   script?: string;
 }
@@ -58,8 +58,8 @@ export interface WorkerRouteAttributes {
   /** Worker script the route runs, or `undefined` for an opt-out route. */
   script: string | undefined;
   /**
-   * Origin serving the route's hostname — `https://<host>` when deployed,
-   * the local edge listener under `alchemy dev` — or `undefined` for a
+   * Origin serving the route's hostname -- `https://<host>` when deployed,
+   * the local edge listener under `alchemy dev` -- or `undefined` for a
    * wildcard host.
    */
   url?: string;
@@ -74,7 +74,7 @@ export type WorkerRoute = Resource<
 >;
 
 /**
- * A Workers Route — a zone-level mapping from a URL pattern to a Worker
+ * A Workers Route -- a zone-level mapping from a URL pattern to a Worker
  * script.
  *
  * Routes are the classic way to serve a Worker on a zone hostname or
@@ -106,7 +106,7 @@ export type WorkerRoute = Resource<
  *   script: worker.workerName,
  * });
  *
- * // Workers only run on proxied hostnames — give the host an origin.
+ * // Workers only run on proxied hostnames -- give the host an origin.
  * yield* Cloudflare.DNS.Record("ApiPlaceholder", {
  *   zoneId: zone.zoneId,
  *   name: "api.example.com",
@@ -119,7 +119,7 @@ export type WorkerRoute = Resource<
  * ### Disabling Workers on a path
  * **Example:** Opt a path out of a wildcard route
  * ```typescript
- * // No `script` — matching requests bypass Workers entirely.
+ * // No `script` -- matching requests bypass Workers entirely.
  * yield* Cloudflare.Workers.WorkerRoute("AssetsBypass", {
  *   zoneId: zone.zoneId,
  *   pattern: "example.com/assets/*",
@@ -170,7 +170,7 @@ export const WorkerRouteProviderLocal = () =>
             return { action: "update" } as const;
           }
           // Unchanged: re-register so a fresh dev session's edge serves it
-          // without the plan reporting an update — unless the hostname's
+          // without the plan reporting an update -- unless the hostname's
           // listener moved (a new session picks a new port).
           const registered = yield* register(output);
           return registered.url === output.url
@@ -241,7 +241,7 @@ export const WorkerRouteProviderLive = () =>
       let observed = output?.routeId ? yield* observeById(zoneId, output.routeId) : undefined;
 
       // 2. Fall back to scanning the zone for the pattern. Ownership has
-      //    already been verified upstream — `read` reports existing
+      //    already been verified upstream -- `read` reports existing
       //    routes as `Unowned` and the engine gates takeover behind the
       //    adopt policy before reconcile ever runs.
       if (!observed) {
@@ -250,7 +250,7 @@ export const WorkerRouteProviderLive = () =>
 
       // 3. Ensure. A duplicate-pattern failure means another actor (or a
       //    crashed previous reconcile) created the route between our
-      //    observation and now — treat it as a race and converge via PUT.
+      //    observation and now -- treat it as a race and converge via PUT.
       if (!observed) {
         observed = yield* workers.createRoute({ zoneId, pattern: news.pattern, script }).pipe(
           Effect.map(normalizeRoute),
@@ -266,7 +266,7 @@ export const WorkerRouteProviderLive = () =>
         );
       }
 
-      // 4. Sync — PUT resends the full desired body when the observed
+      // 4. Sync -- PUT resends the full desired body when the observed
       //    route drifts from the desired pattern/script.
       if (observed.pattern !== news.pattern || observed.script !== script) {
         observed = normalizeRoute(
@@ -353,7 +353,7 @@ const toAttributes = (observed: ObservedRoute, zoneId: string): WorkerRouteAttri
 const observeById = (zoneId: string, routeId: string) =>
   workers.getRoute({ zoneId, routeId }).pipe(
     Effect.map(normalizeRoute),
-    // A missing route surfaces as a 404 whose CF error code varies —
+    // A missing route surfaces as a 404 whose CF error code varies --
     // `RouteNotFound` (10009 or a bare 404 envelope) or `WorkerNotFound`
     // (10007, how some API versions tag a GET on a missing route). Both
     // are in `getRoute`'s typed union; swallow them so the reconciler

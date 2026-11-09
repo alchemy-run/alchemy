@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `transcribe:ListTranscriptionJobs` — list the batch transcription jobs in the account, optionally filtered by status or name prefix.
+ * Runtime binding for `transcribe:ListTranscriptionJobs` -- list the batch transcription jobs in the account, optionally filtered by status or name prefix.
  *
  * Amazon Transcribe batch actions have no resource-level IAM; the host is
  * granted `transcribe:ListTranscriptionJobs` on `*`.

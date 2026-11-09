@@ -32,16 +32,16 @@ import type { TriggerConfig } from "./shared.ts";
 export type ProductsIntegrationsVersionProps = {
   /**
    * Integration id (the `{integration}` segment). If omitted, a unique
-   * id is generated. Immutable — changing it replaces the version.
+   * id is generated. Immutable -- changing it replaces the version.
    */
   integrationId?: string;
   /**
    * Version id (the `{version}` segment). Server-assigned on create.
-   * Immutable — changing it replaces the version.
+   * Immutable -- changing it replaces the version.
    */
   versionId?: string;
   /**
-   * Location (`us-central1`, …). Immutable — changing it replaces the
+   * Location (`us-central1`, ...). Immutable -- changing it replaces the
    * version. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile
    *   region, else `us-central1`)
@@ -49,13 +49,13 @@ export type ProductsIntegrationsVersionProps = {
   location?: string;
   /**
    * Product id (`IP` for Application Integration, `APIGEE` for Apigee
-   * Integration). Immutable — changing it replaces the version.
+   * Integration). Immutable -- changing it replaces the version.
    * @default "IP"
    */
   product?: string;
   /**
    * Human-readable description. Integration versions have no labels
-   * field, so Alchemy ownership is stored in a `[alchemy …]` prefix and
+   * field, so Alchemy ownership is stored in a `[alchemy ...]` prefix and
    * stripped from attributes.
    */
   description?: string;
@@ -99,7 +99,7 @@ export type ProductsIntegrationsVersion = Resource<
     userLabel: string | undefined;
     /** Trigger configurations. */
     triggerConfigs: TriggerConfig[] | undefined;
-    /** Server-reported status (`DRAFT`, `ACTIVE`, …). */
+    /** Server-reported status (`DRAFT`, `ACTIVE`, ...). */
     status: string | undefined;
     /** Server-reported state. */
     state: string | undefined;
@@ -118,7 +118,7 @@ export type ProductsIntegrationsVersion = Resource<
  * A product-scoped Application Integration version
  * (`projects/.../products/{product}/integrations/{integration}/versions/{version}`).
  *
- * Versions have no labels field — Alchemy stamps ownership into the
+ * Versions have no labels field -- Alchemy stamps ownership into the
  * description. Location, product, integration id, and version id are
  * immutable. Description, user label, and trigger configs update in
  * place.

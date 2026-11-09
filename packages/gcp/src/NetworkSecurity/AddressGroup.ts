@@ -38,24 +38,24 @@ export type AddressGroupProps = {
    * `projects/{project}/locations/{location}/addressGroups/{addressGroup}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
    * and logical id. Must be 1-63 characters and match
-   * `[a-z]([a-z0-9-]*[a-z0-9])?`. Immutable — changing it replaces the
+   * `[a-z]([a-z0-9-]*[a-z0-9])?`. Immutable -- changing it replaces the
    * group.
    */
   addressGroupId?: string;
   /**
-   * Location (`global`, `us-central1`, …). Immutable — changing it
+   * Location (`global`, `us-central1`, ...). Immutable -- changing it
    * replaces the group. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default "global"
    */
   location?: string;
   /**
-   * Address type. Immutable — changing it replaces the group.
+   * Address type. Immutable -- changing it replaces the group.
    * @default "IPV4"
    */
   type?: AddressGroupType;
   /**
-   * Maximum number of items. Immutable — changing it replaces the group.
+   * Maximum number of items. Immutable -- changing it replaces the group.
    * @default 100
    */
   capacity?: number;
@@ -64,7 +64,7 @@ export type AddressGroupProps = {
    */
   items?: string[];
   /**
-   * Supported purposes (`DEFAULT`, `CLOUD_ARMOR`). Immutable — changing
+   * Supported purposes (`DEFAULT`, `CLOUD_ARMOR`). Immutable -- changing
    * them replaces the group.
    */
   purpose?: AddressGroupPurpose[];
@@ -88,7 +88,7 @@ export type AddressGroup = Resource<
     addressGroupId: string;
     /** Project id. */
     project: string;
-    /** Location id (`global`, `us-central1`, …). */
+    /** Location id (`global`, `us-central1`, ...). */
     location: string;
     /** Address type (`IPV4` or `IPV6`). */
     type: string;
@@ -127,7 +127,7 @@ export interface AddressGroupLookup {
    */
   addressGroupId: string;
   /**
-   * Location (`global`, `us-central1`, …). `US-CENTRAL1` is accepted and
+   * Location (`global`, `us-central1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -139,7 +139,7 @@ export interface AddressGroupLookup {
 }
 
 /**
- * A Network Security address group — a named collection of IP addresses
+ * A Network Security address group -- a named collection of IP addresses
  * or CIDR ranges used by firewall policies and Cloud Armor.
  *
  * Changing `addressGroupId`, `location`, `type`, `capacity`, or `purpose`

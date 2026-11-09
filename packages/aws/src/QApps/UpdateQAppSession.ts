@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { QApp } from "./QApp.ts";
 
 /**
- * Request for {@link UpdateQAppSession} — `instanceId` is injected from the bound Q App.
+ * Request for {@link UpdateQAppSession} -- `instanceId` is injected from the bound Q App.
  */
 export interface UpdateQAppSessionRequest extends Omit<
   qapps.UpdateQAppSessionInput,
@@ -19,7 +19,7 @@ export interface UpdateQAppSessionRequest extends Omit<
  * ### Sessions
  * **Example:** Submit Card Values
  * ```typescript
- * // init — bind the operation to the Q App
+ * // init -- bind the operation to the Q App
  * const updateQAppSession = yield* AWS.QApps.UpdateQAppSession(app);
  *
  * // runtime

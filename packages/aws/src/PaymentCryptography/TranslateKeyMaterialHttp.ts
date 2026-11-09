@@ -6,7 +6,7 @@ import type { Key } from "./Key.ts";
 import { TranslateKeyMaterial, type TranslateKeyMaterialRequest } from "./TranslateKeyMaterial.ts";
 
 /**
- * HTTP implementation of {@link TranslateKeyMaterial} — bespoke (not
+ * HTTP implementation of {@link TranslateKeyMaterial} -- bespoke (not
  * scaffolded): the key identifiers live in nested request structures
  * (`IncomingKeyMaterial.DiffieHellmanTr31KeyBlock.PrivateKeyIdentifier`,
  * `OutgoingKeyMaterial.Tr31KeyBlock.WrappingKeyIdentifier`) whose union arms

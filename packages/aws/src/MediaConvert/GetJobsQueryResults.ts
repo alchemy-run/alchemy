@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `mediaconvert:GetJobsQueryResults` — fetch the results
+ * Runtime binding for `mediaconvert:GetJobsQueryResults` -- fetch the results
  * of an asynchronous jobs query started with {@link StartJobsQuery}.
  *
  * The binding takes no arguments and grants

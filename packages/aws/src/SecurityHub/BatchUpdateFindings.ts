@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `securityhub:BatchUpdateFindings`.
  *
  * Updates workflow status, severity, notes, and other customer-editable fields on one or more findings.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.SecurityHub.BatchUpdateFindingsHttp)`.
  * ### Working with Findings
  * **Example:** Resolve a Finding
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const batchUpdateFindings = yield* AWS.SecurityHub.BatchUpdateFindings();
  *
  * // runtime

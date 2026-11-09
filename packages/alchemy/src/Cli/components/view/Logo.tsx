@@ -158,7 +158,7 @@ const ring = (cx: number, cy: number, r: number, strokeW: number, color: string)
     };
     const on = Array.from({ length: H }, () => new Uint8Array(W));
 
-    // sides (|x| >= |y|): per dot row, dots are indexed n = 0, 1, … outward
+    // sides (|x| >= |y|): per dot row, dots are indexed n = 0, 1, ... outward
     // from the vertical center line
     const rowEdge: Array<number | undefined> = [];
     const rowInner: Array<number | undefined> = [];
@@ -188,7 +188,7 @@ const ring = (cx: number, cy: number, r: number, strokeW: number, color: string)
       }
     }
 
-    // caps (|y| > |x|): per dot column, dots are indexed k = 0, 1, … inward
+    // caps (|y| > |x|): per dot column, dots are indexed k = 0, 1, ... inward
     // from the top. Rows are unevenly spaced (cell gaps), so walk the actual
     // dots; the bottom cap mirrors the top since the grid is symmetric.
     const colEdge: Array<number | undefined> = [];
@@ -377,7 +377,7 @@ const rasterizeLogo = (cols: number): LogoRun[][] => {
   return lines;
 };
 
-// Braille rasterization is mojibake on non-Unicode terminals — the help
+// Braille rasterization is mojibake on non-Unicode terminals -- the help
 // formatter skips mounting the logo entirely when Unicode is unavailable.
 type LogoProps = { cols: number };
 

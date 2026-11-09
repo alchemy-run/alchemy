@@ -11,7 +11,7 @@ export interface BatchCreatePartitionRequest extends Omit<
 /**
  * Runtime binding for `glue:BatchCreatePartition`.
  *
- * Registers up to 100 partitions on the bound {@link Table} in one call —
+ * Registers up to 100 partitions on the bound {@link Table} in one call --
  * the bulk variant of `CreatePartition` for backfills. Per-partition
  * failures come back in the response's `Errors` list. The database/table
  * names and catalog id are injected from the binding. Provide the

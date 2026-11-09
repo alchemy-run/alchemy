@@ -26,7 +26,7 @@ export interface SwarmPoolOptions extends PoolSettings {
  * swarm service whose tasks host every `Rivet.DurableObject` given this
  * pool and join the control plane's overlay network. Nodes only connect
  * out to the control plane, so the service publishes no ports. Requires a
- * `Rivet.Cluster` on a Docker network — `RivetDocker.SwarmControlPlane`.
+ * `Rivet.Cluster` on a Docker network -- `RivetDocker.SwarmControlPlane`.
  *
  * Every Durable Object given the same pool shares its nodes: declare the
  * pool once and provide it to each class.

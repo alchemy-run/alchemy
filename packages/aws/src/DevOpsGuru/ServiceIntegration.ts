@@ -44,7 +44,7 @@ export interface ServiceIntegration extends Resource<
 > {}
 
 /**
- * The DevOps Guru service integration — the account/region singleton that
+ * The DevOps Guru service integration -- the account/region singleton that
  * controls how DevOps Guru integrates with other AWS services: creating a
  * Systems Manager OpsItem for each insight, analyzing CloudWatch log groups
  * for anomalies, and encrypting DevOps Guru data with a customer-managed
@@ -95,7 +95,7 @@ const isDefault = (observed: ObservedIntegration) =>
   observed.encryptionType === "AWS_OWNED_KMS_KEY";
 
 /**
- * Concurrent `UpdateServiceIntegration` calls conflict server-side — retry
+ * Concurrent `UpdateServiceIntegration` calls conflict server-side -- retry
  * the typed conflict tag on a short bounded schedule.
  *
  * Explicitly typed: inlining `Effect.retry` with options in provider
@@ -185,7 +185,7 @@ export const ServiceIntegrationProvider = () =>
       });
 
       return {
-        // Account/region singleton — surfaced only when non-default.
+        // Account/region singleton -- surfaced only when non-default.
         list: () => observe.pipe(Effect.map((observed) => (isDefault(observed) ? [] : [observed]))),
 
         read: Effect.fn(function* ({ output }) {
@@ -193,17 +193,17 @@ export const ServiceIntegrationProvider = () =>
           if (isDefault(observed)) {
             return undefined;
           }
-          // The integration can't carry ownership tags — a non-default
+          // The integration can't carry ownership tags -- a non-default
           // configuration we have no record of belongs to someone else
           // until explicitly adopted.
           return output !== undefined ? observed : Unowned(observed);
         }),
 
         reconcile: Effect.fn(function* ({ news, session }) {
-          // 1. OBSERVE — the live account configuration is authoritative.
+          // 1. OBSERVE -- the live account configuration is authoritative.
           const observed = yield* observe;
 
-          // 2. SYNC — apply only the changed sections.
+          // 2. SYNC -- apply only the changed sections.
           yield* converge(observed, news);
 
           // 3. RETURN fresh attributes.

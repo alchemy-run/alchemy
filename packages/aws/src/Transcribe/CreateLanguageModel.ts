@@ -22,7 +22,7 @@ export interface CreateLanguageModelRequest extends Omit<
 }
 
 /**
- * Runtime binding for `transcribe:CreateLanguageModel` — kick off training of
+ * Runtime binding for `transcribe:CreateLanguageModel` -- kick off training of
  * a custom language model from text data in S3 (training runs asynchronously
  * and can take multiple hours; poll with {@link DescribeLanguageModel}).
  *
@@ -36,7 +36,7 @@ export interface CreateLanguageModelRequest extends Omit<
  * ### Custom Language Models
  * **Example:** Create a Custom Language Model
  * ```typescript
- * // init — bind the Transcribe data-access role
+ * // init -- bind the Transcribe data-access role
  * const createLanguageModel = yield* AWS.Transcribe.CreateLanguageModel(dataAccessRole);
  *
  * // runtime

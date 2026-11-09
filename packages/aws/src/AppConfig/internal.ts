@@ -78,7 +78,7 @@ export const toTagRecord = (
   );
 
 /**
- * Read the observed tags of an AppConfig resource. Tag reads are best-effort —
+ * Read the observed tags of an AppConfig resource. Tag reads are best-effort --
  * a failure (e.g. a race with deletion) reports no tags.
  */
 export const readAppConfigTags = Effect.fn(function* (arn: string) {

@@ -8,7 +8,7 @@ import type * as Effect from "effect/Effect";
 export interface ListReceivedLicensesRequest extends licensemanager.ListReceivedLicensesRequest {}
 
 /**
- * Runtime binding for `license-manager:ListReceivedLicenses` — list the
+ * Runtime binding for `license-manager:ListReceivedLicenses` -- list the
  * licenses granted to the account (e.g. AWS Marketplace entitlements),
  * the consumer-side counterpart of {@link ListLicenses}.
  *

@@ -26,7 +26,7 @@ export interface InsertRowsOptions {
 export interface WriteTableClient {
   /**
    * Stream rows into the table (`tabledata.insertAll`). Values are plain
-   * JavaScript (`Date` → timestamp, `Uint8Array` → bytes, `bigint` →
+   * JavaScript (`Date` -> timestamp, `Uint8Array` -> bytes, `bigint` ->
    * integer string). Fails with {@link InsertRowsFailed} when any row is
    * rejected.
    */
@@ -48,7 +48,7 @@ export interface WriteTableClient {
  *   [{ id: "a", score: 1, at: new Date() }],
  *   { insertIds: ["a"] },
  * );
- * // …provided with Effect.provide(GCP.BigQuery.WriteTableHttp)
+ * // ...provided with Effect.provide(GCP.BigQuery.WriteTableHttp)
  * ```
  *
  * @binding

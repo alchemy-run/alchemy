@@ -7,7 +7,7 @@ export interface ListOriginationNumbersRequest extends sns.ListOriginationNumber
 /**
  * Runtime binding for `sns:ListOriginationNumbers`.
  *
- * An account-scoped operation — lists the origination phone numbers
+ * An account-scoped operation -- lists the origination phone numbers
  * available to send SMS from this account.
  * Provide the `ListOriginationNumbersHttp` layer on the Function to implement the binding.
  * ### SMS Account Settings

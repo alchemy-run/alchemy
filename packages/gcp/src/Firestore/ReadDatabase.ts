@@ -6,10 +6,10 @@ import type { Database } from "./Database.ts";
 
 /**
  * A Firestore document read through a {@link ReadDatabase} client. `fields`
- * are decoded from Firestore `Value`s to plain JavaScript: integers →
- * `number` (`bigint` beyond the safe range), doubles → `number`,
- * timestamps → `Date`, bytes → `Uint8Array`, arrays and maps recursively,
- * geo points → `{ latitude, longitude }`, references → resource name.
+ * are decoded from Firestore `Value`s to plain JavaScript: integers ->
+ * `number` (`bigint` beyond the safe range), doubles -> `number`,
+ * timestamps -> `Date`, bytes -> `Uint8Array`, arrays and maps recursively,
+ * geo points -> `{ latitude, longitude }`, references -> resource name.
  */
 export interface DocumentSnapshot {
   /** Full resource name `projects/{p}/databases/{d}/documents/{path}`. */
@@ -63,7 +63,7 @@ export interface ReadDatabaseClient {
   /**
    * Run a Firestore `StructuredQuery` against the database root. Filter
    * values use the Firestore REST `Value` shape
-   * (`{ integerValue: "2" }`, `{ stringValue: "a" }`, …).
+   * (`{ integerValue: "2" }`, `{ stringValue: "a" }`, ...).
    */
   query(
     structuredQuery: firestore.StructuredQuery,
@@ -86,7 +86,7 @@ export interface ReadDatabaseClient {
  * const db = yield* GCP.Firestore.ReadDatabase(database);
  * const alice = yield* db.get("users/alice");
  * const { documents } = yield* db.list("users", { pageSize: 20 });
- * // …provided with Effect.provide(GCP.Firestore.ReadDatabaseHttp)
+ * // ...provided with Effect.provide(GCP.Firestore.ReadDatabaseHttp)
  * ```
  *
  * ### Querying

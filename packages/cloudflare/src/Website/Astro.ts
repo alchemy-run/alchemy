@@ -74,7 +74,7 @@ export interface AstroProps<Bindings extends WorkerBindingProps = {}> extends Om
   /**
    * Deploy-time Astro config overrides, merged OVER your natively-loaded
    * `astro.config.*` (values here win). Use it for values that vary per
-   * stage or derive from other resources' Outputs — everything else
+   * stage or derive from other resources' Outputs -- everything else
    * belongs in the config file.
    */
   astro?: {
@@ -83,7 +83,7 @@ export interface AstroProps<Bindings extends WorkerBindingProps = {}> extends Om
     /** Base path the site is served from (astro's `base`). */
     base?: string;
     /**
-     * Astro output target — a deploy-topology decision (whether Worker
+     * Astro output target -- a deploy-topology decision (whether Worker
      * code runs at request time). `"server"` renders pages on demand in
      * the Worker; individual pages opt into prerendering with
      * `export const prerender = true`. `"static"` prerenders every page
@@ -127,7 +127,7 @@ type AstroInput<Bindings extends WorkerBindingProps> = InputProps<
  * `Astro` runs Astro's programmatic build with a wrangler-free
  * Cloudflare adapter (`@alchemy.run/frontend-frameworks/astro`): server-rendered pages
  * execute in the Worker, prerendered pages and client assets deploy as
- * static assets. Your `astro.config.*` loads natively — no adapter
+ * static assets. Your `astro.config.*` loads natively -- no adapter
  * setup or Wrangler configuration required.
  *
  * Input files are content-hashed (respecting `.gitignore` by default)
@@ -156,7 +156,7 @@ type AstroInput<Bindings extends WorkerBindingProps> = InputProps<
  * ### Static Sites
  * When your `astro.config.*` or `astro: { output: "static" }` declares
  * `output: "static"`, every page is prerendered at build time and the
- * deploy is **assets-only**: no server bundle is uploaded —
+ * deploy is **assets-only**: no server bundle is uploaded --
  * Cloudflare's asset layer answers every request (serve the built
  * `404.html` via `assets: { notFoundHandling: "404-page" }`). Session
  * provisioning is skipped for static sites since no Worker
@@ -241,8 +241,8 @@ type AstroInput<Bindings extends WorkerBindingProps> = InputProps<
  *
  * ### Custom Worker Entry
  * By default the deployed Worker entry is Astro's server entrypoint.
- * When the Worker must export more than Astro's fetch handler — Durable
- * Object classes, a `scheduled` handler — point `main` at your own module
+ * When the Worker must export more than Astro's fetch handler -- Durable
+ * Object classes, a `scheduled` handler -- point `main` at your own module
  * that wraps Astro's handler (imported from
  * `@alchemy.run/frontend-frameworks/astro/entrypoints/server`) and
  * re-exports the extras.
@@ -281,12 +281,12 @@ type AstroInput<Bindings extends WorkerBindingProps> = InputProps<
  * ### Astro Configuration
  * Your `astro.config.*` is the home for Astro configuration
  * (integrations, Vite plugins, `site`, `base`, ...) and loads natively.
- * The Cloudflare adapter is injected for you — declaring an `adapter`
+ * The Cloudflare adapter is injected for you -- declaring an `adapter`
  * in the config file fails the build. The `astro` prop is a
  * deploy-time override bag merged OVER the file (values here win) for
  * settings that vary per stage or derive from other resources'
  * Outputs, which a config file cannot consume. `output` comes from the
- * prop, then the config file, then defaults to `"server"` — astro's
+ * prop, then the config file, then defaults to `"server"` -- astro's
  * zero-config `"static"` default would prerender every page inside
  * workerd, where the Worker's bindings don't exist.
  * Use `config` to point at an alternate config file (relative to
@@ -303,7 +303,7 @@ type AstroInput<Bindings extends WorkerBindingProps> = InputProps<
  * Calling `Astro` with no arguments returns a constructor you can
  * `extend` to declare the Worker as a named class. The class is both an
  * `Effect` you can `yield*` to deploy and a type you can reference
- * elsewhere — useful when other resources need to bind to this Worker.
+ * elsewhere -- useful when other resources need to bind to this Worker.
  *
  * **Example:** Declaring a Worker class
  * ```typescript
@@ -359,7 +359,7 @@ export const Astro: {
           // The prop wins, then the config file's `output`, then
           // `"server"`: astro's own zero-config default is `"static"`,
           // which would prerender every page at build time inside workerd
-          // — where the Worker's bindings don't exist.
+          // -- where the Worker's bindings don't exist.
           const { output, workerCache } = yield* resolveAstroSettings({
             rootDir: props.rootDir,
             config: props.config,
@@ -371,7 +371,7 @@ export const Astro: {
           // Auto-provision the KV namespace backing Astro's session API
           // unless the user opted out (`sessionKVBindingName: false`) or
           // already bound their own namespace under the session name.
-          // An `output: "static"` site is assets-only — no Worker
+          // An `output: "static"` site is assets-only -- no Worker
           // script runs at request time, so a session namespace could never
           // be read; skip provisioning it. Resource creation is deduped by
           // logical id, so re-evaluating this props effect is safe.

@@ -7,7 +7,7 @@ import type { CertificateAuthority } from "./CertificateAuthority.ts";
  * Runtime binding for `acm-pca:GetCertificateAuthorityCertificate`.
  *
  * Bind a {@link CertificateAuthority} inside a function runtime to retrieve
- * the CA's own certificate and chain (PEM) — e.g. to build a trust store
+ * the CA's own certificate and chain (PEM) -- e.g. to build a trust store
  * for mutual-TLS verification of certificates the CA issued. Provide
  * `ACMPCA.GetCertificateAuthorityCertificateHttp` on the Function effect to
  * implement the binding.

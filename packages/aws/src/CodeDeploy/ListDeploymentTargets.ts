@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { DeploymentGroup } from "./DeploymentGroup.ts";
 
 /**
- * Runtime binding for `codedeploy:ListDeploymentTargets` — lists the target
+ * Runtime binding for `codedeploy:ListDeploymentTargets` -- lists the target
  * ids of a deployment (optionally filtered by target status).
  * ### Observing Deployment Targets
  * **Example:** List Failed Targets

@@ -25,12 +25,12 @@ import {
 
 export type AchievementConfigurationProps = {
   /**
-   * Play Games application id from the Google Play Console. Immutable —
+   * Play Games application id from the Google Play Console. Immutable --
    * changing it replaces the achievement.
    */
   applicationId: string;
   /**
-   * Server-assigned achievement id. Immutable — changing it replaces the
+   * Server-assigned achievement id. Immutable -- changing it replaces the
    * achievement.
    */
   achievementId?: string;
@@ -114,7 +114,7 @@ export type AchievementConfiguration = Resource<
  * A Play Games Services achievement configuration.
  *
  * Achievement configurations have no labels field and a server-assigned
- * id, so only a recorded achievement can be read back. `applicationId` and `achievementId` are identity — changing either
+ * id, so only a recorded achievement can be read back. `applicationId` and `achievementId` are identity -- changing either
  * replaces the configuration. `achievementType` is immutable after
  * create. Name, description, initial state, steps, and point value
  * update in place.

@@ -15,7 +15,7 @@ export interface TestDNSAnswerRequest extends Omit<route53.TestDNSAnswerRequest,
  * permissions, so it is granted on `*`).
  *
  * Asks Route 53's authoritative servers what they would answer for a record
- * in the bound {@link HostedZone} — works before (and without) delegation,
+ * in the bound {@link HostedZone} -- works before (and without) delegation,
  * so it verifies records written via
  * {@link ChangeResourceRecordSets} without waiting for public DNS. Public
  * zones only. Provide the implementation with

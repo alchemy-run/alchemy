@@ -9,7 +9,7 @@ export interface ListPartsRequest extends Omit<S3.ListPartsRequest, "Bucket"> {}
  * Runtime binding for `s3:ListParts` (`s3:ListMultipartUploadParts`).
  *
  * Bind this operation to a bucket to get a callable that lists the parts
- * uploaded for an in-progress multipart upload — the bucket name is injected
+ * uploaded for an in-progress multipart upload -- the bucket name is injected
  * automatically and `s3:ListMultipartUploadParts` is granted on the bucket's
  * objects. Provide the implementation with
  * `Effect.provide(AWS.S3.ListPartsHttp)`.

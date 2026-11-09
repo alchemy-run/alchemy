@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `dataexchange:GetDataGrant`.
  *
- * Reads a sent data grant's detail — receiver, acceptance state, and
+ * Reads a sent data grant's detail -- receiver, acceptance state, and
  * expiration.
  * Provide the implementation with
  * `Effect.provide(AWS.DataExchange.GetDataGrantHttp)`.

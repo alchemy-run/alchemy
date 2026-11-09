@@ -28,7 +28,7 @@ import {
 const COLLECTION = "onlineEvaluators";
 
 export type OnlineEvaluatorRandomSampling = {
-  /** Percentage of traces to sample (`1`–`100`). */
+  /** Percentage of traces to sample (`1`-`100`). */
   percentage?: number;
 };
 
@@ -55,13 +55,13 @@ export type CloudObservability = {
 
 export type OnlineEvaluatorProps = {
   /**
-   * Vertex AI location. Immutable — changing it replaces the evaluator.
+   * Vertex AI location. Immutable -- changing it replaces the evaluator.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
    * Human-readable name (max 63 characters). OnlineEvaluator has no
-   * labels field, so Alchemy ownership is stored in a compact `[alc …]`
+   * labels field, so Alchemy ownership is stored in a compact `[alc ...]`
    * displayName prefix for `list` / nuke.
    */
   displayName?: string;
@@ -99,7 +99,7 @@ export type OnlineEvaluator = Resource<
     displayName: string | undefined;
     /** Agent resource being evaluated. */
     agentResource: string | undefined;
-    /** Server-reported state (`ACTIVE`, `SUSPENDED`, `FAILED`, …). */
+    /** Server-reported state (`ACTIVE`, `SUSPENDED`, `FAILED`, ...). */
     state: string | undefined;
     /** RFC3339 creation timestamp. */
     createTime: string | undefined;
@@ -111,7 +111,7 @@ export type OnlineEvaluator = Resource<
 >;
 
 /**
- * A Vertex AI Online Evaluator — periodically scores agent traces against
+ * A Vertex AI Online Evaluator -- periodically scores agent traces against
  * registered metrics.
  *
  * OnlineEvaluator has no labels, so Alchemy stamps ownership into the

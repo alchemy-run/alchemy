@@ -56,7 +56,7 @@ export type MetricDescriptorMetadata = {
   samplePeriod?: string;
   /** Ingest delay after which points are guaranteed available. */
   ingestDelay?: string;
-  /** Hierarchy levels that emit this metric (`PROJECT`, `FOLDER`, …). */
+  /** Hierarchy levels that emit this metric (`PROJECT`, `FOLDER`, ...). */
   timeSeriesResourceHierarchyLevel?: string[];
   /** Deprecated launch stage; prefer the top-level `launchStage`. */
   launchStage?: string;
@@ -67,25 +67,25 @@ export type MetricDescriptorProps = {
    * Metric type, including DNS prefix (for example
    * `custom.googleapis.com/invoice/paid/amount`). If omitted, a unique
    * `custom.googleapis.com/` type is generated from the stack, stage,
-   * and logical id. Immutable — changing it replaces the descriptor.
+   * and logical id. Immutable -- changing it replaces the descriptor.
    */
   type?: string;
   /**
    * Whether the metric records a point-in-time value or a change.
    * Custom metrics support `GAUGE` and `CUMULATIVE` (`DELTA` is
-   * rejected). Immutable after create — changing it replaces the
+   * rejected). Immutable after create -- changing it replaces the
    * descriptor.
    * @default "GAUGE"
    */
   metricKind?: MetricKind;
   /**
-   * Measurement type. Immutable after create — changing it replaces
+   * Measurement type. Immutable after create -- changing it replaces
    * the descriptor.
    * @default "DOUBLE"
    */
   valueType?: MetricValueType;
   /**
-   * Unit of the stored value (`"1"`, `"s"`, `"By"`, …).
+   * Unit of the stored value (`"1"`, `"s"`, `"By"`, ...).
    * @default "1"
    */
   unit?: string;
@@ -126,7 +126,7 @@ export type MetricDescriptor = Resource<
     project: string;
     /** Metric kind (`GAUGE`, `DELTA`, `CUMULATIVE`). */
     metricKind: string | undefined;
-    /** Value type (`DOUBLE`, `INT64`, …). */
+    /** Value type (`DOUBLE`, `INT64`, ...). */
     valueType: string | undefined;
     /** Unit of the stored value. */
     unit: string | undefined;
@@ -148,13 +148,13 @@ export type MetricDescriptor = Resource<
 >;
 
 /**
- * A Cloud Monitoring metric descriptor — the schema for a custom or
+ * A Cloud Monitoring metric descriptor -- the schema for a custom or
  * external metric type.
  *
  * Descriptors have no resource labels. Alchemy stamps ownership into
- * `description` (`[alchemy alchemy-stack=… alchemy-stage=…
- * alchemy-id=…]`) so `list` / `pnpm nuke:gcp` can find them. `type`,
- * `metricKind`, and `valueType` are immutable — changing them replaces
+ * `description` (`[alchemy alchemy-stack=... alchemy-stage=...
+ * alchemy-id=...]`) so `list` / `pnpm nuke:gcp` can find them. `type`,
+ * `metricKind`, and `valueType` are immutable -- changing them replaces
  * the descriptor. Display name, description, unit, metadata, and added
  * labels update in place via create-as-upsert.
  *

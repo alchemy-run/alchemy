@@ -99,13 +99,13 @@ export type AgentsWebhookProps = {
   /**
    * Parent agent resource name
    * `projects/{project}/locations/{location}/agents/{agent}` or a bare
-   * agent id (combined with `location`). Immutable — changing it
+   * agent id (combined with `location`). Immutable -- changing it
    * replaces the webhook.
    */
   agent: string;
   /**
    * Webhook id (the `{webhook}` segment). Server-assigned on create.
-   * Immutable — changing it replaces the webhook.
+   * Immutable -- changing it replaces the webhook.
    */
   webhookId?: string;
   /**

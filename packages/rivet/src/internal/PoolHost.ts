@@ -191,7 +191,7 @@ const makeHost = <Network, Req>(options: {
       );
     }
     // Named up front, so a class knows its pool without depending on the
-    // pool resource — whose bindings carry every class's env, which can
+    // pool resource -- whose bindings carry every class's env, which can
     // name other classes' pools.
     const name = options.settings.name ?? (yield* stackDnsLabel(options.id));
     // A private address only works for nodes inside the control plane's
@@ -234,7 +234,7 @@ const makeHost = <Network, Req>(options: {
       });
     });
 
-    // The generic `Self` is the class whose phase is running — the typed
+    // The generic `Self` is the class whose phase is running -- the typed
     // `Self<Rivet.DurableObject>` is the enclosing one while a class is
     // built inside another's. Outside a class phase there is none: the
     // pool was provided to an external Durable Object.

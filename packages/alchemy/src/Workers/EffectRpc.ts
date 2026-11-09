@@ -1,6 +1,6 @@
 /**
  * A typed Effect `RpcClient` over a Durable Object namespace whose stubs
- * expose an Effect `fetch` — the client half of `RpcDurableObject`, shared
+ * expose an Effect `fetch` -- the client half of `RpcDurableObject`, shared
  * by every engine.
  *
  * @internal

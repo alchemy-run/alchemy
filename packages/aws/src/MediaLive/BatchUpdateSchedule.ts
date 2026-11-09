@@ -6,16 +6,16 @@ import type { Channel } from "./Channel.ts";
 /**
  * Runtime binding for `medialive:BatchUpdateSchedule`.
  *
- * Adds and/or removes schedule actions on the bound {@link Channel} — ad
+ * Adds and/or removes schedule actions on the bound {@link Channel} -- ad
  * breaks (SCTE-35 splices), input switches, static image overlays, pause
- * states — the primary data-plane API for driving a live broadcast (e.g.
+ * states -- the primary data-plane API for driving a live broadcast (e.g.
  * a playout-automation Lambda that switches inputs on a timecode). The
  * channel id is injected from the binding. Provide the implementation
  * with `Effect.provide(AWS.MediaLive.BatchUpdateScheduleHttp)`.
  * ### Driving the Channel Schedule
  * **Example:** Schedule an Input Switch
  * ```typescript
- * // init — bind the operation to the channel
+ * // init -- bind the operation to the channel
  * const updateSchedule = yield* AWS.MediaLive.BatchUpdateSchedule(channel);
  *
  * // runtime

@@ -125,7 +125,7 @@ pgrep -f "docker logs -f rivet-node" >/dev/null || setsid sh -c 'while true; do 
  * container on every instance in place.
  *
  * Nodes only connect out to the control plane, so no inbound traffic
- * reaches them, and the pool works with any control plane it can reach —
+ * reaches them, and the pool works with any control plane it can reach --
  * `RivetGCP.ComputeEngineControlPlane`, `RivetCloud.ControlPlane`, or one on
  * another cloud. On a `RivetGCP.ComputeEngineControlPlane` the nodes join its
  * network.

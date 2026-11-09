@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { KxEnvironment } from "./KxEnvironment.ts";
 
 /**
- * Runtime binding for `finspace:GetKxVolume` — reads a volume's status, NAS configuration, and the clusters attached to it in the bound environment.
+ * Runtime binding for `finspace:GetKxVolume` -- reads a volume's status, NAS configuration, and the clusters attached to it in the bound environment.
  * Provide the implementation with
  * `Effect.provide(AWS.FinSpace.GetKxVolumeHttp)`.
  * ### Managing Volumes

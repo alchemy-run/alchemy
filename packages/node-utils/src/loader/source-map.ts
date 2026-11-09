@@ -8,7 +8,7 @@ export type SourceMap = NonNullable<ReturnType<typeof transformSync>["map"]>;
 /**
  * The map as stored in the cache: `sources` names the file by URL and
  * `sourcesContent` is dropped. A bare path in `sources` is resolved against
- * the map's own location — the shared cache directory — whereas a URL is
+ * the map's own location -- the shared cache directory -- whereas a URL is
  * location-independent and correct on Windows too. Every source is a file
  * on this machine, so embedding its text only makes the map larger than
  * the code it describes and every process that loads the module pay for it.
@@ -38,8 +38,8 @@ const inlineComment = (map: string) =>
 /**
  * Map by reference. Node's source-map support only understands `data:`
  * URLs and scheme-less paths (it resolves the latter against the module
- * URL and reads the file), so this is the file URL's path component —
- * `/var/…/x.map` on POSIX, `/C:/…/x.map` on Windows — never a `file:` URL.
+ * URL and reads the file), so this is the file URL's path component --
+ * `/var/.../x.map` on POSIX, `/C:/.../x.map` on Windows -- never a `file:` URL.
  */
 const fileComment = (mapFile: string) =>
   `\n//# sourceMappingURL=${pathToFileURL(mapFile).pathname}`;
@@ -50,7 +50,7 @@ const fileComment = (mapFile: string) =>
  * Normally by reference to the file on disk: an inline `data:` map is part
  * of the script source V8 keeps for the process lifetime, which for a graph
  * the size of alchemy's is hundreds of megabytes. Inlined when there is no
- * file, and — with the source embedded — while a debugger is attached: a
+ * file, and -- with the source embedded -- while a debugger is attached: a
  * map in the shared cache directory is one debuggers either refuse to read
  * (VS Code only loads maps under the workspace by default) or cannot fetch
  * over the inspector protocol (DevTools), leaving every module to show up

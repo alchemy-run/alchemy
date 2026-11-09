@@ -54,7 +54,7 @@ export interface PresignR2UrlOptions {
 
 /**
  * Presign a path-style R2 object URL (`{endpoint}/{bucket}/{key}`) with the
- * given {@link S3CredentialsValue}. Pure SigV4 — no request is made.
+ * given {@link S3CredentialsValue}. Pure SigV4 -- no request is made.
  */
 export const presignR2Url = (
   credentials: S3CredentialsValue,

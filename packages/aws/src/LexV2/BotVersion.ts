@@ -90,12 +90,12 @@ export const BotVersionProvider = () =>
       return {
         stables: ["botId", "botVersion"],
 
-        // Sub-resource keyed entirely by its bot — nuke reaches it through
+        // Sub-resource keyed entirely by its bot -- nuke reaches it through
         // the parent bot's deletion.
         list: () => Effect.succeed([]),
 
         read: Effect.fn(function* ({ output }) {
-          // Versions are auto-numbered — without cached output there is no
+          // Versions are auto-numbered -- without cached output there is no
           // deterministic identity to look up.
           if (output === undefined) return undefined;
           const observed = yield* describeVersion(output.botId, output.botVersion);
@@ -110,7 +110,7 @@ export const BotVersionProvider = () =>
 
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
-          // Versions are immutable — any change replaces (a new version is
+          // Versions are immutable -- any change replaces (a new version is
           // created and the old one deleted).
           if (
             olds?.botId !== news.botId ||
@@ -123,7 +123,7 @@ export const BotVersionProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ news, output, session }) {
-          // 1. OBSERVE — versions are immutable; if the cached version still
+          // 1. OBSERVE -- versions are immutable; if the cached version still
           //    exists there is nothing to converge.
           if (output?.botVersion !== undefined) {
             const existing = yield* describeVersion(news.botId, output.botVersion);
@@ -146,7 +146,7 @@ export const BotVersionProvider = () =>
               localeId,
             });
             if (locale.botLocaleStatus !== "Built") {
-              // An in-flight build surfaces as Conflict — treat as a race.
+              // An in-flight build surfaces as Conflict -- treat as a race.
               yield* lexm
                 .buildBotLocale({
                   botId: news.botId,

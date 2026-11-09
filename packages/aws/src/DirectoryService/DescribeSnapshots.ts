@@ -7,14 +7,14 @@ import type { Directory } from "./Directory.ts";
  * Runtime binding for the `DescribeSnapshots` operation (IAM action
  * `ds:DescribeSnapshots`), scoped to one {@link Directory}.
  *
- * Lists the bound directory's snapshots — id, type (`Auto`/`Manual`),
+ * Lists the bound directory's snapshots -- id, type (`Auto`/`Manual`),
  * status, and start time. The directory id is injected from the binding.
  * Provide the implementation with
  * `Effect.provide(AWS.DirectoryService.DescribeSnapshotsHttp)`.
  * ### Managing Snapshots
  * **Example:** List the Directory's Snapshots
  * ```typescript
- * // init — bind the operation to the directory
+ * // init -- bind the operation to the directory
  * const describeSnapshots = yield* AWS.DirectoryService.DescribeSnapshots(directory);
  *
  * // runtime

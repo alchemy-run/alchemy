@@ -7,14 +7,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `s3:ListJobs` (S3 Batch Operations).
  *
  * Lists the account's current jobs and the jobs that ended within the last
- * 90 days, optionally filtered by status — e.g. an operations dashboard
+ * 90 days, optionally filtered by status -- e.g. an operations dashboard
  * summarizing in-flight bulk operations. The account id is resolved once
  * via `sts:GetCallerIdentity`. Provide the implementation with
  * `Effect.provide(AWS.S3Control.ListJobsHttp)`.
  * ### Running Batch Operations Jobs
  * **Example:** List Active Jobs
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listJobs = yield* AWS.S3Control.ListJobs();
  *
  * // runtime

@@ -5,7 +5,7 @@ import type { AgentAlias } from "./AgentAlias.ts";
 
 /**
  * The `DeleteAgentMemory` request with the binding-injected `agentId` and
- * `agentAliasId` removed — they are supplied automatically from the bound
+ * `agentAliasId` removed -- they are supplied automatically from the bound
  * {@link AgentAlias}.
  */
 export interface DeleteAgentMemoryRequest extends Omit<
@@ -14,13 +14,13 @@ export interface DeleteAgentMemoryRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `bedrock-agent-runtime:DeleteAgentMemory` — delete the
+ * Runtime binding for `bedrock-agent-runtime:DeleteAgentMemory` -- delete the
  * memory an agent has stored, for one session, one memory id, or everything.
  *
  * Bind an {@link AgentAlias} inside a function runtime to get a callable
  * that clears the agent's long-term memory. The binding grants the function
  * `bedrock:DeleteAgentMemory` scoped to exactly that alias. Deletion is
- * idempotent — deleting a session or memory id that holds no memory
+ * idempotent -- deleting a session or memory id that holds no memory
  * succeeds.
  *
  * ### Deleting Agent Memory

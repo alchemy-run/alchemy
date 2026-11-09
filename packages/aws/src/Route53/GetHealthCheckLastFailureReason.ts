@@ -8,7 +8,7 @@ import type { HealthCheck } from "./HealthCheck.ts";
  * action `route53:GetHealthCheckLastFailureReason` on the health check ARN).
  *
  * Reads the reason each Route 53 checker last reported the bound
- * {@link HealthCheck} unhealthy — the diagnostic companion to
+ * {@link HealthCheck} unhealthy -- the diagnostic companion to
  * {@link GetHealthCheckStatus} for alerting and incident tooling. Endpoint
  * checks only (not `CALCULATED` / `RECOVERY_CONTROL`). Provide the
  * implementation with

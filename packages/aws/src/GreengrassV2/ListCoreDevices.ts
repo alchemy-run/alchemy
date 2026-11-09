@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `greengrass:ListCoreDevices`.
  *
  * Enumerates the account's Greengrass core devices, optionally filtered by
- * status (`HEALTHY` / `UNHEALTHY`), thing group, or nucleus runtime — the
+ * status (`HEALTHY` / `UNHEALTHY`), thing group, or nucleus runtime -- the
  * entry point for fleet-health dashboards. Provide the implementation with
  * `Effect.provide(AWS.GreengrassV2.ListCoreDevicesHttp)`.
  * ### Managing Core Devices
  * **Example:** Find Unhealthy Core Devices
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listCoreDevices = yield* AWS.GreengrassV2.ListCoreDevices();
  *
  * // runtime

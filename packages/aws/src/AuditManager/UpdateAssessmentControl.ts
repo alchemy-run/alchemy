@@ -12,7 +12,7 @@ export interface UpdateAssessmentControlRequest extends Omit<
 /**
  * Runtime binding for `auditmanager:UpdateAssessmentControl`.
  *
- * Updates a control within the bound assessment — sets its review
+ * Updates a control within the bound assessment -- sets its review
  * status and/or adds a comment. Provide the
  * implementation with `Effect.provide(AWS.AuditManager.UpdateAssessmentControlHttp)`.
  * ### Assessment Workflow

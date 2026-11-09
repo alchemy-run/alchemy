@@ -13,7 +13,7 @@ export type ViteProps = FrameworkSiteProps & {
 };
 
 /**
- * Static Vite assets served on Neon Functions. The project’s Vite plugins and configuration drive the build; native Vite HMR runs during development.
+ * Static Vite assets served on Neon Functions. The project's Vite plugins and configuration drive the build; native Vite HMR runs during development.
  *
  * Native framework development and HMR run without Neon cloud resources.
  * Apply `Alchemy.remote()` to use the live Function deployment during dev.

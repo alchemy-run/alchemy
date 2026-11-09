@@ -11,7 +11,7 @@ import type { EventType } from "./EventType.ts";
 export interface SendEventRequest extends Omit<frauddetector.SendEventRequest, "eventTypeName"> {}
 
 /**
- * Store an event in Amazon Fraud Detector without generating a prediction —
+ * Store an event in Amazon Fraud Detector without generating a prediction --
  * the effectful ingestion call made from a deployed Lambda or Task. Stored
  * events build the historical dataset used to train models and can be
  * labeled later via `UpdateEventLabel`. The bound event type must have

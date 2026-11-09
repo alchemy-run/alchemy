@@ -9,7 +9,7 @@ import type { TaxSettings } from "./TaxSettings.ts";
 
 /**
  * HTTP implementation of {@link RetrieveTaxSettings}. Provide it on the
- * Function or Worker Effect. Tax Settings has no Stripe id — only the API
+ * Function or Worker Effect. Tax Settings has no Stripe id -- only the API
  * key is bound.
  *
  * @layer

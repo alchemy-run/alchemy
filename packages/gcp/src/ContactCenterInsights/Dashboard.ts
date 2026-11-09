@@ -39,14 +39,14 @@ export type DateRangeConfig = {
 
 export type DashboardProps = {
   /**
-   * Region (`us-central1`, …). Immutable — changing it replaces the
+   * Region (`us-central1`, ...). Immutable -- changing it replaces the
    * dashboard.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
    * Dashboard id (the `{dashboard}` segment). If omitted, a unique id is
-   * generated from the stack, stage, and logical id. Immutable — changing
+   * generated from the stack, stage, and logical id. Immutable -- changing
    * it replaces the dashboard. 4-64 characters matching
    * `^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$`.
    */
@@ -57,7 +57,7 @@ export type DashboardProps = {
   displayName?: string;
   /**
    * Human-readable description. Dashboards have no labels field, so
-   * Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes.
    */
   description?: string;
@@ -120,7 +120,7 @@ export interface DashboardLookup {
    */
   dashboardId: string;
   /**
-   * Region (`us-central1`, …).
+   * Region (`us-central1`, ...).
    */
   location?: string;
   /**
@@ -133,7 +133,7 @@ export interface DashboardLookup {
 /**
  * A Contact Center Insights dashboard of conversation charts.
  *
- * Dashboards have no labels field — Alchemy stamps ownership into the
+ * Dashboards have no labels field -- Alchemy stamps ownership into the
  * description. Location and dashboard id are immutable. Display name,
  * description, filter, date range, and root container update in place.
  *

@@ -1,7 +1,7 @@
 import type * as cf from "@cloudflare/workers-types";
 
 /**
- * One workerd handler invocation (`fetch`, `queue`, `scheduled`, …) as
+ * One workerd handler invocation (`fetch`, `queue`, `scheduled`, ...) as
  * delivered to a Worker's listeners. Shared by every engine that runs
  * Workers-compatible bundles; the `kind` string is kept for compatibility.
  */

@@ -6,14 +6,14 @@
  * Stateless-RPC reality (HTTP): each POST is independent; the client resends
  * all wants plus all previously-ACKed haves every round. With
  * `multi_ack_detailed` + `no-done` and the "lazy-ready" policy the
- * negotiation converges in ≤ 2 POSTs:
+ * negotiation converges in <= 2 POSTs:
  *
  * - POST ends with flush (no `done`): `ACK <oid> common` per recognized
  *   have, `ACK <last> ready` once the want-closure is coverable, else `NAK`.
  *   With `no-done` the server continues straight from `ready` into the pack.
  * - POST ends with `done`: final `ACK <last common>` (else `NAK`), then the
- *   pack — on side-band band 1 when negotiated, raw bytes otherwise.
- * - A fresh clone is one POST: wants + flush + `done`, no haves ⇒ `NAK` +
+ *   pack -- on side-band band 1 when negotiated, raw bytes otherwise.
+ * - A fresh clone is one POST: wants + flush + `done`, no haves => `NAK` +
  *   pack.
  *
  * Shallow (`deepen <n>`): `shallow <oid>` boundary lines (and `unshallow`
@@ -255,7 +255,7 @@ const muxPackEvent = (event: PackEvent): Stream.Stream<Uint8Array> =>
 /**
  * Runs one full upload-pack round: validates the wants, negotiates, computes
  * the closure when a pack is due, and assembles the streaming response body
- * (shallow section, ACK/NAK section, then the pack — sideband-muxed with
+ * (shallow section, ACK/NAK section, then the pack -- sideband-muxed with
  * band-2 progress when negotiated, raw otherwise).
  *
  * Wants that do not exist in the store fail with `ProtocolError`

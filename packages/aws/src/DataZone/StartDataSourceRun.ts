@@ -17,7 +17,7 @@ export interface StartDataSourceRunRequest extends Omit<
  * ### Data Source Runs
  * **Example:** Trigger an Ingestion Run
  * ```typescript
- * // init — bind the operation to the domain
+ * // init -- bind the operation to the domain
  * const startDataSourceRun = yield* AWS.DataZone.StartDataSourceRun(domain);
  *
  * // runtime

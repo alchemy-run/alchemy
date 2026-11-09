@@ -67,7 +67,7 @@ export interface RegistryLookup {
 }
 
 /**
- * An EventBridge Schema Registry — a named collection of event schemas.
+ * An EventBridge Schema Registry -- a named collection of event schemas.
  * Custom registries hold your own OpenAPI 3 / JSONSchema Draft 4 schema
  * documents; AWS also maintains the built-in `aws.events` and
  * `discovered-schemas` registries.
@@ -200,7 +200,7 @@ export const RegistryProvider = () =>
           // OBSERVE
           let live = yield* describe(registryName);
 
-          // ENSURE — tolerate the create race as "already exists".
+          // ENSURE -- tolerate the create race as "already exists".
           if (live === undefined) {
             yield* schemas
               .createRegistry({
@@ -213,7 +213,7 @@ export const RegistryProvider = () =>
             });
           }
 
-          // SYNC description — diff observed against desired.
+          // SYNC description -- diff observed against desired.
           if ((news.description ?? "") !== (live.Description ?? "")) {
             yield* schemas.updateRegistry({
               RegistryName: registryName,
@@ -221,7 +221,7 @@ export const RegistryProvider = () =>
             });
           }
 
-          // SYNC resource policy — diff observed against desired, comparing
+          // SYNC resource policy -- diff observed against desired, comparing
           // canonicalized documents so a re-deploy of an equivalent policy
           // (key order, whitespace) is a no-op.
           const desiredPolicy =
@@ -253,7 +253,7 @@ export const RegistryProvider = () =>
             }
           }
 
-          // SYNC tags — diff against observed cloud tags.
+          // SYNC tags -- diff against observed cloud tags.
           yield* syncSchemasTags(live.RegistryArn!, id, news.tags);
 
           yield* session.note(registryName);

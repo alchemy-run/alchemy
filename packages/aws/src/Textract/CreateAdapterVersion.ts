@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Adapter } from "./Adapter.ts";
 
 /**
- * Runtime binding for `textract:CreateAdapterVersion` — train a new
+ * Runtime binding for `textract:CreateAdapterVersion` -- train a new
  * version of the bound adapter from an annotated dataset manifest in S3
  * (automated retraining pipelines). The `AdapterId` is injected
  * automatically; the caller also needs read access to the manifest and

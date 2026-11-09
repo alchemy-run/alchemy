@@ -12,7 +12,7 @@ export interface DeleteRunRequest extends omics.DeleteRunRequest {}
  * ### Runs
  * **Example:** Call DeleteRun
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const deleteRun = yield* AWS.Omics.DeleteRun();
  * // runtime
  * const result = yield* deleteRun({ id: runId });

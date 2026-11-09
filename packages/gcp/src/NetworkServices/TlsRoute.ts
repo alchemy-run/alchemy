@@ -81,11 +81,11 @@ export type TlsRouteProps = {
    * Route id (the `{tlsRoute}` segment of
    * `projects/{project}/locations/{location}/tlsRoutes/{tlsRoute}`). If
    * omitted, a unique name is generated from the stack, stage, and
-   * logical id. Immutable — changing it replaces the route.
+   * logical id. Immutable -- changing it replaces the route.
    */
   tlsRouteId?: string;
   /**
-   * Location (`global`, `us-central1`, …). Immutable — changing it
+   * Location (`global`, `us-central1`, ...). Immutable -- changing it
    * replaces the route. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default "global"
@@ -131,7 +131,7 @@ export type TlsRoute = Resource<
     tlsRouteId: string;
     /** Project id. */
     project: string;
-    /** Location id (`global`, `us-central1`, …). */
+    /** Location id (`global`, `us-central1`, ...). */
     location: string;
     /** User-provided description. */
     description: string | undefined;
@@ -169,7 +169,7 @@ export interface TlsRouteLookup {
    */
   tlsRouteId: string;
   /**
-   * Location (`global`, `us-central1`, …). `US-CENTRAL1` is accepted and
+   * Location (`global`, `us-central1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;

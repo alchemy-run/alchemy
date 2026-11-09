@@ -6,7 +6,7 @@ import type { SearchJob } from "./SearchJob.ts";
 /**
  * Runtime binding for `backup-search:GetSearchJob`.
  *
- * Retrieves the bound search job's metadata and progress — its `Status`
+ * Retrieves the bound search job's metadata and progress -- its `Status`
  * (`RUNNING`, `COMPLETED`, `STOPPED`, `FAILED`), item/backup counts, and
  * completion time. BackupSearch emits no EventBridge events, so polling this
  * operation until `Status` is terminal is how a consumer knows the results
@@ -15,10 +15,10 @@ import type { SearchJob } from "./SearchJob.ts";
  * ### Polling Search Progress
  * **Example:** Wait for the Search Job to Complete
  * ```typescript
- * // init — bind the operation to the search job
+ * // init -- bind the operation to the search job
  * const getSearchJob = yield* AWS.BackupSearch.GetSearchJob(search);
  *
- * // runtime — poll until the job reaches a terminal status
+ * // runtime -- poll until the job reaches a terminal status
  * const job = yield* getSearchJob().pipe(
  *   Effect.repeat({
  *     schedule: Schedule.spaced("5 seconds"),

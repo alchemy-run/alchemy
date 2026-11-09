@@ -28,18 +28,18 @@ export type QaQuestionTagProps = {
    * Question tag id (the `{qa_question_tag}` segment of
    * `projects/{project}/locations/{location}/qaQuestionTags/{qa_question_tag}`).
    * If omitted, a unique id is generated. Must match `^[a-z0-9-]{4,64}$`.
-   * Immutable — changing it replaces the tag.
+   * Immutable -- changing it replaces the tag.
    */
   qaQuestionTagId?: string;
   /**
-   * Location (`us-central1`, …). Immutable — changing it replaces the
+   * Location (`us-central1`, ...). Immutable -- changing it replaces the
    * tag. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
    * Display name. Question tags have no labels field, so Alchemy
-   * ownership is stored in a `[alchemy …]` prefix and stripped from
+   * ownership is stored in a `[alchemy ...]` prefix and stripped from
    * attributes.
    */
   displayName?: string;
@@ -78,7 +78,7 @@ export type QaQuestionTag = Resource<
  * A Contact Center AI Insights QA question tag used to categorize
  * questions across scorecards.
  *
- * Question tags have no labels field — Alchemy stamps ownership into the
+ * Question tags have no labels field -- Alchemy stamps ownership into the
  * display name. Location and id are immutable. Display name and linked
  * question ids update in place. Patch and delete are long-running.
  *

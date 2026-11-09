@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `rekognition:SearchUsersByImage` — search a face collection for users matching the largest face in a supplied image.
+ * Runtime binding for `rekognition:SearchUsersByImage` -- search a face collection for users matching the largest face in a supplied image.
  *
  * The binding takes no arguments and grants the function
  * `rekognition:SearchUsersByImage` on `*` (Rekognition data-plane resources such

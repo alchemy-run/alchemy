@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `transcribe:GetTranscriptionJob` — read the status and
+ * Runtime binding for `transcribe:GetTranscriptionJob` -- read the status and
  * result of a batch transcription job started with
  * {@link StartTranscriptionJob}.
  *

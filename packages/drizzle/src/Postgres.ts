@@ -1,5 +1,5 @@
 import { resolvePoolConfig } from "@alchemy.run/sql/PostgresTls";
-// `@effect/sql-pg` (and pg underneath) are optional peers — value imports
+// `@effect/sql-pg` (and pg underneath) are optional peers -- value imports
 // are deferred to first use so `@alchemy.run/drizzle` resolves without them
 // installed.
 import type * as PgClient from "@effect/sql-pg/PgClient";
@@ -16,7 +16,7 @@ import type * as Redacted from "effect/Redacted";
  * Open a Drizzle/Postgres database from a connection URL using the
  * `drizzle-orm/effect-postgres` integration.
  *
- * Returns a chainable Proxy over `EffectPgDatabase` (via `proxyChain`) —
+ * Returns a chainable Proxy over `EffectPgDatabase` (via `proxyChain`) --
  * every property read records a step, every call records args, and the
  * chain is replayed against the resolved drizzle db when it's finally
  * yielded as an Effect. Callers don't need a separate `yield* conn` step:
@@ -31,15 +31,15 @@ import type * as Redacted from "effect/Redacted";
  *
  * The connect work is deferred until the first query and memoized on the
  * current execution's `Scope` (via {@link makeExecutionMemo}), so the pool
- * is built at most once per execution — a Worker `fetch`/`queue`/`scheduled`
- * event, a Durable Object call, a Workflow run, or a Lambda invocation — and
+ * is built at most once per execution -- a Worker `fetch`/`queue`/`scheduled`
+ * event, a Durable Object call, a Workflow run, or a Lambda invocation -- and
  * reused across every query and `task` step in that execution. Yielding the
  * connection string is likewise deferred, so deploy / plan-time invocations
  * (where `WorkerEnvironment` isn't provided) never trigger a real connection
  * attempt.
  *
  * The pool is built against that same execution scope, so its `end`
- * finalizer fires when the scope closes — when the request / run settles,
+ * finalizer fires when the scope closes -- when the request / run settles,
  * not when the Worker's isolate-lifetime init completes. Wrapping queries in
  * a nested `Effect.scoped` narrows both the memo and the pool's lifetime to
  * that block: memo key and finalizer target are always the same scope
@@ -63,7 +63,7 @@ export const Postgres = <TRelations extends AnyRelations = EmptyRelations, E = n
   connectionString: Effect.Effect<Redacted.Redacted<string>, E, R>,
   config?: EffectDrizzlePgConfig<TRelations> & {
     /**
-     * Overrides for the underlying `@effect/sql-pg` client — `prepare`,
+     * Overrides for the underlying `@effect/sql-pg` client -- `prepare`,
      * `ssl`, pool limits, and friends. The URL comes from `connectionString`.
      */
     readonly client?: Omit<PgClient.PgPoolConfig, "url">;

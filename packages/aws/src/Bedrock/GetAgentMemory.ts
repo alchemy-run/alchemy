@@ -5,7 +5,7 @@ import type { AgentAlias } from "./AgentAlias.ts";
 
 /**
  * The `GetAgentMemory` request with the binding-injected `agentId` and
- * `agentAliasId` removed — they are supplied automatically from the bound
+ * `agentAliasId` removed -- they are supplied automatically from the bound
  * {@link AgentAlias}.
  */
 export interface GetAgentMemoryRequest extends Omit<
@@ -14,7 +14,7 @@ export interface GetAgentMemoryRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `bedrock-agent-runtime:GetAgentMemory` — retrieve the
+ * Runtime binding for `bedrock-agent-runtime:GetAgentMemory` -- retrieve the
  * session summaries an agent has stored for a memory id.
  *
  * Bind an {@link AgentAlias} inside a function runtime to get a callable

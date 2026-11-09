@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Cluster } from "./Cluster.ts";
 
 /**
- * Runtime binding for `elasticmapreduce:DescribePersistentAppUI` — reads a persistent application UI created for the bound cluster by {@link CreatePersistentAppUI}.
+ * Runtime binding for `elasticmapreduce:DescribePersistentAppUI` -- reads a persistent application UI created for the bound cluster by {@link CreatePersistentAppUI}.
  * ### Application UIs
  * **Example:** Wait for the UI to Attach
  * ```typescript

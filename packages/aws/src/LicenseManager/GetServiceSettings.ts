@@ -8,7 +8,7 @@ import type * as Effect from "effect/Effect";
 export interface GetServiceSettingsRequest extends licensemanager.GetServiceSettingsRequest {}
 
 /**
- * Runtime binding for `license-manager:GetServiceSettings` — read the
+ * Runtime binding for `license-manager:GetServiceSettings` -- read the
  * account's License Manager settings (S3 report bucket, SNS alert topic,
  * organization integration).
  *

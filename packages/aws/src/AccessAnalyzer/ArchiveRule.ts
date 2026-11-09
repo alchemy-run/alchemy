@@ -34,7 +34,7 @@ export interface ArchiveRuleProps {
   /**
    * The filter criteria keyed by finding attribute (e.g. `principal.AWS`,
    * `resource`, `condition.aws:PrincipalOrgID`, `isPublic`). New findings
-   * matching every criterion are automatically archived. Mutable — changing
+   * matching every criterion are automatically archived. Mutable -- changing
    * the filter updates the rule in place.
    */
   filter: Record<string, ArchiveRuleCriterion>;
@@ -52,7 +52,7 @@ export interface ArchiveRule extends Resource<
 > {}
 
 /**
- * An archive rule for an IAM Access Analyzer — automatically archives new
+ * An archive rule for an IAM Access Analyzer -- automatically archives new
  * findings that match the filter criteria, so expected cross-account or
  * public grants don't clutter the active findings list.
  *
@@ -117,7 +117,7 @@ export const ArchiveRuleProvider = () =>
       return ArchiveRule.Provider.of({
         stables: ["analyzerName", "ruleName"],
 
-        // sub-resource keyed by parent analyzer + rule name — not enumerable
+        // sub-resource keyed by parent analyzer + rule name -- not enumerable
         // account-wide without the parent
         list: () => Effect.succeed([]),
 
@@ -140,16 +140,16 @@ export const ArchiveRuleProvider = () =>
           if (olds.ruleName !== news.ruleName) {
             return { action: "replace" } as const;
           }
-          // filter is mutable → default update path
+          // filter is mutable -> default update path
         }),
 
         reconcile: Effect.fn(function* ({ news, session }) {
           const filter = toFilter(news.filter);
 
-          // 1. OBSERVE — cloud state is authoritative
+          // 1. OBSERVE -- cloud state is authoritative
           const existing = yield* observe(news.analyzerName, news.ruleName);
 
-          // 2. ENSURE / SYNC — createArchiveRule for a new rule, otherwise
+          // 2. ENSURE / SYNC -- createArchiveRule for a new rule, otherwise
           //    updateArchiveRule to converge the filter. Both are idempotent.
           if (existing === undefined) {
             yield* aa
@@ -159,7 +159,7 @@ export const ArchiveRuleProvider = () =>
                 filter,
               })
               .pipe(
-                // a concurrent create — fall through to update the filter
+                // a concurrent create -- fall through to update the filter
                 Effect.catchTag("ConflictException", () =>
                   aa.updateArchiveRule({
                     analyzerName: news.analyzerName,

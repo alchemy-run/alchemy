@@ -74,11 +74,11 @@ export interface NextjsProps<Bindings extends WorkerBindingProps = {}> extends O
   dev?: {
     /**
      * - `"preview"` (default): build the OpenNext worker and serve it
-     *   under workerd — production parity (workerd APIs, ISR/cache
+     *   under workerd -- production parity (workerd APIs, ISR/cache
      *   semantics), no HMR.
      * - `"hmr"`: run the real `next dev` (Turbopack HMR) in Node with the
      *   Worker's bindings proxied onto OpenNext's `getCloudflareContext()`
-     *   contract. App code runs in Node, not workerd — CF-specific
+     *   contract. App code runs in Node, not workerd -- CF-specific
      *   runtime behavior still needs `"preview"`.
      * @default "preview"
      */
@@ -91,7 +91,7 @@ export interface NextjsProps<Bindings extends WorkerBindingProps = {}> extends O
   /**
    * Optional configuration for static asset routing behavior.
    * Defaults to `runWorkerFirst: true` with `htmlHandling`/`notFoundHandling`
-   * set to `"none"` — the OpenNext server owns routing and delegates to the
+   * set to `"none"` -- the OpenNext server owns routing and delegates to the
    * `ASSETS` binding itself.
    */
   assets?: AssetsConfig;
@@ -120,7 +120,7 @@ type NextjsInput<Bindings extends WorkerBindingProps> = InputProps<
  * source provider is loaded from the package's `/nextjs` export with a dynamic
  * `import()`.
  *
- * Local dev (`alchemy dev`) defaults to preview parity — the built worker
+ * Local dev (`alchemy dev`) defaults to preview parity -- the built worker
  * served under workerd. Set `dev: { mode: "hmr" }` for the real `next dev`
  * (Turbopack HMR) with the Worker's bindings proxied onto
  * `getCloudflareContext()`.
@@ -133,7 +133,7 @@ type NextjsInput<Bindings extends WorkerBindingProps> = InputProps<
  *
  * Known limitations (upstream `@opennextjs/cloudflare`):
  * - Edge-runtime routes/pages (`export const runtime = "edge"`) are not
- *   supported — the build fails with the offending route list; remove the
+ *   supported -- the build fails with the offending route list; remove the
  *   directive (the node runtime runs on Workers). Middleware is fine.
  * - `next/image` optimization requires a zone with Cloudflare Images;
  *   on `workers.dev`, use `unoptimized` (images serve as raw assets).
@@ -251,7 +251,7 @@ type NextjsInput<Bindings extends WorkerBindingProps> = InputProps<
  * Calling `Nextjs` with no arguments returns a constructor you can
  * `extend` to declare the Worker as a named class. The class is both an
  * `Effect` you can `yield*` to deploy and a type you can reference
- * elsewhere — useful when other resources need to bind to this Worker.
+ * elsewhere -- useful when other resources need to bind to this Worker.
  *
  * **Example:** Declaring a Worker class
  * ```typescript
@@ -312,7 +312,7 @@ export const Nextjs: {
           dev: props?.dev?.port !== undefined ? { port: props.dev.port } : undefined,
           // OpenNext's revalidation queues (memory-queue, do-queue) fetch
           // the worker back through `WORKER_SELF_REFERENCE`. Always wire
-          // the self service binding — it's inert when unused, and its
+          // the self service binding -- it's inert when unused, and its
           // absence turns ISR revalidation into a silent no-op. An
           // explicit user-provided `env.WORKER_SELF_REFERENCE` wins.
           env: {
@@ -347,7 +347,7 @@ export const Nextjs: {
             devMode: "server",
             rootDir: props?.rootDir,
             // `next dev` (Turbopack) cold-starts broken under bun (every
-            // route 404s until `.next` is warm) — pin the dev child to node.
+            // route 404s until `.next` is warm) -- pin the dev child to node.
             runtime: "node",
             options: {
               root: props?.rootDir,

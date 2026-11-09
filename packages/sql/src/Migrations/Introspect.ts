@@ -27,7 +27,7 @@ export const tableColumns = (
           })),
         ),
         // A missing table yields an empty PRAGMA result, not an error, but
-        // some tunnels surface it as one — treat both as "absent".
+        // some tunnels surface it as one -- treat both as "absent".
         Effect.orElseSucceed(() => []),
       );
     case "postgres":
@@ -91,17 +91,17 @@ export const tableColumns = (
 };
 
 /**
- * Classify an existing applied-migrations table by column set — the same
+ * Classify an existing applied-migrations table by column set -- the same
  * versioning trick drizzle uses (there is deliberately no version column):
  *
- * - `absent`         — no table
- * - `drizzle-shaped` — has `hash` (drizzle v1 / alchemy current)
- * - `legacy-alchemy` — `name` + `applied_at`, no `hash` (pre-registry Alchemy)
- * - `legacy-2col`    — two columns, no `name`/`hash` (oldest Alchemy shape,
+ * - `absent`         -- no table
+ * - `drizzle-shaped` -- has `hash` (drizzle v1 / alchemy current)
+ * - `legacy-alchemy` -- `name` + `applied_at`, no `hash` (pre-registry Alchemy)
+ * - `legacy-2col`    -- two columns, no `name`/`hash` (oldest Alchemy shape,
  *   where the primary column carried the migration name)
- * - `wrangler`       — `id`/`name`/`applied_at` with an INTEGER id (already
+ * - `wrangler`       -- `id`/`name`/`applied_at` with an INTEGER id (already
  *   wrangler's real shape)
- * - `unknown`        — anything else
+ * - `unknown`        -- anything else
  */
 export type TableShape =
   | "absent"

@@ -1,7 +1,7 @@
 /** @effect-diagnostics anyUnknownInErrorContext:off */
 
 /**
- * INTERNAL — the "image source changed" trigger stream shared by the floci
+ * INTERNAL -- the "image source changed" trigger stream shared by the floci
  * dev providers that rebuild a Docker image on file change
  * ([ECS FlociTaskProvider](../ECS/FlociTaskProvider.ts),
  * [ECS FlociServiceProvider](../ECS/FlociServiceProvider.ts),
@@ -26,12 +26,12 @@ import {
 /**
  * A stream of "the image source changed" triggers for a props bag:
  *
- * - `main` — a `Bundle.watch` over the exact module graph the deploy
+ * - `main` -- a `Bundle.watch` over the exact module graph the deploy
  *   bundles (rebuild successes are the trigger; rebuild errors are logged
  *   and swallowed);
- * - `context` — a debounced recursive `fs.watch` of the build context (and
+ * - `context` -- a debounced recursive `fs.watch` of the build context (and
  *   the Dockerfile's directory when it lives outside the context);
- * - `image` (registry ref) / inline-dockerfile-only — nothing local to
+ * - `image` (registry ref) / inline-dockerfile-only -- nothing local to
  *   watch: an empty stream.
  */
 export const imageSourceTrigger = Effect.fn(function* (options: {
@@ -52,7 +52,7 @@ export const imageSourceTrigger = Effect.fn(function* (options: {
     });
     // Rolldown's first build runs when the watcher starts, before any file
     // changed; the deploy already built that exact graph. Only a build that
-    // follows a change (`Start`) is a trigger — otherwise the rerun would
+    // follows a change (`Start`) is a trigger -- otherwise the rerun would
     // re-register the image and reap the revision the engine just handed to
     // dependents.
     let changed = false;
@@ -76,7 +76,7 @@ export const imageSourceTrigger = Effect.fn(function* (options: {
 
   if (kind === "context") {
     if (source.context === undefined) {
-      // Inline-dockerfile-only builds have no local files to watch — the
+      // Inline-dockerfile-only builds have no local files to watch -- the
       // content is a prop, and prop changes flow through the dev diff.
       return Stream.empty as Stream.Stream<void>;
     }

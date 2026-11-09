@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { QApp } from "./QApp.ts";
 
 /**
- * Request for {@link AssociateLibraryItemReview} — `instanceId` is injected from the bound Q App.
+ * Request for {@link AssociateLibraryItemReview} -- `instanceId` is injected from the bound Q App.
  */
 export interface AssociateLibraryItemReviewRequest extends Omit<
   qapps.AssociateLibraryItemReviewInput,
@@ -19,7 +19,7 @@ export interface AssociateLibraryItemReviewRequest extends Omit<
  * ### Library Items
  * **Example:** Upvote a Library Item
  * ```typescript
- * // init — bind the operation to the Q App
+ * // init -- bind the operation to the Q App
  * const associateLibraryItemReview = yield* AWS.QApps.AssociateLibraryItemReview(app);
  *
  * // runtime

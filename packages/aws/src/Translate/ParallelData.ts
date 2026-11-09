@@ -14,7 +14,7 @@ import type { Providers } from "../Providers.ts";
 import { readTranslateTags, syncTranslateTags } from "./internal.ts";
 
 /**
- * The parallel data import failed server-side (`Status: FAILED`) — usually a
+ * The parallel data import failed server-side (`Status: FAILED`) -- usually a
  * malformed input file or an S3 URI the caller cannot read.
  */
 export class ParallelDataFailed extends Data.TaggedError("ParallelDataFailed")<{
@@ -33,7 +33,7 @@ export class ParallelDataNotConverged extends Data.TaggedError("ParallelDataNotC
 
 export interface ParallelDataProps {
   /**
-   * Name of the parallel data — up to 256 characters of letters, digits, and
+   * Name of the parallel data -- up to 256 characters of letters, digits, and
    * hyphens (`^([A-Za-z0-9-]_?)+$`). If omitted, a unique name is generated
    * from the app, stage, and logical ID. Changing the name replaces the
    * parallel data.
@@ -46,7 +46,7 @@ export interface ParallelDataProps {
   /**
    * S3 URI of the parallel data input file (e.g.
    * `s3://my-bucket/examples.csv`). The caller must be able to read the
-   * object. Updatable in place — a new import runs on change.
+   * object. Updatable in place -- a new import runs on change.
    */
   s3Uri: string;
   /**
@@ -69,7 +69,7 @@ export interface ParallelData extends Resource<
   ParallelDataProps,
   {
     /**
-     * Name of the parallel data — pass it as `ParallelDataNames` to
+     * Name of the parallel data -- pass it as `ParallelDataNames` to
      * `StartTextTranslationJob` for Active Custom Translation.
      */
     parallelDataName: string;
@@ -104,7 +104,7 @@ export interface ParallelDataLookup {
 }
 
 /**
- * Amazon Translate parallel data — segment-aligned translation examples
+ * Amazon Translate parallel data -- segment-aligned translation examples
  * imported from S3 that steer the style, tone, and word choice of batch
  * translation jobs (Active Custom Translation). The import is asynchronous:
  * the resource waits for the parallel data to become `ACTIVE`.
@@ -168,8 +168,8 @@ export const ParallelDataProvider = () =>
           .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
-      // The import runs asynchronously (CREATING/UPDATING → ACTIVE|FAILED);
-      // poll bounded (~10 min ceiling — small files typically converge in a
+      // The import runs asynchronously (CREATING/UPDATING -> ACTIVE|FAILED);
+      // poll bounded (~10 min ceiling -- small files typically converge in a
       // few minutes).
       const waitForStable = Effect.fn(function* (name: string) {
         const final = yield* getOne(name).pipe(
@@ -223,12 +223,12 @@ export const ParallelDataProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — cloud state is authoritative.
+          // Observe -- cloud state is authoritative.
           const observed = yield* getOne(name);
           const observedProps = observed?.ParallelDataProperties;
 
           if (observedProps === undefined) {
-            // Ensure — greenfield import. ConflictException is a race with a
+            // Ensure -- greenfield import. ConflictException is a race with a
             // concurrent create of the same name; fall through to observe.
             // The client token only needs to be unique per submission;
             // idempotency across crashed runs comes from observing first.
@@ -250,7 +250,7 @@ export const ParallelDataProvider = () =>
               })
               .pipe(Effect.catchTag("ConflictException", () => Effect.void));
           } else {
-            // Sync — diff the observed import config against the desired one
+            // Sync -- diff the observed import config against the desired one
             // and re-import only on drift.
             const config = observedProps.ParallelDataConfig;
             const drift =
@@ -273,7 +273,7 @@ export const ParallelDataProvider = () =>
                   },
                 })
                 .pipe(
-                  // A concurrent import may still be settling — retry bounded.
+                  // A concurrent import may still be settling -- retry bounded.
                   Effect.retry({
                     while: (e): boolean =>
                       e._tag === "ConcurrentModificationException" ||
@@ -292,7 +292,7 @@ export const ParallelDataProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // Idempotent — the parallel data may already be gone. A delete
+          // Idempotent -- the parallel data may already be gone. A delete
           // during CREATING/UPDATING conflicts; retry bounded.
           yield* translate.deleteParallelData({ Name: output.parallelDataName }).pipe(
             Effect.retry({
@@ -302,7 +302,7 @@ export const ParallelDataProvider = () =>
             }),
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
           );
-          // Deletion is asynchronous (DELETING) — wait until gone so a
+          // Deletion is asynchronous (DELETING) -- wait until gone so a
           // replacement can immediately reuse the name.
           yield* translate.getParallelData({ Name: output.parallelDataName }).pipe(
             Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),

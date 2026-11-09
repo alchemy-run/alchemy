@@ -1,6 +1,6 @@
 /**
  * Bootstrap for an Effect `AWS.Lambda.WebFunction` (zip, Node runtime). The
- * generated entry imports this module and the user's `main` — see
+ * generated entry imports this module and the user's `main` -- see
  * `alchemy/Runtime/Bootstrap` for why the entry is a shim.
  *
  * Unlike an Event Function, a Web Function is a plain HTTP server: the

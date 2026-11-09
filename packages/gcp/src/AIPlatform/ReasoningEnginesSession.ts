@@ -26,7 +26,7 @@ export type ReasoningEnginesSessionProps = {
   /**
    * Parent ReasoningEngine resource name
    * (`projects/{project}/locations/{location}/reasoningEngines/{reasoning_engine}`).
-   * Immutable — changing it replaces the session.
+   * Immutable -- changing it replaces the session.
    */
   parent: string;
   /**

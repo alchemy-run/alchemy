@@ -44,11 +44,11 @@ export type AuthzExtensionProps = {
    * `projects/{project}/locations/{location}/authzExtensions/{authzExtension}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Must be 1-63 characters and not start with a number.
-   * Immutable — changing it replaces the extension.
+   * Immutable -- changing it replaces the extension.
    */
   authzExtensionId?: string;
   /**
-   * Location (`us-central1`, `global`, …). Immutable — changing it
+   * Location (`us-central1`, `global`, ...). Immutable -- changing it
    * replaces the extension. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -67,7 +67,7 @@ export type AuthzExtensionProps = {
   timeout?: string;
   /**
    * Load balancing scheme shared by referenced backend services and
-   * forwarding rules. Immutable — changing it replaces the extension.
+   * forwarding rules. Immutable -- changing it replaces the extension.
    * @default "INTERNAL_MANAGED"
    */
   loadBalancingScheme?: AuthzExtensionLoadBalancingScheme;
@@ -119,7 +119,7 @@ export type AuthzExtension = Resource<
     authzExtensionId: string;
     /** Project id. */
     project: string;
-    /** Location id (`us-central1`, `global`, …). */
+    /** Location id (`us-central1`, `global`, ...). */
     location: string;
     /** Backend service URL that runs the callout. */
     service: string | undefined;
@@ -167,7 +167,7 @@ export interface AuthzExtensionLookup {
    */
   authzExtensionId: string;
   /**
-   * Location (`us-central1`, `global`, …). `US-CENTRAL1` is accepted and
+   * Location (`us-central1`, `global`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -179,7 +179,7 @@ export interface AuthzExtensionLookup {
 }
 
 /**
- * A Network Services AuthzExtension — forwards requests to a callout
+ * A Network Services AuthzExtension -- forwards requests to a callout
  * backend that makes an authorization decision for a load balancer.
  *
  * Changing `authzExtensionId`, `location`, or `loadBalancingScheme`

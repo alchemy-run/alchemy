@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 /**
  * Runtime binding for `lambda:GetAccountSettings`.
  *
- * An account-level binding — call it with no arguments to get a callable
+ * An account-level binding -- call it with no arguments to get a callable
  * that reads the region's Lambda quotas (`AccountLimit`) and current usage
  * (`AccountUsage`). Provide the `GetAccountSettingsHttp` layer on the
  * Function to satisfy the binding.

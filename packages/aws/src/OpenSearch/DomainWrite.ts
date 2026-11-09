@@ -15,7 +15,7 @@ import type { Domain } from "./Domain.ts";
 /** Runtime client for write access to a domain's REST data plane. */
 export interface WriteDomainClient {
   /**
-   * Index (upsert) one document — `PUT /{index}/_doc/{id}` when an id is
+   * Index (upsert) one document -- `PUT /{index}/_doc/{id}` when an id is
    * given, `POST /{index}/_doc` (auto-generated id) otherwise.
    */
   indexDocument(
@@ -41,7 +41,7 @@ export interface WriteDomainClient {
   >;
   /**
    * Delete one document (`DELETE /{index}/_doc/{id}`). Deleting a missing
-   * document is not an error — the response carries `result: "not_found"`.
+   * document is not an error -- the response carries `result: "not_found"`.
    */
   deleteDocument(
     index: string,
@@ -53,7 +53,7 @@ export interface WriteDomainClient {
   >;
   /**
    * Bulk-apply index/create/update/delete operations (`POST /_bulk`). Pass
-   * the action/document lines as an array — they are serialized to NDJSON.
+   * the action/document lines as an array -- they are serialized to NDJSON.
    */
   bulk(
     operations: ReadonlyArray<unknown>,
@@ -70,13 +70,13 @@ export interface WriteDomainClient {
  * and `es:ESHttpPatch` on the domain and its paths).
  *
  * Every request is a SigV4-signed HTTP call (service `es`) against the
- * domain's endpoint, made with the host Function's own credentials — the
+ * domain's endpoint, made with the host Function's own credentials -- the
  * domain's access policy must allow the function's role. Provide the
  * implementation with `Effect.provide(AWS.OpenSearch.DomainWriteHttp)`.
  * ### Writing Documents
  * **Example:** Index and Delete Documents
  * ```typescript
- * // init — grants es:ESHttpPut/Post/Delete/Patch on the domain
+ * // init -- grants es:ESHttpPut/Post/Delete/Patch on the domain
  * const writer = yield* AWS.OpenSearch.DomainWrite(domain);
  *
  * // runtime

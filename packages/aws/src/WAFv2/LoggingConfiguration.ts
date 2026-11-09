@@ -15,7 +15,7 @@ export interface LoggingConfigurationProps {
    */
   resourceArn: string;
   /**
-   * ARNs of the log destinations — an Amazon Kinesis Data Firehose delivery
+   * ARNs of the log destinations -- an Amazon Kinesis Data Firehose delivery
    * stream, a CloudWatch Logs log group, or an S3 bucket. The destination
    * name must begin with `aws-waf-logs-`. A trailing `:*` on a CloudWatch
    * Logs log group ARN is stripped automatically (WAF rejects it).
@@ -55,7 +55,7 @@ export interface LoggingConfiguration extends Resource<
 > {}
 
 /**
- * The logging configuration of an AWS WAFv2 {@link WebACL} — streams full
+ * The logging configuration of an AWS WAFv2 {@link WebACL} -- streams full
  * web request logs to a Kinesis Data Firehose delivery stream, a CloudWatch
  * Logs log group, or an S3 bucket.
  *
@@ -103,7 +103,7 @@ export const LoggingConfiguration = Resource<LoggingConfiguration>(
 
 /**
  * Derive the scope from a WAFv2 entity ARN. CLOUDFRONT-scoped ARNs carry a
- * `global/` resource prefix (`arn:aws:wafv2:us-east-1:acct:global/webacl/…`);
+ * `global/` resource prefix (`arn:aws:wafv2:us-east-1:acct:global/webacl/...`);
  * REGIONAL ARNs carry `regional/`.
  */
 const scopeOfArn = (arn: string): WafScope =>
@@ -111,7 +111,7 @@ const scopeOfArn = (arn: string): WafScope =>
 
 /**
  * WAF rejects CloudWatch Logs log group ARNs with the `:*` suffix that IAM
- * policies (and the Logs API) use — strip it.
+ * policies (and the Logs API) use -- strip it.
  */
 const normalizeDestination = (arn: string): string => (arn.endsWith(":*") ? arn.slice(0, -2) : arn);
 
@@ -182,7 +182,7 @@ export const LoggingConfigurationProvider = () =>
             LoggingFilter: news.loggingFilter,
           };
 
-          // Observe — PutLoggingConfiguration is a true upsert, so only
+          // Observe -- PutLoggingConfiguration is a true upsert, so only
           // call it when the observed configuration drifts from desired.
           const observed = yield* readConfig(news.resourceArn);
           const current = observed?.LoggingConfiguration;
@@ -216,7 +216,7 @@ export const LoggingConfigurationProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           const scope = scopeOfArn(output.resourceArn);
-          // Idempotent — the configuration (or the web ACL itself) may
+          // Idempotent -- the configuration (or the web ACL itself) may
           // already be gone.
           yield* withWafScope(
             scope,

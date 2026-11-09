@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `organizations:ListDelegatedAdministrators`.
  *
  * Lists the accounts that are designated as delegated administrators in the organization, optionally filtered by service principal.
- * Account-level operation — Organizations is a management-account-scoped
+ * Account-level operation -- Organizations is a management-account-scoped
  * global service, so the binding takes no resource argument. Provide the
  * implementation with `Effect.provide(AWS.Organizations.ListDelegatedAdministratorsHttp)`.
  * ### Delegated Administration & Trusted Access
  * **Example:** List Delegated Administrators
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listDelegatedAdministrators = yield* AWS.Organizations.ListDelegatedAdministrators();
  *
  * // runtime

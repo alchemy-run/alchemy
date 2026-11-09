@@ -46,7 +46,7 @@ export interface BotLocale extends Resource<
   {
     /** ID of the bot the locale belongs to. */
     botId: string;
-    /** Bot version the locale lives on — always `DRAFT`. */
+    /** Bot version the locale lives on -- always `DRAFT`. */
     botVersion: string;
     /** The locale ID, e.g. `en_US`. */
     localeId: string;
@@ -110,7 +110,7 @@ export const BotLocaleProvider = () =>
       return {
         stables: ["botId", "botVersion", "localeId"],
 
-        // Sub-resource keyed entirely by its bot — nuke reaches it through
+        // Sub-resource keyed entirely by its bot -- nuke reaches it through
         // the parent bot's deletion.
         list: () => Effect.succeed([]),
 
@@ -135,7 +135,7 @@ export const BotLocaleProvider = () =>
           // 1. OBSERVE
           let observed = yield* describeLocale(news.botId, news.localeId);
 
-          // 2. ENSURE — a Conflict is a concurrent create of the same locale.
+          // 2. ENSURE -- a Conflict is a concurrent create of the same locale.
           if (observed === undefined) {
             yield* lexm
               .createBotLocale({
@@ -150,7 +150,7 @@ export const BotLocaleProvider = () =>
             observed = yield* waitForLocaleSettled(news.botId, news.localeId);
           }
 
-          // 3. SYNC — apply the delta when a declared prop drifted.
+          // 3. SYNC -- apply the delta when a declared prop drifted.
           if (
             observed.nluIntentConfidenceThreshold !== desiredThreshold ||
             (observed.description ?? undefined) !== (news.description ?? undefined) ||

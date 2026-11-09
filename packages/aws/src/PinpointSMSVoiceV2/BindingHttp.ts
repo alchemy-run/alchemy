@@ -7,8 +7,8 @@ import type { PhoneNumber } from "./PhoneNumber.ts";
  * Shared scaffolding for AWS End User Messaging SMS (Pinpoint SMS Voice
  * v2) HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service
- * is a `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the three
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service
+ * is a `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the three
  * builders below. Everything except the operation and the IAM action list
  * is boilerplate: phone-number-scoped bindings inject the bound number's
  * ARN as the request's `OriginationIdentity` and grant `actions` on that
@@ -19,7 +19,7 @@ import type { PhoneNumber } from "./PhoneNumber.ts";
 
 /**
  * Build the impl Effect for an End User Messaging SMS operation scoped to
- * a {@link PhoneNumber} (`SendTextMessage`, `PutKeyword`, …): the
+ * a {@link PhoneNumber} (`SendTextMessage`, `PutKeyword`, ...): the
  * deploy-time half grants `actions` on the bound number's ARN, and the
  * runtime half injects the number's ARN into every request as
  * `OriginationIdentity` (the API accepts a phone number ID or ARN there).
@@ -45,7 +45,7 @@ export const makeSmsVoicePhoneNumberHttpBinding = <
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (phoneNumber: PhoneNumber) {
-      // Output yields a DEFERRED effect — resolve again per invocation below.
+      // Output yields a DEFERRED effect -- resolve again per invocation below.
       const PhoneNumberArn = yield* phoneNumber.phoneNumberArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${phoneNumber})`({
@@ -73,7 +73,7 @@ export const makeSmsVoicePhoneNumberHttpBinding = <
 /**
  * Build the impl Effect for an End User Messaging SMS operation scoped to
  * an {@link OptOutList} (`PutOptedOutNumber`, `DescribeOptedOutNumbers`,
- * …): the deploy-time half grants `actions` on the bound list's ARN, and
+ * ...): the deploy-time half grants `actions` on the bound list's ARN, and
  * the runtime half injects the list's ARN into every request as
  * `OptOutListName` (the API accepts a list name or ARN there).
  */
@@ -95,7 +95,7 @@ export const makeSmsVoiceOptOutListHttpBinding = <
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (optOutList: OptOutList) {
-      // Output yields a DEFERRED effect — resolve again per invocation below.
+      // Output yields a DEFERRED effect -- resolve again per invocation below.
       const OptOutListArn = yield* optOutList.optOutListArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${optOutList})`({
@@ -120,7 +120,7 @@ export const makeSmsVoiceOptOutListHttpBinding = <
 /**
  * Build the impl Effect for an account-level End User Messaging SMS
  * operation (`CarrierLookup`, `PutMessageFeedback`): the deploy-time half
- * grants `actions` on `*` — these operations act on message IDs or raw
+ * grants `actions` on `*` -- these operations act on message IDs or raw
  * phone numbers, not on a scopeable resource ARN.
  */
 export const makeSmsVoiceAccountHttpBinding = <I, A, E, R>(options: {

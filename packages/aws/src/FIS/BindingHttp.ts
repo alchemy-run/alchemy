@@ -6,8 +6,8 @@ import type { ExperimentTemplate } from "./ExperimentTemplate.ts";
 /**
  * Shared scaffolding for the AWS Fault Injection Service (FIS) HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the two builders
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the two builders
  * below. Everything except the operation, the IAM action list, and the
  * injected identifier is boilerplate.
  */
@@ -16,7 +16,7 @@ import type { ExperimentTemplate } from "./ExperimentTemplate.ts";
  * Build the impl Effect for a FIS operation scoped to a bound
  * {@link ExperimentTemplate}: the deploy-time half grants `actions` on the
  * template's ARN (plus, when `grantExperimentWildcard` is set, the account's
- * `experiment/*` ARNs — `fis:StartExperiment` authorizes against both the
+ * `experiment/*` ARNs -- `fis:StartExperiment` authorizes against both the
  * template being started and the experiment being created), and the runtime
  * half injects the template's id into every request as `requestKey`.
  *
@@ -33,13 +33,13 @@ export const makeFisTemplateHttpBinding = <I, A, E, R>(options: {
   /** The request field the bound template's id is injected as. */
   requestKey: "id" | "experimentTemplateId";
   /**
-   * Additionally grant `actions` on the account's `experiment/*` ARN —
+   * Additionally grant `actions` on the account's `experiment/*` ARN --
    * `fis:StartExperiment` is authorized against both the template and the
    * experiment it creates.
    */
   grantExperimentWildcard?: boolean;
   /**
-   * Additionally grant `iam:CreateServiceLinkedRole` scoped to FIS — the
+   * Additionally grant `iam:CreateServiceLinkedRole` scoped to FIS -- the
    * first `fis:StartExperiment` in an account creates the
    * `AWSServiceRoleForFIS` service-linked role on the caller's behalf and is
    * denied without it.
@@ -62,7 +62,7 @@ export const makeFisTemplateHttpBinding = <I, A, E, R>(options: {
                 Output.interpolate`${template.arn}`,
                 ...(options.grantExperimentWildcard
                   ? [
-                      // arn:…:experiment-template/EXT… → arn:…:experiment/*
+                      // arn:...:experiment-template/EXT... -> arn:...:experiment/*
                       template.arn.pipe(
                         Output.map((arn) => `${arn.slice(0, arn.lastIndexOf(":"))}:experiment/*`),
                       ),
@@ -103,7 +103,7 @@ export const makeFisTemplateHttpBinding = <I, A, E, R>(options: {
 /**
  * Build the impl Effect for an account-level FIS operation (experiment
  * control and reads, the action/target-resource-type catalogs, the safety
- * lever). The deploy-time half grants `actions` on `*` — experiments are
+ * lever). The deploy-time half grants `actions` on `*` -- experiments are
  * created dynamically at runtime and the catalog/list actions are not scoped
  * to a single resource.
  */

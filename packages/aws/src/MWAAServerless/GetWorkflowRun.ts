@@ -12,13 +12,13 @@ export type GetWorkflowRunInput = Omit<mwaa.GetWorkflowRunRequest, "WorkflowArn"
 /**
  * Runtime binding for `airflow-serverless:GetWorkflowRun`.
  *
- * Reads the detail of a single run of the bound {@link Workflow} — its
+ * Reads the detail of a single run of the bound {@link Workflow} -- its
  * status, timings, error message, and task-instance ids. Provide the
  * implementation with `Effect.provide(AWS.MWAAServerless.GetWorkflowRunHttp)`.
  * ### Observing Runs
  * **Example:** Read A Run's Status
  * ```typescript
- * // init — bind the operation to the workflow
+ * // init -- bind the operation to the workflow
  * const getWorkflowRun = yield* AWS.MWAAServerless.GetWorkflowRun(workflow);
  *
  * // runtime

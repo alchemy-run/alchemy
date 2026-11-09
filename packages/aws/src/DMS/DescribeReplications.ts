@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `dms:DescribeReplications`.
  *
  * Bind this operation (account-level) to look up DMS Serverless
- * replications and their provisioning/replication status — filter by
+ * replications and their provisioning/replication status -- filter by
  * `replication-config-arn` or `replication-config-id`. Pair with
  * {@link StartReplication} / {@link StopReplication} for serverless
  * replication automation. Provide the implementation with
@@ -14,14 +14,14 @@ import type * as Effect from "effect/Effect";
  * ### Orchestrating Serverless Replications
  * **Example:** Check a Serverless Replication's Status
  * ```typescript
- * // init — account-level, no target resource
+ * // init -- account-level, no target resource
  * const describeReplications = yield* AWS.DMS.DescribeReplications();
  *
  * // runtime
  * const { Replications } = yield* describeReplications({
  *   Filters: [{ Name: "replication-config-arn", Values: [configArn] }],
  * });
- * // Replications[0].Status: "created" | "running" | "stopped" | …
+ * // Replications[0].Status: "created" | "running" | "stopped" | ...
  * ```
  *
  * @binding

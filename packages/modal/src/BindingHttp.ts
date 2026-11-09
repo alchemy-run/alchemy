@@ -8,7 +8,7 @@ import * as ModalBindings from "./ModalBindings.ts";
 /**
  * Shared scaffolding for Modal's HTTP bindings. NOT exported from `index.ts`.
  *
- * Every `{Cap}Http.ts` is a thin `Layer.effect(Cap, makeModalBinding({ … }))`:
+ * Every `{Cap}Http.ts` is a thin `Layer.effect(Cap, makeModalBinding({ ... }))`:
  * the operations it calls (resolved once with the host's credentials by
  * {@link ModalBindings.withCredentials}), the environment role it grants the
  * host's identity on the bound resource's environment, and the client it

@@ -17,7 +17,7 @@ export interface CreateSubscriptionRequestRequest extends Omit<
  * ### Subscription Workflows
  * **Example:** Request Access to a Listing
  * ```typescript
- * // init — bind the operation to the domain
+ * // init -- bind the operation to the domain
  * const createSubscriptionRequest = yield* AWS.DataZone.CreateSubscriptionRequest(domain);
  *
  * // runtime

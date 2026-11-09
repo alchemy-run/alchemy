@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `elasticmapreduce:ListSupportedInstanceTypes` — lists the EC2 instance types a given EMR release supports in the region.
+ * Runtime binding for `elasticmapreduce:ListSupportedInstanceTypes` -- lists the EC2 instance types a given EMR release supports in the region.
  * ### Release Catalog
  * **Example:** List Instance Types for a Release
  * ```typescript

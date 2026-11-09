@@ -45,7 +45,7 @@ export interface ActionLike<
    * {@link RuntimeContext}. Empty when the Action captures nothing.
    */
   readonly Captures: Record<string, Output.Output>;
-  /** Resolved runner — populated by the init effect (if any). */
+  /** Resolved runner -- populated by the init effect (if any). */
   readonly Run: (input: In) => Effect.Effect<Out, any, any>;
   /** @internal phantom */
   Output: Out;
@@ -54,13 +54,13 @@ export interface ActionLike<
 export const isAction = (value: any): value is ActionLike =>
   typeof value === "object" && value !== null && value?.Kind === "action";
 
-/** Body function — runs each time the resolved input changes. */
+/** Body function -- runs each time the resolved input changes. */
 export type ActionRunner<In extends object | undefined, Out, Req = any> = (
   input: In,
 ) => Effect.Effect<Out, any, Req>;
 
 /**
- * Init Effect — declares dependencies via `yield*` and returns the runner.
+ * Init Effect -- declares dependencies via `yield*` and returns the runner.
  * Lets multiple Action definitions share resolved services.
  */
 export type ActionInit<In extends object | undefined, Out, Req> = Effect.Effect<
@@ -69,7 +69,7 @@ export type ActionInit<In extends object | undefined, Out, Req> = Effect.Effect<
   Req
 >;
 
-// ── Public API ─────────────────────────────────────────────────────────────
+// -- Public API -------------------------------------------------------------
 //
 // Direct runner:
 //
@@ -77,7 +77,7 @@ export type ActionInit<In extends object | undefined, Out, Req> = Effect.Effect<
 //     return { rows: 42 };
 //   }));
 //
-// Init constructor — pulls in dependencies, returns the runner. The init
+// Init constructor -- pulls in dependencies, returns the runner. The init
 // Effect's `Req` channel bubbles up to the call site:
 //
 //   const Sync = Action("Sync", Effect.gen(function* () {
@@ -87,13 +87,13 @@ export type ActionInit<In extends object | undefined, Out, Req> = Effect.Effect<
 //     });
 //   }));
 //
-// Either way, call it inside a stack to register an instance — `yield*`
+// Either way, call it inside a stack to register an instance -- `yield*`
 // returns `Output<Out>` ready to feed into downstream nodes:
 //
 //   const rows = yield* Sync({ table: bucket.name });
 //   // rows: Output<{ rows: number }, never>
 //
-// Tagged form for split contract/implementation — declare the type with an
+// Tagged form for split contract/implementation -- declare the type with an
 // interface, build the value with the no-arg overload, then supply the runner
 // via `.make` (add the returned Layer to the stack's `providers`, or provide it
 // locally with `Effect.provide`). The init passed to `.make` runs under the
@@ -128,7 +128,7 @@ export function Action(...args: any[]): any {
 export interface ActionClass<Self, Type extends string, In extends object | undefined, Out, Req> {
   readonly Type: Type;
   /**
-   * Default form — uses `Type` as the LogicalId. One instance per Action
+   * Default form -- uses `Type` as the LogicalId. One instance per Action
    * definition (the common case for deploy-time work). Returns the Action's
    * output as `Output<Out>`.
    */
@@ -138,7 +138,7 @@ export interface ActionClass<Self, Type extends string, In extends object | unde
     Req | Stack
   >;
   /**
-   * Explicit-id form — register multiple instances of the same Action
+   * Explicit-id form -- register multiple instances of the same Action
    * definition under distinct logical ids.
    */
   (
@@ -167,7 +167,7 @@ const makeActionClass = (
   baked: ActionRunner<any, any, any> | ActionInit<any, any, any> | undefined,
 ): any => {
   // Pre-resolve baked init/runner into a single Effect<Runner, _, Req>. Use
-  // Effect.cached so the init's body runs at most once per process — every
+  // Effect.cached so the init's body runs at most once per process -- every
   // action instance after the first reuses the resolved runner without paying
   // the init cost (or re-yielding its dependencies).
   let resolveRunner: Effect.Effect<ActionRunner<any, any, any>, any, any> | undefined;
@@ -184,7 +184,7 @@ const makeActionClass = (
     : Context.Service<any, ActionRunner<any, any, any>>(`alchemy/Action<${type}>`);
 
   // Outputs referenced via `yield* output` inside the init Effect land here,
-  // recorded by the capture RuntimeContext. Shared per definition — the init
+  // recorded by the capture RuntimeContext. Shared per definition -- the init
   // runs at most once (Effect.cached), so captures are inherently
   // per-definition, matching how the init's `Req` bubbles per definition.
   const captures: Record<string, Output.Output> = {};
@@ -203,7 +203,7 @@ const makeActionClass = (
   const extra: Record<string, any> = { Type: type };
   if (SelfTag) {
     extra.Self = SelfTag;
-    // `.make(initOrRun)` — accepts either a direct runner or an init Effect.
+    // `.make(initOrRun)` -- accepts either a direct runner or an init Effect.
     // For init form we use `Layer.effect` so the init's Req surfaces on the
     // Layer, and run it under the capture RuntimeContext so `yield* output`
     // accessors are recorded just like the inline form; for runners we use
@@ -262,7 +262,7 @@ const registerAction = <Type extends string, In extends object | undefined, Out>
     actions[fqn] = target as any;
     // `yield* Sync({...})` returns `Output<Out>`. The engine writes the
     // materialized value into `tracker[fqn]` during apply; `Output.of(action)`
-    // resolves a ResourceExpr by looking up `outputs[fqn]` — which is
+    // resolves a ResourceExpr by looking up `outputs[fqn]` -- which is
     // precisely that materialized value. Property access into the returned
     // Output chains through the standard PropExpr proxy.
     return Output.of(target as any) as unknown as Output.ToOutput<Out, never>;

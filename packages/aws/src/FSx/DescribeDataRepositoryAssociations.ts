@@ -6,8 +6,8 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `DescribeDataRepositoryAssociations` operation
  * (IAM action `fsx:DescribeDataRepositoryAssociations` on `*`).
  *
- * Lists the S3 data repository associations linked to Lustre file systems —
- * optionally filtered by `file-system-id` — from inside a function runtime,
+ * Lists the S3 data repository associations linked to Lustre file systems --
+ * optionally filtered by `file-system-id` -- from inside a function runtime,
  * e.g. to discover the S3 prefix a {@link CreateDataRepositoryTask} export
  * will land in. Provide the implementation with
  * `Effect.provide(AWS.FSx.DescribeDataRepositoryAssociationsHttp)`.

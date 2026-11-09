@@ -4,7 +4,7 @@ import { makeLexAliasHttpBinding } from "./BindingHttp.ts";
 import { DeleteSession, type DeleteSessionRequest } from "./DeleteSession.ts";
 
 /**
- * HTTP implementation of {@link DeleteSession} — calls the `lex-runtime-v2`
+ * HTTP implementation of {@link DeleteSession} -- calls the `lex-runtime-v2`
  * `DeleteSession` operation with the Lambda role's credentials and grants
  * the host `lex:DeleteSession` on the alias.
  */

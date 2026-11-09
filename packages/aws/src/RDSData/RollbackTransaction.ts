@@ -15,7 +15,7 @@ export interface RollbackTransactionRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `rds-data:RollbackTransaction` — roll back a Data API
+ * Runtime binding for `rds-data:RollbackTransaction` -- roll back a Data API
  * transaction opened with `AWS.RDSData.BeginTransaction`, discarding every
  * statement executed under its `transactionId`.
  *
@@ -31,7 +31,7 @@ export interface RollbackTransactionRequest extends Omit<
  *   { secret: db.secret },
  * );
  *
- * // runtime — abandon the transaction; its inserts never become visible
+ * // runtime -- abandon the transaction; its inserts never become visible
  * const rollback = yield* rollbackTransaction({
  *   transactionId: tx.transactionId!,
  * });

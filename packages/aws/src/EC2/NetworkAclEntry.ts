@@ -105,7 +105,7 @@ export interface NetworkAclEntry extends Resource<
   Providers
 > {}
 /**
- * A single rule in a `NetworkAcl` — a numbered, stateless allow/deny entry that
+ * A single rule in a `NetworkAcl` -- a numbered, stateless allow/deny entry that
  * matches traffic by protocol, CIDR (IPv4 or IPv6), and, for TCP/UDP, a port
  * range.
  *
@@ -196,7 +196,7 @@ export interface NetworkAclEntry extends Resource<
  * });
  * ```
  * ICMP (`protocol: "1"`) has no ports, so `icmpTypeCode` selects the message
- * type instead — type 8 is echo request and `code: -1` matches all codes.
+ * type instead -- type 8 is echo request and `code: -1` matches all codes.
  *
  * @resource
  */
@@ -351,7 +351,7 @@ export const NetworkAclEntryProvider = () =>
             DryRun: false,
           };
 
-          // Observe — entries are identified by (networkAclId, ruleNumber,
+          // Observe -- entries are identified by (networkAclId, ruleNumber,
           // egress); look up the live entry to decide between create and
           // replace.
           const observed = yield* findEntry(
@@ -360,7 +360,7 @@ export const NetworkAclEntryProvider = () =>
             news.egress ?? false,
           );
 
-          // Ensure / Sync — if the entry doesn't exist, create it; otherwise
+          // Ensure / Sync -- if the entry doesn't exist, create it; otherwise
           // ReplaceNetworkAclEntry overwrites its mutable properties in place.
           if (observed === undefined) {
             yield* session.note(`Creating Network ACL Entry (rule ${news.ruleNumber})...`);

@@ -33,7 +33,7 @@ export type AccessRuleMode =
 export type AccessRuleTarget = "ip" | "ip6" | "ip_range" | "asn" | "country";
 
 /**
- * The match configuration of an IP Access rule. Immutable — the Cloudflare
+ * The match configuration of an IP Access rule. Immutable -- the Cloudflare
  * API only allows `mode`/`notes` to be patched, so changing the
  * configuration replaces the rule.
  */
@@ -43,7 +43,7 @@ export interface AccessRuleConfiguration {
    */
   target: AccessRuleTarget;
   /**
-   * The value to match — e.g. `198.51.100.4` (`ip`), `2001:db8::/64`
+   * The value to match -- e.g. `198.51.100.4` (`ip`), `2001:db8::/64`
    * (`ip_range`), `AS13335` (`asn`), or `US` (`country`).
    */
   value: string;
@@ -54,24 +54,24 @@ export interface AccessRuleProps {
    * Zone the rule applies to. When omitted, the rule is created at the
    * account level and applies to every zone in the account.
    *
-   * Stable — moving a rule between scopes triggers a replacement.
+   * Stable -- moving a rule between scopes triggers a replacement.
    */
   zoneId?: string;
   /**
    * The rule's match configuration (target + value).
    *
-   * Immutable — the API has no way to change a rule's configuration
+   * Immutable -- the API has no way to change a rule's configuration
    * (only `mode`/`notes` are patchable), so changing it triggers a
    * replacement.
    */
   configuration: AccessRuleConfiguration;
   /**
-   * The action to apply to a matched request. Mutable — patched in place.
+   * The action to apply to a matched request. Mutable -- patched in place.
    */
   mode: AccessRuleMode;
   /**
    * An informative summary of the rule, typically used as a reminder or
-   * explanation. Mutable — patched in place.
+   * explanation. Mutable -- patched in place.
    */
   notes?: string;
 }
@@ -106,13 +106,13 @@ export type AccessRule = Resource<
 >;
 
 /**
- * A Cloudflare IP Access rule — block, challenge, or whitelist requests by
+ * A Cloudflare IP Access rule -- block, challenge, or whitelist requests by
  * IP, CIDR range, ASN, or country, either on a single zone or across the
  * whole account.
  *
  * A rule's identity is its `configuration` (target + value) within a scope:
  * Cloudflare rejects a second rule for the same configuration with a
- * duplicate error, and the configuration cannot be changed after creation —
+ * duplicate error, and the configuration cannot be changed after creation --
  * only `mode` and `notes` are mutable. Changing `configuration` or moving
  * the rule between zone and account scope triggers a replacement.
  *
@@ -133,7 +133,7 @@ export type AccessRule = Resource<
  *
  * **Example:** Block a CIDR range account-wide
  * ```typescript
- * // No zoneId — the rule applies to every zone in the account.
+ * // No zoneId -- the rule applies to every zone in the account.
  * yield* Cloudflare.Firewall.AccessRule("BlockScannerRange", {
  *   configuration: { target: "ip_range", value: "203.0.113.0/24" },
  *   mode: "block",
@@ -184,9 +184,9 @@ export const AccessRuleProvider = () =>
     diff: Effect.fn(function* ({ olds = {}, news }) {
       const o = olds as AccessRuleProps;
       const n = news as AccessRuleProps;
-      // No prior props to compare against — let the engine decide.
+      // No prior props to compare against -- let the engine decide.
       if (o.configuration === undefined) return undefined;
-      // The API can only patch mode/notes — configuration is immutable.
+      // The API can only patch mode/notes -- configuration is immutable.
       if (
         o.configuration.target !== n.configuration.target ||
         o.configuration.value !== n.configuration.value
@@ -217,7 +217,7 @@ export const AccessRuleProvider = () =>
 
       // Adoption path: a rule with this configuration may already exist in
       // the scope. Access rules carry no ownership markers, so we cannot
-      // prove we created it — brand it `Unowned` so the engine refuses to
+      // prove we created it -- brand it `Unowned` so the engine refuses to
       // take over unless `adopt` is set.
       const configuration = output?.configuration ?? olds?.configuration;
       if (configuration) {
@@ -232,20 +232,20 @@ export const AccessRuleProvider = () =>
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string | undefined;
 
-      // 1. Observe — the rule id cached on `output` is a hint, not a
+      // 1. Observe -- the rule id cached on `output` is a hint, not a
       //    guarantee: a missing rule falls through to the configuration
       //    scan and then to create.
       let observed = output?.ruleId ? yield* getRule(zoneId, accountId, output.ruleId) : undefined;
 
       // 2. Fall back to scanning the scope for a configuration match.
-      //    Ownership has already been verified upstream — `read` reports
+      //    Ownership has already been verified upstream -- `read` reports
       //    existing rules as `Unowned` and the engine gates takeover
       //    behind the adopt policy before reconcile ever runs.
       if (!observed) {
         observed = yield* findByConfiguration(zoneId, accountId, news.configuration);
       }
 
-      // 3. Ensure — create when missing. A concurrent create surfaces as
+      // 3. Ensure -- create when missing. A concurrent create surfaces as
       //    `DuplicateAccessRule` (Cloudflare code 10009): converge by
       //    re-scanning for the rule that won the race.
       if (!observed) {
@@ -260,7 +260,7 @@ export const AccessRuleProvider = () =>
         );
       }
 
-      // 4. Sync — diff observed mode/notes against desired; skip the
+      // 4. Sync -- diff observed mode/notes against desired; skip the
       //    patch call entirely on a no-op.
       const dirty =
         observed.mode !== news.mode ||
@@ -273,8 +273,8 @@ export const AccessRuleProvider = () =>
     }),
 
     // IP Access rules are hybrid-scoped: account-level rules (zoneId
-    // undefined) plus per-zone rules. Enumerate both — the account
-    // collection, then fan out across every zone — and tag each item with
+    // undefined) plus per-zone rules. Enumerate both -- the account
+    // collection, then fan out across every zone -- and tag each item with
     // its scope so the result matches the exact `read` Attributes shape.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -286,7 +286,7 @@ export const AccessRuleProvider = () =>
             (page.result ?? []).map((rule) => toAttributes(rule, undefined, accountId)),
           ),
         ),
-        // No permission to read account-level rules — skip them.
+        // No permission to read account-level rules -- skip them.
         Effect.catchTag("Forbidden", () => Effect.succeed([])),
       );
 
@@ -313,7 +313,7 @@ export const AccessRuleProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       // Cloudflare answers DELETE for an already-gone rule with HTTP 200
       // and `result: null` (not an error envelope), which the typed
-      // response decode rejects — observe first and treat missing as done.
+      // response decode rejects -- observe first and treat missing as done.
       const observed = yield* getRule(output.zoneId, output.accountId, output.ruleId);
       if (!observed) return;
       yield* deleteRule(output.zoneId, output.accountId, output.ruleId).pipe(
@@ -343,7 +343,7 @@ const getRule = (zoneId: string | undefined, accountId: string, ruleId: string) 
 
 /**
  * Find a rule by exact configuration (target + value) within the scope.
- * The configuration is a rule's identity — Cloudflare rejects duplicates —
+ * The configuration is a rule's identity -- Cloudflare rejects duplicates --
  * so at most one rule can match.
  */
 const findByConfiguration = (
@@ -416,7 +416,7 @@ const toAttributes = (
   zoneId,
   accountId,
   configuration: {
-    // Distilled types each union variant's target/value as optional —
+    // Distilled types each union variant's target/value as optional --
     // Cloudflare always echoes both for a persisted rule.
     target: (rule.configuration.target ?? "ip") as AccessRuleTarget,
     value: rule.configuration.value ?? "",

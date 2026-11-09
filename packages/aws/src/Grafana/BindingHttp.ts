@@ -6,8 +6,8 @@ import type { Workspace } from "./Workspace.ts";
 /**
  * Shared scaffolding for AWS Managed Grafana HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the builders
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the builders
  * below. Everything except the operation and the IAM action list is
  * boilerplate.
  */

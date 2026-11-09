@@ -6,16 +6,16 @@ import type { Channel } from "./Channel.ts";
 /**
  * Runtime binding for `medialive:DescribeSchedule`.
  *
- * Reads the bound {@link Channel}'s schedule — the queue of pending and
+ * Reads the bound {@link Channel}'s schedule -- the queue of pending and
  * recent actions created with {@link BatchUpdateSchedule} (one page per
- * call; pass `NextToken` from the previous response to continue) — e.g.
+ * call; pass `NextToken` from the previous response to continue) -- e.g.
  * so a playout dashboard can show upcoming input switches and ad breaks.
  * The channel id is injected from the binding. Provide the implementation
  * with `Effect.provide(AWS.MediaLive.DescribeScheduleHttp)`.
  * ### Driving the Channel Schedule
  * **Example:** List the Channel's Scheduled Actions
  * ```typescript
- * // init — bind the operation to the channel
+ * // init -- bind the operation to the channel
  * const describeSchedule = yield* AWS.MediaLive.DescribeSchedule(channel);
  *
  * // runtime

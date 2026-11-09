@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Project } from "./Project.ts";
 
 /**
- * Runtime binding for `codebuild:BatchDeleteBuilds` — deletes builds of
+ * Runtime binding for `codebuild:BatchDeleteBuilds` -- deletes builds of
  * the bound project by id. Builds that cannot be deleted are returned in
  * `buildsNotDeleted` with a reason rather than failing the call.
  * ### Deleting Builds

@@ -27,7 +27,7 @@ export interface MySQLBranchProps extends BaseBranchProps {
   clusterSize?: MySQLClusterSize;
 
   /**
-   * Parent branch — either a string name or another {@link MySQLBranch}.
+   * Parent branch -- either a string name or another {@link MySQLBranch}.
    * @default "main"
    */
   parentBranch?: string | MySQLBranch;

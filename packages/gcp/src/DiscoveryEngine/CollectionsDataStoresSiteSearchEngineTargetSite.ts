@@ -20,7 +20,7 @@ import { waitForOperation } from "./operations.ts";
 export type CollectionsDataStoresSiteSearchEngineTargetSiteProps = {
   /**
    * Parent data store resource name (must use `PUBLIC_WEBSITE` content
-   * config). Immutable — changing it replaces the target site.
+   * config). Immutable -- changing it replaces the target site.
    */
   dataStore: string;
   /**

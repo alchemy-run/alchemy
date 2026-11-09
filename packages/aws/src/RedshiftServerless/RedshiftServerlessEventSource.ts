@@ -52,13 +52,13 @@ export interface RedshiftServerlessEventSourceProps extends EventRouteProps {
 /**
  * Event source connecting Redshift Serverless notifications to the hosting
  * compute. Redshift Serverless publishes namespace, workgroup, and snapshot
- * lifecycle events — capacity changes, completed snapshots, configuration
- * updates — to the account's default EventBridge bus (source
+ * lifecycle events -- capacity changes, completed snapshots, configuration
+ * updates -- to the account's default EventBridge bus (source
  * `aws.redshift-serverless`); this subscribes the host Function to those
  * events so it can react to completed snapshots or alert on workgroup
  * status changes.
  *
- * Redshift Serverless publishes to EventBridge automatically — no
+ * Redshift Serverless publishes to EventBridge automatically -- no
  * additional resource is created besides the EventBridge rule targeting the
  * host. Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.

@@ -12,7 +12,7 @@ export interface MergeShardsRequest extends Omit<
  * Runtime binding for `kinesis:MergeShards`.
  *
  * Bind this operation to a `Stream` to merge two adjacent shards of a
- * PROVISIONED-mode stream into one — the stream ARN is injected
+ * PROVISIONED-mode stream into one -- the stream ARN is injected
  * automatically. Useful for building custom shard-scaling logic (the
  * `Stream` resource's `shardCount` prop covers uniform scaling via
  * `UpdateShardCount`; merge/split give per-shard control). Provide the
@@ -20,10 +20,10 @@ export interface MergeShardsRequest extends Omit<
  * ### Managing Shards
  * **Example:** Merge Two Adjacent Shards
  * ```typescript
- * // init — bind the operation to the stream
+ * // init -- bind the operation to the stream
  * const mergeShards = yield* AWS.Kinesis.MergeShards(stream);
  *
- * // runtime — merge a shard with its adjacent neighbor
+ * // runtime -- merge a shard with its adjacent neighbor
  * yield* mergeShards({
  *   ShardToMerge: "shardId-000000000000",
  *   AdjacentShardToMerge: "shardId-000000000001",

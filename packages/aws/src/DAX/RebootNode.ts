@@ -7,7 +7,7 @@ import type { Cluster } from "./Cluster.ts";
  * Runtime binding for the `RebootNode` operation (IAM action
  * `dax:RebootNode`), scoped to one {@link Cluster}.
  *
- * Reboots a single node of the bound DAX cluster — restarts the DAX engine
+ * Reboots a single node of the bound DAX cluster -- restarts the DAX engine
  * process without flushing the cache contents. The node id comes from
  * `DescribeClusters` (e.g. `my-cluster-a`). Provide the implementation with
  * `Effect.provide(AWS.DAX.RebootNodeHttp)`.
@@ -17,7 +17,7 @@ import type { Cluster } from "./Cluster.ts";
  * const rebootNode = yield* DAX.RebootNode(cluster);
  *
  * const result = yield* rebootNode({ NodeId: nodeId });
- * // result.Cluster?.Nodes → the node reports status "rebooting"
+ * // result.Cluster?.Nodes -> the node reports status "rebooting"
  * ```
  *
  * @binding

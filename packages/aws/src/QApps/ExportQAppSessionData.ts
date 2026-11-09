@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { QApp } from "./QApp.ts";
 
 /**
- * Request for {@link ExportQAppSessionData} — `instanceId` is injected from the bound Q App.
+ * Request for {@link ExportQAppSessionData} -- `instanceId` is injected from the bound Q App.
  */
 export interface ExportQAppSessionDataRequest extends Omit<
   qapps.ExportQAppSessionDataInput,
@@ -19,7 +19,7 @@ export interface ExportQAppSessionDataRequest extends Omit<
  * ### Sessions
  * **Example:** Export Session Data
  * ```typescript
- * // init — bind the operation to the Q App
+ * // init -- bind the operation to the Q App
  * const exportQAppSessionData = yield* AWS.QApps.ExportQAppSessionData(app);
  *
  * // runtime

@@ -5,8 +5,8 @@ import type { Repository } from "./Repository.ts";
 /**
  * Shared scaffolding for the ECR HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, makeEcrRepositoryHttpBinding({ … }))`. Everything
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, makeEcrRepositoryHttpBinding({ ... }))`. Everything
  * except the operation and the IAM action list is boilerplate: per the ECR
  * service authorization reference every repository-scoped action authorizes
  * against the repository ARN, and the runtime callable injects the bound
@@ -57,8 +57,8 @@ export const makeEcrRepositoryHttpBinding = <I extends RepositoryScopedRequest, 
         });
       }
       // The request is optional at the impl level so contracts whose
-      // remaining fields are all optional (DescribeImages, ListImages, …) can
-      // declare `(request?: …)`; contracts with required fields keep the
+      // remaining fields are all optional (DescribeImages, ListImages, ...) can
+      // declare `(request?: ...)`; contracts with required fields keep the
       // parameter required and narrow this signature.
       return Effect.fn(`AWS.ECR.${options.capability}(${repository.LogicalId})`)(function* (
         request?: Omit<I, keyof RepositoryScopedRequest>,

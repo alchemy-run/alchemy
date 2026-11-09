@@ -28,7 +28,7 @@ export interface PermissionProps {
   principal?: string;
   /**
    * The actions the principal may perform against the CA. For the ACM
-   * principal AWS requires all three actions — a subset is rejected with
+   * principal AWS requires all three actions -- a subset is rejected with
    * `ValidationException: Permissions must contain all three actions
    * [IssueCertificate, GetCertificate, ListPermissions] for ACM to
    * perform renewals.`
@@ -131,7 +131,7 @@ export const PermissionProvider = () =>
                       })),
                   ),
                   // CA removed (or state-blocked) between enumeration and
-                  // listPermissions — it has no listable permissions.
+                  // listPermissions -- it has no listable permissions.
                   Effect.catchTag(["ResourceNotFoundException", "InvalidStateException"], () =>
                     Effect.succeed([] as Permission["Attributes"][]),
                   ),
@@ -163,7 +163,7 @@ export const PermissionProvider = () =>
           const principal = news.principal ?? DEFAULT_PRINCIPAL;
           const actions = news.actions ?? DEFAULT_ACTIONS;
 
-          // OBSERVE — the permission has no update API, so converge by
+          // OBSERVE -- the permission has no update API, so converge by
           // comparing the observed action set and recreating on drift.
           const existing = yield* findPermission(news.certificateAuthorityArn, principal);
 
@@ -190,7 +190,7 @@ export const PermissionProvider = () =>
                 Actions: actions,
               })
               .pipe(
-                // A concurrent reconciler won the create race — the
+                // A concurrent reconciler won the create race -- the
                 // permission exists; treat as converged.
                 Effect.catchTag("PermissionAlreadyExistsException", () => Effect.void),
               );
@@ -210,7 +210,7 @@ export const PermissionProvider = () =>
             })
             .pipe(
               // CA already gone, or in a state (DELETED) where permissions
-              // are no longer addressable — the permission is gone with it.
+              // are no longer addressable -- the permission is gone with it.
               Effect.catchTag(
                 ["ResourceNotFoundException", "InvalidStateException"],
                 () => Effect.void,

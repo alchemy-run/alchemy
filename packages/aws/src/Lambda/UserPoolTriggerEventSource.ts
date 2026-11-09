@@ -15,7 +15,7 @@ import { Permission as LambdaPermission } from "./Permission.ts";
 
 /**
  * The `version`/`triggerSource`/`userPoolId`/`request`/`response` envelope
- * shared by every user pool Lambda trigger. Declared structurally —
+ * shared by every user pool Lambda trigger. Declared structurally --
  * `@types/aws-lambda` keeps `BaseTriggerEvent` in an internal `_common`
  * module that its package root does not re-export.
  */
@@ -30,7 +30,7 @@ export interface UserPoolTriggerEnvelope {
 }
 
 /**
- * A Cognito user pool trigger invocation — the
+ * A Cognito user pool trigger invocation -- the
  * `version`/`triggerSource`/`userPoolId`/`request`/`response` envelope
  * shared by every user pool Lambda trigger.
  */

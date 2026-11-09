@@ -14,7 +14,7 @@ import {
  * on `ERROR`), so everything event-specific is optional.
  */
 export interface MediaConvertJobEventDetail {
-  /** The job's id (`arn:…:jobs/{id}`). */
+  /** The job's id (`arn:...:jobs/{id}`). */
   jobId?: string;
   /** The event kind within the state change stream: `SUBMITTED`, `PROGRESSING`, `INPUT_INFORMATION`, `STATUS_UPDATE`, `NEW_WARNING`, `QUEUE_HOP`, `COMPLETE`, `ERROR`, or `CANCELED`. */
   status?: string;
@@ -61,7 +61,7 @@ export interface JobEventSourceProps extends EventRouteProps {
  * those events so it can chain post-transcode automation or alert on
  * `ERROR` jobs.
  *
- * MediaConvert publishes to EventBridge automatically — no additional
+ * MediaConvert publishes to EventBridge automatically -- no additional
  * resource is created besides the EventBridge rule targeting the host.
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.

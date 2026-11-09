@@ -2,7 +2,7 @@ import * as ccaip from "@distilled.cloud/gcp/contactcenteraiplatform_v1alpha1";
 import * as Effect from "effect/Effect";
 import { waitForOperation as waitForLongRunning, type LongRunningOperation } from "../Operation.ts";
 
-/** Contact center instance provisioning takes 30–45 minutes. */
+/** Contact center instance provisioning takes 30-45 minutes. */
 const OPERATION_BUDGET = "60 minutes";
 
 /**

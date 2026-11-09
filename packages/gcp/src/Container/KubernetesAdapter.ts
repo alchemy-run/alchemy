@@ -15,13 +15,13 @@ import type { Connection } from "@alchemy.run/kubernetes/Connection";
  * The `gcp-gke` {@link ClusterAdapter}: everything platform-specific about
  * running `Kubernetes.*` workloads on Google Kubernetes Engine.
  *
- * - **connect** — Google OAuth bearer tokens against the cluster endpoint,
+ * - **connect** -- Google OAuth bearer tokens against the cluster endpoint,
  *   re-getting the cluster when the connection doesn't carry endpoint/CA.
- * - **identity** — GKE Workload Identity Federation: every `iam` grant a
+ * - **identity** -- GKE Workload Identity Federation: every `iam` grant a
  *   GCP binding attaches to the workload is granted directly to the
  *   Kubernetes ServiceAccount's principal
  *   (`principal://iam.googleapis.com/projects/{number}/locations/global/workloadIdentityPools/{project}.svc.id.goog/subject/ns/{namespace}/sa/{ksa}`)
- *   — no Google service account involved. Applied grants are recorded in
+ *   -- no Google service account involved. Applied grants are recorded in
  *   the identity state; grants no binding asks for any more are revoked on
  *   the next reconcile, and all of them on delete. With
  *   `identity.gcpServiceAccount`, the KSA is instead annotated with
@@ -29,13 +29,13 @@ import type { Connection } from "@alchemy.run/kubernetes/Connection";
  *   `roles/iam.workloadIdentityUser` on that GSA, and the binding grants
  *   go to the GSA. The cluster's `workloadIdentityConfig.workloadPool` is
  *   enabled by `GCP.Container.Cluster` (Autopilot enables it by default).
- * - **registry** — a per-workload Artifact Registry Docker repository;
+ * - **registry** -- a per-workload Artifact Registry Docker repository;
  *   `main` programs are bundled, `context` Dockerfiles built, and `image`
  *   refs mirrored into it.
- * - **bootstrap** — generated container entries wiring the GCP credential
+ * - **bootstrap** -- generated container entries wiring the GCP credential
  *   chain so Workload Identity's GCE metadata server resolves inside the
  *   pod.
- * - **loadBalancerDefaults** — GKE backend-service based L4
+ * - **loadBalancerDefaults** -- GKE backend-service based L4
  *   (`cloud.google.com/l4-rbs`).
  *
  * Registered by `GCP.providers()`; resolved dynamically by the
@@ -82,13 +82,13 @@ declare module "@alchemy.run/kubernetes/Connection" {
     /**
      * Authenticate against a GKE cluster with Google OAuth bearer tokens
      * minted from the ambient GCP credentials. Contributed by
-     * `GCP.providers()` — `GCP.Container.Cluster` attributes expose a
+     * `GCP.providers()` -- `GCP.Container.Cluster` attributes expose a
      * ready-made `connection` carrying this descriptor.
      */
     "gcp-gke": {
       /** GKE cluster id (the `{cluster}` path segment). */
       clusterId: string;
-      /** Zone or region (`us-central1-a`, `us-central1`, …). */
+      /** Zone or region (`us-central1-a`, `us-central1`, ...). */
       location: string;
       /**
        * GCP project id.
@@ -112,8 +112,8 @@ declare module "@alchemy.run/kubernetes/ClusterAdapter" {
       /** Project the grants and workload pool belong to. */
       project?: string;
       /**
-       * The IAM member binding grants were applied to — the KSA's
-       * `principal://…` identifier, or `serviceAccount:{gsa}`.
+       * The IAM member binding grants were applied to -- the KSA's
+       * `principal://...` identifier, or `serviceAccount:{gsa}`.
        */
       member?: string;
       /** Grants applied to `member`, revoked once no binding asks for them. */
@@ -136,7 +136,7 @@ declare module "@alchemy.run/kubernetes/ClusterAdapter" {
       repositoryUri: string;
       /** Full resource name `projects/.../repositories/{repository}`. */
       name: string;
-      /** Artifact Registry location (`us-central1`, …). */
+      /** Artifact Registry location (`us-central1`, ...). */
       location: string;
     };
   }
@@ -154,7 +154,7 @@ declare module "@alchemy.run/kubernetes/ClusterAdapter" {
   interface WorkloadBindingContract {
     /**
      * IAM grants landed on the workload's Workload Identity principal (GKE
-     * only) — the same host-binding channel as `GCP.Run.Service` and
+     * only) -- the same host-binding channel as `GCP.Run.Service` and
      * `GCP.Function`.
      */
     iam?: GcpIamGrant[];
@@ -177,7 +177,7 @@ type GkeAdapterDeps =
 
 const GSA_ANNOTATION = "iam.gke.io/gcp-service-account";
 
-/** Zone `us-central1-a` → region `us-central1`; regions pass through. */
+/** Zone `us-central1-a` -> region `us-central1`; regions pass through. */
 export const regionOfLocation = (location: string) => {
   const parts = location.split("-");
   const last = parts[parts.length - 1] ?? "";
@@ -198,7 +198,7 @@ export const workloadPoolOf = (project: string) => `${project}.svc.id.goog`;
 
 /**
  * The Workload Identity Federation principal of a Kubernetes
- * ServiceAccount — the IAM member GKE pods running as that KSA
+ * ServiceAccount -- the IAM member GKE pods running as that KSA
  * authenticate as. Every cluster in the project shares the pool, so the
  * same `namespace`/`serviceAccount` pair is one identity project-wide.
  */
@@ -231,7 +231,7 @@ const identityStateOf = (state: Record<string, unknown> | undefined) => ({
 /**
  * Build a {@link ClusterTransport} for a GKE cluster from known
  * endpoint/CA. Captures the ambient GCP credentials so the per-request
- * token mint is self-contained — used by the adapter and by the
+ * token mint is self-contained -- used by the adapter and by the
  * `GCP.Container.Cluster` provider's kubernetes-object binding channel.
  */
 export const makeGkeTransport = Effect.fn(function* (options: {
@@ -252,7 +252,7 @@ export const makeGkeTransport = Effect.fn(function* (options: {
 });
 
 /**
- * The `Kubernetes.Connection` of a GKE cluster — stamped on
+ * The `Kubernetes.Connection` of a GKE cluster -- stamped on
  * `GCP.Container.Cluster` attributes so the cluster resource can be passed
  * directly as any `Kubernetes.*` workload's `cluster`.
  */

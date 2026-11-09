@@ -72,14 +72,14 @@ export type PolicyProps = {
   /**
    * Attachment point, URL-encoded (`cloudresourcemanager.googleapis.com%2Fprojects%2Fmy-project`)
    * or raw (`cloudresourcemanager.googleapis.com/projects/my-project`).
-   * Defaults to the current GCP project. Immutable — changing it
+   * Defaults to the current GCP project. Immutable -- changing it
    * replaces the policy.
    */
   attachmentPoint?: string;
   /**
    * Policy id (3-63 chars, lowercase letters, numbers, dashes, periods;
    * must start with a letter). If omitted, a unique name is generated.
-   * Immutable — changing it replaces the policy.
+   * Immutable -- changing it replaces the policy.
    */
   policyId?: string;
   /**

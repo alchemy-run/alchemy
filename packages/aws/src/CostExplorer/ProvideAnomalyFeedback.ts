@@ -18,7 +18,7 @@ export interface ProvideAnomalyFeedbackRequest extends ce.ProvideAnomalyFeedback
  * ### Anomaly Detection at Runtime
  * **Example:** Mark an Anomaly as Expected
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const provideAnomalyFeedback = yield* AWS.CostExplorer.ProvideAnomalyFeedback();
  *
  * // runtime

@@ -15,7 +15,7 @@ export interface InvokeBlueprintOptimizationAsyncRequest extends Omit<
 /**
  * Runtime binding for the `InvokeBlueprintOptimizationAsync` operation (IAM
  * action `bedrock:InvokeBlueprintOptimizationAsync` on the blueprint ARN +
- * the account's data automation profiles) — start an asynchronous job that
+ * the account's data automation profiles) -- start an asynchronous job that
  * tunes the bound blueprint's schema against labeled samples (asset +
  * ground-truth pairs in S3) from a deployed Function.
  *
@@ -26,11 +26,11 @@ export interface InvokeBlueprintOptimizationAsyncRequest extends Omit<
  * ### Blueprint Optimization
  * **Example:** Optimize A Blueprint Against Labeled Samples
  * ```typescript
- * // deploy time — bind the blueprint
+ * // deploy time -- bind the blueprint
  * const optimize =
  *   yield* AWS.BedrockDataAutomation.InvokeBlueprintOptimizationAsync(blueprint);
  *
- * // runtime — start the optimization job
+ * // runtime -- start the optimization job
  * const { invocationArn } = yield* optimize({
  *   samples: [
  *     {

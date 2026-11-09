@@ -29,12 +29,12 @@ export type SessionTemplateProps = {
   /**
    * Template id (the `{template}` segment of
    * `projects/{project}/locations/{location}/sessionTemplates/{template}`).
-   * If omitted, a unique RFC1035 name is generated. Immutable — changing
+   * If omitted, a unique RFC1035 name is generated. Immutable -- changing
    * it replaces the template.
    */
   templateId?: string;
   /**
-   * Location (`us-central1`, …). Immutable — changing it replaces the
+   * Location (`us-central1`, ...). Immutable -- changing it replaces the
    * template. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
@@ -108,7 +108,7 @@ export interface SessionTemplateLookup {
    */
   templateId: string;
   /**
-   * Location (`us-central1`, …). `US-CENTRAL1` is accepted and normalized
+   * Location (`us-central1`, ...). `US-CENTRAL1` is accepted and normalized
    * to `us-central1`.
    */
   location?: string;

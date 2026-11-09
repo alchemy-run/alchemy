@@ -47,7 +47,7 @@ export type UserApiToken = Resource<
  * For CI tokens, prefer {@link AccountApiToken} so the token survives
  * personnel changes.
  *
- * Policy `resources` are passed through verbatim — no `accountId` rewriting
+ * Policy `resources` are passed through verbatim -- no `accountId` rewriting
  * is performed because user tokens aren't bound to a single account.
  * ### Creating a Token
  * **Example:** A token bound to the authenticated user
@@ -142,7 +142,7 @@ export const UserApiTokenProvider = () =>
       }
       const policies = resolvePolicies(collected);
 
-      // Observe — fetch current state if we know the token id;
+      // Observe -- fetch current state if we know the token id;
       // Cloudflare reports a deleted token as `TokenNotFound`, which
       // we treat as "create from scratch".
       const observed = output?.tokenId
@@ -152,7 +152,7 @@ export const UserApiTokenProvider = () =>
           )
         : undefined;
 
-      // Ensure — create if missing. Cloudflare returns the plaintext
+      // Ensure -- create if missing. Cloudflare returns the plaintext
       // token value exactly once on create, so we must persist it.
       // No idempotency token is available; we accept a duplicate over
       // losing the secret value.
@@ -170,7 +170,7 @@ export const UserApiTokenProvider = () =>
         return buildAttributes(result, Redacted.make(result.value));
       }
 
-      // Sync — the update API replaces all mutable fields. Cloudflare
+      // Sync -- the update API replaces all mutable fields. Cloudflare
       // does not return the plaintext value on update, so preserve
       // the one captured at creation.
       const result = yield* user.updateToken({
@@ -197,7 +197,7 @@ export const UserApiTokenProvider = () =>
     }),
     // User-scoped: enumerate every token owned by the authenticated user via
     // `GET /user/tokens` (no account scope). The list API never returns the
-    // plaintext token value — it is only emitted once at creation — so we
+    // plaintext token value -- it is only emitted once at creation -- so we
     // hydrate the read shape with an empty Redacted value, matching what
     // `read` produces when the secret was never captured.
     list: () =>
@@ -212,7 +212,7 @@ export const UserApiTokenProvider = () =>
           ),
         ),
         // User-scoped tokens require user-level auth; an account-scoped token
-        // (e.g. a CI profile) gets `Unauthorized` here — nothing to enumerate.
+        // (e.g. a CI profile) gets `Unauthorized` here -- nothing to enumerate.
         Effect.catchTag("Unauthorized", () => Effect.succeed([])),
       ),
   });

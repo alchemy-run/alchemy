@@ -151,7 +151,7 @@ export interface EndpointGroupLookup {
 }
 
 /**
- * A Global Accelerator endpoint group — the set of regional endpoints
+ * A Global Accelerator endpoint group -- the set of regional endpoints
  * (ALBs, NLBs, EC2 instances, or Elastic IPs) that a listener routes
  * traffic to in one AWS Region, with traffic-dial and health-check
  * configuration.
@@ -306,7 +306,7 @@ const describeEndpointGroup = Effect.fn(function* (endpointGroupArn: string) {
   );
 });
 
-// An endpoint group's natural identity is (listener, region) — GA allows at
+// An endpoint group's natural identity is (listener, region) -- GA allows at
 // most one per region per listener, so this lookup is exact.
 const findEndpointGroup = Effect.fn(function* (
   listenerArn: string | undefined,
@@ -325,7 +325,7 @@ const findEndpointGroup = Effect.fn(function* (
 export const EndpointGroupProvider = () =>
   Provider.succeed(EndpointGroup, {
     stables: ["endpointGroupArn", "listenerArn", "endpointGroupRegion"],
-    // Sub-resource keyed entirely by its parent listener (and untagged) —
+    // Sub-resource keyed entirely by its parent listener (and untagged) --
     // account-wide enumeration happens via the Accelerator resource.
     list: () => Effect.succeed([]),
     lookup: Effect.fn(function* ({ endpointGroupArn }) {
@@ -352,7 +352,7 @@ export const EndpointGroupProvider = () =>
       // everything else updates in place.
     }),
     reconcile: Effect.fn(function* ({ news, output, instanceId, session }) {
-      // Observe — cached ARN first, then the exact (listener, region) key.
+      // Observe -- cached ARN first, then the exact (listener, region) key.
       let live = output?.endpointGroupArn
         ? yield* describeEndpointGroup(output.endpointGroupArn)
         : undefined;
@@ -360,7 +360,7 @@ export const EndpointGroupProvider = () =>
         live = yield* findEndpointGroup(news.listenerArn, news.endpointGroupRegion);
       }
 
-      // Ensure — create if missing; a concurrent create for the same
+      // Ensure -- create if missing; a concurrent create for the same
       // (listener, region) surfaces as AlreadyExists and we converge on it.
       if (!live?.EndpointGroupArn) {
         live = yield* withGaRegion(
@@ -382,7 +382,7 @@ export const EndpointGroupProvider = () =>
       }
       const endpointGroupArn = live.EndpointGroupArn;
 
-      // Sync — one update with the full desired config when anything drifts.
+      // Sync -- one update with the full desired config when anything drifts.
       if (hasDrift(live, news)) {
         const updated = yield* withGaRegion(
           ga.updateEndpointGroup({

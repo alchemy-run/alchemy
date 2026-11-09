@@ -37,7 +37,7 @@ export interface ReplaceDiff {
 
 /**
  * Returns true when `value` (or any nested leaf) is still an unresolved
- * plan-time expression — i.e. an `Output`/`Expr` or an `Effect` that was
+ * plan-time expression -- i.e. an `Output`/`Expr` or an `Effect` that was
  * not fully evaluated by `resolveInput` in Plan.ts.
  *
  * Use at the top of a provider `diff` to short-circuit before field access:
@@ -56,7 +56,7 @@ const _hasUnresolved = (value: unknown, seen: WeakSet<object> = new WeakSet()): 
   if (value == null || isPrimitive(value)) return false;
   if (Output.isExpr(value) || Effect.isEffect(value)) return true;
   // Only plain data is traversed; any other class instance (Layer, Context,
-  // Date, SDK objects) is a resolved leaf — see isPlainData (#1082).
+  // Date, SDK objects) is a resolved leaf -- see isPlainData (#1082).
   if (isPlainData(value)) {
     if (seen.has(value)) return false;
     seen.add(value);
@@ -71,8 +71,8 @@ const _hasUnresolved = (value: unknown, seen: WeakSet<object> = new WeakSet()): 
  * (including opaque `Redacted`/`Duration` instances) intact.
  *
  * Persisted resource state must only ever hold plain data. Durable (JSON)
- * state stores already enforce this implicitly — Output proxies are
- * function-typed, so `JSON.stringify` silently drops them — but the
+ * state stores already enforce this implicitly -- Output proxies are
+ * function-typed, so `JSON.stringify` silently drops them -- but the
  * in-memory store used by tests retains live proxies, which would later be
  * fed back into provider lifecycle operations as `olds` after an
  * interrupted apply (e.g. `read` during a destroy plan) and blow up on
@@ -92,7 +92,7 @@ const _stripUnresolved = (
 ): unknown => {
   if (value == null || isPrimitive(value)) return value;
   if (Output.isExpr(value) || Effect.isEffect(value)) return undefined;
-  // Serializable leaves — the only class instances persisted state may
+  // Serializable leaves -- the only class instances persisted state may
   // carry (StateEncoding knows Redacted/Duration/Date/bytes). Rebuilding
   // them structurally would strip their prototype.
   if (
@@ -107,7 +107,7 @@ const _stripUnresolved = (
     return mapPlainData(value, ancestors, (child) => _stripUnresolved(child, ancestors));
   }
   // Any other class instance (Layer, Context, SDK objects) is runtime-only
-  // wiring that can't round-trip through JSON — a beta.103 Context is even
+  // wiring that can't round-trip through JSON -- a beta.103 Context is even
   // cyclic (#1082). Persisted state holds plain data only.
   return undefined;
 };
@@ -116,8 +116,8 @@ const _stripUnresolved = (
  * Deeply replace Effect-valued entries with `undefined`, leaving resolved
  * values AND unresolved `Output`/`Expr`s intact.
  *
- * Effect-valued props — e.g. a tagged Worker class in `env` (the
- * circular-bindings pattern) — can never be evaluated inside lifecycle
+ * Effect-valued props -- e.g. a tagged Worker class in `env` (the
+ * circular-bindings pattern) -- can never be evaluated inside lifecycle
  * operations, and {@link stripUnresolved} drops them from persisted state at
  * the commit boundary. A provider `diff` that wants its structural change
  * detection to still run despite them strips them first, so `isResolved`
@@ -128,7 +128,7 @@ export const stripEffects = <T>(value: T): T => _stripEffects(value) as T;
 
 const _stripEffects = (
   value: unknown,
-  // Ancestor-path cycle guard — see _stripUnresolved (#1082).
+  // Ancestor-path cycle guard -- see _stripUnresolved (#1082).
   ancestors: WeakSet<object> = new WeakSet(),
 ): unknown => {
   if (value == null || isPrimitive(value)) return value;
@@ -149,8 +149,8 @@ const _stripEffects = (
     return mapPlainData(value, ancestors, (child) => _stripEffects(child, ancestors));
   }
   // Non-plain instances (Layer, Context, SDK objects) are dropped with
-  // Effects — same runtime-only rationale, and their internals may be
-  // cyclic (effect ≥4.0.0-beta.103's Context — #1082).
+  // Effects -- same runtime-only rationale, and their internals may be
+  // cyclic (effect >=4.0.0-beta.103's Context -- #1082).
   return undefined;
 };
 
@@ -192,7 +192,7 @@ export const havePropsChanged = <Props extends object>(
   // Compare both sides through `stripUnresolved` so the comparison is
   // symmetric with the commit boundary: persisted props can never hold an
   // Effect or Output expr (stripped at commit / silently dropped by JSON
-  // serialization), while desired props may still carry them — e.g. a tagged
+  // serialization), while desired props may still carry them -- e.g. a tagged
   // Worker class in `env` serializes via its `toJSON` to
   // `{"_id":"Effect",...}` and would otherwise report a phantom change on
   // every plan, forever (#874). Unresolved Outputs in `newProps` are already
@@ -227,7 +227,7 @@ export const deepEqual = (a: unknown, b: unknown, options?: DeepEqualOptions): b
 const canonicalize = (
   value: unknown,
   stripNullish: boolean,
-  // Ancestor-path cycle guard — see _stripUnresolved (#1082).
+  // Ancestor-path cycle guard -- see _stripUnresolved (#1082).
   ancestors: WeakSet<object> = new WeakSet(),
 ): unknown => {
   if (stripNullish && value == null) return undefined;
@@ -248,7 +248,7 @@ const canonicalize = (
     );
     if (rebuilt === undefined || Array.isArray(rebuilt)) return rebuilt;
     // Deterministic key order for the JSON.stringify comparison. Filtering
-    // after the walk is JSON-equivalent to filtering before it —
+    // after the walk is JSON-equivalent to filtering before it --
     // undefined-valued keys are dropped by JSON.stringify either way.
     return Object.fromEntries(
       Object.entries(rebuilt as Record<string, unknown>)
@@ -258,8 +258,8 @@ const canonicalize = (
   }
   if (value && typeof value === "object") {
     // Non-plain instances (Effect, Layer, Context, SDK objects) never
-    // canonicalize — walking them is unsafe (cyclic on effect
-    // ≥4.0.0-beta.103 — #1082) and comparing them is meaningless.
+    // canonicalize -- walking them is unsafe (cyclic on effect
+    // >=4.0.0-beta.103 -- #1082) and comparing them is meaningless.
     return undefined;
   }
   return value;
@@ -269,11 +269,11 @@ const canonicalize = (
  * Deterministic ordering for binding rows.
  *
  * Bindings are registered by concurrently-built layers (a Function/Worker's
- * capability layers run real IO — bundling, fs — before calling `host.bind`),
+ * capability layers run real IO -- bundling, fs -- before calling `host.bind`),
  * so the registration order of `stack.bindings[fqn]` is not stable across
  * deploys. `diffBindings` itself is sid-keyed and order-insensitive, but the
  * row order flows into provider `diff`/`reconcile` inputs and persisted
- * state — any consumer that hashes or deep-compares the binding array (e.g.
+ * state -- any consumer that hashes or deep-compares the binding array (e.g.
  * a metadata hash over bindings) would churn on registration-order flips.
  * Sorting by `sid` at every boundary makes binding rows stable.
  */
@@ -287,7 +287,7 @@ export const sortBindings = <B extends { sid: string }>(bindings: B[]): B[] =>
  * Collapse bindings that share the same `sid`, keeping the last occurrence,
  * and return them in deterministic (sid-sorted) order.
  *
- * The same binding can be recorded more than once on a target resource — e.g.
+ * The same binding can be recorded more than once on a target resource -- e.g.
  * a KV namespace bound to both a Worker and a Workflow ends up pushed twice to
  * `stack.bindings[fqn]`. `diffBindings` already collapses these implicitly via
  * its `Map` keyed by `sid`, so the `reconcile` path never observes duplicates.

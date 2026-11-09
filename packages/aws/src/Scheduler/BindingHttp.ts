@@ -2,8 +2,8 @@ import type * as scheduler from "@distilled.cloud/aws/scheduler";
 /**
  * Shared scaffolding for EventBridge Scheduler HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the builders
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the builders
  * below. Everything except the operation and the IAM action list is
  * boilerplate:
  *
@@ -16,7 +16,7 @@ import type * as scheduler from "@distilled.cloud/aws/scheduler";
  * - **Write operations** (`scheduler:CreateSchedule`,
  *   `scheduler:UpdateSchedule`) additionally take the schedule **execution
  *   role** (the IAM role EventBridge Scheduler assumes to invoke the target)
- *   and contribute `iam:PassRole` on it — without the PassRole statement the
+ *   and contribute `iam:PassRole` on it -- without the PassRole statement the
  *   write fails only at runtime. The bound role is injected as the target's
  *   `RoleArn` unless the request overrides it, and `FlexibleTimeWindow`
  *   defaults to `{ Mode: "OFF" }`.
@@ -30,7 +30,7 @@ import type { ScheduleGroup } from "./ScheduleGroup.ts";
 
 /**
  * Resolve the group-scoped schedule ARN pattern the binding is granted on.
- * Passes unresolved Outputs — binding data is resolved by the engine before
+ * Passes unresolved Outputs -- binding data is resolved by the engine before
  * the host reconciles.
  */
 const scheduleArnPattern = Effect.fn(function* (group: ScheduleGroup | undefined) {
@@ -44,7 +44,7 @@ const scheduleArnPattern = Effect.fn(function* (group: ScheduleGroup | undefined
 });
 
 /**
- * Account-wide schedule ARN pattern — the resource IAM evaluates
+ * Account-wide schedule ARN pattern -- the resource IAM evaluates
  * `scheduler:ListSchedules` against, regardless of any `GroupName` filter in
  * the request.
  */
@@ -82,10 +82,10 @@ export const makeScheduleGroupScopedHttpBinding = <
   fallbackGroupName?: string;
   /**
    * IAM resource scope. `"group"` (default) grants on the bound group's
-   * `schedule/{group}/*` pattern. `"all"` grants on `schedule/*​/*` —
+   * `schedule/{group}/*` pattern. `"all"` grants on `schedule/*­/*` --
    * required for `scheduler:ListSchedules`, which IAM evaluates against the
    * account-wide schedule pattern regardless of the request's `GroupName`
-   * filter (AccessDenied cites `schedule/*​/*`).
+   * filter (AccessDenied cites `schedule/*­/*`).
    */
   resourceScope?: "group" | "all";
 }) =>

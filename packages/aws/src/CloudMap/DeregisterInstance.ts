@@ -9,7 +9,7 @@ export interface DeregisterInstanceRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `servicediscovery:DeregisterInstance` — lets a
+ * Runtime binding for `servicediscovery:DeregisterInstance` -- lets a
  * self-registering workload remove its own Cloud Map instance (and the
  * Route 53 records/health check Cloud Map created for it).
  *

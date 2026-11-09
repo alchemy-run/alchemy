@@ -6,10 +6,10 @@ import type { Stack } from "./Stack.ts";
 /**
  * Runtime binding for the `DetectStackDrift` operation (IAM actions
  * `cloudformation:DetectStackDrift` + `cloudformation:DetectStackResourceDrift`
- * — AWS authorizes both on the per-stack call).
+ * -- AWS authorizes both on the per-stack call).
  *
  * Bind this operation to a {@link Stack} to start drift detection from inside
- * a function runtime — e.g. a scheduled drift monitor. Detection runs
+ * a function runtime -- e.g. a scheduled drift monitor. Detection runs
  * asynchronously; poll the returned `StackDriftDetectionId` with
  * {@link DescribeStackDriftDetectionStatus}. Note that CloudFormation reads
  * the live state of the stack's resources with the caller's credentials, so

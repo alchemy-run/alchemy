@@ -13,7 +13,7 @@ import * as Stream from "effect/Stream";
  * A rule pointing an alias at a specific agent version (optionally with
  * provisioned throughput). Omit `routingConfiguration` entirely to have
  * Bedrock snapshot the current DRAFT into a new version and point the alias
- * at it — the common "deploy the current agent" case.
+ * at it -- the common "deploy the current agent" case.
  */
 export interface AgentAliasRoutingConfig {
   /** The agent version this alias routes invocations to. */
@@ -96,7 +96,7 @@ export type AgentAliasLookup =
     };
 
 /**
- * An alias for an Amazon Bedrock {@link Agent} — a stable, invocable pointer
+ * An alias for an Amazon Bedrock {@link Agent} -- a stable, invocable pointer
  * to one or more agent versions.
  *
  * An alias is what applications invoke (via `bedrock-agent-runtime`
@@ -195,7 +195,7 @@ export const AgentAliasProvider = () =>
       return AgentAlias.Provider.of({
         stables: ["agentId", "agentAliasId", "agentAliasArn", "agentAliasName"],
 
-        // Aliases are scoped to a parent agent — enumeration requires the
+        // Aliases are scoped to a parent agent -- enumeration requires the
         // agent id, so this returns empty (the engine keys off state).
         list: () => Effect.succeed([]),
 

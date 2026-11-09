@@ -11,7 +11,7 @@ import type * as Effect from "effect/Effect";
  * ### Discovering Services
  * **Example:** List Discovered Services
  * ```typescript
- * // init — account-level, no resource argument
+ * // init -- account-level, no resource argument
  * const listServices = yield* AWS.ApplicationSignals.ListServices();
  *
  * // runtime

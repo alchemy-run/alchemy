@@ -8,17 +8,17 @@ import type { Flow } from "./Flow.ts";
  *
  * Bind this operation to a {@link Flow} in the function's init phase to get a
  * callable that deactivates a schedule or event-triggered flow. On-demand
- * flows cannot be stopped — AppFlow rejects them with a typed
+ * flows cannot be stopped -- AppFlow rejects them with a typed
  * `UnsupportedOperationException`. The flow name is injected automatically
  * and `appflow:StopFlow` is granted on the flow. Provide the implementation
  * with `Effect.provide(AWS.AppFlow.StopFlowHttp)`.
  * ### Running Flows
  * **Example:** Deactivate a Scheduled Flow from a Handler
  * ```typescript
- * // init — bind the operation to the flow
+ * // init -- bind the operation to the flow
  * const stopFlow = yield* AWS.AppFlow.StopFlow(flow);
  *
- * // runtime — deactivate the flow
+ * // runtime -- deactivate the flow
  * const result = yield* stopFlow();
  * // result.flowStatus === "Suspended"
  * ```

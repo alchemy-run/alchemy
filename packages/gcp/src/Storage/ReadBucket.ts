@@ -52,7 +52,7 @@ export interface ReadBucketClient {
  * const object = yield* uploads.get("hello.txt");
  * const text = object && new TextDecoder().decode(object.body);
  * const { objects } = yield* uploads.list({ prefix: "images/" });
- * // …provided with Effect.provide(GCP.Storage.ReadBucketHttp)
+ * // ...provided with Effect.provide(GCP.Storage.ReadBucketHttp)
  * ```
  *
  * @binding

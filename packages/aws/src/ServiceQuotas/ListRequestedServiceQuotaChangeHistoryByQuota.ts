@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 
 /**
  * Runtime binding for
- * `servicequotas:ListRequestedServiceQuotaChangeHistoryByQuota` — list quota
+ * `servicequotas:ListRequestedServiceQuotaChangeHistoryByQuota` -- list quota
  * increase requests for one specific quota from inside a Function.
  *
  * ### Quota Increase Requests

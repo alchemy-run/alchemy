@@ -6,7 +6,7 @@ import type { FeatureGroup } from "./FeatureGroup.ts";
 export interface GetRecordRequest extends Omit<featurestore.GetRecordRequest, "FeatureGroupName"> {}
 
 /**
- * Runtime binding for `sagemaker:GetRecord` — read the latest record for an
+ * Runtime binding for `sagemaker:GetRecord` -- read the latest record for an
  * identifier from a `FeatureGroup`'s online store.
  *
  * Bind this operation to a `FeatureGroup` inside a function runtime to get a

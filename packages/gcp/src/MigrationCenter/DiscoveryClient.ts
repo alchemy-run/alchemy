@@ -33,12 +33,12 @@ export type DiscoveryClientProps = {
   /**
    * Discovery client id (the `{discoveryClient}` segment of
    * `projects/{project}/locations/{location}/discoveryClients/{discoveryClient}`).
-   * If omitted, a unique RFC1035 name is generated. Immutable — changing
+   * If omitted, a unique RFC1035 name is generated. Immutable -- changing
    * it replaces the client.
    */
   discoveryClientId?: string;
   /**
-   * Region (`us-central1`, …). Immutable — changing it replaces the
+   * Region (`us-central1`, ...). Immutable -- changing it replaces the
    * client. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile
    *   region, else `us-central1`)
@@ -46,7 +46,7 @@ export type DiscoveryClientProps = {
   location?: string;
   /**
    * Full name of the associated source, or the source id (combined with
-   * `location`). Immutable — changing it replaces the client.
+   * `location`). Immutable -- changing it replaces the client.
    */
   source: string;
   /**
@@ -133,7 +133,7 @@ export interface DiscoveryClientLookup {
    */
   discoveryClientId: string;
   /**
-   * Region (`us-central1`, …). `US-CENTRAL1` is accepted and normalized to
+   * Region (`us-central1`, ...). `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    */
   location?: string;

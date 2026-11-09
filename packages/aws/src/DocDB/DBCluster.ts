@@ -36,7 +36,7 @@ export interface DBClusterProps {
   engineVersion?: string;
   /**
    * Subnet group the cluster is placed into. DocumentDB is VPC-only, so this
-   * is effectively required. Immutable — forces replacement.
+   * is effectively required. Immutable -- forces replacement.
    */
   dbSubnetGroupName?: string;
   /**
@@ -53,7 +53,7 @@ export interface DBClusterProps {
    */
   port?: number;
   /**
-   * Availability zones for cluster placement. Immutable — forces replacement.
+   * Availability zones for cluster placement. Immutable -- forces replacement.
    */
   availabilityZones?: string[];
   /**
@@ -80,11 +80,11 @@ export interface DBClusterProps {
    */
   deletionProtection?: boolean;
   /**
-   * Whether the storage is encrypted. Immutable — forces replacement.
+   * Whether the storage is encrypted. Immutable -- forces replacement.
    */
   storageEncrypted?: boolean;
   /**
-   * Optional KMS key used for storage encryption. Immutable — forces replace.
+   * Optional KMS key used for storage encryption. Immutable -- forces replace.
    */
   kmsKeyId?: string;
   /**
@@ -100,7 +100,7 @@ export interface DBClusterProps {
    */
   globalClusterIdentifier?: string;
   /**
-   * Master username. Immutable — forces replacement.
+   * Master username. Immutable -- forces replacement.
    */
   masterUsername?: string;
   /**
@@ -393,7 +393,7 @@ export const DBClusterProvider = () =>
         // AWS account/region collection: exhaustively paginate
         // `describeDBClusters` and map each cluster to the exact `read`
         // Attributes shape. DocumentDB does not surface tags inline on the
-        // cluster, so — mirroring `DBSubnetGroup.list` — we emit an empty tag
+        // cluster, so -- mirroring `DBSubnetGroup.list` -- we emit an empty tag
         // map rather than issuing a per-item `listTagsForResource` fan-out.
         list: () =>
           docdb.describeDBClusters.pages({}).pipe(
@@ -412,7 +412,7 @@ export const DBClusterProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
-          // Immutable props — any change forces a fresh cluster.
+          // Immutable props -- any change forces a fresh cluster.
           if (
             olds !== undefined &&
             ((olds.engine ?? "docdb") !== (news.engine ?? "docdb") ||
@@ -455,10 +455,10 @@ export const DBClusterProvider = () =>
           // unwrapping and never appears in traces.
           const masterUserPassword = news.masterUserPassword;
 
-          // Observe — fetch live cluster state.
+          // Observe -- fetch live cluster state.
           let observed = yield* readCluster(identifier);
 
-          // Ensure — create the cluster if it's missing. Tolerate
+          // Ensure -- create the cluster if it's missing. Tolerate
           // `DBClusterAlreadyExistsFault` as a race with a peer reconciler.
           if (!observed?.DBClusterArn) {
             yield* docdb
@@ -498,7 +498,7 @@ export const DBClusterProvider = () =>
             // doesn't hit `InvalidDBClusterStateFault`.
             observed = yield* waitForCluster(identifier);
 
-            // syncCoreSettings — single `modifyDBCluster` carrying scalar
+            // syncCoreSettings -- single `modifyDBCluster` carrying scalar
             // in-place fields, only emitting a field when the desired value
             // differs from the observed cloud state.
             const core: docdb.ModifyDBClusterMessage = {
@@ -533,7 +533,7 @@ export const DBClusterProvider = () =>
             if (news.allowMajorVersionUpgrade) {
               core.AllowMajorVersionUpgrade = true;
             }
-            // syncMasterPassword — rotation or explicit password update.
+            // syncMasterPassword -- rotation or explicit password update.
             if (news.manageMasterUserPassword && news.rotateMasterUserPassword) {
               core.RotateMasterUserPassword = true;
               coreDirty = true;
@@ -546,7 +546,7 @@ export const DBClusterProvider = () =>
               observed = yield* waitForCluster(identifier);
             }
 
-            // syncCloudwatchLogsExports — delta-shaped; separate call.
+            // syncCloudwatchLogsExports -- delta-shaped; separate call.
             const logDelta = logExportDelta(
               observed.EnabledCloudwatchLogsExports,
               news.enableCloudwatchLogsExports,
@@ -563,7 +563,7 @@ export const DBClusterProvider = () =>
 
           const dbClusterArn = observed.DBClusterArn ?? "";
 
-          // Sync tags — diff observed cloud tags against desired.
+          // Sync tags -- diff observed cloud tags against desired.
           const observedTags = yield* readTags(dbClusterArn);
           const { removed, upsert } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0 && dbClusterArn) {

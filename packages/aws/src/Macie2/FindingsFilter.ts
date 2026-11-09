@@ -85,7 +85,7 @@ export interface FindingsFilterLookup {
 }
 
 /**
- * An Amazon Macie findings filter — matches findings against criteria and
+ * An Amazon Macie findings filter -- matches findings against criteria and
  * either keeps (`NOOP`) or auto-suppresses (`ARCHIVE`) them. Requires Macie to
  * be enabled for the account (see `Macie2.Session`). Name, description,
  * action, position, and criteria are all updatable in place.
@@ -147,7 +147,7 @@ export const FindingsFilterProvider = () =>
         macie2.getFindingsFilter({ id }).pipe(
           Effect.catchTags({
             ResourceNotFoundException: () => Effect.undefined,
-            // Macie disabled ⇒ the filter is unreachable (and disabling deletes
+            // Macie disabled => the filter is unreachable (and disabling deletes
             // all Macie configuration), so report it as gone.
             AccessDeniedException: () => Effect.undefined,
           }),
@@ -190,12 +190,12 @@ export const FindingsFilterProvider = () =>
           const name = news.name ?? (yield* createName(id, news));
           const desiredAction = news.action ?? "NOOP";
 
-          // 1. OBSERVE — cloud state is authoritative; output caches the id.
+          // 1. OBSERVE -- cloud state is authoritative; output caches the id.
           let filterId = output?.id;
           let live = filterId ? yield* getFilter(filterId) : undefined;
 
           if (!live || filterId === undefined) {
-            // 2. ENSURE — create the filter (retry through enablement lag).
+            // 2. ENSURE -- create the filter (retry through enablement lag).
             const created = yield* retryThroughEnablement(
               macie2.createFindingsFilter({
                 name,
@@ -208,7 +208,7 @@ export const FindingsFilterProvider = () =>
             );
             filterId = created.id!;
           } else {
-            // 3. SYNC settings — observed ↔ desired.
+            // 3. SYNC settings -- observed <-> desired.
             const drift =
               live.name !== name ||
               live.action !== desiredAction ||
@@ -226,7 +226,7 @@ export const FindingsFilterProvider = () =>
               });
             }
 
-            // 3b. SYNC tags — diff against OBSERVED cloud tags.
+            // 3b. SYNC tags -- diff against OBSERVED cloud tags.
             const { upsert, removed } = diffTags(tagRecord(live.tags), desiredTags);
             if (upsert.length > 0) {
               yield* macie2.tagResource({
@@ -249,7 +249,7 @@ export const FindingsFilterProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // Idempotent — the filter may already be gone, or Macie may already
+          // Idempotent -- the filter may already be gone, or Macie may already
           // be disabled for the account.
           yield* macie2.deleteFindingsFilter({ id: output.id }).pipe(
             Effect.catchTags({

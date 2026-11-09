@@ -6,8 +6,8 @@ import type { QApp } from "./QApp.ts";
 /**
  * Shared HTTP scaffolding for the Amazon Q Apps runtime bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the builders
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the builders
  * below. Everything except the operation and the IAM action list is
  * boilerplate: every Q Apps operation runs against the Q Business
  * application environment instance of the bound {@link QApp} (its
@@ -16,11 +16,11 @@ import type { QApp } from "./QApp.ts";
  *
  * Two IAM grant shapes:
  *
- * - {@link makeQAppHttpBinding} — operations keyed by the bound Q App or one
+ * - {@link makeQAppHttpBinding} -- operations keyed by the bound Q App or one
  *   of its sessions. Granted on the app's ARN and its sub-resources
- *   (`{appArn}`, `{appArn}/*` — Q App session ARNs are children of the app
+ *   (`{appArn}`, `{appArn}/*` -- Q App session ARNs are children of the app
  *   ARN).
- * - {@link makeQAppsInstanceHttpBinding} — instance-level operations
+ * - {@link makeQAppsInstanceHttpBinding} -- instance-level operations
  *   (library items, categories, listing, generation). Library-item and
  *   category authorization ARNs are service-assigned and not derivable from
  *   a bound Q App, so these grant on `Resource: ["*"]`.

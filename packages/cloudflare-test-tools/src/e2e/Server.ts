@@ -39,7 +39,7 @@ export class Server extends Context.Service<
 /**
  * Where the harness persists a fixture's `BuildOutput`, relative to the
  * fixture root. Persistence is the harness's E2E mechanism (preview serves
- * from it) — it is NOT part of the `Framework` contract; `Framework.build`
+ * from it) -- it is NOT part of the `Framework` contract; `Framework.build`
  * returns the `BuildOutput` purely in-memory.
  */
 export const BUILD_OUTPUT_FILE = "dist/build.json";
@@ -104,7 +104,7 @@ export const layer = Layer.effect(
     // selected.
     const target = makeCloudflareTarget(Options.resolveCloudflareOptions(options));
     // The fixture's project root (Options.root resolved against the harness
-    // cwd) — threaded into Framework.dev; buildAndPersist resolves it itself.
+    // cwd) -- threaded into Framework.dev; buildAndPersist resolves it itself.
     const root = yield* Options.resolveRoot(options);
 
     const buildJsonPath = path.resolve(cwd, BUILD_OUTPUT_FILE);

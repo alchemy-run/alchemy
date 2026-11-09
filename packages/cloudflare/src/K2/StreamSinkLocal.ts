@@ -5,7 +5,7 @@ import { WriteStreamLocal } from "./WriteStreamLocal.ts";
 /**
  * Implementation of the {@link StreamSink} service that appends over the
  * stream's HTTP input with the **current credentials**
- * ({@link WriteStreamLocal}) — for draining a Stream into K2 from an Action
+ * ({@link WriteStreamLocal}) -- for draining a Stream into K2 from an Action
  * or other deploy-time Effect. The stream needs `http: true`.
  * ### Providing the Layer
  * **Example:** Seed a stream from an Action

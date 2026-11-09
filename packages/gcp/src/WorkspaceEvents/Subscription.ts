@@ -45,7 +45,7 @@ export type PayloadOptions = {
 export type DriveOptions = {
   /**
    * Receive events about Drive files that are children of the target
-   * folder or shared drive. Immutable — changing it replaces the
+   * folder or shared drive. Immutable -- changing it replaces the
    * subscription.
    */
   includeDescendants?: boolean;
@@ -54,7 +54,7 @@ export type DriveOptions = {
 export type SubscriptionProps = {
   /**
    * Resource name `subscriptions/{subscription}` or the `{subscription}`
-   * id. Server-assigned on create. Immutable — changing it replaces the
+   * id. Server-assigned on create. Immutable -- changing it replaces the
    * subscription.
    */
   subscriptionId?: string;
@@ -62,7 +62,7 @@ export type SubscriptionProps = {
    * Google Workspace resource to monitor, as a full resource name
    * (`//chat.googleapis.com/spaces/{space}`,
    * `//drive.googleapis.com/files/{file}`,
-   * `//meet.googleapis.com/spaces/{space}`). Immutable — changing it
+   * `//meet.googleapis.com/spaces/{space}`). Immutable -- changing it
    * replaces the subscription.
    */
   targetResource: string;
@@ -74,17 +74,17 @@ export type SubscriptionProps = {
   /**
    * Pub/Sub topic that receives events
    * (`projects/{project}/topics/{topic}` or a topic id). Created with
-   * Alchemy ownership labels when omitted. Immutable — changing it
+   * Alchemy ownership labels when omitted. Immutable -- changing it
    * replaces the subscription. The topic must live in the same project.
    */
   pubsubTopic?: string;
   /**
-   * Event payload options. Chat and Drive only. Immutable — changing
+   * Event payload options. Chat and Drive only. Immutable -- changing
    * them replaces the subscription.
    */
   payloadOptions?: PayloadOptions;
   /**
-   * Drive-only options. Immutable — changing them replaces the
+   * Drive-only options. Immutable -- changing them replaces the
    * subscription.
    */
   driveOptions?: DriveOptions;
@@ -148,7 +148,7 @@ export type Subscription = Resource<
  * Subscriptions have no labels field, so Alchemy stamps ownership onto
  * the destination Pub/Sub topic (`alchemy-wesub-*`) for `list` / nuke.
  * `targetResource`, the Pub/Sub topic, payload options, and Drive options
- * are identity — changing them replaces the subscription. Event types and
+ * are identity -- changing them replaces the subscription. Event types and
  * expiration update in place. Creating a subscription requires Workspace
  * Events OAuth scopes for the target resource (Chat, Drive, or Meet).
  *

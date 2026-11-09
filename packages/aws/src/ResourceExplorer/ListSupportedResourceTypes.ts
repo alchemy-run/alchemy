@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `resource-explorer-2:ListSupportedResourceTypes`.
  *
- * Enumerates the resource types Resource Explorer can index and search —
+ * Enumerates the resource types Resource Explorer can index and search --
  * the discovery half of query-building: validate a `service:`/`resourcetype:`
  * filter before searching, or drive a resource-type picker. Account-level
  * operation, so the binding takes no resource argument. Provide the
@@ -14,7 +14,7 @@ import type * as Effect from "effect/Effect";
  * ### Listing Resources
  * **Example:** Enumerate Searchable Resource Types
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listSupportedResourceTypes =
  *   yield* AWS.ResourceExplorer.ListSupportedResourceTypes();
  *

@@ -58,7 +58,7 @@ export interface ThingTypeLookup {
 }
 
 /**
- * An AWS IoT Thing Type — a reusable template describing a class of things.
+ * An AWS IoT Thing Type -- a reusable template describing a class of things.
  *
  * ### Creating a Thing Type
  * **Example:** Basic Thing Type
@@ -182,7 +182,7 @@ export const ThingTypeProvider = () =>
             live = yield* iot.describeThingType({ thingTypeName });
           }
 
-          // SYNC deprecation — a destroy deprecates the type but AWS blocks
+          // SYNC deprecation -- a destroy deprecates the type but AWS blocks
           // deletion for 5 minutes, so a re-create with the same name can
           // observe a deprecated type. Converge it back to active.
           if (live.thingTypeMetadata?.deprecated) {

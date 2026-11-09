@@ -8,7 +8,7 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
 /**
  * Claims an inbound HTTP request for an event source (a Pub/Sub push
- * delivery, a Cloud Scheduler call, …). Return `undefined` to pass the
+ * delivery, a Cloud Scheduler call, ...). Return `undefined` to pass the
  * request on to the next listener and finally the user's `fetch`.
  */
 export type GcpHttpListener = (

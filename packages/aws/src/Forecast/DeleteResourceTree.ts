@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `forecast:DeleteResourceTree` — delete an entire tree
+ * Runtime binding for `forecast:DeleteResourceTree` -- delete an entire tree
  * of runtime-created Forecast resources (a predictor and its forecasts and
  * exports, or a dataset's import jobs) in a single call, the cost-hygiene
  * counterpart to the `Create*` bindings.

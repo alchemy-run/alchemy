@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `sesv2:GetMessageInsights`.
  *
- * Retrieves the delivery insights SES tracked for a single sent message —
+ * Retrieves the delivery insights SES tracked for a single sent message --
  * the per-recipient event timeline (send, delivery, open, click, bounce,
  * complaint) plus the resolved subject, from-address, and tags. Requires VDM
  * (Virtual Deliverability Manager) to be enabled and the message to have been
@@ -15,10 +15,10 @@ import type * as Effect from "effect/Effect";
  * ### Deliverability Insights
  * **Example:** Look Up a Message's Delivery Timeline
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getInsights = yield* SES.GetMessageInsights();
  *
- * // runtime — MessageId returned by a prior SendEmail
+ * // runtime -- MessageId returned by a prior SendEmail
  * const { Insights } = yield* getInsights({ MessageId: messageId });
  * ```
  *

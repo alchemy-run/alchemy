@@ -27,14 +27,14 @@ export interface PresignPutObjectRequest {
  * browser can upload directly to R2 without credentials and without routing
  * the body through a Worker.
  *
- * Presigning is a pure SigV4 computation against R2's S3-compatible API — no
+ * Presigning is a pure SigV4 computation against R2's S3-compatible API -- no
  * request is made. When deployed, the binding mints a scoped account API
  * token (`Workers R2 Storage Write`) and derives R2 S3 credentials from it;
  * the URLs point at `https://{accountId}.r2.cloudflarestorage.com`.
  *
  * Under `alchemy dev`, a locally-emulated bucket is served on the Worker's
  * local S3 endpoint (`{worker url}/cdn-cgi/local/r2/s3`) and the minted URLs
- * point there — the same code runs unchanged in both modes, and objects
+ * point there -- the same code runs unchanged in both modes, and objects
  * uploaded locally are visible to every local binding of the bucket.
  *
  * Browser uploads to a deployed bucket also need a matching CORS rule on the

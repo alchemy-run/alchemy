@@ -8,7 +8,7 @@ import type { SecretBindingTarget } from "./BindingHttp.ts";
 export interface ReadSecretClient {
   /**
    * UTF-8 payload of `version` (a version id, `latest`, or a full version
-   * name), or `undefined` when that version does not exist — including
+   * name), or `undefined` when that version does not exist -- including
    * `latest` on a secret with no versions. `version` defaults to `latest`.
    * A missing, disabled, or destroyed version reads as `undefined`.
    */
@@ -39,7 +39,7 @@ export interface ReadSecretClient {
  * ```typescript
  * const apiKey = yield* GCP.SecretManager.ReadSecret(secret);
  * const value = yield* apiKey.access();
- * // …provided with Effect.provide(GCP.SecretManager.ReadSecretHttp)
+ * // ...provided with Effect.provide(GCP.SecretManager.ReadSecretHttp)
  * ```
  *
  * **Example:** Pin a version

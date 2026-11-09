@@ -92,7 +92,7 @@ export const AttributeGroupAssociationProvider = () =>
 
       return AttributeGroupAssociation.Provider.of({
         stables: ["applicationId", "applicationArn", "attributeGroupId", "attributeGroupArn"],
-        // The application/attribute-group pair IS the association's identity —
+        // The application/attribute-group pair IS the association's identity --
         // changing either side replaces the association.
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
@@ -126,7 +126,7 @@ export const AttributeGroupAssociationProvider = () =>
           };
         }),
         reconcile: Effect.fn(function* ({ news, session }) {
-          // 1. OBSERVE — resolve both sides to canonical IDs; a missing parent
+          // 1. OBSERVE -- resolve both sides to canonical IDs; a missing parent
           // surfaces its typed ResourceNotFoundException.
           const application = yield* appregistry.getApplication({
             application: news.application,
@@ -137,7 +137,7 @@ export const AttributeGroupAssociationProvider = () =>
           const applicationId = application.id!;
           const attributeGroupId = attributeGroup.id!;
 
-          // 2. ENSURE — associate when missing; a ConflictException is a
+          // 2. ENSURE -- associate when missing; a ConflictException is a
           // concurrent-associate race, not a failure.
           if (!(yield* isAssociated(applicationId, attributeGroupId))) {
             yield* appregistry

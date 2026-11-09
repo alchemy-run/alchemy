@@ -89,7 +89,7 @@ export interface ServiceQuotaIncreaseRequest extends Resource<
  * :::caution
  * Submitting a quota increase request may open an AWS Support case and
  * **cannot be cancelled through the Service Quotas API**. Destroying this
- * resource only forgets the request — a still-open request (and its support
+ * resource only forgets the request -- a still-open request (and its support
  * case, if any) lives on in AWS.
  * :::
  *
@@ -276,7 +276,7 @@ export const ServiceQuotaIncreaseRequestProvider = () =>
           // resource (output present) and the applied quota still satisfies
           // the desired value, the resource is intact. Without prior state
           // a merely-satisfied quota is NOT a pre-existing foreign resource
-          // (there is nothing to adopt) — report it as missing.
+          // (there is nothing to adopt) -- report it as missing.
           if (
             output !== undefined &&
             desiredValue !== undefined &&
@@ -298,13 +298,13 @@ export const ServiceQuotaIncreaseRequestProvider = () =>
             return { action: "replace" } as const;
           }
           // desiredValue / supportCaseAllowed changes fall through to the
-          // default update path — reconcile submits a new request if needed.
+          // default update path -- reconcile submits a new request if needed.
         }),
 
         reconcile: Effect.fn(function* ({ news, output, session }) {
           const { serviceCode, quotaCode, desiredValue } = news;
 
-          // 1. OBSERVE — the applied quota value and any existing request.
+          // 1. OBSERVE -- the applied quota value and any existing request.
           //    Cloud state is authoritative; output only caches the request
           //    ID from a previous run.
           const quota = yield* observeQuota(serviceCode, quotaCode, news.contextId);
@@ -323,7 +323,7 @@ export const ServiceQuotaIncreaseRequestProvider = () =>
             request = yield* findOpenRequest(serviceCode, quotaCode, desiredValue);
           }
 
-          // 2. ENSURE — submit only when the applied value is below the
+          // 2. ENSURE -- submit only when the applied value is below the
           //    desired value and no matching request is already in flight.
           if (request === undefined) {
             const satisfied = quota?.Value !== undefined && quota.Value >= desiredValue;
@@ -339,7 +339,7 @@ export const ServiceQuotaIncreaseRequestProvider = () =>
                 .pipe(
                   Effect.map((r) => r.RequestedQuota),
                   // An open request for this quota already exists (created
-                  // out-of-band, or a race with a prior partial run) —
+                  // out-of-band, or a race with a prior partial run) --
                   // converge on it instead of failing.
                   Effect.catchTag("ResourceAlreadyExistsException", () =>
                     findOpenRequest(serviceCode, quotaCode),
@@ -348,7 +348,7 @@ export const ServiceQuotaIncreaseRequestProvider = () =>
             }
           }
 
-          // 3. A submitted request is immutable — nothing further to sync.
+          // 3. A submitted request is immutable -- nothing further to sync.
           if (request?.Id !== undefined) {
             yield* session.note(request.Id);
           }

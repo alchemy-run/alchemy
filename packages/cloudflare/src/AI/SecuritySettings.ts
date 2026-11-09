@@ -12,14 +12,14 @@ type AiSecuritySettingsTypeId = typeof AiSecuritySettingsTypeId;
 
 export type SecuritySettingsProps = {
   /**
-   * Zone the AI Security settings belong to. Stable — changing the zone
+   * Zone the AI Security settings belong to. Stable -- changing the zone
    * triggers a replacement (the old zone's setting is restored to the
    * value it had before Alchemy managed it).
    */
   zoneId: string;
   /**
    * Whether AI Security for Apps (Firewall for AI) is enabled on the
-   * zone. Mutable — toggled in place via PUT.
+   * zone. Mutable -- toggled in place via PUT.
    *
    * @default false
    */
@@ -57,12 +57,12 @@ export type SecuritySettings = Resource<
  * AI Security for Apps (Firewall for AI) settings on a Cloudflare zone
  * (`/zones/{zone_id}/ai-security/settings`).
  *
- * The settings object is a zone singleton — it always exists and is never
+ * The settings object is a zone singleton -- it always exists and is never
  * created or deleted, only toggled. Reconcile PUTs the desired `enabled`
  * value when the observed value differs; destroy restores the value the
  * zone had before Alchemy first managed it.
  *
- * Declare at most one `SecuritySettings` per zone — two instances
+ * Declare at most one `SecuritySettings` per zone -- two instances
  * managing the same zone would fight over the single underlying setting.
  *
  * AI Security for Apps is entitlement-gated: on accounts without the
@@ -102,7 +102,7 @@ export const SecuritySettingsProvider = () =>
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // No account-wide API for this zone singleton — enumerate every
+      // No account-wide API for this zone singleton -- enumerate every
       // zone in the account and read its setting. The observed value at
       // read time is its own `initialEnabled` (nothing is being managed).
       const allZones = yield* listAllZones(accountId);
@@ -141,12 +141,12 @@ export const SecuritySettingsProvider = () =>
       const zoneId = output?.zoneId ?? (olds?.zoneId as string | undefined);
       if (!zoneId) return undefined;
       const observed = yield* aiSecurity.getAiSecurity({ zoneId }).pipe(
-        // Zone deleted out-of-band — the singleton is gone with it.
+        // Zone deleted out-of-band -- the singleton is gone with it.
         Effect.catchTag("ZoneNotAuthorized", () => Effect.undefined),
       );
       if (observed === undefined) return undefined;
       // The setting is a singleton that always exists with a Cloudflare
-      // default — there is nothing to "own", so a cold read adopts
+      // default -- there is nothing to "own", so a cold read adopts
       // freely (never `Unowned`). The observed value at adoption time
       // becomes the `initialEnabled` restored on destroy.
       const enabled = observed.enabled ?? false;
@@ -159,17 +159,17 @@ export const SecuritySettingsProvider = () =>
       const zoneId = news.zoneId as string;
       const desired = news.enabled ?? false;
 
-      // 1. Observe — the singleton always exists; read its live value.
+      // 1. Observe -- the singleton always exists; read its live value.
       const observed = yield* aiSecurity.getAiSecurity({ zoneId });
       const observedEnabled = observed.enabled ?? false;
 
-      // 2. Capture — the pre-management value, restored on destroy.
+      // 2. Capture -- the pre-management value, restored on destroy.
       //    `output` (including an adoption read) already carries it;
       //    otherwise this is our first touch and the observed value is
       //    the zone's original.
       const initialEnabled = output !== undefined ? output.initialEnabled : observedEnabled;
 
-      // 3. Sync — PUT only when the observed value differs.
+      // 3. Sync -- PUT only when the observed value differs.
       if (observedEnabled === desired) {
         return { zoneId, enabled: observedEnabled, initialEnabled };
       }
@@ -182,7 +182,7 @@ export const SecuritySettingsProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { zoneId, initialEnabled } = output;
-      // Observe — if the zone itself is gone, so is the setting; if the
+      // Observe -- if the zone itself is gone, so is the setting; if the
       // entitlement was revoked, the setting is unreachable and there is
       // nothing we can restore.
       const observed = yield* aiSecurity.getAiSecurity({ zoneId }).pipe(

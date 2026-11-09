@@ -9,7 +9,7 @@ import type { FileSystem } from "./FileSystem.ts";
  * the file system ARN).
  *
  * Releases all NFSv3 byte-range locks held on the bound OpenZFS
- * {@link FileSystem} — the recovery action for clients that crashed while
+ * {@link FileSystem} -- the recovery action for clients that crashed while
  * holding locks and left files stuck. Provide the implementation with
  * `Effect.provide(AWS.FSx.ReleaseFileSystemNfsV3LocksHttp)`.
  * ### Operational Recovery

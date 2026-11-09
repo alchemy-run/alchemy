@@ -232,10 +232,10 @@ export const AutoScalingConfigurationProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // 1. Observe — the latest ACTIVE revision is authoritative.
+          // 1. Observe -- the latest ACTIVE revision is authoritative.
           let observed = yield* findLatest(name);
 
-          // 2/3. Ensure + sync — scaling settings live on immutable
+          // 2/3. Ensure + sync -- scaling settings live on immutable
           // revisions, so a drift on any user-specified field is converged
           // by creating a new revision under the same name. Only compare
           // fields the user actually specified: the service fills in
@@ -258,7 +258,7 @@ export const AutoScalingConfigurationProvider = () =>
             observed = created.AutoScalingConfiguration;
           }
 
-          // 3b. Sync tags on the latest revision ARN — diff against
+          // 3b. Sync tags on the latest revision ARN -- diff against
           // OBSERVED cloud tags.
           if (observed.AutoScalingConfigurationArn) {
             yield* syncAppRunnerTags(observed.AutoScalingConfigurationArn, desiredTags);
@@ -274,7 +274,7 @@ export const AutoScalingConfigurationProvider = () =>
           // configuration name; it requires the revision-less name partial
           // ARN. A configuration still referenced by a service (App Runner
           // releases the association asynchronously after the service
-          // finishes deleting) rejects with InvalidRequestException —
+          // finishes deleting) rejects with InvalidRequestException --
           // retry through that window (bounded).
           yield* apprunner
             .deleteAutoScalingConfiguration({
@@ -305,7 +305,7 @@ export const AutoScalingConfigurationProvider = () =>
                     s.AutoScalingConfigurationArn !== undefined &&
                     // App Runner ships an AWS-managed `DefaultConfiguration`
                     // revision that always exists and can never be deleted
-                    // — keep it out of enumeration for account-wide
+                    // -- keep it out of enumeration for account-wide
                     // teardown (nuke).
                     s.AutoScalingConfigurationName !== "DefaultConfiguration",
                 ),
@@ -320,7 +320,7 @@ export const AutoScalingConfigurationProvider = () =>
                     })
                     .pipe(
                       Effect.flatMap((r) => toAttrs(r.AutoScalingConfiguration)),
-                      // Tolerate a delete race — drop the item.
+                      // Tolerate a delete race -- drop the item.
                       Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
                     ),
                 { concurrency: 4 },

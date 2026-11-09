@@ -22,10 +22,10 @@ export interface HeadObjectRequest extends Omit<S3.HeadObjectRequest, "Bucket"> 
  * ### Inspecting Objects
  * **Example:** Check an Object's Metadata
  * ```typescript
- * // init — bind the operation to the bucket
+ * // init -- bind the operation to the bucket
  * const headObject = yield* AWS.S3.HeadObject(bucket);
  *
- * // runtime — inspect without transferring the body
+ * // runtime -- inspect without transferring the body
  * const head = yield* headObject({ Key: "uploads/report.pdf" });
  * const size = head.ContentLength;
  * const contentType = head.ContentType;

@@ -6,7 +6,7 @@ import type { Cluster } from "./Cluster.ts";
 /**
  * Runtime binding for `eks:DescribeAddon`.
  *
- * Reads one installed add-on's state — version, status, health issues, and pod identity associations.
+ * Reads one installed add-on's state -- version, status, health issues, and pod identity associations.
  * The cluster `clusterName` is injected from the bound {@link Cluster} and `eks:DescribeAddon` is granted on the cluster's sub-resource ARNs.
  * Provide the implementation with
  * `Effect.provide(AWS.EKS.DescribeAddonHttp)`.

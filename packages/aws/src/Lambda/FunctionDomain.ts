@@ -8,7 +8,7 @@ import { defaultProviderMode, type ProviderMode } from "alchemy/ProviderMode";
  * Lambda Function URLs cannot serve a custom hostname, so a Function's
  * `domain` composes an API Gateway v2 HTTP API front door (the
  * `ApiGatewayV2.HttpApi` composite: `$default` route, `AWS_PROXY`
- * integration with payload 2.0 — the Function URL event shape — and an
+ * integration with payload 2.0 -- the Function URL event shape -- and an
  * auto-deployed `$default` stage), a regional ACM certificate, one
  * `ApiGatewayV2.DomainName` + `ApiMapping` per hostname, and the alias
  * records, published through whichever DNS host `domain.dns` names.
@@ -40,7 +40,7 @@ export interface FunctionDomainConfig {
   aliases?: string[];
   /**
    * Route 53 hosted zone for the certificate validation and alias records.
-   * Optional — when omitted, the most specific PUBLIC hosted zone in the
+   * Optional -- when omitted, the most specific PUBLIC hosted zone in the
    * account containing each hostname is inferred. Ignored when {@link dns}
    * names another DNS host.
    */
@@ -50,7 +50,7 @@ export interface FunctionDomainConfig {
    * [DNS Adapters](/infrastructure-as-code/dns-adapters)). Omitted: Route
    * 53 (see {@link hostedZoneId}) with an `A` alias record per hostname.
    * Pass `Cloudflare.DNS.Adapter()` or `Hetzner.DNS.Adapter()` for a
-   * domain whose DNS lives there — each hostname gets a `CNAME` to the API
+   * domain whose DNS lives there -- each hostname gets a `CNAME` to the API
    * Gateway domain and the certificate is validated through that host.
    */
   dns?: DnsConfig;
@@ -102,12 +102,12 @@ interface FunctionDomainHost {
  *
  * Resources (under `{FunctionId}/`):
  *
- * - `Api/*` — `ApiGatewayV2.HttpApi` (Api, Integration, `$default` Route,
+ * - `Api/*` -- `ApiGatewayV2.HttpApi` (Api, Integration, `$default` Route,
  *   Stage, invoke Permission)
  * - `Certificate` (+ `CertificateValidation` / `CertificateIssued` on a
- *   non-Route 53 DNS host) — in the Function's region
- * - `DomainName-{host}` / `ApiMapping-{host}` — per hostname
- * - `Domain-{host}` — the DNS host's alias record(s) per hostname
+ *   non-Route 53 DNS host) -- in the Function's region
+ * - `DomainName-{host}` / `ApiMapping-{host}` -- per hostname
+ * - `Domain-{host}` -- the DNS host's alias record(s) per hostname
  */
 export const composeFunctionDomain = (
   fn: FunctionDomainHost,

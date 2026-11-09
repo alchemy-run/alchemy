@@ -8,7 +8,7 @@ import type * as Effect from "effect/Effect";
 export interface ExecuteQueryRequest extends sitewise.ExecuteQueryRequest {}
 
 /**
- * Runtime binding for `iotsitewise:ExecuteQuery` — run a SiteWise SQL
+ * Runtime binding for `iotsitewise:ExecuteQuery` -- run a SiteWise SQL
  * query across all asset models, assets, measurements, metrics, and
  * transforms in the account from a deployed Lambda or Task.
  *
@@ -22,7 +22,7 @@ export interface ExecuteQueryRequest extends sitewise.ExecuteQueryRequest {}
  *
  * **Example:** Find an Asset by Name
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const executeQuery = yield* AWS.IoTSiteWise.ExecuteQuery();
  *
  * // runtime

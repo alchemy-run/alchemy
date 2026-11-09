@@ -6,7 +6,7 @@ import type { Channel } from "./Channel.ts";
 /**
  * Runtime binding for `mediapackagev2:ResetChannelState`.
  *
- * Resets the ingest state of the bound {@link Channel} — clearing buffered
+ * Resets the ingest state of the bound {@link Channel} -- clearing buffered
  * content so the encoder can re-push a clean stream after a corrupted
  * contribution (e.g. an ops Lambda recovering a broken live event). The
  * channel's group and name are injected from the binding. Provide the
@@ -15,7 +15,7 @@ import type { Channel } from "./Channel.ts";
  * ### Resetting Ingest State
  * **Example:** Reset a Channel After a Corrupted Contribution
  * ```typescript
- * // init — bind the operation to the channel
+ * // init -- bind the operation to the channel
  * const resetChannel = yield* AWS.MediaPackageV2.ResetChannelState(channel);
  *
  * // runtime

@@ -6,7 +6,7 @@
  * methods against the built shape.
  *
  * The engine's class (workerd's `DurableObject` subclass) owns the
- * lifecycle API — it hands this core the state service and its
+ * lifecycle API -- it hands this core the state service and its
  * `waitUntil` hook and picks the RPC dispatch mode.
  *
  * @internal
@@ -31,7 +31,7 @@ import { handleRpcExit, type Pin, type WorkerBuild } from "./Worker.ts";
 import { withEventContext } from "./WorkerBridge.ts";
 
 /**
- * Lifecycle handlers dispatched by the bridge itself — never RPC methods.
+ * Lifecycle handlers dispatched by the bridge itself -- never RPC methods.
  */
 export const RESERVED_DURABLE_OBJECT_HANDLERS: ReadonlySet<string> = new Set([
   "fetch",
@@ -78,10 +78,10 @@ export interface DurableObjectInstanceOptions {
   /**
    * How RPC methods reach the instance:
    *
-   * - `"proxy"` — the engine resolves method names dynamically (workerd's
+   * - `"proxy"` -- the engine resolves method names dynamically (workerd's
    *   JSRPC dispatches through the bridge class's `Proxy`); `dispatch`
    *   builds each method on demand.
-   * - `"static"` — the RPC surface is materialized as real methods on
+   * - `"static"` -- the RPC surface is materialized as real methods on
    *   `target` once the instance builds (for engines whose RPC stalls on
    *   Proxy-returning constructors), and {@link DurableObjectInstance.fetch}
    *   serves the fetch-RPC protocol over the instance's own `fetch` so
@@ -94,8 +94,8 @@ export interface DurableObjectInstanceOptions {
   /**
    * Runs the instance build. Engines whose object constructor has no I/O
    * context outside a concurrency gate (workerd: `state.blockConcurrencyWhile`)
-   * pass that gate here so an init that performs I/O — a D1 `CREATE TABLE`,
-   * a migration — runs INSIDE it. Default: run immediately.
+   * pass that gate here so an init that performs I/O -- a D1 `CREATE TABLE`,
+   * a migration -- runs INSIDE it. Default: run immediately.
    */
   readonly gate?: (run: () => Promise<BuiltDurableObject>) => Promise<BuiltDurableObject>;
 }
@@ -104,7 +104,7 @@ export interface DurableObjectInstance {
   /**
    * The instance, built once per in-memory activation: the export's
    * two-phase constructor runs with the state service and the captured
-   * services provided. Rejects if the build fails (not memoized — see
+   * services provided. Rejects if the build fails (not memoized -- see
    * `getWorkerExport`).
    */
   readonly instance: Promise<BuiltDurableObject>;

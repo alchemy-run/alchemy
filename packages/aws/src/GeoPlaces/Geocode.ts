@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `geo-places:Geocode` — convert an address or place
+ * Runtime binding for `geo-places:Geocode` -- convert an address or place
  * description into geographic coordinates.
  *
  * geo-places is a standalone, pay-per-call Amazon Location API with no

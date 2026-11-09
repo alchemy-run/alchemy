@@ -4,7 +4,7 @@ import { makePaymentCryptographyKeyPairHttpBinding } from "./BindingHttp.ts";
 import { TranslatePinData } from "./TranslatePinData.ts";
 
 /**
- * HTTP implementation of {@link TranslatePinData} — grants the host Function
+ * HTTP implementation of {@link TranslatePinData} -- grants the host Function
  * `payment-cryptography:TranslatePinData` on both the incoming and outgoing
  * PIN encryption keys and calls the Payment Cryptography Data API at
  * runtime.

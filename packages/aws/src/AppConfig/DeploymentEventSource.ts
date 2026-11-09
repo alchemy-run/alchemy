@@ -6,7 +6,7 @@ import type { Environment } from "./Environment.ts";
 
 /**
  * The deployment notification action points an AppConfig deployment emits as
- * it progresses. These are the `ON_*` subset of extension action points —
+ * it progresses. These are the `ON_*` subset of extension action points --
  * fire-and-forget notifications that cannot modify the deployment.
  */
 export type DeploymentEventType =

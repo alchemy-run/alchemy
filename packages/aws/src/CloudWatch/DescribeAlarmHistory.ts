@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 export interface DescribeAlarmHistoryRequest extends cloudwatch.DescribeAlarmHistoryInput {}
 
 /**
- * Runtime binding for `cloudwatch:DescribeAlarmHistory` — read state
+ * Runtime binding for `cloudwatch:DescribeAlarmHistory` -- read state
  * transitions and configuration changes recorded for alarms in the
  * account/region.
  *
@@ -14,7 +14,7 @@ export interface DescribeAlarmHistoryRequest extends cloudwatch.DescribeAlarmHis
  * ### Reading Alarm State
  * **Example:** Read an Alarm's Recent History
  * ```typescript
- * // init — grants cloudwatch:DescribeAlarmHistory
+ * // init -- grants cloudwatch:DescribeAlarmHistory
  * const describeAlarmHistory = yield* AWS.CloudWatch.DescribeAlarmHistory();
  *
  * // runtime

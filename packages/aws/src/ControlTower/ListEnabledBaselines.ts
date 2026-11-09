@@ -13,7 +13,7 @@ import type * as Effect from "effect/Effect";
  * ### Auditing Enablements
  * **Example:** List Baselines Enabled on an OU
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const listEnabledBaselines = yield* AWS.ControlTower.ListEnabledBaselines();
  *
  * // runtime

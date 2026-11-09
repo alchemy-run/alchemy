@@ -8,7 +8,7 @@ import type * as Effect from "effect/Effect";
  * scoping, so the grant is on `*`).
  *
  * Returns counts of the account's access policies, security policies,
- * security configurations, and lifecycle policies — useful for quota
+ * security configurations, and lifecycle policies -- useful for quota
  * dashboards (each policy type has an account quota). Provide the
  * implementation with
  * `Effect.provide(AWS.OpenSearchServerless.GetPoliciesStatsHttp)`.

@@ -1,5 +1,5 @@
 /**
- * `@alchemy.run/frontend-frameworks/react-router` — React Router v7
+ * `@alchemy.run/frontend-frameworks/react-router` -- React Router v7
  * (framework mode) integration implementing framework-core's `Framework`
  * service, with the deploy target passed as a value (AWS Lambda by default,
  * via the `@alchemy.run/frontend-frameworks/react-router/aws` subpath
@@ -10,7 +10,7 @@
  * integration drives the project's own Vite install through the same two
  * passes `react-router build` runs, makes the server build's input a fetch
  * handler over the emitted `ServerBuild` manifest, and forces the server
- * bundle to be self-contained so it deploys as a standalone Lambda — the
+ * bundle to be self-contained so it deploys as a standalone Lambda -- the
  * project's `vite.config.ts` needs no adapter wiring.
  *
  * React Server Components (React Router's `unstable` RSC plugin) and
@@ -21,8 +21,8 @@
  * the fully-typed path with React Router-specific options.
  *
  * This module (and `ReactRouter.ts`) is target-agnostic by contract: it must
- * not import anything AWS-specific. The AWS half — the Lambda entry and the
- * streaming adapter — lives behind
+ * not import anything AWS-specific. The AWS half -- the Lambda entry and the
+ * streaming adapter -- lives behind
  * `@alchemy.run/frontend-frameworks/react-router/aws`.
  */
 import type * as FileSystem from "effect/FileSystem";

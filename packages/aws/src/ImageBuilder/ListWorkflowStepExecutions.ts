@@ -5,13 +5,13 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `imagebuilder:ListWorkflowStepExecutions`.
  *
- * Lists the steps of one workflow execution with their runtime status —
+ * Lists the steps of one workflow execution with their runtime status --
  * drill-down from `ListWorkflowExecutions`. Provide the implementation with
  * `Effect.provide(AWS.ImageBuilder.ListWorkflowStepExecutionsHttp)`.
  * ### Workflow Monitoring
  * **Example:** List the Steps of a Workflow Execution
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listWorkflowStepExecutions =
  *   yield* AWS.ImageBuilder.ListWorkflowStepExecutions();
  *

@@ -43,7 +43,7 @@ export interface EcsPoolOptions extends PoolSettings {
  * Run a pool of Effect Cluster runners on ECS Fargate: an ECS service whose tasks
  * host every class given this pool, in the database's VPC, behind a
  * load balancer that serves their gateway to callers anywhere. Requires a
- * database in an AWS VPC — `ClusterAWS.Database`.
+ * database in an AWS VPC -- `ClusterAWS.Database`.
  *
  * Runners reach each other and the database through the cluster's runner
  * security group; the load balancer only reaches the gateway, which checks

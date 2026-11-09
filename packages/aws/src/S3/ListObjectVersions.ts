@@ -9,7 +9,7 @@ export interface ListObjectVersionsRequest extends Omit<S3.ListObjectVersionsReq
  * Runtime binding for `s3:ListBucketVersions`.
  *
  * Bind this operation to a bucket to get a callable that lists object
- * versions and delete markers — the bucket name is injected automatically and
+ * versions and delete markers -- the bucket name is injected automatically and
  * `s3:ListBucketVersions` is granted on the bucket. Provide the
  * implementation with `Effect.provide(AWS.S3.ListObjectVersionsHttp)`.
  * ### Listing Objects

@@ -3,14 +3,14 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 import type { ConfigRule } from "./ConfigRule.ts";
 
-/** Request for {@link PutExternalEvaluation} — the rule name is injected from the bound rule. */
+/** Request for {@link PutExternalEvaluation} -- the rule name is injected from the bound rule. */
 export interface PutExternalEvaluationRequest extends Omit<
   config.PutExternalEvaluationRequest,
   "ConfigRuleName"
 > {}
 
 /**
- * Runtime binding for `config:PutExternalEvaluation` — push an externally
+ * Runtime binding for `config:PutExternalEvaluation` -- push an externally
  * computed compliance verdict for one resource into the bound
  * {@link ConfigRule} (the rule must use the external evaluation mode); the
  * rule name is injected automatically.
@@ -20,7 +20,7 @@ export interface PutExternalEvaluationRequest extends Omit<
  * ### Reporting Evaluations (Custom Rules)
  * **Example:** Push an External Evaluation
  * ```typescript
- * // init — grants config:PutExternalEvaluation
+ * // init -- grants config:PutExternalEvaluation
  * const putExternalEvaluation = yield* AWS.Config.PutExternalEvaluation(rule);
  *
  * // runtime

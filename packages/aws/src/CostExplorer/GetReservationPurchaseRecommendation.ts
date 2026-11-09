@@ -17,7 +17,7 @@ export interface GetReservationPurchaseRecommendationRequest
  * ### Reservations
  * **Example:** Get RI Purchase Recommendations
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const getReservationPurchaseRecommendation = yield* AWS.CostExplorer.GetReservationPurchaseRecommendation();
  *
  * // runtime

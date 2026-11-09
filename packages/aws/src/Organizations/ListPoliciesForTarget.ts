@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `organizations:ListPoliciesForTarget`.
  *
  * Lists the policies of the specified type that are directly attached to the specified target root, OU, or account.
- * Account-level operation — Organizations is a management-account-scoped
+ * Account-level operation -- Organizations is a management-account-scoped
  * global service, so the binding takes no resource argument. Provide the
  * implementation with `Effect.provide(AWS.Organizations.ListPoliciesForTargetHttp)`.
  * ### Policies & Effective Policy
  * **Example:** List Policies Attached to a Target
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listPoliciesForTarget = yield* AWS.Organizations.ListPoliciesForTarget();
  *
  * // runtime

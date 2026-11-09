@@ -5,8 +5,8 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `eks:DescribeAddonVersions`.
  *
- * Reads the add-on catalog — which add-ons (and versions) are available, per Kubernetes version.
- * `eks:DescribeAddonVersions` is granted on `*` — the operation is account-scoped and takes no resource.
+ * Reads the add-on catalog -- which add-ons (and versions) are available, per Kubernetes version.
+ * `eks:DescribeAddonVersions` is granted on `*` -- the operation is account-scoped and takes no resource.
  * Provide the implementation with
  * `Effect.provide(AWS.EKS.DescribeAddonVersionsHttp)`.
  * ### Version Catalogs

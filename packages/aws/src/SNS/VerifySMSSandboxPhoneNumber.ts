@@ -7,7 +7,7 @@ export interface VerifySMSSandboxPhoneNumberRequest extends sns.VerifySMSSandbox
 /**
  * Runtime binding for `sns:VerifySMSSandboxPhoneNumber`.
  *
- * An account-scoped operation — verifies a sandbox destination phone
+ * An account-scoped operation -- verifies a sandbox destination phone
  * number with the one-time password SNS texted to it.
  * Provide the `VerifySMSSandboxPhoneNumberHttp` layer on the Function to implement the binding.
  * ### SMS Sandbox

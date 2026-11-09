@@ -22,7 +22,7 @@ export interface GetMapTileRequest extends Omit<location.GetMapTileRequest, "Map
  * const getTile = yield* Location.GetMapTile(map);
  *
  * const tile = yield* getTile({ Z: "0", X: "0", Y: "0" });
- * // tile.Blob → tile bytes, tile.ContentType → e.g. "application/vnd.mapbox-vector-tile"
+ * // tile.Blob -> tile bytes, tile.ContentType -> e.g. "application/vnd.mapbox-vector-tile"
  * ```
  *
  * @binding

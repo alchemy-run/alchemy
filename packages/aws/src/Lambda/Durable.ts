@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 
 /**
  * Retry policy for a durable step. Maps onto the Durable Execution SDK's
- * `retryStrategy` — the delay grows per the configured backoff between
+ * `retryStrategy` -- the delay grows per the configured backoff between
  * attempts, and the step fails the execution once `limit` retries are
  * exhausted.
  */
@@ -42,9 +42,9 @@ export interface DurableStepConfig {
   /**
    * Checkpoint semantics for the step body.
    *
-   * - `"at-least-once"` (default) — the body may re-run if the invocation is
+   * - `"at-least-once"` (default) -- the body may re-run if the invocation is
    *   interrupted before the checkpoint lands; the body must be idempotent.
-   * - `"at-most-once"` — the step is checkpointed as started before the body
+   * - `"at-most-once"` -- the step is checkpointed as started before the body
    *   runs; an interruption surfaces as a `StepInterruptedError` instead of a
    *   silent re-run.
    */
@@ -91,7 +91,7 @@ export interface DurableCallbackOptions extends DurableCallbackConfig {
 
 /**
  * Internal service that wraps the AWS Durable Execution SDK's
- * `DurableContext`. Not accessed directly by users — use {@link step},
+ * `DurableContext`. Not accessed directly by users -- use {@link step},
  * {@link sleep}, and {@link waitForCallback} instead.
  */
 export class DurableStep extends Context.Service<
@@ -130,7 +130,7 @@ export class DurableExecutionContext extends Context.Service<
  * effect before it is handed to the SDK.
  *
  * Determinism law: all effectful/non-deterministic work (time, randomness,
- * I/O, SDK calls) must live INSIDE a step — code between steps re-runs on
+ * I/O, SDK calls) must live INSIDE a step -- code between steps re-runs on
  * every replay and must be a pure function of the input and prior step
  * results.
  */
@@ -152,7 +152,7 @@ export function step<T, R = never>(
 
 /**
  * Pause the durable execution for the given duration. The invocation is
- * checkpointed and terminated — no compute is billed while suspended — and
+ * checkpointed and terminated -- no compute is billed while suspended -- and
  * Lambda re-invokes the function when the timer fires.
  */
 export const sleep = (

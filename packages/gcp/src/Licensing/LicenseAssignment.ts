@@ -24,18 +24,18 @@ import {
 
 export type LicenseAssignmentProps = {
   /**
-   * Product id (`Google-Apps`, `Google-Vault`, …). See Products and
-   * SKUs in the Enterprise License Manager docs. Immutable — changing
+   * Product id (`Google-Apps`, `Google-Vault`, ...). See Products and
+   * SKUs in the Enterprise License Manager docs. Immutable -- changing
    * it replaces the assignment.
    */
   productId: string;
   /**
-   * Product SKU id (`Google-Apps-For-Business`, `1010020027`, …).
+   * Product SKU id (`Google-Apps-For-Business`, `1010020027`, ...).
    * Reassigning to another SKU of the same product updates in place.
    */
   skuId: string;
   /**
-   * User's primary email. Immutable — changing it replaces the
+   * User's primary email. Immutable -- changing it replaces the
    * assignment. If the email changes in Admin Console, pass the new
    * address; the previous id is not a stable key.
    */
@@ -85,7 +85,7 @@ export type LicenseAssignment = Resource<
  * `GOOGLE_LICENSE_CUSTOMER_ID` (or `GOOGLE_WORKSPACE_CUSTOMER_ID`),
  * `GOOGLE_LICENSE_PRODUCT_ID`, and `GOOGLE_LICENSE_USER_ID` are set, so
  * a Workspace domain is never bulk-revoked. Product and user are
- * identity — changing either replaces the assignment. SKU reassignment
+ * identity -- changing either replaces the assignment. SKU reassignment
  * within the same product updates in place via `licenseAssignments.patch`.
  *
  * Creating an assignment requires the

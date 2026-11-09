@@ -62,7 +62,7 @@ export const RecordsSinkHttp = Layer.effect(
             // Timestream ingests the valid subset and reports invalid records
             // positionally via RejectedRecordsException. Rejections are
             // permanent (schema conflicts, out-of-retention timestamps,
-            // version conflicts) — drop them, never retry.
+            // version conflicts) -- drop them, never retry.
             Effect.catchTag("RejectedRecordsException", (error) =>
               Effect.succeed<WriteOutcome>({
                 rejectedIndices: new Set(

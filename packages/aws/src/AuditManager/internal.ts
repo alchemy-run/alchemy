@@ -11,7 +11,7 @@ export const unredact = (
   value === undefined ? undefined : Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
 /**
- * Audit Manager tag maps arrive as `{ [key]: string | undefined }` — narrow
+ * Audit Manager tag maps arrive as `{ [key]: string | undefined }` -- narrow
  * to the `Record<string, string>` shape the Tags helpers expect.
  */
 export const toTagRecord = (

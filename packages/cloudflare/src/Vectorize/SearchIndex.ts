@@ -5,10 +5,10 @@ import type { Index } from "./VectorizeIndex.ts";
 
 /**
  * Bind a {@link Index} to a Worker and obtain the Effect-native Vectorize
- * client (`describe`, `query`, `upsert`, …).
+ * client (`describe`, `query`, `upsert`, ...).
  *
  * `SearchIndex` is a single identifier that is simultaneously the binding's
- * Context tag, its type, and the callable —
+ * Context tag, its type, and the callable --
  * `yield* Cloudflare.Vectorize.SearchIndex(index)`.
  *
  * **Example:** Querying an index inside a Worker

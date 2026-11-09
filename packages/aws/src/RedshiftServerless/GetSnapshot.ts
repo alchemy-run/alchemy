@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `GetSnapshot` operation (IAM actions
  * `redshift-serverless:GetSnapshot`).
  *
- * Reads one snapshot by name or ARN — e.g. polling a snapshot taken with
+ * Reads one snapshot by name or ARN -- e.g. polling a snapshot taken with
  * {@link CreateSnapshot} until its `status` reaches `AVAILABLE`. Provide the implementation with
  * `Effect.provide(AWS.RedshiftServerless.GetSnapshotHttp)`.
  * ### Managing Snapshots
  * **Example:** Poll a Snapshot Until Available
  * ```typescript
- * // init — resolve the runtime client
+ * // init -- resolve the runtime client
  * const getSnapshot = yield* AWS.RedshiftServerless.GetSnapshot();
  *
  * const { snapshot } = yield* getSnapshot({ snapshotName: "pre-migration-1" });

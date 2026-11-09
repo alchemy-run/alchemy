@@ -15,10 +15,10 @@ export interface ListRulesRequest extends Omit<eventbridge.ListRulesRequest, "Ev
  * ### Listing Rules
  * **Example:** List Rules on a Bus
  * ```typescript
- * // init — bind the bus (provide AWS.EventBridge.ListRulesHttp on the Function)
+ * // init -- bind the bus (provide AWS.EventBridge.ListRulesHttp on the Function)
  * const listRules = yield* AWS.EventBridge.ListRules(bus);
  *
- * // runtime — list rules, optionally filtered by name prefix
+ * // runtime -- list rules, optionally filtered by name prefix
  * const { Rules } = yield* listRules({ NamePrefix: "orders-" });
  * ```
  *

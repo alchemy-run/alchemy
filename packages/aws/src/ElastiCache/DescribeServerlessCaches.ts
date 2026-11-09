@@ -7,7 +7,7 @@ import type * as Effect from "effect/Effect";
  * `elasticache:DescribeServerlessCaches`).
  *
  * Reads the current status, endpoint, and configuration of the account's
- * serverless caches — e.g. an operational health check that verifies a cache
+ * serverless caches -- e.g. an operational health check that verifies a cache
  * is `available` before routing traffic. Provide the implementation with
  * `Effect.provide(AWS.ElastiCache.DescribeServerlessCachesHttp)`.
  * ### Monitoring Caches
@@ -16,7 +16,7 @@ import type * as Effect from "effect/Effect";
  * const describeCaches = yield* ElastiCache.DescribeServerlessCaches();
  *
  * const result = yield* describeCaches({ ServerlessCacheName: name });
- * // result.ServerlessCaches?.[0]?.Status → "available"
+ * // result.ServerlessCaches?.[0]?.Status -> "available"
  * ```
  *
  * @binding

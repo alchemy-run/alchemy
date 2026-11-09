@@ -12,7 +12,7 @@ type TypeId = typeof TypeId;
 
 export type SettingProps = {
   /**
-   * Zone the setting belongs to. Stable — changing the zone triggers a
+   * Zone the setting belongs to. Stable -- changing the zone triggers a
    * replacement (the old zone's setting is restored to the value it had
    * before Alchemy managed it).
    */
@@ -22,7 +22,7 @@ export type SettingProps = {
    * Cloudflare presents the zone's uploaded client certificate
    * ({@link Certificate}) to your origin on every pull.
    *
-   * Mutable — updated in place.
+   * Mutable -- updated in place.
    * @default false (Cloudflare's default)
    */
   enabled: boolean;
@@ -47,7 +47,7 @@ export type Setting = Resource<TypeId, SettingProps, SettingAttributes, never, P
  * The zone-level Authenticated Origin Pulls (AOP) toggle
  * (`/zones/{zone_id}/origin_tls_client_auth/settings`).
  *
- * The setting is a singleton — it always exists on every zone (Cloudflare
+ * The setting is a singleton -- it always exists on every zone (Cloudflare
  * default `false`), so this resource never creates or deletes anything
  * physical. Reconcile flips the flag when the observed value differs from
  * the desired one; destroy restores the value the setting had before
@@ -55,7 +55,7 @@ export type Setting = Resource<TypeId, SettingProps, SettingAttributes, never, P
  *
  * Enabling AOP only has effect once a zone client certificate is uploaded
  * ({@link Certificate}) and your origin is configured to
- * verify it — enabling the flag alone does not break traffic unless the
+ * verify it -- enabling the flag alone does not break traffic unless the
  * origin enforces mTLS.
  * ### Enabling Authenticated Origin Pulls
  * **Example:** Enable zone-level AOP
@@ -101,7 +101,7 @@ export const SettingProvider = () =>
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // No account-wide API for this zone singleton — enumerate every
+      // No account-wide API for this zone singleton -- enumerate every
       // zone in the account and read its setting (every zone has one).
       const allZones = yield* listAllZones(accountId);
       const rows = yield* Effect.forEach(
@@ -139,7 +139,7 @@ export const SettingProvider = () =>
       const observed = yield* originTls.getSetting({ zoneId });
       const enabled = observed.enabled ?? false;
       // The setting is a singleton that always exists with a Cloudflare
-      // default — there is nothing to "own", so a cold read adopts freely
+      // default -- there is nothing to "own", so a cold read adopts freely
       // (never `Unowned`). The observed value at adoption time becomes the
       // `initialEnabled` restored on destroy.
       const initialEnabled = output !== undefined ? output.initialEnabled : enabled;
@@ -150,17 +150,17 @@ export const SettingProvider = () =>
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
 
-      // 1. Observe — the setting always exists; read its live value.
+      // 1. Observe -- the setting always exists; read its live value.
       const observed = yield* originTls.getSetting({ zoneId });
       const observedEnabled = observed.enabled ?? false;
 
-      // 2. Capture — the pre-management value, restored on destroy.
+      // 2. Capture -- the pre-management value, restored on destroy.
       //    `output` (including an adoption read) already carries it;
       //    otherwise this is our first touch and the observed value is the
       //    zone's original.
       const initialEnabled = output !== undefined ? output.initialEnabled : observedEnabled;
 
-      // 3. Sync — put only when the observed value differs.
+      // 3. Sync -- put only when the observed value differs.
       if (observedEnabled === news.enabled) {
         return { zoneId, enabled: observedEnabled, initialEnabled };
       }
@@ -177,7 +177,7 @@ export const SettingProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { zoneId, initialEnabled } = output;
-      // Observe — restore the pre-management value; skip the call when it
+      // Observe -- restore the pre-management value; skip the call when it
       // already matches (idempotent re-delete after a crashed run).
       const observed = yield* originTls.getSetting({ zoneId });
       if ((observed.enabled ?? false) === initialEnabled) return;

@@ -5,9 +5,9 @@
  *
  * E2B builds remotely only: there is no local Docker step. The flow is
  *
- *   1. `createTemplate` — the template (by name) and a new build id
+ *   1. `createTemplate` -- the template (by name) and a new build id
  *   2. `getTemplateFileUploadLink` per `COPY` hash, uploading what E2B lacks
- *   3. `startTemplateBuild` — base image or template, steps, start/ready command
+ *   3. `startTemplateBuild` -- base image or template, steps, start/ready command
  *   4. `getTemplateBuildStatus` until the build is `ready` or `error`
  *
  * This module runs where a Worker runs: it imports nothing from
@@ -28,7 +28,7 @@ import { tarGzip } from "./Tar.ts";
 /** Credentials for a private base image. Passed to E2B's builder for the pull only. */
 export type TemplateRegistry =
   | {
-      /** Any registry with username/password auth (Docker Hub, GHCR, …). */
+      /** Any registry with username/password auth (Docker Hub, GHCR, ...). */
       readonly username: string;
       readonly password: Redacted.Redacted<string>;
     }

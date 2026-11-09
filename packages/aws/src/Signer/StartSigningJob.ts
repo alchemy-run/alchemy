@@ -7,7 +7,7 @@ import type { SigningProfile } from "./SigningProfile.ts";
  * Runtime binding for `signer:StartSigningJob`.
  *
  * Starts an asynchronous code-signing job with the bound
- * {@link SigningProfile} — Signer reads the (versioned) source object from
+ * {@link SigningProfile} -- Signer reads the (versioned) source object from
  * S3, signs it with the profile's platform and material, and writes the
  * signed artifact to the destination bucket. The profile name is injected
  * from the binding; the caller's credentials are used for the S3 access, so
@@ -18,7 +18,7 @@ import type { SigningProfile } from "./SigningProfile.ts";
  * ### Signing Code
  * **Example:** Sign an S3 Object
  * ```typescript
- * // init — bind the operation to the profile
+ * // init -- bind the operation to the profile
  * const startSigningJob = yield* AWS.Signer.StartSigningJob(profile);
  *
  * // runtime

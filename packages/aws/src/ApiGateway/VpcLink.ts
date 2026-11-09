@@ -163,7 +163,7 @@ export const VpcLinkProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
           const { region } = yield* AWSEnvironment.current;
-          // Observe — fetch the live VPC link if we have a cached id.
+          // Observe -- fetch the live VPC link if we have a cached id.
           // We never trust `output.description`/etc. for diffing; the
           // observed cloud state drives every sync below.
           let observed = output?.vpcLinkId
@@ -172,7 +172,7 @@ export const VpcLinkProvider = () =>
                 .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined))
             : undefined;
 
-          // Ensure — create the VPC link if missing.
+          // Ensure -- create the VPC link if missing.
           if (!observed?.id) {
             const created = yield* ag.createVpcLink({
               name,
@@ -189,7 +189,7 @@ export const VpcLinkProvider = () =>
 
           const vpcLinkId = observed.id!;
 
-          // Sync mutable scalar fields — observed ↔ desired patch list.
+          // Sync mutable scalar fields -- observed <-> desired patch list.
           const patches: ag.PatchOperation[] = [];
           if (news.description !== observed.description) {
             patches.push({
@@ -212,7 +212,7 @@ export const VpcLinkProvider = () =>
             });
           }
 
-          // Sync tags — observed ↔ desired so adoption converges without
+          // Sync tags -- observed <-> desired so adoption converges without
           // fighting the existing tag set.
           const observedTags = tagRecord(observed.tags);
           if (!deepEqual(observedTags, desiredTags)) {

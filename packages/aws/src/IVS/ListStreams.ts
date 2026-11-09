@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `ivs:ListStreams`.
  *
  * Enumerates the account's live streams in the current region, optionally
- * filtered by stream health. This is an account-level operation — no
+ * filtered by stream health. This is an account-level operation -- no
  * channel is bound, and the grant is on `*`. Provide the implementation
  * with `Effect.provide(AWS.IVS.ListStreamsHttp)`.
  * ### Monitoring Live Streams
  * **Example:** Count Live Streams
  * ```typescript
- * // init — account-level, no resource to bind
+ * // init -- account-level, no resource to bind
  * const listStreams = yield* AWS.IVS.ListStreams();
  *
  * // runtime

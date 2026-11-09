@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Cluster } from "./Cluster.ts";
 
 /**
- * Runtime binding for `elasticmapreduce:ListInstanceFleets` — lists the bound cluster's instance fleets (instance-fleet clusters only) with target and provisioned capacities.
+ * Runtime binding for `elasticmapreduce:ListInstanceFleets` -- lists the bound cluster's instance fleets (instance-fleet clusters only) with target and provisioned capacities.
  * ### Inspecting the Cluster
  * **Example:** Read Fleet Capacities
  * ```typescript

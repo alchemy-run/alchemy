@@ -155,7 +155,7 @@ const validateRuleName = (props: Pick<SamplingRuleProps, "ruleName">) =>
     ? Effect.fail(
         new XRayReservedRuleName({
           message:
-            '"Default" is reserved for the built-in X-Ray fallback sampling rule — choose another ruleName.',
+            '"Default" is reserved for the built-in X-Ray fallback sampling rule \u2014 choose another ruleName.',
         }),
       )
     : Effect.void;
@@ -197,7 +197,7 @@ export const SamplingRuleProvider = () =>
         Attributes: props.attributes ?? {},
       });
 
-      // X-Ray has no GetSamplingRule — observe by enumerating the (small)
+      // X-Ray has no GetSamplingRule -- observe by enumerating the (small)
       // rule list and matching on the deterministic rule name.
       const observeRule = (name: string) =>
         xray.getSamplingRules.items({}).pipe(
@@ -224,7 +224,7 @@ export const SamplingRuleProvider = () =>
               record.SamplingRule?.RuleName &&
               record.SamplingRule.RuleARN &&
               // The built-in `Default` sampling rule always exists and can
-              // never be deleted — keep it out of enumeration for
+              // never be deleted -- keep it out of enumeration for
               // account-wide teardown (nuke).
               record.SamplingRule.RuleName !== "Default"
                 ? [
@@ -261,11 +261,11 @@ export const SamplingRuleProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — the rule list is authoritative; output is only a
+          // 1. OBSERVE -- the rule list is authoritative; output is only a
           //    cached identifier.
           let live = yield* observeRule(ruleName);
 
-          // 2. ENSURE — create when missing; a concurrent create surfaces as
+          // 2. ENSURE -- create when missing; a concurrent create surfaces as
           //    the typed SamplingRuleAlreadyExists tag, which we treat as a
           //    race and re-observe.
           if (live === undefined) {
@@ -280,7 +280,7 @@ export const SamplingRuleProvider = () =>
               );
           }
 
-          // 3. SYNC — diff every mutable field of the OBSERVED rule against
+          // 3. SYNC -- diff every mutable field of the OBSERVED rule against
           //    the desired shape; a single UpdateSamplingRule applies the
           //    full desired state only when something actually drifted.
           const inSync =
@@ -307,7 +307,7 @@ export const SamplingRuleProvider = () =>
           const ruleArn =
             live?.RuleARN ?? `arn:aws:xray:${region}:${accountId}:sampling-rule/${ruleName}`;
 
-          // 3b. SYNC TAGS — diff against OBSERVED cloud tags so adoption
+          // 3b. SYNC TAGS -- diff against OBSERVED cloud tags so adoption
           //     converges (create-time Tags only apply on first create).
           const currentTags = yield* observedTags(ruleArn);
           const { upsert, removed } = diffTags(currentTags, desiredTags);
@@ -326,7 +326,7 @@ export const SamplingRuleProvider = () =>
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* xray.deleteSamplingRule({ RuleName: output.ruleName }).pipe(
-            // Typed synthetic tag for a missing rule — idempotent delete.
+            // Typed synthetic tag for a missing rule -- idempotent delete.
             Effect.catchTag("SamplingRuleNotFound", () => Effect.void),
           );
         }),

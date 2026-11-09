@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Lists the account's Location batch metadata jobs (e.g. batch address validation jobs).
  *
  * Runtime binding for the `ListJobs` operation (IAM action
- * `geo:ListJobs`), account-scoped — batch jobs are created at runtime so the
+ * `geo:ListJobs`), account-scoped -- batch jobs are created at runtime so the
  * grant is on `*`. Provide the implementation with
  * `Effect.provide(AWS.Location.ListJobsHttp)`.
  *
@@ -16,7 +16,7 @@ import type * as Effect from "effect/Effect";
  * const listJobs = yield* Location.ListJobs();
  *
  * const page = yield* listJobs();
- * // page.Entries → [{ JobId, Status, Action }, …]
+ * // page.Entries -> [{ JobId, Status, Action }, ...]
  * ```
  *
  * @binding

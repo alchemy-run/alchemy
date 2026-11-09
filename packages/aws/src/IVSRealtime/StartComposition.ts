@@ -10,7 +10,7 @@ export interface StartCompositionRequest extends Omit<
 > {}
 
 /**
- * Start a server-side composition of the bound stage — IVS mixes the
+ * Start a server-side composition of the bound stage -- IVS mixes the
  * stage's participants into a single video according to the `layout` and
  * delivers it to the given `destinations` (an IVS low-latency channel
  * and/or an S3 storage configuration).

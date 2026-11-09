@@ -6,7 +6,7 @@ import type { Service } from "./Service.ts";
 /**
  * Pause an App Runner {@link Service} from a Lambda (or other AWS runtime).
  * App Runner releases the service's compute capacity (the endpoint stops
- * serving) while keeping its configuration — e.g. a nightly scheduler that
+ * serving) while keeping its configuration -- e.g. a nightly scheduler that
  * pauses non-production services to stop compute billing. The call is
  * asynchronous; pair with {@link ListOperations} or {@link ResumeService}.
  *

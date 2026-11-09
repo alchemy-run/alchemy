@@ -7,14 +7,14 @@ import type * as Effect from "effect/Effect";
  *
  * Gets information about a product the caller has access to, including its provisioning artifacts (versions) and launch paths.
  *
- * Account-level operation — which products the caller can see and act on
+ * Account-level operation -- which products the caller can see and act on
  * is governed by portfolio principal associations, so the binding takes no
  * resource argument. Provide the implementation with
  * `Effect.provide(AWS.ServiceCatalog.DescribeProductHttp)`.
  * ### Browsing the Catalog
  * **Example:** Get a Product's Artifacts and Launch Paths
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const describeProduct = yield* AWS.ServiceCatalog.DescribeProduct();
  *
  * // runtime

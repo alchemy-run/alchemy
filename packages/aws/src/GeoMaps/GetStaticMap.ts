@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `geo-maps:GetStaticMap` — render a static map image
+ * Runtime binding for `geo-maps:GetStaticMap` -- render a static map image
  * with customizable size, center, zoom, and overlays.
  *
  * geo-maps is a standalone, pay-per-call Amazon Location API with no resource
@@ -21,7 +21,7 @@ import type * as Effect from "effect/Effect";
  * // init
  * const getStaticMap = yield* AWS.GeoMaps.GetStaticMap();
  *
- * // runtime — Center is "longitude,latitude"; FileName must be "map" or "map@2x"
+ * // runtime -- Center is "longitude,latitude"; FileName must be "map" or "map@2x"
  * const image = yield* getStaticMap({
  *   FileName: "map",
  *   Center: "-122.3493,47.6205",

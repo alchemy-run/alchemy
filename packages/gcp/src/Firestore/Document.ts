@@ -30,25 +30,25 @@ export type DocumentFieldValue = {
 export type DocumentProps = {
   /**
    * Database id or `projects/{project}/databases/{database}`. Defaults
-   * to `"(default)"`. Immutable — changing it replaces the document.
+   * to `"(default)"`. Immutable -- changing it replaces the document.
    * @default "(default)"
    */
   database?: string;
   /**
-   * Collection id relative to `parent`. Immutable — changing it
+   * Collection id relative to `parent`. Immutable -- changing it
    * replaces the document.
    * @default "_alchemy"
    */
   collectionId?: string;
   /**
    * Parent document path relative to the database (no leading slash),
-   * or empty for a root collection. Immutable — changing it replaces
+   * or empty for a root collection. Immutable -- changing it replaces
    * the document.
    */
   parentPath?: string;
   /**
    * Client-assigned document id. If omitted, a unique id is generated
-   * from the stack, stage, and logical id. Immutable — changing it
+   * from the stack, stage, and logical id. Immutable -- changing it
    * replaces the document.
    */
   documentId?: string;

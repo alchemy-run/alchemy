@@ -56,7 +56,7 @@ export interface TargetGroupAttachment extends Resource<
  *
  * For `lambda` targets, the Lambda function's resource policy must allow
  * `elasticloadbalancing.amazonaws.com` to invoke it, scoped to the target
- * group ARN — create a {@link Permission} first. The provider retries the
+ * group ARN -- create a {@link Permission} first. The provider retries the
  * registration briefly while that permission propagates.
  * ### Registering Targets
  * **Example:** Lambda function target
@@ -104,7 +104,7 @@ export const TargetGroupAttachment = Resource<TargetGroupAttachment>(
 // attachment, so registerTargets can run before the policy lands. ELB surfaces
 // the missing-permission case as either `InvalidTargetException` or an
 // empty-message `AccessDeniedException` (both members of the registerTargets
-// error union — AccessDeniedException via CommonErrors), so retry both briefly
+// error union -- AccessDeniedException via CommonErrors), so retry both briefly
 // while IAM propagates. Explicitly typed so `Retry.Return`'s conditional type
 // never leaks into declaration emit.
 const retryThroughPermissionPropagation = <A, E extends { _tag: string }, R>(
@@ -130,7 +130,7 @@ export const TargetGroupAttachmentProvider = () =>
     stables: ["targetGroupArn", "targetId", "port", "availabilityZone"],
     diff: Effect.fn(function* ({ olds, news }) {
       if (!isResolved(news)) return;
-      // Registration has no mutable aspect — every change is a replacement.
+      // Registration has no mutable aspect -- every change is a replacement.
       if (
         olds.targetGroupArn !== news.targetGroupArn ||
         olds.targetId !== news.targetId ||
@@ -199,7 +199,7 @@ export const TargetGroupAttachmentProvider = () =>
       const targetGroupArn = news.targetGroupArn as TargetGroupArn;
       const target = wireTarget(news);
 
-      // Observe — is the target already registered?
+      // Observe -- is the target already registered?
       const health = yield* elbv2
         .describeTargetHealth({ TargetGroupArn: targetGroupArn })
         .pipe(Effect.catchTag(["InvalidTargetException"], () => Effect.undefined));
@@ -209,7 +209,7 @@ export const TargetGroupAttachmentProvider = () =>
           (news.port === undefined || d.Target?.Port === news.port),
       );
 
-      // Ensure — registerTargets is an idempotent put, but skip the call
+      // Ensure -- registerTargets is an idempotent put, but skip the call
       // (and its permission-propagation retry) when already registered.
       if (!registered) {
         yield* retryThroughPermissionPropagation(

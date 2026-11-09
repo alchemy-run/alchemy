@@ -9,10 +9,10 @@ import { pathToFileURL } from "node:url";
  * (the same contract `nitro-cloudflare-dev` provides, and production serves
  * natively):
  *
- * - `event.context.cf` — the static `request.cf` mock;
- * - `event.context.waitUntil` — accepted and dropped (long-lived dev
+ * - `event.context.cf` -- the static `request.cf` mock;
+ * - `event.context.waitUntil` -- accepted and dropped (long-lived dev
  *   process: background work simply runs);
- * - `event.context.cloudflare = { request, env, context }` — `env` is the
+ * - `event.context.cloudflare = { request, env, context }` -- `env` is the
  *   live proxied environment (bindings round-trip to the host's workerd
  *   instance over HTTP, so state is SHARED with the host proxy), `request`
  *   is a synthesized `Request` carrying `cf`, `context` is the no-op
@@ -62,7 +62,7 @@ const isConnectInfo = (value: unknown): value is DevConnectInfo =>
 /**
  * Synthesize the per-event `Request` (what the preset's runtime hands the
  * worker). Body is intentionally omitted: the node request stream belongs
- * to h3's own body parsing — read bodies through h3 (`readBody`), not
+ * to h3's own body parsing -- read bodies through h3 (`readBody`), not
  * `context.cloudflare.request`.
  */
 const synthesizeRequest = (
@@ -95,7 +95,7 @@ export default defineNitroPlugin((nitroApp) => {
   const config = useRuntimeConfig() as Record<string, unknown>;
   const info = config[RUNTIME_CONFIG_KEY];
   if (!isConnectInfo(info)) {
-    // Not running under the distilled dev host — stay inert.
+    // Not running under the distilled dev host -- stay inert.
     return;
   }
   let connected: Promise<ConnectedPlatform> | undefined;

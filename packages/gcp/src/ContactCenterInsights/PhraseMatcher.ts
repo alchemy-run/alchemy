@@ -65,19 +65,19 @@ export type PhraseMatcherProps = {
   /**
    * Phrase matcher id (the `{phrase_matcher}` segment of
    * `projects/{project}/locations/{location}/phraseMatchers/{phrase_matcher}`).
-   * If omitted, a unique id is generated. Immutable — changing it replaces
+   * If omitted, a unique id is generated. Immutable -- changing it replaces
    * the matcher.
    */
   phraseMatcherId?: string;
   /**
-   * Location (`us-central1`, …). Immutable — changing it replaces the
+   * Location (`us-central1`, ...). Immutable -- changing it replaces the
    * matcher. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
    * Display name. Phrase matchers have no labels field, so Alchemy
-   * ownership is stored in a `[alchemy …]` prefix and stripped from
+   * ownership is stored in a `[alchemy ...]` prefix and stripped from
    * attributes.
    */
   displayName?: string;
@@ -146,7 +146,7 @@ export type PhraseMatcher = Resource<
  * A Contact Center AI Insights phrase matcher that flags conversations
  * containing configured phrases.
  *
- * Phrase matchers have no labels field — Alchemy stamps ownership into
+ * Phrase matchers have no labels field -- Alchemy stamps ownership into
  * the display name so `list` / nuke can find them. Location and id are
  * immutable. Display name, type, active flag, role, version tag, and
  * rule groups update in place.

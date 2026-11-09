@@ -9,7 +9,7 @@ export interface GetFindingRequest extends Omit<aa.GetFindingRequest, "analyzerA
 /**
  * Runtime binding for `access-analyzer:GetFinding`.
  *
- * Retrieves a single external-access finding (V1 API — prefer {@link
+ * Retrieves a single external-access finding (V1 API -- prefer {@link
  * GetFindingV2}). Provide the implementation with
  * `Effect.provide(AWS.AccessAnalyzer.GetFindingHttp)`.
  * ### Reading Findings

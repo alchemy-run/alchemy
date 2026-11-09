@@ -35,7 +35,7 @@ export interface WriteSecretClient {
  * const apiKey = yield* GCP.SecretManager.WriteSecret(secret);
  * const version = yield* apiKey.addVersion(newKey);
  * yield* apiKey.destroyVersion(previousVersion);
- * // …provided with Effect.provide(GCP.SecretManager.WriteSecretHttp)
+ * // ...provided with Effect.provide(GCP.SecretManager.WriteSecretHttp)
  * ```
  *
  * @binding

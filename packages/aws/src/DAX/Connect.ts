@@ -6,7 +6,7 @@ import type { Cluster } from "./Cluster.ts";
 
 /**
  * Connection descriptor for a DAX cluster. Alchemy does not bundle a DAX
- * client — pass these settings to the DAX SDK client of your choice
+ * client -- pass these settings to the DAX SDK client of your choice
  * (`amazon-dax-client`, `@amazon-dax-sdk/lib-dax`, ...), which speaks the
  * DynamoDB-compatible DAX protocol against the cluster's discovery endpoint.
  */
@@ -16,7 +16,7 @@ export interface ClusterConnectionInfo {
   /** Discovery endpoint port (8111 unencrypted, 9111 for TLS). */
   port: number;
   /**
-   * Full `dax://` (or `daxs://` for TLS) discovery endpoint URL — the value
+   * Full `dax://` (or `daxs://` for TLS) discovery endpoint URL -- the value
    * DAX SDK clients accept directly.
    */
   url: string;
@@ -42,7 +42,7 @@ export const connectEnvPrefix = (logicalId: string): string =>
  * variables on the host Function, and resolves a typed
  * {@link ClusterConnectionInfo} at runtime.
  *
- * The DAX data plane is VPC-only — the host Function must be attached to the
+ * The DAX data plane is VPC-only -- the host Function must be attached to the
  * cluster's VPC and allowed ingress by the cluster's security groups.
  * Provide the implementation with `Effect.provide(AWS.DAX.ConnectReadHttp)`.
  * ### Connecting to a Cluster
@@ -71,7 +71,7 @@ export const ConnectRead = Binding.Service<ConnectRead>("AWS.DAX.ConnectRead");
  * discovery endpoint as environment variables on the host Function, and
  * resolves a typed {@link ClusterConnectionInfo} at runtime.
  *
- * The DAX data plane is VPC-only — the host Function must be attached to the
+ * The DAX data plane is VPC-only -- the host Function must be attached to the
  * cluster's VPC and allowed ingress by the cluster's security groups.
  * Provide the implementation with `Effect.provide(AWS.DAX.ConnectWriteHttp)`.
  * ### Connecting to a Cluster
@@ -98,7 +98,7 @@ export const ConnectWrite = Binding.Service<ConnectWrite>("AWS.DAX.ConnectWrite"
  * publishes the discovery endpoint as environment variables on the host
  * Function, and resolves a typed {@link ClusterConnectionInfo} at runtime.
  *
- * The DAX data plane is VPC-only — the host Function must be attached to the
+ * The DAX data plane is VPC-only -- the host Function must be attached to the
  * cluster's VPC and allowed ingress by the cluster's security groups.
  * Provide the implementation with
  * `Effect.provide(AWS.DAX.ConnectReadWriteHttp)`.

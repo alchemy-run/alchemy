@@ -87,7 +87,7 @@ const makeSpannerExecutor = Effect.fn(function* (options: {
 
   /**
    * Run one DDL statement exactly once under deterministic operation ids
-   * `{base}_0`, `{base}_1`, …: an operation a previous deploy started is
+   * `{base}_0`, `{base}_1`, ...: an operation a previous deploy started is
    * awaited, not resubmitted. A single statement applies atomically, so an
    * earlier attempt that failed changed nothing and the next attempt id
    * runs it again; a failure of this deploy's own attempt fails the deploy.

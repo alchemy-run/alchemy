@@ -71,7 +71,7 @@ export const CLOUDFLARE_AUTH_PROVIDER_NAME = "Cloudflare";
 
 /**
  * Cloudflare account IDs are 32 lowercase hex characters. Placeholder
- * values ("", "-", "dummy", …) end up interpolated into API paths and
+ * values ("", "-", "dummy", ...) end up interpolated into API paths and
  * surface as baffling `InvalidRoute: Could not route to
  * /accounts/<value>/...` errors, so reject them up front with an
  * actionable message instead.
@@ -90,14 +90,14 @@ export const validateAccountId = (
         message:
           `Cloudflare account ID is missing (${source}). ` +
           `Re-run \`${command}\` and provide your account ID ` +
-          "(found in the Cloudflare dashboard under Workers & Pages → Account details).",
+          "(found in the Cloudflare dashboard under Workers & Pages \u2192 Account details).",
       });
     }
     if (!ACCOUNT_ID_PATTERN.test(trimmed)) {
       return yield* AuthError.make({
         message:
-          `'${trimmed}' is not a valid Cloudflare account ID (${source}) — expected 32 hex characters. ` +
-          "Copy the account ID from the Cloudflare dashboard (Workers & Pages → Account details) " +
+          `'${trimmed}' is not a valid Cloudflare account ID (${source}) \u2014 expected 32 hex characters. ` +
+          "Copy the account ID from the Cloudflare dashboard (Workers & Pages \u2192 Account details) " +
           `and re-run \`${command}\`.`,
       });
     }
@@ -108,4 +108,4 @@ export const validateAccountId = (
 export const validateAccountIdField = (v: string): string | undefined =>
   ACCOUNT_ID_PATTERN.test(v.trim())
     ? undefined
-    : "Expected a 32-character hex account ID (Workers & Pages → Account details)";
+    : "Expected a 32-character hex account ID (Workers & Pages \u2192 Account details)";

@@ -46,7 +46,7 @@ export type SshKey = Resource<
     id: number;
     /** Name of the SSH key (unique per project). */
     name: string;
-    /** MD5 fingerprint of the public key (`aa:bb:…`). */
+    /** MD5 fingerprint of the public key (`aa:bb:...`). */
     fingerprint: string;
     /** Public key as stored by Hetzner. */
     publicKey: string;
@@ -71,7 +71,7 @@ export interface SshKeyLookup {
 
 /**
  * A Hetzner Cloud SSH key. Public keys are injected into Servers at create
- * time. The public key is immutable — changing it replaces the key.
+ * time. The public key is immutable -- changing it replaces the key.
  *
  * @see https://docs.hetzner.cloud/reference/cloud#ssh-keys
  *
@@ -79,7 +79,7 @@ export interface SshKeyLookup {
  * **Example:** Generated name
  * ```typescript
  * const key = yield* Hetzner.SshKey("deploy", {
- *   publicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI… user@host",
+ *   publicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... user@host",
  * });
  * ```
  *
@@ -87,7 +87,7 @@ export interface SshKeyLookup {
  * ```typescript
  * const key = yield* Hetzner.SshKey("deploy", {
  *   name: "deploy-key",
- *   publicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI… user@host",
+ *   publicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... user@host",
  *   labels: { role: "deploy" },
  * });
  * ```

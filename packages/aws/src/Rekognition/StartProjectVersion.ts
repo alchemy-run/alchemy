@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `rekognition:StartProjectVersion` — start hosting a trained Custom Labels model version so it can serve DetectCustomLabels requests.
+ * Runtime binding for `rekognition:StartProjectVersion` -- start hosting a trained Custom Labels model version so it can serve DetectCustomLabels requests.
  *
  * The binding takes no arguments and grants the function
  * `rekognition:StartProjectVersion` on `*` (Rekognition data-plane resources such

@@ -22,7 +22,7 @@ export type DhcpOptionsArn<ID extends DhcpOptionsId = DhcpOptionsId> =
 
 export interface DhcpOptionsProps {
   /**
-   * The domain name for hosts in the VPC (e.g. `example.internal`). Immutable —
+   * The domain name for hosts in the VPC (e.g. `example.internal`). Immutable --
    * a DHCP options set cannot be edited, so any change replaces it.
    */
   domainName?: string;
@@ -107,7 +107,7 @@ export type DhcpOptionsLookup =
 /**
  * A DHCP options set configures the DHCP parameters (domain name, DNS servers,
  * NTP servers, NetBIOS settings) that a VPC hands out to the instances launched
- * inside it. Attach a custom set to a VPC to override the AWS defaults — for
+ * inside it. Attach a custom set to a VPC to override the AWS defaults -- for
  * example to point instances at your own DNS or an internal search domain.
  *
  * A DHCP options set is immutable: AWS provides no edit API, so changing any
@@ -311,7 +311,7 @@ export const DhcpOptionsProvider = () =>
 
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return;
-          // The DHCP configuration itself is immutable — a change replaces.
+          // The DHCP configuration itself is immutable -- a change replaces.
           const eq = (a?: string[], b?: string[]) =>
             JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
           if (
@@ -329,13 +329,13 @@ export const DhcpOptionsProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const desiredTags = yield* createTags(id, news.tags);
 
-          // Observe — find the options set via the cached id, else create.
+          // Observe -- find the options set via the cached id, else create.
           let opts: ec2.DhcpOptions | undefined;
           if (output?.dhcpOptionsId) {
             opts = yield* describeDhcpOptions(output.dhcpOptionsId);
           }
 
-          // Ensure — create if missing.
+          // Ensure -- create if missing.
           if (opts === undefined) {
             yield* session.note("Creating DHCP options set...");
             const result = yield* ec2.createDhcpOptions({
@@ -353,7 +353,7 @@ export const DhcpOptionsProvider = () =>
 
           const dhcpOptionsId = opts.DhcpOptionsId!;
 
-          // Sync association — associate the desired VPC, and detach any VPC we
+          // Sync association -- associate the desired VPC, and detach any VPC we
           // previously associated that is no longer desired (re-point it at the
           // default options set).
           const previousVpc = output?.vpcId;
@@ -370,7 +370,7 @@ export const DhcpOptionsProvider = () =>
             });
           }
 
-          // Sync tags — observed cloud tags vs desired.
+          // Sync tags -- observed cloud tags vs desired.
           const currentTags =
             (yield* ec2
               .describeTags({
@@ -408,7 +408,7 @@ export const DhcpOptionsProvider = () =>
         delete: Effect.fn(function* ({ output, session }) {
           const dhcpOptionsId = output.dhcpOptionsId;
 
-          // Disassociate any VPC first — a set cannot be deleted while attached.
+          // Disassociate any VPC first -- a set cannot be deleted while attached.
           if (output.vpcId) {
             yield* session.note(`Restoring default DHCP options on ${output.vpcId}...`);
             yield* ec2

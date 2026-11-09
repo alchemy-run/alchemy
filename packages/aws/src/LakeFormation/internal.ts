@@ -4,7 +4,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
 /**
- * Bounded retry through `ConcurrentModificationException` — Lake Formation
+ * Bounded retry through `ConcurrentModificationException` -- Lake Formation
  * serializes grant/revoke/settings mutations and rejects concurrent writers.
  * Explicitly typed so declaration emit does not widen the provider layer (see
  * PATTERNS §7 on inlined `Effect.retry`).
@@ -18,7 +18,7 @@ export const retryWhileConcurrentModification = <A, E extends { _tag: string }, 
   });
 
 /**
- * Bounded retry through `InvalidLakeFormationPrincipal` — a freshly-created
+ * Bounded retry through `InvalidLakeFormationPrincipal` -- a freshly-created
  * IAM role/user takes ~10s to propagate before Lake Formation accepts it as a
  * principal ("Invalid principal, arn: ..." surfaced as a typed synthetic
  * error via the distilled patch). Explicitly typed for the same

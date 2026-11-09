@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Repository } from "./Repository.ts";
 
 /**
- * Request for {@link BatchCheckLayerAvailability} — `repositoryName` is injected from the
+ * Request for {@link BatchCheckLayerAvailability} -- `repositoryName` is injected from the
  * bound {@link Repository} (the registry defaults to the caller's account).
  */
 export interface BatchCheckLayerAvailabilityRequest extends Omit<
@@ -15,14 +15,14 @@ export interface BatchCheckLayerAvailabilityRequest extends Omit<
 /**
  * Runtime binding for `ecr:BatchCheckLayerAvailability`.
  *
- * Checks whether image layers already exist in the bound repository — pushed clients call this before uploading to skip blobs the registry already has. Provide the implementation with
+ * Checks whether image layers already exist in the bound repository -- pushed clients call this before uploading to skip blobs the registry already has. Provide the implementation with
  * `Effect.provide(AWS.ECR.BatchCheckLayerAvailabilityHttp)`.
  * ### Pushing Images
  * **Example:** Skip Already-Pushed Layers
  * ```typescript
  * const checkLayers = yield* AWS.ECR.BatchCheckLayerAvailability(repository);
  *
- * const res = yield* checkLayers({ layerDigests: ["sha256:…"] });
+ * const res = yield* checkLayers({ layerDigests: ["sha256:..."] });
  * const missing = res.layers?.filter((l) => l.layerAvailability === "UNAVAILABLE");
  * ```
  *

@@ -9,7 +9,7 @@ export interface ResetJobBookmarkRequest extends Omit<glue.ResetJobBookmarkReque
  * Runtime binding for `glue:ResetJobBookmark`.
  *
  * Resets the bound {@link Job}'s bookmark entry so the next bookmarked run
- * reprocesses the source data from the beginning — the standard remediation
+ * reprocesses the source data from the beginning -- the standard remediation
  * after a bad deploy consumed data incorrectly. The job name is injected
  * from the binding. Provide the implementation with
  * `Effect.provide(AWS.Glue.ResetJobBookmarkHttp)`.

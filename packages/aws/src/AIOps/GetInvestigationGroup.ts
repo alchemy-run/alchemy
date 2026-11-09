@@ -6,16 +6,16 @@ import type { InvestigationGroup } from "./InvestigationGroup.ts";
 /**
  * Runtime binding for `aiops:GetInvestigationGroup`.
  *
- * Reads the bound {@link InvestigationGroup}'s full configuration — the
+ * Reads the bound {@link InvestigationGroup}'s full configuration -- the
  * telemetry-access role, retention period, encryption, tag key boundaries,
- * chatbot notification channels, and cross-account configurations — so an
+ * chatbot notification channels, and cross-account configurations -- so an
  * ops function can audit or report on the Region's investigation setup. The
  * group's ARN is injected from the binding. Provide the implementation with
  * `Effect.provide(AWS.AIOps.GetInvestigationGroupHttp)`.
  * ### Reading the Investigation Group
  * **Example:** Inspect the Group's Configuration
  * ```typescript
- * // init — grants aiops:GetInvestigationGroup on the group
+ * // init -- grants aiops:GetInvestigationGroup on the group
  * const getInvestigationGroup = yield* AWS.AIOps.GetInvestigationGroup(group);
  *
  * // runtime

@@ -155,7 +155,7 @@ const ProviderLive = () =>
       const title = news.title ?? output?.title ?? (yield* createTitle(id, undefined));
       const acct = output?.accountId ?? accountId;
 
-      // Observe — re-fetch the cached namespace; fall back to a title
+      // Observe -- re-fetch the cached namespace; fall back to a title
       // scan so we recover from out-of-band deletes or partial state
       // persistence failures.
       let observed:
@@ -175,7 +175,7 @@ const ProviderLive = () =>
           .pipe(Effect.catchTag("NamespaceNotFound", () => Effect.undefined));
       }
 
-      // Ensure — create if missing. Cloudflare returns
+      // Ensure -- create if missing. Cloudflare returns
       // `NamespaceTitleAlreadyExists` on a concurrent create; tolerate
       // by adopting the namespace with the same title.
       if (!observed) {
@@ -202,7 +202,7 @@ const ProviderLive = () =>
         return yield* new NamespaceModeMismatch({ namespaceId: observed.id, expected: "instant" });
       }
 
-      // Sync — KV's only mutable property is the title. Rename only
+      // Sync -- KV's only mutable property is the title. Rename only
       // when the observed title drifts from desired so we avoid
       // unnecessary API calls on every reconcile.
       let namespaceId = observed.id;

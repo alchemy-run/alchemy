@@ -7,14 +7,14 @@ import type * as Effect from "effect/Effect";
  *
  * Enumerates the components actually installed on a core device (name,
  * version, lifecycle state such as `RUNNING` or `BROKEN`, and last status
- * report) — the ground truth for "what is this device really running". The
+ * report) -- the ground truth for "what is this device really running". The
  * caller supplies the core device thing name at runtime. Provide the
  * implementation with
  * `Effect.provide(AWS.GreengrassV2.ListInstalledComponentsHttp)`.
  * ### Managing Core Devices
  * **Example:** Audit A Device's Installed Components
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listInstalledComponents = yield* AWS.GreengrassV2.ListInstalledComponents();
  *
  * // runtime

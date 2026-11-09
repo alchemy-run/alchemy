@@ -3,8 +3,8 @@
  * JSON object in the BlobStore describing a repository's current serving
  * state. The Repo DO rewrites it after every commit that changes what an
  * anonymous reader could see (push, ref write, meta change, bundle cut),
- * and the Worker uses it to answer public read traffic — the `info/refs`
- * advertisement and bundle-covered full clones — without waking the DO.
+ * and the Worker uses it to answer public read traffic -- the `info/refs`
+ * advertisement and bundle-covered full clones -- without waking the DO.
  *
  * Consistency: the snapshot is written AFTER the SQLite commit and
  * before the response, so read-your-writes holds for the writer. A crash
@@ -37,7 +37,7 @@ export interface HeadSnapshot {
 
 export const encodeHeadSnapshot = (snapshot: HeadSnapshot): string => JSON.stringify(snapshot);
 
-/** `undefined` on malformed/foreign content — callers fall to the DO. */
+/** `undefined` on malformed/foreign content -- callers fall to the DO. */
 export const decodeHeadSnapshot = (raw: string): HeadSnapshot | undefined => {
   try {
     const parsed = JSON.parse(raw) as HeadSnapshot;

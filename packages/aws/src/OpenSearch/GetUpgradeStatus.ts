@@ -14,7 +14,7 @@ import type * as Effect from "effect/Effect";
  * const getUpgradeStatus = yield* OpenSearch.GetUpgradeStatus();
  *
  * const result = yield* getUpgradeStatus({ DomainName: name });
- * // result.StepStatus → "SUCCEEDED"
+ * // result.StepStatus -> "SUCCEEDED"
  * ```
  *
  * @binding

@@ -10,7 +10,7 @@ export interface CopyObjectRequest extends Omit<S3.CopyObjectRequest, "Bucket"> 
  * Runtime binding for `s3:CopyObject`.
  *
  * Bind this operation to the destination bucket to get a callable that copies
- * objects server-side — no download/re-upload round trip. `CopySource` names
+ * objects server-side -- no download/re-upload round trip. `CopySource` names
  * the source as `"source-bucket/key"`. Provide the implementation with
  * `Effect.provide(AWS.S3.CopyObjectHttp)`. The binding grants reads of current
  * and specific source versions within the bound bucket. Cross-bucket copies
@@ -19,10 +19,10 @@ export interface CopyObjectRequest extends Omit<S3.CopyObjectRequest, "Bucket"> 
  * ### Copying Objects
  * **Example:** Copy an Object Within a Bucket
  * ```typescript
- * // init — bind the operation to the destination bucket
+ * // init -- bind the operation to the destination bucket
  * const copyObject = yield* AWS.S3.CopyObject(bucket);
  *
- * // runtime — promote a staged upload to its final key
+ * // runtime -- promote a staged upload to its final key
  * yield* copyObject({
  *   CopySource: `${bucketName}/incoming/report.pdf`,
  *   Key: "published/report.pdf",

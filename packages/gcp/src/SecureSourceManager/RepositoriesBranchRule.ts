@@ -42,7 +42,7 @@ export type RepositoriesBranchRuleProps = {
   /**
    * Parent repository. Full name
    * `projects/{project}/locations/{location}/repositories/{repository}`
-   * or the repository id (combined with `location`). Immutable —
+   * or the repository id (combined with `location`). Immutable --
    * changing it replaces the rule.
    */
   repository: string;
@@ -53,7 +53,7 @@ export type RepositoriesBranchRuleProps = {
   location?: string;
   /**
    * Branch rule id (the `{branchRule}` segment). If omitted, a unique
-   * RFC1035 name is generated. Immutable — changing it replaces the rule.
+   * RFC1035 name is generated. Immutable -- changing it replaces the rule.
    */
   branchRuleId?: string;
   /**

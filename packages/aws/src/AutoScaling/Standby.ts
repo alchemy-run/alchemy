@@ -23,7 +23,7 @@ export interface ExitStandbyRequest extends Omit<
 
 export interface StandbyClient {
   /**
-   * Move instances into `Standby` — they stay attached (and optionally keep
+   * Move instances into `Standby` -- they stay attached (and optionally keep
    * counting toward desired capacity) but receive no load balancer traffic.
    */
   enter: (
@@ -43,17 +43,17 @@ export interface StandbyClient {
  * actions `autoscaling:EnterStandby` and `autoscaling:ExitStandby` scoped to
  * the group ARN).
  *
- * Temporarily pulls instances out of service — to debug a misbehaving
- * instance, apply a patch, or drain it during maintenance — and puts them
+ * Temporarily pulls instances out of service -- to debug a misbehaving
+ * instance, apply a patch, or drain it during maintenance -- and puts them
  * back afterwards. Provide the implementation with
  * `Effect.provide(AWS.AutoScaling.StandbyHttp)`.
  * ### Standby Maintenance
  * **Example:** Pull an instance for maintenance, then return it
  * ```typescript
- * // init — bind the operations to the group
+ * // init -- bind the operations to the group
  * const standby = yield* AWS.AutoScaling.Standby(group);
  *
- * // runtime — take the instance out of rotation
+ * // runtime -- take the instance out of rotation
  * yield* standby.enter({
  *   InstanceIds: [instanceId],
  *   ShouldDecrementDesiredCapacity: true,
@@ -61,7 +61,7 @@ export interface StandbyClient {
  *
  * // ... perform maintenance ...
  *
- * // runtime — put it back in service
+ * // runtime -- put it back in service
  * yield* standby.exit({ InstanceIds: [instanceId] });
  * ```
  *

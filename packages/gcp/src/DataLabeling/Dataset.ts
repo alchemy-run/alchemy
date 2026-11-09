@@ -31,18 +31,18 @@ export type DatasetProps = {
   /**
    * Dataset id (the `{dataset}` segment of
    * `projects/{project}/datasets/{dataset}`). Server-assigned on create.
-   * Immutable — changing it replaces the dataset.
+   * Immutable -- changing it replaces the dataset.
    */
   datasetId?: string;
   /**
    * Display name. Maximum 64 characters. Required by the API; Alchemy
-   * falls back to a generated name. Immutable — changing it replaces
+   * falls back to a generated name. Immutable -- changing it replaces
    * the dataset.
    */
   displayName?: string;
   /**
    * Human-readable description. Datasets have no labels field, so
-   * Alchemy stamps ownership into this field. Immutable — changing it
+   * Alchemy stamps ownership into this field. Immutable -- changing it
    * replaces the dataset.
    */
   description?: string;
@@ -78,7 +78,7 @@ export type Dataset = Resource<
 >;
 
 /**
- * A Data Labeling dataset — a container for data items and annotated
+ * A Data Labeling dataset -- a container for data items and annotated
  * datasets produced by labeling tasks.
  *
  * Dataset ids are server-assigned. Display name and description are

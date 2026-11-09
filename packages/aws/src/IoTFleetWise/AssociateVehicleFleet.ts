@@ -16,7 +16,7 @@ export interface AssociateVehicleFleetRequest extends Omit<
  * Runtime binding for the `AssociateVehicleFleet` operation (IAM action
  * `iotfleetwise:AssociateVehicleFleet`), scoped to one {@link Fleet}.
  *
- * Adds a vehicle to the bound fleet at runtime — e.g. a provisioning
+ * Adds a vehicle to the bound fleet at runtime -- e.g. a provisioning
  * Lambda enrolling freshly-registered vehicles. Provide the implementation
  * with `Effect.provide(AWS.IoTFleetWise.AssociateVehicleFleetHttp)`.
  *

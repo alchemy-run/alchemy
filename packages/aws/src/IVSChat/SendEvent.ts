@@ -11,7 +11,7 @@ export interface SendEventRequest extends Omit<ivschat.SendEventRequest, "roomId
 
 /**
  * Send an application-defined event to every client connected to the bound
- * room — the effectful call made from a deployed Lambda or Task. Use it to
+ * room -- the effectful call made from a deployed Lambda or Task. Use it to
  * broadcast state changes (poll results, stream metadata, moderation
  * notices) alongside user chat messages; `attributes` carries the payload
  * as string key-value pairs.

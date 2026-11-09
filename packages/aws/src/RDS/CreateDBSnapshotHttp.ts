@@ -10,7 +10,7 @@ export const CreateDBSnapshotHttp = Layer.effect(
     operation: rds.createDBSnapshot,
     actions: ["rds:CreateDBSnapshot", "rds:AddTagsToResource"],
     // Snapshot creation authorizes against BOTH the source ARN and the
-    // target snapshot ARN — widen the grant to the account's
+    // target snapshot ARN -- widen the grant to the account's
     // `snapshot` ARN space.
     extraResources: (arn) => [`${arn.split(":").slice(0, 5).join(":")}:snapshot:*`],
   }),

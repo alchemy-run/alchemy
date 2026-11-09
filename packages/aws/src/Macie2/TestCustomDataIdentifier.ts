@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `macie2:TestCustomDataIdentifier`.
  *
  * Tests criteria for a custom data identifier.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.Macie2.TestCustomDataIdentifierHttp)`.
  * ### Custom Data Identifiers & Lists
  * **Example:** Test a Detection Regex
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const testCustomDataIdentifier = yield* AWS.Macie2.TestCustomDataIdentifier();
  *
  * // runtime

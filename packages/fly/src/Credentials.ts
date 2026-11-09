@@ -37,11 +37,11 @@ export const bindFlyApiToken = (): Effect.Effect<void, never, Credentials> =>
   });
 
 /**
- * `Credentials` for the HTTP binding layers (`GetSecretHttp`, `ExecHttp`, …).
+ * `Credentials` for the HTTP binding layers (`GetSecretHttp`, `ExecHttp`, ...).
  *
  * Those layers are built in two places. Inside a stack (plan/deploy, or an
  * Action) `providers()` has already resolved the profile-backed
- * `Credentials`, and the binding must use them — a laptop deploy has no
+ * `Credentials`, and the binding must use them -- a laptop deploy has no
  * `FLY_API_TOKEN` in its env once the token lives in the Alchemy profile.
  * Inside a deployed Machine there is no profile; `bindFlyApiToken`
  * has already `RuntimeContext.set` the org token, which Platform copies
@@ -63,7 +63,7 @@ export const CredentialsFromAmbientOrEnv: Layer.Layer<Credentials> = Layer.effec
  *
  * Maps onto `@distilled.cloud/fly-io`'s `{ apiKey, apiBaseUrl }` shape.
  * Distilled's own `CredentialsFromEnv` also accepts `FLY_IO_API_KEY` as a
- * fallback — Alchemy itself only reads `FLY_API_TOKEN`.
+ * fallback -- Alchemy itself only reads `FLY_API_TOKEN`.
  */
 export const fromAuthProvider = () =>
   Layer.effect(

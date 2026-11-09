@@ -16,7 +16,7 @@ export interface GetConsoleOutputRequest extends Omit<
  * Runtime binding for the `GetConsoleOutput` operation scoped to the bound
  * {@link Instance} (IAM action `ec2:GetConsoleOutput` on the instance ARN).
  *
- * Fetches the instance's serial console output (base64-encoded) — e.g. a
+ * Fetches the instance's serial console output (base64-encoded) -- e.g. a
  * diagnostics Lambda that captures boot logs when a host fails its health
  * checks. Pass `Latest: true` for the most recent output on supported
  * instance types. Provide the implementation with
@@ -24,10 +24,10 @@ export interface GetConsoleOutputRequest extends Omit<
  * ### Diagnostics
  * **Example:** Capture the instance's console output
  * ```typescript
- * // init — bind the operation to the instance
+ * // init -- bind the operation to the instance
  * const getConsoleOutput = yield* AWS.EC2.GetConsoleOutput(instance);
  *
- * // runtime — fetch the (base64-encoded) boot log
+ * // runtime -- fetch the (base64-encoded) boot log
  * const result = yield* getConsoleOutput({ Latest: true });
  * const log = Buffer.from(result.Output ?? "", "base64").toString("utf8");
  * ```

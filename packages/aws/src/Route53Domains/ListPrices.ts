@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 export interface ListPricesRequest extends route53domains.ListPricesRequest {}
 
 /**
- * Runtime binding for `route53domains:ListPrices` — list registration,
+ * Runtime binding for `route53domains:ListPrices` -- list registration,
  * transfer, renewal, restoration, and owner-change prices for the TLDs
  * supported by Route 53, or for one specific TLD.
  *

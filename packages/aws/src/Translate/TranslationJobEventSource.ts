@@ -45,7 +45,7 @@ export interface TranslationJobEventSourceProps extends EventRouteProps {
  * subscribes the host Function to those events so it can chain
  * post-translation automation or alert on `FAILED` jobs.
  *
- * Translate publishes to EventBridge automatically — no additional resource
+ * Translate publishes to EventBridge automatically -- no additional resource
  * is created besides the EventBridge rule targeting the host. Provide the
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.

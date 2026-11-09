@@ -9,7 +9,7 @@ export interface ListPipelineExecutionsRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `codepipeline:ListPipelineExecutions` — enumerates
+ * Runtime binding for `codepipeline:ListPipelineExecutions` -- enumerates
  * recent executions of the pipeline (newest first).
  * ### Observing Pipelines
  * **Example:** List Recent Executions

@@ -34,13 +34,13 @@ export type MembershipsFeatureProps = {
   /**
    * Parent Fleet membership. Full name
    * `projects/{project}/locations/{location}/memberships/{membership}`
-   * or the membership id (combined with `location`). Immutable —
+   * or the membership id (combined with `location`). Immutable --
    * changing it replaces the feature.
    */
   membership: string;
   /**
-   * Location of the parent membership (`global`, `us-central1`, …).
-   * Used when `membership` is a bare id. Immutable — changing it
+   * Location of the parent membership (`global`, `us-central1`, ...).
+   * Used when `membership` is a bare id. Immutable -- changing it
    * replaces the feature. Fleet memberships are typically `global`.
    * @default "global"
    */
@@ -50,12 +50,12 @@ export type MembershipsFeatureProps = {
    * `.../memberships/{membership}/features/{feature}`). Well-known Fleet
    * Feature names such as `configmanagement`, `servicemesh`, or
    * `policycontroller`. If omitted, a unique RFC1035 name is generated.
-   * Immutable — changing it replaces the feature.
+   * Immutable -- changing it replaces the feature.
    */
   featureId?: string;
   /**
    * Per-feature spec for this membership (Config Management, Service
-   * Mesh, Policy Controller, …).
+   * Mesh, Policy Controller, ...).
    */
   spec?: FeatureSpec;
   /**
@@ -114,7 +114,7 @@ export interface MembershipsFeatureLookup {
    */
   featureId: string;
   /**
-   * Location of the parent membership (`global`, `us-central1`, …). Used
+   * Location of the parent membership (`global`, `us-central1`, ...). Used
    * when `membership` is a bare id. Fleet memberships are typically
    * `global`.
    */
@@ -133,7 +133,7 @@ export interface MembershipsFeatureLookup {
 }
 
 /**
- * A GKE Hub MembershipFeature — the per-membership settings for a Fleet
+ * A GKE Hub MembershipFeature -- the per-membership settings for a Fleet
  * Feature such as Config Management or Service Mesh.
  *
  * Changing `featureId`, `membership`, or `location` replaces the

@@ -23,11 +23,11 @@ import {
 
 export type StorelayoutpageProps = {
   /**
-   * Play EMM enterprise id. Immutable — changing it replaces the page.
+   * Play EMM enterprise id. Immutable -- changing it replaces the page.
    */
   enterpriseId: string;
   /**
-   * Server-assigned store page id. Immutable — changing it replaces the
+   * Server-assigned store page id. Immutable -- changing it replaces the
    * page.
    */
   pageId?: string;
@@ -67,7 +67,7 @@ export type Storelayoutpage = Resource<
  * Store pages have no labels field and their names are shown to device
  * users, so Alchemy tracks a page by its recorded id only (`list` finds
  * pages from older releases that carried a name marker). `enterpriseId` and `pageId`
- * are identity — changing either replaces the page. Names and links
+ * are identity -- changing either replaces the page. Names and links
  * update in place.
  *
  * ### Creating a Store Page

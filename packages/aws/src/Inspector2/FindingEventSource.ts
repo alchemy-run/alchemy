@@ -8,7 +8,7 @@ import {
 
 /**
  * The `detail` payload Amazon Inspector delivers to EventBridge for a
- * finding — the full finding document. Only the commonly-matched fields are
+ * finding -- the full finding document. Only the commonly-matched fields are
  * typed; the schema grows over time.
  */
 export interface FindingEventDetail {
@@ -64,7 +64,7 @@ export interface FindingEventSourceProps extends EventRouteProps {
  * detail-type `Inspector2 Finding`); this subscribes the host Function to
  * those events so it can triage, notify, or auto-remediate.
  *
- * Inspector publishes to EventBridge automatically — no additional resource
+ * Inspector publishes to EventBridge automatically -- no additional resource
  * is created besides the EventBridge rule targeting the host. Provide the
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.

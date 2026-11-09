@@ -41,7 +41,7 @@ export interface AccessPointPolicy extends Resource<
 
 /**
  * The resource policy of an S3 Access Point. Grants principals access to
- * objects through the access point — the delegated replacement for a giant
+ * objects through the access point -- the delegated replacement for a giant
  * shared bucket policy.
  *
  * Note that the underlying bucket must delegate access control to the access
@@ -90,7 +90,7 @@ export const AccessPointPolicyProvider = () =>
 
       return AccessPointPolicy.Provider.of({
         stables: ["accessPointName"],
-        // Sub-resource keyed by its access point — there is no account-wide
+        // Sub-resource keyed by its access point -- there is no account-wide
         // enumeration of access point policies, and the policy is deleted
         // with its access point, so nuke discovers it via the parent.
         list: () => Effect.succeed([]),
@@ -113,10 +113,10 @@ export const AccessPointPolicyProvider = () =>
           const { accountId } = yield* AWSEnvironment.current;
           const name = news.accessPointName;
 
-          // 1. OBSERVE — read the policy currently attached in the cloud.
+          // 1. OBSERVE -- read the policy currently attached in the cloud.
           const observed = yield* observePolicy(accountId, name);
 
-          // 2. SYNC — apply only when the desired document differs after
+          // 2. SYNC -- apply only when the desired document differs after
           // canonicalization (key order / whitespace insensitive), so a
           // re-deploy of an unchanged document is a no-op.
           const desired = desiredPolicy(news);
@@ -142,7 +142,7 @@ export const AccessPointPolicyProvider = () =>
               Name: output.accessPointName,
             })
             .pipe(
-              // Idempotent delete — a policy (or its whole access point)
+              // Idempotent delete -- a policy (or its whole access point)
               // that is already gone is success.
               Effect.catchTag(["NoSuchAccessPointPolicy", "NoSuchAccessPoint"], () => Effect.void),
             );

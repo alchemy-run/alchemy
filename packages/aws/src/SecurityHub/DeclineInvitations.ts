@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `securityhub:DeclineInvitations`.
  *
  * Declines Security Hub membership invitations from the specified accounts.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.SecurityHub.DeclineInvitationsHttp)`.
  * ### Members & Organization
  * **Example:** Decline Invitations
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const declineInvitations = yield* AWS.SecurityHub.DeclineInvitations();
  *
  * // runtime

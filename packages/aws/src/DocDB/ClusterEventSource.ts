@@ -51,7 +51,7 @@ export interface ClusterEventSourceProps {
   /**
    * ARN of a Secrets Manager secret holding the DocumentDB connection
    * credentials (`{ username, password }`). Used for `BASIC_AUTH` access.
-   * Required — a managed cluster exposes this as `cluster.masterUserSecretArn`.
+   * Required -- a managed cluster exposes this as `cluster.masterUserSecretArn`.
    */
   secretArn: string;
   /**

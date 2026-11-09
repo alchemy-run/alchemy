@@ -79,7 +79,7 @@ export interface SchemaLookup {
 }
 
 /**
- * An event schema in an EventBridge Schema Registry — a versioned OpenAPI 3
+ * An event schema in an EventBridge Schema Registry -- a versioned OpenAPI 3
  * or JSONSchema Draft 4 document describing the structure of an event.
  * Updating the content publishes a new schema version; previous versions are
  * retained by the registry.
@@ -155,7 +155,7 @@ export const SchemaProvider = () =>
       return Schema.Provider.of({
         stables: ["registryName", "schemaName", "schemaArn"],
 
-        // Sub-resource keyed by its parent registry — listSchemas requires a
+        // Sub-resource keyed by its parent registry -- listSchemas requires a
         // RegistryName, so there is no account-wide enumeration.
         list: () => Effect.succeed([]),
 
@@ -226,7 +226,7 @@ export const SchemaProvider = () =>
             });
           }
 
-          // SYNC content / type / description — diff observed against desired.
+          // SYNC content / type / description -- diff observed against desired.
           // Content is compared canonically (sorted keys, no whitespace) so a
           // reformatted-but-equal document does not publish a new version.
           const contentChanged =
@@ -246,7 +246,7 @@ export const SchemaProvider = () =>
             });
           }
 
-          // SYNC tags — diff against observed cloud tags.
+          // SYNC tags -- diff against observed cloud tags.
           yield* syncSchemasTags(live.SchemaArn!, id, news.tags);
 
           yield* session.note(`${registryName}/${schemaName}`);

@@ -6,7 +6,7 @@ import type { Project } from "./Project.ts";
 export interface StartBuildRequest extends Omit<SVC.StartBuildInput, "projectName"> {}
 
 /**
- * Runtime binding for `codebuild:StartBuild` — lets a workload kick off a
+ * Runtime binding for `codebuild:StartBuild` -- lets a workload kick off a
  * build of a CodeBuild project (optionally overriding the source version,
  * environment variables, buildspec, etc.).
  *

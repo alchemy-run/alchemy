@@ -279,7 +279,7 @@ export const nameFromOperation = (operation: ssm.Operation): string | undefined 
 };
 
 /**
- * Wait on a Secure Source Manager long-running operation. Instance creation takes 20–40 minutes; repository children finish in seconds.
+ * Wait on a Secure Source Manager long-running operation. Instance creation takes 20-40 minutes; repository children finish in seconds.
  * `ALREADY_EXISTS` (a create race) counts as success; so does `NOT_FOUND`
  * when `notFoundOk` (deletes). Returns the final operation.
  */

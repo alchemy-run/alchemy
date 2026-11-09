@@ -29,7 +29,7 @@ export type HttpsHealthCheckProps = {
    */
   httpsHealthCheckName?: string;
   /**
-   * Optional description. Alchemy ownership is stored in a `[alchemy …]`
+   * Optional description. Alchemy ownership is stored in a `[alchemy ...]`
    * prefix so `list` / nuke can find resources (legacy HttpsHealthCheck has
    * no labels field).
    */
@@ -40,7 +40,7 @@ export type HttpsHealthCheckProps = {
    */
   checkIntervalSec?: number;
   /**
-   * Probe timeout in seconds. Must be ≤ `checkIntervalSec`.
+   * Probe timeout in seconds. Must be <= `checkIntervalSec`.
    * @default 5
    */
   timeoutSec?: number;
@@ -128,9 +128,9 @@ export interface HttpsHealthCheckResourceLookup {
 /**
  * A legacy global Compute Engine HTTPS health check.
  *
- * Legacy HTTPS health checks are deprecated for most load balancers —
+ * Legacy HTTPS health checks are deprecated for most load balancers --
  * prefer `HealthCheck` with `httpsHealthCheck`. Compute HttpsHealthCheck
- * has no labels field — Alchemy ownership is stored in the description so
+ * has no labels field -- Alchemy ownership is stored in the description so
  * nuke can find leaked checks.
  *
  * ### Creating an HTTPS Health Check

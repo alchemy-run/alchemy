@@ -41,12 +41,12 @@ export type LocationsJobTriggerProps = {
    * Trigger id (the `{jobTrigger}` segment of
    * `projects/{project}/locations/{location}/jobTriggers/{jobTrigger}`).
    * If omitted, a unique name is generated. Must match `[a-zA-Z0-9_-]+` and
-   * is at most 100 characters. Immutable — changing it replaces the
+   * is at most 100 characters. Immutable -- changing it replaces the
    * trigger.
    */
   triggerId?: string;
   /**
-   * Processing location (`us-central1`, `global`, …). Immutable —
+   * Processing location (`us-central1`, `global`, ...). Immutable --
    * changing it replaces the trigger.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -57,7 +57,7 @@ export type LocationsJobTriggerProps = {
   displayName?: string;
   /**
    * Human-readable description (max 256 characters). Job triggers have no
-   * labels field, so Alchemy ownership is stored in a `[alchemy …]`
+   * labels field, so Alchemy ownership is stored in a `[alchemy ...]`
    * prefix and stripped from attributes.
    */
   description?: string;
@@ -124,7 +124,7 @@ export interface LocationsJobTriggerLookup {
    */
   triggerId: string;
   /**
-   * Processing location (`us-central1`, `global`, …).
+   * Processing location (`us-central1`, `global`, ...).
    */
   location?: string;
   /**
@@ -138,7 +138,7 @@ export interface LocationsJobTriggerLookup {
  * A regional Cloud DLP job trigger (`projects.locations.jobTriggers`).
  *
  * Job triggers have no labels field, so Alchemy stamps ownership into the
- * description for `list` / nuke. Location and id are identity — changing
+ * description for `list` / nuke. Location and id are identity -- changing
  * them replaces the trigger. Display name, description, status, inspect
  * job, and triggers update in place.
  *

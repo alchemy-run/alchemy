@@ -19,12 +19,12 @@ export class ServiceNetworkServiceAssociationUnexpectedResponse extends Data.Tag
 
 export interface ServiceNetworkServiceAssociationProps {
   /**
-   * ID or ARN of the service network. Immutable — changing it replaces the
+   * ID or ARN of the service network. Immutable -- changing it replaces the
    * association.
    */
   serviceNetworkIdentifier: string;
   /**
-   * ID or ARN of the lattice service to associate. Immutable — changing it
+   * ID or ARN of the lattice service to associate. Immutable -- changing it
    * replaces the association.
    */
   serviceIdentifier: string;
@@ -167,12 +167,12 @@ export const ServiceNetworkServiceAssociationProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — prefer the stable id cache, fall back to pair lookup.
+          // Observe -- prefer the stable id cache, fall back to pair lookup.
           let assoc = output?.associationId
             ? yield* observe(output.associationId)
             : yield* findByPair(news.serviceNetworkIdentifier, news.serviceIdentifier);
 
-          // Ensure — create if missing. A ConflictException means the pair
+          // Ensure -- create if missing. A ConflictException means the pair
           // is already associated (a race); recover the existing association.
           if (!assoc?.arn || !assoc.id) {
             const created = yield* retryOnConflict(

@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Project } from "./Project.ts";
 
 /**
- * Runtime binding for `codebuild:ListSandboxesForProject` — lists the
+ * Runtime binding for `codebuild:ListSandboxesForProject` -- lists the
  * bound project's sandbox ids, newest first.
  * ### Sandboxes
  * **Example:** List Sandboxes

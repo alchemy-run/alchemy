@@ -95,7 +95,7 @@ export type CustomAlertTrigger =
 export interface CustomAlertProps {
   /**
    * Name of the alert. If omitted, a unique name is generated.
-   * Mutable — renames are applied in place.
+   * Mutable -- renames are applied in place.
    * @default ${app}-${id}-${stage}-${suffix}
    */
   name?: string;
@@ -106,8 +106,8 @@ export interface CustomAlertProps {
   /**
    * A [SQL API](https://developers.cloudflare.com/analytics/sql-api/) query
    * returning the number the trigger evaluates, e.g.
-   * `SELECT count() AS value FROM logs.workersLogs WHERE …`. The query must
-   * scope itself to the account (`accountTag = '…'`). Cloudflare checks
+   * `SELECT count() AS value FROM logs.workersLogs WHERE ...`. The query must
+   * scope itself to the account (`accountTag = '...'`). Cloudflare checks
    * it when the alert is saved and rejects it with `InvalidAlertQuery`.
    */
   query: string;
@@ -257,7 +257,7 @@ export const CustomAlertProvider = () =>
         return observed ? toAttributes(observed, acct) : undefined;
       }
 
-      // Cold read: no persisted id (state-persistence failure) — find the
+      // Cold read: no persisted id (state-persistence failure) -- find the
       // deterministic physical name in the account's policy list.
       const name = yield* createPolicyName(id, olds?.name);
       const match = yield* findPolicyByName(acct, name);
@@ -269,7 +269,7 @@ export const CustomAlertProvider = () =>
       const name = yield* createPolicyName(id, news.name ?? output?.name);
       const desired = buildBody(name, news, bindings);
 
-      // 1. Observe — by cached id first, then by deterministic name.
+      // 1. Observe -- by cached id first, then by deterministic name.
       let observed: ObservedPolicy | undefined;
       if (output?.policyId) {
         observed = yield* observePolicy(accountId, output.policyId);
@@ -278,7 +278,7 @@ export const CustomAlertProvider = () =>
         observed = yield* findPolicyByName(accountId, name);
       }
 
-      // 2. Ensure — create when missing. `createPolicy` only returns the
+      // 2. Ensure -- create when missing. `createPolicy` only returns the
       //    new id; re-read for the full attribute set.
       if (!observed) {
         const created = yield* alerting.createPolicy({ accountId, ...desired });
@@ -291,7 +291,7 @@ export const CustomAlertProvider = () =>
         return toAttributes(fresh ?? { id: created.id, name }, accountId);
       }
 
-      // 3. Sync — PUT the full desired body when anything drifts from the
+      // 3. Sync -- PUT the full desired body when anything drifts from the
       //    observed policy, filters included.
       if (!policyEqualsObserved(desired, observed)) {
         yield* alerting.updatePolicy({ accountId, policyId: observed.id, ...desired });

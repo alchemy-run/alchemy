@@ -21,15 +21,15 @@ import type { ResourceClassLike, ResourceLike } from "../Resource.ts";
  * - Both variants are exposed via {@link ProviderService.modes} as lazy,
  *   memoized builders. NEITHER is constructed at registration: a variant
  *   (and the mode-specific dependency layers composed inside its thunk) is
- *   built the first time something demands it — planning a resource of
+ *   built the first time something demands it -- planning a resource of
  *   this type, deleting a state row stamped with its mode, a nuke scan. A
  *   dual provider whose resources never appear in a run costs nothing, and
  *   in dev the sidecar process a local variant spawns only starts once a
  *   resource of its type is actually planned.
  *
  * Laziness mechanics: the layer is a {@link Layer.fromBuildMemo}, so the
- * build itself is memoized by layer identity (one provider instance — and
- * one instance registry for local providers — per memo-map ancestry, i.e.
+ * build itself is memoized by layer identity (one provider instance -- and
+ * one instance registry for local providers -- per memo-map ancestry, i.e.
  * shared across every stack build that forks the same root, exactly like
  * ordinary layers). The build receives its `MemoMap` and `Scope`; variant
  * layers are built with `Layer.buildWithMemoMap` against that same memo
@@ -57,7 +57,7 @@ export const dual = <
   LayerLive extends Layer.Layer<any, any, any>,
   LayerLocal extends Layer.Layer<any, any, any>,
 >(
-  // Only the resource type string is needed — a ResourceClass, a Platform,
+  // Only the resource type string is needed -- a ResourceClass, a Platform,
   // or a bare `{ Type }` (useful when importing the class would create a
   // module cycle) all satisfy this.
   cls: ResourceClassLike<R> | Platform<R, any, any, any, any> | { Type: R["Type"] },
@@ -65,7 +65,7 @@ export const dual = <
     live: () => LayerLive;
     local: () => LayerLocal;
     /**
-     * Data-plane override context for the local mode — the layer of cloud
+     * Data-plane override context for the local mode -- the layer of cloud
      * environment services (endpoint, credentials, region) the local
      * lifecycle variant runs under (e.g. AWS's `flociServices()`). Stamped
      * onto the registered service as
@@ -76,7 +76,7 @@ export const dual = <
      */
     dataPlane?: () => Layer.Layer<any, any, never>;
     /**
-     * Data-plane override for **live** mode — the inverse of
+     * Data-plane override for **live** mode -- the inverse of
      * {@link dataPlane}. Stamped as {@link ProviderService.liveDataPlane} so
      * `Alchemy.remote()` binding clients in a `dev` run provide the live
      * chain closest (ambient is the emulator). Pass a module-memoized
@@ -134,7 +134,7 @@ export const dual = <
       // `precreate`, `tail`, `logs`), `version`, `stables` and `nuke`
       // there. The registered service therefore only needs the required
       // lifecycle methods for structural provider checks and direct
-      // registration access — each forwarding to the default
+      // registration access -- each forwarding to the default
       // variant, built on first call.
       const variant = modes[defaultMode];
 

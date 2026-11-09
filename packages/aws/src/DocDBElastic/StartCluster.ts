@@ -7,7 +7,7 @@ import type { Cluster } from "./Cluster.ts";
  * Runtime binding for the `StartCluster` operation (IAM action
  * `docdb-elastic:StartCluster`), scoped to one {@link Cluster}.
  *
- * Restarts the bound elastic cluster after it was stopped — compute billing
+ * Restarts the bound elastic cluster after it was stopped -- compute billing
  * resumes and the cluster transitions through `STARTING` back to `ACTIVE`.
  * Provide the implementation with
  * `Effect.provide(AWS.DocDBElastic.StartClusterHttp)`.
@@ -17,7 +17,7 @@ import type { Cluster } from "./Cluster.ts";
  * const startCluster = yield* DocDBElastic.StartCluster(cluster);
  *
  * const result = yield* startCluster();
- * // result.cluster.status → "STARTING"
+ * // result.cluster.status -> "STARTING"
  * ```
  *
  * @binding

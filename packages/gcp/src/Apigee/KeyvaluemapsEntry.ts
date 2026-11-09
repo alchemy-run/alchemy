@@ -14,12 +14,12 @@ const MAX_NAME_LENGTH = 255;
 export type KeyvaluemapsEntryProps = {
   /**
    * Apigee organization id. Defaults to the current GCP project id.
-   * Immutable — changing it replaces the entry.
+   * Immutable -- changing it replaces the entry.
    */
   organization?: string;
   /**
    * Parent key value map id or full name
-   * (`organizations/{org}/keyvaluemaps/{keyvaluemap}`). Immutable —
+   * (`organizations/{org}/keyvaluemaps/{keyvaluemap}`). Immutable --
    * changing it replaces the entry.
    */
   map: string;
@@ -27,7 +27,7 @@ export type KeyvaluemapsEntryProps = {
    * Entry key (the `{entry}` segment of
    * `organizations/{org}/keyvaluemaps/{keyvaluemap}/entries/{entry}`).
    * If omitted, a unique name is generated from the stack, stage, and
-   * logical id. Immutable — changing it replaces the entry. Must not be
+   * logical id. Immutable -- changing it replaces the entry. Must not be
    * `__alchemy` (reserved by {@link Keyvaluemap} for ownership).
    */
   entryId?: string;
@@ -62,7 +62,7 @@ export type KeyvaluemapsEntry = Resource<
  * Entries have no labels field and the value is read by proxies, so
  * Alchemy stores it verbatim and identifies its entries by the generated
  * key: `read` reports an entry with an explicit `entryId` as unowned
- * (adopt it with `--adopt`). Organization, map, and key are identity —
+ * (adopt it with `--adopt`). Organization, map, and key are identity --
  * changing them replaces the entry. `value` updates in place.
  *
  * ### Creating an Entry

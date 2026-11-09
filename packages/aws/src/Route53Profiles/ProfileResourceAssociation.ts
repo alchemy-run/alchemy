@@ -15,7 +15,7 @@ export interface ProfileResourceAssociationProps {
    */
   profileId: string;
   /**
-   * ARN of the DNS resource to attach — a private hosted zone, Resolver
+   * ARN of the DNS resource to attach -- a private hosted zone, Resolver
    * rule, or DNS Firewall rule group. Changing it forces replacement.
    */
   resourceArn: string;
@@ -116,7 +116,7 @@ const retryConflict = <A, E extends { _tag: string }, R>(
 /**
  * Bounded wait (~2 min) for a disassociation to drain so the Profile and
  * the attached resource can be deleted right after. If it is still draining
- * after the budget we proceed — downstream deletes absorb the residual with
+ * after the budget we proceed -- downstream deletes absorb the residual with
  * their own bounded retries.
  *
  * @internal
@@ -199,7 +199,7 @@ export const ProfileResourceAssociationProvider = () =>
 
       return ProfileResourceAssociation.Provider.of({
         stables: ["profileResourceAssociationId", "profileId", "resourceArn"],
-        // Parent-keyed listing only — enumerate every Profile, then each
+        // Parent-keyed listing only -- enumerate every Profile, then each
         // Profile's resource associations.
         list: () =>
           profiles.listProfiles.items({}).pipe(

@@ -5,8 +5,8 @@ import { withPricingRegion } from "./internal.ts";
 /**
  * Shared HTTP scaffolding for the AWS Price List runtime bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, makePricingHttpBinding({ … }))` over the builder
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, makePricingHttpBinding({ ... }))` over the builder
  * below. Everything except the operation and the IAM action is boilerplate.
  *
  * The Price List Query API is a global, data-only service served from
@@ -28,7 +28,7 @@ export const makePricingHttpBinding = <I extends object, A, E, R>(options: {
 }) =>
   Effect.gen(function* () {
     const bind = yield* AWSBindings.Bind;
-    // Capture the client with the region pinned to us-east-1 — the Price
+    // Capture the client with the region pinned to us-east-1 -- the Price
     // List Query API is not served from most regions.
     const op = yield* options.operation.pipe(withPricingRegion, AWSBindings.withCredentials);
 
@@ -46,7 +46,7 @@ export const makePricingHttpBinding = <I extends object, A, E, R>(options: {
       }
       return Effect.fn(`AWS.Pricing.${options.capability}`)(function* (request?: I) {
         // The region must also be pinned at the call site: the yield-time
-        // snapshot is only a fallback — the calling fiber's ambient Region
+        // snapshot is only a fallback -- the calling fiber's ambient Region
         // (the host Function's own region) wins over it.
         return yield* withPricingRegion(op((request ?? {}) as I));
       });

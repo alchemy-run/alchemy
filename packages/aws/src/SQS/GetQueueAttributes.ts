@@ -12,7 +12,7 @@ export interface GetQueueAttributesRequest extends Omit<
  * Runtime binding for `sqs:GetQueueAttributes`.
  *
  * Bind this operation to a {@link Queue} inside a function runtime to read
- * live queue attributes — e.g. `ApproximateNumberOfMessages` for queue-depth
+ * live queue attributes -- e.g. `ApproximateNumberOfMessages` for queue-depth
  * monitoring or backpressure decisions. The binding grants the host function
  * `sqs:GetQueueAttributes` on the queue. Provide the
  * `GetQueueAttributesHttp` layer on the Function to implement the binding.

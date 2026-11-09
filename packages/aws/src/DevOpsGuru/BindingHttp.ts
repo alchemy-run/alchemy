@@ -4,8 +4,8 @@ import * as AWSBindings from "../AWSBindings.ts";
 /**
  * Shared scaffolding for Amazon DevOps Guru HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, makeDevOpsGuruAccountHttpBinding({ … }))` over the
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, makeDevOpsGuruAccountHttpBinding({ ... }))` over the
  * builder below. Everything except the operation and the IAM action is
  * boilerplate.
  *

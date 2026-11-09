@@ -17,7 +17,7 @@ export interface ListCostAllocationTagBackfillHistoryRequest
  * ### Cost Allocation Tags
  * **Example:** List Backfill Requests
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const listCostAllocationTagBackfillHistory = yield* AWS.CostExplorer.ListCostAllocationTagBackfillHistory();
  *
  * // runtime

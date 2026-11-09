@@ -8,7 +8,7 @@ export interface StartRunRequest extends Omit<omics.StartRunRequest, "workflowId
 /**
  * Runtime binding for `omics:StartRun`.
  *
- * Bind this operation to a `Workflow` to get a callable that starts a run of the bound workflow — the
+ * Bind this operation to a `Workflow` to get a callable that starts a run of the bound workflow -- the
  * store/workflow id is injected automatically and the action is granted on the
  * bound resource. Provide the implementation with
  * `Effect.provide(AWS.Omics.StartRunHttp)`.

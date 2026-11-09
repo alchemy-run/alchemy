@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `transcribe:ListCallAnalyticsCategories` — list the Call Analytics categories in the account.
+ * Runtime binding for `transcribe:ListCallAnalyticsCategories` -- list the Call Analytics categories in the account.
  *
  * Amazon Transcribe batch actions have no resource-level IAM; the host is
  * granted `transcribe:ListCallAnalyticsCategories` on `*`.

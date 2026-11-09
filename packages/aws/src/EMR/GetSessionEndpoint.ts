@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Cluster } from "./Cluster.ts";
 
 /**
- * Runtime binding for `elasticmapreduce:GetSessionEndpoint` — resolves the Spark Connect endpoint URL and a time-limited auth token for an interactive session on the bound cluster. The returned `AuthToken` is `Redacted` — unwrap with `Redacted.value`.
+ * Runtime binding for `elasticmapreduce:GetSessionEndpoint` -- resolves the Spark Connect endpoint URL and a time-limited auth token for an interactive session on the bound cluster. The returned `AuthToken` is `Redacted` -- unwrap with `Redacted.value`.
  * ### Interactive Sessions
  * **Example:** Connect a Spark Client
  * ```typescript

@@ -14,10 +14,10 @@ export interface StopJobRequest extends Omit<amplify.StopJobRequest, "appId"> {}
  * ### Controlling Jobs
  * **Example:** Cancel a Running Build
  * ```typescript
- * // init — bind the operation to the app
+ * // init -- bind the operation to the app
  * const stopJob = yield* AWS.Amplify.StopJob(app);
  *
- * // runtime — cancel the job
+ * // runtime -- cancel the job
  * const { jobSummary } = yield* stopJob({
  *   branchName: "main",
  *   jobId: "42",

@@ -171,7 +171,7 @@ export const replaceOnIdentity = (input: {
 
 /**
  * Wait for a Datastream long-running operation. Private connections peer a
- * VPC and can take 10–20 minutes.
+ * VPC and can take 10-20 minutes.
  * `ALREADY_EXISTS` (a concurrent create won) always succeeds;
  * `notFoundOk` also accepts a `NOT_FOUND` result or an operation that has
  * already been garbage-collected (deletes).

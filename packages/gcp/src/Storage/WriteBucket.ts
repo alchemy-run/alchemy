@@ -28,7 +28,7 @@ export interface WriteBucketClient {
  * const uploads = yield* GCP.Storage.WriteBucket(bucket);
  * yield* uploads.put("hello.txt", "Hello!", { contentType: "text/plain" });
  * yield* uploads.delete("old.txt");
- * // …provided with Effect.provide(GCP.Storage.WriteBucketHttp)
+ * // ...provided with Effect.provide(GCP.Storage.WriteBucketHttp)
  * ```
  *
  * @binding

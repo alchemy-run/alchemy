@@ -40,7 +40,7 @@ export const EXTRA_FILES_HASH_EXCLUDE = [
 
 /**
  * Extra file or directory copied next to a bundled program (Docker
- * context, unit archive, …). `dest` is relative to the image/unit root.
+ * context, unit archive, ...). `dest` is relative to the image/unit root.
  */
 export interface ExtraFile {
   /** Local file or directory (absolute, or relative to {@link initialCwd}). */
@@ -149,8 +149,8 @@ export const hashExtraFiles = Effect.fn(function* (
  * Copy a file or directory without macOS `clonefile`. Nitro/Nuxt
  * `.output/server` trees (and their nested `node_modules`) fail
  * `fs.copy` with `EINVAL: invalid argument, clonefile`. Nested
- * `node_modules` are copied — nitro's node preset emits runtime
- * deps there (`solid-js`, `seroval`, …) and the host imports them.
+ * `node_modules` are copied -- nitro's node preset emits runtime
+ * deps there (`solid-js`, `seroval`, ...) and the host imports them.
  */
 export const copyTree = Effect.fn(function* (from: string, to: string) {
   const fs = yield* FileSystem.FileSystem;

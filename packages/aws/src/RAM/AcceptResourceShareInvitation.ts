@@ -6,14 +6,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `ram:AcceptResourceShareInvitation`.
  *
  * Accepts an invitation to a resource share from another account, granting this account access to the shared resources.
- * Account-level operation — the target shares, invitations, and permissions
+ * Account-level operation -- the target shares, invitations, and permissions
  * are chosen per request at runtime, so the binding takes no resource
  * argument. Provide the implementation with
  * `Effect.provide(AWS.RAM.AcceptResourceShareInvitationHttp)`.
  * ### Invitations
  * **Example:** Accept an Invitation
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const acceptResourceShareInvitation = yield* AWS.RAM.AcceptResourceShareInvitation();
  *
  * // runtime

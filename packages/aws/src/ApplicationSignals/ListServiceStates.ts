@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `application-signals:ListServiceStates`.
  *
  * Returns the last deployment and other change states of discovered
- * services — visibility into recent changes for troubleshooting and change
+ * services -- visibility into recent changes for troubleshooting and change
  * correlation. Provide the implementation with
  * `Effect.provide(AWS.ApplicationSignals.ListServiceStatesHttp)`.
  * ### Tracking Changes
  * **Example:** List Recent Service States
  * ```typescript
- * // init — account-level, no resource argument
+ * // init -- account-level, no resource argument
  * const listServiceStates = yield* AWS.ApplicationSignals.ListServiceStates();
  *
  * // runtime

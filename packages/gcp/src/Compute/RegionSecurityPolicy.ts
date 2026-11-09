@@ -44,14 +44,14 @@ export type RegionSecurityPolicyProps = {
    */
   securityPolicyName?: string;
   /**
-   * Region the policy lives in (e.g. `us-central1`). Immutable — changing
+   * Region the policy lives in (e.g. `us-central1`). Immutable -- changing
    * it replaces the policy. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   region?: string;
   /**
-   * Intended use of the policy. Set only at create time — changing it
+   * Intended use of the policy. Set only at create time -- changing it
    * replaces the policy.
    * @default "CLOUD_ARMOR"
    */
@@ -110,7 +110,7 @@ export type RegionSecurityPolicy = Resource<
     project: string;
     /** Region short name (`us-central1`). */
     region: string;
-    /** Policy type (`CLOUD_ARMOR`, `CLOUD_ARMOR_EDGE`, …). */
+    /** Policy type (`CLOUD_ARMOR`, `CLOUD_ARMOR_EDGE`, ...). */
     type: string;
     /** Description. */
     description: string | undefined;
@@ -172,7 +172,7 @@ export interface RegionSecurityPolicyLookup {
  * A regional Cloud Armor security policy that filters HTTP(S) requests
  * targeting regional backend services.
  *
- * Type and region are immutable — changing either replaces the policy.
+ * Type and region are immutable -- changing either replaces the policy.
  * Description, advanced options, Adaptive Protection, reCAPTCHA, DDoS
  * config, and user-defined fields update in place via
  * `regionSecurityPolicies.patch`. Rules are synced with `addRule` /

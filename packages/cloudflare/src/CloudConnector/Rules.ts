@@ -33,7 +33,7 @@ export interface Rule {
    */
   expression: string;
   /**
-   * Host of the target bucket — e.g. `mybucket.s3.amazonaws.com` for S3,
+   * Host of the target bucket -- e.g. `mybucket.s3.amazonaws.com` for S3,
    * or an R2 bucket's public host. Accepts an `Input` so it can reference
    * another resource's output (commonly an `Bucket`).
    */
@@ -51,13 +51,13 @@ export interface Rule {
 
 export interface RulesProps {
   /**
-   * Zone the rules apply to. Stable — changing the zone triggers
+   * Zone the rules apply to. Stable -- changing the zone triggers
    * replacement.
    */
   zoneId: string;
   /**
    * Ordered list of Cloud Connector rules. The whole list is owned by
-   * this resource and replaced atomically on every change — rules
+   * this resource and replaced atomically on every change -- rules
    * managed elsewhere in the zone will be overwritten on deploy.
    */
   rules: Rule[];
@@ -98,8 +98,8 @@ export type Rules = Resource<TypeId, RulesProps, RulesAttributes, never, Provide
  * Google Cloud Storage, or Azure Blob Storage) without an origin server.
  * Each rule pairs a Rules-language expression with the target bucket host.
  *
- * The zone has exactly one rule list — the API only supports replacing the
- * whole list — so this resource owns it in its entirety (PUT-replace
+ * The zone has exactly one rule list -- the API only supports replacing the
+ * whole list -- so this resource owns it in its entirety (PUT-replace
  * semantics) and there should be at most one `Rules`
  * resource per zone. Destroying the resource clears the list.
  *
@@ -163,7 +163,7 @@ export const RulesProvider = () =>
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // No account-wide API for Cloud Connector rules — the rule list is
+      // No account-wide API for Cloud Connector rules -- the rule list is
       // a per-zone singleton, so enumerate every zone and read its list.
       const zones = yield* listAllZones(accountId);
       const rows = yield* Effect.forEach(
@@ -171,7 +171,7 @@ export const RulesProvider = () =>
         (zone) =>
           listObservedRules(zone.id).pipe(
             Effect.map((rules): RulesAttributes | undefined =>
-              // A zone with no rules has nothing to manage — same as
+              // A zone with no rules has nothing to manage -- same as
               // `read` returning `undefined` for an empty list.
               rules.length === 0 ? undefined : { zoneId: zone.id, rules },
             ),
@@ -198,11 +198,11 @@ export const RulesProvider = () =>
       const zoneId = output?.zoneId ?? (olds?.zoneId as string | undefined);
       if (!zoneId) return undefined;
       const observed = yield* listObservedRules(zoneId);
-      // An empty list means the resource doesn't exist — the API has no
+      // An empty list means the resource doesn't exist -- the API has no
       // separate "created but empty" state.
       if (observed.length === 0) return undefined;
       const attrs: RulesAttributes = { zoneId, rules: observed };
-      // No prior state of our own but the zone already has rules — they
+      // No prior state of our own but the zone already has rules -- they
       // may be managed by hand or by another tool. Refuse to take over
       // unless adoption is explicitly allowed.
       if (output === undefined) return Unowned(attrs);
@@ -243,9 +243,9 @@ export const RulesProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      // The API has no DELETE endpoint — clearing the list is a PUT with
+      // The API has no DELETE endpoint -- clearing the list is a PUT with
       // an empty rule array, which is naturally idempotent. A zone deleted
-      // out-of-band surfaces as InvalidRoute (Cloudflare code 7003) — the
+      // out-of-band surfaces as InvalidRoute (Cloudflare code 7003) -- the
       // rules are gone with it.
       yield* cloudConnector
         .putRule({ zoneId: output.zoneId, rules: [] })
@@ -273,7 +273,7 @@ const listObservedRules = (zoneId: string) =>
       ),
     ),
     // A zone that has never had Cloud Connector rules configured reports
-    // "could not find entrypoint ruleset" (code 10003) — that's just an
+    // "could not find entrypoint ruleset" (code 10003) -- that's just an
     // empty list.
     Effect.catchTag("CloudConnectorRulesNotFound", () => Effect.succeed([] as RuleAttribute[])),
   );

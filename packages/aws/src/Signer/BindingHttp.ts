@@ -7,14 +7,14 @@ import type { SigningProfile } from "./SigningProfile.ts";
 /**
  * Shared scaffolding for the AWS Signer HTTP runtime bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the two
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the two
  * builders below. Everything except the operation and the IAM action list is
  * boilerplate.
  *
  * Signer authorizes profile-addressed actions against the *signing profile*
- * ARN (`arn:…:/signing-profiles/name`) and its version-qualified variant
- * (`arn:…:/signing-profiles/name/version`), so the profile-scoped builder
+ * ARN (`arn:...:/signing-profiles/name`) and its version-qualified variant
+ * (`arn:...:/signing-profiles/name/version`), so the profile-scoped builder
  * grants on both. Job-addressed actions (describe/list/revoke a signing job)
  * target job ids chosen per request at runtime, so those bindings are
  * account-level and grant on `Resource: ["*"]`.
@@ -24,7 +24,7 @@ const profilePolicyStatement = (profile: SigningProfile, actions: readonly strin
   Action: [...actions],
   Resource: [
     Output.interpolate`${profile.arn}`,
-    // The version-qualified profile ARN (`…/signing-profiles/name/version`).
+    // The version-qualified profile ARN (`.../signing-profiles/name/version`).
     Output.map(profile.arn, (arn) => `${arn}/*`),
   ],
 });
@@ -48,7 +48,7 @@ export const makeSignerProfileHttpBinding = <I extends { profileName?: string },
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (profile: SigningProfile) {
-      // Outputs yield a DEFERRED effect — resolve again per invocation below.
+      // Outputs yield a DEFERRED effect -- resolve again per invocation below.
       const ProfileName = yield* profile.profileName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${profile})`({

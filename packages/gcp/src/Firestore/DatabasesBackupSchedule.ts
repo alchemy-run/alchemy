@@ -24,7 +24,7 @@ export type WeeklyRecurrenceDay =
 export type DatabasesBackupScheduleProps = {
   /**
    * Parent database. Full name `projects/{project}/databases/{database}`
-   * or the database id. Immutable — changing it replaces the schedule.
+   * or the database id. Immutable -- changing it replaces the schedule.
    */
   database: string;
   /**
@@ -44,7 +44,7 @@ export type DatabasesBackupScheduleProps = {
    * Changing the day or switching from daily replaces the schedule.
    */
   weeklyRecurrence?: {
-    /** Day of week (`MONDAY` … `SUNDAY`). */
+    /** Day of week (`MONDAY` ... `SUNDAY`). */
     day: WeeklyRecurrenceDay;
   };
 };

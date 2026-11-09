@@ -19,12 +19,12 @@ const PER_EVENT_OVERHEAD = 26;
 /**
  * Select the events `rejectedLogEventsInfo` marks as permanently rejected,
  * preserving input order. The API skips (never ingests) these while still
- * processing the remaining valid events, so they must be dropped — not
+ * processing the remaining valid events, so they must be dropped -- not
  * retried:
  *
- * - `tooOldLogEventEndIndex` / `expiredLogEventEndIndex` — everything up to
+ * - `tooOldLogEventEndIndex` / `expiredLogEventEndIndex` -- everything up to
  *   and including that index is too old / past retention;
- * - `tooNewLogEventStartIndex` — everything from that index on is more than
+ * - `tooNewLogEventStartIndex` -- everything from that index on is more than
  *   2 hours in the future.
  */
 const selectRejected = (
@@ -76,7 +76,7 @@ export const LogEventSinkHttp = Layer.effect(
               logEvents: [...batch],
             }),
           // No `unprocessed` extractor: PutLogEvents has no transient per-event
-          // failure mode — timestamp rejections are permanent, so drop + surface.
+          // failure mode -- timestamp rejections are permanent, so drop + surface.
           rejected: selectRejected,
         },
       );

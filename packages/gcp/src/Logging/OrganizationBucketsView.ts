@@ -27,13 +27,13 @@ export type OrganizationBucketsViewProps = {
    * View id (the last segment of the view resource name). If omitted, a
    * unique name is generated from the stack, stage, and logical id.
    * Limited to 100 characters: letters, digits, underscores, hyphens;
-   * first character must be alphanumeric. Immutable — changing it
+   * first character must be alphanumeric. Immutable -- changing it
    * replaces the view.
    */
   viewId?: string;
   /**
    * Parent organization (`organizations/{organization}` or the numeric
-   * id). Defaults to the project ancestor organization. Immutable —
+   * id). Defaults to the project ancestor organization. Immutable --
    * changing it replaces the view.
    */
   organization?: string;
@@ -41,7 +41,7 @@ export type OrganizationBucketsViewProps = {
    * Parent log bucket resource name
    * (`organizations/{organization}/locations/{location}/buckets/{bucket}`).
    * If omitted, Alchemy uses the organization `_Default` bucket.
-   * Immutable — changing it replaces the view.
+   * Immutable -- changing it replaces the view.
    */
   bucket?: string;
   /**
@@ -61,7 +61,7 @@ export type OrganizationBucketsViewProps = {
   filter?: string;
   /**
    * Human-readable description. Log views have no labels field, so
-   * Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes.
    */
   description?: string;
@@ -105,7 +105,7 @@ export type OrganizationBucketsView = Resource<
  *
  * Views have no labels field, so Alchemy stamps ownership into the
  * description for `list` / nuke. `viewId`, organization, and the parent
- * bucket are identity — changing any replaces the view.
+ * bucket are identity -- changing any replaces the view.
  *
  * ### Creating an Organization View
  * **Example:** View on the organization `_Default` bucket

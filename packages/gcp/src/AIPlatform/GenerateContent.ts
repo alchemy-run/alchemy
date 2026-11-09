@@ -6,7 +6,7 @@ import type { GcpProjectMissing } from "../Environment.ts";
 
 /**
  * A Vertex AI publisher model, e.g. Gemini. Publisher models are not
- * Alchemy resources — they are addressed by id under a location.
+ * Alchemy resources -- they are addressed by id under a location.
  */
 export interface PublisherModel {
   /**
@@ -66,7 +66,7 @@ export interface GenerateContentClient {
  * Bind it in a Function/Job init phase with a model id or a
  * {@link PublisherModel} descriptor and provide
  * {@link GenerateContentHttp}. At deploy time it grants the host's
- * runtime service account `roles/aiplatform.user` on the project —
+ * runtime service account `roles/aiplatform.user` on the project --
  * Vertex AI publisher models have no resource-level IAM policy.
  *
  * ### Generating Text

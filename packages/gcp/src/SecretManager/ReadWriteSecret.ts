@@ -18,7 +18,7 @@ export interface ReadWriteSecretClient extends ReadSecretClient, WriteSecretClie
  * const apiKey = yield* GCP.SecretManager.ReadWriteSecret(secret);
  * const current = yield* apiKey.access();
  * yield* apiKey.addVersion(rotate(current));
- * // …provided with Effect.provide(GCP.SecretManager.ReadWriteSecretHttp)
+ * // ...provided with Effect.provide(GCP.SecretManager.ReadWriteSecretHttp)
  * ```
  *
  * @binding

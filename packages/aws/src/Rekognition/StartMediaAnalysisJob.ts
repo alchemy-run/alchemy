@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `rekognition:StartMediaAnalysisJob` — start an asynchronous media analysis job (e.g. bulk content moderation) over an S3 manifest of images.
+ * Runtime binding for `rekognition:StartMediaAnalysisJob` -- start an asynchronous media analysis job (e.g. bulk content moderation) over an S3 manifest of images.
  *
  * The binding takes no arguments and grants the function
  * `rekognition:StartMediaAnalysisJob` on `*` (Rekognition data-plane resources such

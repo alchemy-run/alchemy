@@ -14,13 +14,13 @@ type TypeId = typeof TypeId;
 export type LogsRetentionFlagProps = {
   /**
    * Zone whose Logpull retention flag is managed. The flag is a zone-level
-   * singleton, so the zone is the resource's identity — changing it
+   * singleton, so the zone is the resource's identity -- changing it
    * triggers a replacement (the old zone's flag is restored to the value
    * it had before Alchemy managed it).
    */
   zoneId: string;
   /**
-   * Whether Logpull log retention is enabled for the zone. Mutable —
+   * Whether Logpull log retention is enabled for the zone. Mutable --
    * re-posted in place.
    */
   flag: boolean;
@@ -56,9 +56,9 @@ export type LogsRetentionFlag = Resource<
  * resource never creates or deletes anything physical. Reconcile re-posts
  * the flag when the observed value differs from the desired one; destroy
  * restores the value the flag had before Alchemy first managed it
- * (captured as `initialFlag`) — there is no DELETE endpoint.
+ * (captured as `initialFlag`) -- there is no DELETE endpoint.
  *
- * Logpull is an Enterprise feature — on unentitled zones every operation
+ * Logpull is an Enterprise feature -- on unentitled zones every operation
  * fails with the typed `LogsControlNotAuthorized` error.
  * ### Managing log retention
  * **Example:** Enable Logpull retention on a zone
@@ -97,7 +97,7 @@ export const LogsRetentionFlagProvider = () =>
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // No account-wide API for this zone singleton — enumerate every
+      // No account-wide API for this zone singleton -- enumerate every
       // zone in the account and read its retention flag (every zone has
       // one). The observed value at enumeration time is the zone's
       // original, so it doubles as `initialFlag`.
@@ -116,7 +116,7 @@ export const LogsRetentionFlagProvider = () =>
                   } satisfies LogsRetentionFlagAttributes),
             ),
             // Logpull is Enterprise-only; unentitled zones reject with the
-            // typed error — skip them rather than fail the whole listing.
+            // typed error -- skip them rather than fail the whole listing.
             Effect.catchTag("LogsControlNotAuthorized", () => Effect.undefined),
           ),
         { concurrency: 10 },
@@ -137,9 +137,9 @@ export const LogsRetentionFlagProvider = () =>
       const zoneId = output?.zoneId ?? (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
       if (zoneId === undefined) return undefined;
       const observed = yield* getFlag(zoneId);
-      // Zone deleted out-of-band — the flag is gone with it.
+      // Zone deleted out-of-band -- the flag is gone with it.
       if (observed === undefined) return undefined;
-      // The flag is a zone singleton that always exists — there is nothing
+      // The flag is a zone singleton that always exists -- there is nothing
       // to "own", so a cold read adopts freely. The observed value at
       // adoption time becomes the `initialFlag` restored on destroy.
       const initialFlag = output?.initialFlag ?? observed;
@@ -150,15 +150,15 @@ export const LogsRetentionFlagProvider = () =>
       // Inputs were resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
 
-      // 1. Observe — the flag always exists; read its live value.
+      // 1. Observe -- the flag always exists; read its live value.
       const observed = yield* logs
         .getControlRetention({ zoneId })
         .pipe(Effect.map((r) => r.flag ?? false));
 
-      // 2. Capture — the pre-management value, restored on destroy.
+      // 2. Capture -- the pre-management value, restored on destroy.
       const initialFlag = output?.initialFlag ?? observed;
 
-      // 3. Sync — re-post only when the observed value differs.
+      // 3. Sync -- re-post only when the observed value differs.
       if (observed === news.flag) {
         return { zoneId, flag: observed, initialFlag };
       }
@@ -171,7 +171,7 @@ export const LogsRetentionFlagProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { zoneId, initialFlag } = output;
-      // Observe — if the zone itself is gone, so is the flag.
+      // Observe -- if the zone itself is gone, so is the flag.
       const observed = yield* getFlag(zoneId);
       if (observed === undefined) return;
       // Restore the pre-management value; skip the call when it already

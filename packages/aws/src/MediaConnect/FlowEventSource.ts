@@ -82,7 +82,7 @@ export interface FlowEventSourceProps extends EventRouteProps {
  * `aws.mediaconnect`); this subscribes the host Function to those events
  * so it can page an operator or trigger automated failover handling.
  *
- * MediaConnect publishes to EventBridge automatically — no additional
+ * MediaConnect publishes to EventBridge automatically -- no additional
  * resource is created besides the EventBridge rule targeting the host.
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.

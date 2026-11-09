@@ -12,7 +12,7 @@ export interface UpdateDataIntegrationAssociationRequest extends Omit<
  * Updates an association of an AppIntegrations {@link DataIntegration}
  * (`app-integrations:UpdateDataIntegrationAssociation`). Updating an
  * association with an `ON_DEMAND` `ExecutionConfiguration` reruns the
- * on-demand data-pull job — this is the data-plane trigger for pulling
+ * on-demand data-pull job -- this is the data-plane trigger for pulling
  * source data again.
  *
  * Provide the `UpdateDataIntegrationAssociationHttp` layer on the Function to
@@ -24,7 +24,7 @@ export interface UpdateDataIntegrationAssociationRequest extends Omit<
  * const updateDataIntegrationAssociation =
  *   yield* AWS.AppIntegrations.UpdateDataIntegrationAssociation(integration);
  *
- * // runtime — the DataIntegrationIdentifier is injected automatically
+ * // runtime -- the DataIntegrationIdentifier is injected automatically
  * yield* updateDataIntegrationAssociation({
  *   DataIntegrationAssociationIdentifier: associationId,
  *   ExecutionConfiguration: {

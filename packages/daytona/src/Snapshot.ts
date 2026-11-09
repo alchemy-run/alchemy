@@ -114,7 +114,7 @@ export interface SnapshotProps {
   gpuType?: GpuType[];
   /** Region to build the snapshot in. */
   regionId?: string;
-  /** Sandbox class (`container`, `linux-vm`, …). Dockerfile builds need `container`. */
+  /** Sandbox class (`container`, `linux-vm`, ...). Dockerfile builds need `container`. */
   sandboxClass?: snapshots.SandboxClass;
 }
 
@@ -646,7 +646,7 @@ export const SnapshotProvider = () =>
             return toSnapshotAttributes(ready, output?.buildHash ?? buildHash);
           }
 
-          // Ensure — a local build pushes its image to Daytona's registry,
+          // Ensure -- a local build pushes its image to Daytona's registry,
           // which the snapshot then pulls.
           if (local !== undefined) {
             yield* session.note(`Building ${name} with local Docker...`);
@@ -663,7 +663,7 @@ export const SnapshotProvider = () =>
             return toSnapshotAttributes(built, buildHash);
           }
 
-          // Ensure — upload what the Dockerfile copies, then build.
+          // Ensure -- upload what the Dockerfile copies, then build.
           for (const warning of plan?.warnings ?? []) yield* session.note(warning);
           const contextHashes =
             plan !== undefined && plan.files.length > 0

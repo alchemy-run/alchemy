@@ -6,7 +6,7 @@ import type { DataSet } from "./DataSet.ts";
 /**
  * Runtime binding for `quicksight:CreateIngestion`.
  *
- * Triggers a SPICE refresh (ingestion) of the bound {@link DataSet} — e.g.
+ * Triggers a SPICE refresh (ingestion) of the bound {@link DataSet} -- e.g.
  * after a pipeline lands new data. `AwsAccountId` and `DataSetId` are
  * injected from the binding; the caller supplies a unique `IngestionId`.
  * Poll the refresh with
@@ -15,7 +15,7 @@ import type { DataSet } from "./DataSet.ts";
  * ### Refreshing SPICE Data
  * **Example:** Trigger A Full Refresh
  * ```typescript
- * // init — bind the operation to the dataset
+ * // init -- bind the operation to the dataset
  * const createIngestion = yield* AWS.QuickSight.CreateIngestion(dataSet);
  *
  * // runtime

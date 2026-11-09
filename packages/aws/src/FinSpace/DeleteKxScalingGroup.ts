@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { KxEnvironment } from "./KxEnvironment.ts";
 
 /**
- * Runtime binding for `finspace:DeleteKxScalingGroup` — deletes a scaling group from the bound environment. The group must have no clusters placed on it.
+ * Runtime binding for `finspace:DeleteKxScalingGroup` -- deletes a scaling group from the bound environment. The group must have no clusters placed on it.
  * Provide the implementation with
  * `Effect.provide(AWS.FinSpace.DeleteKxScalingGroupHttp)`.
  * ### Managing Scaling Groups

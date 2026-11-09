@@ -5,18 +5,18 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `servicecatalog:ProvisionProduct`.
  *
- * Provisions (launches) a product, creating the underlying CloudFormation stack. Returns the in-flight provisioning record — poll it with `DescribeRecord`.
+ * Provisions (launches) a product, creating the underlying CloudFormation stack. Returns the in-flight provisioning record -- poll it with `DescribeRecord`.
  *
  * Also grants the CloudFormation stack-creation and template-fetch (`s3:GetObject`) actions Service Catalog performs with the caller's credentials when the product has no launch-role constraint.
  *
- * Account-level operation — which products the caller can see and act on
+ * Account-level operation -- which products the caller can see and act on
  * is governed by portfolio principal associations, so the binding takes no
  * resource argument. Provide the implementation with
  * `Effect.provide(AWS.ServiceCatalog.ProvisionProductHttp)`.
  * ### Provisioning Products
  * **Example:** Launch a Product
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const provisionProduct = yield* AWS.ServiceCatalog.ProvisionProduct();
  *
  * // runtime

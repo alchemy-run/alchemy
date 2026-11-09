@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `comprehend:ListDocumentClassificationJobs` — list the account's
+ * Runtime binding for `comprehend:ListDocumentClassificationJobs` -- list the account's
  * asynchronous document classification jobs, with optional status/name/time filters.
  *
  * The binding takes no arguments and grants the action on `*` (job APIs

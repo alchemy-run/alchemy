@@ -7,12 +7,12 @@ import type * as Effect from "effect/Effect";
  *
  * Lists the account's signing jobs, filterable by status, platform,
  * requester, revocation state, and signature expiry window. Account-level
- * operation — the binding takes no resource argument. Provide the
+ * operation -- the binding takes no resource argument. Provide the
  * implementation with `Effect.provide(AWS.Signer.ListSigningJobsHttp)`.
  * ### Observing Signing Jobs
  * **Example:** List In-Progress Jobs
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listSigningJobs = yield* AWS.Signer.ListSigningJobs();
  *
  * // runtime

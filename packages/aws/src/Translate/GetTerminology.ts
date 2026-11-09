@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `translate:GetTerminology` — retrieve a custom
+ * Runtime binding for `translate:GetTerminology` -- retrieve a custom
  * terminology's properties and a presigned download location for its
  * term-pair file.
  *
@@ -16,7 +16,7 @@ import type * as Effect from "effect/Effect";
  * // runtime
  * const result = yield* getTerminology({ Name: glossary.terminologyName });
  * // result.TerminologyProperties?.TermCount
- * // result.TerminologyDataLocation?.Location — presigned download URL
+ * // result.TerminologyDataLocation?.Location -- presigned download URL
  * ```
  *
  * @binding

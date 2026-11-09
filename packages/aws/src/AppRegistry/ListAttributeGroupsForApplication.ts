@@ -18,7 +18,7 @@ export interface ListAttributeGroupsForApplicationRequest extends Omit<
  * ### Reading Attribute Groups
  * **Example:** List the Application's Attribute Group Details
  * ```typescript
- * // init — bind the operation to the application
+ * // init -- bind the operation to the application
  * const listAttributeGroupsForApplication =
  *   yield* AWS.AppRegistry.ListAttributeGroupsForApplication(app);
  *

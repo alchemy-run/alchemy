@@ -9,8 +9,8 @@ import type { Runtime } from "./Runtime.ts";
 /**
  * Shared scaffolding for Bedrock AgentCore data-plane HTTP bindings.
  *
- * NOT exported from `index.ts` — every single-operation `{Op}Http.ts` in this
- * service is a thin `Layer.effect(Cap, makeAgentCoreHttpBinding({ … }))` over
+ * NOT exported from `index.ts` -- every single-operation `{Op}Http.ts` in this
+ * service is a thin `Layer.effect(Cap, makeAgentCoreHttpBinding({ ... }))` over
  * the builder below. Everything except the operation, the IAM action list,
  * the injected identifier, and the granted ARNs is boilerplate: the runtime
  * callable injects the bound resource's identifier (memory id, code

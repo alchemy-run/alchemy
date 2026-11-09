@@ -7,8 +7,8 @@ import { ResolverFactory, type ResolveOptions } from "rolldown/experimental";
  * what tsx layers over Node's resolver:
  *
  * - `tsconfig.json` `paths` / `baseUrl` aliases, discovered per importing file
- * - emitted-extension substitution (`./x.js` → `x.ts`/`x.tsx`, `.mjs` → `.mts`,
- *   `.cjs` → `.cts`, `.jsx` → `.tsx`), TypeScript source winning over an
+ * - emitted-extension substitution (`./x.js` -> `x.ts`/`x.tsx`, `.mjs` -> `.mts`,
+ *   `.cjs` -> `.cts`, `.jsx` -> `.tsx`), TypeScript source winning over an
  *   emitted sibling
  * - extensionless specifiers and directory indexes, TypeScript first
  *
@@ -112,7 +112,7 @@ export class SpecifierResolver {
    * Resolves `specifier` as imported from `parentPath` to an absolute file
    * path, or `undefined` when Oxc cannot resolve it (Node then reports the
    * error), when it is a builtin, or when a bare specifier lands inside
-   * `node_modules` — packages are Node's business, only `paths` aliases
+   * `node_modules` -- packages are Node's business, only `paths` aliases
    * that map onto project files are ours.
    */
   resolve(

@@ -7,14 +7,14 @@ import type { AccessPoint } from "./AccessPoint.ts";
  * Runtime binding for `s3:GetAccessPointPolicyStatus`.
  *
  * Indicates whether the bound {@link AccessPoint}'s policy currently allows
- * public access — e.g. a compliance auditor Lambda that alerts on publicly
+ * public access -- e.g. a compliance auditor Lambda that alerts on publicly
  * exposed access points. An access point without a policy fails with the
  * typed `NoSuchAccessPointPolicy` tag. Provide the implementation with
  * `Effect.provide(AWS.S3Control.GetAccessPointPolicyStatusHttp)`.
  * ### Observing an Access Point
  * **Example:** Check Whether the Access Point Is Public
  * ```typescript
- * // init — bind the operation to the access point
+ * // init -- bind the operation to the access point
  * const getPolicyStatus =
  *   yield* AWS.S3Control.GetAccessPointPolicyStatus(accessPoint);
  *

@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 import type { Domain } from "./Domain.ts";
 
 /**
- * Request for {@link GetAuthorizationToken} — `domain` and `domainOwner` are
+ * Request for {@link GetAuthorizationToken} -- `domain` and `domainOwner` are
  * injected from the bound {@link Domain}.
  */
 export interface GetAuthorizationTokenRequest {
@@ -20,15 +20,15 @@ export interface GetAuthorizationTokenRequest {
 /**
  * Runtime binding for `codeartifact:GetAuthorizationToken`.
  *
- * Mints a temporary authorization token for the bound domain — the credential
- * package managers (npm, pip, maven, …) present to a CodeArtifact repository
+ * Mints a temporary authorization token for the bound domain -- the credential
+ * package managers (npm, pip, maven, ...) present to a CodeArtifact repository
  * endpoint. The deploy-time half grants `codeartifact:GetAuthorizationToken`
  * on the domain plus the `sts:GetServiceBearerToken` call CodeArtifact
  * performs on the caller's behalf. Provide the implementation with
  * `Effect.provide(AWS.CodeArtifact.GetAuthorizationTokenHttp)`.
  *
  * The returned `authorizationToken` is wrapped in `Redacted` so it never
- * leaks into logs — unwrap with `Redacted.value(...)` at the point of use.
+ * leaks into logs -- unwrap with `Redacted.value(...)` at the point of use.
  *
  * ### Authenticating Package Managers
  * **Example:** Mint a Token for npm
@@ -40,7 +40,7 @@ export interface GetAuthorizationTokenRequest {
  * const res = yield* getToken({ duration: "1 hour" });
  * const token = Redacted.isRedacted(res.authorizationToken)
  *   ? Redacted.value(res.authorizationToken)
- *   : res.authorizationToken; // pass to `npm config set //…:_authToken=`
+ *   : res.authorizationToken; // pass to `npm config set //...:_authToken=`
  * ```
  *
  * @binding

@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `dataexchange:GetJob`.
  *
  * Reads a job's state (`WAITING`, `IN_PROGRESS`, `COMPLETED`, `ERROR`,
- * …) and typed error details — the polling half of every import/export
+ * ...) and typed error details -- the polling half of every import/export
  * flow.
  * Provide the implementation with
  * `Effect.provide(AWS.DataExchange.GetJobHttp)`.

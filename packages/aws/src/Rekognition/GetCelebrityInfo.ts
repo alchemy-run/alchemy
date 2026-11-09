@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `rekognition:GetCelebrityInfo` — get the name and additional links for a celebrity ID returned by RecognizeCelebrities.
+ * Runtime binding for `rekognition:GetCelebrityInfo` -- get the name and additional links for a celebrity ID returned by RecognizeCelebrities.
  *
  * The binding takes no arguments and grants the function
  * `rekognition:GetCelebrityInfo` on `*` (Rekognition data-plane resources such

@@ -23,7 +23,7 @@ export interface StartCopyJobRequest extends Omit<
 /**
  * Runtime binding for the `StartCopyJob` operation (IAM actions
  * `backup:StartCopyJob` + `backup:CopyIntoBackupVault` + `iam:PassRole` on
- * the copy role) — copy a recovery point from the bound source vault to a
+ * the copy role) -- copy a recovery point from the bound source vault to a
  * destination vault (e.g. cross-region or cross-account disaster recovery).
  *
  * The binding is constructed with the **source** {@link BackupVault} and the

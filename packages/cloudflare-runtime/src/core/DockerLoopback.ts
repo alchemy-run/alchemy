@@ -6,7 +6,7 @@ import * as NodePath from "node:path";
 /**
  * Hostname rewritten into container env so loopback still looks local
  * (Prisma's `prisma+postgres://` plain-HTTP gate). Mapped in the sidecar
- * ExtraHosts — to `127.0.0.1` on native Linux (unix-socket tunnel) or
+ * ExtraHosts -- to `127.0.0.1` on native Linux (unix-socket tunnel) or
  * Docker `host-gateway` on Docker Desktop.
  */
 export const CONTAINER_LOOPBACK_ALIAS = "host.docker.localhost";
@@ -40,7 +40,7 @@ const addPort = (ports: Set<number>, raw: string) => {
 
 /**
  * Ports a container will dial if this env value is a loopback URL / DSN.
- * Empty when the value is not loopback (Neon, PlanetScale, …).
+ * Empty when the value is not loopback (Neon, PlanetScale, ...).
  */
 export const loopbackPortsFromEnvValue = (value: string): number[] => {
   if (!LOOPBACK_HOST_IN_VALUE.test(value)) return [];
@@ -156,7 +156,7 @@ const writeForwarderScript = (dir: string) => {
 };
 
 /**
- * Host unix socket per port → `127.0.0.1:port`. The container never SYNs
+ * Host unix socket per port -> `127.0.0.1:port`. The container never SYNs
  * the docker bridge; UFW INPUT is not on this path.
  */
 export const ensureLoopbackUnixSockets = (ports: readonly number[]) => {

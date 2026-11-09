@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `securityhub:BatchGetAutomationRules`.
  *
  * Returns the full configuration of a batch of automation rules by ARN.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.SecurityHub.BatchGetAutomationRulesHttp)`.
  * ### Custom Actions, Automation Rules & Aggregation
  * **Example:** Hydrate Automation Rules
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const batchGetAutomationRules = yield* AWS.SecurityHub.BatchGetAutomationRules();
  *
  * // runtime

@@ -10,7 +10,7 @@ export interface ListOperationsRequest extends Omit<
 
 /**
  * List the operations that occurred on an App Runner {@link Service} (most
- * recent first) from a Lambda (or other AWS runtime) — the tracking
+ * recent first) from a Lambda (or other AWS runtime) -- the tracking
  * counterpart to the asynchronous {@link StartDeployment},
  * {@link PauseService}, and {@link ResumeService} calls, whose returned
  * `OperationId`s appear here with `Status` transitions

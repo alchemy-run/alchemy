@@ -120,7 +120,7 @@ export interface TcpConfig {
 
 export interface Props {
   /**
-   * Zone the health check belongs to. Stable — changing the zone triggers
+   * Zone the health check belongs to. Stable -- changing the zone triggers
    * a replacement.
    */
   zoneId: string;
@@ -129,7 +129,7 @@ export interface Props {
    * characters, hyphens and underscores are allowed. If omitted, a unique
    * name is generated from the app, stage, and logical ID.
    *
-   * Mutable — Cloudflare supports renaming in place.
+   * Mutable -- Cloudflare supports renaming in place.
    * @default ${app}-${stage}-${id}
    */
   name?: string;
@@ -233,7 +233,7 @@ export interface Attributes {
 export type Healthcheck = Resource<TypeId, Props, Attributes, never, Providers>;
 
 /**
- * A Cloudflare standalone Health Check — monitors an origin server from
+ * A Cloudflare standalone Health Check -- monitors an origin server from
  * Cloudflare's edge and powers Health Check notifications and analytics.
  *
  * Zone-scoped and available on paid zone plans (Pro: 2 checks,
@@ -246,7 +246,7 @@ export type Healthcheck = Resource<TypeId, Props, Attributes, never, Providers>;
  *
  * Safety: health checks carry no ownership markers, so when there is no
  * prior state `read` matches by deterministic name and reports an
- * existing check as `Unowned` — the engine refuses to take it over
+ * existing check as `Unowned` -- the engine refuses to take it over
  * unless `--adopt` (or `adopt(true)`) is set.
  * ### Creating a Health Check
  * **Example:** Basic HTTP health check
@@ -326,7 +326,7 @@ export const HealthcheckProvider = () =>
     }),
 
     read: Effect.fn(function* ({ id, output, olds }) {
-      // Owned path: we have persisted state (our own id) — refresh it.
+      // Owned path: we have persisted state (our own id) -- refresh it.
       if (output?.healthcheckId) {
         const observed = yield* getHealthcheck(output.zoneId, output.healthcheckId);
         if (observed) return toAttributes(observed, output.zoneId);
@@ -335,7 +335,7 @@ export const HealthcheckProvider = () =>
       // Adoption path: no state of our own, but a check with our
       // deterministic name may already exist. Health checks carry no
       // ownership markers we can inspect, so we cannot prove we created
-      // it — brand it `Unowned` so the engine refuses to take over
+      // it -- brand it `Unowned` so the engine refuses to take over
       // unless `adopt` is set.
       const zoneId = olds?.zoneId as string | undefined;
       if (!zoneId) return undefined;
@@ -354,7 +354,7 @@ export const HealthcheckProvider = () =>
       const name = yield* createHealthcheckName(id, news.name);
       const desired = buildDesiredBody(news, name);
 
-      // 1. Observe — the id cached on `output` is a hint, not a
+      // 1. Observe -- the id cached on `output` is a hint, not a
       //    guarantee: a 404 falls through to "missing".
       let observed: ObservedHealthcheck | undefined;
       if (output?.healthcheckId) {
@@ -366,7 +366,7 @@ export const HealthcheckProvider = () =>
         observed = yield* findByName(zoneId, name);
       }
 
-      // 2. Ensure — create when missing; a concurrent create of the same
+      // 2. Ensure -- create when missing; a concurrent create of the same
       //    name surfaces as `HealthcheckAlreadyExists`, which we treat as
       //    a race: re-read by name and converge via update below.
       let justCreated = false;
@@ -378,7 +378,7 @@ export const HealthcheckProvider = () =>
         justCreated = observed !== undefined;
       }
 
-      // 3. Sync — the update endpoint is a PUT that takes the full body;
+      // 3. Sync -- the update endpoint is a PUT that takes the full body;
       //    diff observed cloud state against desired and skip the call
       //    entirely on a no-op.
       if (observed?.id && !justCreated && !desiredEqualsObserved(desired, observed)) {
@@ -406,7 +406,7 @@ export const HealthcheckProvider = () =>
           healthcheckId: output.healthcheckId,
         })
         .pipe(
-          // Already gone — deletion is idempotent.
+          // Already gone -- deletion is idempotent.
           Effect.catchTag("HealthcheckNotFound", () => Effect.void),
         );
     }),
@@ -414,7 +414,7 @@ export const HealthcheckProvider = () =>
     // Health checks are zone-scoped (`/zones/{zone_id}/healthchecks`) with no
     // account-wide enumeration API, so fan out over every zone and list per
     // zone. A scoped token may lack permission on a zone (eventual consistency)
-    // or a zone may be partially provisioned — skip those zones (-> []) rather
+    // or a zone may be partially provisioned -- skip those zones (-> []) rather
     // than failing the whole enumeration.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -541,7 +541,7 @@ const desiredEqualsObserved = (desired: DesiredBody, observed: ObservedHealthche
 };
 
 /**
- * Compare only the http_config fields the user actually specified —
+ * Compare only the http_config fields the user actually specified --
  * Cloudflare fills the rest with plan/type-dependent defaults we should
  * not fight.
  */

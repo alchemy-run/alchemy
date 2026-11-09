@@ -10,7 +10,7 @@ import { resolveZoneId } from "../Zone/lookup.ts";
 
 export interface RecordListProps {
   /**
-   * Zone that owns every record — a zone id or zone name. When omitted,
+   * Zone that owns every record -- a zone id or zone name. When omitted,
    * each record's zone is inferred from its name by walking its parent
    * domains, so one list may span several zones (e.g. certificate
    * validation records for `example.com` and `example.org`).
@@ -19,10 +19,10 @@ export interface RecordListProps {
   /**
    * Records to publish. Always DNS-only (never proxied).
    *
-   * - `CNAME` — overwrites any record at the name (one CNAME per name).
-   * - `A` / `AAAA` — the name's addresses of that type converge to exactly
+   * - `CNAME` -- overwrites any record at the name (one CNAME per name).
+   * - `A` / `AAAA` -- the name's addresses of that type converge to exactly
    *   the listed values.
-   * - `TXT` — each listed value is added alongside any other TXT values at
+   * - `TXT` -- each listed value is added alongside any other TXT values at
    *   the name.
    */
   records: DnsRecord[];
@@ -57,7 +57,7 @@ export type RecordList = Resource<
 
 /**
  * An explicit list of Cloudflare DNS records whose values are typically
- * computed from another resource's outputs — ACM certificate validation
+ * computed from another resource's outputs -- ACM certificate validation
  * CNAMEs, a platform's ownership-verification TXT, a Fly App's addresses.
  *
  * This is the resource a `Cloudflare.DNS.Adapter()` declares for
@@ -196,7 +196,7 @@ const removeEntries = (entries: RecordListEntry[]) =>
 export const RecordListProvider = () =>
   Provider.succeed(RecordList, {
     // No `diff`: every change (records, a pinned zone moving) converges in
-    // place — reconcile removes records the list no longer publishes.
+    // place -- reconcile removes records the list no longer publishes.
     read: Effect.fn(function* ({ output }) {
       if (output === undefined) return undefined;
       const present = yield* Effect.forEach(output.records, (entry) =>

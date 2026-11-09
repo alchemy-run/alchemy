@@ -6,17 +6,17 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `schemas:GetDiscoveredSchema`.
  *
  * Infers an OpenAPI 3 or JSONSchema Draft 4 schema from up to 10 sample
- * events — the same inference the schema discoverer applies to live traffic,
+ * events -- the same inference the schema discoverer applies to live traffic,
  * exposed as an on-demand call. The operation is account-level (it is not
  * scoped to any registry or schema). Provide the implementation with
  * `Effect.provide(AWS.Schemas.GetDiscoveredSchemaHttp)`.
  * ### Discovering Schemas
  * **Example:** Infer A Schema From Sample Events
  * ```typescript
- * // init — account-level, no resource to bind
+ * // init -- account-level, no resource to bind
  * const getDiscoveredSchema = yield* AWS.Schemas.GetDiscoveredSchema();
  *
- * // runtime — events are full AWS event envelopes as JSON strings
+ * // runtime -- events are full AWS event envelopes as JSON strings
  * const { Content } = yield* getDiscoveredSchema({
  *   Type: "OpenApi3",
  *   Events: [JSON.stringify(sampleEvent)],

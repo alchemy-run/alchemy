@@ -6,13 +6,13 @@ export interface RetrieveDomainAuthCodeRequest
   extends route53domains.RetrieveDomainAuthCodeRequest {}
 
 /**
- * Runtime binding for `route53domains:RetrieveDomainAuthCode` — retrieve
+ * Runtime binding for `route53domains:RetrieveDomainAuthCode` -- retrieve
  * the authorization (transfer) code for a domain registered in the current
  * AWS account. The code is required to transfer the domain to another
  * registrar.
  *
  * The returned `AuthCode` is a secret and is typed as
- * `Redacted.Redacted<string>` — unwrap with `Redacted.value` only at the
+ * `Redacted.Redacted<string>` -- unwrap with `Redacted.value` only at the
  * point of use. Requesting the code for a domain that is not registered in
  * the account fails with a typed `DomainNotFound` error.
  *

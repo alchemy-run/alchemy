@@ -6,14 +6,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `detective:DisassociateMembership`.
  *
  * Removes *this* account from a behavior graph it previously accepted an
- * invitation to — the member-side exit, mirroring the admin's
+ * invitation to -- the member-side exit, mirroring the admin's
  * `DeleteMembers`.
  * Provide the implementation with
  * `Effect.provide(AWS.Detective.DisassociateMembershipHttp)`.
  * ### Responding to Invitations
  * **Example:** Leave A Behavior Graph
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const disassociateMembership = yield* AWS.Detective.DisassociateMembership();
  *
  * // runtime

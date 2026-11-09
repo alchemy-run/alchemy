@@ -90,7 +90,7 @@ export interface RedisProps {
    */
   image?: string;
   /**
-   * Region for the service instance (`us-west2`, `us-east4`, …). If
+   * Region for the service instance (`us-west2`, `us-east4`, ...). If
    * omitted, Railway picks the default. Updates in place.
    */
   region?: string;
@@ -124,7 +124,7 @@ export type Redis = Resource<
     privateHost: string;
     /** Latest deployment id, if one exists. */
     deploymentId: string | undefined;
-    /** Latest deployment status (`SUCCESS`, `DEPLOYING`, …). */
+    /** Latest deployment status (`SUCCESS`, `DEPLOYING`, ...). */
     deploymentStatus: string | undefined;
   },
   never,
@@ -275,9 +275,9 @@ const RedisResource = Resource<Redis>("Railway.Redis");
  * **Example:** Connect to an existing Redis
  * ```typescript
  * const cache = Railway.Redis.lookup({
- *   projectId: "a1b2c3d4-…",
- *   environmentId: "e5f6a7b8-…",
- *   serviceId: "c9d0e1f2-…",
+ *   projectId: "a1b2c3d4-...",
+ *   environmentId: "e5f6a7b8-...",
+ *   serviceId: "c9d0e1f2-...",
  * });
  * ```
  *

@@ -6,14 +6,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `controltower:ListEnabledControls`.
  *
  * An account-level operation that enumerates the controls (guardrails)
- * enabled on an organizational unit — or, with a filter, across the whole
+ * enabled on an organizational unit -- or, with a filter, across the whole
  * organization. Useful for compliance dashboards and drift-detection
  * functions. Provide the implementation with
  * `Effect.provide(AWS.ControlTower.ListEnabledControlsHttp)`.
  * ### Auditing Enablements
  * **Example:** List Controls Enabled on an OU
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const listEnabledControls = yield* AWS.ControlTower.ListEnabledControls();
  *
  * // runtime

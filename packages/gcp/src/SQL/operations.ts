@@ -16,7 +16,7 @@ const operationNameOf = (operation: sqladmin.Operation) =>
  *
  * An operation whose error code (`errors[].code`) says the target already
  * existed counts as done (a lost create race). With `notFoundOk`, one whose
- * target was already gone — or whose operation record is gone — counts as
+ * target was already gone -- or whose operation record is gone -- counts as
  * done too (a lost delete race).
  */
 export const waitForSqlOperation = (

@@ -53,12 +53,12 @@ export type MigrationJobProps = {
   /**
    * Migration job id (the `{migrationJob}` segment of
    * `projects/{project}/locations/{location}/migrationJobs/{migrationJob}`).
-   * If omitted, a unique RFC1035 name is generated. Immutable — changing
+   * If omitted, a unique RFC1035 name is generated. Immutable -- changing
    * it replaces the job.
    */
   migrationJobId?: string;
   /**
-   * Region (`us-central1`, …). Immutable — changing it replaces the job.
+   * Region (`us-central1`, ...). Immutable -- changing it replaces the job.
    * `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -72,18 +72,18 @@ export type MigrationJobProps = {
    */
   labels?: Record<string, string>;
   /**
-   * Migration type (`ONE_TIME` or `CONTINUOUS`). Immutable — changing it
+   * Migration type (`ONE_TIME` or `CONTINUOUS`). Immutable -- changing it
    * replaces the job.
    */
   type: MigrationJobType;
   /**
    * Source connection profile. Full name or id (combined with
-   * `location`). Immutable — changing it replaces the job.
+   * `location`). Immutable -- changing it replaces the job.
    */
   source: string;
   /**
    * Destination connection profile. Full name or id (combined with
-   * `location`). Immutable — changing it replaces the job.
+   * `location`). Immutable -- changing it replaces the job.
    */
   destination: string;
   /**
@@ -137,7 +137,7 @@ export type MigrationJobProps = {
    */
   objectsConfig?: MigrationJobObjectsConfig;
   /**
-   * CMEK used for the job. Immutable — changing it replaces the job.
+   * CMEK used for the job. Immutable -- changing it replaces the job.
    */
   cmekKeyName?: string;
   /**
@@ -266,7 +266,7 @@ export interface MigrationJobLookup {
    */
   migrationJobId: string;
   /**
-   * Region (`us-central1`, …). `US-CENTRAL1` is accepted and normalized to
+   * Region (`us-central1`, ...). `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    */
   location?: string;

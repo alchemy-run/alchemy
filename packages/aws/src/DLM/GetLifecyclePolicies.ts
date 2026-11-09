@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `dlm:GetLifecyclePolicies`.
  *
  * Enumerates the account's Data Lifecycle Manager policies (optionally
- * filtered by state, resource type, or target tags) — the building block of
+ * filtered by state, resource type, or target tags) -- the building block of
  * backup-coverage auditing: list every policy, flag the ones in `ERROR`, or
  * verify a fleet's tags are actually covered by an `ENABLED` policy.
  * Provide the implementation with
@@ -14,7 +14,7 @@ import type * as Effect from "effect/Effect";
  * ### Monitoring Lifecycle Policies
  * **Example:** Find Failed Policies
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getLifecyclePolicies = yield* AWS.DLM.GetLifecyclePolicies();
  *
  * // runtime

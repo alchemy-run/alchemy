@@ -22,11 +22,11 @@ import * as Redacted from "effect/Redacted";
 /**
  * How migrations reach a Cloud SQL database:
  *
- * - `"data-api"` — Cloud SQL's `instances.executeSql` over HTTPS. Needs
+ * - `"data-api"` -- Cloud SQL's `instances.executeSql` over HTTPS. Needs
  *   `dataApiAccess: true` on the instance; no network route to the
  *   database. The Data API only reads passwords from Secret Manager, so
  *   each deploy stages the password in a short-lived regional secret.
- * - `"connector"` — a `pg`/`mysql2` connection from the deploying machine
+ * - `"connector"` -- a `pg`/`mysql2` connection from the deploying machine
  *   through the Cloud SQL connector (an ephemeral client certificate from
  *   the SQL Admin API, TLS to port 3307). Needs a route to the instance's
  *   public (or private) IP, but no authorized networks.

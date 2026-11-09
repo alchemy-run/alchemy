@@ -151,7 +151,7 @@ export interface ServerLookup {
 }
 
 /**
- * An AWS Transfer Family server — a managed SFTP/FTPS/FTP/AS2 endpoint in
+ * An AWS Transfer Family server -- a managed SFTP/FTPS/FTP/AS2 endpoint in
  * front of S3 or EFS storage. A running server is billed hourly (plus data
  * transfer), so create it only when needed and destroy it promptly.
  * ### Creating a Server
@@ -331,11 +331,11 @@ export const ServerProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // 1. Observe — cloud state is authoritative (via the id cache).
+          // 1. Observe -- cloud state is authoritative (via the id cache).
           let serverId = output?.serverId;
           let observed = serverId ? yield* describe(serverId) : undefined;
 
-          // 2. Ensure — create if missing.
+          // 2. Ensure -- create if missing.
           if (observed === undefined) {
             const created = yield* transfer.createServer({
               Protocols: news.protocols ?? ["SFTP"],
@@ -360,7 +360,7 @@ export const ServerProvider = () =>
             });
             serverId = created.ServerId;
           } else {
-            // 3. Sync — push mutable configuration. updateServer requires a
+            // 3. Sync -- push mutable configuration. updateServer requires a
             //    settled server state.
             yield* waitUntilSettled(serverId!);
             yield* transfer.updateServer({
@@ -390,7 +390,7 @@ export const ServerProvider = () =>
             });
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           const arn = observed.Arn;
           const observedTags = yield* readTags(arn);
           const { upsert, removed } = diffTags(observedTags, desiredTags);

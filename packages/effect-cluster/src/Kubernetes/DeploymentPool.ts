@@ -35,7 +35,7 @@ export interface DeploymentPoolOptions extends PoolSettings {
  * namespace. Pods reach each other at their own addresses; the gateway is
  * a Service of the Deployment, at
  * `http://{name}.{namespace}.svc.cluster.local:34500` for callers in the
- * cluster. Requires a database on a Kubernetes cluster —
+ * cluster. Requires a database on a Kubernetes cluster --
  * `ClusterKubernetes.Database`.
  *
  * ### Running on Kubernetes

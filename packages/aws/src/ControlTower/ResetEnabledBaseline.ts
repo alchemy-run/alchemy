@@ -7,7 +7,7 @@ import type { EnabledBaseline } from "./EnabledBaseline.ts";
  * Runtime binding for `controltower:ResetEnabledBaseline`.
  *
  * Bind this operation to an {@link EnabledBaseline} to re-enroll the
- * target with its baseline from inside a function runtime — remediating
+ * target with its baseline from inside a function runtime -- remediating
  * drift without changing the enablement's configuration. The call starts an
  * asynchronous operation; poll it with {@link GetBaselineOperation}.
  * Provide the implementation with
@@ -15,7 +15,7 @@ import type { EnabledBaseline } from "./EnabledBaseline.ts";
  * ### Remediating Drift
  * **Example:** Reset a Drifted Enabled Baseline
  * ```typescript
- * // init — bind the operation to the enabled baseline
+ * // init -- bind the operation to the enabled baseline
  * const resetEnabledBaseline = yield* AWS.ControlTower.ResetEnabledBaseline(ouBaseline);
  *
  * // runtime

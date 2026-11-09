@@ -6,7 +6,7 @@ import type { Canary } from "./Canary.ts";
 export interface GetCanaryRunsRequest extends Omit<synthetics.GetCanaryRunsRequest, "Name"> {}
 
 /**
- * Runtime binding for `synthetics:GetCanaryRuns` — list the run results
+ * Runtime binding for `synthetics:GetCanaryRuns` -- list the run results
  * (status, timeline, artifact location) of the bound {@link Canary}; the
  * canary name is injected automatically.
  *
@@ -15,7 +15,7 @@ export interface GetCanaryRunsRequest extends Omit<synthetics.GetCanaryRunsReque
  * ### Reading Canary Runs
  * **Example:** List Recent Runs
  * ```typescript
- * // init — grants synthetics:GetCanaryRuns on the canary
+ * // init -- grants synthetics:GetCanaryRuns on the canary
  * const getCanaryRuns = yield* AWS.Synthetics.GetCanaryRuns(canary);
  *
  * // runtime

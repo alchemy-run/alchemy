@@ -8,7 +8,7 @@ import type * as Effect from "effect/Effect";
  *
  * Returns events related to caches, replication groups, security groups, and
  * parameter groups from the last hour (up to 14 days with an explicit time
- * window) — snapshot completions, failovers, configuration changes. Provide
+ * window) -- snapshot completions, failovers, configuration changes. Provide
  * the implementation with `Effect.provide(AWS.ElastiCache.DescribeEventsHttp)`.
  * ### Monitoring Caches
  * **Example:** Read a Cache's Recent Events

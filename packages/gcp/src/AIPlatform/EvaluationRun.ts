@@ -29,7 +29,7 @@ export type EvaluationRunProps = {
    */
   evaluationRunId?: string;
   /**
-   * Region. Immutable — changing it replaces the run.
+   * Region. Immutable -- changing it replaces the run.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
@@ -102,7 +102,7 @@ export type EvaluationRun = Resource<
 >;
 
 /**
- * A Vertex AI Evaluation Run — one execution of metrics over a set of
+ * A Vertex AI Evaluation Run -- one execution of metrics over a set of
  * evaluation items or a BigQuery request set.
  *
  * Vertex assigns the resource id. Creating a run starts evaluation. There

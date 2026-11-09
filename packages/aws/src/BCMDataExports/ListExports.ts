@@ -17,7 +17,7 @@ export interface ListExportsRequest extends bcm.ListExportsRequest {}
  * ### Inspecting an Export
  * **Example:** List Every Export in the Account
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const listExports = yield* AWS.BCMDataExports.ListExports();
  *
  * // runtime

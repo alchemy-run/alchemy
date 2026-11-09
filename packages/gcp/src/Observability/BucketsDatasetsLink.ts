@@ -28,18 +28,18 @@ export type BucketsDatasetsLinkProps = {
    * Parent observability dataset. Full name
    * `projects/{project}/locations/{location}/buckets/{bucket}/datasets/{dataset}`
    * or the dataset id (combined with `bucket` and `location`). A dataset
-   * may have at most one link. Immutable — changing it replaces the
+   * may have at most one link. Immutable -- changing it replaces the
    * link (delete-first).
    */
   dataset: string;
   /**
    * Parent bucket used when `dataset` is a bare id. Full name or the
-   * bucket id. Defaults to `_Trace`. Immutable — changing it replaces
+   * bucket id. Defaults to `_Trace`. Immutable -- changing it replaces
    * the link.
    */
   bucket?: string;
   /**
-   * Bucket location used when `dataset` is a bare id. Immutable —
+   * Bucket location used when `dataset` is a bare id. Immutable --
    * changing it replaces the link.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -49,7 +49,7 @@ export type BucketsDatasetsLinkProps = {
    * `.../datasets/{dataset}/links/{link}`). Also used as the linked
    * BigQuery dataset id, so it may contain only letters, digits, and
    * underscores and must start with a letter. If omitted, a unique name
-   * is generated. Immutable — changing it replaces the link.
+   * is generated. Immutable -- changing it replaces the link.
    */
   linkId?: string;
   /**
@@ -139,7 +139,7 @@ export interface BucketsDatasetsLinkLookup {
  * `_Trace/Spans`).
  *
  * A dataset may have only one link. Create, update, and delete are
- * long-running operations. Links have no labels field — Alchemy stamps
+ * long-running operations. Links have no labels field -- Alchemy stamps
  * ownership into the description. `linkId` and the parent dataset are
  * identity; replacement is delete-first because a dataset cannot hold
  * two links.

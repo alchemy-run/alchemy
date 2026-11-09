@@ -38,7 +38,7 @@ export interface KeyPairProps {
   keyFormat?: KeyPairFormat;
   /**
    * Public key material (PEM or OpenSSH) to import instead of generating a new
-   * key pair. When set, AWS stores only the public key — no `privateKey` is
+   * key pair. When set, AWS stores only the public key -- no `privateKey` is
    * returned. Changing it replaces the key pair.
    */
   publicKeyMaterial?: string;
@@ -203,7 +203,7 @@ export const KeyPairProvider = () =>
             (info.Tags ?? []).map((t) => [t.Key ?? "", t.Value]),
           );
           if (!hasTags(tags, observedTags)) {
-            // Exists but unbranded — let the engine gate adoption behind --adopt.
+            // Exists but unbranded -- let the engine gate adoption behind --adopt.
             return Unowned({
               keyPairId: info.KeyPairId as KeyPairId,
               keyName: info.KeyName ?? keyName,
@@ -250,11 +250,11 @@ export const KeyPairProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — is the key pair already present?
+          // Observe -- is the key pair already present?
           let info = yield* describeByName(keyName);
           let privateKey = output?.privateKey;
 
-          // Ensure — import or generate when missing.
+          // Ensure -- import or generate when missing.
           if (!info?.KeyPairId) {
             if (news.publicKeyMaterial !== undefined) {
               const imported = yield* ec2
@@ -312,7 +312,7 @@ export const KeyPairProvider = () =>
           }
           const keyPairId = info.KeyPairId as KeyPairId;
 
-          // Sync tags — observed cloud tags vs desired.
+          // Sync tags -- observed cloud tags vs desired.
           const observedTags = Object.fromEntries(
             (info.Tags ?? []).map((t) => [t.Key!, t.Value!]),
           ) as Record<string, string>;
@@ -338,7 +338,7 @@ export const KeyPairProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // `deleteKeyPair` is idempotent — deleting a missing key pair
+          // `deleteKeyPair` is idempotent -- deleting a missing key pair
           // succeeds, so there is no NotFound error to catch.
           yield* ec2.deleteKeyPair({ KeyPairId: output.keyPairId });
         }),

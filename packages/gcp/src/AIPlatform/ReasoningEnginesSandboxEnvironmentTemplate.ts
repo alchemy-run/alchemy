@@ -35,7 +35,7 @@ export type ReasoningEnginesSandboxEnvironmentTemplateProps = {
   /**
    * Parent Reasoning Engine. Full name
    * `projects/{project}/locations/{location}/reasoningEngines/{engine}`
-   * or the engine id (combined with `location`). Immutable — changing it
+   * or the engine id (combined with `location`). Immutable -- changing it
    * replaces the template.
    */
   reasoningEngine: string;
@@ -46,7 +46,7 @@ export type ReasoningEnginesSandboxEnvironmentTemplateProps = {
   location?: string;
   /**
    * Display name. Required by Vertex. SandboxEnvironmentTemplate has no
-   * labels field, so Alchemy ownership is stored in a `[alchemy …]`
+   * labels field, so Alchemy ownership is stored in a `[alchemy ...]`
    * prefix for `list` / nuke.
    */
   displayName?: string;
@@ -92,7 +92,7 @@ export type ReasoningEnginesSandboxEnvironmentTemplate = Resource<
 >;
 
 /**
- * A Vertex AI sandbox environment template — the blueprint used to
+ * A Vertex AI sandbox environment template -- the blueprint used to
  * create Agent Engine sandbox environments.
  *
  * There is no update API. Changing parent or location replaces the

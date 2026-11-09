@@ -244,7 +244,7 @@ export const PermissionProvider = () =>
                     }));
                 }).pipe(
                   // Functions with no resource policy / removed out of band
-                  // between list and getPolicy — skip them.
+                  // between list and getPolicy -- skip them.
                   Effect.catchTag("ResourceNotFoundException", () =>
                     Effect.succeed([] as PermissionAttrs[]),
                   ),
@@ -268,7 +268,7 @@ export const PermissionProvider = () =>
           }
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          // Observe — derive identity. The statementId is deterministic from
+          // Observe -- derive identity. The statementId is deterministic from
           // the logical id, so we always use it whether this is a first
           // reconciliation, an adoption, or a re-run after a partial create.
           const statementId = output?.statementId ?? (yield* createStatementId(id));

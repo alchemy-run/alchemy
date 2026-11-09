@@ -10,7 +10,7 @@ import * as Layer from "effect/Layer";
 import * as Scheduler from "effect/Scheduler";
 
 /**
- * Migrations for {@link DurableObject} — the shape of the `migrations.js`
+ * Migrations for {@link DurableObject} -- the shape of the `migrations.js`
  * bundle `drizzle-kit generate` emits for `driver: "durable-sqlite"`
  * (each migration's `.sql` file imported as a text module).
  */
@@ -40,15 +40,15 @@ export interface DurableObjectConfig<
  * construction without importing `.sql` files. Each instance applies pending
  * files on activation using Alchemy's shared migration history.
  *
- * Every query is an Effect with a typed error channel — drizzle's
+ * Every query is an Effect with a typed error channel -- drizzle's
  * `EffectDrizzleQueryError` (query + params + cause, wrapping the
- * underlying effect-sql `SqlError`) — so failures are handled with
+ * underlying effect-sql `SqlError`) -- so failures are handled with
  * `Effect.catchTag` instead of leaking as defects. Transactions add
  * `SqlError` to the union. Opening the db itself never fails: a
  * migration that cannot apply dies, since the instance is unusable
  * without its schema.
  *
- * Yield it in the object's inner (instance) Effect — it runs when the
+ * Yield it in the object's inner (instance) Effect -- it runs when the
  * instance activates, before any request reaches its methods:
  *
  * ```typescript
@@ -113,7 +113,7 @@ export const DurableObject = Effect.fn("Drizzle.DurableObject")(function* <
   const state = yield* DurableObjectState;
   const storage = state.raw.storage;
   const { migrations, ...drizzleConfig } = config ?? {};
-  // Built on the ambient (instance) Scope — the client wraps the DO's
+  // Built on the ambient (instance) Scope -- the client wraps the DO's
   // local SQLite storage, so there is no disposable resource behind it.
   const services = yield* Layer.build(SqliteDoClient.layer({ storage }));
   const client = Context.get(services, SqliteDoClient.SqliteClient);
@@ -130,7 +130,7 @@ export const DurableObject = Effect.fn("Drizzle.DurableObject")(function* <
   if (migrations !== undefined && "_tag" in migrations) {
     yield* migrations.apply().pipe(Effect.orDie);
   } else if (migrations !== undefined) {
-    // A migration that cannot apply leaves the instance unusable — there
+    // A migration that cannot apply leaves the instance unusable -- there
     // is no meaningful recovery at init, so it dies rather than forcing
     // every caller to handle (or orDie) an error channel.
     yield* migrate(db, {

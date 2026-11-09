@@ -35,7 +35,7 @@ export type SecretKeyUsage =
 export interface SecretKeyAlgorithm {
   /** WebCrypto algorithm name, e.g. `"HMAC"`, `"AES-GCM"`, `"RSA-PSS"`. */
   readonly name: string;
-  /** Algorithm-specific parameters (`hash`, `length`, `namedCurve`, …). */
+  /** Algorithm-specific parameters (`hash`, `length`, `namedCurve`, ...). */
   readonly [param: string]: unknown;
 }
 
@@ -46,7 +46,7 @@ export interface SecretKeyAlgorithm {
 export interface SecretKeyJwk {
   /** JWK key type, e.g. `"oct"`, `"RSA"`, `"EC"`. */
   readonly kty: string;
-  /** Remaining JWK members (`k`, `n`, `e`, `crv`, `alg`, …). */
+  /** Remaining JWK members (`k`, `n`, `e`, `crv`, `alg`, ...). */
   readonly [member: string]: unknown;
 }
 
@@ -57,7 +57,7 @@ export type SecretKeyProps = {
    */
   algorithm: SecretKeyAlgorithm;
   /**
-   * Allowed operations with the key (`"sign"`, `"verify"`, `"encrypt"`, …).
+   * Allowed operations with the key (`"sign"`, `"verify"`, `"encrypt"`, ...).
    */
   usages: ReadonlyArray<SecretKeyUsage>;
 } & (
@@ -69,17 +69,17 @@ export type SecretKeyProps = {
       format: "raw" | "pkcs8" | "spki";
       /**
        * Base64-encoded key data (raw bytes, or DER for `pkcs8`/`spki`).
-       * Accepts a `Redacted` value — it is unwrapped when the binding is
+       * Accepts a `Redacted` value -- it is unwrapped when the binding is
        * registered, since the Cloudflare API accepts only the plain value.
        */
       keyBase64: string | Redacted.Redacted<string>;
       keyJwk?: never;
     }
   | {
-      /** Data format of the key material — a JSON Web Key in `keyJwk`. */
+      /** Data format of the key material -- a JSON Web Key in `keyJwk`. */
       format: "jwk";
       /**
-       * Key data in JSON Web Key format. Accepts a `Redacted` value — it is
+       * Key data in JSON Web Key format. Accepts a `Redacted` value -- it is
        * unwrapped when the binding is registered, since the Cloudflare API
        * accepts only the plain value.
        */
@@ -116,7 +116,7 @@ const unwrap = <A>(value: A | Redacted.Redacted<A> | undefined): A | undefined =
   value === undefined ? undefined : Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
 /**
- * A Cloudflare Workers Secret Key binding — key material uploaded once and
+ * A Cloudflare Workers Secret Key binding -- key material uploaded once and
  * exposed to the Worker as a native, non-extractable
  * [`CryptoKey`](https://developers.cloudflare.com/workers/runtime-apis/bindings/secret-key/).
  * The Worker can sign, verify, encrypt, or decrypt with the key via
@@ -124,7 +124,7 @@ const unwrap = <A>(value: A | Redacted.Redacted<A> | undefined): A | undefined =
  *
  * `SecretKey` is a single value that is at once the `Binding.Service` tag, the
  * callable that produces a {@link SecretKeyBinding}, and the type. Declare it
- * on a Worker's `env` (it flows through `InferEnv` → the native `CryptoKey`)
+ * on a Worker's `env` (it flows through `InferEnv` -> the native `CryptoKey`)
  * or `yield*` it inside an Effect-native Worker to attach the binding and
  * obtain a deferred {@link SecretKeyAccessor}.
  *
@@ -190,7 +190,7 @@ const unwrap = <A>(value: A | Redacted.Redacted<A> | undefined): A | undefined =
  * });
  *
  * export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
- * //   { HMAC_KEY: CryptoKey } — the native runtime binding
+ * //   { HMAC_KEY: CryptoKey } -- the native runtime binding
  *
  * // worker.ts
  * export default {
@@ -213,7 +213,7 @@ const unwrap = <A>(value: A | Redacted.Redacted<A> | undefined): A | undefined =
  */
 export interface SecretKey extends Binding.Service<SecretKey, TypeId, SecretKeyAccessor> {
   /**
-   * @param name Binding name (logical id) — the `env` key it resolves to.
+   * @param name Binding name (logical id) -- the `env` key it resolves to.
    * @param props Key format, algorithm, usages, and the key material.
    */
   (name: string, props: SecretKeyProps): SecretKeyBinding;
@@ -227,8 +227,8 @@ export const SecretKey = Binding.Service<SecretKey, SecretKeyPayload>({
     format: props.format,
     algorithm: props.algorithm,
     usages: [...props.usages],
-    // The wire shape is plain — Redacted key material is unwrapped at bind
-    // time (same convention as Redacted env values → `secret_text`).
+    // The wire shape is plain -- Redacted key material is unwrapped at bind
+    // time (same convention as Redacted env values -> `secret_text`).
     keyBase64: unwrap(props.keyBase64),
     keyJwk: unwrap(props.keyJwk),
   }),

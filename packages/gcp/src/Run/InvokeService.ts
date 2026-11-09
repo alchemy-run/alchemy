@@ -18,7 +18,7 @@ export interface InvokeServiceRequestInit {
   method?: string;
   /** Extra request headers. `Authorization` is always set by the binding. */
   headers?: Record<string, string>;
-  /** Request body; objects are not serialized — pass a string. */
+  /** Request body; objects are not serialized -- pass a string. */
   body?: string | Uint8Array;
 }
 
@@ -60,7 +60,7 @@ type ShapeOf<Target> = Target extends Rpc<infer Shape> ? Shape : {};
 
 /**
  * Minting the ID token, reaching the service, or decoding its response
- * failed. Non-2xx responses are not errors — inspect `status`.
+ * failed. Non-2xx responses are not errors -- inspect `status`.
  */
 export class InvokeServiceError extends Data.TaggedError("GCP.Run.InvokeServiceError")<{
   message: string;
@@ -69,7 +69,7 @@ export class InvokeServiceError extends Data.TaggedError("GCP.Run.InvokeServiceE
 
 /**
  * Runtime binding that calls a private Cloud Run {@link Service} from
- * another Cloud Run host with Google-signed identity — the GCP analog of
+ * another Cloud Run host with Google-signed identity -- the GCP analog of
  * `AWS.Lambda.InvokeFunction`.
  *
  * At deploy time it grants `roles/run.invoker` on the target service to

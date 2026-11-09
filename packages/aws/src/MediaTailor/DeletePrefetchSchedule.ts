@@ -13,7 +13,7 @@ export interface DeletePrefetchScheduleRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `mediatailor:DeletePrefetchSchedule` — remove a
+ * Runtime binding for `mediatailor:DeletePrefetchSchedule` -- remove a
  * prefetch schedule from the bound {@link PlaybackConfiguration} (e.g. when
  * a live event is cancelled).
  *

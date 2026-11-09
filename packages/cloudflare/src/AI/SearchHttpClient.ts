@@ -9,12 +9,12 @@ import { SearchError, type QuerySearchClient } from "./QuerySearch.ts";
 import type { QuerySearchNamespaceClient } from "./QuerySearchNamespace.ts";
 
 // Shared HTTP scaffolding for the AI Search `*Local` binding layers. NOT
-// re-exported from `index.ts` — only the per-level `*Local` layers are public.
+// re-exported from `index.ts` -- only the per-level `*Local` layers are public.
 //
 // The `ai_search` / `ai_search_namespace` Worker bindings proxy the same AI
 // Search REST API that distilled wraps, so the whole data plane
 // (`search` / `chatCompletions` / `info` / `stats` / `list`) is reachable over
-// HTTP with the current credentials — no Worker host, no native binding.
+// HTTP with the current credentials -- no Worker host, no native binding.
 //
 // The one wrinkle: distilled decodes responses to **camelCase**, while the
 // binding client contract types come from `@cloudflare/workers-types` and are
@@ -53,7 +53,7 @@ const run = <A, E>(
     }),
   );
 
-// ── response mappers (distilled camelCase -> runtime snake_case) ─────────────
+// -- response mappers (distilled camelCase -> runtime snake_case) -------------
 
 type ChunkIn = aisearch.SearchNamespaceInstanceResponse["chunks"][number];
 
@@ -203,7 +203,7 @@ const mapMulti = (r: aisearch.SearchNamespaceResponse): runtime.AiSearchMultiSea
   })),
 });
 
-// ── request mappers (runtime snake_case -> distilled camelCase) ──────────────
+// -- request mappers (runtime snake_case -> distilled camelCase) --------------
 
 const mapMessages = (messages: runtime.AiSearchMessage[]) =>
   messages.map((m) => ({
@@ -250,7 +250,7 @@ const mapOptions = (o: runtime.AiSearchOptions | undefined) => {
           maxNumResults: o.retrieval.max_num_results,
           contextExpansion: o.retrieval.context_expansion,
           returnOnFailure: o.retrieval.return_on_failure,
-          // `filters` is a Vectorize metadata filter over user-defined fields —
+          // `filters` is a Vectorize metadata filter over user-defined fields --
           // pass through untouched.
           filters: o.retrieval.filters as Record<string, unknown> | undefined,
           boostBy: o.retrieval.boost_by,
@@ -259,7 +259,7 @@ const mapOptions = (o: runtime.AiSearchOptions | undefined) => {
   };
 };
 
-// ── client builders ──────────────────────────────────────────────────────────
+// -- client builders ----------------------------------------------------------
 
 /** Effect resolving `{ name (namespace), id (instanceId) }` at apply time. */
 export type InstanceRef = Effect.Effect<{ name: string; id: string }>;

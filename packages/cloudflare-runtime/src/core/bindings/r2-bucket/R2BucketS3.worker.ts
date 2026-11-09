@@ -9,7 +9,7 @@
  * Runs as a fetch middleware in the entry chain: requests under
  * `/cdn-cgi/local/r2/s3` are served here, everything else is forwarded to
  * the next middleware (`UPSTREAM`). It sits after `plugin:entry`, which
- * restores the client-facing URL and `Host` from the proxy headers — SigV4
+ * restores the client-facing URL and `Host` from the proxy headers -- SigV4
  * signs the host, so verification must see what the client signed.
  *
  * Each exposed bucket is a regular `r2Bucket` binding onto the shared `r2`

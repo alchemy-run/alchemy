@@ -6,8 +6,8 @@ import type { EndpointGroup } from "./EndpointGroup.ts";
 /**
  * Runtime binding for `globalaccelerator:DescribeEndpointGroup`.
  *
- * Reads the bound {@link EndpointGroup}'s live state — most usefully the
- * observed per-endpoint health (`HEALTHY` / `UNHEALTHY` / `INITIAL`) — so a
+ * Reads the bound {@link EndpointGroup}'s live state -- most usefully the
+ * observed per-endpoint health (`HEALTHY` / `UNHEALTHY` / `INITIAL`) -- so a
  * function can monitor regional endpoint health or verify an endpoint it
  * just registered. The endpoint group ARN is injected from the binding.
  * Provide the implementation with
@@ -15,7 +15,7 @@ import type { EndpointGroup } from "./EndpointGroup.ts";
  * ### Observing Endpoint Groups
  * **Example:** Check Endpoint Health
  * ```typescript
- * // init — bind the operation to the endpoint group
+ * // init -- bind the operation to the endpoint group
  * const describeEndpointGroup =
  *   yield* AWS.GlobalAccelerator.DescribeEndpointGroup(group);
  *

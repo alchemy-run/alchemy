@@ -120,7 +120,7 @@ class ControlOperationPending extends Data.TaggedError("ControlOperationPending"
   readonly status: string | undefined;
 }> {}
 
-// Explicitly-typed retry wrappers — an inline `Effect.retry` in provider
+// Explicitly-typed retry wrappers -- an inline `Effect.retry` in provider
 // lifecycle code leaks `Retry.Return`'s conditional type into declaration
 // emit and widens the provider layer to `unknown` for every consumer of
 // `AWS.providers()`.
@@ -134,7 +134,7 @@ const retryWhileControlOperationPending = <A, E extends { readonly _tag: string 
     schedule: Schedule.max([Schedule.spaced("10 seconds"), Schedule.recurs(90)]),
   });
 
-// Control Tower serializes control operations per OU — a concurrent
+// Control Tower serializes control operations per OU -- a concurrent
 // operation surfaces as a typed ConflictException. Retry through it on a
 // bounded schedule.
 const retryWhileControlConflict = <A, E extends { readonly _tag: string }, R>(
@@ -174,7 +174,7 @@ const readEnabledControl = (enabledControlArn: string) =>
     Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
   );
 
-// Find an enabled control by (controlIdentifier, targetIdentifier) —
+// Find an enabled control by (controlIdentifier, targetIdentifier) --
 // covers the create-race and lost-output cases where we don't have the
 // ARN cached.
 const findEnabledControlArn = (controlIdentifier: string, targetIdentifier: string) =>
@@ -195,7 +195,7 @@ export const EnabledControlProvider = () =>
     Effect.gen(function* () {
       return EnabledControl.Provider.of({
         stables: ["enabledControlArn", "controlIdentifier", "targetIdentifier"],
-        // Enumeration requires a target OU — there is no org-wide listing
+        // Enumeration requires a target OU -- there is no org-wide listing
         // that returns the full attribute shape without the management
         // account's OU tree, so nuke discovery is not supported.
         list: () => Effect.succeed([]),
@@ -226,7 +226,7 @@ export const EnabledControlProvider = () =>
           }
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          // 1. Observe — cloud state is authoritative; output is only an
+          // 1. Observe -- cloud state is authoritative; output is only an
           //    ARN cache.
           let arn = output?.enabledControlArn;
           let details = arn === undefined ? undefined : yield* readEnabledControl(arn);
@@ -235,7 +235,7 @@ export const EnabledControlProvider = () =>
             details = arn === undefined ? undefined : yield* readEnabledControl(arn);
           }
 
-          // 2. Ensure — enable if missing and wait for the asynchronous
+          // 2. Ensure -- enable if missing and wait for the asynchronous
           //    operation to converge.
           if (details === undefined) {
             const internalTags = yield* createInternalTags(id);
@@ -260,7 +260,7 @@ export const EnabledControlProvider = () =>
             }
             details = yield* readEnabledControl(arn);
           } else if (news.parameters !== undefined) {
-            // 3. Sync — parameters are the only in-place-mutable aspect.
+            // 3. Sync -- parameters are the only in-place-mutable aspect.
             //    Diff observed parameter summaries against desired; skip
             //    the API on a no-op. Parameters cannot be cleared (the
             //    update API requires them), so an absent `parameters` prop

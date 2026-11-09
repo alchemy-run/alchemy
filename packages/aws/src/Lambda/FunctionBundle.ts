@@ -2,7 +2,7 @@
 
 /**
  * The Lambda Function code-bundling machinery, extracted from the live
- * provider closure so it is reusable outside `FunctionProvider` — the floci
+ * provider closure so it is reusable outside `FunctionProvider` -- the floci
  * local provider's watch loop rebuilds the exact same artifact on file
  * change (see [FlociFunctionProvider](./FlociFunctionProvider.ts)).
  *
@@ -54,7 +54,7 @@ export const matchesConfiguredExternal = (
 };
 
 /**
- * The resolved rolldown configuration for a `bundle: true` Function — the
+ * The resolved rolldown configuration for a `bundle: true` Function -- the
  * exact input/output options `bundleCode` hands to `Bundle.build`, reusable
  * verbatim with `Bundle.watch` for incremental dev rebuilds, plus the
  * post-processing inputs `finishBundle` needs.
@@ -125,7 +125,7 @@ export const makeFunctionBundler = Effect.gen(function* () {
       return out.sort();
     });
 
-  // `bundle: false` — ship `main`'s directory as-is. Framework outputs
+  // `bundle: false` -- ship `main`'s directory as-is. Framework outputs
   // like nitro's `.output/server` are complete deployment units (entry +
   // chunks + their own `node_modules`); re-bundling them can orphan
   // CJS `require`s of exports-mapped subpaths.

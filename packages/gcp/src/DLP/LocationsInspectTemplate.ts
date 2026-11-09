@@ -32,12 +32,12 @@ export type LocationsInspectTemplateProps = {
    * Template id (the `{inspectTemplate}` segment of
    * `projects/{project}/locations/{location}/inspectTemplates/{inspectTemplate}`).
    * If omitted, a unique name is generated. Must match `[a-zA-Z0-9_-]+` and
-   * is at most 100 characters. Immutable — changing it replaces the
+   * is at most 100 characters. Immutable -- changing it replaces the
    * template.
    */
   templateId?: string;
   /**
-   * Processing location (`us-central1`, `global`, …). Immutable —
+   * Processing location (`us-central1`, `global`, ...). Immutable --
    * changing it replaces the template.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -49,7 +49,7 @@ export type LocationsInspectTemplateProps = {
   /**
    * Human-readable description (max 256 characters). Inspect templates
    * have no labels field, so Alchemy ownership is stored in a
-   * `[alchemy …]` prefix and stripped from attributes.
+   * `[alchemy ...]` prefix and stripped from attributes.
    */
   description?: string;
   /**
@@ -107,7 +107,7 @@ export interface LocationsInspectTemplateLookup {
    */
   templateId: string;
   /**
-   * Processing location (`us-central1`, `global`, …).
+   * Processing location (`us-central1`, `global`, ...).
    */
   location?: string;
   /**
@@ -122,7 +122,7 @@ export interface LocationsInspectTemplateLookup {
  * (`projects.locations.inspectTemplates`).
  *
  * Inspect templates have no labels field, so Alchemy stamps ownership
- * into the description for `list` / nuke. Location and id are identity —
+ * into the description for `list` / nuke. Location and id are identity --
  * changing them replaces the template. Display name, description, and
  * inspect config update in place.
  *

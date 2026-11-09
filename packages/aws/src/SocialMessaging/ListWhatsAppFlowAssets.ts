@@ -26,7 +26,7 @@ export interface ListWhatsAppFlowAssetsRequest extends Omit<
  * ### Managing WhatsApp Flows
  * **Example:** List a Flow's Assets
  * ```typescript
- * // init — bind the operation to the linked WABA
+ * // init -- bind the operation to the linked WABA
  * const listFlowAssets = yield* AWS.SocialMessaging.ListWhatsAppFlowAssets(account);
  *
  * // runtime

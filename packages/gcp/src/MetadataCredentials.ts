@@ -12,7 +12,7 @@ import * as Redacted from "effect/Redacted";
 import * as Ref from "effect/Ref";
 
 /**
- * Credentials sourced from the GCE / Cloud Run metadata server — the
+ * Credentials sourced from the GCE / Cloud Run metadata server -- the
  * runtime identity of a deployed Cloud Run Service, Job, or WorkerPool.
  *
  * Kept dependency-light: the generated container bootstraps import this

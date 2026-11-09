@@ -60,12 +60,12 @@ export type InsightsConfigProps = {
   /**
    * Insights config id (the `{insightsConfig}` segment of
    * `projects/{project}/locations/{location}/insightsConfigs/{insightsConfig}`).
-   * If omitted, a unique RFC1035 name is generated. Immutable —
+   * If omitted, a unique RFC1035 name is generated. Immutable --
    * changing it replaces the config.
    */
   insightsConfigId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the config. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile
@@ -149,7 +149,7 @@ export interface InsightsConfigLookup {
    */
   insightsConfigId: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * Region (`us-central1`, `us-east1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -161,7 +161,7 @@ export interface InsightsConfigLookup {
 }
 
 /**
- * A Developer Connect InsightsConfig — the SDLC event hub that ties an
+ * A Developer Connect InsightsConfig -- the SDLC event hub that ties an
  * App Hub application, runtime environments, and deployed artifacts
  * together.
  *

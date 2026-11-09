@@ -102,7 +102,7 @@ export interface EndpointAttributes {
   name: string;
   /** Environment name, or `undefined` for the workspace default. */
   environment: string | undefined;
-  /** Base URL of the endpoint's APIs (`…/v1/chat/completions`, `…/v1/messages`). */
+  /** Base URL of the endpoint's APIs (`.../v1/chat/completions`, `.../v1/messages`). */
   url: string;
   /** Whether callers need a proxy auth token. */
   requiresAuth: boolean;

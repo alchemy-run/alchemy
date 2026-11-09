@@ -19,14 +19,14 @@ export interface SendingSubdomainProps {
    * Zone the sending subdomain is registered on. The subdomain name must
    * be within this zone.
    *
-   * Stable — moving the subdomain to another zone triggers a replacement.
+   * Stable -- moving the subdomain to another zone triggers a replacement.
    */
   zoneId: string;
   /**
    * The fully-qualified subdomain to send email from (e.g.
    * `mail.example.com`). Must be within the zone.
    *
-   * Stable — the Cloudflare API has no update operation for sending
+   * Stable -- the Cloudflare API has no update operation for sending
    * subdomains, so a rename is a delete + create. Declared as plain
    * `string` (not `string`) so it is statically knowable in `diff`.
    */
@@ -52,7 +52,7 @@ export interface SendingSubdomainAttributes {
   /**
    * Whether Email Sending is enabled on this subdomain. Flips to `true`
    * once the auto-provisioned DNS records (DKIM/SPF/return-path) validate
-   * — usually immediate for zones on Cloudflare DNS.
+   * -- usually immediate for zones on Cloudflare DNS.
    */
   enabled: boolean;
   /** The DKIM selector used for email signing. */
@@ -98,8 +98,8 @@ export type SendingSubdomain = Resource<
  *   zoneId: zone.zoneId,
  *   name: "mail.example.com",
  * });
- * // sending.enabled — true once DNS records validated
- * // sending.dkimSelector / sending.returnPathDomain — provisioned config
+ * // sending.enabled -- true once DNS records validated
+ * // sending.dkimSelector / sending.returnPathDomain -- provisioned config
  * ```
  *
  * ### Message previews
@@ -149,7 +149,7 @@ export const SendingSubdomainProvider = () =>
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       // Sending subdomains are zone-scoped (`/zones/{id}/email/sending/
-      // subdomains`) with no account-wide list — enumerate every zone and
+      // subdomains`) with no account-wide list -- enumerate every zone and
       // list its subdomains, then flatten.
       const zones = yield* listAllZones(accountId);
       const rows = yield* Effect.forEach(
@@ -162,7 +162,7 @@ export const SendingSubdomainProvider = () =>
                 (page.result ?? []).map((subdomain) => toAttributes(subdomain, zone.id)),
               ),
             ),
-            // Email Sending may be unavailable / plan-gated on a zone —
+            // Email Sending may be unavailable / plan-gated on a zone --
             // skip those zones rather than fail the whole enumeration.
             Effect.catchTag("Forbidden", () => Effect.succeed([])),
           ),
@@ -197,7 +197,7 @@ export const SendingSubdomainProvider = () =>
 
       // Adoption path: a subdomain with this name may already exist on the
       // zone. Sending subdomains carry no ownership markers, so we cannot
-      // prove we created it — brand it `Unowned` so the engine refuses to
+      // prove we created it -- brand it `Unowned` so the engine refuses to
       // take over unless `adopt` is set.
       const name = output?.name ?? olds?.name;
       if (name) {
@@ -211,7 +211,7 @@ export const SendingSubdomainProvider = () =>
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
 
-      // 1. Observe — the subdomain id cached on `output` is a hint, not a
+      // 1. Observe -- the subdomain id cached on `output` is a hint, not a
       //    guarantee: a missing subdomain falls through to the name scan
       //    and then to create.
       let observed = output?.subdomainId
@@ -219,14 +219,14 @@ export const SendingSubdomainProvider = () =>
         : undefined;
 
       // 2. Fall back to scanning the zone for a name match. Ownership has
-      //    already been verified upstream — `read` reports existing
+      //    already been verified upstream -- `read` reports existing
       //    subdomains as `Unowned` and the engine gates takeover behind
       //    the adopt policy before reconcile ever runs.
       if (!observed) {
         observed = yield* findByName(zoneId, news.name);
       }
 
-      // 3. Ensure — create when missing. A concurrent create surfaces as
+      // 3. Ensure -- create when missing. A concurrent create surfaces as
       //    `SendingSubdomainAlreadyExists` (Cloudflare code 2040):
       //    converge by re-scanning for the subdomain that won the race.
       if (!observed) {
@@ -243,12 +243,12 @@ export const SendingSubdomainProvider = () =>
           );
       }
 
-      // 4. Sync — converge `previewEnabled` when it is declared, then wait
+      // 4. Sync -- converge `previewEnabled` when it is declared, then wait
       //    for DNS validation. Cloudflare auto-creates the records on CF-hosted
       //    zones but validation is eventually consistent: poll briefly
       //    for `enabled` to flip, and return the observed state either
       //    way (an externally-hosted zone stays disabled until the user
-      //    adds the records — that is not a deploy failure).
+      //    adds the records -- that is not a deploy failure).
       const ensured =
         news.previewEnabled !== undefined && observed.previewEnabled !== news.previewEnabled
           ? yield* emailSending.editSubdomain({
@@ -273,7 +273,7 @@ export const SendingSubdomainProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      // Idempotent — an already-gone subdomain answers with Cloudflare
+      // Idempotent -- an already-gone subdomain answers with Cloudflare
       // code 2033 (`SendingSubdomainNotFound`), which is success here.
       yield* emailSending
         .deleteSubdomain({
@@ -302,7 +302,7 @@ const getSubdomain = (zoneId: string, subdomainId: string) =>
 
 /**
  * Find a sending subdomain by exact name within the zone. The name is the
- * subdomain's identity — Cloudflare rejects duplicates with code 2040 — so
+ * subdomain's identity -- Cloudflare rejects duplicates with code 2040 -- so
  * at most one can match.
  */
 const findByName = (zoneId: string, name: string) =>

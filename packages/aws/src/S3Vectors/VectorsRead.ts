@@ -31,11 +31,11 @@ export interface ReadVectorsClient {
 }
 
 /**
- * Read-only runtime binding for the S3 Vectors data plane — query, get, and
+ * Read-only runtime binding for the S3 Vectors data plane -- query, get, and
  * list vectors in a bound {@link Index}.
  *
  * Grants only `s3vectors:QueryVectors`, `s3vectors:GetVectors`, and
- * `s3vectors:ListVectors` on exactly the bound index's ARN — the
+ * `s3vectors:ListVectors` on exactly the bound index's ARN -- the
  * least-privilege choice for retrieval-only consumers (e.g. a RAG search
  * endpoint that never writes embeddings). Provide the implementation with
  * `Effect.provide(AWS.S3Vectors.VectorsReadHttp)`.

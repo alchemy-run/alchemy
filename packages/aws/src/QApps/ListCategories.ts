@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { QApp } from "./QApp.ts";
 
 /**
- * Request for {@link ListCategories} — `instanceId` is injected from the bound Q App.
+ * Request for {@link ListCategories} -- `instanceId` is injected from the bound Q App.
  */
 export interface ListCategoriesRequest extends Omit<qapps.ListCategoriesInput, "instanceId"> {}
 
@@ -16,7 +16,7 @@ export interface ListCategoriesRequest extends Omit<qapps.ListCategoriesInput, "
  * ### Categories
  * **Example:** List Categories
  * ```typescript
- * // init — bind the operation to the Q App
+ * // init -- bind the operation to the Q App
  * const listCategories = yield* AWS.QApps.ListCategories(app);
  *
  * // runtime

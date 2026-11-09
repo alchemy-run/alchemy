@@ -3,8 +3,8 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `comprehend:DetectSyntax` — tokenize the input text
- * and label each token with its part of speech (noun, verb, adjective, …).
+ * Runtime binding for `comprehend:DetectSyntax` -- tokenize the input text
+ * and label each token with its part of speech (noun, verb, adjective, ...).
  *
  * The binding takes no arguments and grants the action on `*` (the action
  * has no resource-level IAM).
@@ -20,7 +20,7 @@ import type * as Effect from "effect/Effect";
  *   Text: "The cat sat on the mat.",
  *   LanguageCode: "en",
  * });
- * // result.SyntaxTokens: [{ Text: "cat", PartOfSpeech: { Tag: "NOUN" } }, …]
+ * // result.SyntaxTokens: [{ Text: "cat", PartOfSpeech: { Tag: "NOUN" } }, ...]
  * ```
  *
  * @binding

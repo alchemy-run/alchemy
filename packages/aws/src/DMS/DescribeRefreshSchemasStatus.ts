@@ -13,7 +13,7 @@ import type { Endpoint } from "./Endpoint.ts";
  * ### Polling a Schema Refresh
  * **Example:** Wait for a Refresh to Complete
  * ```typescript
- * // init — bind the operation to the endpoint
+ * // init -- bind the operation to the endpoint
  * const refreshStatus = yield* AWS.DMS.DescribeRefreshSchemasStatus(source);
  *
  * // runtime

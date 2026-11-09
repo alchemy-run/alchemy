@@ -6,7 +6,7 @@ import type { CloudControlBindingOptions } from "./BindingOptions.ts";
 /**
  * Runtime binding for `cloudformation:CreateResource`.
  *
- * Provisions any Cloud Control-supported resource from inside a Function —
+ * Provisions any Cloud Control-supported resource from inside a Function --
  * the building block for dynamic, per-tenant provisioning services. The call
  * is asynchronous: poll the returned `RequestToken` with
  * {@link GetResourceRequestStatus} until the operation settles. Because Cloud
@@ -16,7 +16,7 @@ import type { CloudControlBindingOptions } from "./BindingOptions.ts";
  * ### Provisioning Resources
  * **Example:** Create an SSM Parameter at runtime
  * ```typescript
- * // init — account-level; grant the create handler's permissions too
+ * // init -- account-level; grant the create handler's permissions too
  * const createResource = yield* CloudControl.CreateResource({
  *   handlerPolicyStatements: [
  *     {

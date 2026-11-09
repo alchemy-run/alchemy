@@ -44,18 +44,18 @@ export type GatewayProps = {
    * `projects/{project}/locations/{location}/gateways/{gateway}`). If
    * omitted, a unique name is generated from the stack, stage, and
    * logical id. Must be 1-63 characters and not start with a number.
-   * Immutable — changing it replaces the gateway.
+   * Immutable -- changing it replaces the gateway.
    */
   gatewayId?: string;
   /**
-   * Location (`global`, `us-central1`, …). Immutable — changing it
+   * Location (`global`, `us-central1`, ...). Immutable -- changing it
    * replaces the gateway. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default "global"
    */
   location?: string;
   /**
-   * Customer-managed gateway type. Immutable — changing it replaces the
+   * Customer-managed gateway type. Immutable -- changing it replaces the
    * gateway.
    * @default "OPEN_MESH"
    */
@@ -80,7 +80,7 @@ export type GatewayProps = {
   /**
    * Merge key for configuration across Gateway instances. Max 64
    * characters; must start with a letter. Defaults to the gateway id.
-   * Immutable — changing it replaces the gateway.
+   * Immutable -- changing it replaces the gateway.
    */
   scope?: string;
   /**
@@ -148,7 +148,7 @@ export type Gateway = Resource<
     gatewayId: string;
     /** Project id. */
     project: string;
-    /** Location id (`global`, `us-central1`, …). */
+    /** Location id (`global`, `us-central1`, ...). */
     location: string;
     /** Server-defined resource URL. */
     selfLink: string | undefined;
@@ -207,7 +207,7 @@ export interface GatewayLookup {
    */
   gatewayId: string;
   /**
-   * Location (`global`, `us-central1`, …). `US-CENTRAL1` is accepted and
+   * Location (`global`, `us-central1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -219,7 +219,7 @@ export interface GatewayLookup {
 }
 
 /**
- * A Network Services Gateway — the ip:port a Mesh or Secure Web Gateway
+ * A Network Services Gateway -- the ip:port a Mesh or Secure Web Gateway
  * proxy listens on, plus TLS and routing policy.
  *
  * Changing `gatewayId`, `location`, `type`, `network`, or `subnetwork`

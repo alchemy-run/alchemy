@@ -38,7 +38,7 @@ export type ObjectProps = {
   file?: string;
   /**
    * `Content-Type` served with the object. Inferred from the key's
-   * extension when omitted (`.html` → `text/html; charset=utf-8`, …).
+   * extension when omitted (`.html` -> `text/html; charset=utf-8`, ...).
    * @default inferred from `key`, else `text/plain; charset=utf-8` for string content and `application/octet-stream` otherwise
    */
   contentType?: string;
@@ -81,7 +81,7 @@ export type Object = Resource<
 
 /**
  * A single object in a Cloud Storage bucket whose content is declared as
- * infrastructure — inline `content` or a local `file`.
+ * infrastructure -- inline `content` or a local `file`.
  *
  * Reconcile observes the live object and uploads only when its MD5,
  * `Content-Type`, `Cache-Control`, or ownership metadata differ from the
@@ -265,7 +265,7 @@ export const ObjectProvider = () =>
           const contentType = desiredContentType(news);
           const ownership = yield* createInternalLabels(fqn);
 
-          // Observe — the live object is the baseline, not olds/output.
+          // Observe -- the live object is the baseline, not olds/output.
           const current = yield* observe(news.bucketName, news.key);
           const inSync =
             current !== undefined &&
@@ -277,7 +277,7 @@ export const ObjectProvider = () =>
             return toAttrs(news.bucketName, news.key, current);
           }
 
-          // Ensure — a multipart upload replaces content and metadata in
+          // Ensure -- a multipart upload replaces content and metadata in
           // one write, so a stale object converges in a single call.
           const uploaded = yield* media.upload(news.bucketName, {
             name: news.key,

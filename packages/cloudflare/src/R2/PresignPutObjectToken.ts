@@ -5,7 +5,7 @@ import { makePresignBinding, presignR2Url } from "./PresignToken.ts";
 
 /**
  * Implementation of {@link PresignPutObject} that signs URLs with S3
- * credentials derived from an API token. Signing is local SigV4 — no request
+ * credentials derived from an API token. Signing is local SigV4 -- no request
  * is made to R2.
  *
  * Deployed, it mints a scoped account API token with

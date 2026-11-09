@@ -7,7 +7,7 @@ export interface ListSMSSandboxPhoneNumbersRequest extends sns.ListSMSSandboxPho
 /**
  * Runtime binding for `sns:ListSMSSandboxPhoneNumbers`.
  *
- * An account-scoped operation — lists the destination phone numbers
+ * An account-scoped operation -- lists the destination phone numbers
  * registered (verified or pending) in the account's SMS sandbox.
  * Provide the `ListSMSSandboxPhoneNumbersHttp` layer on the Function to implement the binding.
  * ### SMS Sandbox

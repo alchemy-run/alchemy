@@ -90,7 +90,7 @@ type LogEventsHandler<Req> = (
  * and each log event is delivered to the handler as a {@link LogEventRecord}.
  *
  * :::warning
- * Never subscribe a function to its own log group — every line the handler
+ * Never subscribe a function to its own log group -- every line the handler
  * logs would re-invoke the handler in an infinite loop.
  * :::
  *

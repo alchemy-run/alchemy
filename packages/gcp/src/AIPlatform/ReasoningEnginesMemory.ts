@@ -42,7 +42,7 @@ export type ReasoningEnginesMemoryProps = {
   /**
    * Parent Reasoning Engine. Full name
    * `projects/{project}/locations/{location}/reasoningEngines/{engine}`
-   * or the engine id (combined with `location`). Immutable — changing it
+   * or the engine id (combined with `location`). Immutable -- changing it
    * replaces the memory.
    */
   reasoningEngine: string;
@@ -53,7 +53,7 @@ export type ReasoningEnginesMemoryProps = {
   location?: string;
   /**
    * Memory id. If omitted, a unique RFC1035 name is generated. Immutable
-   * — changing it replaces the memory.
+   * -- changing it replaces the memory.
    */
   memoryId?: string;
   /**
@@ -70,7 +70,7 @@ export type ReasoningEnginesMemoryProps = {
   displayName?: string;
   /**
    * Human-readable description. Memory has no labels field, so Alchemy
-   * ownership is stored in a `[alchemy …]` prefix for `list` / nuke.
+   * ownership is stored in a `[alchemy ...]` prefix for `list` / nuke.
    */
   description?: string;
   /**
@@ -149,7 +149,7 @@ export interface ReasoningEnginesMemoryLookup {
 }
 
 /**
- * A Vertex AI Reasoning Engine memory — scoped semantic knowledge used
+ * A Vertex AI Reasoning Engine memory -- scoped semantic knowledge used
  * by an Agent Engine Memory Bank.
  *
  * Memory has no labels, so Alchemy stamps ownership into the

@@ -11,7 +11,7 @@ export interface GenerateMacRequest extends Omit<kms.GenerateMacRequest, "KeyId"
  *
  * Bind this operation to an HMAC KMS {@link Key} (or the `alias/...` name of
  * a pre-existing key) to get a callable that automatically injects the
- * `KeyId`. Computes an HMAC inside KMS — the MAC key never leaves the HSM,
+ * `KeyId`. Computes an HMAC inside KMS -- the MAC key never leaves the HSM,
  * so any party with `kms:VerifyMac` can validate tokens without ever
  * holding the shared secret.
  *

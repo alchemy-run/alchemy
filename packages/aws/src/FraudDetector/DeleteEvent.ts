@@ -13,7 +13,7 @@ export interface DeleteEventRequest extends Omit<
 > {}
 
 /**
- * Delete a stored event from Amazon Fraud Detector — the effectful erasure
+ * Delete a stored event from Amazon Fraud Detector -- the effectful erasure
  * call made from a deployed Lambda or Task, e.g. to honor a data-deletion
  * request. Set `deleteAuditHistory` to also remove the event's prediction
  * history.

@@ -16,7 +16,7 @@ export interface GetReservationUtilizationRequest extends ce.GetReservationUtili
  * ### Reservations
  * **Example:** Check Reservation Utilization
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const getReservationUtilization = yield* AWS.CostExplorer.GetReservationUtilization();
  *
  * // runtime

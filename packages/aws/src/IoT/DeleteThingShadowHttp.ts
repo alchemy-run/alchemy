@@ -4,7 +4,7 @@ import { makeIotThingHttpBinding } from "./BindingHttp.ts";
 import { DeleteThingShadow } from "./DeleteThingShadow.ts";
 
 /**
- * HTTP implementation of the {@link DeleteThingShadow} capability — grants
+ * HTTP implementation of the {@link DeleteThingShadow} capability -- grants
  * `iot:DeleteThingShadow` on the thing ARN and calls the IoT data-plane
  * `DeleteThingShadow` API.
  */

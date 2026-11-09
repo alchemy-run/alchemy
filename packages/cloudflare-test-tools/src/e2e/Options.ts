@@ -11,21 +11,21 @@ import { Cwd } from "./Cwd.ts";
 const kOptions = Symbol("@alchemy.run/cloudflare-test-tools/e2e/Options");
 
 /**
- * Cloudflare-target configuration — everything the cloudflare deploy target
+ * Cloudflare-target configuration -- everything the cloudflare deploy target
  * needs to build, dev-serve, and preview a fixture.
  */
 export interface CloudflareTargetOptions {
   /**
    * Cloudflare worker configuration (compatibility date/flags, worker name,
    * bindings, assets) consumed by the built-in Vite implementation of the
-   * `Framework` service — and, by convention, by framework packages named via
+   * `Framework` service -- and, by convention, by framework packages named via
    * {@link Options.framework} (they read the same shape for their cloudflare
    * plugin options). Optional so assets-only fixtures can omit it.
    */
   readonly worker?: CloudflareVitePluginOptions;
   /**
    * Miniflare options for the preview server (`e2e preview` / the Playwright
-   * `live` mode) — the cloudflare target's serving story for built output.
+   * `live` mode) -- the cloudflare target's serving story for built output.
    */
   readonly preview?: Options.MiniflareOptions;
 }
@@ -64,26 +64,26 @@ export interface Options {
    */
   readonly target?: TargetOptions;
   /**
-   * @deprecated Alias for `target.cloudflare.worker` — kept so existing
+   * @deprecated Alias for `target.cloudflare.worker` -- kept so existing
    * `e2e.config.ts` files work unchanged. Prefer the target-scoped form.
    */
   readonly vite?: CloudflareVitePluginOptions;
   /**
-   * @deprecated Alias for `target.cloudflare.preview` — kept so existing
+   * @deprecated Alias for `target.cloudflare.preview` -- kept so existing
    * `e2e.config.ts` files work unchanged. Prefer the target-scoped form.
    */
   readonly miniflare?: Options.MiniflareOptions;
   /**
    * The framework integration implementing `dev`/`build` for this fixture.
    *
-   * - omitted — the built-in Vite implementation (default; zero behavior
+   * - omitted -- the built-in Vite implementation (default; zero behavior
    *   change for existing fixtures)
-   * - a package specifier (e.g. `"@alchemy.run/frontend-frameworks/waku"`) — loaded from the
+   * - a package specifier (e.g. `"@alchemy.run/frontend-frameworks/waku"`) -- loaded from the
    *   *fixture's* own `node_modules`; the module must default-export (or
    *   named-export `framework`) a factory `(options: Options) =>
    *   Layer<Framework>` (a `Layer<Framework>` export is also accepted)
-   * - a factory function — called with these options
-   * - a `Layer<Framework>` — used as-is (build it yourself in `e2e.config.ts`
+   * - a factory function -- called with these options
+   * - a `Layer<Framework>` -- used as-is (build it yourself in `e2e.config.ts`
    *   by importing the framework package directly, for full type safety over
    *   framework-specific options)
    */
@@ -93,8 +93,8 @@ export interface Options {
 /**
  * The resolved cloudflare-target configuration: the target-scoped form merged
  * with the deprecated top-level aliases (target-scoped wins). This is the
- * single accessor the harness — and, by convention, framework packages that
- * read the harness options structurally — use to obtain cloudflare config;
+ * single accessor the harness -- and, by convention, framework packages that
+ * read the harness options structurally -- use to obtain cloudflare config;
  * nothing else should touch `options.vite` / `options.miniflare` directly.
  */
 export const resolveCloudflareOptions = (
@@ -109,7 +109,7 @@ export const resolveCloudflareOptions = (
 
 /**
  * Resolve {@link Options.root} to an absolute project root (against the
- * harness cwd), or `undefined` when the fixture root is the project root —
+ * harness cwd), or `undefined` when the fixture root is the project root --
  * the value the harness passes to `Framework.build`/`Framework.dev` as
  * `FrameworkBuildOptions.root` / `FrameworkDevOptions.root`.
  */

@@ -20,7 +20,7 @@ export type EvaluationProps = {
   gatewayId: string;
   /**
    * Human readable evaluation name. If omitted, a unique name is generated
-   * from the app, stage, and logical ID. Evaluations are immutable —
+   * from the app, stage, and logical ID. Evaluations are immutable --
    * changing the name triggers a replacement.
    * @default ${app}-${stage}-${id}
    */
@@ -33,7 +33,7 @@ export type EvaluationProps = {
   datasetIds: string[];
   /**
    * The evaluation types to run (e.g. speed, cost). Discover ids with
-   * `listEvaluationTypes` — the mandatory `speed` and `cost` types are
+   * `listEvaluationTypes` -- the mandatory `speed` and `cost` types are
    * account-global constants. Changing the types triggers a replacement.
    */
   evaluationTypeIds: string[];
@@ -67,7 +67,7 @@ export type EvaluationAttributes = {
   evaluationTypeIds: string[];
   /**
    * Whether Cloudflare has finished processing the evaluation. Evaluations
-   * are asynchronous jobs over logged traffic — this starts `false`.
+   * are asynchronous jobs over logged traffic -- this starts `false`.
    */
   processed: boolean;
   /**
@@ -147,7 +147,7 @@ export const EvaluationProvider = () =>
         return { action: "replace" } as const;
       }
       if (output === undefined) return undefined;
-      // Evaluations have no update API — any change is a replacement.
+      // Evaluations have no update API -- any change is a replacement.
       // Auto-generated names are engine-owned: the deployed name stays
       // authoritative even if the generator would name this id differently
       // today. Only an explicit user-provided name can force a replace.
@@ -177,7 +177,7 @@ export const EvaluationProvider = () =>
         const observed = yield* getEvaluation(acct, gatewayId, output.evaluationId);
         return observed ? toAttributes(observed, acct, known) : undefined;
       }
-      // Cold read — recover from lost state by matching the deterministic
+      // Cold read -- recover from lost state by matching the deterministic
       // physical name. Names are not unique on Cloudflare's side; an exact
       // match on our generated/explicit name is the best identity we have.
       const name = yield* createEvaluationName(id, olds?.name);
@@ -193,7 +193,7 @@ export const EvaluationProvider = () =>
       const datasetIds = news.datasetIds as string[];
       const evaluationTypeIds = news.evaluationTypeIds;
 
-      // Observe — the evaluationId cached on `output` is a hint, not a
+      // Observe -- the evaluationId cached on `output` is a hint, not a
       // guarantee: a missing evaluation falls through and we recreate.
       const observed = output?.evaluationId
         ? yield* getEvaluation(output.accountId ?? accountId, gatewayId, output.evaluationId)
@@ -208,10 +208,10 @@ export const EvaluationProvider = () =>
         });
       }
 
-      // Ensure — greenfield (or out-of-band delete). Cloudflare enforces
+      // Ensure -- greenfield (or out-of-band delete). Cloudflare enforces
       // name uniqueness, so a conflict (e.g. a leftover from an interrupted
       // run or a create race) is converged by adopting the existing
-      // evaluation by name instead of failing — evaluations are immutable,
+      // evaluation by name instead of failing -- evaluations are immutable,
       // and diff routes any prop change to a replacement, so a name match
       // is already the desired evaluation.
       const created = yield* aiGateway
@@ -235,7 +235,7 @@ export const EvaluationProvider = () =>
           id: output.evaluationId,
         })
         // Cloudflare reports both a missing evaluation and a missing parent
-        // gateway with code 7002 — either way it's already gone.
+        // gateway with code 7002 -- either way it's already gone.
         .pipe(Effect.catchTag("EvaluationNotFound", () => Effect.void));
     }),
     // Evaluations are scoped under an AI Gateway, which itself is
@@ -276,7 +276,7 @@ export const EvaluationProvider = () =>
 
 /**
  * Read an evaluation by id, mapping "gone" (`EvaluationNotFound`,
- * Cloudflare error code 7002 — which also covers a deleted parent gateway)
+ * Cloudflare error code 7002 -- which also covers a deleted parent gateway)
  * to `undefined`.
  */
 const getEvaluation = (accountId: string, gatewayId: string, id: string) =>

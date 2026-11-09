@@ -5,14 +5,14 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `fis:GetAction`.
  *
- * Reads a single FIS action from the service's action catalog — its
+ * Reads a single FIS action from the service's action catalog -- its
  * description, parameters, and the targets it applies to (e.g.
  * `aws:ec2:stop-instances`). Provide the implementation with
  * `Effect.provide(AWS.FIS.GetActionHttp)`.
  * ### Browsing the Action Catalog
  * **Example:** Inspect an Action's Parameters
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getAction = yield* AWS.FIS.GetAction();
  *
  * // runtime

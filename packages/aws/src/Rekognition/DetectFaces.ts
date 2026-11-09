@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `rekognition:DetectFaces` — detect the 100 largest faces in an image and return facial landmarks, pose, and optional attributes (age range, emotions, etc.).
+ * Runtime binding for `rekognition:DetectFaces` -- detect the 100 largest faces in an image and return facial landmarks, pose, and optional attributes (age range, emotions, etc.).
  *
  * The binding takes no arguments and grants the function
  * `rekognition:DetectFaces` on `*` (Rekognition data-plane resources such

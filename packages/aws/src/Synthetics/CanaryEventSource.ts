@@ -76,7 +76,7 @@ export interface CanaryEventSourceProps extends EventRouteProps {
  * it can page on failed runs, annotate deploy dashboards, or kick off
  * remediation.
  *
- * Synthetics publishes to EventBridge automatically — no additional
+ * Synthetics publishes to EventBridge automatically -- no additional
  * resource is created besides the EventBridge rule targeting the host.
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.

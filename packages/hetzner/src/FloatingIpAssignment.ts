@@ -220,13 +220,13 @@ export const FloatingIpAssignmentProvider = () =>
         });
       }
 
-      // Observe — cloud assignment on the Floating IP is authoritative.
+      // Observe -- cloud assignment on the Floating IP is authoritative.
       let current = yield* getById(floatingIpId);
       if (current === undefined) {
         current = yield* refresh(floatingIpId);
       }
 
-      // Ensure — the pair exists. Release a previously owned IP first so
+      // Ensure -- the pair exists. Release a previously owned IP first so
       // an in-place retarget does not leave the old address assigned.
       if (output !== undefined && output.floatingIpId !== floatingIpId) {
         const previous = yield* getById(output.floatingIpId);

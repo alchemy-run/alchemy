@@ -8,13 +8,13 @@ import type { BotAlias } from "./BotAlias.ts";
 /**
  * Shared HTTP scaffolding for the Lex V2 runtime bindings.
  *
- * Every Lex V2 conversation capability follows the same shape — resolve the
+ * Every Lex V2 conversation capability follows the same shape -- resolve the
  * distilled `lex-runtime-v2` operation, register a `lex:*` IAM policy
  * statement on the binding host scoped to the bot alias, and return a
  * runtime callable that injects the alias's `botId` + `botAliasId`. The only
  * variation is the operation and the IAM action, so those are the inputs.
  *
- * @internal — not exported from `index.ts`.
+ * @internal -- not exported from `index.ts`.
  */
 
 type LexRequirements = Credentials | AwsRegion | HttpClient.HttpClient;

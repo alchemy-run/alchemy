@@ -33,7 +33,7 @@ const isFailed = (status: string | undefined): boolean =>
  * Poll a QuickSight resource until its `ResourceStatus` reaches a terminal
  * value. `*_IN_PROGRESS` repeats (bounded); `*_FAILED` fails immediately.
  * Creation/update of most QuickSight resources settles within a few seconds
- * (data-source connectivity validation can take longer) — budget ~2.5 min.
+ * (data-source connectivity validation can take longer) -- budget ~2.5 min.
  *
  * The explicit `Effect.Effect<A, E, R>` return annotation is load-bearing:
  * inlining retry/repeat combinators in provider lifecycle code lets their
@@ -85,7 +85,7 @@ export const toTagRecord = (
   );
 
 /**
- * Read the observed tags of a QuickSight resource by ARN. Best-effort — a
+ * Read the observed tags of a QuickSight resource by ARN. Best-effort -- a
  * failure (e.g. a race with deletion) reports no tags.
  */
 export const readQuickSightTags = Effect.fn(function* (arn: string) {

@@ -6,7 +6,7 @@ import type { Dashboard } from "./Dashboard.ts";
 export interface GetDashboardRequest extends Omit<cloudwatch.GetDashboardInput, "DashboardName"> {}
 
 /**
- * Runtime binding for `cloudwatch:GetDashboard` — read the body and
+ * Runtime binding for `cloudwatch:GetDashboard` -- read the body and
  * metadata of the bound {@link Dashboard}; the dashboard name is injected
  * automatically.
  *
@@ -15,7 +15,7 @@ export interface GetDashboardRequest extends Omit<cloudwatch.GetDashboardInput, 
  * ### Reading Dashboards
  * **Example:** Read a Bound Dashboard
  * ```typescript
- * // init — grants cloudwatch:GetDashboard on the dashboard
+ * // init -- grants cloudwatch:GetDashboard on the dashboard
  * const getDashboard = yield* AWS.CloudWatch.GetDashboard(dashboard);
  *
  * // runtime

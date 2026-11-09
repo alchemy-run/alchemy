@@ -15,13 +15,13 @@ type TypeId = typeof TypeId;
 export interface HostnameRouteProps {
   /**
    * The hostname to route through the tunnel (e.g.
-   * `app.internal.example.com`). Unique per account. Mutable — updated
+   * `app.internal.example.com`). Unique per account. Mutable -- updated
    * in place via PATCH.
    */
   hostname: string;
   /**
    * UUID of the `cfd_tunnel` that traffic for the hostname egresses
-   * through. Mutable — updated in place via PATCH.
+   * through. Mutable -- updated in place via PATCH.
    */
   tunnelId: string;
   /**
@@ -54,7 +54,7 @@ export type HostnameRoute = Resource<
 >;
 
 /**
- * A Cloudflare Zero Trust **hostname route** — routes traffic for a
+ * A Cloudflare Zero Trust **hostname route** -- routes traffic for a
  * private hostname through a `cfd_tunnel`, so WARP clients can reach
  * internal apps by name without publishing a public DNS record.
  *
@@ -106,7 +106,7 @@ export const HostnameRouteProvider = () =>
       }
 
       // Cold lookup: hostnames are unique per account, but the route
-      // carries no ownership markers — brand the match `Unowned`.
+      // carries no ownership markers -- brand the match `Unowned`.
       const hostname = olds?.hostname;
       if (hostname === undefined) return undefined;
       const match = yield* findByHostname(acct, hostname);
@@ -117,7 +117,7 @@ export const HostnameRouteProvider = () =>
     reconcile: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
-      // 1. Observe — cached id is a hint; fall back to a hostname scan so
+      // 1. Observe -- cached id is a hint; fall back to a hostname scan so
       //    a crashed prior run converges. A hostname scan also surfaces a
       //    leftover/foreign route squatting on the hostname, which the sync
       //    step below re-routes to our tunnel.
@@ -128,7 +128,7 @@ export const HostnameRouteProvider = () =>
         observed = yield* findByHostname(accountId, news.hostname);
       }
 
-      // 2. Ensure — create when missing, tolerating the "already routed to
+      // 2. Ensure -- create when missing, tolerating the "already routed to
       //    another tunnel" race: a concurrent create won, or a leftover route
       //    not yet visible to our scan owns the hostname. Re-observe (the list
       //    is eventually consistent right after the conflicting create) so the
@@ -155,7 +155,7 @@ export const HostnameRouteProvider = () =>
           );
       }
 
-      // 3. Sync — PATCH only when the observed state differs (this is also how
+      // 3. Sync -- PATCH only when the observed state differs (this is also how
       //    a taken-over foreign route gets re-routed to our tunnel).
       const dirty =
         (observed.hostname ?? "") !== news.hostname ||
@@ -183,7 +183,7 @@ export const HostnameRouteProvider = () =>
         .pipe(Effect.catchTag("HostnameRouteNotFound", () => Effect.void));
     }),
 
-    // Account collection — hostname routes are enumerated account-wide via
+    // Account collection -- hostname routes are enumerated account-wide via
     // the Zero Trust list API. Paginate exhaustively, drop tombstoned/idless
     // rows, and hydrate each into the exact `read` Attributes shape.
     list: Effect.fn(function* () {

@@ -7,13 +7,13 @@ import type { KnowledgeBase } from "./KnowledgeBase.ts";
  * The `RetrieveAndGenerateStream` request. The knowledge base is referenced
  * inside
  * `retrieveAndGenerateConfiguration.knowledgeBaseConfiguration.knowledgeBaseId`
- * — pass the bound {@link KnowledgeBase}'s `knowledgeBaseId` there.
+ * -- pass the bound {@link KnowledgeBase}'s `knowledgeBaseId` there.
  */
 export interface RetrieveAndGenerateStreamRequest
   extends bedrock.RetrieveAndGenerateStreamRequest {}
 
 /**
- * Runtime binding for `bedrock-agent-runtime:RetrieveAndGenerateStream` —
+ * Runtime binding for `bedrock-agent-runtime:RetrieveAndGenerateStream` --
  * the streaming variant of {@link RetrieveAndGenerate}. The grounded answer
  * arrives as an event `Stream` of `output` text deltas, `citation` events,
  * and `guardrail` events instead of a single response.

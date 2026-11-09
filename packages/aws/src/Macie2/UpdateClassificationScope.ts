@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `macie2:UpdateClassificationScope`.
  *
  * Updates the classification scope settings for an account.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.Macie2.UpdateClassificationScopeHttp)`.
  * ### Automated Discovery
  * **Example:** Exclude Buckets from Automated Discovery
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const updateClassificationScope = yield* AWS.Macie2.UpdateClassificationScope();
  *
  * // runtime

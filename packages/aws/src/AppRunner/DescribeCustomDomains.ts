@@ -10,7 +10,7 @@ export interface DescribeCustomDomainsRequest extends Omit<
 
 /**
  * Describe the custom domains associated with an App Runner
- * {@link Service} from a Lambda (or other AWS runtime) — poll a domain's
+ * {@link Service} from a Lambda (or other AWS runtime) -- poll a domain's
  * certificate validation status (`PENDING_VALIDATION` -> `SUCCESS`) after
  * {@link AssociateCustomDomain}, and read the `DNSTarget` customers point
  * their DNS at.

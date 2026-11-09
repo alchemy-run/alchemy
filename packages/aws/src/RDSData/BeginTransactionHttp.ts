@@ -9,7 +9,7 @@ export const BeginTransactionHttp = Layer.effect(
     tag: "AWS.RDSData.BeginTransaction",
     action: "rds-data:BeginTransaction",
     operation: rdsdata.beginTransaction,
-    // the runtime callable takes no request — everything comes from bind time
+    // the runtime callable takes no request -- everything comes from bind time
     makeInput: (
       _request: void,
       { resourceArn, secretArn, database, schema },

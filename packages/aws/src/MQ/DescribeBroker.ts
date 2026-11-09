@@ -7,7 +7,7 @@ import type { Broker } from "./Broker.ts";
  * Runtime binding for the `DescribeBroker` operation (IAM action
  * `mq:DescribeBroker`), scoped to one {@link Broker}.
  *
- * Resolves the broker's live state at runtime — engine version, instance
+ * Resolves the broker's live state at runtime -- engine version, instance
  * endpoints (the wire-protocol URIs clients connect to), pending changes,
  * and maintenance information. Provide the implementation with
  * `Effect.provide(AWS.MQ.DescribeBrokerHttp)`.
@@ -17,8 +17,8 @@ import type { Broker } from "./Broker.ts";
  * const describeBroker = yield* MQ.DescribeBroker(broker);
  *
  * const info = yield* describeBroker();
- * // info.BrokerState → "RUNNING"
- * // info.BrokerInstances?.[0]?.Endpoints → ["ssl://b-….mq.us-west-2.amazonaws.com:61617", …]
+ * // info.BrokerState -> "RUNNING"
+ * // info.BrokerInstances?.[0]?.Endpoints -> ["ssl://b-....mq.us-west-2.amazonaws.com:61617", ...]
  * ```
  *
  * @binding

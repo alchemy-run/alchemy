@@ -8,7 +8,7 @@ import type { Table } from "./Table.ts";
  * `s3tables:GetTableMetadataLocation` on the table ARN).
  *
  * Reads the bound {@link Table}'s current metadata location and version
- * token — the read half of the Iceberg commit protocol: read the current
+ * token -- the read half of the Iceberg commit protocol: read the current
  * metadata, write a new metadata file to the warehouse, then commit it with
  * {@link UpdateTableMetadataLocation}. Provide the implementation with
  * `Effect.provide(AWS.S3Tables.GetTableMetadataLocationHttp)`.

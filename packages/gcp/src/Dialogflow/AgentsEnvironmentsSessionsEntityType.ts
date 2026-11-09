@@ -28,17 +28,17 @@ export type AgentsEnvironmentsSessionsEntityTypeProps = {
   /**
    * Parent environment resource name
    * `projects/{project}/locations/{location}/agents/{agent}/environments/{environment}`.
-   * Immutable — changing it replaces the session entity type.
+   * Immutable -- changing it replaces the session entity type.
    */
   environment: string;
   /**
-   * Entity type resource name or id. Immutable — changing it replaces
+   * Entity type resource name or id. Immutable -- changing it replaces
    * the session entity type.
    */
   entityType: string;
   /**
    * Session id (at most 36 bytes). If omitted, a unique id is generated.
-   * Immutable — changing it replaces the session entity type.
+   * Immutable -- changing it replaces the session entity type.
    */
   sessionId?: string;
   /**
@@ -117,7 +117,7 @@ export class AgentsEnvironmentsSessionsEntityTypeNotResolved extends Data.Tagged
   resourceName: string;
 }> {}
 
-// Earlier versions stamped a `__alchemy__…` sentinel entity; drop it.
+// Earlier versions stamped a `__alchemy__...` sentinel entity; drop it.
 const LEGACY_SENTINEL_PREFIX = "__alchemy__";
 
 const entitiesOf = (

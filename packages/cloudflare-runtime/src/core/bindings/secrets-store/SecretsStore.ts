@@ -58,7 +58,7 @@ export class SecretsStore extends Plugin.Service<
     ) => Effect.Effect<WorkerdConfig.ServiceDesignator>;
     /**
      * Resolve a designator addressing a store directly as a raw KV
-     * namespace — the admin/seeding surface (`admin`) that deploy-time
+     * namespace -- the admin/seeding surface (`admin`) that deploy-time
      * tooling uses to write secret values into the local store.
      */
     readonly registerStore: (
@@ -220,7 +220,7 @@ export const local = (props: SecretsStoreSecretProps): BindingHook<SecretsStore>
  * Bind a local Secrets Store *store* as a raw KV namespace
  * (`env.<binding>.put(secretName, value)` / `.delete()` / `.list()`).
  *
- * This is the admin/seeding surface — the equivalent of Miniflare's
+ * This is the admin/seeding surface -- the equivalent of Miniflare's
  * `getSecretsStoreSecretAPI`. Deploy-time tooling (e.g. alchemy's local
  * Secret provider, through the platform proxy) uses it to write secret
  * values into the same store the `secrets_store_secret` bindings read.

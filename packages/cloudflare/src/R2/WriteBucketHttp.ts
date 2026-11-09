@@ -121,7 +121,7 @@ export const makeWriteR2HttpClient = (
                 }),
               ).pipe(
                 Effect.asVoid,
-                // The native binding's `delete` is idempotent — deleting a
+                // The native binding's `delete` is idempotent -- deleting a
                 // key that isn't there resolves. Keep the HTTP client at
                 // parity instead of surfacing R2's `NoSuchKey`.
                 Effect.catchTag("NoSuchKey", () => Effect.void),

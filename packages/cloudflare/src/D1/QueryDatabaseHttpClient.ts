@@ -6,7 +6,7 @@ import type { Credentials } from "../Credentials.ts";
 import { type QueryDatabaseClient, PreparedStatement } from "./QueryDatabase.ts";
 
 // Shared HTTP scaffolding for the D1 `QueryDatabase` binding. NOT re-exported
-// from `index.ts` — only the contract and the impl layers are public. A future
+// from `index.ts` -- only the contract and the impl layers are public. A future
 // token-scoped `QueryDatabaseHttp` layer reuses this builder with an auth
 // minted from an `AccountApiToken`; `QueryDatabaseLocal` builds the auth from
 // the ambient current-credentials context.
@@ -32,7 +32,7 @@ export interface D1Auth {
 /**
  * Build a {@link QueryDatabaseClient} over the D1 HTTP query API.
  *
- * `databaseId` is an Effect so the resolution stays deferred to each call —
+ * `databaseId` is an Effect so the resolution stays deferred to each call --
  * inside an Action it resolves through the apply-time RuntimeContext. The
  * credentials are provided ONLY around the distilled op (via `auth.authorize`),
  * never around the id accessor, matching the KV / Vectorize Local variants.
@@ -44,7 +44,7 @@ export const makeHttpQueryDatabaseClient = (
   makeQueryDatabaseClientFrom(Effect.map(databaseId, (id) => makeHttpD1Database(auth, id)));
 
 /**
- * Build a {@link QueryDatabaseClient} from a deferred `D1Database` — shared
+ * Build a {@link QueryDatabaseClient} from a deferred `D1Database` -- shared
  * by the cloud HTTP transport above and the local-simulator gateway
  * transport (`QueryDatabaseLocal` with a `dev:` id).
  */
@@ -88,7 +88,7 @@ const toResult = <T>(
 /**
  * Normalize a bound value the way the native D1 binding does before it reaches
  * SQLite. Over the raw HTTP query API, unlike the Worker binding, values are
- * bound verbatim — a JS `true` would arrive as the string `"true"`. Match the
+ * bound verbatim -- a JS `true` would arrive as the string `"true"`. Match the
  * native semantics: booleans become integers (1/0) and binary becomes a byte
  * array (BLOB). `null`, numbers, and strings pass through unchanged.
  */
@@ -110,7 +110,7 @@ export const makeHttpD1Database = (auth: D1Auth, databaseId: string): runtime.D1
 /**
  * The transport a {@link runtime.D1Database} facade is built over: run one
  * query (or batch) and return the D1 result envelope(s). Two transports
- * exist — the cloud HTTP API (`runQuery`) and the local-simulator gateway
+ * exist -- the cloud HTTP API (`runQuery`) and the local-simulator gateway
  * (`withLocalD1Query`).
  */
 export type D1QueryTransport = (

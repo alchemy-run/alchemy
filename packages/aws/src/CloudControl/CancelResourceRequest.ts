@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `cloudformation:CancelResourceRequest`.
  *
  * Cancels a resource operation request that is still `PENDING` or
- * `IN_PROGRESS` — the companion to {@link CreateResource} /
+ * `IN_PROGRESS` -- the companion to {@link CreateResource} /
  * {@link UpdateResource} / {@link DeleteResource} for aborting slow or
  * mistaken provisioning operations.
  * ### Tracking Requests

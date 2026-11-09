@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { TelemetryRule } from "./TelemetryRule.ts";
 
 /**
- * Runtime binding for `observabilityadmin:GetTelemetryRule` — reads the full
+ * Runtime binding for `observabilityadmin:GetTelemetryRule` -- reads the full
  * configuration and per-region status of the bound
  * {@link TelemetryRule}. The rule's name is injected automatically and the
  * IAM grant is scoped to the rule's ARN.
@@ -14,7 +14,7 @@ import type { TelemetryRule } from "./TelemetryRule.ts";
  * ### Reading a Telemetry Rule
  * **Example:** Read the bound rule's configuration
  * ```typescript
- * // init — grants observabilityadmin:GetTelemetryRule on the rule
+ * // init -- grants observabilityadmin:GetTelemetryRule on the rule
  * const getTelemetryRule = yield* AWS.ObservabilityAdmin.GetTelemetryRule(rule);
  *
  * // runtime

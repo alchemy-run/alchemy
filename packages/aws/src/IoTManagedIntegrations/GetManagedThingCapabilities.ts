@@ -8,7 +8,7 @@ import type { ManagedThing } from "./ManagedThing.ts";
  * action `iotmanagedintegrations:GetManagedThingCapabilities`), scoped to
  * one {@link ManagedThing}.
  *
- * Reads the capability report the bound device registered at onboarding —
+ * Reads the capability report the bound device registered at onboarding --
  * the data model that {@link SendManagedThingCommand} commands are written
  * against. Provide the implementation with
  * `Effect.provide(AWS.IoTManagedIntegrations.GetManagedThingCapabilitiesHttp)`.

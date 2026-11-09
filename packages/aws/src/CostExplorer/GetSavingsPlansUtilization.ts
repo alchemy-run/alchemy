@@ -16,7 +16,7 @@ export interface GetSavingsPlansUtilizationRequest extends ce.GetSavingsPlansUti
  * ### Savings Plans
  * **Example:** Check Savings Plans Utilization
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const getSavingsPlansUtilization = yield* AWS.CostExplorer.GetSavingsPlansUtilization();
  *
  * // runtime

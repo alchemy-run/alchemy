@@ -64,7 +64,7 @@ export interface AlarmLookup {
 }
 
 /**
- * A CloudWatch metric alarm — watches a single metric (or metric-math
+ * A CloudWatch metric alarm -- watches a single metric (or metric-math
  * expression) and transitions between `OK`, `ALARM`, and
  * `INSUFFICIENT_DATA`, optionally firing actions on state change.
  * ### Creating Alarms
@@ -101,7 +101,7 @@ export interface AlarmLookup {
  * ### Reading Alarm State at Runtime
  * **Example:** Read the Alarm's State from a Function
  * ```typescript
- * // init — bind the alarm to the function (see DescribeAlarms)
+ * // init -- bind the alarm to the function (see DescribeAlarms)
  * const describeAlarms = yield* AWS.CloudWatch.DescribeAlarms(alarm);
  *
  * // runtime
@@ -228,13 +228,13 @@ export const AlarmProvider = () =>
           return (yield* hasAlchemyTags(id, state.tags)) ? state : Unowned(state);
         }),
         reconcile: Effect.fn(function* ({ id, news, olds, output, session }) {
-          // Observe — derive the alarm name and read whatever is currently
+          // Observe -- derive the alarm name and read whatever is currently
           // in CloudWatch under that name. `output.alarmName` wins when
           // present so an existing physical resource is never renamed.
           const name = output?.alarmName ?? (yield* createAlarmName(id, news));
           const existing = yield* readAlarm(name);
 
-          // Ensure — `putMetricAlarm` is an upsert; we always send the full
+          // Ensure -- `putMetricAlarm` is an upsert; we always send the full
           // desired config so the cloud converges to `news` regardless of
           // whether the alarm pre-existed.
           yield* retryConcurrent(
@@ -244,7 +244,7 @@ export const AlarmProvider = () =>
             }),
           );
 
-          // Sync tags — diff observed (or prior) tags against desired and
+          // Sync tags -- diff observed (or prior) tags against desired and
           // apply only the delta. On adoption `olds` is undefined, so we
           // fall back to whatever we just observed.
           const tags = yield* updateResourceTags({

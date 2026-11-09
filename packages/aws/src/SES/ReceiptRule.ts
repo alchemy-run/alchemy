@@ -15,7 +15,7 @@ import type { Providers } from "../Providers.ts";
 export type ReceiptRuleTlsPolicy = ses.TlsPolicy;
 
 /**
- * A single receipt-rule action. Pass the distilled action shape directly — one
+ * A single receipt-rule action. Pass the distilled action shape directly -- one
  * of `S3Action`, `SNSAction`, `LambdaAction`, `BounceAction`, `AddHeaderAction`,
  * `StopAction`, `WorkmailAction`, or `ConnectAction`. Actions run in array
  * order; resource ARNs (bucket, topic, function) are supplied by the caller.
@@ -87,7 +87,7 @@ export interface ReceiptRule extends Resource<
 > {}
 
 /**
- * An Amazon SES receipt rule — a matcher plus an ordered list of actions that
+ * An Amazon SES receipt rule -- a matcher plus an ordered list of actions that
  * SES applies to inbound email received through the parent
  * `SES.ReceiptRuleSet`.
  *
@@ -124,7 +124,7 @@ export interface ReceiptRule extends Resource<
  * ### Ordering Rules
  * **Example:** Place a Rule After Another
  * ```typescript
- * // A BounceAction's Sender must be a verified SES identity — SES rejects the
+ * // A BounceAction's Sender must be a verified SES identity -- SES rejects the
  * // rule with IdentityNotVerified at create/update time otherwise.
  * const first = yield* SES.ReceiptRule("First", {
  *   ruleSetName: ruleSet.ruleSetName,
@@ -198,7 +198,7 @@ export const ReceiptRuleProvider = () =>
 
       const buildRule = (ruleName: string, props: ReceiptRuleProps): ses.ReceiptRule => ({
         Name: ruleName,
-        // The classic API defaults an omitted Enabled/ScanEnabled to FALSE —
+        // The classic API defaults an omitted Enabled/ScanEnabled to FALSE --
         // apply the documented defaults explicitly so an undeclared rule is
         // enabled (a silently disabled rule bounces all inbound mail).
         Enabled: props.enabled ?? true,
@@ -241,10 +241,10 @@ export const ReceiptRuleProvider = () =>
           const ruleName = output?.ruleName ?? (yield* createName(id, news));
           const rule = buildRule(ruleName, news);
 
-          // OBSERVE — cloud state is authoritative.
+          // OBSERVE -- cloud state is authoritative.
           const observed = yield* describeRule(ruleSetName, ruleName);
 
-          // ENSURE / SYNC — a single full-replace call converges the rule's
+          // ENSURE / SYNC -- a single full-replace call converges the rule's
           // matcher and actions whether it is missing or already present.
           if (observed?.Rule === undefined) {
             yield* ses
@@ -273,7 +273,7 @@ export const ReceiptRuleProvider = () =>
               .pipe(retryRolePropagation);
           }
 
-          // SYNC POSITION — updateReceiptRule never moves the rule, so diff the
+          // SYNC POSITION -- updateReceiptRule never moves the rule, so diff the
           // observed predecessor against the desired `after` and reposition
           // only on a mismatch.
           const ruleSet = yield* ses.describeReceiptRuleSet({

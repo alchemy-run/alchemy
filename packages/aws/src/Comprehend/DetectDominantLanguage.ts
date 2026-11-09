@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `comprehend:DetectDominantLanguage` — determine the
+ * Runtime binding for `comprehend:DetectDominantLanguage` -- determine the
  * dominant language of the input text (returns RFC 5646 language codes with
  * confidence scores).
  *

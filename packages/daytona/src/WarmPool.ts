@@ -101,7 +101,7 @@ export const WarmPoolProvider = () =>
       }),
       reconcile: Effect.fn(function* ({ news, output }) {
         const snapshot = yield* snapshotName(news.snapshot);
-        // Observe — a pool is identified by its snapshot and region.
+        // Observe -- a pool is identified by its snapshot and region.
         const pools = yield* warmPools.listWarmPools({});
         const current =
           pools.find((p) => p.id === output?.warmPoolId) ??

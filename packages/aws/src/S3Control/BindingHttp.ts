@@ -4,8 +4,8 @@ import * as Effect from "effect/Effect";
 /**
  * Shared scaffolding for the Amazon S3 Control HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, makeS3Control…HttpBinding({ … }))` over one of the
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, makeS3Control...HttpBinding({ ... }))` over one of the
  * builders below. Every S3 Control request carries the owning `AccountId`
  * (an endpoint host label), so each builder's only real job is deciding
  * where that account id comes from:
@@ -18,7 +18,7 @@ import * as Effect from "effect/Effect";
  *   route APIs are served from).
  * - Account-level operations (access point listing, S3 Batch Operations
  *   jobs) resolve the caller's account once via `sts:GetCallerIdentity`
- *   (cached per binding) and are granted on `*` — job ARNs are
+ *   (cached per binding) and are granted on `*` -- job ARNs are
  *   server-assigned at runtime and unknowable at deploy time.
  */
 import * as AWSBindings from "../AWSBindings.ts";
@@ -28,7 +28,7 @@ import type { MultiRegionAccessPoint } from "./MultiRegionAccessPoint.ts";
 
 /**
  * All Multi-Region Access Point control-plane requests are routed to the
- * US West (Oregon) region regardless of the ambient region — mirrors the
+ * US West (Oregon) region regardless of the ambient region -- mirrors the
  * {@link MultiRegionAccessPoint} resource provider.
  */
 const inMrapRegion = <A, E, R>(
@@ -138,7 +138,7 @@ export const makeS3ControlMrapHttpBinding = <
 /**
  * Build the impl Effect for an account-level S3 Control operation (access
  * point listing, S3 Batch Operations jobs). The deploy-time half grants
- * `actions` on `*` — job ARNs are server-assigned at runtime and unknowable
+ * `actions` on `*` -- job ARNs are server-assigned at runtime and unknowable
  * at deploy time. The runtime half resolves the caller's account id once via
  * `sts:GetCallerIdentity` (needs no extra IAM permission) and injects it as
  * `AccountId`.
@@ -154,7 +154,7 @@ export const makeS3ControlAccountHttpBinding = <I extends { AccountId: string },
    * Grant `iam:PassRole` so the function can hand S3 Batch Operations the
    * execution role named in the job. Set on `CreateJob`. Matches the AWS
    * Batch Operations permission model (an `iam:PassedToService` condition is
-   * NOT populated for `s3:CreateJob` — IAM denies a conditioned grant).
+   * NOT populated for `s3:CreateJob` -- IAM denies a conditioned grant).
    */
   passRole?: boolean;
 }) =>
@@ -173,7 +173,7 @@ export const makeS3ControlAccountHttpBinding = <I extends { AccountId: string },
           },
         ];
         if (options.passRole) {
-          // No `iam:PassedToService` condition — IAM does not populate the
+          // No `iam:PassedToService` condition -- IAM does not populate the
           // key for `s3:CreateJob`, so a conditioned grant is always
           // denied. This matches the policy AWS documents for Batch
           // Operations job creators.

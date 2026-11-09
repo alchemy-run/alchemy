@@ -1,5 +1,5 @@
 /**
- * `@alchemy.run/frontend-frameworks/astro/entrypoints/node-server` — the
+ * `@alchemy.run/frontend-frameworks/astro/entrypoints/node-server` -- the
  * Node container server entrypoint the Node deploy target pins as the
  * adapter's `serverEntrypoint`.
  *

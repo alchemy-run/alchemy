@@ -1,7 +1,7 @@
 /**
  * Internal Kubernetes object model + ordering/path helpers powering
  * `Kubernetes.Manifest` and the workload platforms (`Deployment`, `Job`).
- * Not part of the public surface — the public manifest shape is the literal
+ * Not part of the public surface -- the public manifest shape is the literal
  * `KubernetesManifest` on `Kubernetes.Manifest`.
  */
 

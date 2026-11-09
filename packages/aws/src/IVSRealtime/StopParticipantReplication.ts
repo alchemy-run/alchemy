@@ -19,7 +19,7 @@ export interface StopParticipantReplicationRequest extends Omit<
  * ### Replicating Participants
  * **Example:** Stop a replication
  * ```typescript
- * // init — bound to (source, destination)
+ * // init -- bound to (source, destination)
  * const stopParticipantReplication =
  *   yield* IVSRealtime.StopParticipantReplication(mainStage, overflowStage);
  *

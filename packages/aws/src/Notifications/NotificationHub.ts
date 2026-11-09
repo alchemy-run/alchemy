@@ -32,7 +32,7 @@ export interface NotificationHub extends Resource<
 > {}
 
 /**
- * An AWS User Notifications **notification hub** — a regional enablement
+ * An AWS User Notifications **notification hub** -- a regional enablement
  * that stores and replicates notification events. An account can register
  * at most 3 hubs, and at least one ACTIVE hub must exist for notification
  * configurations to deliver events.
@@ -42,7 +42,7 @@ export interface NotificationHub extends Resource<
  *
  * **AWS refuses to deregister the last ACTIVE hub in the account**
  * (`ConflictException`). Destroying a stack containing the account's only
- * hub therefore fails — keep a baseline hub registered outside the stack,
+ * hub therefore fails -- keep a baseline hub registered outside the stack,
  * or register a second hub first.
  *
  * ### Registering a Notification Hub
@@ -60,7 +60,7 @@ export interface NotificationHub extends Resource<
 export const NotificationHub = Resource<NotificationHub>("AWS.Notifications.NotificationHub");
 
 /**
- * Poll until the hub reaches a terminal status (bounded and fail-open —
+ * Poll until the hub reaches a terminal status (bounded and fail-open --
  * registration is typically ACTIVE immediately).
  *
  * Explicitly typed so `Effect.repeat`'s conditional return type doesn't
@@ -113,7 +113,7 @@ export const NotificationHubProvider = () =>
           const region = output?.notificationHubRegion ?? olds?.region;
           if (region === undefined) return undefined;
           const found = yield* findByRegion(region);
-          // Hubs are not taggable — identity is the region itself.
+          // Hubs are not taggable -- identity is the region itself.
           return found ? toAttrs(found) : undefined;
         }),
 
@@ -126,11 +126,11 @@ export const NotificationHubProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ news, session }) {
-          // OBSERVE — the hub is keyed by region; registration is an
+          // OBSERVE -- the hub is keyed by region; registration is an
           // idempotent upsert so a concurrent create is harmless.
           let live = yield* findByRegion(news.region);
 
-          // ENSURE — register when missing (or not yet ACTIVE; re-register
+          // ENSURE -- register when missing (or not yet ACTIVE; re-register
           // of an existing region is a no-op returning current state).
           if (live === undefined) {
             const registered = yield* pinNotificationsRegion(
@@ -141,7 +141,7 @@ export const NotificationHubProvider = () =>
             live = registered;
           }
 
-          // Wait for activation (bounded, fail-open — usually immediate).
+          // Wait for activation (bounded, fail-open -- usually immediate).
           if (live.statusSummary.status === "REGISTERING") {
             const settled = yield* untilActive(
               findByRegion(news.region),

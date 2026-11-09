@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `DescribeDBClusterSnapshots` operation (IAM action
  * `rds:DescribeDBClusterSnapshots`).
  *
- * Lists the account's Aurora cluster snapshots — the discovery half of a
+ * Lists the account's Aurora cluster snapshots -- the discovery half of a
  * snapshot-rotation or verification function. Provide the implementation with
  * `Effect.provide(AWS.RDS.DescribeDBClusterSnapshotsHttp)`.
  * ### Managing Cluster Snapshots

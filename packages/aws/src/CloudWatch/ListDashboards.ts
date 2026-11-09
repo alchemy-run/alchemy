@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 export interface ListDashboardsRequest extends cloudwatch.ListDashboardsInput {}
 
 /**
- * Runtime binding for `cloudwatch:ListDashboards` — list the dashboards in
+ * Runtime binding for `cloudwatch:ListDashboards` -- list the dashboards in
  * the account, optionally filtered by name prefix.
  *
  * Provide `CloudWatch.ListDashboardsHttp` on the hosting Lambda Function
@@ -13,7 +13,7 @@ export interface ListDashboardsRequest extends cloudwatch.ListDashboardsInput {}
  * ### Reading Dashboards
  * **Example:** List Dashboards
  * ```typescript
- * // init — grants cloudwatch:ListDashboards
+ * // init -- grants cloudwatch:ListDashboards
  * const listDashboards = yield* AWS.CloudWatch.ListDashboards();
  *
  * // runtime

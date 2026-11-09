@@ -9,7 +9,7 @@ export interface StartApplicationRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `kinesisanalytics:StartApplication` — starts the
+ * Runtime binding for `kinesisanalytics:StartApplication` -- starts the
  * bound Flink application, optionally restoring from a snapshot via
  * `RunConfiguration`. The returned `OperationId` can be polled with
  * {@link DescribeApplicationOperation}.

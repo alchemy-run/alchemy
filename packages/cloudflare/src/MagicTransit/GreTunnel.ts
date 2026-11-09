@@ -66,7 +66,7 @@ export interface GreTunnelProps {
   /**
    * The name of the tunnel. Cannot contain spaces or special characters,
    * must be 15 characters or less, and cannot share a name with another GRE
-   * tunnel. Immutable in practice — changing it triggers a replacement.
+   * tunnel. Immutable in practice -- changing it triggers a replacement.
    */
   name: string;
   /**
@@ -107,7 +107,7 @@ export interface GreTunnelProps {
    */
   healthCheck?: MagicTunnelHealthCheck;
   /**
-   * BGP configuration. The update API cannot change BGP settings —
+   * BGP configuration. The update API cannot change BGP settings --
    * changing this triggers a replacement.
    */
   bgp?: MagicTunnelBgp;
@@ -152,11 +152,11 @@ export type GreTunnel = Resource<TypeId, GreTunnelProps, GreTunnelAttributes, ne
  * A Magic Transit / Magic WAN GRE tunnel between Cloudflare and a customer
  * router.
  *
- * Requires a Magic Transit or Magic WAN subscription on the account —
+ * Requires a Magic Transit or Magic WAN subscription on the account --
  * accounts that are not onboarded receive a typed
  * `MagicTransitNotOnboarded` error (Cloudflare code 1012).
  *
- * The tunnel `name` is its routing identity (unique, ≤15 chars) — changing
+ * The tunnel `name` is its routing identity (unique, <=15 chars) -- changing
  * it triggers a replacement, as does changing `bgp` (the update API cannot
  * modify BGP settings). Everything else is updated in place via PUT.
  * ### Creating a GRE tunnel
@@ -216,7 +216,7 @@ export const GreTunnelProvider = () =>
       if (olds === undefined) return undefined;
       // The tunnel name is its routing identity; renames are rejected.
       if (olds.name !== news.name) return { action: "replace" } as const;
-      // The update API has no `bgp` field — BGP changes require recreate.
+      // The update API has no `bgp` field -- BGP changes require recreate.
       if (!sameBgp(olds.bgp, news.bgp)) return { action: "replace" } as const;
       return undefined;
     }),
@@ -229,7 +229,7 @@ export const GreTunnelProvider = () =>
         const observed = yield* getTunnel(acct, output.tunnelId);
         if (observed) return toAttributes(observed, acct);
       }
-      // Cold read — tunnel names are unique per account, so an exact name
+      // Cold read -- tunnel names are unique per account, so an exact name
       // match identifies the tunnel. Tunnels carry no ownership markers;
       // report as Unowned so takeover is gated behind the adopt policy.
       const name = output?.name ?? olds?.name;
@@ -243,14 +243,14 @@ export const GreTunnelProvider = () =>
     reconcile: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
-      // Observe — the id on `output` is a hint; fall through to the
+      // Observe -- the id on `output` is a hint; fall through to the
       // unique-name lookup when it is gone.
       let observed = output?.tunnelId ? yield* getTunnel(accountId, output.tunnelId) : undefined;
       if (!observed) {
         observed = yield* findByName(accountId, news.name);
       }
 
-      // Ensure — create when missing.
+      // Ensure -- create when missing.
       if (!observed) {
         const created = yield* magicTransit.createGreTunnel({
           accountId,
@@ -281,7 +281,7 @@ export const GreTunnelProvider = () =>
         observed = created;
       }
 
-      // Sync — diff observed cloud state against desired; the update API
+      // Sync -- diff observed cloud state against desired; the update API
       // is a full PUT, so send everything, but skip the call on a no-op.
       // This also converges health-check fields the create API does not
       // accept (direction/rate/type).
@@ -333,9 +333,9 @@ export const GreTunnelProvider = () =>
     // Account-scoped collection. `listGreTunnels` returns the full set in one
     // (non-paginated) call, so there is nothing to paginate. Accounts without
     // a Magic Transit subscription reject with the typed
-    // `MagicTransitNotOnboarded` tag (code 1012) — and, depending on token
+    // `MagicTransitNotOnboarded` tag (code 1012) -- and, depending on token
     // scope, a typed `Forbidden` (403). Both mean the account cannot enumerate
-    // Magic Transit, so treat them as non-listable → [].
+    // Magic Transit, so treat them as non-listable -> [].
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       return yield* magicTransit.listGreTunnels({ accountId, xMagicNewHcTarget: true }).pipe(

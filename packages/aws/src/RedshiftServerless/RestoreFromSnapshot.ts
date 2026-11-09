@@ -7,14 +7,14 @@ import type { Namespace } from "./Namespace.ts";
  * Runtime binding for the `RestoreFromSnapshot` operation (IAM actions
  * `redshift-serverless:RestoreFromSnapshot`).
  *
- * Restores the bound {@link Namespace} from a snapshot — a
+ * Restores the bound {@link Namespace} from a snapshot -- a
  * disaster-recovery runbook step. The namespace name is injected from the
  * binding; pass the serving workgroup and the snapshot to restore. Provide the implementation with
  * `Effect.provide(AWS.RedshiftServerless.RestoreFromSnapshotHttp)`.
  * ### Restoring Data
  * **Example:** Restore a Namespace from a Snapshot
  * ```typescript
- * // init — resolve the runtime client
+ * // init -- resolve the runtime client
  * const restoreFromSnapshot = yield* AWS.RedshiftServerless.RestoreFromSnapshot(namespace);
  *
  * yield* restoreFromSnapshot({

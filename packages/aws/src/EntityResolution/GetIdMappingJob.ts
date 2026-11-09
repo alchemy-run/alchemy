@@ -12,7 +12,7 @@ import type { IdMappingWorkflow } from "./IdMappingWorkflow.ts";
  * ### Running ID Mapping Jobs
  * **Example:** Poll a Job's Status
  * ```typescript
- * // init — bind the operation to the workflow
+ * // init -- bind the operation to the workflow
  * const getIdMappingJob = yield* AWS.EntityResolution.GetIdMappingJob(workflow);
  *
  * // runtime

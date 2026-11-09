@@ -7,7 +7,7 @@ import type { EnabledControl } from "./EnabledControl.ts";
  * Runtime binding for `controltower:ResetEnabledControl`.
  *
  * Bind this operation to an {@link EnabledControl} to re-deploy the
- * guardrail's governance resources from inside a function runtime —
+ * guardrail's governance resources from inside a function runtime --
  * remediating drift without changing the enablement's configuration. The
  * call starts an asynchronous operation; poll it with
  * {@link GetControlOperation}. Provide the implementation with
@@ -15,7 +15,7 @@ import type { EnabledControl } from "./EnabledControl.ts";
  * ### Remediating Drift
  * **Example:** Reset a Drifted Enabled Control
  * ```typescript
- * // init — bind the operation to the enabled control
+ * // init -- bind the operation to the enabled control
  * const resetEnabledControl = yield* AWS.ControlTower.ResetEnabledControl(guardrail);
  *
  * // runtime

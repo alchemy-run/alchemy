@@ -45,7 +45,7 @@ export type VmwareClustersVmwareNodePoolProps = {
   /**
    * Parent VMware user cluster. Full name
    * `projects/{project}/locations/{location}/vmwareClusters/{cluster}`
-   * or the cluster id (combined with `location`). Immutable — changing
+   * or the cluster id (combined with `location`). Immutable -- changing
    * it replaces the node pool.
    */
   vmwareCluster: string;
@@ -56,7 +56,7 @@ export type VmwareClustersVmwareNodePoolProps = {
   location?: string;
   /**
    * Node pool id (the `{vmwareNodePool}` segment). If omitted, a unique
-   * RFC1123 name is generated. Max 40 characters. Immutable — changing
+   * RFC1123 name is generated. Max 40 characters. Immutable -- changing
    * it replaces the pool.
    */
   vmwareNodePoolId?: string;
@@ -66,7 +66,7 @@ export type VmwareClustersVmwareNodePoolProps = {
   config: VmwareNodeConfig;
   /**
    * Display name. Node pools have no GCP labels field, so Alchemy stamps
-   * ownership into annotations and a `[alchemy …]` displayName prefix
+   * ownership into annotations and a `[alchemy ...]` displayName prefix
    * and strips both from attributes.
    */
   displayName?: string;
@@ -140,8 +140,8 @@ export type VmwareClustersVmwareNodePool = Resource<
  * A worker node pool on an Anthos on VMware user cluster.
  *
  * Node pools have no GCP labels field, so Alchemy stamps ownership into
- * annotations and a `[alchemy …]` displayName prefix for `list` / nuke.
- * Pool id, location, and parent cluster are identity — changing them
+ * annotations and a `[alchemy ...]` displayName prefix for `list` / nuke.
+ * Pool id, location, and parent cluster are identity -- changing them
  * replaces the pool. Config, display name, version, and autoscaling
  * update in place.
  *

@@ -186,7 +186,7 @@ export const replaceOnIdentity = (input: {
 };
 
 // A KMS config parks in KEY_CHECK_PENDING until the NetApp service agent is
-// granted the key and `verify` is called — a settled state, not provisioning.
+// granted the key and `verify` is called -- a settled state, not provisioning.
 const READY_STATES = new Set(["READY", "IN_USE", "READ_ONLY", "KEY_CHECK_PENDING"]);
 const FAILED_STATES = new Set(["ERROR", "KEY_NOT_REACHABLE"]);
 

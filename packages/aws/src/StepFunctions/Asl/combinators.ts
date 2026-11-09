@@ -1,5 +1,5 @@
 /**
- * The `Sfn.*` combinators — Effect-mirroring constructors over the ASL AST.
+ * The `Sfn.*` combinators -- Effect-mirroring constructors over the ASL AST.
  *
  * Names and semantics track their `Effect` counterparts as closely as the
  * target language allows: `Sfn.gen`, `Sfn.retry`, `Sfn.catchTag`,
@@ -62,7 +62,7 @@ export const waitForTaskToken = <A = unknown, E = never>(
 ): SfnEffect<A, E> => make({ kind: "integrate", options, waitForTaskToken: true });
 
 /**
- * Run programs in parallel (an ASL `Parallel` state) — mirrors
+ * Run programs in parallel (an ASL `Parallel` state) -- mirrors
  * `Effect.all`. The result is the tuple of branch results.
  */
 export const all = <const T extends readonly SfnEffect<any, any>[]>(
@@ -71,7 +71,7 @@ export const all = <const T extends readonly SfnEffect<any, any>[]>(
   make({ kind: "all", branches });
 
 /**
- * Apply `body` to every element of `items` (an ASL inline `Map` state) —
+ * Apply `body` to every element of `items` (an ASL inline `Map` state) --
  * mirrors `Effect.forEach`, including the `concurrency` option
  * (`MaxConcurrency`). The result is the array of iteration results.
  */
@@ -88,7 +88,7 @@ export const forEach = <Item, A, E>(
   });
 
 /**
- * Pause the workflow (an ASL `Wait` state) — mirrors `Effect.sleep`.
+ * Pause the workflow (an ASL `Wait` state) -- mirrors `Effect.sleep`.
  * Durations round up to whole seconds (ASL's granularity).
  */
 export const sleep = (duration: Duration.Input): SfnEffect<void> =>
@@ -98,9 +98,9 @@ export const sleep = (duration: Duration.Input): SfnEffect<void> =>
   });
 
 /**
- * Branch on a typed condition (an ASL `Choice` state) — mirrors
+ * Branch on a typed condition (an ASL `Choice` state) -- mirrors
  * `Effect.if`. Build conditions with the typed comparators (`Sfn.eq`,
- * `Sfn.gt`, `Sfn.and`, …). When `onFalse` is omitted the false branch
+ * `Sfn.gt`, `Sfn.and`, ...). When `onFalse` is omitted the false branch
  * produces `null`.
  */
 export const when = <A, E, B = null, E2 = never>(
@@ -111,7 +111,7 @@ export const when = <A, E, B = null, E2 = never>(
 
 /**
  * Branch on a value's literal cases (an ASL `Choice` state with one rule
- * per case) — mirrors `Effect.match`-style dispatch. With no `otherwise`
+ * per case) -- mirrors `Effect.match`-style dispatch. With no `otherwise`
  * and no matching case the execution fails with `States.NoChoiceMatched`.
  */
 export const match = <
@@ -127,16 +127,16 @@ export const match = <
   make({ kind: "match", value, cases, otherwise });
 
 /**
- * Produce a value (an ASL `Pass` state) — mirrors `Effect.succeed`. The
+ * Produce a value (an ASL `Pass` state) -- mirrors `Effect.succeed`. The
  * value may embed typed `Expr` references from earlier steps.
  */
 export const succeed = <const T>(value: T): SfnEffect<UnwrapExpr<T>> =>
   make({ kind: "succeed", value });
 
 /**
- * Fail the workflow with a tagged error (an ASL `Fail` state) — mirrors
+ * Fail the workflow with a tagged error (an ASL `Fail` state) -- mirrors
  * `Effect.fail`. The error's `_tag` becomes the ASL `Error` name, so
- * `Sfn.catchTag(program, tag, …)` and `Sfn.retry({ while: [tag] })` line up
+ * `Sfn.catchTag(program, tag, ...)` and `Sfn.retry({ while: [tag] })` line up
  * with it end-to-end.
  */
 export const fail = <E extends { readonly _tag: string }>(
@@ -151,7 +151,7 @@ export const fail = <E extends { readonly _tag: string }>(
   });
 
 /**
- * Retry a program on failure (ASL `Retry`) — mirrors `Effect.retry`, with
+ * Retry a program on failure (ASL `Retry`) -- mirrors `Effect.retry`, with
  * an option bag in the `Schedule.exponential` vocabulary (`initial`,
  * `backoff`, `maxAttempts`, `maxDelay`, `jitter`; `while` takes error
  * tags). Multi-state programs are wrapped in a single-branch `Parallel`
@@ -167,7 +167,7 @@ export const retry: {
         make({ kind: "retry", inner: self, options: selfOrOptions })) as any;
 
 /**
- * Catch failures by tag (ASL `Catch` with `ErrorEquals`) — mirrors
+ * Catch failures by tag (ASL `Catch` with `ErrorEquals`) -- mirrors
  * `Effect.catchTag`, narrowing `E` exactly the same way. The handler
  * receives a typed reference to the ASL error output (`{ Error, Cause }`).
  */
@@ -198,7 +198,7 @@ export const catchTag: {
         })) as any;
 
 /**
- * Catch every failure (ASL `Catch` with `States.ALL`) — mirrors
+ * Catch every failure (ASL `Catch` with `States.ALL`) -- mirrors
  * `Effect.catchAll`.
  */
 export const catchAll: {

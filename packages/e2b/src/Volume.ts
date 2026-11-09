@@ -146,7 +146,7 @@ export const VolumeProvider = () =>
           // Observe
           const observed = yield* observe(output?.volumeId, name);
           if (observed !== undefined) return toAttrs(observed);
-          // Ensure — a Conflict is a peer creating the same name: read it back.
+          // Ensure -- a Conflict is a peer creating the same name: read it back.
           yield* session.note(`Creating volume ${name}...`);
           const created = yield* volumes.createVolume({ name }).pipe(
             Effect.map((volume): volumes.Volume | undefined => volume),

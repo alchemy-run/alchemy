@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `rekognition:GetPersonTracking` — get the results of an asynchronous the path of persons detection job started by StartPersonTracking.
+ * Runtime binding for `rekognition:GetPersonTracking` -- get the results of an asynchronous the path of persons detection job started by StartPersonTracking.
  *
  * The binding takes no arguments and grants the function
  * `rekognition:GetPersonTracking` on `*` (Rekognition data-plane resources such

@@ -11,7 +11,7 @@ export interface GetEventRequest extends Omit<frauddetector.GetEventRequest, "ev
 
 /**
  * Read a stored event (its entities and variable values) back from Amazon
- * Fraud Detector — the effectful lookup call made from a deployed Lambda or
+ * Fraud Detector -- the effectful lookup call made from a deployed Lambda or
  * Task. Events are stored by `SendEvent` or by predictions on an event type
  * with ingestion enabled.
  *

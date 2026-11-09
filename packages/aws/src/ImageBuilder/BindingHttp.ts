@@ -6,8 +6,8 @@ import type { ImagePipeline } from "./ImagePipeline.ts";
 /**
  * Shared scaffolding for the EC2 Image Builder HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the two builders
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the two builders
  * below. Everything except the operation and the IAM action list is
  * boilerplate.
  */
@@ -39,7 +39,7 @@ export const makeImageBuilderPipelineHttpBinding = <
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (pipeline: ImagePipeline) {
-      // Outputs yield a DEFERRED effect — resolve again per invocation below.
+      // Outputs yield a DEFERRED effect -- resolve again per invocation below.
       const PipelineArn = yield* pipeline.imagePipelineArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${pipeline})`({
@@ -66,8 +66,8 @@ export const makeImageBuilderPipelineHttpBinding = <
 /**
  * Build the impl Effect for an account-level Image Builder operation (image
  * build-version reads and control, account image listings). Image build
- * versions are created dynamically by pipeline runs — their ARNs are not
- * known at deploy time — so the deploy-time half grants `actions` on `*` and
+ * versions are created dynamically by pipeline runs -- their ARNs are not
+ * known at deploy time -- so the deploy-time half grants `actions` on `*` and
  * the runtime callable passes the caller's request through as-is.
  */
 export const makeImageBuilderAccountHttpBinding = <I, A, E, R>(options: {

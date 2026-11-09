@@ -13,7 +13,7 @@ import type * as Effect from "effect/Effect";
  * ### Polling Asynchronous Operations
  * **Example:** List In-Progress Landing Zone Operations
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const listLandingZoneOperations =
  *   yield* AWS.ControlTower.ListLandingZoneOperations();
  *

@@ -28,7 +28,7 @@ export type ChannelPartnerLinksCustomerProps = {
   /**
    * Channel partner link that owns the customer. Full name
    * `accounts/{account}/channelPartnerLinks/{channelPartner}` or the
-   * partner id (combined with `account`). Immutable — changing it
+   * partner id (combined with `account`). Immutable -- changing it
    * replaces the customer.
    */
   parent: string;
@@ -38,7 +38,7 @@ export type ChannelPartnerLinksCustomerProps = {
   account?: string;
   /**
    * Customer id (last segment of `accounts/{account}/customers/{customer}`).
-   * Server-assigned on create. Immutable — changing it replaces the
+   * Server-assigned on create. Immutable -- changing it replaces the
    * customer.
    */
   customerId?: string;

@@ -56,7 +56,7 @@ export type OAuthCredential = {
 export type GitHubConfig = {
   /**
    * GitHub App that was installed (`DEVELOPER_CONNECT`, `FIREBASE`,
-   * `GEMINI_CODE_ASSIST`, `DATAFORM`). Immutable — changing it
+   * `GEMINI_CODE_ASSIST`, `DATAFORM`). Immutable -- changing it
    * replaces the connection.
    * @default "DEVELOPER_CONNECT"
    */
@@ -73,7 +73,7 @@ export type GitHubConfig = {
 
 export type GitHubEnterpriseConfig = {
   /**
-   * URI of the GitHub Enterprise host. Immutable — changing it
+   * URI of the GitHub Enterprise host. Immutable -- changing it
    * replaces the connection.
    */
   hostUri?: string;
@@ -114,7 +114,7 @@ export type GitLabConfig = {
    */
   authorizerCredential?: UserCredential;
   /**
-   * Secret Manager resource containing the webhook secret. Immutable —
+   * Secret Manager resource containing the webhook secret. Immutable --
    * changing it replaces the connection.
    */
   webhookSecretSecretVersion?: string;
@@ -126,12 +126,12 @@ export type GitLabConfig = {
 
 export type GitLabEnterpriseConfig = {
   /**
-   * URI of the GitLab Enterprise host. Immutable — changing it
+   * URI of the GitLab Enterprise host. Immutable -- changing it
    * replaces the connection.
    */
   hostUri?: string;
   /**
-   * Secret Manager resource containing the webhook secret. Immutable —
+   * Secret Manager resource containing the webhook secret. Immutable --
    * changing it replaces the connection.
    */
   webhookSecretSecretVersion?: string;
@@ -155,12 +155,12 @@ export type GitLabEnterpriseConfig = {
 
 export type BitbucketCloudConfig = {
   /**
-   * Bitbucket Cloud workspace id. Immutable — changing it replaces the
+   * Bitbucket Cloud workspace id. Immutable -- changing it replaces the
    * connection.
    */
   workspace?: string;
   /**
-   * Secret Manager resource containing the webhook secret. Immutable —
+   * Secret Manager resource containing the webhook secret. Immutable --
    * changing it replaces the connection.
    */
   webhookSecretSecretVersion?: string;
@@ -176,12 +176,12 @@ export type BitbucketCloudConfig = {
 
 export type BitbucketDataCenterConfig = {
   /**
-   * URI of the Bitbucket Data Center host. Immutable — changing it
+   * URI of the Bitbucket Data Center host. Immutable -- changing it
    * replaces the connection.
    */
   hostUri?: string;
   /**
-   * Secret Manager resource containing the webhook secret. Immutable —
+   * Secret Manager resource containing the webhook secret. Immutable --
    * changing it replaces the connection.
    */
   webhookSecretSecretVersion?: string;
@@ -207,7 +207,7 @@ export type SecureSourceManagerInstanceConfig = {
   /**
    * Secure Source Manager instance, as
    * `projects/{project}/locations/{location}/instances/{instance}`.
-   * Immutable — changing it replaces the connection.
+   * Immutable -- changing it replaces the connection.
    */
   instance?: string;
 };
@@ -241,12 +241,12 @@ export type ConnectionProps = {
   /**
    * Connection id (the `{connection}` segment of
    * `projects/{project}/locations/{location}/connections/{connection}`).
-   * If omitted, a unique RFC1035 name is generated. Immutable —
+   * If omitted, a unique RFC1035 name is generated. Immutable --
    * changing it replaces the connection.
    */
   connectionId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the connection. `US-CENTRAL1` is accepted and normalized
    * to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile
@@ -378,7 +378,7 @@ export interface ConnectionLookup {
    */
   connectionId: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * Region (`us-central1`, `us-east1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;

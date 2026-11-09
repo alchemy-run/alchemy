@@ -26,7 +26,7 @@ export interface GetWhatsAppFlowPreviewRequest extends Omit<
  * ### Managing WhatsApp Flows
  * **Example:** Get a Flow Preview URL
  * ```typescript
- * // init — bind the operation to the linked WABA
+ * // init -- bind the operation to the linked WABA
  * const getFlowPreview = yield* AWS.SocialMessaging.GetWhatsAppFlowPreview(account);
  *
  * // runtime

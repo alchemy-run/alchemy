@@ -10,8 +10,8 @@ import type { Tracker } from "./Tracker.ts";
 /**
  * Shared scaffolding for the Amazon Location Service runtime bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, makeLocation…HttpBinding({ … }))` over one of the
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, makeLocation...HttpBinding({ ... }))` over one of the
  * builders below. Everything except the operation and the IAM action list is
  * boilerplate: each data-plane operation is scoped to exactly one Location
  * resource (tracker, geofence collection, place index, route calculator, or
@@ -249,7 +249,7 @@ export const makeLocationMapHttpBinding = <I extends { MapName: string }, A, E, 
 /**
  * Build the impl Effect for an account-scoped Location operation (the batch
  * metadata jobs API: `ListJobs`, `GetJob`, `CancelJob`): jobs are created at
- * runtime so their ARNs are unknowable at deploy time — the deploy-time half
+ * runtime so their ARNs are unknowable at deploy time -- the deploy-time half
  * grants `actions` on `*`.
  */
 export const makeLocationAccountHttpBinding = <I, A, E, R>(options: {

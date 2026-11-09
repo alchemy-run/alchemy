@@ -7,7 +7,7 @@ import type * as Effect from "effect/Effect";
  * `memorydb:DescribeClusters`).
  *
  * Lists the account's MemoryDB clusters, or describes a single cluster by
- * name — e.g. checking a cluster's status or endpoint from an operational
+ * name -- e.g. checking a cluster's status or endpoint from an operational
  * Lambda. Provide the implementation with
  * `Effect.provide(AWS.MemoryDB.DescribeClustersHttp)`.
  * ### Monitoring Clusters
@@ -16,7 +16,7 @@ import type * as Effect from "effect/Effect";
  * const describeClusters = yield* MemoryDB.DescribeClusters();
  *
  * const page = yield* describeClusters({ ClusterName: clusterName });
- * // page.Clusters[0].Status → "available"
+ * // page.Clusters[0].Status -> "available"
  * ```
  *
  * @binding

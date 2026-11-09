@@ -21,7 +21,7 @@ export type ContractProps = {
   /**
    * Path to the project's `prisma.config.ts`, relative to the current
    * working directory. The config is the single source of truth for the
-   * contract source, emit output directory, and database defaults — exactly
+   * contract source, emit output directory, and database defaults -- exactly
    * as when running the `prisma` CLI by hand.
    *
    * @default "./prisma.config.ts"
@@ -30,7 +30,7 @@ export type ContractProps = {
   /**
    * Directory holding the migration graph (`app/` packages +
    * content-addressed `snapshots/`), relative to the **config file's
-   * directory** — the same base the CLI resolves against. If you override
+   * directory** -- the same base the CLI resolves against. If you override
    * `orm.migrations.dir` in `prisma.config.ts`, set this to the same value.
    *
    * @default "./migrations"
@@ -52,7 +52,7 @@ export type Contract = Resource<
   ContractProps,
   {
     /**
-     * The emitted contract's storage hash — the identity the migration graph
+     * The emitted contract's storage hash -- the identity the migration graph
      * and the database marker track. Changes exactly when the contract's
      * storage shape changes; downstream {@link Migrate} resources diff this
      * against the database marker to decide whether to run.
@@ -80,8 +80,8 @@ export type Contract = Resource<
 /**
  * A Prisma ORM v8 contract managed as an Alchemy resource.
  *
- * Runs `prisma contract emit` and — when the contract's storage shape
- * has drifted from the migration graph — `prisma migration plan` as
+ * Runs `prisma contract emit` and -- when the contract's storage shape
+ * has drifted from the migration graph -- `prisma migration plan` as
  * part of `alchemy deploy`, so the emitted contract artifacts
  * (`contract.json` / `contract.d.ts`) and the migration packages under
  * `migrations/` are always regenerated from the source contract before
@@ -100,7 +100,7 @@ export type Contract = Resource<
  * Plans that require a human decision (data backfills rendered as
  * `placeholder(...)` closures in `migration.ts`) are never auto-answered:
  * the deploy fails with instructions to fill the placeholder, self-emit the
- * package (`node migrations/app/<dir>/migration.ts`), and commit — the next
+ * package (`node migrations/app/<dir>/migration.ts`), and commit -- the next
  * deploy then sees no drift and applies the committed package.
  *
  * The resource is delete-safe: removing it from the stack does **not** wipe
@@ -143,7 +143,7 @@ export const Contract = Resource<Contract>("Prisma.Contract");
 
 const placeholderGuidance = (dir: string) =>
   [
-    `The planned migration package ${dir} contains unfilled placeholder(s) — a data`,
+    `The planned migration package ${dir} contains unfilled placeholder(s) \u2014 a data`,
     "backfill or destructive change that Prisma cannot decide automatically",
     "(the SQL is applied to a real database later in the same deploy).",
     "",
@@ -163,7 +163,7 @@ export const ContractProvider = () =>
       const path = yield* Path.Path;
 
       // Every prop is optional, so `Prisma.Contract("contract")` (no props
-      // object at all) is legal — the engine then hands lifecycle ops
+      // object at all) is legal -- the engine then hands lifecycle ops
       // `undefined` rather than `{}`.
       const resolveConfig = (p: ContractProps | undefined) =>
         path.resolve(process.cwd(), p?.config ?? "./prisma.config.ts");
@@ -212,7 +212,7 @@ export const ContractProvider = () =>
             head,
             // Drift when the graph doesn't cover the emitted contract, or the
             // head package was planned but never self-emitted (empty ops.json
-            // means unfilled placeholders — reconcile re-raises the guidance).
+            // means unfilled placeholders -- reconcile re-raises the guidance).
             changed: head === undefined || head.to !== emitted.storageHash || head.opsEmpty,
           };
         }).pipe(Artifacts.cached("Prisma.Contract.detectDrift"));
@@ -244,7 +244,7 @@ export const ContractProvider = () =>
           const emittedExists =
             output.contractJson !== undefined &&
             (yield* fs.exists(path.resolve(process.cwd(), output.contractJson)));
-          // Only flag an update when something would actually change —
+          // Only flag an update when something would actually change --
           // otherwise downstream resources (e.g. Prisma.Migrate) would see
           // `contract.contractHash` as an unresolved Output during plan and
           // cascade into spurious updates of their own. The canonical-path
@@ -283,7 +283,7 @@ export const ContractProvider = () =>
 
           if (head === undefined || head.to !== emitted.storageHash) {
             yield* session.note(
-              `Planning Prisma migration (${head ? `${head.to.slice(0, 8)} →` : "empty →"} ${emitted.storageHash.slice(0, 8)})`,
+              `Planning Prisma migration (${head ? `${head.to.slice(0, 8)} \u2192` : "empty \u2192"} ${emitted.storageHash.slice(0, 8)})`,
             );
             const plan = yield* runPrismaCli<PlanResult>(
               [
@@ -326,7 +326,7 @@ export const ContractProvider = () =>
           }
 
           // A converged graph whose head was planned earlier but never
-          // self-emitted still blocks the deploy — Migrate would fail on it.
+          // self-emitted still blocks the deploy -- Migrate would fail on it.
           const finalHead = resolveGraphHead(packages);
           if (finalHead?.opsEmpty) {
             const dir = relative(path.join(migrationsDir, "app", finalHead.dirName));

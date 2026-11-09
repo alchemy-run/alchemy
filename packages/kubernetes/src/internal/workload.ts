@@ -62,7 +62,7 @@ export const imagePlatformOf = (
   (architecture ?? connection?.architecture) === "arm64" ? "linux/arm64" : "linux/amd64";
 
 /**
- * Best-effort {@link Connection} of a `cluster` prop value — `undefined`
+ * Best-effort {@link Connection} of a `cluster` prop value -- `undefined`
  * instead of throwing, for plan-time diffs where the referenced resource
  * may resolve to stables-only (or `{}`).
  */
@@ -87,7 +87,7 @@ const sortKeysDeep = (value: unknown): unknown => {
 };
 
 /**
- * A stable identity string for a connection's *target cluster* — the auth
+ * A stable identity string for a connection's *target cluster* -- the auth
  * descriptor (which names the cluster for managed clouds and the
  * kubeconfig context otherwise). Changing it means the workload moves
  * clusters, which is a replacement. Deliberately excludes `endpoint` /
@@ -99,7 +99,7 @@ export const connectionIdentity = (connection: Connection | undefined): string |
 /**
  * The persisted connection of a workload's attributes, tolerating legacy
  * pre-rename rows (`AWS.EKS.*` attributes carried a flat `clusterName`
- * instead of a `connection`) by synthesizing an `aws-eks` connection —
+ * instead of a `connection`) by synthesizing an `aws-eks` connection --
  * the only platform those legacy types could target.
  */
 export const connectionOfOutput = (output: Record<string, unknown>): Connection | undefined => {
@@ -116,7 +116,7 @@ export const connectionOfOutput = (output: Record<string, unknown>): Connection 
 /**
  * Collect environment variables from a host's active bindings and report
  * which cloud-grant channels (any binding-data key besides `env`, e.g.
- * AWS `policyStatements`) are in play — the caller fails when grants
+ * AWS `policyStatements`) are in play -- the caller fails when grants
  * exist but the cluster has no identity adapter to materialize them.
  */
 export const collectBindingEnv = (
@@ -175,7 +175,7 @@ export const imageSourceKind = (source: WorkloadImageSource): ImageSourceKind | 
  * Content hash for image sources whose identity is computable without a
  * bundler: `image` (the ref + platform) and `context` (the build-context
  * directory + Dockerfile content + platform). `main` returns `undefined`
- * — its hash comes from the bundle output inside the registry adapter.
+ * -- its hash comes from the bundle output inside the registry adapter.
  */
 export const computeStaticWorkloadImageHash = Effect.fn(function* (
   source: WorkloadImageSource,
@@ -215,7 +215,7 @@ export const computeStaticWorkloadImageHash = Effect.fn(function* (
 
 export interface ResolveWorkloadImageOptions {
   adapter: ClusterAdapterService;
-  /** The target connection — its `registry`, if any, receives builds. */
+  /** The target connection -- its `registry`, if any, receives builds. */
   connection: Connection;
   /** Publisher for connection-level registries. */
   connectionRegistry: ConnectionRegistry;
@@ -287,7 +287,7 @@ export const resolveWorkloadImage = Effect.fn(function* (options: ResolveWorkloa
   );
 });
 
-/** Plan-time content hash for `diff` — adapter-aware. */
+/** Plan-time content hash for `diff` -- adapter-aware. */
 export const workloadImageHash = Effect.fn(function* (options: {
   adapter: ClusterAdapterService;
   connection: Connection;

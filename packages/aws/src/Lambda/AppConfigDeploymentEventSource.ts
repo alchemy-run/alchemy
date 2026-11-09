@@ -114,7 +114,7 @@ export const AppConfigDeploymentEventSource = Layer.effect(
         yield* Namespace.push(
           host.LogicalId,
           Effect.gen(function* () {
-            // NB: hyphenated logical ids only — the id lands in the
+            // NB: hyphenated logical ids only -- the id lands in the
             // `alchemy::id` tag value, and IAM/AppConfig tag values reject
             // `(`, `)` and `,`.
             const role = yield* InvokeRole(`${target.LogicalId}-${suffix}-InvokeRole`, {

@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `securityhub:UpdateOrganizationConfiguration`.
  *
  * Updates how Security Hub is configured across the organization (auto-enable, central configuration).
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.SecurityHub.UpdateOrganizationConfigurationHttp)`.
  * ### Members & Organization
  * **Example:** Auto-Enable New Accounts
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const updateOrganizationConfiguration = yield* AWS.SecurityHub.UpdateOrganizationConfiguration();
  *
  * // runtime

@@ -6,7 +6,7 @@ export interface ValidateStateMachineDefinitionRequest
   extends sfn.ValidateStateMachineDefinitionInput {}
 
 /**
- * Runtime binding for `states:ValidateStateMachineDefinition` — AWS's
+ * Runtime binding for `states:ValidateStateMachineDefinition` -- AWS's
  * static ASL validator (the Tier-4 check op for the Step Functions DSL).
  *
  * Service-scoped (no resource argument): validates any definition string

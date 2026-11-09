@@ -37,13 +37,13 @@ export type EnvironmentVersionConfig = {
 export type AgentsEnvironmentProps = {
   /**
    * Parent agent resource name
-   * `projects/{project}/locations/{location}/agents/{agent}`. Immutable —
+   * `projects/{project}/locations/{location}/agents/{agent}`. Immutable --
    * changing it replaces the environment.
    */
   agent: string;
   /**
    * Environment id (the `{environment}` segment). Server-assigned on
-   * create. Immutable — changing it replaces the environment.
+   * create. Immutable -- changing it replaces the environment.
    */
   environmentId?: string;
   /**

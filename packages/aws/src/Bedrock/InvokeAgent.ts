@@ -5,7 +5,7 @@ import type { AgentAlias } from "./AgentAlias.ts";
 
 /**
  * The `InvokeAgent` request with the binding-injected `agentId` and
- * `agentAliasId` removed — they are supplied automatically from the bound
+ * `agentAliasId` removed -- they are supplied automatically from the bound
  * {@link AgentAlias}.
  */
 export interface InvokeAgentRequest extends Omit<
@@ -14,7 +14,7 @@ export interface InvokeAgentRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `bedrock-agent-runtime:InvokeAgent` — send user input
+ * Runtime binding for `bedrock-agent-runtime:InvokeAgent` -- send user input
  * to a Bedrock agent through one of its aliases and receive the agent's
  * response as an event stream.
  *

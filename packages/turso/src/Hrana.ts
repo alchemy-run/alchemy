@@ -7,7 +7,7 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Redacted from "effect/Redacted";
 
 /**
- * A minimal Hrana-over-HTTP client (`POST /v2/pipeline`) — the SQL wire
+ * A minimal Hrana-over-HTTP client (`POST /v2/pipeline`) -- the SQL wire
  * protocol every Turso database speaks. Deploy-time work (migrations, SQL
  * imports) uses it instead of `@libsql/client`, so the provider needs no
  * driver and runs anywhere `HttpClient` does.

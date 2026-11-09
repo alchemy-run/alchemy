@@ -30,7 +30,7 @@ export type CertificateProps = {
   /**
    * The CA certificate content (PEM). Client certificates presented to
    * Access-protected applications must chain to this CA. The certificate
-   * body is immutable — changing it replaces the resource.
+   * body is immutable -- changing it replaces the resource.
    */
   certificate: string;
   /**
@@ -73,7 +73,7 @@ export type Certificate = Resource<
  * that Access uses to validate client certificates presented to protected
  * applications on the associated hostnames.
  *
- * The certificate body is immutable — changing the PEM replaces the
+ * The certificate body is immutable -- changing the PEM replaces the
  * resource. The name and associated hostnames converge in place.
  * ### Creating a Certificate
  * **Example:** Upload a CA certificate
@@ -115,7 +115,7 @@ export const CertificateProvider = () =>
     stables: ["certificateId", "accountId", "fingerprint"],
     // Account-scoped collection (pattern b). Cloudflare never returns the
     // certificate PEM body, so the persisted `certificate` field is empty for
-    // enumerated items — every other attribute matches the `read` shape.
+    // enumerated items -- every other attribute matches the `read` shape.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       return yield* zeroTrust.listAccessCertificatesForAccount.pages({ accountId }).pipe(
@@ -155,7 +155,7 @@ export const CertificateProvider = () =>
           return toAttrs(direct, acct, output.certificate);
         }
       }
-      // Cold lookup — the certificate body never comes back from the API,
+      // Cold lookup -- the certificate body never comes back from the API,
       // so recovery is only possible when we still know the uploaded PEM.
       const pem = olds?.certificate ?? output?.certificate;
       if (pem === undefined) return undefined;
@@ -170,7 +170,7 @@ export const CertificateProvider = () =>
       const name = yield* createCertificateName(id, news.name);
       const desiredHostnames = news.associatedHostnames ?? [];
 
-      // Observe — prefer the cached id, fall back to a name lookup so we
+      // Observe -- prefer the cached id, fall back to a name lookup so we
       // recover from out-of-band deletes and state-persistence failures.
       let observed: ObservedCertificate | undefined;
       if (output?.certificateId) {
@@ -185,7 +185,7 @@ export const CertificateProvider = () =>
         observed = yield* findCertificateByName(acct, name);
       }
 
-      // Ensure — upload the certificate when missing. Tolerate a same-named
+      // Ensure -- upload the certificate when missing. Tolerate a same-named
       // create race by re-observing.
       if (!observed || !observed.id) {
         const created = yield* zeroTrust
@@ -212,7 +212,7 @@ export const CertificateProvider = () =>
         return toAttrs(created, acct, news.certificate);
       }
 
-      // Sync — converge name and associated hostnames via PUT only when the
+      // Sync -- converge name and associated hostnames via PUT only when the
       // observed state differs from the desired state.
       const observedHostnames = [...(observed.associatedHostnames ?? [])];
       if (observed.name !== name || !sameMembers(observedHostnames, desiredHostnames)) {
@@ -235,7 +235,7 @@ export const CertificateProvider = () =>
     }),
     delete: Effect.fn(function* ({ output }) {
       // The API refuses to delete a certificate that still has associated
-      // hostnames — disassociate first, tolerating an already-gone cert.
+      // hostnames -- disassociate first, tolerating an already-gone cert.
       yield* zeroTrust
         .updateAccessCertificateForAccount({
           accountId: output.accountId,

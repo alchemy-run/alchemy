@@ -28,7 +28,7 @@ export interface LanguageModelClient {
   readonly raw: Effect.Effect<Ai, never, RuntimeContext>;
   /**
    * Effect resolving to the AI Gateway id to route `ai.run` calls through.
-   * Omit for a plain Workers AI binding — requests then go directly to
+   * Omit for a plain Workers AI binding -- requests then go directly to
    * Workers AI without a gateway.
    */
   readonly id?: Effect.Effect<string, never, RuntimeContext>;
@@ -39,7 +39,7 @@ export interface LanguageModelClient {
  */
 export interface LanguageModelOptions {
   /**
-   * Already-bound AI client — from `Cloudflare.AI.QueryGateway(gateway)`
+   * Already-bound AI client -- from `Cloudflare.AI.QueryGateway(gateway)`
    * (routed through the gateway) or `Cloudflare.Workers.AI()` (direct).
    */
   readonly client: LanguageModelClient;
@@ -124,7 +124,7 @@ export const makeLanguageModel = ({
 //   - Native:  { response: "...", tool_calls: [...] , usage }
 //   - OpenAI:  { choices: [{ message: { content, tool_calls, reasoning_content } }], usage }
 //
-// We accept both defensively — schemas would over-constrain.
+// We accept both defensively -- schemas would over-constrain.
 // ---------------------------------------------------------------------------
 
 interface WorkersAiMessage {
@@ -171,7 +171,7 @@ interface WorkersAiInputs {
 }
 
 // ---------------------------------------------------------------------------
-// Prompt → Workers AI messages (pure, no .push mutation)
+// Prompt -> Workers AI messages (pure, no .push mutation)
 // ---------------------------------------------------------------------------
 
 const uint8ArrayToBase64 = (bytes: Uint8Array): string => {
@@ -438,7 +438,7 @@ const mapUsage = (raw: Record<string, unknown> | undefined): Response.Usage => {
   const completionTokens = (usage.completion_tokens as number | undefined) ?? 0;
   const cached = (usage.prompt_tokens_details as { cached_tokens?: number } | undefined)
     ?.cached_tokens;
-  // Construct an actual `Response.Usage` instance — `Schema.Class<Usage>`
+  // Construct an actual `Response.Usage` instance -- `Schema.Class<Usage>`
   // encodes by going through the class constructor / `isInstance` check, so a
   // plain struct that "matches" the encoded shape isn't enough.
   return Response.Usage.make({
@@ -460,7 +460,7 @@ const mapUsage = (raw: Record<string, unknown> | undefined): Response.Usage => {
 // Inline reasoning
 //
 // Some models (e.g. `@cf/deepseek-ai/deepseek-r1-distill-qwen-32b`) write
-// their chain of thought into the text itself, as `<think>…</think>`
+// their chain of thought into the text itself, as `<think>...</think>`
 // followed by the answer. Others (e.g. `@cf/qwen/qwq-32b`) have a chat
 // template that pre-opens `<think>`, so only the closing tag is generated.
 // `splitThink` incrementally routes text before `</think>` to reasoning and
@@ -564,7 +564,7 @@ const splitThinkText = (
 };
 
 // ---------------------------------------------------------------------------
-// generateText: JSON → Response.PartEncoded[]
+// generateText: JSON -> Response.PartEncoded[]
 //
 // Normalize the dual-shape (native + OpenAI) response into a single
 // `DecodedResponse` once, then build the part list with pure spreads.
@@ -694,11 +694,11 @@ const parseGenerateText = Effect.fn(function* (
 });
 
 // ---------------------------------------------------------------------------
-// streamText: SSE byte stream → Stream<Response.StreamPartEncoded>
+// streamText: SSE byte stream -> Stream<Response.StreamPartEncoded>
 //
 // Immutable `StreamState` is threaded through `Stream.mapAccumEffect`. The
 // per-chunk output buffer (`parts: Array<StreamPartEncoded>`) is mutable for
-// performance — it's scoped to one chunk, never escapes the handler, and lets
+// performance -- it's scoped to one chunk, never escapes the handler, and lets
 // us avoid the O(n²) array-spread that pure threading would force in the hot
 // path. This matches the pattern Effect's own `@effect/ai-*` adapters use.
 // ---------------------------------------------------------------------------
@@ -718,7 +718,7 @@ interface StreamState {
   readonly receivedDone: boolean;
   // Workers AI's *native* streaming for function-calling models (e.g.
   // `@cf/meta/llama-3.3-70b`) does not emit structured `tool_calls` deltas
-  // — it streams the call as a JSON document inside the `response` text
+  // -- it streams the call as a JSON document inside the `response` text
   // field (`{"name":"get_weather","parameters":{...}}`). When tools were
   // requested we buffer that text here instead of emitting it as
   // text-delta, then parse it into tool-params parts on finalize.
@@ -940,7 +940,7 @@ const handleNativeText = (
     const [s, answer] = yield* splitInlineReasoning(state, text, parts, idGen);
     if (answer.length === 0) return s;
     // When tools were requested, the native `response` stream is the
-    // tool-call JSON, not prose — buffer it and decide on finalize. We
+    // tool-call JSON, not prose -- buffer it and decide on finalize. We
     // pre-allocate the tool id here (we're in an Effect, finalize is sync).
     if (hasTools) {
       const id = s.nativeToolId ?? (yield* idGen.generateId());
@@ -1080,7 +1080,7 @@ const decodeNativeToolBuffer = (
 const flushNativeToolBuffer = (state: StreamState, parts: StreamParts): StreamState => {
   if (state.nativeToolBuffer.length === 0) return state;
   const calls = decodeNativeToolBuffer(state.nativeToolBuffer);
-  // Not a tool-call document — the model returned prose despite tools being
+  // Not a tool-call document -- the model returned prose despite tools being
   // available; surface it as text so nothing is dropped.
   if (calls === undefined) {
     const id = state.nativeToolId ?? "text-0";
@@ -1139,12 +1139,12 @@ const finalizeStream = (state: StreamState): ReadonlyArray<Response.StreamPartEn
   s = flushNativeToolBuffer(s, parts);
 
   // Three cases for the final reason:
-  //  1. The model emitted an explicit `finish_reason`           → map it.
-  //  2. The stream ended cleanly (`[DONE]` seen) but no reason  → "stop".
+  //  1. The model emitted an explicit `finish_reason`           -> map it.
+  //  2. The stream ended cleanly (`[DONE]` seen) but no reason  -> "stop".
   //     Workers AI's native shape never includes `finish_reason`,
   //     so without this rule every native-mode stream would report
   //     `unknown` despite completing successfully.
-  //  3. The stream ended abnormally (no `[DONE]`, no reason)    → "error".
+  //  3. The stream ended abnormally (no `[DONE]`, no reason)    -> "error".
   const reason: Response.FinishReason =
     s.finishReason !== undefined
       ? mapFinishReason(s.finishReason)

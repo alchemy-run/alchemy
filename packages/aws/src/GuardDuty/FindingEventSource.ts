@@ -7,7 +7,7 @@ import {
 } from "../EventBridge/EventSource.ts";
 
 /**
- * The `detail` payload GuardDuty delivers to EventBridge for a finding —
+ * The `detail` payload GuardDuty delivers to EventBridge for a finding --
  * the full finding document. Only the commonly-matched fields are typed;
  * the schema grows over time.
  */
@@ -16,7 +16,7 @@ export interface FindingEventDetail {
   id?: string;
   /** The finding type, e.g. `Recon:EC2/PortProbeUnprotectedPort`. */
   type?: string;
-  /** The finding severity (0.1–8+; 7+ is high). */
+  /** The finding severity (0.1-8+; 7+ is high). */
   severity?: number;
   /** The account the finding was generated in. */
   accountId?: string;
@@ -30,7 +30,7 @@ export interface FindingEventDetail {
   description?: string;
   /** The affected resource document. */
   resource?: Record<string, unknown>;
-  /** The detection service document (counts, first/last seen, …). */
+  /** The detection service document (counts, first/last seen, ...). */
   service?: Record<string, unknown>;
   /** Additional finding fields (the schema grows over time). */
   [key: string]: unknown;
@@ -66,7 +66,7 @@ export interface FindingEventSourceProps extends EventRouteProps {
  * `aws.guardduty`, detail-type `GuardDuty Finding`); this subscribes the
  * host Function to those events so it can triage, notify, or auto-remediate.
  *
- * GuardDuty publishes to EventBridge automatically — no additional
+ * GuardDuty publishes to EventBridge automatically -- no additional
  * resource is created besides the EventBridge rule targeting the host.
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.

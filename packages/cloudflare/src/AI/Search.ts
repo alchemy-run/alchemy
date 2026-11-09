@@ -12,15 +12,15 @@ import { SearchToken } from "./SearchToken.ts";
 type WebCrawlerParams = NonNullable<SourceParams["webCrawler"]>;
 
 /**
- * How a web crawler discovers and parses pages — Cloudflare's `parseType`
+ * How a web crawler discovers and parses pages -- Cloudflare's `parseType`
  * folded together with its parse options. Defaults to `type: "sitemap"`.
  */
 export type Parse = {
   /**
    * How pages are discovered:
-   * - `"sitemap"` (default) — read `<seed>/sitemap.xml` (found via
+   * - `"sitemap"` (default) -- read `<seed>/sitemap.xml` (found via
    *   `robots.txt`) and index the URLs it lists.
-   * - `"discover"` — start at `source` and follow links.
+   * - `"discover"` -- start at `source` and follow links.
    * @default "sitemap"
    */
   type?: NonNullable<WebCrawlerParams["parseType"]>;
@@ -48,10 +48,10 @@ export type SharedProps = Omit<
 > & {
   /**
    * Namespace to group this pipeline under. Pass an {@link SearchNamespace}
-   * resource — the engine orders this pipeline after the namespace on deploy
+   * resource -- the engine orders this pipeline after the namespace on deploy
    * and tears it down before the namespace on destroy. Omit to place the
    * pipeline in the account-provided `default` namespace. The namespace is
-   * immutable — changing it triggers a replacement.
+   * immutable -- changing it triggers a replacement.
    * @default the account-provided `default` namespace
    */
   namespace?: SearchNamespace;
@@ -103,7 +103,7 @@ export type WebCrawlerProps = SharedProps & {
 };
 
 /**
- * Props for the {@link Search} construct — a union discriminated by what you
+ * Props for the {@link Search} construct -- a union discriminated by what you
  * pass as `source`: an {@link Bucket} for an R2 source, or a URL string for
  * a web crawl.
  */
@@ -112,7 +112,7 @@ export type Props = R2Props | WebCrawlerProps;
 /**
  * The result of the {@link Search} construct. It *is* the underlying
  * {@link SearchInstance}, augmented with the managed `serviceToken`, so it
- * can be passed anywhere a `SearchInstance` is expected —
+ * can be passed anywhere a `SearchInstance` is expected --
  * `Cloudflare.AI.QuerySearch(search)`, a Worker's `env`, etc.
  */
 export type Search = SearchInstance & {
@@ -128,15 +128,15 @@ export type Search = SearchInstance & {
  * A convenience construct over {@link SearchInstance} that auto-creates the
  * sub-resources an AI Search instance typically needs, so a single call wires
  * up a working pipeline. The data source is chosen by what you pass as
- * `source` — an {@link Bucket} for R2, or a URL for a web crawl:
+ * `source` -- an {@link Bucket} for R2, or a URL for a web crawl:
  *
  * - For an R2 source, it mints a least-privilege {@link AccountApiToken}
  *   (`AI Search Index Engine`, stable child `ApiToken`) and an
  *   {@link SearchToken} wrapping it (stable child `Token`), then passes
  *   that token to the instance.
  *   Cloudflare requires a service token to read an R2 bucket and only
- *   provisions one through the dashboard / Wrangler — never on a
- *   programmatic API create — so the construct provisions it for you. Pass
+ *   provisions one through the dashboard / Wrangler -- never on a
+ *   programmatic API create -- so the construct provisions it for you. Pass
  *   your own `tokenId` to skip minting and reuse an existing token.
  * - It creates the {@link SearchInstance} (child `SearchInstance`) with the
  *   remaining props.
@@ -146,12 +146,12 @@ export type Search = SearchInstance & {
  *
  * The returned value *is* an {@link SearchInstance} (augmented with the
  * managed `serviceToken`, `undefined` for a web crawler), so a `Search`
- * is usable anywhere a `SearchInstance` is expected — pass it straight to
+ * is usable anywhere a `SearchInstance` is expected -- pass it straight to
  * `Cloudflare.AI.QuerySearch(search)` or a Worker's `env`.
  *
  * ### Creating an AI Search pipeline
  * **Example:** R2-backed instance (token provisioned for you)
- * Pass an {@link Bucket} as `source` — its presence selects R2.
+ * Pass an {@link Bucket} as `source` -- its presence selects R2.
  * ```typescript
  * const bucket = yield* Cloudflare.R2.Bucket("docs");
  * const search = yield* Cloudflare.AI.Search("docs-search", {
@@ -243,8 +243,8 @@ export type Search = SearchInstance & {
  * For a vanilla `async fetch` Worker, pass the `search` under `Worker.env`.
  * The engine attaches the same single-instance `ai_search` binding (see
  * `toBinding` in `WorkerAsyncBindings.ts`), orders the deploy
- * bucket → instance → worker, and `InferEnv` types `env.SEARCH` as the
- * runtime `SearchInstance` handle — no hand-written types.
+ * bucket -> instance -> worker, and `InferEnv` types `env.SEARCH` as the
+ * runtime `SearchInstance` handle -- no hand-written types.
  *
  * **Example:** Async Worker that answers from AI Search
  * ```typescript
@@ -305,7 +305,7 @@ export const Search = (id: string, props: Props) =>
       }) as Input<SourceParams> | undefined;
 
       // Cloudflare requires a service token to read an R2 source and only
-      // auto-creates one via the dashboard/Wrangler — not on a programmatic
+      // auto-creates one via the dashboard/Wrangler -- not on a programmatic
       // API create. Mint one ourselves unless the caller passed a `tokenId`.
       if (tokenId === undefined) {
         const { accountId } = yield* yield* CloudflareEnvironment;
@@ -357,7 +357,7 @@ export const Search = (id: string, props: Props) =>
     });
 
     // Return the instance itself (augmented with the managed `serviceToken`)
-    // so a `Search` is usable anywhere a `SearchInstance` is expected —
+    // so a `Search` is usable anywhere a `SearchInstance` is expected --
     // `Cloudflare.AI.QuerySearch(search)`, `env: { SEARCH: search }`, etc.
     return Object.assign(instance, { serviceToken }) as Search;
   }).pipe(CoreNamespace.push(id));

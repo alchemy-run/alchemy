@@ -2,7 +2,7 @@ import type * as FileSystem from "effect/FileSystem";
 import type * as Layer from "effect/Layer";
 import type * as Path from "effect/Path";
 /**
- * `@alchemy.run/frontend-frameworks/sveltekit` — SvelteKit integration implementing
+ * `@alchemy.run/frontend-frameworks/sveltekit` -- SvelteKit integration implementing
  * framework-core's `Framework` service, with the deploy target passed as a
  * value (Cloudflare Workers by default, via the
  * `@alchemy.run/frontend-frameworks/sveltekit/cloudflare` subpath module).
@@ -14,9 +14,9 @@ import type * as Path from "effect/Path";
  * SvelteKit-specific options.
  *
  * This module (and `SvelteKit.ts`) is target-agnostic by contract: it must
- * not import anything Cloudflare-specific. The Cloudflare half — the
+ * not import anything Cloudflare-specific. The Cloudflare half -- the
  * in-memory kit adapter fork, the workerd rolldown finishing pass, the
- * proxy-backed dev platform — lives behind
+ * proxy-backed dev platform -- lives behind
  * `@alchemy.run/frontend-frameworks/sveltekit/cloudflare`.
  */
 import type { Framework } from "../core/index.ts";
@@ -97,7 +97,7 @@ export interface HarnessOptions {
  * top-level `vite` alias. The worker's declared binding hooks are passed
  * through to the deploy target's dev platform wholesale (the Cloudflare
  * target serves them on `platform.env` via cloudflare-runtime's platform
- * proxy — resource bindings included, not just literal values).
+ * proxy -- resource bindings included, not just literal values).
  */
 export const fromHarnessOptions = (options: HarnessOptions): SvelteKitOptions => {
   const worker = options.target?.cloudflare?.worker ?? options.vite;

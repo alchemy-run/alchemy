@@ -17,7 +17,7 @@ export interface CreateAccessPointRequest extends Omit<
  * `elasticfilesystem:CreateAccessPoint` on the file system ARN and
  * `elasticfilesystem:TagResource` for tag-on-create).
  *
- * Creates an access point into the bound {@link FileSystem} at runtime —
+ * Creates an access point into the bound {@link FileSystem} at runtime --
  * the multi-tenant pattern where each tenant gets its own POSIX identity
  * and root directory carved out of one file system. `ClientToken` makes the
  * create idempotent; a repeated identical create surfaces the typed

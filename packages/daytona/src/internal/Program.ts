@@ -13,7 +13,7 @@ import type * as rolldown from "rolldown";
 import { inSandbox } from "./Toolbox.ts";
 
 /**
- * INTERNAL — the program a `Daytona.Sandbox` with `main` runs: bundled with
+ * INTERNAL -- the program a `Daytona.Sandbox` with `main` runs: bundled with
  * rolldown, uploaded into the sandbox, and run with Node in a session.
  */
 

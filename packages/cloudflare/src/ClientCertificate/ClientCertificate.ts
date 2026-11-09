@@ -31,7 +31,7 @@ export interface Props {
    * Zone the client certificate is issued under. Client certificates are a
    * zone-level API Shield feature.
    *
-   * Immutable — moving a certificate between zones triggers a replacement.
+   * Immutable -- moving a certificate between zones triggers a replacement.
    */
   zoneId: string;
   /**
@@ -39,7 +39,7 @@ export interface Props {
    * newline-encoded. Cloudflare's Managed CA signs this CSR and returns the
    * client certificate.
    *
-   * Immutable — the API has no way to re-sign a certificate, so changing the
+   * Immutable -- the API has no way to re-sign a certificate, so changing the
    * CSR triggers a replacement. Plain `string` (not `string`) so it is
    * statically comparable inside `diff`.
    */
@@ -48,7 +48,7 @@ export interface Props {
    * The number of days the client certificate will be valid after the
    * `issuedOn` date.
    *
-   * Immutable — changing the validity triggers a replacement.
+   * Immutable -- changing the validity triggers a replacement.
    */
   validityDays: number;
 }
@@ -108,7 +108,7 @@ export type ClientCertificate = Resource<TypeId, Props, Attributes, never, Provi
  *
  * Client certificates are immutable: there is no API to change the CSR or
  * validity, so any prop change triggers a replacement. Deleting the resource
- * revokes the certificate — revoked certificates remain listed on the zone in
+ * revokes the certificate -- revoked certificates remain listed on the zone in
  * `revoked` status but are treated as deleted by this resource.
  *
  * Safety: client certificates carry no ownership markers. When there is no
@@ -141,7 +141,7 @@ export type ClientCertificate = Resource<TypeId, Props, Attributes, never, Provi
  * ### Rotation
  * **Example:** Rotate by changing the CSR
  * ```typescript
- * // csr and validityDays are immutable — changing either replaces the
+ * // csr and validityDays are immutable -- changing either replaces the
  * // certificate: a new one is signed and the old one is revoked.
  * const cert = yield* Cloudflare.ClientCertificate.ClientCertificate("ApiClient", {
  *   zoneId: zone.zoneId,
@@ -169,7 +169,7 @@ export const isClientCertificate = (value: unknown): value is ClientCertificate 
 export const ClientCertificateProvider = () =>
   Provider.succeed(ClientCertificate, {
     // Everything Cloudflare returns at issuance is fixed for the lifetime of
-    // the certificate — only `status` changes (revocation/reactivation).
+    // the certificate -- only `status` changes (revocation/reactivation).
     stables: [
       "clientCertificateId",
       "zoneId",
@@ -197,7 +197,7 @@ export const ClientCertificateProvider = () =>
     // certificates, and hydrate each into the same Attributes shape `read`
     // produces. Revoked certificates stay listed forever but revocation is the
     // delete semantic, so they are filtered out. Zones where API Shield is not
-    // entitled reject with the typed `Forbidden` error — skip them.
+    // entitled reject with the typed `Forbidden` error -- skip them.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const zones = yield* listAllZones(accountId);
@@ -223,9 +223,9 @@ export const ClientCertificateProvider = () =>
     diff: Effect.fn(function* ({ olds = {}, news }) {
       const o = olds as Props;
       const n = news as Props;
-      // No prior props to compare against — let the engine decide.
+      // No prior props to compare against -- let the engine decide.
       if (o.csr === undefined) return undefined;
-      // The API has no update for csr/validityDays — every change replaces.
+      // The API has no update for csr/validityDays -- every change replaces.
       if (normalizePem(o.csr) !== normalizePem(n.csr)) {
         return { action: "replace" } as const;
       }
@@ -245,7 +245,7 @@ export const ClientCertificateProvider = () =>
 
       // Owned path: refresh by our persisted certificate id. A revoked (or
       // asynchronously revoking) certificate stays listed on the zone forever
-      // — revocation is the delete semantic, so report it as gone.
+      // -- revocation is the delete semantic, so report it as gone.
       if (output?.clientCertificateId) {
         const observed = yield* getCertificate(zoneId, output.clientCertificateId);
         if (observed && !isGone(observed.status)) {
@@ -257,7 +257,7 @@ export const ClientCertificateProvider = () =>
       // Adoption path: a non-revoked certificate issued from the same CSR
       // (with the same validity) may already exist on the zone. Client
       // certificates carry no ownership markers, so we cannot prove we
-      // created it — brand it `Unowned` so the engine refuses takeover
+      // created it -- brand it `Unowned` so the engine refuses takeover
       // unless `adopt` is set.
       if (olds?.csr !== undefined && olds.validityDays !== undefined) {
         const observed = yield* findByCsr(zoneId, olds.csr, olds.validityDays);
@@ -270,7 +270,7 @@ export const ClientCertificateProvider = () =>
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
 
-      // 1. Observe — the certificate id cached on `output` is a hint, not a
+      // 1. Observe -- the certificate id cached on `output` is a hint, not a
       //    guarantee. A missing or revoked certificate (revocation is the
       //    delete semantic; the certificate cannot serve mTLS) falls
       //    through to the CSR scan and then to create.
@@ -284,14 +284,14 @@ export const ClientCertificateProvider = () =>
       //    BOTH props matters: a replacement keeps one of them while
       //    changing the other, so the old certificate never matches the new
       //    desired state and cannot be mistaken for it. Ownership has
-      //    already been verified upstream — `read` reports existing
+      //    already been verified upstream -- `read` reports existing
       //    certificates as `Unowned` and the engine gates takeover behind
       //    the adopt policy before reconcile ever runs.
       if (!observed) {
         observed = yield* findByCsr(zoneId, news.csr, news.validityDays);
       }
 
-      // 3. Ensure — sign the CSR when missing. Cloudflare happily signs the
+      // 3. Ensure -- sign the CSR when missing. Cloudflare happily signs the
       //    same CSR multiple times (each issuance is a distinct
       //    certificate), so there is no AlreadyExists race to tolerate.
       if (!observed) {
@@ -309,7 +309,7 @@ export const ClientCertificateProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       // DELETE revokes the certificate. Revoked certificates remain listed
-      // on the zone — observe first and treat already-revoked (or already
+      // on the zone -- observe first and treat already-revoked (or already
       // revoking) as done so delete is idempotent.
       const observed = yield* getCertificate(output.zoneId, output.clientCertificateId);
       if (!observed || isGone(observed.status)) {
@@ -352,7 +352,7 @@ const getCertificate = (zoneId: string, clientCertificateId: string) =>
  * Find a non-revoked certificate issued from the given CSR with the given
  * validity. Cloudflare echoes the CSR back on every certificate, so an exact
  * (whitespace-normalized) CSR + validity match is the only identity available
- * for cold reads — certificates have no names or tags. Both props are matched
+ * for cold reads -- certificates have no names or tags. Both props are matched
  * so a replacement (which changes at least one of them) can never mistake the
  * outgoing certificate for the desired one.
  */
@@ -373,7 +373,7 @@ const findByCsr = (zoneId: string, csr: string, validityDays: number) =>
 /**
  * A certificate is "gone" once it is `revoked` or asynchronously transitioning
  * to it (`pending_revocation`). Revocation is the delete semantic, and a
- * revoking certificate can no longer serve mTLS — so it must never be adopted,
+ * revoking certificate can no longer serve mTLS -- so it must never be adopted,
  * reused, listed, or treated as live. Without this, a prior run's async revoke
  * leaves a `pending_revocation` certificate that a fresh deploy would otherwise
  * mistake for an existing live certificate matching the CSR.

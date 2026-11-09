@@ -20,7 +20,7 @@ export interface ResourcePolicyProps {
   /**
    * The IAM resource-based policy document (JSON, maximum 5 KB) granting
    * one or more Amazon Web Services services and accounts permission to
-   * access X-Ray — e.g. allowing SNS active tracing to call
+   * access X-Ray -- e.g. allowing SNS active tracing to call
    * `xray:PutTraceSegments`. Updated in place.
    */
   policyDocument: string;
@@ -50,7 +50,7 @@ export interface ResourcePolicy extends Resource<
 > {}
 
 /**
- * An X-Ray resource policy — an account-level, resource-based IAM policy
+ * An X-Ray resource policy -- an account-level, resource-based IAM policy
  * that grants other Amazon Web Services services and accounts access to
  * X-Ray, e.g. allowing SNS active tracing to send trace segments.
  *
@@ -111,7 +111,7 @@ export const ResourcePolicyProvider = () =>
         return props.policyName ?? (yield* createPhysicalName({ id, maxLength: 128 }));
       });
 
-      // X-Ray has no GetResourcePolicy — observe by enumerating the (at
+      // X-Ray has no GetResourcePolicy -- observe by enumerating the (at
       // most 5) policies in the account and matching on the policy name.
       const observePolicy = (policyName: string) =>
         xray.listResourcePolicies.items({}).pipe(
@@ -140,7 +140,7 @@ export const ResourcePolicyProvider = () =>
           const policyName = output?.policyName ?? (yield* createPolicyName(id, olds ?? {}));
           const found = yield* observePolicy(policyName);
           if (found === undefined) return undefined;
-          // Resource policies are not taggable — ownership is keyed by the
+          // Resource policies are not taggable -- ownership is keyed by the
           // deterministic policy name.
           return { policyName, policyRevisionId: found.PolicyRevisionId };
         }),
@@ -156,10 +156,10 @@ export const ResourcePolicyProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const policyName = output?.policyName ?? (yield* createPolicyName(id, news));
 
-          // 1. OBSERVE — the live policy list is authoritative.
+          // 1. OBSERVE -- the live policy list is authoritative.
           const existing = yield* observePolicy(policyName);
 
-          // 2/3. ENSURE + SYNC — `putResourcePolicy` is a true upsert; call
+          // 2/3. ENSURE + SYNC -- `putResourcePolicy` is a true upsert; call
           // it only when the canonical document drifts. The observed
           // revision id guards against concurrent writers; a revision race
           // surfaces as the typed InvalidPolicyRevisionIdException, which we
@@ -191,7 +191,7 @@ export const ResourcePolicyProvider = () =>
         }),
         delete: Effect.fn(function* ({ output }) {
           // DeleteResourcePolicy without a revision id skips the revision
-          // check and is idempotent — deleting a missing policy succeeds.
+          // check and is idempotent -- deleting a missing policy succeeds.
           yield* xray.deleteResourcePolicy({
             PolicyName: output.policyName,
           });

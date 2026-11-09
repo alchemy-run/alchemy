@@ -11,7 +11,7 @@ export interface StartReadSetImportJobRequest extends Omit<
 /**
  * Runtime binding for `omics:StartReadSetImportJob`.
  *
- * Bind this operation to a `SequenceStore` to get a callable that starts an import job that ingests read sets into the store — the
+ * Bind this operation to a `SequenceStore` to get a callable that starts an import job that ingests read sets into the store -- the
  * store/workflow id is injected automatically and the action is granted on the
  * bound resource. Provide the implementation with
  * `Effect.provide(AWS.Omics.StartReadSetImportJobHttp)`.

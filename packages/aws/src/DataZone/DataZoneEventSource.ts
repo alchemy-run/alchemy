@@ -23,7 +23,7 @@ export interface DataZoneEventDetail {
     [key: string]: unknown;
   };
   /**
-   * The type-specific event body — e.g. for `Subscription Request Created`:
+   * The type-specific event body -- e.g. for `Subscription Request Created`:
    * the domain, requester, and subscribed listing identifiers.
    */
   data?: {
@@ -56,14 +56,14 @@ export interface DataZoneEventSourceProps extends EventRouteProps {
 
 /**
  * Event source connecting Amazon DataZone notifications to the hosting
- * compute. DataZone publishes its workflow events — subscription requests
+ * compute. DataZone publishes its workflow events -- subscription requests
  * being created/accepted/rejected, subscriptions being granted, revoked, or
  * cancelled, data source run state changes, asset changes, and domain
- * changes — to the account's default EventBridge bus (source
+ * changes -- to the account's default EventBridge bus (source
  * `aws.datazone`); this subscribes the host Function to those events so it
  * can drive automated approval workflows or downstream syncs.
  *
- * DataZone publishes to EventBridge automatically — no additional resource
+ * DataZone publishes to EventBridge automatically -- no additional resource
  * is created besides the EventBridge rule targeting the host. Provide the
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.

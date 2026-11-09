@@ -5,7 +5,7 @@ import { ref } from "../ref.ts";
 import { makeFrameworkSite, type FrameworkSiteProps } from "./FrameworkSite.ts";
 
 /**
- * The vinext Node framework module (it is its own deploy target — not
+ * The vinext Node framework module (it is its own deploy target -- not
  * the Cloudflare Worker source).
  */
 export const VINEXT_FRAMEWORK_SPECIFIER = "@alchemy.run/frontend-frameworks/vinext/node";
@@ -26,7 +26,7 @@ export interface VinextProps extends FrameworkSiteProps {
  * Deploy a [vinext](https://vinext.dev) application to Railway as a
  * long-running Node process: vinext's Vite build, then vinext's production
  * server (`startProdServer`) on `PORT` (default 3000). **Not** the
- * Cloudflare Worker path — those wrappers are workerd.
+ * Cloudflare Worker path -- those wrappers are workerd.
  *
  * The image `npm install`s `vinext`, `react`, `react-dom`, and
  * `react-server-dom-webpack`, and bakes `dist/` into `/app`.

@@ -70,7 +70,7 @@ interface BaseResourceState {
    *
    * `undefined` means either a mode-agnostic provider (single
    * implementation serves both dev and deploy) or a legacy row written
-   * before modes were persisted — both acted on the real cloud, so an
+   * before modes were persisted -- both acted on the real cloud, so an
    * unstamped row is assumed **live**, unless its attrs carry a local
    * identity marker (`dev:`-prefixed ids) proving it was reconciled
    * locally, in which case it is assumed **local** (see `stampedMode`).

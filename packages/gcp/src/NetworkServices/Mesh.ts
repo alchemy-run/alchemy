@@ -36,13 +36,13 @@ export type MeshProps = {
    * Mesh id (the `{mesh}` segment of
    * `projects/{project}/locations/{location}/meshes/{mesh}`). If omitted,
    * a unique name is generated from the stack, stage, and logical id.
-   * Must be 1-63 characters and not start with a number. Immutable —
+   * Must be 1-63 characters and not start with a number. Immutable --
    * changing it replaces the mesh.
    */
   meshId?: string;
   /**
-   * Location (`global`, `us-central1`, …). Meshes are typically
-   * `global`. Immutable — changing it replaces the mesh. `US-CENTRAL1`
+   * Location (`global`, `us-central1`, ...). Meshes are typically
+   * `global`. Immutable -- changing it replaces the mesh. `US-CENTRAL1`
    * is accepted and normalized to `us-central1`.
    * @default "global"
    */
@@ -77,7 +77,7 @@ export type Mesh = Resource<
     meshId: string;
     /** Project id. */
     project: string;
-    /** Location id (`global`, `us-central1`, …). */
+    /** Location id (`global`, `us-central1`, ...). */
     location: string;
     /** User-provided description. */
     description: string | undefined;
@@ -111,7 +111,7 @@ export interface MeshLookup {
    */
   meshId: string;
   /**
-   * Location (`global`, `us-central1`, …). Meshes are typically `global`.
+   * Location (`global`, `us-central1`, ...). Meshes are typically `global`.
    * `US-CENTRAL1` is accepted and normalized to `us-central1`.
    */
   location?: string;

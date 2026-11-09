@@ -12,7 +12,7 @@ export interface StartDeploymentRequest extends Omit<
 > {}
 
 /**
- * Start an AppConfig deployment from a Lambda (or other AWS runtime) — roll a
+ * Start an AppConfig deployment from a Lambda (or other AWS runtime) -- roll a
  * configuration version out to an environment following a deployment
  * strategy. Pairs with {@link CreateHostedConfigurationVersion} to build
  * runtime feature-flag/configuration management services.

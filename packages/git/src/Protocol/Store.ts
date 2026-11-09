@@ -28,7 +28,7 @@ export class StoreError extends Schema.TaggedError<StoreError>()("StoreError", {
 export type ObjectLocation = "row" | "r2" | "pack";
 
 /**
- * Metadata for one stored object — also the shape of a pack manifest entry
+ * Metadata for one stored object -- also the shape of a pack manifest entry
  * (the fetch closure materializes a list of these, and `PackWriter` streams
  * from it).
  */
@@ -44,7 +44,7 @@ export interface ObjectMeta {
 }
 
 /**
- * One entry of a fetch-pack manifest. Alias of {@link ObjectMeta} — the
+ * One entry of a fetch-pack manifest. Alias of {@link ObjectMeta} -- the
  * closure walk produces exactly the metadata the pack emitter needs.
  */
 export type ManifestEntry = ObjectMeta;
@@ -84,7 +84,7 @@ export interface ObjectSource {
    * Emits `varint(type,size) + zdata` for every entry as a stream of LARGE
    * chunks: objects are read in batches (one statement per ~256) and
    * concatenated, and pack-resident objects are visited in pack order so
-   * the window cache is sequential. Optional — sources without batching
+   * the window cache is sequential. Optional -- sources without batching
    * fall back to one `readZData` per entry (DESIGN §22).
    */
   readonly packEntries?:
@@ -93,7 +93,7 @@ export interface ObjectSource {
 }
 
 /**
- * One advertised ref: full name, tip oid, and — for annotated tags — the
+ * One advertised ref: full name, tip oid, and -- for annotated tags -- the
  * peeled target commit oid (advertised as a `^{}` line).
  */
 export interface RefRecord {
@@ -134,7 +134,7 @@ export interface ClosureRequest {
   readonly clientShallow: ReadonlyArray<Oid>;
   /**
    * The REPO's own shallow boundary (commits whose parents were never
-   * ingested — a depth-limited import). These never expand in any walk and
+   * ingested -- a depth-limited import). These never expand in any walk and
    * always surface as `shallow <oid>` lines when included in a pack, so
    * clones of a shallow repo are themselves shallow (and fsck-clean).
    */

@@ -1,5 +1,5 @@
 /**
- * `@alchemy.run/frontend-frameworks/react-router/node` — the Node container
+ * `@alchemy.run/frontend-frameworks/react-router/node` -- the Node container
  * deploy target for the React Router v7 integration.
  *
  * React Router builds through Vite: `reactRouter()` in the project's
@@ -12,14 +12,14 @@
  * `ReactRouter.ts`). What this target owns is the Node packaging on top of
  * that fetch handler:
  *
- * - **`serverEntryFileName`** — `index.js`, the chunk the server pass emits
+ * - **`serverEntryFileName`** -- `index.js`, the chunk the server pass emits
  *   (React Router's `serverBuildFile`); the finishing pass wraps it.
- * - **`finish`** — emits the Node deployment surface next to the entry: a
+ * - **`finish`** -- emits the Node deployment surface next to the entry: a
  *   `package.json` (`type: "module"` so Node classifies the `.js` server
  *   build as ESM) and a Node HTTP program (`serve-node.mjs`) that serves
  *   `clientDirectory` first, then falls through to that fetch handler on
  *   `PORT` (default 3000), and answers `GET /health`.
- * - **`bundle`** — Node resolve conditions (no `workerd`, no `@aws-sdk/`).
+ * - **`bundle`** -- Node resolve conditions (no `workerd`, no `@aws-sdk/`).
  *
  * No Lambda adapter: the serve entry talks to the fetch handler directly.
  */
@@ -115,7 +115,7 @@ const makeNodeFinishTarget = (config: ReactRouterNodeTargetConfig = {}): ReactRo
  * A React Router build loads and executes the project's `vite.config.*` and
  * `react-router.config.ts` (user plugins may mutate `process.env` or
  * `process.chdir`, and React Router's config loader spins its own vite-node
- * server) — none of which may touch the engine process, where many deploys
+ * server) -- none of which may touch the engine process, where many deploys
  * share one event loop. This target's wholesale `build` therefore runs the
  * framework in a disposable child process whose working directory IS the
  * project root (see `core/BuildChild.ts`). The shared
@@ -163,7 +163,7 @@ export const makeNodeTarget = (
 
 /**
  * The deploy-target module contract (`resolveDeployTarget` accepts the
- * default export — or the named `target` export — as a value or factory).
+ * default export -- or the named `target` export -- as a value or factory).
  */
 export const target = makeNodeTarget;
 

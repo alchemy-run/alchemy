@@ -1,5 +1,5 @@
 /**
- * `@alchemy.run/frontend-frameworks/nuxt/cloudflare` — the Cloudflare Workers deploy target
+ * `@alchemy.run/frontend-frameworks/nuxt/cloudflare` -- the Cloudflare Workers deploy target
  * for `@alchemy.run/frontend-frameworks/nuxt`.
  *
  * Nuxt 4's Cloudflare story is nitro's `cloudflare_module` preset: the
@@ -8,23 +8,23 @@
  * prerendered pages and `_headers` merged in), so this target needs no
  * finishing pass. What it owns:
  *
- * - **`nitroPreset`** — `"cloudflare_module"`, enforced as the last word on
+ * - **`nitroPreset`** -- `"cloudflare_module"`, enforced as the last word on
  *   the resolved nitro config.
- * - **`configureNitro`** — wrangler-free doctrine: `cloudflare.deployConfig:
+ * - **`configureNitro`** -- wrangler-free doctrine: `cloudflare.deployConfig:
  *   false` (nitro must never write a `wrangler.json` into user projects) and
  *   `cloudflare.nodeCompat: true` by default (without a wrangler config on
  *   disk nitro would otherwise skip its hybrid workerd node-compat; the
  *   deployed worker enables the `nodejs_compat` flag to match). Also wires
  *   the user-entry seam: a configured `main` becomes nitro's `entry`.
- * - **`entry`** — surfaces `config.main` as the generic user-entry carriage.
+ * - **`entry`** -- surfaces `config.main` as the generic user-entry carriage.
  *   Nitro's entry module is the exports seam: the emitted worker exports are
  *   exactly the entry module's exports, so a user entry that re-exports
  *   nitro's runtime handler (`nitropack/presets/cloudflare/runtime/cloudflare-module`)
  *   and adds its own classes gets Durable Objects et al. onto the same
  *   worker.
- * - **`bundle`** — workerd resolve conditions and the `cloudflare:`
+ * - **`bundle`** -- workerd resolve conditions and the `cloudflare:`
  *   externals, for callers that post-process server code.
- * - **`devPlatform`** — the wrangler-free dev bridge: opens
+ * - **`devPlatform`** -- the wrangler-free dev bridge: opens
  *   cloudflare-runtime's platform proxy (a local workerd instance hosting
  *   the configured binding hooks) and injects a nitro plugin that serves
  *   `event.context.cf` / `event.context.waitUntil` /
@@ -39,7 +39,7 @@ import type { NuxtTarget, NuxtTargetConfig } from "./Nuxt.ts";
 export const NITRO_PRESET = "cloudflare_module";
 
 /**
- * The importable specifier of nitro's cloudflare-module runtime handler — the
+ * The importable specifier of nitro's cloudflare-module runtime handler -- the
  * module a USER worker entry re-exports to wrap the framework's fetch
  * handler (the "wrappable handler" half of the user-entry seam):
  *
@@ -102,7 +102,7 @@ export const makeCloudflareTarget = (config: NuxtTargetConfig = {}): NuxtTarget 
 
 /**
  * The deploy-target module contract (`resolveDeployTarget` accepts the
- * default export — or the named `target` export — as a value or factory).
+ * default export -- or the named `target` export -- as a value or factory).
  */
 export const target = makeCloudflareTarget;
 

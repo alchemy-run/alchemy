@@ -30,7 +30,7 @@ import { waitForOperation } from "./operations.ts";
 
 export type NasJobProps = {
   /**
-   * Vertex AI location. Immutable — changing it replaces the job.
+   * Vertex AI location. Immutable -- changing it replaces the job.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
@@ -92,7 +92,7 @@ export type NasJob = Resource<
 /**
  * A Vertex AI Neural Architecture Search job.
  *
- * The API assigns the job id. There is no update method — changing display
+ * The API assigns the job id. There is no update method -- changing display
  * name, labels, or `nasJobSpec` replaces the job. Delete cancels a running
  * job first.
  *

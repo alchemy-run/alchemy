@@ -4,8 +4,8 @@
  * (`workers-sdk/packages/miniflare/src/workers/core/constants.ts`).
  *
  * Required query parameters (matching Miniflare's `workers/core/email.ts`):
- * - `from` — the SMTP envelope MAIL FROM address
- * - `to` — the SMTP envelope RCPT TO address
+ * - `from` -- the SMTP envelope MAIL FROM address
+ * - `to` -- the SMTP envelope RCPT TO address
  *
  * The request body carries the raw MIME message.
  */
@@ -24,8 +24,8 @@ export const PATH_EMAIL_HANDLER = "/cdn-cgi/handler/email";
 export const PATH_HANDLER_PREFIX = "/cdn-cgi/handler/";
 
 /**
- * Disk service rooted at `{storage}/email` — the same directory the
- * send-email simulator persists to — that the entry worker writes email
+ * Disk service rooted at `{storage}/email` -- the same directory the
+ * send-email simulator persists to -- that the entry worker writes email
  * replies through (Miniflare stores replies via its loopback
  * `store-temp-file` endpoint instead).
  */

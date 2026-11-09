@@ -28,12 +28,12 @@ export type NodeGroupShareSettings = compute.ShareSettings;
 export type NodeGroupProps = {
   /**
    * Group name (RFC1035, 1-63 characters). If omitted, a unique name is
-   * generated from the stack, stage, and logical id. Immutable — changing
+   * generated from the stack, stage, and logical id. Immutable -- changing
    * it replaces the group.
    */
   nodeGroupName?: string;
   /**
-   * Zone the group lives in. Immutable — changing it replaces the group.
+   * Zone the group lives in. Immutable -- changing it replaces the group.
    * `US-CENTRAL1-A` is accepted and normalized to `us-central1-a`.
    * @default "us-central1-a"
    */
@@ -52,7 +52,7 @@ export type NodeGroupProps = {
   /**
    * Optional description. Node groups have no labels field, so Alchemy
    * ownership (`alchemy-stack` / `alchemy-stage` / `alchemy-id`) is stored
-   * in a `[alchemy …]` prefix for `list` / nuke. Updated in place via
+   * in a `[alchemy ...]` prefix for `list` / nuke. Updated in place via
    * `patch`.
    */
   description?: string;
@@ -62,7 +62,7 @@ export type NodeGroupProps = {
    */
   maintenancePolicy?: NodeGroupMaintenancePolicy;
   /**
-   * Daily maintenance window start time (`00:00`, `04:00`, …).
+   * Daily maintenance window start time (`00:00`, `04:00`, ...).
    */
   maintenanceWindow?: NodeGroupMaintenanceWindow;
   /**
@@ -152,7 +152,7 @@ export interface NodeGroupLookup {
  * Name and zone are immutable. Description, maintenance policy, window,
  * interval, autoscaling, and share settings update in place via
  * `nodeGroups.patch`. The node template is swapped with
- * `setNodeTemplate`. Compute NodeGroup has no labels field — Alchemy
+ * `setNodeTemplate`. Compute NodeGroup has no labels field -- Alchemy
  * stamps ownership into the description so nuke can find leaked groups.
  *
  * ### Creating a Node Group

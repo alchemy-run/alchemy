@@ -14,7 +14,7 @@ export interface UpdateResourcePositionRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `iotwireless:UpdateResourcePosition` — set the bound
+ * Runtime binding for `iotwireless:UpdateResourcePosition` -- set the bound
  * wireless device's static position (WGS84, as a GeoJSON payload) from a
  * deployed Lambda or Task.
  *
@@ -28,7 +28,7 @@ export interface UpdateResourcePositionRequest extends Omit<
  * // init
  * const updatePosition = yield* AWS.IoTWireless.UpdateResourcePosition(device);
  *
- * // runtime — coordinates are [longitude, latitude, altitude]
+ * // runtime -- coordinates are [longitude, latitude, altitude]
  * yield* updatePosition({
  *   GeoJsonPayload: JSON.stringify({
  *     type: "Point",

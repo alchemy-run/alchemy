@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 export interface DescribeAnomalyDetectorsRequest extends cloudwatch.DescribeAnomalyDetectorsInput {}
 
 /**
- * Runtime binding for `cloudwatch:DescribeAnomalyDetectors` — list the
+ * Runtime binding for `cloudwatch:DescribeAnomalyDetectors` -- list the
  * anomaly detection models in the account/region, optionally filtered by
  * namespace, metric name, or dimensions.
  *
@@ -14,7 +14,7 @@ export interface DescribeAnomalyDetectorsRequest extends cloudwatch.DescribeAnom
  * ### Reading Anomaly Detectors
  * **Example:** List Detectors in a Namespace
  * ```typescript
- * // init — grants cloudwatch:DescribeAnomalyDetectors
+ * // init -- grants cloudwatch:DescribeAnomalyDetectors
  * const describeAnomalyDetectors = yield* AWS.CloudWatch.DescribeAnomalyDetectors();
  *
  * // runtime

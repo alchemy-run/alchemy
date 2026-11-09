@@ -8,7 +8,7 @@ import type * as Effect from "effect/Effect";
  *
  * Claims an `UNINITIALIZED` CloudHSM cluster by submitting the cluster
  * certificate (the cluster's CSR signed by your issuing CA) and the CA's
- * root certificate — lets a Function automate the activation ceremony
+ * root certificate -- lets a Function automate the activation ceremony
  * around your CA. The certificates are public key material. Provide the
  * implementation with `Effect.provide(AWS.CloudHSMV2.InitializeClusterHttp)`.
  * ### Activating a Cluster

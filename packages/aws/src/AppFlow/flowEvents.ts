@@ -1,6 +1,6 @@
 /**
  * The EventBridge `detail-type`s Amazon AppFlow publishes for flow activity.
- * Open union — AWS may add new report types.
+ * Open union -- AWS may add new report types.
  */
 export type FlowEventDetailType =
   | "AppFlow Start Flow Run Report"
@@ -12,7 +12,7 @@ export interface FlowEventsOptions {
   /**
    * Only match events for these flow names (the event detail's `flow-name`).
    * Matches all flows when omitted. Use plain flow names (e.g. a constant
-   * `flowName` prop) — the pattern is matched again inside the running
+   * `flowName` prop) -- the pattern is matched again inside the running
    * function, so unresolved `Output` values cannot be used here.
    */
   flowNames?: string[];

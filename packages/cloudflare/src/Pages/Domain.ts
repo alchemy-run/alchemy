@@ -30,13 +30,13 @@ export type DomainStatus =
 export interface DomainProps {
   /**
    * Name of the Pages project the domain is attached to (e.g.
-   * `project.name`). The attachment cannot be moved — changing the project
+   * `project.name`). The attachment cannot be moved -- changing the project
    * triggers a replacement.
    */
   projectName: string;
   /**
    * The custom domain name (e.g. `www.example.com`). The domain is the
-   * attachment's identity — changing it triggers a replacement.
+   * attachment's identity -- changing it triggers a replacement.
    *
    * Declared as plain `string` so it is statically knowable inside `diff`.
    */
@@ -101,7 +101,7 @@ export type Domain = Resource<TypeId, DomainProps, DomainAttributes, never, Prov
  * Attaching a domain starts Cloudflare's validation flow: the domain must
  * resolve to the project (typically via a CNAME record pointing at the
  * project's `*.pages.dev` subdomain) before its status becomes `active`.
- * The resource does not wait for activation — compose it with
+ * The resource does not wait for activation -- compose it with
  * `Cloudflare.DNS.Record` to create the CNAME, and certificate issuance
  * completes asynchronously.
  *
@@ -150,7 +150,7 @@ export const DomainProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      // The domain name is the attachment's identity — no rename API.
+      // The domain name is the attachment's identity -- no rename API.
       const oldName = output?.name ?? o?.name;
       if (oldName !== undefined && oldName !== n.name) {
         return { action: "replace" } as const;
@@ -194,7 +194,7 @@ export const DomainProvider = () =>
               ),
             ),
             // The project can vanish between enumeration and the
-            // per-project list — skip it rather than failing the whole
+            // per-project list -- skip it rather than failing the whole
             // enumeration.
             Effect.catchTag("ProjectNotFound", () => Effect.succeed([])),
           ),
@@ -225,10 +225,10 @@ export const DomainProvider = () =>
       // Inputs have been resolved to concrete strings by Plan.
       const projectName = news.projectName as string;
 
-      // 1. Observe — `(projectName, name)` is the attachment's identity.
+      // 1. Observe -- `(projectName, name)` is the attachment's identity.
       let observed = yield* getDomain(accountId, projectName, news.name);
 
-      // 2. Ensure — existence-only resource: attach when missing,
+      // 2. Ensure -- existence-only resource: attach when missing,
       //    tolerating the AlreadyExists race by re-reading.
       if (!observed) {
         observed = yield* pages
@@ -247,7 +247,7 @@ export const DomainProvider = () =>
             ),
           );
       } else if (observed.status === "pending" || observed.status === "error") {
-        // 3. Sync — nothing is mutable on the attachment itself, but a
+        // 3. Sync -- nothing is mutable on the attachment itself, but a
         //    stalled validation can be re-kicked. Tolerate the domain
         //    vanishing between observe and patch.
         observed = yield* pages
@@ -265,7 +265,7 @@ export const DomainProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       // Idempotent: the domain may already be detached, or the whole
       // project may already be gone (deleting a project detaches its
-      // domains) — both count as success.
+      // domains) -- both count as success.
       yield* pages
         .deleteProjectDomain({
           accountId: output.accountId,
@@ -287,7 +287,7 @@ type ObservedDomain =
   | pages.PatchProjectDomainResponse;
 
 /**
- * Read a domain attachment, mapping "gone" to `undefined` — either the
+ * Read a domain attachment, mapping "gone" to `undefined` -- either the
  * domain is not attached (`PagesDomainNotFound`, code 8000021) or the
  * whole project no longer exists (`ProjectNotFound`, code 8000007).
  */
@@ -311,7 +311,7 @@ const toAttributes = (
   status: domain.status,
   // While a domain is still `initializing`/`pending`, Cloudflare omits the
   // certificate authority, validation/verification blocks and (for an
-  // off-account zone) the zone tag entirely — coalesce to "" so the
+  // off-account zone) the zone tag entirely -- coalesce to "" so the
   // Attributes shape stays stable across the async activation lifecycle.
   certificateAuthority: domain.certificateAuthority ?? "",
   validationStatus: domain.validationData?.status ?? "",

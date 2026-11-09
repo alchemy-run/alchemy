@@ -104,7 +104,7 @@ export type Bucket = Resource<
     addOnId: string;
     /** Physical Tigris add-on / bucket name. */
     name: string;
-    /** Observed provisioning status (`ready`, …). */
+    /** Observed provisioning status (`ready`, ...). */
     status: string | undefined;
     /** Organization slug. */
     orgSlug: string | undefined;
@@ -574,7 +574,7 @@ const withTigrisKeys = <A, E>(
 
 /**
  * Signed HeadBucket. Tigris answers 404 for a name it has no bucket
- * under — even to the deleted bucket's own keys — and 403 for a bucket
+ * under -- even to the deleted bucket's own keys -- and 403 for a bucket
  * the keys don't own.
  */
 const tigrisHasBucket = (keys: TigrisKeys, bucketName: string) =>
@@ -1076,7 +1076,7 @@ const secretsFromBoundEnv = (env: Record<string, string>): Record<string, string
  *
  * Looks up the add-on by id/name (retrying while Tigris is still
  * provisioning) and also copies any already-evaluated `AWS_*` /
- * `BUCKET_NAME` values from binding env — GraphQL `environment` is often
+ * `BUCKET_NAME` values from binding env -- GraphQL `environment` is often
  * empty after create. A missing add-on may use bound values only when the
  * bucket name, credential pair, and S3 endpoint are complete. Partial values
  * are never written. Region is optional, as in the Tigris bindings.

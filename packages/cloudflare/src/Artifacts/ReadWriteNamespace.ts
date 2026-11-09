@@ -275,7 +275,7 @@ export interface ReadWriteNamespaceClient extends ReadNamespaceClient, WriteName
 /**
  * Bind a Cloudflare Artifacts namespace with read-only access
  * (`Cloudflare.Artifacts.ReadNamespace(Repos)`): `get` / `list` / `raw`. Repos
- * returned by `get` expose the {@link ReadRepoClient} surface — metadata,
+ * returned by `get` expose the {@link ReadRepoClient} surface -- metadata,
  * commit history, and file reads.
  *
  * ### Reading history

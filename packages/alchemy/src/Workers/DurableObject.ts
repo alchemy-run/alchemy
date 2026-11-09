@@ -21,7 +21,7 @@ import { WorkerEnvironment } from "./WorkerEnvironment.ts";
 
 /**
  * The lifecycle handlers a Durable Object instance may return. Erased only
- * at the heterogeneous export/dispatch boundary — each engine declares its
+ * at the heterogeneous export/dispatch boundary -- each engine declares its
  * own precisely typed shape.
  */
 export interface DurableObjectShape {
@@ -131,7 +131,7 @@ export const exportDurableObjectClass = <Shape>(
 
 /** A Durable Object class declaration as registered on its hosting worker. */
 export interface DurableObjectBindingDeclaration {
-  /** Binding name — the Durable Object's logical id. */
+  /** Binding name -- the Durable Object's logical id. */
   readonly name: string;
   /** The exported class name backing the binding. */
   readonly className: string;

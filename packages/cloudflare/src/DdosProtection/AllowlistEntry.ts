@@ -17,12 +17,12 @@ export interface DdosAllowlistEntryProps {
   /**
    * The allowlisted prefix in CIDR format (e.g. `192.0.2.0/24`).
    *
-   * Immutable — the API only patches comment/enabled, so changing the
+   * Immutable -- the API only patches comment/enabled, so changing the
    * prefix triggers a replacement.
    */
   prefix: string;
   /**
-   * A comment describing the allowlist prefix. Mutable — patched in place.
+   * A comment describing the allowlist prefix. Mutable -- patched in place.
    * Because allowlist entries carry no ownership markers, the default
    * comment brands the entry with a name derived from the app, stage, and
    * logical ID.
@@ -30,7 +30,7 @@ export interface DdosAllowlistEntryProps {
    */
   comment?: string;
   /**
-   * Whether the allowlist prefix is in effect. Mutable — patched in place.
+   * Whether the allowlist prefix is in effect. Mutable -- patched in place.
    * @default false
    */
   enabled?: boolean;
@@ -65,7 +65,7 @@ export type DdosAllowlistEntry = Resource<
  * An Advanced TCP Protection allowlist entry (Magic Transit).
  *
  * Traffic from an allowlisted prefix bypasses Advanced TCP Protection
- * entirely. An entry's identity is its `prefix` — only `comment` and
+ * entirely. An entry's identity is its `prefix` -- only `comment` and
  * `enabled` are mutable in place; changing the prefix triggers a
  * replacement.
  *
@@ -91,7 +91,7 @@ export type DdosAllowlistEntry = Resource<
  * // `enabled: false` keeps the entry inert until you flip it on.
  * yield* Cloudflare.DdosProtection.DdosAllowlistEntry("PartnerRange", {
  *   prefix: "198.51.100.0/24",
- *   comment: "partner NAT range — enable during migration",
+ *   comment: "partner NAT range -- enable during migration",
  *   enabled: false,
  * });
  * ```
@@ -117,9 +117,9 @@ export const DdosAllowlistEntryProvider = () =>
     diff: Effect.fn(function* ({ olds, news }) {
       if (olds === undefined) return undefined;
       // `news` runs at plan time and may still carry unresolved
-      // expressions — bail out and let the engine apply default logic.
+      // expressions -- bail out and let the engine apply default logic.
       if (!isResolved(news)) return undefined;
-      // The API only patches comment/enabled — the prefix is the entry's
+      // The API only patches comment/enabled -- the prefix is the entry's
       // identity and cannot change.
       if (olds.prefix !== news.prefix) {
         return { action: "replace" } as const;
@@ -139,7 +139,7 @@ export const DdosAllowlistEntryProvider = () =>
 
       // Adoption path: an entry for this prefix may already exist.
       // Allowlist entries carry no ownership markers, so brand the match
-      // `Unowned` — the engine refuses to take over unless `adopt` is set.
+      // `Unowned` -- the engine refuses to take over unless `adopt` is set.
       const prefix = output?.prefix ?? olds?.prefix;
       if (prefix) {
         const observed = yield* findByPrefix(acct, prefix);
@@ -153,7 +153,7 @@ export const DdosAllowlistEntryProvider = () =>
       const comment = news.comment ?? (yield* createPhysicalName({ id, lowercase: true }));
       const enabled = news.enabled ?? false;
 
-      // 1. Observe — the allowlist id cached on `output` is a hint, not a
+      // 1. Observe -- the allowlist id cached on `output` is a hint, not a
       //    guarantee: a missing entry falls through to the prefix scan and
       //    then to create.
       let observed = output?.allowlistId
@@ -166,7 +166,7 @@ export const DdosAllowlistEntryProvider = () =>
         observed = yield* findByPrefix(accountId, news.prefix);
       }
 
-      // 3. Ensure — create when missing.
+      // 3. Ensure -- create when missing.
       if (!observed) {
         observed = yield* ddos.createAdvancedTcpProtectionAllowlist({
           accountId,
@@ -176,7 +176,7 @@ export const DdosAllowlistEntryProvider = () =>
         });
       }
 
-      // 4. Sync — diff observed comment/enabled against desired; skip the
+      // 4. Sync -- diff observed comment/enabled against desired; skip the
       //    patch entirely on a no-op.
       const dirty = observed.comment !== comment || observed.enabled !== enabled;
       if (dirty) {
@@ -210,7 +210,7 @@ export const DdosAllowlistEntryProvider = () =>
           ),
         ),
         // Accounts without the Magic Transit / Advanced TCP Protection
-        // entitlement cannot enumerate allowlist entries — there is
+        // entitlement cannot enumerate allowlist entries -- there is
         // provably nothing to list, so return an empty array.
         Effect.catchTag(
           "AdvancedTcpProtectionNotEntitled",

@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `chatbot:DeleteMicrosoftTeamsConfiguredTeam`.
  *
- * Removes an onboarded Microsoft Teams team from AWS Chatbot — the drastic
+ * Removes an onboarded Microsoft Teams team from AWS Chatbot -- the drastic
  * end of offboarding automation. Existing channel configurations for the
  * team stop working until it is re-onboarded via the console OAuth flow.
  * Provide the implementation with

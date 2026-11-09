@@ -13,7 +13,7 @@ export type GetDashboardForJobRunInput = Omit<emr.GetDashboardForJobRunRequest, 
  * Runtime binding for `emr-serverless:GetDashboardForJobRun`.
  *
  * Creates a pre-signed URL to the live Spark/Tez UI (or Spark History
- * Server) for a job run on the bound {@link Application} — hand it to an
+ * Server) for a job run on the bound {@link Application} -- hand it to an
  * on-call engineer to debug a slow or failed job without console access.
  * Provide the implementation with
  * `Effect.provide(AWS.EMRServerless.GetDashboardForJobRunHttp)`.

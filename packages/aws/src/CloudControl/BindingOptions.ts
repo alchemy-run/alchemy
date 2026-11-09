@@ -12,7 +12,7 @@ export interface CloudControlBindingOptions {
    *
    * Cloud Control invokes the target resource type's CloudFormation handlers
    * with the caller's credentials, so the host also needs the handler's
-   * underlying service permissions — e.g. `ssm:PutParameter` +
+   * underlying service permissions -- e.g. `ssm:PutParameter` +
    * `ssm:GetParameters` to create an `AWS::SSM::Parameter`. Consult the
    * `handlers` section of the resource type's schema for the exact actions.
    */

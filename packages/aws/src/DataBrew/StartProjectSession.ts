@@ -6,7 +6,7 @@ import type { Project } from "./Project.ts";
 export interface StartProjectSessionRequest extends Omit<SVC.StartProjectSessionRequest, "Name"> {}
 
 /**
- * Runtime binding for `databrew:StartProjectSession` — opens an interactive
+ * Runtime binding for `databrew:StartProjectSession` -- opens an interactive
  * session on the bound DataBrew project. The response's `ClientSessionId`
  * (a `Redacted` session token) authenticates subsequent
  * {@link SendProjectSessionAction} calls.

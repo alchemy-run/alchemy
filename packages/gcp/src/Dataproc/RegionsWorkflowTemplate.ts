@@ -31,7 +31,7 @@ import type { WorkflowTemplateProps } from "./WorkflowTemplate.ts";
 
 export type RegionsWorkflowTemplateProps = Omit<WorkflowTemplateProps, "location"> & {
   /**
-   * Region (`us-central1`, …). Immutable — changing it replaces the
+   * Region (`us-central1`, ...). Immutable -- changing it replaces the
    * template. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */

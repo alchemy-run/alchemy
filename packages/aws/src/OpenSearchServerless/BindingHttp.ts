@@ -6,8 +6,8 @@ import type { Collection } from "./Collection.ts";
 /**
  * Shared scaffolding for the OpenSearch Serverless runtime bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, makeAoss…HttpBinding({ … }))` over one of the two
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, makeAoss...HttpBinding({ ... }))` over one of the two
  * builders below. Everything except the operation, the IAM action list, and
  * (for collection-scoped operations) the injected collection `id` is
  * boilerplate.
@@ -56,7 +56,7 @@ export const makeAossCollectionHttpBinding = <I extends { id?: string }, A, E, R
 
 /**
  * Build the impl Effect for an account-level operation (no collection
- * argument): the deploy-time half grants `actions` on `*` — the account
+ * argument): the deploy-time half grants `actions` on `*` -- the account
  * settings, policy stats, and lifecycle-policy read actions do not support
  * resource-level scoping.
  */

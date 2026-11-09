@@ -46,7 +46,7 @@ export type HubProps = {
    * `projects/{project}/locations/global/hubs/{hub}`). If omitted, a
    * unique RFC1035 name is generated from the stack, stage, and logical
    * id. Must be 1-63 characters and match `[a-z]([-a-z0-9]*[a-z0-9])?`.
-   * Immutable — changing it replaces the hub.
+   * Immutable -- changing it replaces the hub.
    */
   hubId?: string;
   /**
@@ -89,7 +89,7 @@ export type Hub = Resource<
     hubId: string;
     /** Project id. */
     project: string;
-    /** Location id. Hubs are global — always `"global"`. */
+    /** Location id. Hubs are global -- always `"global"`. */
     location: string;
     /** User-provided description. */
     description: string | undefined;
@@ -103,7 +103,7 @@ export type Hub = Resource<
     labels: Record<string, string>;
     /** Server-generated UUID, unique across hubs. */
     uniqueId: string | undefined;
-    /** Server-reported lifecycle state (`ACTIVE`, `CREATING`, …). */
+    /** Server-reported lifecycle state (`ACTIVE`, `CREATING`, ...). */
     state: string | undefined;
     /** VPC networks associated with this hub's spokes (output-only). */
     routingVpcs: HubRoutingVpc[];
@@ -138,7 +138,7 @@ export interface HubLookup {
 }
 
 /**
- * A Network Connectivity Center hub — the global attachment point for
+ * A Network Connectivity Center hub -- the global attachment point for
  * VPC, VPN, and interconnect spokes.
  *
  * Hubs live at `locations/global`. Changing `hubId` replaces the hub.

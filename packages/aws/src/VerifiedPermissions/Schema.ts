@@ -14,7 +14,7 @@ export interface SchemaProps {
   /**
    * The Cedar JSON schema document (as a JSON string). Defines the entity
    * types, actions, and the relationships between them used to validate
-   * policies when the store's validation mode is `STRICT`. Mutable — updating
+   * policies when the store's validation mode is `STRICT`. Mutable -- updating
    * re-submits the schema via `PutSchema`.
    */
   cedarJson: string;
@@ -39,7 +39,7 @@ export interface Schema extends Resource<
  * `validationMode: "STRICT"` on the store, policies and templates are
  * validated against it at submission time.
  *
- * A policy store has at most one schema — `PutSchema` is an upsert that fully
+ * A policy store has at most one schema -- `PutSchema` is an upsert that fully
  * replaces the previous schema.
  * ### Defining a Schema
  * **Example:** Photo App Schema
@@ -82,7 +82,7 @@ export const SchemaProvider = () =>
       return Schema.Provider.of({
         stables: ["policyStoreId"],
 
-        // singleton child of a policy store — not enumerable account-wide
+        // singleton child of a policy store -- not enumerable account-wide
         list: () => Effect.succeed([]),
 
         read: Effect.fn(function* ({ olds, output }) {
@@ -100,11 +100,11 @@ export const SchemaProvider = () =>
           if (olds.policyStoreId !== news.policyStoreId) {
             return { action: "replace" } as const;
           }
-          // cedarJson is mutable → default update path
+          // cedarJson is mutable -> default update path
         }),
 
         reconcile: Effect.fn(function* ({ news, session }) {
-          // PutSchema is a full upsert — idempotent for both create and update
+          // PutSchema is a full upsert -- idempotent for both create and update
           yield* avp.putSchema({
             policyStoreId: news.policyStoreId,
             definition: { cedarJson: news.cedarJson },
@@ -114,7 +114,7 @@ export const SchemaProvider = () =>
         }),
 
         delete: Effect.fn(function* () {
-          // Verified Permissions has no DeleteSchema API — the schema is
+          // Verified Permissions has no DeleteSchema API -- the schema is
           // removed when the policy store is deleted. Nothing to do.
           yield* Effect.void;
         }),

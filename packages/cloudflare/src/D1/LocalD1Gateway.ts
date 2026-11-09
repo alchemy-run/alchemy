@@ -2,11 +2,11 @@ import { D1 } from "@alchemy.run/cloudflare-runtime/core/bindings";
 import { SERVICE_D1 } from "@alchemy.run/cloudflare-runtime/core/bindings/d1/D1Options";
 /**
  * Node-side query path into the local workerd D1 simulator, built on the
- * runtime's platform proxy (`PlatformProxy.open` — our `getPlatformProxy`).
+ * runtime's platform proxy (`PlatformProxy.open` -- our `getPlatformProxy`).
  *
  * The simulator (a `d1` service routing to a per-database
  * `D1DatabaseObject` Durable Object over DO SQLite) is only reachable from
- * inside workerd — but alchemy's migration runner and the
+ * inside workerd -- but alchemy's migration runner and the
  * `QueryDatabaseLocal` capability run in Node. The platform proxy bridges
  * the two: it hosts the binding in a scoped workerd instance and exposes it
  * to Node. We bind the raw `d1` service (the same designator the
@@ -14,12 +14,12 @@ import { SERVICE_D1 } from "@alchemy.run/cloudflare-runtime/core/bindings/d1/D1O
  * full D1 HTTP protocol (`POST /query`, multi-statement SQL) rather than
  * the line-based `exec()` surface of the wrapped binding:
  *
- *   Node ── proxy.env.D1_RAW.fetch({sql}) ──▶ `d1` service ──▶ D1DatabaseObject
+ *   Node -- proxy.env.D1_RAW.fetch({sql}) --> `d1` service --> D1DatabaseObject
  *
  * Data lands in the same `{storage}/d1` directory every local worker
  * binding reads.
  *
- * NOT exported from `index.ts` — provider-internal scaffolding.
+ * NOT exported from `index.ts` -- provider-internal scaffolding.
  */
 import { open } from "@alchemy.run/cloudflare-runtime/core/platform-proxy";
 import type { BindingHook } from "@alchemy.run/cloudflare-runtime/core/PluginContext";
@@ -38,7 +38,7 @@ export class LocalD1QueryError extends Data.TaggedError("LocalD1QueryError")<{
 
 /**
  * A single query or batch in the shape the cloud `d1.queryDatabase` op
- * accepts — the local gateway speaks the same surface so client code can
+ * accepts -- the local gateway speaks the same surface so client code can
  * swap transports without translation.
  */
 export type D1QueryBody =
@@ -53,7 +53,7 @@ interface D1StatementResponse {
 }
 
 /**
- * A plain service binding onto the raw `d1` service for `databaseId` —
+ * A plain service binding onto the raw `d1` service for `databaseId` --
  * bypassing the `cloudflare-internal:d1-api` wrapper so the proxy's fetch
  * passthrough can POST the full D1 HTTP protocol.
  */
@@ -100,7 +100,7 @@ export const withLocalD1Query = <A, E, R>(
               method: "POST",
               headers: { "content-type": "application/json" },
               // The DO accepts a single D1Query or an array (one
-              // transaction) — a batch maps to the array form.
+              // transaction) -- a batch maps to the array form.
               body: JSON.stringify("batch" in body ? body.batch : body),
             });
             return (await response.json()) as unknown;

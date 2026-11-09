@@ -22,7 +22,7 @@ export interface GetMapSpritesRequest extends Omit<location.GetMapSpritesRequest
  * const getSprites = yield* Location.GetMapSprites(map);
  *
  * const sprites = yield* getSprites({ FileName: "sprites.json" });
- * // sprites.Blob → sprite index JSON bytes
+ * // sprites.Blob -> sprite index JSON bytes
  * ```
  *
  * @binding

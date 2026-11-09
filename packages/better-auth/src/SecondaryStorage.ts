@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import type { BetterAuthStorageError } from "./Errors.ts";
 
 /**
- * Effect-native contract for Better Auth's `secondaryStorage` — the
+ * Effect-native contract for Better Auth's `secondaryStorage` -- the
  * key-value store used for sessions, rate limiting, and OAuth state when
  * configured.
  *
@@ -40,13 +40,13 @@ export interface SecondaryStorageService {
  *
  * When a layer providing this service is in context, Better Auth is
  * configured with `secondaryStorage` and its rate limiter defaults to it.
- * When absent, Better Auth runs database-only — the dependency is resolved
+ * When absent, Better Auth runs database-only -- the dependency is resolved
  * with `Effect.serviceOption`, so it never appears in `BetterAuth`'s
  * requirements.
  *
  * Better Auth's guidance is a Redis-style store: strongly consistent
  * reads and precise sub-minute TTLs. Eventually-consistent stores
- * (e.g. Cloudflare KV) are NOT a fit — session reads race cross-location
+ * (e.g. Cloudflare KV) are NOT a fit -- session reads race cross-location
  * propagation and rate-limit windows need atomic counters. A strongly
  * consistent Cloudflare option would be a Durable Object-backed layer.
  */

@@ -56,7 +56,7 @@ export interface AstroProps extends FrameworkSiteProps {
  *
  * The build runs through `@alchemy.run/frontend-frameworks/astro` with the
  * `@alchemy.run/frontend-frameworks/astro/node` deploy target (a Node
- * adapter is injected — your `astro.config.*` must not declare one).
+ * adapter is injected -- your `astro.config.*` must not declare one).
  *
  * During `alchemy dev` the site is Astro's own dev server and no cloud
  * resources are created. `Alchemy.remote()` opts back into the live

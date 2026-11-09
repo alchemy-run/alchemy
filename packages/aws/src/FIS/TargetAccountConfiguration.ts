@@ -26,7 +26,7 @@ export interface TargetAccountConfigurationProps {
   roleArn: string;
   /**
    * A description of the target account. Once set, it cannot be fully
-   * removed via the API — only changed.
+   * removed via the API -- only changed.
    */
   description?: string;
 }
@@ -54,7 +54,7 @@ export interface TargetAccountConfiguration extends Resource<
 
 /**
  * A target account configuration for a multi-account AWS Fault Injection
- * Service (FIS) experiment template — registers an AWS account (and the IAM
+ * Service (FIS) experiment template -- registers an AWS account (and the IAM
  * role FIS assumes there) as a target of the experiment, so a single
  * experiment can inject faults into resources across accounts.
  *
@@ -92,7 +92,7 @@ export const TargetAccountConfigurationProvider = () =>
     TargetAccountConfiguration,
     Effect.gen(function* () {
       // A missing template and a missing configuration both surface as
-      // ResourceNotFoundException — either way the configuration does not
+      // ResourceNotFoundException -- either way the configuration does not
       // exist.
       const observe = (experimentTemplateId: string, accountId: string) =>
         fis.getTargetAccountConfiguration({ experimentTemplateId, accountId }).pipe(
@@ -109,7 +109,7 @@ export const TargetAccountConfigurationProvider = () =>
       return TargetAccountConfiguration.Provider.of({
         stables: ["experimentTemplateId", "accountId"],
 
-        // The (template, account) pair IS the configuration's identity —
+        // The (template, account) pair IS the configuration's identity --
         // changing either side replaces it. roleArn/description sync in
         // place.
         diff: Effect.fn(function* ({ news, olds }) {
@@ -137,12 +137,12 @@ export const TargetAccountConfigurationProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ news, session }) {
-          // 1. Observe — the (template, account) pair is the deterministic
+          // 1. Observe -- the (template, account) pair is the deterministic
           // identity; cloud state is authoritative.
           let observed = yield* observe(news.experimentTemplateId, news.accountId);
 
           if (observed === undefined) {
-            // 2. Ensure — create when missing; a concurrent create race
+            // 2. Ensure -- create when missing; a concurrent create race
             // surfaces as ConflictException and falls through to observe.
             observed = yield* fis
               .createTargetAccountConfiguration({
@@ -158,7 +158,7 @@ export const TargetAccountConfigurationProvider = () =>
                 ),
               );
           } else if (
-            // 3. Sync — diff observed against desired and apply the single
+            // 3. Sync -- diff observed against desired and apply the single
             // update on any delta. `description` is settable-but-not-removable,
             // so it only participates while declared.
             observed.roleArn !== news.roleArn ||

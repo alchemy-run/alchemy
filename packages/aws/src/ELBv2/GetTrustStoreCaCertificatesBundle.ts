@@ -9,17 +9,17 @@ import type { TrustStore } from "./TrustStore.ts";
  * the trust-store ARN).
  *
  * Returns a pre-signed S3 URI (active for ten minutes) for the bound
- * {@link TrustStore}'s CA certificate bundle — e.g. an ops endpoint that
+ * {@link TrustStore}'s CA certificate bundle -- e.g. an ops endpoint that
  * serves or audits the mTLS CA bundle currently in force. The trust-store
  * ARN is injected from the binding. Provide the implementation with
  * `Effect.provide(AWS.ELBv2.GetTrustStoreCaCertificatesBundleHttp)`.
  * ### Trust Store Content
  * **Example:** Fetch the presigned CA-bundle location
  * ```typescript
- * // init — bind the operation to the trust store
+ * // init -- bind the operation to the trust store
  * const getCaBundle = yield* AWS.ELBv2.GetTrustStoreCaCertificatesBundle(trustStore);
  *
- * // runtime — Location is a presigned S3 URL valid for ten minutes
+ * // runtime -- Location is a presigned S3 URL valid for ten minutes
  * const { Location } = yield* getCaBundle();
  * ```
  *

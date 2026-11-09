@@ -12,7 +12,7 @@ export interface ChangeMessageVisibilityRequest extends Omit<
  * Runtime binding for `sqs:ChangeMessageVisibility`.
  *
  * Bind this operation to a {@link Queue} inside a function runtime to extend
- * or shrink the visibility timeout of an in-flight message — e.g. extend it
+ * or shrink the visibility timeout of an in-flight message -- e.g. extend it
  * while a slow job is still processing, or set it to `0` to release the
  * message back to the queue immediately. The binding grants the host
  * function `sqs:ChangeMessageVisibility` on the queue. Provide the

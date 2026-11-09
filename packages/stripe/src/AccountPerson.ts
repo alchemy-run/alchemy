@@ -72,7 +72,7 @@ export interface AccountPersonRelationship {
 
 export interface AccountPersonProps {
   /**
-   * Id of the Connect account this person belongs to (`acct_…`).
+   * Id of the Connect account this person belongs to (`acct_...`).
    * Changing it replaces the person.
    */
   account: string;
@@ -108,9 +108,9 @@ export type AccountPerson = Resource<
   "Stripe.AccountPerson",
   AccountPersonProps,
   {
-    /** Stripe person id (`person_…`). */
+    /** Stripe person id (`person_...`). */
     id: string;
-    /** Id of the Connect account this person belongs to (`acct_…`). */
+    /** Id of the Connect account this person belongs to (`acct_...`). */
     account: string;
     /** The person's first name, if set. */
     firstName: string | undefined;
@@ -132,7 +132,7 @@ export type AccountPerson = Resource<
 >;
 
 /**
- * A Stripe Person on a Connect account — a director, executive, owner, or
+ * A Stripe Person on a Connect account -- a director, executive, owner, or
  * representative of the account's legal entity. Name, email, phone,
  * relationship, and metadata update in place. Changing `account` replaces
  * the person. Destroy deletes the person (the account opener cannot be

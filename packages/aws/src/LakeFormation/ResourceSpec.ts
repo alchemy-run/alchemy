@@ -138,7 +138,7 @@ export interface LFTagPolicyResourceSpec {
 }
 
 /**
- * A Lake Formation resource reference — exactly one variant should be set.
+ * A Lake Formation resource reference -- exactly one variant should be set.
  * Mirrors the Lake Formation `Resource` union used by `GrantPermissions`,
  * `AddLFTagsToResource`, etc.
  */

@@ -25,7 +25,7 @@ export type RepositoriesWorkspaceProps = {
   /**
    * Parent repository. Full name
    * `projects/{project}/locations/{location}/repositories/{repository}`
-   * or the repository id (combined with `location`). Immutable —
+   * or the repository id (combined with `location`). Immutable --
    * changing it replaces the workspace.
    */
   repository: string;
@@ -36,7 +36,7 @@ export type RepositoriesWorkspaceProps = {
   location?: string;
   /**
    * Workspace id (the `{workspace}` segment). If omitted, a unique
-   * RFC1035 name is generated. Immutable — changing it replaces the
+   * RFC1035 name is generated. Immutable -- changing it replaces the
    * workspace. Workspaces have no labels field; ownership is the
    * generated physical id and the parent repository's Alchemy labels.
    */

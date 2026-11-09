@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Project } from "./Project.ts";
 
 /**
- * Runtime binding for `codebuild:StartCommandExecution` — runs a shell
+ * Runtime binding for `codebuild:StartCommandExecution` -- runs a shell
  * command in a running sandbox of the bound project. Poll the result with
  * {@link BatchGetCommandExecutions}.
  * ### Sandboxes

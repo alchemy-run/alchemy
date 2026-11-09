@@ -12,7 +12,7 @@ import {
 import * as Lambda from "./Function.ts";
 
 /**
- * Lambda runtime implementation for `AWS.Scheduler.consumeSchedule(...)` —
+ * Lambda runtime implementation for `AWS.Scheduler.consumeSchedule(...)` --
  * the "cron handler" DX where a Lambda consumes its own EventBridge Scheduler
  * invocations.
  *
@@ -53,7 +53,7 @@ export const ScheduleEventSource = Layer.effect(
       descriptor: ScheduleDescriptor,
       process: (event: ScheduleEvent) => Effect.Effect<void, never, Req>,
     ) {
-      // Stable route id — computed identically at deploy time (names the
+      // Stable route id -- computed identically at deploy time (names the
       // backing Schedule + role) and at runtime (matches incoming events).
       const routeId = yield* Effect.sync(() => createScheduleRouteId(descriptor, host));
 

@@ -37,7 +37,7 @@ export const sameOwners = (
 
 /**
  * Distilled fully-encodes `{id}` path labels. Google returns the web
- * resource id already percent-encoded (`http%3A%2F%2F…`), so decode
+ * resource id already percent-encoded (`http%3A%2F%2F...`), so decode
  * first and let the protocol encode once.
  */
 export const toPathId = (id: string | undefined) => {

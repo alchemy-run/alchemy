@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `comprehend:DescribeKeyPhrasesDetectionJob` — get the
+ * Runtime binding for `comprehend:DescribeKeyPhrasesDetectionJob` -- get the
  * properties (status, input/output config, timings) of an asynchronous
  * key-phrase detection job started with {@link StartKeyPhrasesDetectionJob}.
  *
@@ -18,7 +18,7 @@ import type * as Effect from "effect/Effect";
  *
  * // runtime
  * const job = yield* describeKeyPhrasesDetectionJob({ JobId: jobId });
- * // job.KeyPhrasesDetectionJobProperties?.JobStatus: "SUBMITTED" | "IN_PROGRESS" | "COMPLETED" | …
+ * // job.KeyPhrasesDetectionJobProperties?.JobStatus: "SUBMITTED" | "IN_PROGRESS" | "COMPLETED" | ...
  * ```
  *
  * @binding

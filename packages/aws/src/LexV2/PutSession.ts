@@ -11,7 +11,7 @@ import type { BotAlias } from "./BotAlias.ts";
 export interface PutSessionRequest extends Omit<lexr.PutSessionRequest, "botId" | "botAliasId"> {}
 
 /**
- * Runtime binding for `lex:PutSession` — create or overwrite the session
+ * Runtime binding for `lex:PutSession` -- create or overwrite the session
  * state of a conversation with an Amazon Lex V2 bot alias, letting your
  * application steer the dialog (e.g. pre-fill slots or elicit a specific
  * intent).

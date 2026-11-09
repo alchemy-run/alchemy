@@ -45,7 +45,7 @@ export type HiveDatabaseOptions = {
   /**
    * User-supplied Hive database parameters. Alchemy ownership keys
    * (`alchemy-stack`, `alchemy-stage`, `alchemy-id`) are merged in
-   * automatically — BigLake databases have no labels field.
+   * automatically -- BigLake databases have no labels field.
    */
   parameters?: Record<string, string>;
 };
@@ -54,13 +54,13 @@ export type CatalogsDatabaseProps = {
   /**
    * Parent catalog. Full name
    * `projects/{project}/locations/{location}/catalogs/{catalog}` or the
-   * catalog id (combined with `location`). Immutable — changing it
+   * catalog id (combined with `location`). Immutable -- changing it
    * replaces the database.
    */
   catalog: string;
   /**
    * Database id (the `{database}` segment). If omitted, a unique id is
-   * generated. Immutable — changing it replaces the database.
+   * generated. Immutable -- changing it replaces the database.
    */
   databaseId?: string;
   /**
@@ -152,7 +152,7 @@ export interface CatalogsDatabaseLookup {
 /**
  * A Hive database inside a BigLake Metastore catalog.
  *
- * Databases have no labels field — Alchemy stamps ownership into
+ * Databases have no labels field -- Alchemy stamps ownership into
  * `hiveOptions.parameters` so `list` / nuke can find them. Catalog,
  * database id, and type are immutable. Hive location URI and parameters
  * update in place.

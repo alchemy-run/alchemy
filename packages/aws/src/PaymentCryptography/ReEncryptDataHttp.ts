@@ -4,7 +4,7 @@ import { makePaymentCryptographyKeyPairHttpBinding } from "./BindingHttp.ts";
 import { ReEncryptData } from "./ReEncryptData.ts";
 
 /**
- * HTTP implementation of {@link ReEncryptData} — grants the host Function
+ * HTTP implementation of {@link ReEncryptData} -- grants the host Function
  * `payment-cryptography:ReEncryptData` on both the incoming and outgoing
  * keys and calls the Payment Cryptography Data API at runtime.
  */

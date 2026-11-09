@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `textract:ListAdapters` — list the Textract
+ * Runtime binding for `textract:ListAdapters` -- list the Textract
  * adapters in the account/region.
  *
  * ### Managing Adapters

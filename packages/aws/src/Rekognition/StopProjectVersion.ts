@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `rekognition:StopProjectVersion` — stop hosting a Custom Labels model version to stop incurring inference-unit charges.
+ * Runtime binding for `rekognition:StopProjectVersion` -- stop hosting a Custom Labels model version to stop incurring inference-unit charges.
  *
  * The binding takes no arguments and grants the function
  * `rekognition:StopProjectVersion` on `*` (Rekognition data-plane resources such

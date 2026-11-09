@@ -130,9 +130,9 @@ export type TableSchemaInput = S.Schema<any> | TableSchema;
  * What happens to the Iceberg table when the resource is removed from the
  * stack or the stack is destroyed.
  *
- * - `"retain"` — leave the table and its data in the catalog.
- * - `"drop"` — drop the table from the catalog without purging its files.
- * - `"purge"` — drop the table and ask the catalog to purge its data and
+ * - `"retain"` -- leave the table and its data in the catalog.
+ * - `"drop"` -- drop the table from the catalog without purging its files.
+ * - `"purge"` -- drop the table and ask the catalog to purge its data and
  *   metadata files.
  */
 export type TableDeletePolicy = "retain" | "drop" | "purge";
@@ -198,10 +198,10 @@ export interface TableProps {
   name?: string;
   /**
    * Table schema. Additive changes (new optional columns, relaxing
-   * `required`, `int`→`long`, `float`→`double`, wider decimals, docs,
+   * `required`, `int`->`long`, `float`->`double`, wider decimals, docs,
    * column order) evolve the table in place. Destructive changes (dropping
    * a column, adding a required column, narrowing or changing a type) fail
-   * the plan — Alchemy never drops data to replace a table.
+   * the plan -- Alchemy never drops data to replace a table.
    */
   schema: TableSchemaInput;
   /**
@@ -303,10 +303,10 @@ const toProps = <P>(props: P): Effect.Effect<P> =>
  * An Apache Iceberg table in a Cloudflare Basin (R2 Data) catalog.
  *
  * Declare the table's schema with Effect Schema; Alchemy derives the Iceberg
- * schema (`String`→`string`, `Boolean`→`boolean`, `Int`→`long` (`int` when
- * bounded to 32 bits), `Number`→`double`, `Date`→`timestamptz`,
- * `Uint8Array`→`binary`, arrays→`list`, `Struct`/`Class`→`struct`,
- * `Record`→`map`, optional/nullable→not required). Additive schema changes
+ * schema (`String`->`string`, `Boolean`->`boolean`, `Int`->`long` (`int` when
+ * bounded to 32 bits), `Number`->`double`, `Date`->`timestamptz`,
+ * `Uint8Array`->`binary`, arrays->`list`, `Struct`/`Class`->`struct`,
+ * `Record`->`map`, optional/nullable->not required). Additive schema changes
  * evolve the table in place, keeping its UUID and field ids; destructive
  * changes fail the plan. By default the table is retained when removed
  * from the stack.
@@ -333,7 +333,7 @@ const toProps = <P>(props: P): Effect.Effect<P> =>
  *   schema: Order,
  *   partitionBy: ["day(at)"],
  * });
- * // orders.identifier → "sales.<generated name>"
+ * // orders.identifier -> "sales.<generated name>"
  * ```
  *
  * **Example:** Plain Iceberg column descriptors
@@ -667,7 +667,7 @@ const AGE_UNITS = [
   ["m", 60_000],
 ] as const;
 
-/** Whole days, hours, or minutes (rounded up) — the API's `7d` / `36h` form. */
+/** Whole days, hours, or minutes (rounded up) -- the API's `7d` / `36h` form. */
 const formatAge = (millis: number): string => {
   for (const [unit, size] of AGE_UNITS) {
     if (millis % size === 0) return `${millis / size}${unit}`;
@@ -866,7 +866,7 @@ export const TableProvider = () =>
       const properties = { ...news.properties, ...(yield* createInternalTags(id)) };
 
       const observed = yield* Effect.gen(function* () {
-        // Ensure the namespace — creation is idempotent under a race.
+        // Ensure the namespace -- creation is idempotent under a race.
         yield* Iceberg.createNamespace({ namespace: [namespace] }).pipe(
           Effect.catchTag("AlreadyExistsException", () => Effect.void),
         );
@@ -903,7 +903,7 @@ export const TableProvider = () =>
         }
 
         // Sync schema + properties against observed metadata; a concurrent
-        // commit invalidates the requirements — reload and retry.
+        // commit invalidates the requirements -- reload and retry.
         return yield* syncTable({
           namespace,
           table: tableName,

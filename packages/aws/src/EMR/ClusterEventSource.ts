@@ -13,7 +13,7 @@ import {
  * schema grows over time).
  */
 export interface ClusterEventDetail {
-  /** The id of the cluster the event is about (`j-…`). */
+  /** The id of the cluster the event is about (`j-...`). */
   clusterId?: string;
   /** The new state, e.g. `RUNNING`, `WAITING`, `TERMINATED`, `COMPLETED`. */
   state?: string;
@@ -25,13 +25,13 @@ export interface ClusterEventDetail {
   name?: string;
   /** Cluster events: why the cluster changed state. */
   stateChangeReason?: string;
-  /** Step events: the step's id (`s-…`). */
+  /** Step events: the step's id (`s-...`). */
   stepId?: string;
   /** Step events: the step's configured action on failure. */
   actionOnFailure?: string;
-  /** Instance-group events: the group's id (`ig-…`). */
+  /** Instance-group events: the group's id (`ig-...`). */
   instanceGroupId?: string;
-  /** Instance-fleet events: the fleet's id (`if-…`). */
+  /** Instance-fleet events: the fleet's id (`if-...`). */
   instanceFleetId?: string;
   /** Additional event fields (the schema grows over time). */
   [key: string]: unknown;
@@ -84,7 +84,7 @@ export interface ClusterEventSourceProps extends EventRouteProps {
  * host Function to those events so it can alert on failed steps or chain
  * post-cluster automation.
  *
- * EMR publishes to EventBridge automatically — no additional resource is
+ * EMR publishes to EventBridge automatically -- no additional resource is
  * created besides the EventBridge rule targeting the host. Provide the
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.

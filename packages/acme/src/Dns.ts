@@ -6,7 +6,7 @@
  * record sets past their TTL, so a challenge value published a moment ago
  * can stay invisible for far longer than the CA takes to validate. Where
  * `node:dns` is available (deploy time, Fly Machines) the check therefore
- * asks the zone's **authoritative** nameservers directly — the same
+ * asks the zone's **authoritative** nameservers directly -- the same
  * servers the CA asks. Networks can intercept port 53, so DNS over HTTPS
  * also checks for the exact challenge value. A stale recursive cache must
  * not veto a positive answer; the CA performs its own validation.

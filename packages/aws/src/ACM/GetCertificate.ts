@@ -8,13 +8,13 @@ import type { Certificate } from "./Certificate.ts";
  *
  * Bind this operation to a {@link Certificate} to get a callable that
  * retrieves the issued certificate body and its certificate chain (both
- * PEM-encoded). The certificate must be issued — a certificate that is still
+ * PEM-encoded). The certificate must be issued -- a certificate that is still
  * pending validation fails with the typed `RequestInProgressException`.
  * Provide the implementation with `Effect.provide(AWS.ACM.GetCertificateHttp)`.
  * ### Reading Certificates
  * **Example:** Fetch the PEM Certificate Chain
  * ```typescript
- * // init — bind the operation to the certificate
+ * // init -- bind the operation to the certificate
  * const getCertificate = yield* AWS.ACM.GetCertificate(certificate);
  *
  * // runtime

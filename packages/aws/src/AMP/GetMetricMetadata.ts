@@ -14,7 +14,7 @@ export interface GetMetricMetadataRequest {
 }
 
 /**
- * Runtime binding for `aps:GetMetricMetadata` — read metric metadata (type,
+ * Runtime binding for `aps:GetMetricMetadata` -- read metric metadata (type,
  * help, unit) from an AMP {@link Workspace}'s Prometheus-compatible
  * `api/v1/metadata` endpoint, SigV4-signed with the host Function's
  * credentials.

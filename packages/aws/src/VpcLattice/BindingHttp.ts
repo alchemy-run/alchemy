@@ -6,8 +6,8 @@ import type { TargetGroup } from "./TargetGroup.ts";
 /**
  * Shared scaffolding for the VPC Lattice runtime bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, makeVpcLatticeTargetGroupHttpBinding({ … }))` over
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, makeVpcLatticeTargetGroupHttpBinding({ ... }))` over
  * the builder below. Everything except the operation, the IAM action list,
  * and the injected `targetGroupIdentifier` is boilerplate.
  */

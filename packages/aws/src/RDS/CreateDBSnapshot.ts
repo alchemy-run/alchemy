@@ -8,14 +8,14 @@ import type { DBInstance } from "./DBInstance.ts";
  * `rds:CreateDBSnapshot` +
  * `rds:AddTagsToResource`).
  *
- * Takes a manual snapshot of the bound {@link DBInstance} — e.g. a
+ * Takes a manual snapshot of the bound {@link DBInstance} -- e.g. a
  * pre-migration backup function or a scheduled snapshot-rotation job. The
  * instance identifier is injected from the binding. Provide the implementation with
  * `Effect.provide(AWS.RDS.CreateDBSnapshotHttp)`.
  * ### Managing Instance Snapshots
  * **Example:** Take a Manual Instance Snapshot
  * ```typescript
- * // init — bind the operation to the instance
+ * // init -- bind the operation to the instance
  * const createDBSnapshot = yield* AWS.RDS.CreateDBSnapshot(instance);
  *
  * // runtime

@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `organizations:ListAWSServiceAccessForOrganization`.
  *
  * Lists the Amazon Web Services services that are enabled for trusted access with the organization.
- * Account-level operation — Organizations is a management-account-scoped
+ * Account-level operation -- Organizations is a management-account-scoped
  * global service, so the binding takes no resource argument. Provide the
  * implementation with `Effect.provide(AWS.Organizations.ListAWSServiceAccessForOrganizationHttp)`.
  * ### Delegated Administration & Trusted Access
  * **Example:** List Trusted-Access Services
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listAWSServiceAccessForOrganization = yield* AWS.Organizations.ListAWSServiceAccessForOrganization();
  *
  * // runtime

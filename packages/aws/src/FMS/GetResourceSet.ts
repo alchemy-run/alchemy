@@ -15,7 +15,7 @@ export interface GetResourceSetRequest extends fms.GetResourceSetRequest {}
  * ### Resource Sets
  * **Example:** Read a Resource Set
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const getResourceSet = yield* AWS.FMS.GetResourceSet();
  *
  * // runtime

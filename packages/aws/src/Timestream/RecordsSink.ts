@@ -7,7 +7,7 @@ import type { Table } from "./Table.ts";
 
 /**
  * A raw distilled Timestream `Record`. Callers stay in control of
- * `Dimensions`, `MeasureName`, `Time`, `Version`, etc. — the sink performs no
+ * `Dimensions`, `MeasureName`, `Time`, `Version`, etc. -- the sink performs no
  * auto-marshalling.
  */
 export type RecordsSinkRecord = TSW.Record;
@@ -31,7 +31,7 @@ export type RecordsSinkError =
  * Timestream ingests the valid subset of each batch and reports invalid
  * records positionally via `RejectedRecordsException` (schema conflicts,
  * timestamps outside the retention window, version conflicts). Rejections are
- * **permanent** — the sink drops them (surfacing a warning with the rejected
+ * **permanent** -- the sink drops them (surfacing a warning with the rejected
  * count) and keeps draining; there is no transient per-record failure mode to
  * retry.
  *
@@ -41,7 +41,7 @@ export type RecordsSinkError =
  * ### Streaming Records
  * **Example:** Stream records into a table
  * ```typescript
- * // init — bind the sink to the table; shared attributes are sent once per
+ * // init -- bind the sink to the table; shared attributes are sent once per
  * // batch as CommonAttributes and merged into every record server-side
  * const sink = yield* Timestream.RecordsSink(table, {
  *   commonAttributes: {
@@ -51,7 +51,7 @@ export type RecordsSinkError =
  *   },
  * });
  *
- * // runtime — drain a stream through the sink (batched 100 records/call)
+ * // runtime -- drain a stream through the sink (batched 100 records/call)
  * yield* Stream.fromIterable(
  *   samples.map((s) => ({
  *     Dimensions: [{ Name: "host", Value: s.host }],

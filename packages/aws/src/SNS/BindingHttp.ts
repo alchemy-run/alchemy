@@ -7,8 +7,8 @@ import type { Topic } from "./Topic.ts";
 /**
  * Shared scaffolding for AWS SNS HTTP bindings.
  *
- * NOT exported from `index.ts` — every near-identical `{Op}Http.ts` in this
- * service is a thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of
+ * NOT exported from `index.ts` -- every near-identical `{Op}Http.ts` in this
+ * service is a thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of
  * the builders below. Everything except the operation, the IAM action list,
  * and the injected identifier is boilerplate. Genuinely-different bindings
  * (the batched `TopicSink`) stay bespoke.
@@ -19,7 +19,7 @@ import type { Topic } from "./Topic.ts";
  * `ListSubscriptions`, the SMS/sandbox APIs): the runtime callable passes
  * the caller's request through unchanged and the deploy-time half grants
  * `actions` on `*` (these SNS actions do not support resource-level
- * permissions — only topic-scoped actions do).
+ * permissions -- only topic-scoped actions do).
  */
 export const makeSnsAccountHttpBinding = <I, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.SNS.ListTopics`. */

@@ -19,12 +19,12 @@ export class ServiceNetworkVpcAssociationUnexpectedResponse extends Data.TaggedE
 
 export interface ServiceNetworkVpcAssociationProps {
   /**
-   * ID or ARN of the service network to associate. Immutable — changing it
+   * ID or ARN of the service network to associate. Immutable -- changing it
    * replaces the association.
    */
   serviceNetworkIdentifier: string;
   /**
-   * ID of the VPC to associate. Immutable — changing it replaces the
+   * ID of the VPC to associate. Immutable -- changing it replaces the
    * association.
    */
   vpcIdentifier: string;

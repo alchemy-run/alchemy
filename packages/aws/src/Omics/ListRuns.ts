@@ -12,7 +12,7 @@ export interface ListRunsRequest extends omics.ListRunsRequest {}
  * ### Runs
  * **Example:** Call ListRuns
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const listRuns = yield* AWS.Omics.ListRuns();
  * // runtime
  * const result = yield* listRuns({ id: runId });

@@ -8,8 +8,8 @@ import type { Schema } from "./Schema.ts";
 /**
  * Shared scaffolding for EventBridge Schemas HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the builders
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the builders
  * below. Everything except the operation, the identifier resolver, and the
  * IAM action list is boilerplate.
  */
@@ -66,7 +66,7 @@ export const makeSchemasSchemaHttpBinding = <
 /**
  * Build the impl Effect for a Schemas operation scoped to a {@link Registry}:
  * the deploy-time half grants `actions` on the registry ARN and on the
- * registry's schema-type ARN (`…:schema/{registryName}*` — the resource
+ * registry's schema-type ARN (`...:schema/{registryName}*` -- the resource
  * `schemas:SearchSchemas` authorizes against), and the runtime half injects
  * the registry's `RegistryName` into every request.
  */

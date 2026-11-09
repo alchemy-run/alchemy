@@ -5,7 +5,7 @@ import type { DataSource } from "./DataSource.ts";
 
 /**
  * The `DeleteKnowledgeBaseDocuments` request with the binding-injected
- * `knowledgeBaseId` and `dataSourceId` removed — they are supplied
+ * `knowledgeBaseId` and `dataSourceId` removed -- they are supplied
  * automatically from the bound {@link DataSource}.
  */
 export interface DeleteKnowledgeBaseDocumentsRequest extends Omit<
@@ -14,7 +14,7 @@ export interface DeleteKnowledgeBaseDocumentsRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `bedrock-agent:DeleteKnowledgeBaseDocuments` — remove
+ * Runtime binding for `bedrock-agent:DeleteKnowledgeBaseDocuments` -- remove
  * specific documents from the bound {@link DataSource}'s knowledge base
  * index.
  *

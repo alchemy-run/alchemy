@@ -8,7 +8,7 @@ import type { EventBus } from "./EventBus.ts";
 /**
  * A raw `PutEventsRequestEntry` minus `EventBusName`, which the sink derives
  * from the bus it is bound to. Callers stay in control of `Source`,
- * `DetailType`, `Detail`, `Time`, `Resources`, and `TraceHeader` — no
+ * `DetailType`, `Detail`, `Time`, `Resources`, and `TraceHeader` -- no
  * auto-marshalling.
  */
 export interface BusSinkEntry extends Omit<eventbridge.PutEventsRequestEntry, "EventBusName"> {}
@@ -19,7 +19,7 @@ export type BusSinkError = eventbridge.PutEventsError | BatchRetryExhaustedError
  * A batching sink over EventBridge `PutEvents` (10 entries / 256 KiB per
  * call). Per-entry failures with transient error codes (`ThrottlingException`,
  * `InternalFailure`) are re-submitted on a bounded schedule; any other
- * per-entry `ErrorCode` (e.g. `MalformedDetail`) is permanent — those entries
+ * per-entry `ErrorCode` (e.g. `MalformedDetail`) is permanent -- those entries
  * are dropped and surfaced via a logged warning. Exhausting retries fails the
  * sink with a typed `BatchRetryExhaustedError` carrying the stranded entries.
  *
@@ -28,12 +28,12 @@ export type BusSinkError = eventbridge.PutEventsError | BatchRetryExhaustedError
  * ### Streaming Events
  * **Example:** Run a Stream of Entries into the Bus
  * ```typescript
- * // init — bind the sink (provide AWS.EventBridge.BusSinkHttp on the Function)
+ * // init -- bind the sink (provide AWS.EventBridge.BusSinkHttp on the Function)
  * const sink = yield* AWS.EventBridge.BusSink(bus);
  *
  * return {
  *   fetch: Effect.gen(function* () {
- *     // runtime — publish a stream of raw PutEvents entries
+ *     // runtime -- publish a stream of raw PutEvents entries
  *     const entries: AWS.EventBridge.BusSinkEntry[] = markers.map((marker) => ({
  *       Source: "my.app",
  *       DetailType: "MarkerSeen",

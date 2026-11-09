@@ -8,7 +8,7 @@ import type * as Effect from "effect/Effect";
 export interface AcceptGrantRequest extends licensemanager.AcceptGrantRequest {}
 
 /**
- * Runtime binding for `license-manager:AcceptGrant` — accept a license
+ * Runtime binding for `license-manager:AcceptGrant` -- accept a license
  * grant that another account distributed to this account, activating the
  * granted entitlements.
  *

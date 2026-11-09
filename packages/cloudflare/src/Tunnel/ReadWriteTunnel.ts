@@ -18,7 +18,7 @@ import { writeClient, type WriteTunnelClient } from "./WriteTunnel.ts";
  * @remarks
  *
  * `ReadWriteTunnel` is a single identifier that is simultaneously the binding's
- * Context tag, its type, and the callable —
+ * Context tag, its type, and the callable --
  * `yield* Cloudflare.Tunnel.ReadWriteTunnel()`.
  *
  * ### Managing tunnels at runtime

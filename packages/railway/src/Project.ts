@@ -85,7 +85,7 @@ export interface ProjectLookup {
  *
  * ### Create a Project
  * Alchemy generates a unique name unless you pass one. `url` is the
- * dashboard URL. A production environment is created with the project —
+ * dashboard URL. A production environment is created with the project --
  * do not recreate it as an Environment resource.
  *
  * **Example:** Generated name
@@ -164,7 +164,7 @@ export interface ProjectLookup {
  *
  * **Example:** Add a database to an existing project
  * ```typescript
- * const project = Railway.Project.lookup({ projectId: "a1b2c3d4-…" });
+ * const project = Railway.Project.lookup({ projectId: "a1b2c3d4-..." });
  * const db = yield* Railway.Postgres("Db", { project });
  * ```
  *
@@ -300,7 +300,7 @@ const findByName = (workspaceId: string, name: string) =>
 
 /**
  * Workspace projects Alchemy owns. Distilled `projects.items` plus the
- * physical-name filter — Railway has no tags. No lock, no retry override.
+ * physical-name filter -- Railway has no tags. No lock, no retry override.
  */
 export const ownedProjects = Effect.fn(function* () {
   const workspaceId = yield* currentWorkspaceId();

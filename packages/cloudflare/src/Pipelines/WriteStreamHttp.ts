@@ -9,7 +9,7 @@ import { WriteStream } from "./WriteStream.ts";
  * it into the host, and POSTs records to the stream's HTTP ingest
  * endpoint (`https://{stream_id}.ingest.cloudflare.com`).
  *
- * The stream must have its HTTP endpoint enabled — declare it with
+ * The stream must have its HTTP endpoint enabled -- declare it with
  * `http: true` (authenticated). Records are validated and encoded with
  * the stream's Effect Schema exactly as with `WriteStreamBinding`.
  * ### Providing the Layer

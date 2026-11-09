@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { KxEnvironment } from "./KxEnvironment.ts";
 
 /**
- * Runtime binding for `finspace:ListKxClusterNodes` — lists the nodes of a kdb cluster in the bound environment — node ids, availability zones, and launch times.
+ * Runtime binding for `finspace:ListKxClusterNodes` -- lists the nodes of a kdb cluster in the bound environment -- node ids, availability zones, and launch times.
  * Provide the implementation with
  * `Effect.provide(AWS.FinSpace.ListKxClusterNodesHttp)`.
  * ### Monitoring Clusters

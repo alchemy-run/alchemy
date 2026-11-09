@@ -6,8 +6,8 @@ import type { VirtualCluster } from "./VirtualCluster.ts";
 /**
  * Runtime binding for `emr-containers:DescribeJobRun`.
  *
- * Reads a job run on the bound {@link VirtualCluster} — its state
- * (`PENDING` → `RUNNING` → `COMPLETED`/`FAILED`/`CANCELLED`), failure
+ * Reads a job run on the bound {@link VirtualCluster} -- its state
+ * (`PENDING` -> `RUNNING` -> `COMPLETED`/`FAILED`/`CANCELLED`), failure
  * reason, and the resolved driver/configuration. The virtual cluster ID is
  * injected from the binding; pass the job run `id` returned by
  * `StartJobRun`. Provide the implementation with

@@ -10,7 +10,7 @@ export interface ListLicenseSpecificationsForResourceRequest
 
 /**
  * Runtime binding for
- * `license-manager:ListLicenseSpecificationsForResource` — list the
+ * `license-manager:ListLicenseSpecificationsForResource` -- list the
  * license configurations associated with a resource (e.g. an AMI or
  * instance).
  *

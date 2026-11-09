@@ -28,7 +28,7 @@ export interface ModuleRule {
 
 /**
  * The default {@link ModuleRule | module rules} applied when
- * `bundle: false` is set without explicit rules — the same set Wrangler
+ * `bundle: false` is set without explicit rules -- the same set Wrangler
  * applies to `no_bundle` Workers: ESModule (`**\/*.js`, `**\/*.mjs`),
  * CompiledWasm (`**\/*.wasm`), Text (`**\/*.txt`, `**\/*.html`,
  * `**\/*.sql`), and Data (`**\/*.bin`). Source maps (`.js.map`) are
@@ -58,7 +58,7 @@ export interface PrebuiltWorkerBundleOptions {
  *
  * The entry's directory is walked recursively and every file matching the
  * rule globs is uploaded byte-for-byte as an additional module, named by
- * its POSIX path relative to that directory — the same contract as
+ * its POSIX path relative to that directory -- the same contract as
  * Wrangler's `find_additional_modules` and Alchemy v1's `noBundle`. The
  * entry file is always first and never duplicated as an additional
  * module.
@@ -142,7 +142,7 @@ export const readPrebuiltWorkerBundle = Effect.fn(function* (options: PrebuiltWo
  * initial byte-for-byte read, then re-reads whenever a file under the
  * entry's directory changes (debounced). Mirrors the
  * {@link Bundle.BundleWatchEvent} protocol of the rolldown watcher so
- * local dev can consume either stream interchangeably — crucially
+ * local dev can consume either stream interchangeably -- crucially
  * WITHOUT re-bundling the prebuilt artifact, preserving the same
  * byte-for-byte contract as the deploy path.
  */
@@ -154,12 +154,12 @@ export const watchPrebuiltWorkerBundle = (options: PrebuiltWorkerBundleOptions) 
 
 /**
  * Source provider for prebuilt workers (`bundle: false`): the entry and
- * every file matching the module rules are uploaded byte-for-byte — no
+ * every file matching the module rules are uploaded byte-for-byte -- no
  * bundling, no minification. `hash()` is a cheap re-read (IO + sha256,
  * no bundling), cached per run under the shared `"build"` artifact key.
  *
  * Local dev honors the same byte-for-byte contract: the entry directory
- * is fs-watched and re-read on change — never re-bundled with rolldown,
+ * is fs-watched and re-read on change -- never re-bundled with rolldown,
  * which would violate the prebuilt contract ("re-bundling such artifacts
  * is unsafe").
  */

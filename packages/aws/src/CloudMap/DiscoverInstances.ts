@@ -9,7 +9,7 @@ export interface DiscoverInstancesRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `servicediscovery:DiscoverInstances` — the Cloud Map
+ * Runtime binding for `servicediscovery:DiscoverInstances` -- the Cloud Map
  * data-plane query that returns a randomized list of registered (by default
  * healthy) instances of a service.
  *

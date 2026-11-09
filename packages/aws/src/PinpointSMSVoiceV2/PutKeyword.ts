@@ -15,7 +15,7 @@ export interface PutKeywordRequest extends Omit<
 /**
  * Runtime binding for `sms-voice:PutKeyword`.
  *
- * Creates or updates a keyword on the bound origination phone number —
+ * Creates or updates a keyword on the bound origination phone number --
  * when an end user texts the keyword to the number, End User Messaging
  * SMS automatically replies with `KeywordMessage` (or opts them out /
  * back in when `KeywordAction` is set). The deploy-time half grants

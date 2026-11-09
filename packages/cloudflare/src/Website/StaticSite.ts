@@ -35,7 +35,7 @@ export interface StaticSiteProps<Bindings extends WorkerBindingProps = {}>
    *
    * With `command`, `alchemy dev` skips the build and spawns `command` as a
    * long-lived child process tied to the stack's scope. Alchemy does not
-   * proxy or interpret the process — the dev server's own URL (e.g.
+   * proxy or interpret the process -- the dev server's own URL (e.g.
    * `http://localhost:5173`) is what you open in the browser.
    *
    * Without `command`, `alchemy dev` runs the build and a local Worker
@@ -136,7 +136,7 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  * `StaticSite` runs a build command (e.g. `npm run build`), content-hashes
  * the output directory, and deploys the result as a Cloudflare Worker with
  * static assets. Use this when your site has its own build step that
- * produces a directory of files — Hugo, Zola, Eleventy, or any custom
+ * produces a directory of files -- Hugo, Zola, Eleventy, or any custom
  * pipeline.
  *
  * For Vite-based projects, prefer `Cloudflare.Website.Vite` which handles
@@ -146,7 +146,7 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  * ### Basic Usage
  * Point `command` at your build script and `outdir` at where it writes
  * output. Alchemy runs the command, hashes the output, and deploys it as
- * an assets-only Worker — no Worker code is uploaded, and Cloudflare's
+ * an assets-only Worker -- no Worker code is uploaded, and Cloudflare's
  * asset layer serves every request itself.
  *
  * **Example:** Deploying a Hugo site
@@ -179,7 +179,7 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  *
  * ### Asset Configuration
  * Use `assets` to control how Cloudflare handles routing for
- * your static files — HTML handling, not-found behavior, etc.
+ * your static files -- HTML handling, not-found behavior, etc.
  *
  * **Example:** SPA-style routing
  * ```typescript
@@ -228,7 +228,7 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  * The default scope only hashes files under `cwd` (plus the nearest
  * lockfile), so edits to a sibling workspace package the app imports do
  * not retrigger the build on their own. Add the sibling's sources with a
- * `../` include glob — and keep `lockfile: true`, since providing
+ * `../` include glob -- and keep `lockfile: true`, since providing
  * `include` otherwise drops the lockfile from the hash:
  * ```typescript
  * const site = yield* Cloudflare.Website.StaticSite("Web", {
@@ -247,7 +247,7 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  * Calling `StaticSite` with no arguments returns a constructor you can
  * `extend` to declare the Worker as a named class. The class is both
  * an `Effect` you can `yield*` to deploy and a type you can reference
- * elsewhere — useful when other resources need to bind to this Worker.
+ * elsewhere -- useful when other resources need to bind to this Worker.
  *
  * **Example:** Declaring a Worker class
  * ```typescript
@@ -298,8 +298,8 @@ const makeStaticSite = <const Bindings extends WorkerBindingProps = {}, Req = ne
 
     // `Dev` and `Build` carry constant logical ids, so they are namespaced
     // under `id` to keep two sites on one stack from colliding. Nothing
-    // else is: the site's own `props` — and the resources its `env`
-    // bindings declare — must resolve in the CALLER's namespace. Pushing
+    // else is: the site's own `props` -- and the resources its `env`
+    // bindings declare -- must resolve in the CALLER's namespace. Pushing
     // the namespace around the whole body instead re-declares a shared
     // resource referenced from `env` as a second copy under `<id>/`.
     // `Vite` already passes `id` straight through to `Worker`.
@@ -377,7 +377,7 @@ const makeStaticSite = <const Bindings extends WorkerBindingProps = {}, Req = ne
  *
  * - strings and `Redacted` values pass through unchanged
  * - `Config` (and any other runnable Effect) is resolved here, at stack
- *   construction — passing it through unresolved would hand the subprocess
+ *   construction -- passing it through unresolved would hand the subprocess
  *   the JSON-serialized `Config` object (`{"_id":"Config"}`) instead of its
  *   value (#796)
  * - `Output` references resolve at reconcile; the resolved value is
@@ -400,7 +400,7 @@ const serializeEnv = Effect.fn(function* (
       entries.push([k, Output.map(v, serializeEnvValue)]);
     } else if (isContainerDecl(v)) {
       // A `Cloudflare.Container` declaration is Effect-shaped but is a
-      // binding (DO namespace + ContainerApplication) — yielding it would
+      // binding (DO namespace + ContainerApplication) -- yielding it would
       // resolve the started-instance tag, which only exists inside a
       // Durable Object (#997). Deploy-time only, nothing to expose to the
       // build subprocess.
@@ -412,7 +412,7 @@ const serializeEnv = Effect.fn(function* (
       if (resolved === undefined) continue;
       entries.push([k, resolved]);
     } else if (v !== null && typeof v === "object" && "~alchemy/Kind" in v) {
-      // A binding Effect (e.g. WorkerLoader) — deploy-time only, nothing to
+      // A binding Effect (e.g. WorkerLoader) -- deploy-time only, nothing to
       // expose to the build subprocess.
       continue;
     } else {

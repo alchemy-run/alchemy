@@ -54,12 +54,12 @@ export interface JobRunEventSourceProps extends EventRouteProps {
 /**
  * Event source connecting Amazon EMR on EKS job run state changes to the
  * hosting compute. EMR on EKS publishes every job run state transition
- * (`PENDING` → `SUBMITTED` → `RUNNING` → `COMPLETED`/`FAILED`/`CANCELLED`)
+ * (`PENDING` -> `SUBMITTED` -> `RUNNING` -> `COMPLETED`/`FAILED`/`CANCELLED`)
  * to the account's default EventBridge bus (source `aws.emr-containers`,
  * detail-type `EMR Job Run State Change`); this subscribes the host
  * Function to those events so it can react when Spark jobs finish or fail.
  *
- * EMR on EKS publishes to EventBridge automatically — no additional
+ * EMR on EKS publishes to EventBridge automatically -- no additional
  * resource is created besides the EventBridge rule targeting the host.
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.

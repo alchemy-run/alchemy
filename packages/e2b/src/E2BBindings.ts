@@ -2,8 +2,8 @@
  * How E2B bindings reach E2B from any host.
  *
  * E2B authenticates with a team API key and has no identity federation or
- * key scopes, so every host — a Cloudflare Worker, a Lambda, a container, an
- * E2B sandbox — gets its own API key, minted at deploy as an `E2B.ApiKey` in
+ * key scopes, so every host -- a Cloudflare Worker, a Lambda, a container, an
+ * E2B sandbox -- gets its own API key, minted at deploy as an `E2B.ApiKey` in
  * the host's namespace and deleted with the host. The deployer's credentials
  * never reach a host. Minting takes the deployer's access token. The binding
  * captures the key (and the E2B domain) as named runtime Outputs; inside the
@@ -45,7 +45,7 @@ const output = <A>(value: A) => Output.asOutput(value) as Output.Output<A, never
 /** The `alchemy::*` metadata on objects a host creates at run time. */
 export type OwnerTags = Readonly<Record<string, string>>;
 
-/** E2B's `metadata` filter: `key=value&…`. */
+/** E2B's `metadata` filter: `key=value&...`. */
 export const metadataQuery = (metadata: Readonly<Record<string, string>>) =>
   new URLSearchParams(Object.entries(metadata)).toString();
 

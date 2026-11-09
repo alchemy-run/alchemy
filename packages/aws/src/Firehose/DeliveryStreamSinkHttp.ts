@@ -45,7 +45,7 @@ export const DeliveryStreamSinkHttp = Layer.effect(
         send: (batch) => send({ Records: [...batch] }),
         // PutRecordBatch failures are positional: RequestResponses[i] mirrors
         // the request order and carries an ErrorCode (ServiceUnavailable /
-        // internal failure) — all transient, so re-submit them on the
+        // internal failure) -- all transient, so re-submit them on the
         // bounded schedule.
         unprocessed: (out, batch) => {
           if (!out.FailedPutCount) {

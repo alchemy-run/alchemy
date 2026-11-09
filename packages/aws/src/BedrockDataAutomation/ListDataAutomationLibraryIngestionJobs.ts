@@ -15,7 +15,7 @@ export interface ListDataAutomationLibraryIngestionJobsRequest extends Omit<
 /**
  * Runtime binding for the `ListDataAutomationLibraryIngestionJobs` operation
  * (IAM action `bedrock:ListDataAutomationLibraryIngestionJobs` on the
- * library ARN) — page through the bound library's ingestion jobs from a
+ * library ARN) -- page through the bound library's ingestion jobs from a
  * deployed Function.
  *
  * Provide the implementation with
@@ -23,11 +23,11 @@ export interface ListDataAutomationLibraryIngestionJobsRequest extends Omit<
  * ### Library Ingestion
  * **Example:** List Recent Ingestion Jobs
  * ```typescript
- * // deploy time — bind the library
+ * // deploy time -- bind the library
  * const listJobs =
  *   yield* AWS.BedrockDataAutomation.ListDataAutomationLibraryIngestionJobs(library);
  *
- * // runtime — first page of jobs
+ * // runtime -- first page of jobs
  * const { jobs } = yield* listJobs({ maxResults: 25 });
  * ```
  *

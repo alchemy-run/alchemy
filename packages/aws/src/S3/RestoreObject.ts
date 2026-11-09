@@ -9,7 +9,7 @@ export interface RestoreObjectRequest extends Omit<S3.RestoreObjectRequest, "Buc
  * Runtime binding for `s3:RestoreObject`.
  *
  * Bind this operation to a bucket to get a callable that initiates a restore
- * of an archived (Glacier / Deep Archive) object — the bucket name is
+ * of an archived (Glacier / Deep Archive) object -- the bucket name is
  * injected automatically and `s3:RestoreObject` is granted on the bucket's
  * objects. Provide the implementation with
  * `Effect.provide(AWS.S3.RestoreObjectHttp)`.

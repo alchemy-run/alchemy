@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 
 /**
  * Runtime binding for the `CancelDataRepositoryTask` operation (IAM action
- * `fsx:CancelDataRepositoryTask` on `*` — runtime-created tasks have ARNs
+ * `fsx:CancelDataRepositoryTask` on `*` -- runtime-created tasks have ARNs
  * unknowable at deploy time).
  *
  * Cancels a `PENDING` or `EXECUTING` Lustre data repository task started

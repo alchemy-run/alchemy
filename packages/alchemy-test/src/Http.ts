@@ -21,14 +21,14 @@ import * as Schedule from "effect/Schedule";
  *  - `5xx` while the script is up but a binding it depends on isn't ready yet.
  *
  * This is ordinary eventual consistency that belongs at the call site, not in
- * the resource provider — the provider returning before every edge PoP has
+ * the resource provider -- the provider returning before every edge PoP has
  * converged is correct. Consumers ride out the window by retrying the request.
  */
 export class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{ status: number }> {}
 
 /**
  * Status codes that indicate the edge hasn't finished converging on a fresh
- * deploy. Deliberate client errors (`401`, `403`, `400`, …) are NOT in this
+ * deploy. Deliberate client errors (`401`, `403`, `400`, ...) are NOT in this
  * set, so assertions on those statuses still observe them immediately rather
  * than being retried away.
  */
@@ -101,7 +101,7 @@ const defaultGuardSchedule = Schedule.min([
  * Worker URL.
  *
  * Protocol clients like effect RPC's `layerProtocolHttp` never inspect the
- * response status or content-type — they pipe the raw body straight into the
+ * response status or content-type -- they pipe the raw body straight into the
  * serialization parser, so every edge-generated HTML page (the workers.dev
  * placeholder, which serves with HTTP **200**; 1101/1102 error pages;
  * 429/1015 rate limits) surfaces as an opaque decode defect (e.g.
@@ -109,7 +109,7 @@ const defaultGuardSchedule = Schedule.min([
  *
  * This transform rejects any response whose `content-type` doesn't match the
  * expected one as a typed `HttpClientError` that records the status + a body
- * snippet — so a failure names its cause — and retries the request through a
+ * snippet -- so a failure names its cause -- and retries the request through a
  * bounded schedule so callers ride out the cold-start window
  * ({@link WorkerNotReady} documents why this belongs at the call site).
  */
@@ -183,7 +183,7 @@ export const rpcClientLayer = (
     serialization?: RpcSerialization.RpcSerialization["Service"];
     /**
      * Set `false` to skip the edge guard entirely and use a plain fetch
-     * transport — e.g. for a test that asserts on the raw edge behavior
+     * transport -- e.g. for a test that asserts on the raw edge behavior
      * itself. Default `true`.
      */
     guard?: boolean;

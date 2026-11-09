@@ -29,16 +29,16 @@ export type { RulesetFile, RulesetSource };
 
 export type RulesetProps = {
   /**
-   * Source files for this ruleset. Rulesets are immutable — changing
+   * Source files for this ruleset. Rulesets are immutable -- changing
    * `source` replaces the ruleset. Firebase Rules has no labels field,
-   * so Alchemy stamps ownership into a `// [alchemy …]` comment on the
+   * so Alchemy stamps ownership into a `// [alchemy ...]` comment on the
    * first file and strips it from attributes.
    */
   source: RulesetSource;
   /**
    * Intended resource this ruleset should be released to, e.g.
    * `firestore.googleapis.com/projects/{project}/databases/(default)`.
-   * May be left blank for the default release. Immutable — changing it
+   * May be left blank for the default release. Immutable -- changing it
    * replaces the ruleset.
    */
   attachmentPoint?: string;
@@ -56,7 +56,7 @@ export type Ruleset = Resource<
     project: string;
     /** User source with the Alchemy ownership comment stripped. */
     source: RulesetSource;
-    /** Services declared by this ruleset (`cloud.firestore`, …). */
+    /** Services declared by this ruleset (`cloud.firestore`, ...). */
     services: string[];
     /** Intended release attachment point, if set. */
     attachmentPoint: string | undefined;
@@ -71,8 +71,8 @@ export type Ruleset = Resource<
  * An immutable Firebase Security Rules ruleset.
  *
  * Rulesets have no labels field, so Alchemy stamps ownership into a
- * `// [alchemy …]` comment on the first source file for `list` / nuke.
- * Source and `attachmentPoint` are identity — changing either replaces
+ * `// [alchemy ...]` comment on the first source file for `list` / nuke.
+ * Source and `attachmentPoint` are identity -- changing either replaces
  * the ruleset. The ruleset id is assigned by the service.
  *
  * ### Creating a Ruleset

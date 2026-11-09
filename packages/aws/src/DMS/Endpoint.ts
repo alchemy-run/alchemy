@@ -154,7 +154,7 @@ export interface EndpointLookup {
 }
 
 /**
- * An AWS Database Migration Service (DMS) endpoint — the source or target
+ * An AWS Database Migration Service (DMS) endpoint -- the source or target
  * database of a replication. Endpoints are metadata-only (they store
  * connection information, not data), so they are free and fast to create.
  * ### Creating Endpoints
@@ -316,10 +316,10 @@ export const EndpointProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* findEndpoint(name);
 
-          // 2. Ensure — create if missing; tolerate AlreadyExists as a race.
+          // 2. Ensure -- create if missing; tolerate AlreadyExists as a race.
           if (observed === undefined) {
             observed = yield* dms
               .createEndpoint({
@@ -338,7 +338,7 @@ export const EndpointProvider = () =>
                 Effect.catchTag("ResourceAlreadyExistsFault", () => findEndpoint(name)),
               );
           } else {
-            // 3. Sync — the endpoint exists; push desired configuration. DMS
+            // 3. Sync -- the endpoint exists; push desired configuration. DMS
             //    modifyEndpoint is a full upsert of the connection settings,
             //    so send them all (cheap, no delta computation needed).
             observed = yield* dms
@@ -358,7 +358,7 @@ export const EndpointProvider = () =>
             });
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           const arn = observed.EndpointArn;
           const observedTags = yield* readTags(arn);
           const { upsert, removed } = diffTags(observedTags, desiredTags);

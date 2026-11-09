@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { DeploymentGroup } from "./DeploymentGroup.ts";
 
 /**
- * Runtime binding for `codedeploy:ContinueDeployment` — for a blue/green
+ * Runtime binding for `codedeploy:ContinueDeployment` -- for a blue/green
  * deployment paused in the ready state (`actionOnTimeout:
  * "STOP_DEPLOYMENT"`), starts rerouting traffic to the replacement
  * environment without waiting for the configured wait time.

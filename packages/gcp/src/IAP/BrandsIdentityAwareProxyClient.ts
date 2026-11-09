@@ -27,22 +27,22 @@ import {
 export type BrandsIdentityAwareProxyClientProps = {
   /**
    * Parent IAP OAuth brand. Full name
-   * `projects/{project}/brands/{brand}` or the brand id. Immutable —
+   * `projects/{project}/brands/{brand}` or the brand id. Immutable --
    * changing it replaces the client. The project must belong to a
    * Google Workspace organization, and the brand must already exist.
    */
   brand: string;
   /**
    * Human-friendly OAuth client name. IAP clients have no labels field,
-   * so Alchemy stamps ownership into a `[alchemy …]` prefix and strips
-   * it from attributes. Immutable — the API has no update, so changing
+   * so Alchemy stamps ownership into a `[alchemy ...]` prefix and strips
+   * it from attributes. Immutable -- the API has no update, so changing
    * this replaces the client.
    */
   displayName?: string;
   /**
    * Server-assigned OAuth client id (the `{client_id}` segment of
    * `projects/{project}/brands/{brand}/identityAwareProxyClients/{client_id}`).
-   * Leave blank on create. Immutable — changing it replaces the client.
+   * Leave blank on create. Immutable -- changing it replaces the client.
    */
   identityAwareProxyClientId?: string;
 };
@@ -76,7 +76,7 @@ export type BrandsIdentityAwareProxyClient = Resource<
  *
  * IAP OAuth clients have no labels field, so Alchemy stamps ownership
  * into `displayName` for `list` / nuke. Brand, client id, and display
- * name are identity — the API has no patch, so changing any of them
+ * name are identity -- the API has no patch, so changing any of them
  * replaces the client. Creating a client requires an existing
  * internal-only OAuth brand on a Workspace project.
  *

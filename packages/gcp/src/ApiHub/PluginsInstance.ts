@@ -40,22 +40,22 @@ export type PluginsInstanceProps = {
   /**
    * Parent plugin resource name
    * `projects/{project}/locations/{location}/plugins/{plugin}`.
-   * Immutable — changing it replaces the instance.
+   * Immutable -- changing it replaces the instance.
    */
   plugin: string;
   /**
    * Plugin instance id (the `{instance}` segment). If omitted, a unique
-   * id is generated. Immutable — changing it replaces the instance.
+   * id is generated. Immutable -- changing it replaces the instance.
    */
   pluginInstanceId?: string;
   /**
    * Location of the API Hub instance. Defaults to the parent plugin's
-   * location. Immutable — changing it replaces the instance.
+   * location. Immutable -- changing it replaces the instance.
    */
   location?: string;
   /**
    * Display name. Max 255 characters. Plugin instances have no
-   * description, so Alchemy stamps ownership into a `[alchemy …]` prefix
+   * description, so Alchemy stamps ownership into a `[alchemy ...]` prefix
    * and strips it from attributes.
    */
   displayName?: string;
@@ -147,7 +147,7 @@ export interface PluginsInstanceLookup {
 }
 
 /**
- * An API Hub plugin instance — a configured running copy of a plugin.
+ * An API Hub plugin instance -- a configured running copy of a plugin.
  *
  * Plugin instances have no labels or description, so Alchemy stamps
  * ownership into the display name for `list` / nuke. Plugin, location,

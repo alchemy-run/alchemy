@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `DeleteClusterSnapshot` operation (IAM action
  * `redshift:DeleteClusterSnapshot`).
  *
- * Deletes a manual cluster snapshot by identifier — the cleanup half of a
+ * Deletes a manual cluster snapshot by identifier -- the cleanup half of a
  * snapshot-rotation job (automated snapshots cannot be deleted; they expire
  * with the retention period). Provide the implementation with
  * `Effect.provide(AWS.Redshift.DeleteClusterSnapshotHttp)`.

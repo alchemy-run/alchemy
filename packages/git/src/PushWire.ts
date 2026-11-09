@@ -1,13 +1,13 @@
 import type { ObjectType } from "./Protocol/ObjectCodec.ts";
 /**
- * The Worker ↔ Repo DO push protocol (DESIGN §22.10): the pack never
+ * The Worker <-> Repo DO push protocol (DESIGN §22.10): the pack never
  * enters the Durable Object. The Worker receives the body, spills it,
- * verifies it through the hasher fan-out, and ships the DO only *rows* —
+ * verifies it through the hasher fan-out, and ships the DO only *rows* --
  * staged-object batches (promoted rows are coordinates into the wire
- * pack, inline rows carry their zlib bytes) — plus the commit summary.
+ * pack, inline rows carry their zlib bytes) -- plus the commit summary.
  *
  * Batches cross the RPC boundary as one binary buffer:
- * `u32 jsonLen | json | zdata…` where the JSON array lists each row's
+ * `u32 jsonLen | json | zdata...` where the JSON array lists each row's
  * metadata and the byte length of its zdata run, in order.
  */
 import type { StagedObject } from "./Store/ObjectStore.ts";

@@ -13,7 +13,7 @@ import type { Instance } from "./Instance.ts";
  * ### Looking Up Groups
  * **Example:** Resolve a GroupId From a Display Name
  * ```typescript
- * // init — bind the operation to the Identity Center instance
+ * // init -- bind the operation to the Identity Center instance
  * const getGroupId = yield* AWS.IdentityCenter.GetGroupId(instance);
  *
  * // runtime

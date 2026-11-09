@@ -28,7 +28,7 @@ export interface SwarmPoolOptions extends PoolSettings {
  * tasks host every `Cluster.Entity` given this pool, on the
  * database's overlay network. Runners find each other through the
  * database and talk on the network; the gateway is served on the same
- * network. Requires an `Cluster.Database` on a Docker network —
+ * network. Requires an `Cluster.Database` on a Docker network --
  * `ClusterDocker.Database`.
  *
  * Every entity given the same pool shares it: declare the pool once

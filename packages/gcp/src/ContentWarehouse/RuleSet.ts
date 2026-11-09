@@ -34,19 +34,19 @@ export type RuleSetProps = {
   /**
    * Rule set id (the `{ruleSet}` segment of
    * `projects/{project}/locations/{location}/ruleSets/{ruleSet}`).
-   * Assigned by the API on create. Immutable — changing it replaces the
+   * Assigned by the API on create. Immutable -- changing it replaces the
    * rule set. Supply it to adopt an existing rule set.
    */
   ruleSetId?: string;
   /**
-   * Multi-region location (`us` or `eu`). Immutable — changing it
+   * Multi-region location (`us` or `eu`). Immutable -- changing it
    * replaces the rule set. `US` is accepted and normalized to `us`.
    * @default "us"
    */
   location?: string;
   /**
    * Short description. Rule sets have no labels field, so Alchemy stamps
-   * ownership into a `[alchemy …]` prefix and strips it from attributes.
+   * ownership into a `[alchemy ...]` prefix and strips it from attributes.
    */
   description?: string;
   /**
@@ -98,10 +98,10 @@ const DEFAULT_RULES: Rule[] = [
 ];
 
 /**
- * A Document AI Warehouse rule set — trigger conditions and actions run
+ * A Document AI Warehouse rule set -- trigger conditions and actions run
  * when documents are created, updated, or linked.
  *
- * Rule sets have no labels field — Alchemy stamps ownership into the
+ * Rule sets have no labels field -- Alchemy stamps ownership into the
  * description so `list` / nuke can find them. Location is immutable.
  * Description, source, and rules update in place.
  *

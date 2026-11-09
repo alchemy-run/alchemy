@@ -17,7 +17,7 @@ export interface EndpointHealthcheckProps {
   /**
    * The IP address of the host to perform checks against. Must be an
    * on-net (private) IP reachable through Magic Transit / Magic WAN, and
-   * unique among the account's endpoint healthchecks — Cloudflare rejects
+   * unique among the account's endpoint healthchecks -- Cloudflare rejects
    * public or duplicate IPs with an "Invalid request" error (code 1002,
    * surfaced as the typed `InvalidHealthcheckEndpoint`).
    */
@@ -32,8 +32,8 @@ export interface EndpointHealthcheckProps {
    * side. If omitted, a unique name is generated from the app, stage, and
    * logical ID.
    *
-   * Cannot be changed after creation — Cloudflare's PUT endpoint echoes a
-   * new name back but never persists it — so updating this property
+   * Cannot be changed after creation -- Cloudflare's PUT endpoint echoes a
+   * new name back but never persists it -- so updating this property
    * triggers a replacement.
    * @default ${app}-${stage}-${id}
    */
@@ -62,14 +62,14 @@ export type EndpointHealthcheck = Resource<
 >;
 
 /**
- * A Magic Transit / Magic WAN endpoint healthcheck — a continuous ICMP
+ * A Magic Transit / Magic WAN endpoint healthcheck -- a continuous ICMP
  * probe of an on-net IP address used to monitor reachability of hosts
  * behind Magic tunnels.
  *
  * The `endpoint` must be a private (on-net) IP; Cloudflare rejects public
  * IPs with the typed `InvalidHealthcheckEndpoint` error. The `endpoint` is
  * mutable in place via PUT (the UUID is stable across updates), but `name`
- * is create-only — changing it triggers a replacement.
+ * is create-only -- changing it triggers a replacement.
  * ### Creating an endpoint healthcheck
  * **Example:** Probe an on-net host
  * ```typescript
@@ -142,7 +142,7 @@ export const EndpointHealthcheckProvider = () =>
         if (observed) return toAttributes(observed, acct);
         return undefined;
       }
-      // Cold read — recover from lost state by matching the deterministic
+      // Cold read -- recover from lost state by matching the deterministic
       // physical name. Healthchecks carry no ownership markers, so report
       // the match as Unowned and let the adopt policy gate takeover.
       const name = yield* createHealthcheckName(id, olds?.name);
@@ -160,7 +160,7 @@ export const EndpointHealthcheckProvider = () =>
         name,
       };
 
-      // Observe — the id cached on `output` is a hint, not a guarantee:
+      // Observe -- the id cached on `output` is a hint, not a guarantee:
       // a "No entry found" falls through to missing and we recreate.
       // A GET right after a prior create can transiently 404 while the
       // new healthcheck propagates; bounded-retry on the typed
@@ -170,7 +170,7 @@ export const EndpointHealthcheckProvider = () =>
         ? yield* observeExisting(output.accountId ?? accountId, output.healthcheckId)
         : undefined;
 
-      // Ensure — greenfield (or out-of-band delete): create with the full
+      // Ensure -- greenfield (or out-of-band delete): create with the full
       // desired body. Names are not unique so there is no AlreadyExists
       // race to tolerate.
       if (!observed) {
@@ -181,7 +181,7 @@ export const EndpointHealthcheckProvider = () =>
         return toAttributes(created, accountId);
       }
 
-      // Sync — diff observed cloud state against desired; the update API
+      // Sync -- diff observed cloud state against desired; the update API
       // is a PUT carrying the full body, so send everything, but skip the
       // call entirely on a no-op. The name is create-only (a changed name
       // is routed to replacement by `diff`; the PUT echoes a new name back
@@ -243,7 +243,7 @@ const getHealthcheck = (accountId: string, id: string) =>
  * Observe a healthcheck we believe exists (its id is cached on `output`).
  * A GET issued right after a create can transiently 404 while the new
  * state propagates, so bounded-retry on the typed
- * `EndpointHealthcheckNotFound` before treating the resource as gone —
+ * `EndpointHealthcheckNotFound` before treating the resource as gone --
  * this prevents a propagation blip from triggering a duplicate create.
  */
 const observeExisting = (accountId: string, id: string) =>

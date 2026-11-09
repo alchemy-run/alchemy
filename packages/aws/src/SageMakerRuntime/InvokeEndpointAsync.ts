@@ -24,7 +24,7 @@ export interface InvokeEndpointAsyncRequest extends Omit<
 }
 
 /**
- * Runtime binding for `sagemaker:InvokeEndpointAsync` — enqueue an
+ * Runtime binding for `sagemaker:InvokeEndpointAsync` -- enqueue an
  * asynchronous inference request against a deployed SageMaker async endpoint.
  * The request payload is read from S3 (`InputLocation`) and the result is
  * written back to S3; the call returns immediately with an `OutputLocation`.
@@ -45,7 +45,7 @@ export interface InvokeEndpointAsyncRequest extends Omit<
  *   ContentType: "application/json",
  *   InputLocation: "s3://my-bucket/input/request.json",
  * });
- * // result.OutputLocation — poll S3 for the written inference result
+ * // result.OutputLocation -- poll S3 for the written inference result
  * ```
  *
  * @binding

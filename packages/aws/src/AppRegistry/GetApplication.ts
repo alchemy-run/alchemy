@@ -6,14 +6,14 @@ import type { Application } from "./Application.ts";
 /**
  * Runtime binding for `servicecatalog:GetApplication`.
  *
- * Reads the bound application's metadata — description, tags, the
+ * Reads the bound application's metadata -- description, tags, the
  * `awsApplication` tag value, integrations, and the associated resource
  * count. Provide the implementation with
  * `Effect.provide(AWS.AppRegistry.GetApplicationHttp)`.
  * ### Reading Application Metadata
  * **Example:** Read the Application at Runtime
  * ```typescript
- * // init — bind the operation to the application
+ * // init -- bind the operation to the application
  * const getApplication = yield* AWS.AppRegistry.GetApplication(app);
  *
  * // runtime

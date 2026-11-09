@@ -9,7 +9,7 @@ export interface StartAnalysisReportRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `network-firewall:StartAnalysisReport` — generate a
+ * Runtime binding for `network-firewall:StartAnalysisReport` -- generate a
  * traffic analysis report (`TLS_SNI` or `HTTP_HOST`) for the bound
  * {@link Firewall}; the firewall ARN is injected automatically. The
  * firewall's analysis settings must have the analysis type enabled.
@@ -19,7 +19,7 @@ export interface StartAnalysisReportRequest extends Omit<
  * ### Analysis Reports
  * **Example:** Start a TLS SNI Analysis Report
  * ```typescript
- * // init — grants network-firewall:StartAnalysisReport on the firewall
+ * // init -- grants network-firewall:StartAnalysisReport on the firewall
  * const startAnalysisReport =
  *   yield* AWS.NetworkFirewall.StartAnalysisReport(firewall);
  *

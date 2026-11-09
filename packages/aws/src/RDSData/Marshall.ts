@@ -1,7 +1,7 @@
 import type * as rdsdata from "@distilled.cloud/aws/rds-data";
 
 /**
- * JS value → Data API `SqlParameter` marshalling, matching the Postgres
+ * JS value -> Data API `SqlParameter` marshalling, matching the Postgres
  * wire expectations: integers as `longValue`, floats as `doubleValue`,
  * `Date`s as `TIMESTAMP`-hinted strings, `Uint8Array` as blobs, and
  * anything else JSON-stringified.
@@ -42,8 +42,8 @@ export const toSqlParameter = (name: string, value: unknown): rdsdata.SqlParamet
 const TIMESTAMP_TYPES = new Set(["timestamp", "timestamptz", "date", "datetime"]);
 
 /**
- * Data API `Field` → JS value. Timestamp-typed columns (per the response's
- * `columnMetadata.typeName`) revive as `Date`s — the Data API returns UTC
+ * Data API `Field` -> JS value. Timestamp-typed columns (per the response's
+ * `columnMetadata.typeName`) revive as `Date`s -- the Data API returns UTC
  * timestamps as `"YYYY-MM-DD HH:MM:SS[.FFF]"` strings.
  */
 export const fromField = (field: rdsdata.Field, typeName: string | undefined): unknown => {

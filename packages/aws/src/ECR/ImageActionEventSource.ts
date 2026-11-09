@@ -17,7 +17,7 @@ export interface ImageActionDetail {
   result: "SUCCESS" | "FAILURE";
   /** Name of the repository the image was pushed to / deleted from. */
   "repository-name": string;
-  /** Manifest digest of the affected image, e.g. `sha256:…`. */
+  /** Manifest digest of the affected image, e.g. `sha256:...`. */
   "image-digest": string;
   /** Tag of the affected image, when the action targeted a tag. */
   "image-tag"?: string;
@@ -84,7 +84,7 @@ export interface ImageActionsProps extends EventRouteProps {
  * push or delete completes; this subscribes the host Function to those
  * events so it can react without polling.
  *
- * ECR publishes to EventBridge automatically — no additional resource is
+ * ECR publishes to EventBridge automatically -- no additional resource is
  * created besides the EventBridge rule targeting the host. Provide the
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.
@@ -153,7 +153,7 @@ export interface ImageScansProps extends EventRouteProps {
  * Event source connecting completed ECR image scans to the hosting compute.
  * ECR publishes an event to the account's default EventBridge bus (source
  * `aws.ecr`, detail-type `ECR Image Scan`) when a vulnerability scan
- * finishes — including scan-on-push scans; this subscribes the host Function
+ * finishes -- including scan-on-push scans; this subscribes the host Function
  * to those events so it can react to new findings without polling.
  *
  * ### Consuming Image Events

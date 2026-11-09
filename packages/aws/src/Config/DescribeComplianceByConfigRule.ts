@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `config:DescribeComplianceByConfigRule` — read
+ * Runtime binding for `config:DescribeComplianceByConfigRule` -- read
  * whether your Config rules are compliant (and how many resources violate
  * each noncompliant rule).
  *
@@ -12,7 +12,7 @@ import type * as Effect from "effect/Effect";
  * ### Reading Compliance
  * **Example:** Check Rule Compliance
  * ```typescript
- * // init — grants config:DescribeComplianceByConfigRule
+ * // init -- grants config:DescribeComplianceByConfigRule
  * const describeComplianceByConfigRule = yield* AWS.Config.DescribeComplianceByConfigRule();
  *
  * // runtime

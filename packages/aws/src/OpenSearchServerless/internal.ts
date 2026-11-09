@@ -35,7 +35,7 @@ export const stringifyPolicy = (
 
 /**
  * Normalize a policy document (string or object) to a stable JSON string for
- * drift comparison — parse-then-stringify so key ordering differences between
+ * drift comparison -- parse-then-stringify so key ordering differences between
  * the desired document and the API's echoed document do not force a spurious
  * update.
  */
@@ -135,7 +135,7 @@ export const awaitVpcEndpointActive = Effect.fn("AWS.OpenSearchServerless.awaitV
 
 /**
  * Bounded retry through the `ConflictException` window that AOSS raises while a
- * dependent resource is still tearing down — e.g. deleting an encryption
+ * dependent resource is still tearing down -- e.g. deleting an encryption
  * `SecurityPolicy` while its `Collection` deletion is still propagating.
  * Explicitly typed for the same declaration-emit reason as above.
  */

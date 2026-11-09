@@ -11,7 +11,7 @@ const compactFlagType = (type: string): string => {
   const value = bracketed ? type.slice(1, -1) : type;
   const choices = value.split("|");
   const compact =
-    choices.length > 2 ? `${choices.slice(0, 2).join("|")}|…` : `${value.slice(0, 21)}…`;
+    choices.length > 2 ? `${choices.slice(0, 2).join("|")}|\u2026` : `${value.slice(0, 21)}\u2026`;
   return bracketed ? `<${compact}>` : compact;
 };
 
@@ -57,7 +57,7 @@ const wrapLines = (text: string, width: number): string =>
 /**
  * Help formatter for plain (non-interactive) runs: the default effect/cli
  * formatter with colors off, enum flag types compacted, and output wrapped
- * to the terminal width — CI logs, redirected output, and coding agents
+ * to the terminal width -- CI logs, redirected output, and coding agents
  * get parseable, bounded lines.
  */
 export const plainCliFormatter = (options: { columns: number }): CliOutput.Formatter => {

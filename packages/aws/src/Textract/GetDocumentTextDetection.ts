@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `textract:GetDocumentTextDetection` — read the
+ * Runtime binding for `textract:GetDocumentTextDetection` -- read the
  * status and results of an asynchronous OCR job started with
  * `StartDocumentTextDetection`.
  *

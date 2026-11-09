@@ -7,13 +7,13 @@ import type { Instance } from "./Instance.ts";
  * Runtime binding for the `CreateUser` operation (IAM action
  * `identitystore:CreateUser`), scoped to one {@link Instance}.
  *
- * Creates a user in the bound instance's identity store — e.g. a just-in-time provisioning Lambda mirroring users from an external HR system. The instance's
+ * Creates a user in the bound instance's identity store -- e.g. a just-in-time provisioning Lambda mirroring users from an external HR system. The instance's
  * `IdentityStoreId` is injected from the binding. Provide the implementation with
  * `Effect.provide(AWS.IdentityCenter.CreateUserHttp)`.
  * ### Managing Users
  * **Example:** Provision a User
  * ```typescript
- * // init — bind the operation to the Identity Center instance
+ * // init -- bind the operation to the Identity Center instance
  * const createUser = yield* AWS.IdentityCenter.CreateUser(instance);
  *
  * // runtime

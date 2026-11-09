@@ -7,7 +7,7 @@ import type * as Effect from "effect/Effect";
  * `redshift:DescribeClusters`).
  *
  * Lists the account's provisioned Redshift clusters or looks one up by
- * identifier — e.g. an ops function that checks whether the warehouse is
+ * identifier -- e.g. an ops function that checks whether the warehouse is
  * `available` before submitting a load. Provide the implementation with
  * `Effect.provide(AWS.Redshift.DescribeClustersHttp)`.
  * ### Monitoring Clusters

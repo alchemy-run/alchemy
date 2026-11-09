@@ -31,13 +31,13 @@ export type WorkflowProps = {
    * Workflow id (the `{workflow}` segment of
    * `projects/{project}/locations/{location}/workflows/{workflow}`). If
    * omitted, a unique name is generated from the stack, stage, and logical
-   * id. Must match `[A-Za-z][A-Za-z0-9_-]{0,62}[A-Za-z0-9]` (1–64
+   * id. Must match `[A-Za-z][A-Za-z0-9_-]{0,62}[A-Za-z0-9]` (1-64
    * characters, start with a letter, end with a letter or number).
-   * Immutable — changing it replaces the workflow.
+   * Immutable -- changing it replaces the workflow.
    */
   workflowId?: string;
   /**
-   * Workflows location (`us-central1`, `us-east1`, …). Immutable —
+   * Workflows location (`us-central1`, `us-east1`, ...). Immutable --
    * changing it replaces the workflow. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
@@ -94,7 +94,7 @@ export type Workflow = Resource<
     name: string;
     /** Workflow id (last path segment). */
     workflowId: string;
-    /** Location id (`us-central1`, …). */
+    /** Location id (`us-central1`, ...). */
     location: string;
     /** Project id. */
     project: string;
@@ -143,12 +143,12 @@ export interface WorkflowLookup {
   /**
    * Workflow id (the `{workflow}` segment of
    * `projects/{project}/locations/{location}/workflows/{workflow}`). Must
-   * match `[A-Za-z][A-Za-z0-9_-]{0,62}[A-Za-z0-9]` (1–64 characters, start
+   * match `[A-Za-z][A-Za-z0-9_-]{0,62}[A-Za-z0-9]` (1-64 characters, start
    * with a letter, end with a letter or number).
    */
   workflowId: string;
   /**
-   * Workflows location (`us-central1`, `us-east1`, …). `US-CENTRAL1` is
+   * Workflows location (`us-central1`, `us-east1`, ...). `US-CENTRAL1` is
    * accepted and normalized to `us-central1`.
    */
   location?: string;
@@ -160,7 +160,7 @@ export interface WorkflowLookup {
 }
 
 /**
- * A Google Cloud Workflows workflow — YAML or JSON orchestration that
+ * A Google Cloud Workflows workflow -- YAML or JSON orchestration that
  * Workflows executes as a revisioned program.
  *
  * Changing `workflowId` or `location` replaces the workflow. Updating

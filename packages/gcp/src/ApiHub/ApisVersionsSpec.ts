@@ -39,7 +39,7 @@ export type SpecContents = {
    */
   contents: string;
   /**
-   * MIME type (`application/yaml`, `application/json`, …).
+   * MIME type (`application/yaml`, `application/json`, ...).
    */
   mimeType: string;
 };
@@ -48,13 +48,13 @@ export type ApisVersionsSpecProps = {
   /**
    * Parent version. Full name
    * `projects/{project}/locations/{location}/apis/{api}/versions/{version}`.
-   * Immutable — changing it replaces the spec.
+   * Immutable -- changing it replaces the spec.
    */
   version: string;
   /**
    * Spec id (the `{spec}` segment of
    * `.../versions/{version}/specs/{spec}`). If omitted, a unique id is
-   * generated. Immutable — changing it replaces the spec.
+   * generated. Immutable -- changing it replaces the spec.
    */
   specId?: string;
   /**
@@ -73,7 +73,7 @@ export type ApisVersionsSpecProps = {
   sourceUri?: string;
   /**
    * Spec document. Required on create when `sourceUri` is omitted.
-   * Input-only — subsequent updates send a new document when this field
+   * Input-only -- subsequent updates send a new document when this field
    * changes.
    */
   contents?: SpecContents;
@@ -160,7 +160,7 @@ export interface ApisVersionsSpecLookup {
  * operations onto the version.
  *
  * Parent version and id are immutable. Display name, source URI, contents,
- * spec type, and attributes update in place. Specs have no labels field —
+ * spec type, and attributes update in place. Specs have no labels field --
  * Alchemy stamps ownership into the display name.
  *
  * ### Creating a Spec

@@ -75,7 +75,7 @@ export interface EventTypeLookup {
 }
 
 /**
- * An Amazon Fraud Detector event type — the schema of an event (its variables,
+ * An Amazon Fraud Detector event type -- the schema of an event (its variables,
  * labels, and entity types) that detectors evaluate. Event types are cheap
  * metadata objects.
  *
@@ -156,7 +156,7 @@ export const EventTypeProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // putEventType is an idempotent upsert — call it to converge the
+          // putEventType is an idempotent upsert -- call it to converge the
           // core configuration whether creating or updating.
           yield* frauddetector.putEventType({
             name,
@@ -172,7 +172,7 @@ export const EventTypeProvider = () =>
           });
 
           const eventType = yield* get(name);
-          // Sync tags — diff against OBSERVED cloud tags.
+          // Sync tags -- diff against OBSERVED cloud tags.
           yield* syncFraudDetectorTags(eventType!.arn!, desiredTags);
 
           yield* session.note(name);

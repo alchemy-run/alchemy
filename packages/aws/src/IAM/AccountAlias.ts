@@ -68,11 +68,11 @@ export const AccountAliasProvider = () =>
       return accountAlias ? [{ accountAlias }] : [];
     }),
     reconcile: Effect.fn(function* ({ news, session }) {
-      // Observe — the account alias is a singleton; the only way to know
+      // Observe -- the account alias is a singleton; the only way to know
       // which alias is set is to list and take the first entry.
       const existing = yield* readAccountAlias;
 
-      // Ensure / Sync — IAM only allows a single alias per account, so
+      // Ensure / Sync -- IAM only allows a single alias per account, so
       // applying the desired alias is just `createAccountAlias`. If a
       // different alias already exists, replace it by creating the new one
       // and deleting the old (the API also supports overwriting in a

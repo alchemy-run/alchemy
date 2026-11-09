@@ -15,7 +15,7 @@ export interface PutAppsListRequest extends fms.PutAppsListRequest {}
  * ### Applications Lists
  * **Example:** Create an Applications List
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const putAppsList = yield* AWS.FMS.PutAppsList();
  *
  * // runtime

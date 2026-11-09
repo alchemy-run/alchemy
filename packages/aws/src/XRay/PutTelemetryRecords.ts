@@ -6,7 +6,7 @@ export interface PutTelemetryRecordsRequest extends xray.PutTelemetryRecordsRequ
 
 /**
  * Upload telemetry about segment transmission (received/sent/rejected
- * counts and backend connection errors) — the companion action to
+ * counts and backend connection errors) -- the companion action to
  * `PutTraceSegments` used by X-Ray daemons and custom emitters.
  *
  * Bind the operation in the function's init phase to get a runtime callable;
@@ -18,7 +18,7 @@ export interface PutTelemetryRecordsRequest extends xray.PutTelemetryRecordsRequ
  * ```typescript
  * import * as XRay from "@alchemy.run/aws/XRay";
  *
- * // init — grants xray:PutTelemetryRecords
+ * // init -- grants xray:PutTelemetryRecords
  * const putTelemetryRecords = yield* XRay.PutTelemetryRecords();
  *
  * // runtime

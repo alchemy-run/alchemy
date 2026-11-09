@@ -15,7 +15,7 @@ export interface GetViolationDetailsRequest extends fms.GetViolationDetailsReque
  * ### Compliance and Protection Status
  * **Example:** Read a Resource's Violation Details
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const getViolationDetails = yield* AWS.FMS.GetViolationDetails();
  *
  * // runtime

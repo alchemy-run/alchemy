@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `translate:StopTextTranslationJob` — stop an
+ * Runtime binding for `translate:StopTextTranslationJob` -- stop an
  * asynchronous batch translation job that is in progress. An `IN_PROGRESS`
  * job is marked `STOP_REQUESTED` and later `STOPPED`; a job that completes
  * first ends `COMPLETED`.

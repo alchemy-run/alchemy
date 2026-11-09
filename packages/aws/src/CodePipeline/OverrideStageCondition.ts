@@ -9,7 +9,7 @@ export interface OverrideStageConditionRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `codepipeline:OverrideStageCondition` — overrides a
+ * Runtime binding for `codepipeline:OverrideStageCondition` -- overrides a
  * stage condition (e.g. a failing `BEFORE_ENTRY` or `ON_SUCCESS` check) so
  * the execution can proceed (V2 pipelines).
  * ### Operating Stages

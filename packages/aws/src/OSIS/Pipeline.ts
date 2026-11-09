@@ -164,7 +164,7 @@ export interface PipelineLookup {
 }
 
 /**
- * An Amazon OpenSearch Ingestion (OSIS) pipeline — a managed Data Prepper
+ * An Amazon OpenSearch Ingestion (OSIS) pipeline -- a managed Data Prepper
  * pipeline that ingests, transforms, and delivers data to OpenSearch domains,
  * serverless collections, or S3.
  *
@@ -318,10 +318,10 @@ export const PipelineProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...props.tags };
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* readPipeline(name);
 
-          // 2. Ensure — create if missing; tolerate AlreadyExists as a race.
+          // 2. Ensure -- create if missing; tolerate AlreadyExists as a race.
           if (observed === undefined) {
             yield* osis
               .createPipeline({
@@ -360,7 +360,7 @@ export const PipelineProvider = () =>
           // statuses; wait (bounded) so update calls do not conflict.
           observed = yield* waitForActive(name);
 
-          // 3. Sync — compute the update delta from OBSERVED state.
+          // 3. Sync -- compute the update delta from OBSERVED state.
           const update: osis.UpdatePipelineRequest = { PipelineName: name };
           let mutated = false;
           if (props.minUnits !== observed.MinUnits) {
@@ -424,7 +424,7 @@ export const PipelineProvider = () =>
             observed = yield* waitForActive(name);
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           const arn = observed.PipelineArn;
           if (arn) {
             const observedTags = yield* readPipelineTags(arn);
@@ -444,7 +444,7 @@ export const PipelineProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           const name = output.pipelineName;
           // A pipeline mid-create/update rejects deletion with
-          // ConflictException — wait (bounded, tolerant) for it to settle,
+          // ConflictException -- wait (bounded, tolerant) for it to settle,
           // then retry conflicts through any residual transition.
           yield* waitForPipelineSettled(name, readPipeline(name)).pipe(
             Effect.orElseSucceed(() => undefined),

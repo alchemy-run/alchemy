@@ -9,7 +9,7 @@ export interface GenerateMacRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `payment-cryptography:GenerateMac` — computes a
+ * Runtime binding for `payment-cryptography:GenerateMac` -- computes a
  * Message Authentication Code over hex-encoded message data under a
  * {@link Key}. Provide `GenerateMacHttp` on the Function to satisfy this
  * service.
@@ -19,7 +19,7 @@ export interface GenerateMacRequest extends Omit<
  * // init
  * const generateMac = yield* PaymentCryptography.GenerateMac(macKey);
  *
- * // runtime — MessageData is hex-encoded
+ * // runtime -- MessageData is hex-encoded
  * const result = yield* generateMac({
  *   MessageData: "31323334353637383930313233343536",
  *   GenerationAttributes: { Algorithm: "HMAC" },

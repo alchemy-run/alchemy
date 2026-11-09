@@ -7,13 +7,13 @@ import type { Namespace } from "./Namespace.ts";
  * Runtime binding for the `RestoreFromRecoveryPoint` operation (IAM actions
  * `redshift-serverless:RestoreFromRecoveryPoint`).
  *
- * Restores the bound {@link Namespace} from an automatic recovery point —
+ * Restores the bound {@link Namespace} from an automatic recovery point --
  * point-in-time recovery within the last 24 hours. Provide the implementation with
  * `Effect.provide(AWS.RedshiftServerless.RestoreFromRecoveryPointHttp)`.
  * ### Restoring Data
  * **Example:** Restore a Namespace from a Recovery Point
  * ```typescript
- * // init — resolve the runtime client
+ * // init -- resolve the runtime client
  * const restore = yield* AWS.RedshiftServerless.RestoreFromRecoveryPoint(namespace);
  *
  * yield* restore({ workgroupName, recoveryPointId });

@@ -53,14 +53,14 @@ export type NotebookExecutionJobRequest = {
 
 export type ScheduleProps = {
   /**
-   * Region (`us-central1`, …). Immutable — changing it replaces the
+   * Region (`us-central1`, ...). Immutable -- changing it replaces the
    * Schedule.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
    * User-facing display name. Vertex AI Schedules have no labels field,
-   * so Alchemy ownership is stored in a `[alchemy …]` prefix.
+   * so Alchemy ownership is stored in a `[alchemy ...]` prefix.
    */
   displayName?: string;
   /**
@@ -162,7 +162,7 @@ export type Schedule = Resource<
 /**
  * A Vertex AI Schedule that periodically starts pipeline or notebook jobs.
  *
- * Schedules have no labels field — Alchemy stamps ownership into the
+ * Schedules have no labels field -- Alchemy stamps ownership into the
  * display name. Location is immutable. Cron, run limits, and pause state
  * update in place.
  *

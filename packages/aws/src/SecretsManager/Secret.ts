@@ -227,7 +227,7 @@ const toTagRecord = (
  * Expressed as an explicitly-typed helper: inlining `Effect.retry` here
  * leaves `Retry.Return`'s conditional type unresolved in the provider's
  * inferred layer type, which TypeScript's declaration emit widens to an
- * `unknown` R — poisoning the whole `AWS.providers()` union for every
+ * `unknown` R -- poisoning the whole `AWS.providers()` union for every
  * downstream consumer.
  */
 const retryThroughDeletionWindow = <A, E extends { _tag: string }, R>(
@@ -353,7 +353,7 @@ export const SecretProvider = () =>
           .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         // A secret with `DeletedDate` set is scheduled for deletion (our
         // delete uses `ForceDeleteWithoutRecovery`, which still completes
-        // asynchronously). It cannot be updated, so treat it as missing —
+        // asynchronously). It cannot be updated, so treat it as missing --
         // reconcile recreates it once the pending deletion finishes.
         return described?.DeletedDate ? undefined : described;
       });
@@ -457,16 +457,16 @@ export const SecretProvider = () =>
             news.secretBinary !== undefined ||
             news.generateSecretString !== undefined;
 
-          // Observe — describe the secret using whichever identifier we
+          // Observe -- describe the secret using whichever identifier we
           // have (ARN preferred, name as fallback).
           let observed = yield* readSecret(output?.secretArn ?? secretName);
 
-          // Ensure — create if missing. Tolerate `ResourceExistsException`
+          // Ensure -- create if missing. Tolerate `ResourceExistsException`
           // by re-describing; the sync step below converges metadata and
           // value. Recreating a physical name right after our own
           // `ForceDeleteWithoutRecovery` can race the asynchronous deletion
           // and fail with `InvalidRequestException` ("already scheduled for
-          // deletion") — force deletions complete within seconds, so retry
+          // deletion") -- force deletions complete within seconds, so retry
           // through that window (bounded).
           if (!observed?.ARN && news.recoveryWindowInDays !== undefined) {
             yield* restoreIfPendingDeletion(id, secretName);
@@ -507,7 +507,7 @@ export const SecretProvider = () =>
           // Sync metadata + value. `updateSecret` accepts description,
           // KMS key, and the secret value in one call. We always send
           // metadata (idempotent) and only send a new value if the user
-          // provided one — `updateSecret` requires SecretString or
+          // provided one -- `updateSecret` requires SecretString or
           // SecretBinary to actually rotate, but is fine to call without
           // them to update description/kmsKeyId only.
           const valuePayload = yield* createValue(news);
@@ -518,7 +518,7 @@ export const SecretProvider = () =>
             ...valuePayload,
           });
 
-          // Sync tags — diff observed cloud tags against desired.
+          // Sync tags -- diff observed cloud tags against desired.
           const observedTags = toTagRecord(observed.Tags);
           const { removed, upsert } = diffTags(observedTags, desiredTags);
 
@@ -536,7 +536,7 @@ export const SecretProvider = () =>
             });
           }
 
-          // Sync the resource-based policy — diff the observed policy
+          // Sync the resource-based policy -- diff the observed policy
           // against the desired one (both canonicalized via
           // `normalizePolicyDocument`) so a re-deploy of an equivalent
           // document is a no-op API-wise.
@@ -623,7 +623,7 @@ export const SecretProvider = () =>
         }),
         // `listSecrets` returns full secret metadata (ARN, name, description,
         // KMS key, and tags) inline, so we hydrate the exact `read` Attributes
-        // shape directly — without fetching plaintext values via
+        // shape directly -- without fetching plaintext values via
         // `getSecretValue`. `versionId` is per-value state not surfaced by the
         // list API, so it is `undefined` (matching `read` when there is no
         // prior output).

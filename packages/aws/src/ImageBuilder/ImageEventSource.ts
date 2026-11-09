@@ -9,7 +9,7 @@ import {
 /**
  * The `detail` payload EC2 Image Builder delivers to EventBridge.
  * Image-state-change events report the build's new state (`BUILDING`,
- * `TESTING`, `DISTRIBUTING`, `AVAILABLE`, `CANCELLED`, `FAILED`, …);
+ * `TESTING`, `DISTRIBUTING`, `AVAILABLE`, `CANCELLED`, `FAILED`, ...);
  * workflow-step-waiting events identify the `WAIT_FOR_ACTION` step that is
  * paused. Fields not shared by every event kind are optional (the schema
  * grows over time).
@@ -40,7 +40,7 @@ export interface ImageEventSourceProps extends EventRouteProps {
   id?: string;
   /**
    * Which notifications to subscribe to: image state changes (a build
-   * progressing through `BUILDING` → … → `AVAILABLE`/`FAILED`/`CANCELLED`)
+   * progressing through `BUILDING` -> ... -> `AVAILABLE`/`FAILED`/`CANCELLED`)
    * and/or workflow steps pausing on `WAIT_FOR_ACTION`.
    * @default ["image-state-change"]
    */
@@ -61,7 +61,7 @@ export interface ImageEventSourceProps extends EventRouteProps {
  * events so it can react when a build finishes, fails, or pauses for manual
  * action.
  *
- * Image Builder publishes to EventBridge automatically — no additional
+ * Image Builder publishes to EventBridge automatically -- no additional
  * resource is created besides the EventBridge rule targeting the host.
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.

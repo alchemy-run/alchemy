@@ -12,7 +12,7 @@ export interface ImportCertificateAuthorityCertificateRequest extends Omit<
  * Runtime binding for `acm-pca:ImportCertificateAuthorityCertificate`.
  *
  * Bind a {@link CertificateAuthority} inside a function runtime to install
- * the CA's signed certificate — the final step of the activation flow
+ * the CA's signed certificate -- the final step of the activation flow
  * (fetch CSR via {@link GetCertificateAuthorityCsr}, sign it, import). This
  * enables workflows where the CA's CSR is signed by an on-premises or
  * external parent CA at runtime. Provide

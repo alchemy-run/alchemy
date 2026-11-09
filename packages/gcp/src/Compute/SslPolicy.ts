@@ -28,7 +28,7 @@ export type SslPolicyProps = {
    */
   sslPolicyName?: string;
   /**
-   * Optional description. Alchemy ownership is stored in a `[alchemy …]`
+   * Optional description. Alchemy ownership is stored in a `[alchemy ...]`
    * prefix so `list` / nuke can find resources (Compute SslPolicy has no
    * labels field).
    */
@@ -119,7 +119,7 @@ export interface SslPolicyLookup {
  * Application Load Balancers and proxy Network Load Balancers. This
  * resource maps to the global `sslPolicies` collection
  * (`regionSslPolicies` is a separate resource). Compute SslPolicy has no
- * labels field — Alchemy ownership is stored in the description so nuke
+ * labels field -- Alchemy ownership is stored in the description so nuke
  * can find leaked policies.
  *
  * ### Creating an SSL Policy

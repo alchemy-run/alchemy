@@ -165,7 +165,7 @@ export const DatabaseTokenProvider = () =>
         reconcile: Effect.fn(function* ({ news, olds, output }) {
           const org = output?.organization ?? (yield* organization);
 
-          // Observe — the token is bound to the database's UUID, so a
+          // Observe -- the token is bound to the database's UUID, so a
           // database replaced under the same name invalidates it.
           const { database } = yield* turso.getDatabase({
             organizationSlug: org,
@@ -181,7 +181,7 @@ export const DatabaseTokenProvider = () =>
             return output;
           }
 
-          // Ensure — mint.
+          // Ensure -- mint.
           const authorization = news.authorization ?? "full-access";
           const { jwt } = yield* turso.createDatabaseToken({
             organizationSlug: org,

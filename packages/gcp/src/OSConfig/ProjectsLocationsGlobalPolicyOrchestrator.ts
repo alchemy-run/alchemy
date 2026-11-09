@@ -37,7 +37,7 @@ export type ProjectsLocationsGlobalPolicyOrchestratorProps = {
   /**
    * Orchestrator id (the `{policyOrchestrator}` segment of
    * `projects/{project}/locations/global/policyOrchestrators/{policyOrchestrator}`).
-   * If omitted, a unique RFC1035 name is generated. Immutable — changing
+   * If omitted, a unique RFC1035 name is generated. Immutable -- changing
    * it replaces the orchestrator.
    */
   policyOrchestratorId?: string;
@@ -114,7 +114,7 @@ export type ProjectsLocationsGlobalPolicyOrchestrator = Resource<
  * A project-scoped OS Config policy orchestrator.
  *
  * Policy orchestrators upsert or delete OS policy assignments across
- * zones in a project. Id is identity — changing `policyOrchestratorId`
+ * zones in a project. Id is identity -- changing `policyOrchestratorId`
  * replaces the resource. Action, state, description, labels, the
  * orchestrated payload, and scope update in place.
  *

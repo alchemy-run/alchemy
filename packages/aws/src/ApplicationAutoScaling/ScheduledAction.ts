@@ -103,13 +103,13 @@ export interface ScheduledAction extends Resource<
 > {}
 
 /**
- * An Application Auto Scaling scheduled action — adjusts a scalable target's
+ * An Application Auto Scaling scheduled action -- adjusts a scalable target's
  * minimum and/or maximum capacity on a one-time (`at(...)`) or recurring
  * (`cron(...)` / `rate(...)`) schedule.
  *
  * The action applies to the scalable target identified by the
  * (`serviceNamespace`, `resourceId`, `scalableDimension`) triple, which must
- * be registered (see {@link ScalableTarget}) before the action is created —
+ * be registered (see {@link ScalableTarget}) before the action is created --
  * pass the target's outputs so deployment orders correctly.
  * ### Scheduling Capacity Changes
  * **Example:** Scale Out for Business Hours
@@ -215,7 +215,7 @@ export const ScheduledActionProvider = () =>
           if (oldName !== newName) {
             return { action: "replace" } as const;
           }
-          // The target triple pins the action to a scalable target — any
+          // The target triple pins the action to a scalable target -- any
           // change replaces the action. Only compare sides that are known:
           // a half-created state row may have lost Output-valued props.
           for (const key of ["serviceNamespace", "resourceId", "scalableDimension"] as const) {
@@ -243,12 +243,12 @@ export const ScheduledActionProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, session }) {
           const scheduledActionName = yield* toName(id, news);
 
-          // Ensure + sync — `putScheduledAction` is the single
+          // Ensure + sync -- `putScheduledAction` is the single
           // create-or-update API, keyed by (name, target triple). Note the
           // AWS semantics: unspecified StartTime/EndTime are *deleted* on
           // update, which matches declarative convergence exactly. A put
           // issued immediately after the target registers can race its
-          // propagation — retry the typed ObjectNotFoundException briefly.
+          // propagation -- retry the typed ObjectNotFoundException briefly.
           yield* retryWhileTargetPropagates(
             aas.putScheduledAction({
               ScheduledActionName: scheduledActionName,

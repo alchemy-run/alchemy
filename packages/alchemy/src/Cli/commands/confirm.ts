@@ -8,7 +8,7 @@ import { exitDeclined } from "./errors.ts";
  * A declined confirmation prompt. By the time this propagates the decline
  * message has already been printed and the exit code set, so the
  * `[Runtime.errorReported] = false` marker suppresses the runtime's default
- * failure log — the process just exits 1, matching the CLI's documented
+ * failure log -- the process just exits 1, matching the CLI's documented
  * "1 = failure or decline" contract.
  */
 export class ConfirmationDeclined extends Data.TaggedError("ConfirmationDeclined") {

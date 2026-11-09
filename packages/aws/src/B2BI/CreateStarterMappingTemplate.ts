@@ -6,14 +6,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `b2bi:CreateStarterMappingTemplate`.
  *
  * Generates a starter mapping template (JSONATA or XSLT) for a given X12
- * transaction set — a scaffold covering every field of the transaction that
+ * transaction set -- a scaffold covering every field of the transaction that
  * can be edited down to the desired mapping. Optionally writes the template
  * to S3 via `outputSampleLocation`. Provide the implementation with
  * `Effect.provide(AWS.B2BI.CreateStarterMappingTemplateHttp)`.
  * ### Generating Mappings
  * **Example:** Scaffold a JSONATA Template for X12 850
  * ```typescript
- * // init — account-level, no resource argument
+ * // init -- account-level, no resource argument
  * const createStarterMappingTemplate =
  *   yield* AWS.B2BI.CreateStarterMappingTemplate();
  *
@@ -24,7 +24,7 @@ import type * as Effect from "effect/Effect";
  *     x12: { transactionSet: "X12_850", version: "VERSION_4010" },
  *   },
  * });
- * // result.mappingTemplate — the generated starter template
+ * // result.mappingTemplate -- the generated starter template
  * ```
  *
  * @binding

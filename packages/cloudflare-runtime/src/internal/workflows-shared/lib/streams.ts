@@ -8,7 +8,7 @@ import {
   WorkflowTimeoutError,
 } from "./errors.ts";
 
-// ── Constants ───────────────────────────────────────────────────────────────
+// -- Constants ---------------------------------------------------------------
 
 export const DEFAULT_STREAM_OUTPUT_CHUNK_SIZE = 256 * 1024;
 export const STREAM_OUTPUT_META_SUFFIX = "-value-stream-meta";
@@ -19,7 +19,7 @@ export const MAX_OUTPUT_SHOWN_IN_LOGS = 1024;
 const DO_STORAGE_LIMIT = 1024 * 1024 * 1024 + 100 * 1024 * 1024;
 const STREAM_OUTPUT_STORAGE_WRITE_HEADROOM_BYTES = 16 * 1024;
 
-// ── Types ───────────────────────────────────────────────────────────────────
+// -- Types -------------------------------------------------------------------
 
 export enum StreamOutputState {
   Pending = "pending",
@@ -44,7 +44,7 @@ export class InvalidStoredStreamOutputError extends Error {
   name = "InvalidStoredStreamOutputError";
 }
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
+// -- Helpers -----------------------------------------------------------------
 
 export function getStreamOutputMetaKey(cacheKey: string): string {
   return `${cacheKey}${STREAM_OUTPUT_META_SUFFIX}`;
@@ -91,7 +91,7 @@ function normalizeChunkToUint8Array(value: unknown): Uint8Array {
   );
 }
 
-// ── Buffer helpers ──────────────────────────────────────────────────────────
+// -- Buffer helpers ----------------------------------------------------------
 
 function takeBufferedBytes(bufferedChunks: Array<Uint8Array>, byteLength: number): Uint8Array {
   const output = new Uint8Array(byteLength);
@@ -116,7 +116,7 @@ function takeBufferedBytes(bufferedChunks: Array<Uint8Array>, byteLength: number
   return output;
 }
 
-// ── Stream iteration ────────────────────────────────────────────────────────
+// -- Stream iteration --------------------------------------------------------
 
 async function* iterateStreamChunks(
   stream: ReadableStream<unknown>,
@@ -197,7 +197,7 @@ async function* iterateStreamChunks(
   }
 }
 
-// ── SQL helpers ─────────────────────────────────────────────────────────────
+// -- SQL helpers -------------------------------------------------------------
 
 function deleteAttemptChunks(
   storage: DurableObjectStorage,
@@ -228,7 +228,7 @@ async function deleteMetaForAttempt(
   await storage.delete(metaKey);
 }
 
-// ── Integrity validation ────────────────────────────────────────────────────
+// -- Integrity validation ----------------------------------------------------
 
 type StreamOutputChunkSummary = {
   chunkCount: number;
@@ -297,7 +297,7 @@ export function getInvalidStoredStreamOutputError(
   );
 }
 
-// ── Preview ─────────────────────────────────────────────────────────────────
+// -- Preview -----------------------------------------------------------------
 
 function readStreamOutputPreviewBytes(options: {
   storage: DurableObjectStorage;
@@ -387,7 +387,7 @@ export function getStoredStreamOutputPreview(options: {
   }
 }
 
-// ── Cleanup ─────────────────────────────────────────────────────────────────
+// -- Cleanup -----------------------------------------------------------------
 
 export async function cleanupPendingStreamOutput(
   storage: DurableObjectStorage,
@@ -416,7 +416,7 @@ export async function rollbackStreamOutput(
   await deleteMetaForAttempt(storage, cacheKey, attempt);
 }
 
-// ── Write ───────────────────────────────────────────────────────────────────
+// -- Write -------------------------------------------------------------------
 
 async function doWriteStreamOutput(options: {
   storage: DurableObjectStorage;
@@ -605,7 +605,7 @@ export async function writeStreamOutput(options: {
   }
 }
 
-// ── Replay ──────────────────────────────────────────────────────────────────
+// -- Replay ------------------------------------------------------------------
 
 export function createReplayReadableStream(options: {
   storage: DurableObjectStorage;

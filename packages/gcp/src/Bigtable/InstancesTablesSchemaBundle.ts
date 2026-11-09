@@ -25,20 +25,20 @@ import {
 export type InstancesTablesSchemaBundleProps = {
   /**
    * Parent instance. Full name `projects/{project}/instances/{instance}`
-   * or the instance id. Immutable — changing it replaces the bundle.
+   * or the instance id. Immutable -- changing it replaces the bundle.
    */
   instance: string;
   /**
    * Parent table. Full name
    * `projects/{project}/instances/{instance}/tables/{table}` or the table
-   * id. Immutable — changing it replaces the bundle.
+   * id. Immutable -- changing it replaces the bundle.
    */
   table: string;
   /**
    * Schema bundle id (the `{schema_bundle}` segment of
    * `.../tables/{table}/schemaBundles/{schema_bundle}`). If omitted, a
    * unique name is generated from the stack, stage, and logical id.
-   * Immutable — changing it replaces the bundle.
+   * Immutable -- changing it replaces the bundle.
    */
   schemaBundleId?: string;
   /**
@@ -111,7 +111,7 @@ export interface InstancesTablesSchemaBundleLookup {
 }
 
 /**
- * A Cloud Bigtable schema bundle — a named FileDescriptorSet used to
+ * A Cloud Bigtable schema bundle -- a named FileDescriptorSet used to
  * decode protobuf cell values.
  *
  * The parent instance and table must already exist. Changing

@@ -8,7 +8,7 @@ export const PrismaHttpClientLive = NodeHttpClient.layerNodeHttp;
 
 /**
  * The HTTP client Prisma artifact uploads run on. Kept as a Prisma-scoped
- * service — overriding the global `HttpClient.HttpClient` from
+ * service -- overriding the global `HttpClient.HttpClient` from
  * `Prisma.providers()` would hijack every other provider in the stack (e.g.
  * Cloudflare Worker script uploads break on node's chunked multipart
  * bodies). Live wiring provides the node transport here because the

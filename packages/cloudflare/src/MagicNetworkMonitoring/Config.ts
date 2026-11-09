@@ -30,7 +30,7 @@ export interface WarpDevice {
 
 export interface ConfigProps {
   /**
-   * The account name label stored on the MNM configuration. Freeform —
+   * The account name label stored on the MNM configuration. Freeform --
    * mutable in place.
    */
   name: string;
@@ -43,7 +43,7 @@ export interface ConfigProps {
   /**
    * IPv4 CIDR addresses (`/32`) of the routers that send flow data to
    * Cloudflare. Registering router flow sources requires the Magic Network
-   * Monitoring router-flow entitlement — accounts without it reject any
+   * Monitoring router-flow entitlement -- accounts without it reject any
    * non-empty value with the typed `InvalidMnmConfig` error (Cloudflare
    * code 1003).
    * @default []
@@ -72,7 +72,7 @@ export interface ConfigAttributes {
 export type Config = Resource<TypeId, ConfigProps, ConfigAttributes, never, Providers>;
 
 /**
- * The Magic Network Monitoring (MNM) account configuration — the singleton
+ * The Magic Network Monitoring (MNM) account configuration -- the singleton
  * that registers your network's routers (and optionally WARP devices) as
  * flow-data sources and sets the fallback packet sampling rate.
  *
@@ -136,7 +136,7 @@ export const ConfigProvider = () =>
 
     diff: Effect.fn(function* ({ output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // The config is an account singleton — moving accounts replaces it.
+      // The config is an account singleton -- moving accounts replaces it.
       if (output !== undefined && output.accountId !== accountId) {
         return { action: "replace" } as const;
       }
@@ -147,11 +147,11 @@ export const ConfigProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
       // A missing config answers HTTP 200 with `result: null` rather than
-      // a 404 — `observe` maps that to `undefined`.
+      // a 404 -- `observe` maps that to `undefined`.
       const observed = observe(yield* mnm.getConfig({ accountId: acct }));
       if (observed === undefined) return undefined;
       // The config carries no ownership markers. With no prior state we
-      // cannot prove we created it — report `Unowned` so the engine gates
+      // cannot prove we created it -- report `Unowned` so the engine gates
       // takeover behind the adopt policy.
       const attributes = toAttributes(observed, acct);
       return output === undefined ? Unowned(attributes) : attributes;
@@ -168,11 +168,11 @@ export const ConfigProvider = () =>
         warpDevices: news.warpDevices ?? [],
       };
 
-      // 1. Observe — a missing singleton answers `result: null` and maps
+      // 1. Observe -- a missing singleton answers `result: null` and maps
       //    to `undefined`.
       const observed = observe(yield* mnm.getConfig({ accountId }));
 
-      // 2. Ensure — create when missing, converging a concurrent create
+      // 2. Ensure -- create when missing, converging a concurrent create
       //    (`MnmConfigAlreadyExists`, Cloudflare code 1005) into the
       //    update below.
       if (observed === undefined) {
@@ -182,13 +182,13 @@ export const ConfigProvider = () =>
             .pipe(Effect.catchTag("MnmConfigAlreadyExists", () => mnm.updateConfig(desired))),
         );
         // `updateConfig` answers `result: null` if the config vanished
-        // again mid-flight — fall back to one fresh create.
+        // again mid-flight -- fall back to one fresh create.
         if (created !== undefined) return toAttributes(created, accountId);
         const recreated = yield* mnm.createConfig(desired);
         return toAttributes(observe(recreated) ?? desired, accountId);
       }
 
-      // 3. Sync — diff observed cloud state against desired; the update
+      // 3. Sync -- diff observed cloud state against desired; the update
       //    is a full-body PUT, so skip the call entirely on a no-op.
       const dirty =
         observed.name !== desired.name ||
@@ -199,7 +199,7 @@ export const ConfigProvider = () =>
 
       const updated = observe(yield* mnm.updateConfig(desired));
       if (updated !== undefined) return toAttributes(updated, accountId);
-      // Deleted out-of-band between observe and update — recreate.
+      // Deleted out-of-band between observe and update -- recreate.
       const recreated = yield* mnm.createConfig(desired);
       return toAttributes(observe(recreated) ?? desired, accountId);
     }),
@@ -211,7 +211,7 @@ export const ConfigProvider = () =>
       );
     }),
 
-    // Account singleton — there is exactly one MNM config per account and
+    // Account singleton -- there is exactly one MNM config per account and
     // only a per-account `getConfig`. Mirror `read`: return the one-element
     // array when the config exists, `[]` when it is unset (HTTP 200 with
     // `result: null`, which `observe` maps to `undefined`).

@@ -15,7 +15,7 @@ export interface ClusterPolicyProps {
   clusterId: string;
   /**
    * The resource-based policy document (JSON) that defines access
-   * permissions and conditions for the cluster — e.g. denying
+   * permissions and conditions for the cluster -- e.g. denying
    * `dsql:DbConnect` from outside a VPC, or restricting connections to an
    * AWS Organization. Updated in place.
    */
@@ -45,7 +45,7 @@ export interface ClusterPolicy extends Resource<
 > {}
 
 /**
- * The resource-based policy of an Aurora DSQL cluster — controls which
+ * The resource-based policy of an Aurora DSQL cluster -- controls which
  * principals may perform actions on the cluster (most commonly gating
  * `dsql:DbConnect` / `dsql:DbConnectAdmin` behind VPC or Organization
  * conditions). A cluster has at most one.
@@ -119,7 +119,7 @@ export const ClusterPolicyProvider = () =>
   Provider.effect(
     ClusterPolicy,
     Effect.gen(function* () {
-      /** Read the policy; typed not-found → undefined. */
+      /** Read the policy; typed not-found -> undefined. */
       const readPolicy = Effect.fn(function* (identifier: string) {
         return yield* dsql
           .getClusterPolicy({ identifier })
@@ -147,7 +147,7 @@ export const ClusterPolicyProvider = () =>
           if (!clusterId) return undefined;
           const existing = yield* readPolicy(clusterId);
           if (existing === undefined) return undefined;
-          // Cluster policies are not taggable — ownership is implied by the
+          // Cluster policies are not taggable -- ownership is implied by the
           // owned parent cluster.
           return toAttrs(clusterId, existing.policy, existing.policyVersion);
         }),
@@ -155,10 +155,10 @@ export const ClusterPolicyProvider = () =>
         reconcile: Effect.fn(function* ({ news, session }) {
           const clusterId = news!.clusterId;
 
-          // 1. Observe — the live policy is authoritative.
+          // 1. Observe -- the live policy is authoritative.
           const observed = yield* readPolicy(clusterId);
 
-          // 2/3. Ensure + sync — `putClusterPolicy` is a true upsert; call
+          // 2/3. Ensure + sync -- `putClusterPolicy` is a true upsert; call
           // it only when the canonical document drifts. `expectedPolicyVersion`
           // pins the observed version so a concurrent writer surfaces as a
           // typed ConflictException instead of a silent overwrite.

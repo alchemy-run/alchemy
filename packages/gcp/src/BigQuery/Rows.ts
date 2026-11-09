@@ -5,10 +5,10 @@ import type * as bigquery from "@distilled.cloud/gcp/bigquery_v2";
  * NOT exported from `index.ts`.
  *
  * Decoding (driven by the table / result schema, with
- * `formatOptions.useInt64Timestamp` requested): `INTEGER` → `number`
- * (`bigint` beyond the safe range), `FLOAT` → `number`, `BOOLEAN` →
- * `boolean`, `TIMESTAMP` → `Date`, `BYTES` → `Uint8Array`, `JSON` → parsed
- * value, `RECORD` → object, `REPEATED` → array, `NULL` → `null`. `NUMERIC`,
+ * `formatOptions.useInt64Timestamp` requested): `INTEGER` -> `number`
+ * (`bigint` beyond the safe range), `FLOAT` -> `number`, `BOOLEAN` ->
+ * `boolean`, `TIMESTAMP` -> `Date`, `BYTES` -> `Uint8Array`, `JSON` -> parsed
+ * value, `RECORD` -> object, `REPEATED` -> array, `NULL` -> `null`. `NUMERIC`,
  * `BIGNUMERIC`, `DATE`, `TIME`, `DATETIME`, `GEOGRAPHY`, and everything else
  * stay strings.
  */

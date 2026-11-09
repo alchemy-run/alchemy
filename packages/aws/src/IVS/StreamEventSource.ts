@@ -82,7 +82,7 @@ export interface StreamEventSourceProps extends EventRouteProps {
  * to those events so it can react to broadcasts going live or recordings
  * landing in S3.
  *
- * IVS publishes to EventBridge automatically — no additional resource is
+ * IVS publishes to EventBridge automatically -- no additional resource is
  * created besides the EventBridge rule targeting the host. Provide the
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on
  * the Function effect.

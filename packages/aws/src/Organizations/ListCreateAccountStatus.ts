@@ -5,14 +5,14 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `organizations:ListCreateAccountStatus`.
  *
- * Lists the account-creation requests that match the specified states — auditing in-flight and completed account vending.
- * Account-level operation — Organizations is a management-account-scoped
+ * Lists the account-creation requests that match the specified states -- auditing in-flight and completed account vending.
+ * Account-level operation -- Organizations is a management-account-scoped
  * global service, so the binding takes no resource argument. Provide the
  * implementation with `Effect.provide(AWS.Organizations.ListCreateAccountStatusHttp)`.
  * ### Account Vending
  * **Example:** List In-Flight Account Creations
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listCreateAccountStatus = yield* AWS.Organizations.ListCreateAccountStatus();
  *
  * // runtime

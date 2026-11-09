@@ -34,7 +34,7 @@ export type PhraseSetProps = {
   /**
    * Speech-to-Text Adaptation location. The global Speech endpoint
    * accepts `global`; `us` and `eu` need matching regional endpoints.
-   * Immutable — changing it replaces the phrase set.
+   * Immutable -- changing it replaces the phrase set.
    * @default "global"
    */
   location?: string;
@@ -42,7 +42,7 @@ export type PhraseSetProps = {
    * Phrase set id (the `{phrase_set}` segment of
    * `projects/{project}/locations/{location}/phraseSets/{phrase_set}`).
    * If omitted, a unique id is generated. Letters, numbers, and hyphens;
-   * 4-63 characters; must start with a letter. Immutable — changing it
+   * 4-63 characters; must start with a letter. Immutable -- changing it
    * replaces the phrase set.
    */
   phraseSetId?: string;
@@ -120,7 +120,7 @@ export interface PhraseSetLookup {
  * not write ownership into the phrases (they bias recognition). A
  * generated id identifies the set; one with an explicit id that Alchemy
  * has no state for is reported as unowned. Location and
- * phrase set id are identity — changing either replaces the set.
+ * phrase set id are identity -- changing either replaces the set.
  * `phrases` and `boost` update in place.
  *
  * ### Creating a Phrase Set

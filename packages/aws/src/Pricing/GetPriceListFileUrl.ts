@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 export interface GetPriceListFileUrlRequest extends pricing.GetPriceListFileUrlRequest {}
 
 /**
- * Runtime binding for `pricing:GetPriceListFileUrl` — resolve a presigned
+ * Runtime binding for `pricing:GetPriceListFileUrl` -- resolve a presigned
  * download URL for one bulk Price List file.
  *
  * Takes a `PriceListArn` and `FileFormat` (`csv` or `json`) obtained from

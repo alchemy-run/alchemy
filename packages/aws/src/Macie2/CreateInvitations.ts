@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `macie2:CreateInvitations`.
  *
  * Sends an Amazon Macie membership invitation to one or more accounts.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.Macie2.CreateInvitationsHttp)`.
  * ### Administrator & Invitations
  * **Example:** Invite Member Accounts
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const createInvitations = yield* AWS.Macie2.CreateInvitations();
  *
  * // runtime

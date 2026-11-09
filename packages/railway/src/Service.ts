@@ -69,7 +69,7 @@ export interface ServiceProps extends PlatformProps {
    */
   image?: string;
   /**
-   * Region the service runs in (`us-west2`, `europe-west4-drams3a`, …).
+   * Region the service runs in (`us-west2`, `europe-west4-drams3a`, ...).
    * Railway places replicas with `deploy.multiRegionConfig`. Omit this
    * and the current placement is left alone (the workspace default on
    * first create). Updating it moves the replicas in place and keeps
@@ -247,7 +247,7 @@ export type Service = Resource<
     /** Observed healthcheck timeout in seconds. */
     healthcheckTimeout: number | undefined;
     /**
-     * Observed replica count. Alchemy does not set this — Railway
+     * Observed replica count. Alchemy does not set this -- Railway
      * load-balances whatever is running (default 1).
      */
     replicas: number | undefined;
@@ -272,7 +272,7 @@ export type Service = Resource<
     domain: string | undefined;
     /**
      * Internal DNS name on the default private mesh
-     * (`{name}.railway.internal`). Derived from the service name — no
+     * (`{name}.railway.internal`). Derived from the service name -- no
      * extra API call.
      */
     dnsName: string;
@@ -286,7 +286,7 @@ export type Service = Resource<
     domainId: string | undefined;
     /** Latest deployment id, if one exists. */
     deploymentId: string | undefined;
-    /** Latest deployment status (`SUCCESS`, `DEPLOYING`, …). */
+    /** Latest deployment status (`SUCCESS`, `DEPLOYING`, ...). */
     deploymentStatus: string | undefined;
     /** Content hash of the bundled program (empty for public images). */
     code: {
@@ -469,7 +469,7 @@ const createServiceRuntimeContext = (id: string): ServiceRuntimeContext => {
  *
  * ### Pre-deploy
  * Railway runs `preDeploy.command` after the image build and before
- * start — the same setting as the dashboard Pre-deploy Command.
+ * start -- the same setting as the dashboard Pre-deploy Command.
  *
  * **Example:** Run migrations before traffic
  * ```typescript

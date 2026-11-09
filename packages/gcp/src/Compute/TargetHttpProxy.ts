@@ -21,7 +21,7 @@ export type TargetHttpProxyProps = {
    */
   targetHttpProxyName?: string;
   /**
-   * Optional description. Alchemy ownership is stored in a `[alchemy …]`
+   * Optional description. Alchemy ownership is stored in a `[alchemy ...]`
    * prefix so `list` / nuke can find resources (Compute TargetHttpProxy has
    * no labels field).
    */
@@ -40,7 +40,7 @@ export type TargetHttpProxyProps = {
   /**
    * Idle keep-alive timeout in seconds after a response completes with no
    * matching traffic. Global external Application Load Balancers allow
-   * 5–1200 (default 610). Not supported on classic Application Load
+   * 5-1200 (default 610). Not supported on classic Application Load
    * Balancers.
    */
   httpKeepAliveTimeoutSec?: number;
@@ -102,7 +102,7 @@ export interface TargetHttpProxyLookup {
  * at a URL map that routes host/path to a backend service, backend bucket,
  * or redirect. This resource maps to the global `targetHttpProxies`
  * collection (`regionTargetHttpProxies` is a separate resource). Compute
- * TargetHttpProxy has no labels field — Alchemy ownership is stored in the
+ * TargetHttpProxy has no labels field -- Alchemy ownership is stored in the
  * description so nuke can find leaked proxies.
  *
  * ### Creating a Target HTTP Proxy

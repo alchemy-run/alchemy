@@ -6,8 +6,8 @@ import type { Input } from "./Input.ts";
 /**
  * Shared scaffolding for AWS Elemental MediaLive HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service
- * is a `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the three
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service
+ * is a `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the three
  * builders below. Everything except the operation and the IAM action list
  * is boilerplate: channel-scoped bindings inject the bound channel's
  * server-assigned id as the request's `ChannelId` and grant `actions` on
@@ -99,7 +99,7 @@ export const makeMediaLiveInputHttpBinding = <I extends { InputId: string }, A, 
 /**
  * Build the impl Effect for an account-level MediaLive operation (e.g.
  * enumerating the account's channels or inputs). The deploy-time half
- * grants `actions` on `*` — these list operations are not scoped to a
+ * grants `actions` on `*` -- these list operations are not scoped to a
  * single resource.
  */
 export const makeMediaLiveAccountHttpBinding = <I, A, E, R>(options: {

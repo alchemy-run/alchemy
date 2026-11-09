@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `DescribeDomains` operation (IAM action
  * `es:DescribeDomains`).
  *
- * Reads the current status of up to five domains in one call — the batch form of `DescribeDomain`. Provide the implementation with
+ * Reads the current status of up to five domains in one call -- the batch form of `DescribeDomain`. Provide the implementation with
  * `Effect.provide(AWS.OpenSearch.DescribeDomainsHttp)`.
  * ### Monitoring Domains
  * **Example:** Check Several Domains at Once
@@ -14,7 +14,7 @@ import type * as Effect from "effect/Effect";
  * const describeDomains = yield* OpenSearch.DescribeDomains();
  *
  * const result = yield* describeDomains({ DomainNames: [a, b] });
- * // result.DomainStatusList → one status per domain
+ * // result.DomainStatusList -> one status per domain
  * ```
  *
  * @binding

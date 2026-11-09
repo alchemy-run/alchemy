@@ -87,7 +87,7 @@ export type BlueprintLookup =
     };
 
 /**
- * An Amazon Bedrock Data Automation Blueprint — a JSON schema describing the
+ * An Amazon Bedrock Data Automation Blueprint -- a JSON schema describing the
  * custom output fields to extract from documents, images, audio, or video.
  * Attach blueprints to a `DataAutomationProject` via its
  * `customOutputConfiguration`.
@@ -236,14 +236,14 @@ export const BlueprintProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — cloud state is authoritative; output caches the ARN.
+          // 1. OBSERVE -- cloud state is authoritative; output caches the ARN.
           const cachedArn = output?.blueprintArn ?? (yield* findBlueprintArn(blueprintName));
           let live =
             cachedArn === undefined
               ? undefined
               : yield* observeBlueprint(cachedArn, news.blueprintStage);
 
-          // 2. ENSURE — create when missing; a concurrent create surfaces as
+          // 2. ENSURE -- create when missing; a concurrent create surfaces as
           //    the typed ConflictException, which we treat as a race and
           //    re-observe by name.
           if (live === undefined) {
@@ -271,7 +271,7 @@ export const BlueprintProvider = () =>
               );
           }
 
-          // 3. SYNC — diff the OBSERVED schema and encryption key against the
+          // 3. SYNC -- diff the OBSERVED schema and encryption key against the
           //    desired state; apply the idempotent PUT only on drift.
           const kmsDrift =
             news.encryptionConfiguration !== undefined &&
@@ -296,7 +296,7 @@ export const BlueprintProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           // Versions (immutable snapshots, e.g. from CreateBlueprintVersion)
-          // block deletion of the blueprint itself — delete them first.
+          // block deletion of the blueprint itself -- delete them first.
           // NOTE: the blueprintArn filter cannot be combined with other
           // filters ("Invalid List filter combination").
           const versions = yield* bda.listBlueprints

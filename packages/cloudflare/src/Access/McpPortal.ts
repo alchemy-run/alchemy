@@ -14,7 +14,7 @@ type TypeId = typeof TypeId;
 
 export interface McpPortalProps {
   /**
-   * The client-supplied portal identifier. Immutable — changing it
+   * The client-supplied portal identifier. Immutable -- changing it
    * triggers a replacement. If omitted, a deterministic id is generated
    * from the app, stage, and logical ID.
    * @default ${app}-${stage}-${id}
@@ -69,7 +69,7 @@ export type McpPortalAttributes = {
 export type McpPortal = Resource<TypeId, McpPortalProps, McpPortalAttributes, never, Providers>;
 
 /**
- * A Cloudflare Zero Trust **AI Controls MCP portal** — a hosted gateway
+ * A Cloudflare Zero Trust **AI Controls MCP portal** -- a hosted gateway
  * that aggregates MCP servers behind a single Access-protected hostname
  * so administrators can govern which AI tools and prompts are exposed to
  * users.
@@ -118,7 +118,7 @@ export const McpPortalProvider = () =>
       // Account-scoped collection; exhaustively paginate. The list rows
       // carry the full portal shape, so each maps directly into the same
       // Attributes `read` returns. Accounts without the AI Controls
-      // entitlement reject the route with the typed `Forbidden` — treat
+      // entitlement reject the route with the typed `Forbidden` -- treat
       // them as having no portals.
       return yield* zeroTrust.listAccessAiControlMcpPortals.pages({ accountId }).pipe(
         Stream.runCollect,
@@ -133,7 +133,7 @@ export const McpPortalProvider = () =>
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;
-      // The portal id is the API identity — changing it is a replacement.
+      // The portal id is the API identity -- changing it is a replacement.
       const oldId = output?.portalId ?? olds?.portalId;
       if (news.portalId !== undefined && oldId !== undefined && oldId !== news.portalId) {
         return { action: "replace" } as const;
@@ -160,7 +160,7 @@ export const McpPortalProvider = () =>
       // 1. Observe.
       const observed = yield* observePortal(accountId, portalId);
 
-      // 2. Ensure — create when missing.
+      // 2. Ensure -- create when missing.
       if (!observed) {
         const created = yield* zeroTrust.createAccessAiControlMcpPortal({
           accountId,
@@ -176,7 +176,7 @@ export const McpPortalProvider = () =>
         return toAttributes(created, accountId);
       }
 
-      // 3. Sync — update only when the observed state differs. Unset
+      // 3. Sync -- update only when the observed state differs. Unset
       //    optional props mean "keep the observed value" (the API applies
       //    server-side defaults on create, e.g. allowCodeMode: true).
       const dirty =

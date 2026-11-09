@@ -30,7 +30,7 @@ import { waitForOperation } from "./operations.ts";
 
 export type HyperparameterTuningJobProps = {
   /**
-   * Vertex AI location. Immutable — changing it replaces the job.
+   * Vertex AI location. Immutable -- changing it replaces the job.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
@@ -105,7 +105,7 @@ export type HyperparameterTuningJob = Resource<
 /**
  * A Vertex AI HyperparameterTuningJob that runs CustomJobs for each trial.
  *
- * The API assigns the job id. There is no update method — changing display
+ * The API assigns the job id. There is no update method -- changing display
  * name, labels, trial counts, or specs replaces the job. Delete cancels a
  * running job first.
  *

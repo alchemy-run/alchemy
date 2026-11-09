@@ -13,7 +13,7 @@ export interface CreatePrefetchScheduleRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `mediatailor:CreatePrefetchSchedule` — tell MediaTailor
+ * Runtime binding for `mediatailor:CreatePrefetchSchedule` -- tell MediaTailor
  * to fetch and prepare ads for upcoming ad breaks ahead of time (e.g. right
  * before a live event's scheduled break) so avails fill without ADS latency.
  *

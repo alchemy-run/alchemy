@@ -54,7 +54,7 @@ export type WorkstationClustersWorkstationConfigsWorkstationProps = {
    * Parent workstation configuration. Full name
    * `projects/{project}/locations/{location}/workstationClusters/{workstationCluster}/workstationConfigs/{workstationConfig}`
    * or a configuration id (combined with `workstationCluster` and
-   * `location`). Immutable — changing it replaces the workstation.
+   * `location`). Immutable -- changing it replaces the workstation.
    */
   workstationConfig: string;
   /**
@@ -65,7 +65,7 @@ export type WorkstationClustersWorkstationConfigsWorkstationProps = {
   /**
    * Workstation id (the `{workstation}` segment). If omitted, a unique
    * RFC1035 name is generated from the stack, stage, and logical id.
-   * Immutable — changing it replaces the workstation.
+   * Immutable -- changing it replaces the workstation.
    */
   workstationId?: string;
   /**
@@ -153,7 +153,7 @@ export type WorkstationClustersWorkstationConfigsWorkstation = Resource<
 >;
 
 /**
- * A Cloud Workstations workstation — a single developer VM with its own
+ * A Cloud Workstations workstation -- a single developer VM with its own
  * persistent storage, created from a workstation configuration.
  *
  * Changing `workstationId`, `location`, `workstationConfig`,

@@ -8,13 +8,13 @@ import type { DBInstance } from "./DBInstance.ts";
  * `rds:RebootDBInstance`).
  *
  * Reboots the bound {@link DBInstance} (optionally with a forced
- * failover for Multi-AZ deployments) — e.g. to apply static parameter
+ * failover for Multi-AZ deployments) -- e.g. to apply static parameter
  * changes. The instance identifier is injected from the binding. Provide the implementation with
  * `Effect.provide(AWS.RDS.RebootDBInstanceHttp)`.
  * ### Operating an Instance
  * **Example:** Reboot an Instance
  * ```typescript
- * // init — bind the operation to the instance
+ * // init -- bind the operation to the instance
  * const rebootDBInstance = yield* AWS.RDS.RebootDBInstance(instance);
  *
  * // runtime

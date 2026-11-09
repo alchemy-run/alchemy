@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `config:GetComplianceSummaryByConfigRule` — read the
+ * Runtime binding for `config:GetComplianceSummaryByConfigRule` -- read the
  * account-wide count of compliant vs. noncompliant Config rules.
  *
  * Provide `Config.GetComplianceSummaryByConfigRuleHttp` on the hosting Lambda Function to
@@ -11,7 +11,7 @@ import type * as Effect from "effect/Effect";
  * ### Reading Compliance
  * **Example:** Summarize Rule Compliance
  * ```typescript
- * // init — grants config:GetComplianceSummaryByConfigRule
+ * // init -- grants config:GetComplianceSummaryByConfigRule
  * const getComplianceSummaryByConfigRule = yield* AWS.Config.GetComplianceSummaryByConfigRule();
  *
  * // runtime

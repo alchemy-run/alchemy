@@ -17,7 +17,7 @@ export interface DeleteArchiveRequest extends Omit<
  * `glacier:DeleteArchive` on the vault ARN).
  *
  * Deletes an archive from the bound {@link Vault}. The operation is
- * idempotent — deleting an already-deleted archive is not an error.
+ * idempotent -- deleting an already-deleted archive is not an error.
  * Provide the implementation with
  * `Effect.provide(AWS.Glacier.DeleteArchiveHttp)`.
  * ### Deleting Archives

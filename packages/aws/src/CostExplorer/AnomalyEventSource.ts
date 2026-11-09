@@ -81,7 +81,7 @@ export interface AnomalyEventSourceProps extends EventRouteProps {
  * host Function to those events so it can page, open tickets, or trigger
  * automated cost-control actions the moment unusual spend appears.
  *
- * Cost Anomaly Detection publishes to EventBridge automatically — no
+ * Cost Anomaly Detection publishes to EventBridge automatically -- no
  * additional resource is created besides the EventBridge rule targeting
  * the host. Events are delivered to the Cost Anomaly Detection home region
  * (`us-east-1`), so deploy the consuming stack there. Provide the

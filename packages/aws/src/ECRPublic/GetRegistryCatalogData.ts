@@ -12,7 +12,7 @@ import type * as Effect from "effect/Effect";
  * ### Registry Access
  * **Example:** Read The Registry Display Name
  * ```typescript
- * // init — registry-level binding takes no resource
+ * // init -- registry-level binding takes no resource
  * const getRegistryCatalogData = yield* AWS.ECRPublic.GetRegistryCatalogData();
  *
  * // runtime

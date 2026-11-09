@@ -4,7 +4,7 @@ import { makeIotClientHttpBinding } from "./BindingHttp.ts";
 import { DeleteConnection } from "./DeleteConnection.ts";
 
 /**
- * HTTP implementation of the {@link DeleteConnection} capability — grants
+ * HTTP implementation of the {@link DeleteConnection} capability -- grants
  * `iot:DeleteConnection` on the bound client filter and calls the IoT
  * data-plane `DeleteConnection` API.
  */

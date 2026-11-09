@@ -11,7 +11,7 @@ import * as Schedule from "effect/Schedule";
 import type * as rolldown from "rolldown";
 
 /**
- * INTERNAL — the program a `Boat.Sandbox` with `main` runs: bundled with
+ * INTERNAL -- the program a `Boat.Sandbox` with `main` runs: bundled with
  * rolldown, uploaded into the sandbox, and run with Node as a background
  * command.
  */

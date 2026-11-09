@@ -4,7 +4,7 @@
  * (`images:delivery`, `stream:router`, ...).
  *
  * The entry's `USER_WORKER` upstream binding points at the *next middleware
- * in the chain*, and middlewares are fetch-only HTTP-path interceptors — a
+ * in the chain*, and middlewares are fetch-only HTTP-path interceptors -- a
  * JSRPC call like `.email(...)` against one fails with "The RPC receiver
  * does not implement the method". Non-fetch event dispatch (`queue()`,
  * `scheduled()`, `email()`) therefore goes through this direct binding,

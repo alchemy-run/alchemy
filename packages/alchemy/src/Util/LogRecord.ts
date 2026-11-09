@@ -202,7 +202,7 @@ export const recordOf = (options: Logger.Options<unknown>): LogRecord => {
 /**
  * Mark the logs of `effect` as account-level: the CLI files them in the
  * global run log (`~/.alchemy/logs`) instead of the project's. For work that
- * isn't about one project — the state store, auth and credentials, profiles.
+ * isn't about one project -- the state store, auth and credentials, profiles.
  */
 export const globalLogs = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
   Effect.annotateLogs(effect, LogAnnotation.scope, "global");

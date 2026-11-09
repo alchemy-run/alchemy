@@ -8,15 +8,15 @@ import * as Stream from "effect/Stream";
  * Implements the git layer's `ObjectSource` contract over the `objects`
  * table, dispatching byte reads on the `location` column:
  *
- * - `'row'`  — the `zdata` BLOB (zlib(content), no loose header),
- * - `'r2'`   — a streamed R2 `get` of `r2_key` (which may point into a fork
- *   parent's prefix — immutable, shared),
- * - `'pack'` — v1.1 compaction; reads die with {@link NotImplementedError}
+ * - `'row'`  -- the `zdata` BLOB (zlib(content), no loose header),
+ * - `'r2'`   -- a streamed R2 `get` of `r2_key` (which may point into a fork
+ *   parent's prefix -- immutable, shared),
+ * - `'pack'` -- v1.1 compaction; reads die with {@link NotImplementedError}
  *   until the compaction alarm lands (schema-ready, DESIGN.md §10).
  *
  * Plus the push-side surface the protocol layer needs: staged inserts with
  * the row/R2 placement policy, batched metadata reads, and the
- * staged-∪-live membership oracle behind the receive-pack connectivity
+ * staged-U-live membership oracle behind the receive-pack connectivity
  * check (DESIGN.md §3.6 step 5).
  *
  * All reads on the `ObjectSource` surface see **live objects only**
@@ -37,19 +37,19 @@ import * as Zlib from "../Protocol/Zlib.ts";
 import { objectKey, packKeyOf } from "./Keys.ts";
 import type { ObjectMetaRow, SqlClient } from "./Sql.ts";
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Constants & errors
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /**
  * Compressed-size threshold above which an object's bytes are offloaded to
- * R2 (`location = 'r2'`) instead of a row BLOB — 1 MiB, a safety margin
+ * R2 (`location = 'r2'`) instead of a row BLOB -- 1 MiB, a safety margin
  * under the 2 MB SQLite row cap (DESIGN.md §3.3).
  */
 export const R2_OFFLOAD_THRESHOLD = 1_048_576;
 
 /**
- * Per-object uncompressed size cap for v1 — 64 MiB. Delta application needs
+ * Per-object uncompressed size cap for v1 -- 64 MiB. Delta application needs
  * base + result in memory; this keeps worst-case ingest memory bounded.
  * Enforced by `PackParser` (rejected with `unpack object too large`);
  * exported here as the storage layer's authoritative constant.
@@ -65,7 +65,7 @@ export const MAX_OBJECT_SIZE = 67_108_864;
 export const WINDOW_BYTES = 4 * 1024 * 1024;
 
 /**
- * Objects per batch on the emission/closure paths — one SQL statement and
+ * Objects per batch on the emission/closure paths -- one SQL statement and
  * one emitted chunk per batch instead of per object (DESIGN §22).
  */
 export const EMIT_BATCH = 256;
@@ -73,7 +73,7 @@ export const EMIT_BATCH = 256;
 /**
  * Rows per multi-row `INSERT` while staging a push: 6 bindings per row, and
  * Durable Object SQLite allows at most 100 bound parameters per statement
- * (`MAX_IN_PARAMS`) — 16 rows is 96. Still a 16x cut in statement
+ * (`MAX_IN_PARAMS`) -- 16 rows is 96. Still a 16x cut in statement
  * executions over one row per statement (see `insertStagedBatch`).
  */
 export const STAGE_INSERT_ROWS = 16;
@@ -87,7 +87,7 @@ const chunkArray = <T>(items: ReadonlyArray<T>, size: number): Array<Array<T>> =
 };
 
 /**
- * Isolate-wide budget for retained pack windows — 32 MiB (8 windows).
+ * Isolate-wide budget for retained pack windows -- 32 MiB (8 windows).
  *
  * The cache is a module-level LRU shared by every repo instance in the
  * isolate, not a per-instance map: Durable Object instances of one class
@@ -101,7 +101,7 @@ export const WINDOW_CACHE_BYTES = 32 * 1024 * 1024;
 
 /**
  * Windows fetched ahead of the one being emitted (DESIGN §22.4). Blob
- * storage GETs cost ~150–250 ms each regardless of size, and a 40 MiB
+ * storage GETs cost ~150-250 ms each regardless of size, and a 40 MiB
  * pack is ten of them; fetched one at a time they were half of the
  * dynamic transfer time. 3 ahead + 1 current stays within the cache.
  */
@@ -122,7 +122,7 @@ const retainWindow = (cacheKey: string, slab: { start: number; bytes: Uint8Array
 
 /**
  * Raised (as a defect, via `Effect.die`) when a v1 code path reaches a
- * feature the design explicitly defers — currently only reads of
+ * feature the design explicitly defers -- currently only reads of
  * `location = 'pack'` objects, which exist starting with v1.1 compaction.
  */
 export class NotImplementedError extends Schema.TaggedError<NotImplementedError>()(
@@ -130,9 +130,9 @@ export class NotImplementedError extends Schema.TaggedError<NotImplementedError>
   { feature: Schema.String },
 ) {}
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Contract
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /**
  * A pack entry resolved by `PackParser`, ready to stage: the object id, its
@@ -179,7 +179,7 @@ export type InsertOutcome = "inserted" | "exists";
  */
 export interface ObjectStore extends ObjectSource {
   /**
-   * Inflated content for many objects, one statement per ~256 oids — the
+   * Inflated content for many objects, one statement per ~256 oids -- the
    * closure walk reads whole tree levels this way instead of one SQL
    * round trip per tree (DESIGN §22). Missing oids are simply absent.
    */
@@ -191,7 +191,7 @@ export interface ObjectStore extends ObjectSource {
   ) => Stream.Stream<Uint8Array, StoreError>;
   /**
    * Batched metadata for many oids (live objects only). Chunked `IN`
-   * queries, ≤ 100 params each. Missing oids are simply absent from the map.
+   * queries, <= 100 params each. Missing oids are simply absent from the map.
    */
   readonly getMetaBatch: (
     oids: ReadonlyArray<Oid>,
@@ -199,12 +199,12 @@ export interface ObjectStore extends ObjectSource {
   /**
    * Stages one resolved object for `pushId` (DESIGN.md §3.6 step 4).
    *
-   * Placement policy: compressed size > 1 MiB ⇒ the bytes are written to R2
+   * Placement policy: compressed size > 1 MiB => the bytes are written to R2
    * **first** (`{repoId}/objects/{oid}`, content-addressed so re-runs are
    * idempotent), then the metadata row; otherwise the row carries the BLOB.
    *
    * Existing oids are skipped (idempotent re-push). A row left staged by a
-   * **different** (crashed) push is adopted — re-stamped with this `pushId`
+   * **different** (crashed) push is adopted -- re-stamped with this `pushId`
    * so the connectivity check and the final live-flip see it.
    */
   readonly insertStaged: (
@@ -212,7 +212,7 @@ export interface ObjectStore extends ObjectSource {
     object: StagedObject,
   ) => Effect.Effect<InsertOutcome, StoreError>;
   /**
-   * Batched sibling of {@link ObjectStore.insertStaged} — the ingest hot
+   * Batched sibling of {@link ObjectStore.insertStaged} -- the ingest hot
    * path (DESIGN.md §16.6).
    *
    * Staging objects one at a time costs two statements each (an existence
@@ -264,15 +264,15 @@ export interface ObjectStore extends ObjectSource {
 export interface ObjectStoreOptions {
   /** The repo DO's SQL client (see `makeSqlClient`). */
   readonly sql: SqlClient;
-  /** The swappable bulk-byte store (R2 by default — see `BlobStore.ts`). */
+  /** The swappable bulk-byte store (R2 by default -- see `BlobStore.ts`). */
   readonly blobs: BlobStoreShape;
-  /** The repo's ULID — the R2 key prefix (DESIGN.md §3.2). */
+  /** The repo's ULID -- the R2 key prefix (DESIGN.md §3.2). */
   readonly repoId: string;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Implementation
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 const VALID_LOCATIONS: ReadonlySet<string> = new Set(["row", "r2", "pack"]);
 
@@ -323,7 +323,7 @@ interface ZDataRow extends Record<string, string | number | ArrayBuffer | null> 
 }
 
 /**
- * Creates the {@link ObjectStore} for one repo. Plain factory — no Layers —
+ * Creates the {@link ObjectStore} for one repo. Plain factory -- no Layers --
  * so `RepoObject.ts` can wire it in its inner effect with the ambient
  * `state`/bucket handles.
  */
@@ -380,7 +380,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
   /**
    * Coalesced window cache over compacted packs (DESIGN §15 bottleneck 2).
    *
-   * A pack read is one ranged R2 GET per object if done naively — and a
+   * A pack read is one ranged R2 GET per object if done naively -- and a
    * fetch that walks a few thousand objects then costs a few thousand
    * serialized round trips. Measured: **68 s to serve a 53 KiB fetch** over
    * a 1202-object pack. Instead, reads are served out of window-aligned
@@ -423,7 +423,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
    * via the window cache above.
    *
    * `pack_offset` addresses the object's **zdata** directly (not the pack
-   * entry header), so the slice is exactly the stored compressed bytes —
+   * entry header), so the slice is exactly the stored compressed bytes --
    * the same bytes a `location='row'` object holds in its BLOB. Entry
    * headers are regenerated from `(type, size)` at emission time.
    */
@@ -442,7 +442,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
       // Copy out: the slab is retained by the cache and must not be aliased.
       return slab.bytes.slice(relative, relative + row.zsize);
     }
-    // The object straddles the window boundary (or the window was short) —
+    // The object straddles the window boundary (or the window was short) --
     // fall back to an exact ranged read for this one object.
     const body = yield* runBlob(
       blobs.get(key, { offset, length: row.zsize }),
@@ -525,7 +525,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
       return "exists" as const;
     }
     if (object.zdata.byteLength > R2_OFFLOAD_THRESHOLD) {
-      // R2 write FIRST, then the metadata row — a crash between the two
+      // R2 write FIRST, then the metadata row -- a crash between the two
       // leaves only a harmless content-addressed R2 orphan.
       const key = objectKey(repoId, object.oid);
       yield* runBlob(blobs.put(key, object.zdata), `blob put ${key}`);
@@ -588,7 +588,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
     );
 
   const self: ObjectStore = {
-    // ── ObjectSource (live objects only) ────────────────────────────────────
+    // -- ObjectSource (live objects only) ------------------------------------
     has: (oid) =>
       sql
         .first<{ one: number }>(
@@ -714,7 +714,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
 
         // Pack runs (DESIGN §22.4): coords sorted by (pack, offset) and
         // grouped by 4 MiB window. Each group is ONE window fetch (with the
-        // next window fetched concurrently — a cache hit on the following
+        // next window fetched concurrently -- a cache hit on the following
         // step) and one synchronous slice loop: no per-object Effect call,
         // no per-object cache lookup. Objects that straddle a window edge
         // (rare) fall back to the ranged read in `packBytes`; pack order
@@ -818,7 +818,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
         return rowStream.pipe(Stream.concat(packStream), Stream.concat(r2Stream));
       }),
 
-    // ── Store-side surface ──────────────────────────────────────────────────
+    // -- Store-side surface --------------------------------------------------
     getMetaBatch,
 
     insertStagedBatch: Effect.fn(function* (pushId: string, objects: ReadonlyArray<StagedObject>) {
@@ -836,7 +836,7 @@ export const makeObjectStore = (options: ObjectStoreOptions): ObjectStore => {
       }
       if (promoted.length > 0) {
         // Rows that point into a pack already in blob storage: no BLOB
-        // written to SQLite at all. 7 bindings per row → 14 rows per
+        // written to SQLite at all. 7 bindings per row -> 14 rows per
         // statement under the 100-parameter cap.
         const sorted = [...promoted].sort((a, b) => (a.oid < b.oid ? -1 : a.oid > b.oid ? 1 : 0));
         const written = yield* sql.transactionSync((raw) => {

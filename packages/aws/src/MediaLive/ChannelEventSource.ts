@@ -78,13 +78,13 @@ export interface ChannelEventSourceProps extends EventRouteProps {
  * Event source connecting AWS Elemental MediaLive notifications to the
  * hosting compute. MediaLive publishes channel state changes
  * (IDLE/STARTING/RUNNING/STOPPING transitions), channel alerts (a lost
- * input, a failed output — SET and CLEARED), active-input changes, and
+ * input, a failed output -- SET and CLEARED), active-input changes, and
  * their multiplex equivalents to the account's default EventBridge bus
  * (source `aws.medialive`); this subscribes the host Function to those
  * events so it can page an operator, trigger automated pipeline recovery,
  * or reconcile a broadcast schedule.
  *
- * MediaLive publishes to EventBridge automatically — no additional
+ * MediaLive publishes to EventBridge automatically -- no additional
  * resource is created besides the EventBridge rule targeting the host.
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.

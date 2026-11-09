@@ -7,7 +7,7 @@ import type * as Effect from "effect/Effect";
  *
  * Lists the keywords that are pre-mapped to the specified control
  * data source (CloudTrail event names, Config rules, Security Hub
- * controls, …). Provide the
+ * controls, ...). Provide the
  * implementation with `Effect.provide(AWS.AuditManager.ListKeywordsForDataSourceHttp)`.
  * ### Control Data Sources
  * **Example:** Keywords for a Data Source

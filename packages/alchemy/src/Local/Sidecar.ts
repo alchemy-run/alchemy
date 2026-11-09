@@ -1,7 +1,7 @@
 /**
  * The dev sidecar entry: ONE process hosting every RPC-backed local
- * provider — Cloudflare's workerd-backed providers, the floci-backed AWS
- * providers, `Command.Dev` processes, framework dev servers — so their
+ * provider -- Cloudflare's workerd-backed providers, the floci-backed AWS
+ * providers, `Command.Dev` processes, framework dev servers -- so their
  * long-lived state survives exec-child hot reloads during `alchemy dev`.
  *
  * Providers arrive in groups: each `RpcProvider.effect` names the URL of a

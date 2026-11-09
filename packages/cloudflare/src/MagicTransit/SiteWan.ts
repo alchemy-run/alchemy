@@ -20,7 +20,7 @@ const TypeId = "Cloudflare.MagicTransit.SiteWan" as const;
 type TypeId = typeof TypeId;
 
 /**
- * Static addressing configuration for a Magic WAN site WAN — omit to use
+ * Static addressing configuration for a Magic WAN site WAN -- omit to use
  * DHCP. Submit `secondaryAddress` when the site is in high availability
  * mode.
  */
@@ -91,15 +91,15 @@ export type MagicSiteWan = Resource<
 >;
 
 /**
- * A WAN attached to a Magic WAN site — describes an uplink on a Magic WAN
+ * A WAN attached to a Magic WAN site -- describes an uplink on a Magic WAN
  * Connector port (addressing, VLAN, load-balancing priority). Cloudflare
  * automatically creates IPsec tunnels over each WAN.
  *
- * Requires a Magic WAN subscription — accounts without it receive a typed
+ * Requires a Magic WAN subscription -- accounts without it receive a typed
  * `MagicWanUnauthorized` error (Cloudflare code 1025) or `MagicWanNotEnabled`
  * (code 1101, "forbidden: feature not enabled").
  *
- * `siteId` is create-only — changing it triggers a replacement. Everything
+ * `siteId` is create-only -- changing it triggers a replacement. Everything
  * else is updated in place.
  * ### Creating a WAN
  * **Example:** DHCP uplink
@@ -165,7 +165,7 @@ export const MagicSiteWanProvider = () =>
         const observed = yield* getWan(acct, siteId, output.wanId);
         if (observed) return toAttributes(observed, siteId, acct);
       }
-      // Cold read — match the deterministic physical name. WANs carry no
+      // Cold read -- match the deterministic physical name. WANs carry no
       // ownership markers; report as Unowned so takeover is gated behind
       // the adopt policy.
       const name = yield* createWanName(id, olds?.name);
@@ -180,13 +180,13 @@ export const MagicSiteWanProvider = () =>
       const siteId = news.siteId as string;
       const name = yield* createWanName(id, news.name);
 
-      // Observe — the id on `output` is a hint; fall back to a name scan.
+      // Observe -- the id on `output` is a hint; fall back to a name scan.
       let observed = output?.wanId ? yield* getWan(accountId, siteId, output.wanId) : undefined;
       if (!observed) {
         observed = yield* findByName(accountId, siteId, name);
       }
 
-      // Ensure — create when missing. The create API returns the site's
+      // Ensure -- create when missing. The create API returns the site's
       // WAN list; pick the created WAN by name.
       if (!observed) {
         const created = yield* magicTransit.createSiteWan({
@@ -208,7 +208,7 @@ export const MagicSiteWanProvider = () =>
         });
       }
 
-      // Sync — the update API is a PUT; send the full desired state, but
+      // Sync -- the update API is a PUT; send the full desired state, but
       // skip the call entirely on a no-op of the observable fields.
       const dirty =
         (observed.name ?? undefined) !== name ||
@@ -248,7 +248,7 @@ export const MagicSiteWanProvider = () =>
     // scope), then list WANs per site with bounded concurrency, paginating
     // each list exhaustively. Magic WAN-gated accounts (and partial-scope
     // tokens) reject these routes with the typed `MagicWanUnauthorized`
-    // (code 1025) / `Forbidden` tags — treat those as "nothing to list".
+    // (code 1025) / `Forbidden` tags -- treat those as "nothing to list".
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
@@ -274,7 +274,7 @@ export const MagicSiteWanProvider = () =>
                 (page.result ?? []).map((wan) => toAttributes(wan, siteId, accountId)),
               ),
             ),
-            // Site vanished or became inaccessible mid-enumeration — skip it.
+            // Site vanished or became inaccessible mid-enumeration -- skip it.
             Effect.catchTag(["MagicWanUnauthorized", "MagicWanNotEnabled", "Forbidden"], () =>
               Effect.succeed([] as MagicSiteWanAttributes[]),
             ),

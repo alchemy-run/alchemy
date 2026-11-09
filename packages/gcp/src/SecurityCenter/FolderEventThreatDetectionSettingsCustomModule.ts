@@ -35,11 +35,11 @@ export type FolderEventThreatDetectionSettingsCustomModuleProps = {
   /**
    * Parent folder (`folders/{folder}` or the numeric id). Defaults to
    * the project's Resource Manager folder ancestor.
-   * Immutable — changing it replaces the module.
+   * Immutable -- changing it replaces the module.
    */
   folder?: string;
   /**
-   * Custom module type (for example `CONFIGURABLE_BAD_IP`). Immutable —
+   * Custom module type (for example `CONFIGURABLE_BAD_IP`). Immutable --
    * changing it replaces the module.
    * @default "CONFIGURABLE_BAD_IP"
    */
@@ -65,7 +65,7 @@ export type FolderEventThreatDetectionSettingsCustomModuleProps = {
   /**
    * Human-readable description. Event Threat Detection custom modules
    * have no labels field, so Alchemy ownership is stored in a
-   * `[alchemy …]` prefix and stripped from attributes.
+   * `[alchemy ...]` prefix and stripped from attributes.
    */
   description?: string;
 };
@@ -110,7 +110,7 @@ export type FolderEventThreatDetectionSettingsCustomModule = Resource<
 /**
  * A folder-scoped Event Threat Detection custom module.
  *
- * Custom modules have no labels field — Alchemy stamps ownership into the
+ * Custom modules have no labels field -- Alchemy stamps ownership into the
  * description so `list` / nuke can find them. The module id is assigned by
  * the API. Folder and type are identity. Config, enablement, display name,
  * and description update in place.

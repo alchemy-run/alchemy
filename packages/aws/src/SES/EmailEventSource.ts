@@ -9,7 +9,7 @@ import {
 /**
  * The `detail` payload SES delivers to EventBridge for an email sending
  * event. Every event carries `eventType` and `mail`; the event-specific
- * member (`bounce`, `complaint`, `delivery`, …) is present only on that
+ * member (`bounce`, `complaint`, `delivery`, ...) is present only on that
  * event kind.
  */
 export interface EmailEventDetail {

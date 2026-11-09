@@ -7,8 +7,8 @@ import type { Stack } from "./Stack.ts";
  * Runtime binding for the `DescribeStackEvents` operation (IAM action
  * `cloudformation:DescribeStackEvents`).
  *
- * Bind this operation to a {@link Stack} to read its event history —
- * per-resource create/update/delete progress and failure reasons — from
+ * Bind this operation to a {@link Stack} to read its event history --
+ * per-resource create/update/delete progress and failure reasons -- from
  * inside a function runtime. Useful for deployment dashboards and failure
  * alerting. Provide the implementation with
  * `Effect.provide(AWS.CloudFormation.DescribeStackEventsHttp)`.

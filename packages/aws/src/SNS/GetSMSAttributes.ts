@@ -7,7 +7,7 @@ export interface GetSMSAttributesRequest extends sns.GetSMSAttributesInput {}
 /**
  * Runtime binding for `sns:GetSMSAttributes`.
  *
- * An account-scoped operation — reads the account-level SMS settings such
+ * An account-scoped operation -- reads the account-level SMS settings such
  * as `DefaultSMSType`, `MonthlySpendLimit`, and delivery-status sampling.
  * Provide the `GetSMSAttributesHttp` layer on the Function to implement the binding.
  * ### SMS Account Settings

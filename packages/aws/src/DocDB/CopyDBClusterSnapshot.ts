@@ -4,10 +4,10 @@ import type * as Effect from "effect/Effect";
 
 /**
  * Runtime binding for the `CopyDBClusterSnapshot` operation (IAM action
- * `rds:CopyDBClusterSnapshot` — DocumentDB shares the RDS control plane).
+ * `rds:CopyDBClusterSnapshot` -- DocumentDB shares the RDS control plane).
  *
- * Copies a DocumentDB cluster snapshot — to a new name, another KMS key, or
- * (with a pre-signed URL) another region — the core of snapshot fan-out and
+ * Copies a DocumentDB cluster snapshot -- to a new name, another KMS key, or
+ * (with a pre-signed URL) another region -- the core of snapshot fan-out and
  * DR automation. Source and target identifiers are runtime data, so the
  * grant spans the account's `cluster-snapshot` ARNs. Provide the
  * implementation with `Effect.provide(AWS.DocDB.CopyDBClusterSnapshotHttp)`.

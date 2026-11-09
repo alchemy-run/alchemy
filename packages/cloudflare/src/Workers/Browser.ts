@@ -96,11 +96,11 @@ export interface BrowserClient {
 
 /**
  * A Cloudflare Browser Rendering binding for launching headless browser sessions
- * from Workers — a Worker-only binding with no backing cloud resource.
+ * from Workers -- a Worker-only binding with no backing cloud resource.
  *
  * `Browser` is a single value that is at once the `Binding.Service` tag, the
  * callable that produces a {@link BrowserBinding}, and the type. Declare it on a
- * Worker's `env` (it flows through `InferEnv` → `cf.BrowserRun`) or `yield*` it
+ * Worker's `env` (it flows through `InferEnv` -> `cf.BrowserRun`) or `yield*` it
  * inside an Effect-native Worker to attach the binding and obtain the
  * {@link BrowserClient}.
  *
@@ -141,7 +141,7 @@ export interface BrowserClient {
  * ```typescript
  * // Default: a real headless Chrome is launched locally and driven over
  * // CDP under `alchemy dev`. Alchemy.remote() opts the binding into the
- * // real Browser Rendering service instead — in an Effect-native Worker:
+ * // real Browser Rendering service instead -- in an Effect-native Worker:
  * const browser = yield* Cloudflare.Browser("BROWSER").pipe(Alchemy.remote());
  *
  * // or declared on an async Worker's env:
@@ -156,7 +156,7 @@ export interface BrowserClient {
  */
 export interface Browser extends Binding.Service<Browser, TypeId, BrowserClient> {
   /**
-   * @param name Binding name (logical id) — the `env` key it resolves to.
+   * @param name Binding name (logical id) -- the `env` key it resolves to.
    * @default "BROWSER"
    */
   (name?: string): BrowserBinding;

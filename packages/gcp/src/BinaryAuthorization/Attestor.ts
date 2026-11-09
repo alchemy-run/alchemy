@@ -36,13 +36,13 @@ export type AttestorProps = {
   /**
    * Attestor id (the `{attestor}` segment of
    * `projects/{project}/attestors/{attestor}`). If omitted, a unique RFC1035
-   * id is generated. Immutable — changing it replaces the attestor.
+   * id is generated. Immutable -- changing it replaces the attestor.
    */
   attestorId?: string;
   /**
    * Grafeas Attestation Authority note this attestor reads, as
    * `projects/{project}/notes/{note}` or a note id in the same project.
-   * Immutable — changing it replaces the attestor.
+   * Immutable -- changing it replaces the attestor.
    */
   noteReference: string;
   /**
@@ -113,7 +113,7 @@ export interface AttestorLookup {
  *
  * Attestors have no labels field, so Alchemy stamps ownership into
  * `description` for `list` / nuke. `attestorId` and `noteReference` are
- * identity — changing either replaces the attestor. Description and
+ * identity -- changing either replaces the attestor. Description and
  * public keys update in place.
  *
  * ### Creating an Attestor

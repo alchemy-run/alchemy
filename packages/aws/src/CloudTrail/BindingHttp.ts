@@ -5,8 +5,8 @@ import type { EventDataStore } from "./EventDataStore.ts";
 /**
  * Shared scaffolding for AWS CloudTrail HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the two builders
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the two builders
  * below. Everything except the operation, the IAM action list, and (for
  * Lake operations) the injected event data store is boilerplate.
  */
@@ -63,7 +63,7 @@ export const makeCloudTrailEventDataStoreHttpBinding = <I, A, E, R>(options: {
 /**
  * Build the impl Effect for an account-level CloudTrail operation (event
  * history lookup, digest public keys, Insights metrics). The deploy-time
- * half grants `actions` on `*` — these CloudTrail actions are not
+ * half grants `actions` on `*` -- these CloudTrail actions are not
  * resource-scoped.
  */
 export const makeCloudTrailAccountHttpBinding = <I, A, E, R>(options: {

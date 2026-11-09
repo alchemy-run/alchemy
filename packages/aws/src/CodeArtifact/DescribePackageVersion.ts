@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Repository } from "./Repository.ts";
 
 /**
- * Request for {@link DescribePackageVersion} — `domain`, `domainOwner`, and
+ * Request for {@link DescribePackageVersion} -- `domain`, `domainOwner`, and
  * `repository` are injected from the bound {@link Repository}.
  */
 export interface DescribePackageVersionRequest extends Omit<
@@ -15,7 +15,7 @@ export interface DescribePackageVersionRequest extends Omit<
 /**
  * Runtime binding for `codeartifact:DescribePackageVersion`.
  *
- * Reads a single package version's description — status, revision, origin, and license metadata. Provide the implementation with
+ * Reads a single package version's description -- status, revision, origin, and license metadata. Provide the implementation with
  * `Effect.provide(AWS.CodeArtifact.DescribePackageVersionHttp)`.
  * ### Inspecting Package Versions
  * **Example:** Describe a Package Version

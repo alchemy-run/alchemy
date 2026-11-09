@@ -7,13 +7,13 @@ import type { Instance } from "./Instance.ts";
  * Runtime binding for the `ListAccountAssignments` operation (IAM action
  * `sso:ListAccountAssignments`), scoped to one {@link Instance}.
  *
- * Lists who (users/groups) holds a permission set in an AWS account — the core query of an access-review Lambda. The instance's
+ * Lists who (users/groups) holds a permission set in an AWS account -- the core query of an access-review Lambda. The instance's
  * `InstanceArn` is injected from the binding. Provide the implementation with
  * `Effect.provide(AWS.IdentityCenter.ListAccountAssignmentsHttp)`.
  * ### Auditing Access
  * **Example:** List a Permission Set's Assignees
  * ```typescript
- * // init — bind the operation to the Identity Center instance
+ * // init -- bind the operation to the Identity Center instance
  * const listAccountAssignments = yield* AWS.IdentityCenter.ListAccountAssignments(instance);
  *
  * // runtime

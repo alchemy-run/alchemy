@@ -4,9 +4,9 @@ import type * as Effect from "effect/Effect";
 import type { RestApi } from "./RestApi.ts";
 
 /**
- * The event shape a REST API route handler receives — the API Gateway v1
+ * The event shape a REST API route handler receives -- the API Gateway v1
  * Lambda proxy event (`httpMethod`, `resource`, `pathParameters`, `body`,
- * `requestContext`, …).
+ * `requestContext`, ...).
  */
 export type RestApiEvent = lambda.APIGatewayProxyEvent;
 
@@ -25,7 +25,7 @@ export interface RestApiRouteProps {
    */
   path?: string;
   /**
-   * The HTTP verb to serve (`GET`, `POST`, …) or `ANY` for all verbs.
+   * The HTTP verb to serve (`GET`, `POST`, ...) or `ANY` for all verbs.
    * @default "ANY"
    */
   httpMethod?: string;
@@ -43,7 +43,7 @@ export type RestApiEventSourceService = <Req = never>(
  *
  * At deploy time the Lambda implementation (`Lambda.RestApiEventSource`)
  * materializes the path `Resource`s, the `Method` with an `AWS_PROXY`
- * integration, and the invoke `Permission` for the route — and registers
+ * integration, and the invoke `Permission` for the route -- and registers
  * each of them as bindings on the API so any `Deployment` of the same API
  * is ordered after them. At runtime it dispatches matching REST proxy
  * events to the handler. Subscribe routes with {@link onRestApiRoute} and

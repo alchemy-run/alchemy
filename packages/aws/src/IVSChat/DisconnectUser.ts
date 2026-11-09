@@ -15,7 +15,7 @@ export interface DisconnectUserRequest extends Omit<
 
 /**
  * Moderate the bound room by disconnecting all WebSocket connections of a
- * user — the effectful call made from a deployed Lambda or Task. The
+ * user -- the effectful call made from a deployed Lambda or Task. The
  * `userId` is the one the user's chat token was minted with; disconnection
  * does not prevent reconnection, so revoke by not minting further tokens.
  * The call succeeds even when the user has no open connections.

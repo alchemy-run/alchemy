@@ -7,7 +7,7 @@ import type * as Effect from "effect/Effect";
  * `cloudhsm:GetResourcePolicy`).
  *
  * Reads the resource policy attached to a CloudHSM backup (backups are the
- * only CloudHSM resource that supports policies — they govern cross-account
+ * only CloudHSM resource that supports policies -- they govern cross-account
  * backup sharing). Provide the implementation with
  * `Effect.provide(AWS.CloudHSMV2.GetResourcePolicyHttp)`.
  * ### Sharing Backups

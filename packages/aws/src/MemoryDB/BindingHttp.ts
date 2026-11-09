@@ -6,11 +6,11 @@ import type { Cluster } from "./Cluster.ts";
 /**
  * Shared scaffolding for Amazon MemoryDB HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the builders
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the builders
  * below. Everything except the operation, the identifier resolver, and the
  * IAM action list is boilerplate. The env-only side of `ConnectHttp` stays
- * bespoke — it attaches environment variables in addition to IAM policy.
+ * bespoke -- it attaches environment variables in addition to IAM policy.
  */
 
 /**
@@ -23,7 +23,7 @@ export const SNAPSHOT_ARN_WILDCARD = "arn:aws:memorydb:*:*:snapshot/*";
 /**
  * Build the impl Effect for an account-level operation (snapshot management,
  * cluster/event monitoring). The deploy-time half grants `actions` on
- * `resources` (default `*`) — these operations address clusters and
+ * `resources` (default `*`) -- these operations address clusters and
  * snapshots by names that are runtime data.
  */
 export const makeMemoryDBAccountHttpBinding = <I, A, E, R>(options: {

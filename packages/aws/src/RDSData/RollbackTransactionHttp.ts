@@ -9,7 +9,7 @@ export const RollbackTransactionHttp = Layer.effect(
     tag: "AWS.RDSData.RollbackTransaction",
     action: "rds-data:RollbackTransaction",
     operation: rdsdata.rollbackTransaction,
-    // rollback is transaction-scoped — no database/schema on the wire
+    // rollback is transaction-scoped -- no database/schema on the wire
     makeInput: (
       request: RollbackTransactionRequest,
       { resourceArn, secretArn },

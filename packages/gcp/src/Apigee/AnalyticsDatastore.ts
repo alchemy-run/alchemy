@@ -40,12 +40,12 @@ export type DatastoreConfig = {
 export type AnalyticsDatastoreProps = {
   /**
    * Apigee organization id. Defaults to the GCP project id.
-   * Immutable — changing it replaces the datastore.
+   * Immutable -- changing it replaces the datastore.
    */
   organizationId?: string;
   /**
    * Display name shown in the UI. If omitted, a unique name is generated.
-   * Alchemy ownership is stored in a `[alchemy …]` prefix.
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix.
    */
   displayName?: string;
   /**
@@ -87,7 +87,7 @@ export type AnalyticsDatastore = Resource<
 >;
 
 /**
- * An Apigee analytics datastore — an export target (Cloud Storage or
+ * An Apigee analytics datastore -- an export target (Cloud Storage or
  * BigQuery) for organization analytics.
  *
  * Datastores have no labels field. Alchemy stamps ownership into

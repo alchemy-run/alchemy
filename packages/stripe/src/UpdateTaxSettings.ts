@@ -12,7 +12,7 @@ export interface UpdateTaxSettingsRequest extends CreateTaxSettingsRequest {}
 
 /**
  * Update bound Stripe Tax Settings over HTTP. Tax Settings is an account
- * singleton — the update op has no id field; the bound resource associates
+ * singleton -- the update op has no id field; the bound resource associates
  * the API key with the host. Fields Stripe has already set cannot be
  * removed.
  *

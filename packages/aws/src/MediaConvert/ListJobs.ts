@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `mediaconvert:ListJobs` — list your most recent
+ * Runtime binding for `mediaconvert:ListJobs` -- list your most recent
  * transcode jobs from runtime code, optionally filtered by queue or status.
  *
  * The binding takes no arguments and grants `mediaconvert:ListJobs` on `*`.

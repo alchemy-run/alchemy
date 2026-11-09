@@ -11,7 +11,7 @@ import type * as Effect from "effect/Effect";
  * ### Exploring the Service Topology
  * **Example:** List a Service's Operations
  * ```typescript
- * // init — account-level, no resource argument
+ * // init -- account-level, no resource argument
  * const listServiceOperations =
  *   yield* AWS.ApplicationSignals.ListServiceOperations();
  *

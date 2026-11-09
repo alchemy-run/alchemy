@@ -17,7 +17,7 @@ export interface CancelTraceRetrievalRequest extends xray.CancelTraceRetrievalRe
  * ```typescript
  * import * as XRay from "@alchemy.run/aws/XRay";
  *
- * // init — grants xray:CancelTraceRetrieval
+ * // init -- grants xray:CancelTraceRetrieval
  * const cancelTraceRetrieval = yield* XRay.CancelTraceRetrieval();
  *
  * // runtime

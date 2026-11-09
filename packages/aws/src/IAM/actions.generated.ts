@@ -1,4 +1,4 @@
-// AUTO-GENERATED FILE — DO NOT EDIT.
+// AUTO-GENERATED FILE -- DO NOT EDIT.
 //
 // Regenerate with: node scripts/generate-iam-actions.ts
 //

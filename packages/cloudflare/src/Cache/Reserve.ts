@@ -13,14 +13,14 @@ type TypeId = typeof TypeId;
 
 export interface ReserveProps {
   /**
-   * Zone whose Cache Reserve setting is managed. Stable — changing the
+   * Zone whose Cache Reserve setting is managed. Stable -- changing the
    * zone triggers a replacement (the old zone's setting is restored to
    * the value it had before Alchemy managed it).
    */
   zoneId: string;
   /**
    * Whether Cache Reserve is enabled on the zone (`value: "on"`) or
-   * disabled (`value: "off"`). Mutable — patched in place.
+   * disabled (`value: "off"`). Mutable -- patched in place.
    * @default true
    */
   enabled?: boolean;
@@ -28,7 +28,7 @@ export interface ReserveProps {
    * When true, destroying the resource also clears any data already
    * stored in Cache Reserve (after restoring the setting), waiting for
    * the asynchronous clear operation to complete. Disabling Cache
-   * Reserve does NOT purge stored data by itself — storage continues to
+   * Reserve does NOT purge stored data by itself -- storage continues to
    * bill until it expires or is cleared.
    * @default false
    */
@@ -63,7 +63,7 @@ export type Reserve = Resource<TypeId, ReserveProps, ReserveAttributes, never, P
  *
  * Cache Reserve is a large, persistent data store backed by R2 that serves
  * as the ultimate upper-tier cache, dramatically reducing origin egress for
- * cacheable content. The setting is a zone **singleton** — it always exists
+ * cacheable content. The setting is a zone **singleton** -- it always exists
  * on entitled zones (default `off`), so this resource never creates or
  * deletes anything physical. Reconcile patches the setting when the
  * observed value differs from the desired one; destroy restores the value
@@ -75,11 +75,11 @@ export type Reserve = Resource<TypeId, ReserveProps, ReserveAttributes, never, P
  * both reads and writes fail with the typed `SettingUnavailableForPlan`
  * error ("this zone setting is not available for your plan type").
  *
- * Disabling Cache Reserve does not purge data already in reserve — set
+ * Disabling Cache Reserve does not purge data already in reserve -- set
  * `clearOnDelete: true` to run the asynchronous Cache Reserve Clear
  * operation on destroy (the provider polls until the clear completes).
  *
- * Only one `Reserve` resource per zone makes sense — two instances
+ * Only one `Reserve` resource per zone makes sense -- two instances
  * managing the same zone would fight over the singleton.
  * ### Managing Cache Reserve
  * **Example:** Enable Cache Reserve on a zone
@@ -124,7 +124,7 @@ export const ReserveProvider = () =>
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // No account-wide API for this zone singleton — enumerate every
+      // No account-wide API for this zone singleton -- enumerate every
       // zone in the account and read its setting. Cache Reserve is an
       // entitlement-gated add-on, so non-subscribed zones reject the
       // route (`SettingUnavailableForPlan`); skip those.
@@ -161,12 +161,12 @@ export const ReserveProvider = () =>
       const zoneId = output?.zoneId ?? (olds?.zoneId as string | undefined);
       if (!zoneId) return undefined;
       const observed = yield* cache.getCacheReserve({ zoneId }).pipe(
-        // Zone deleted out-of-band — the setting is gone with it.
+        // Zone deleted out-of-band -- the setting is gone with it.
         Effect.catchTag("InvalidRoute", () => Effect.undefined),
       );
       if (observed === undefined) return undefined;
       // The setting is a singleton that always exists with a Cloudflare
-      // default — there is nothing to "own", so a cold read adopts
+      // default -- there is nothing to "own", so a cold read adopts
       // freely (never `Unowned`). The observed value at adoption time
       // becomes the `initialValue` restored on destroy.
       const initialValue = output !== undefined ? output.initialValue : observed.value;
@@ -177,18 +177,18 @@ export const ReserveProvider = () =>
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
 
-      // 1. Observe — the setting always exists (on entitled zones); read
+      // 1. Observe -- the setting always exists (on entitled zones); read
       //    its live value. Entitlement-gated zones fail here with the
       //    typed `SettingUnavailableForPlan` error.
       const observed = yield* cache.getCacheReserve({ zoneId });
 
-      // 2. Capture — the pre-management value, restored on destroy.
+      // 2. Capture -- the pre-management value, restored on destroy.
       //    `output` (including an adoption read) already carries it;
       //    otherwise this is our first touch and the observed value is
       //    the zone's original.
       const initialValue = output !== undefined ? output.initialValue : observed.value;
 
-      // 3. Sync — patch only when the observed value differs.
+      // 3. Sync -- patch only when the observed value differs.
       const desired = desiredValue(news);
       if (observed.value === desired) {
         return toAttributes(zoneId, observed, initialValue);
@@ -202,7 +202,7 @@ export const ReserveProvider = () =>
 
     delete: Effect.fn(function* ({ output, olds }) {
       const { zoneId, initialValue } = output;
-      // Observe — if the zone itself is gone (or the entitlement was
+      // Observe -- if the zone itself is gone (or the entitlement was
       // dropped so the setting no longer exists), nothing to restore.
       const observed = yield* cache.getCacheReserve({ zoneId }).pipe(
         Effect.catchTags({
@@ -218,7 +218,7 @@ export const ReserveProvider = () =>
           .patchCacheReserve({ zoneId, value: initialValue })
           .pipe(Effect.catchTag("InvalidRoute", () => Effect.void));
       }
-      // Optionally clear data already stored in reserve — an async
+      // Optionally clear data already stored in reserve -- an async
       // operation that we kick off and poll to completion (bounded).
       if (olds?.clearOnDelete === true) {
         yield* cache.clearCacheReserve({ zoneId });

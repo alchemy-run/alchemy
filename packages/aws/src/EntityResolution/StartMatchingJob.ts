@@ -6,13 +6,13 @@ import type { MatchingWorkflow } from "./MatchingWorkflow.ts";
 /**
  * Runtime binding for `entityresolution:StartMatchingJob`.
  *
- * Starts a matching job run of the bound workflow — a batch process over the
+ * Starts a matching job run of the bound workflow -- a batch process over the
  * workflow's full input that takes many minutes. Provide the implementation
  * with `Effect.provide(AWS.EntityResolution.StartMatchingJobHttp)`.
  * ### Running Matching Jobs
  * **Example:** Start a Job
  * ```typescript
- * // init — bind the operation to the workflow
+ * // init -- bind the operation to the workflow
  * const startMatchingJob = yield* AWS.EntityResolution.StartMatchingJob(workflow);
  *
  * // runtime

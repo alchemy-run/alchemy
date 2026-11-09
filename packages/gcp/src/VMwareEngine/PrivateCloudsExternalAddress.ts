@@ -39,7 +39,7 @@ export type PrivateCloudsExternalAddressProps = {
   /**
    * Parent PrivateCloud resource name
    * (`projects/{project}/locations/{location}/privateClouds/{privateCloud}`)
-   * or the cloud id. Immutable — changing it replaces the address.
+   * or the cloud id. Immutable -- changing it replaces the address.
    */
   privateCloud: string;
   /**
@@ -60,7 +60,7 @@ export type PrivateCloudsExternalAddressProps = {
   internalIp: string;
   /**
    * Human-readable description. External addresses have no labels field,
-   * so Alchemy stamps ownership into a `[alchemy …]` prefix and strips
+   * so Alchemy stamps ownership into a `[alchemy ...]` prefix and strips
    * it from attributes.
    */
   description?: string;

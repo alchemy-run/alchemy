@@ -106,7 +106,7 @@ export const SSHPublicKeyProvider = () =>
       };
     }),
     reconcile: Effect.fn(function* ({ news, output, session }) {
-      // Observe — SSH key ids are AWS-generated; we can only locate the
+      // Observe -- SSH key ids are AWS-generated; we can only locate the
       // existing key when we have its id from a prior output. The body
       // and identity are immutable (`diff` triggers replacement on body
       // change), so a missing key always means we need to upload.
@@ -123,7 +123,7 @@ export const SSHPublicKeyProvider = () =>
             )
         : undefined;
 
-      // Ensure — upload when missing.
+      // Ensure -- upload when missing.
       let key = observed;
       if (!key?.SSHPublicKeyId) {
         const uploaded = yield* iam.uploadSSHPublicKey({
@@ -138,7 +138,7 @@ export const SSHPublicKeyProvider = () =>
         key = uploaded.SSHPublicKey;
       }
 
-      // Sync — apply the desired status when it differs from observed.
+      // Sync -- apply the desired status when it differs from observed.
       const desiredStatus = news.status ?? key.Status;
       if (desiredStatus !== key.Status) {
         yield* iam.updateSSHPublicKey({

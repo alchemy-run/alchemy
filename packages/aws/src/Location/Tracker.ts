@@ -20,12 +20,12 @@ export type PositionFiltering = "TimeBased" | "DistanceBased" | "AccuracyBased";
 
 export interface TrackerProps {
   /**
-   * Name of the tracker. Immutable — changing it replaces the tracker.
+   * Name of the tracker. Immutable -- changing it replaces the tracker.
    * @default ${app}-${stage}-${id}
    */
   trackerName?: string;
   /**
-   * KMS key ID used to encrypt the tracker's position data. Immutable —
+   * KMS key ID used to encrypt the tracker's position data. Immutable --
    * changing it replaces the tracker.
    */
   kmsKeyId?: string;

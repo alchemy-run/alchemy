@@ -17,19 +17,19 @@ import {
 
 export type ObjectAccessControlProps = {
   /**
-   * Name of the bucket that contains the object. Immutable — changing it
+   * Name of the bucket that contains the object. Immutable -- changing it
    * replaces the entry.
    */
   bucketName: string;
   /**
-   * Object name this ACL entry is attached to. Immutable — changing it
+   * Object name this ACL entry is attached to. Immutable -- changing it
    * replaces the entry.
    */
   object: string;
   /**
    * Principal granted the role. Forms include `user-{email}`,
    * `group-{email}`, `domain-{domain}`, `allUsers`, and
-   * `allAuthenticatedUsers`. Immutable — changing it replaces the entry.
+   * `allAuthenticatedUsers`. Immutable -- changing it replaces the entry.
    */
   entity: string;
   /**
@@ -38,7 +38,7 @@ export type ObjectAccessControlProps = {
   role: string;
   /**
    * Object generation. When omitted, the live generation is used.
-   * Immutable — changing it replaces the entry.
+   * Immutable -- changing it replaces the entry.
    */
   generation?: string;
 };

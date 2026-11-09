@@ -30,7 +30,7 @@ export interface ImageProps {
   image?: string;
   /**
    * Build from a Dockerfile: a path, or inline content
-   * (`Dockerfile.inline\`…\``). Modal's builder runs it, not Docker: a
+   * (`Dockerfile.inline\`...\``). Modal's builder runs it, not Docker: a
    * multi-stage build, BuildKit mounts, heredocs, `EXPOSE`, `HEALTHCHECK`,
    * `LABEL`, `ONBUILD`, `STOPSIGNAL` and `VOLUME` fail at plan; `USER` is
    * ignored (containers run as root) with a warning.
@@ -69,7 +69,7 @@ export interface ImageProps {
 }
 
 export interface ImageAttributes {
-  /** Image ID (`im-…`): pass it as `image` when creating sandboxes. */
+  /** Image ID (`im-...`): pass it as `image` when creating sandboxes. */
   imageId: string;
   /** The App the image was built in; `CreateSandbox(image)` creates sandboxes there. */
   appId: string;

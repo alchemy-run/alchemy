@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `auditmanager:ListNotifications`.
  *
- * Lists the notifications for the account — delegation requests,
+ * Lists the notifications for the account -- delegation requests,
  * control-set review handoffs, and completed report generation. Provide the
  * implementation with `Effect.provide(AWS.AuditManager.ListNotificationsHttp)`.
  * ### Notifications

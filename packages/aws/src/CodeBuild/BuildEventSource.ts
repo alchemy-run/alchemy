@@ -18,7 +18,7 @@ export interface BuildEventDetail {
   /** Name of the project the build belongs to. */
   "project-name"?: string;
   /**
-   * State-change events: the new status — `IN_PROGRESS`, `SUCCEEDED`,
+   * State-change events: the new status -- `IN_PROGRESS`, `SUCCEEDED`,
    * `FAILED`, or `STOPPED`.
    */
   "build-status"?: string;
@@ -26,7 +26,7 @@ export interface BuildEventDetail {
   "completed-phase"?: string;
   /** Phase-change events: the completed phase's status. */
   "completed-phase-status"?: string;
-  /** Deep details: source, environment, phases, logs, … */
+  /** Deep details: source, environment, phases, logs, ... */
   "additional-information"?: Record<string, unknown>;
   /** Additional event fields (the schema grows over time). */
   [key: string]: unknown;
@@ -69,7 +69,7 @@ export interface BuildEventSourceProps extends EventRouteProps {
  * `aws.codebuild`); this subscribes the host Function to those events so it
  * can alert on failed builds or chain post-build automation.
  *
- * CodeBuild publishes to EventBridge automatically — no additional resource
+ * CodeBuild publishes to EventBridge automatically -- no additional resource
  * is created besides the EventBridge rule targeting the host. Provide the
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.

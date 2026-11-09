@@ -39,22 +39,22 @@ export type CachedContentMessage = {
 
 export type CachedContentProps = {
   /**
-   * Region. Immutable — changing it replaces the cache.
+   * Region. Immutable -- changing it replaces the cache.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
    * Publisher model used for the cache, for example
    * `projects/{project}/locations/{location}/publishers/google/models/gemini-2.0-flash-001`.
-   * Immutable — changing it replaces the cache.
+   * Immutable -- changing it replaces the cache.
    */
   model: string;
   /**
-   * Content to cache. Immutable — changing it replaces the cache.
+   * Content to cache. Immutable -- changing it replaces the cache.
    */
   contents?: CachedContentMessage[];
   /**
-   * Developer system instruction (text only). Immutable — changing it
+   * Developer system instruction (text only). Immutable -- changing it
    * replaces the cache.
    */
   systemInstruction?: CachedContentMessage;
@@ -75,7 +75,7 @@ export type CachedContentProps = {
    */
   displayName?: string;
   /**
-   * Customer-managed encryption. Immutable — changing it replaces the
+   * Customer-managed encryption. Immutable -- changing it replaces the
    * cache.
    */
   encryptionSpec?: EncryptionSpec;
@@ -113,7 +113,7 @@ export type CachedContent = Resource<
 >;
 
 /**
- * Vertex AI cached content — explicit context cache for LLM queries.
+ * Vertex AI cached content -- explicit context cache for LLM queries.
  *
  * Cached content has no labels field, so Alchemy stamps ownership into
  * `displayName` for `list` / nuke. Model, contents, system instruction,

@@ -47,7 +47,7 @@ export interface SigningJobEventSourceProps extends EventRouteProps {
  * Change`); this subscribes the host Function to those events so it can
  * react when a code-signing job starts, succeeds, or fails.
  *
- * Signer publishes to EventBridge automatically — no additional resource is
+ * Signer publishes to EventBridge automatically -- no additional resource is
  * created besides the EventBridge rule targeting the host. Provide the
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.

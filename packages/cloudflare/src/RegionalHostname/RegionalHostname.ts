@@ -21,16 +21,16 @@ export interface Props {
   /**
    * DNS hostname to be regionalized. Must be a subdomain of the zone;
    * wildcards are supported for one level (e.g. `*.example.com`). The
-   * hostname is the API path identifier — changing it forces a replacement.
+   * hostname is the API path identifier -- changing it forces a replacement.
    */
   hostname: string;
   /**
-   * Identifying key for the region (e.g. `"eu"`, `"us"` — discoverable via
-   * `addressing.listRegionalHostnameRegions`). Mutable — patched in place.
+   * Identifying key for the region (e.g. `"eu"`, `"us"` -- discoverable via
+   * `addressing.listRegionalHostnameRegions`). Mutable -- patched in place.
    */
   regionKey: string;
   /**
-   * Which routing method to use for the regional hostname. Create-only —
+   * Which routing method to use for the regional hostname. Create-only --
    * the PATCH endpoint only accepts `regionKey`, so changing it forces a
    * replacement.
    */
@@ -106,7 +106,7 @@ export const RegionalHostnameProvider = () =>
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       // Regional hostnames are zone-scoped (/zones/{id}/addressing/
-      // regional_hostnames) with no account-wide enumeration API — fan out
+      // regional_hostnames) with no account-wide enumeration API -- fan out
       // over every zone and list each zone's regional hostnames.
       const zones = yield* listAllZones(accountId);
       const rows = yield* Effect.forEach(
@@ -152,7 +152,7 @@ export const RegionalHostnameProvider = () =>
       if (news.hostname !== (output?.hostname ?? olds.hostname)) {
         return { action: "replace" } as const;
       }
-      // PATCH only accepts regionKey — routing is create-only.
+      // PATCH only accepts regionKey -- routing is create-only.
       if (
         olds.routing !== undefined &&
         news.routing !== undefined &&
@@ -164,7 +164,7 @@ export const RegionalHostnameProvider = () =>
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
-      // The hostname is the identifier — cold reads are trivial.
+      // The hostname is the identifier -- cold reads are trivial.
       const zoneId = output?.zoneId ?? (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
       const hostname = output?.hostname ?? olds?.hostname;
       if (!zoneId || typeof hostname !== "string") return undefined;
@@ -176,10 +176,10 @@ export const RegionalHostnameProvider = () =>
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
 
-      // 1. Observe — the hostname itself is the identifier.
+      // 1. Observe -- the hostname itself is the identifier.
       const observed = yield* getHostname(zoneId, news.hostname);
 
-      // 2. Ensure — create if missing.
+      // 2. Ensure -- create if missing.
       if (!observed) {
         const created = yield* addressing.createRegionalHostname({
           zoneId,
@@ -190,7 +190,7 @@ export const RegionalHostnameProvider = () =>
         return toAttributes(created, zoneId);
       }
 
-      // 3. Sync — regionKey is the only patchable field; skip the PATCH
+      // 3. Sync -- regionKey is the only patchable field; skip the PATCH
       //    entirely on a no-op.
       if (observed.regionKey !== news.regionKey) {
         const patched = yield* addressing.patchRegionalHostname({
@@ -217,8 +217,8 @@ export const RegionalHostnameProvider = () =>
   });
 
 /**
- * Read a regional hostname, mapping "gone" (`RegionalHostnameNotFound` —
- * code 1002 — and `RegionalHostnameEmpty` — code 1000 `not_found`, returned
+ * Read a regional hostname, mapping "gone" (`RegionalHostnameNotFound` --
+ * code 1002 -- and `RegionalHostnameEmpty` -- code 1000 `not_found`, returned
  * when the zone has no regional hostnames at all) to `undefined`.
  */
 const getHostname = (zoneId: string, hostname: string) =>

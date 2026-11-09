@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { KxEnvironment } from "./KxEnvironment.ts";
 
 /**
- * Runtime binding for `finspace:GetKxDatabase` — reads one kdb database of the bound environment — including `lastCompletedChangesetId`, the anchor ingestion pipelines use to advance dataviews.
+ * Runtime binding for `finspace:GetKxDatabase` -- reads one kdb database of the bound environment -- including `lastCompletedChangesetId`, the anchor ingestion pipelines use to advance dataviews.
  * Provide the implementation with
  * `Effect.provide(AWS.FinSpace.GetKxDatabaseHttp)`.
  * ### Reading Databases

@@ -66,7 +66,7 @@ export interface ReplicationSet extends Resource<
 > {}
 
 /**
- * The Incident Manager replication set — the account/region singleton that
+ * The Incident Manager replication set -- the account/region singleton that
  * onboards AWS Systems Manager Incident Manager. Creating it replicates and
  * encrypts Incident Manager data (response plans, incidents, contacts) to the
  * configured Regions; deleting it offboards Incident Manager and removes all
@@ -156,7 +156,7 @@ export const ReplicationSetProvider = () =>
   Provider.effect(
     ReplicationSetResource,
     Effect.gen(function* () {
-      // The replication set is the account singleton — its ARN is not
+      // The replication set is the account singleton -- its ARN is not
       // derivable, so observation always starts from the list.
       const observe = Effect.gen(function* () {
         const listed = yield* incidents.listReplicationSets({});
@@ -203,12 +203,12 @@ export const ReplicationSetProvider = () =>
           const attrs = buildAttrs(live);
           const tags = yield* readTags(live.arn);
           if (yield* hasAlchemyTags(id, tags)) return attrs;
-          // Tag-based ownership is best-effort — if we have prior state for
+          // Tag-based ownership is best-effort -- if we have prior state for
           // this exact singleton, it is ours; otherwise gate adoption.
           return output !== undefined ? attrs : Unowned(attrs);
         }),
 
-        // Account/region singleton — report the single replication set, if any.
+        // Account/region singleton -- report the single replication set, if any.
         list: () => observe.pipe(Effect.map((rs) => (rs ? [buildAttrs(rs)] : []))),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -216,11 +216,11 @@ export const ReplicationSetProvider = () =>
           const desiredTags = { ...news.tags, ...internalTags };
           const regions = yield* desiredRegions(news);
 
-          // 1. OBSERVE — cloud state is authoritative; `output` is only an
+          // 1. OBSERVE -- cloud state is authoritative; `output` is only an
           //    identifier cache.
           let live = yield* observe;
 
-          // 2. ENSURE — onboard Incident Manager if there is no replication
+          // 2. ENSURE -- onboard Incident Manager if there is no replication
           //    set. Tolerate the singleton-create race (ConflictException)
           //    by falling through to observation.
           if (live === undefined) {
@@ -252,7 +252,7 @@ export const ReplicationSetProvider = () =>
           }
           const arn = output?.arn ?? live.arn;
 
-          // 3. SYNC regions — diff observed Region map against desired and
+          // 3. SYNC regions -- diff observed Region map against desired and
           //    apply one add/delete action at a time (the API allows a single
           //    Region change per update). Add first so the set never shrinks
           //    to zero.
@@ -283,7 +283,7 @@ export const ReplicationSetProvider = () =>
             yield* waitForReplicationSetActive(arn);
           }
 
-          // 3b. SYNC deletion protection — observed vs desired.
+          // 3b. SYNC deletion protection -- observed vs desired.
           const desiredProtection = news.deletionProtected ?? false;
           if (live.deletionProtected !== desiredProtection) {
             yield* incidents.updateDeletionProtection({
@@ -292,7 +292,7 @@ export const ReplicationSetProvider = () =>
             });
           }
 
-          // 3c. SYNC tags — diff against OBSERVED cloud tags.
+          // 3c. SYNC tags -- diff against OBSERVED cloud tags.
           const currentTags = yield* readTags(arn);
           const { upsert, removed } = diffTags(currentTags, desiredTags);
           if (upsert.length > 0) {

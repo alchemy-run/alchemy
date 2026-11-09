@@ -11,7 +11,7 @@ export interface BatchDeletePartitionRequest extends Omit<
 /**
  * Runtime binding for `glue:BatchDeletePartition`.
  *
- * Deletes up to 25 partitions of the bound {@link Table} in one call — the
+ * Deletes up to 25 partitions of the bound {@link Table} in one call -- the
  * bulk variant of `DeletePartition` for retention sweeps. Per-partition
  * failures come back in the response's `Errors` list. The database/table
  * names and catalog id are injected from the binding. Provide the

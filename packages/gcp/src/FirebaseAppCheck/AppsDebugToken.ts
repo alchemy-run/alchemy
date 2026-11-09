@@ -29,20 +29,20 @@ import {
 export type AppsDebugTokenProps = {
   /**
    * Firebase App id (`1:123:web:abc`) or full resource name
-   * `projects/{project}/apps/{appId}`. Immutable — changing it replaces
+   * `projects/{project}/apps/{appId}`. Immutable -- changing it replaces
    * the debug token.
    */
   app: string;
   /**
    * Human-readable display name. Debug tokens have no labels field, so
-   * Alchemy stamps ownership into a `[alchemy …]` prefix and strips it
+   * Alchemy stamps ownership into a `[alchemy ...]` prefix and strips it
    * from attributes.
    */
   displayName?: string;
   /**
    * Secret token. Must be a UUID4 (case insensitive). If omitted, a UUID4
    * is generated and stored in Alchemy state. Input-only on the GCP API
-   * — never returned by get/list. Immutable — changing it replaces the
+   * -- never returned by get/list. Immutable -- changing it replaces the
    * debug token. Each app may have at most 20 debug tokens.
    */
   token?: string;
@@ -84,7 +84,7 @@ export type AppsDebugToken = Resource<
  * protects production Firebase services.
  *
  * Debug tokens have no labels field, so Alchemy stamps ownership into
- * `displayName` for `list` / nuke. `app` and `token` are identity —
+ * `displayName` for `list` / nuke. `app` and `token` are identity --
  * changing either replaces the token. Display name updates in place.
  * GCP never returns `token` after create; Alchemy stores the secret in
  * state so {@link ExchangeDebugToken} can redeem it.

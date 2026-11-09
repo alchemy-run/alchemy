@@ -35,7 +35,7 @@ export const StreamSinkHttp = Layer.effect(
         send: (batch) => publish({ Records: [...batch] }),
         // PutRecords failures are positional: Records[i] mirrors the request
         // order and carries an ErrorCode (throughput exceeded / internal
-        // failure) — all transient, so re-submit them on the bounded schedule.
+        // failure) -- all transient, so re-submit them on the bounded schedule.
         unprocessed: (out, batch) => {
           if (!out.FailedRecordCount) {
             return [];

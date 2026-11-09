@@ -28,13 +28,13 @@ export type ApplicationLayerAutomaticResponseAction = "BLOCK" | "COUNT";
 
 export interface ProtectionProps {
   /**
-   * Friendly name for the protection. Immutable — changing it replaces the
+   * Friendly name for the protection. Immutable -- changing it replaces the
    * protection. If omitted, a unique name is generated.
    */
   name?: string;
   /**
    * ARN of the resource to protect (CloudFront distribution, Route 53 hosted
-   * zone, Global Accelerator, ALB, CLB, or Elastic IP allocation). Immutable —
+   * zone, Global Accelerator, ALB, CLB, or Elastic IP allocation). Immutable --
    * changing it replaces the protection.
    */
   resourceArn: string;
@@ -272,11 +272,11 @@ export const ProtectionProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — cloud state is authoritative; a protection is keyed
+          // 1. OBSERVE -- cloud state is authoritative; a protection is keyed
           //    by the resource it protects.
           let protection = yield* observeByResourceArn(news.resourceArn);
 
-          // 2. ENSURE — create if missing; tolerate the AlreadyExists race.
+          // 2. ENSURE -- create if missing; tolerate the AlreadyExists race.
           if (!protection?.Id) {
             yield* shield
               .createProtection({
@@ -296,7 +296,7 @@ export const ProtectionProvider = () =>
             }
           }
 
-          // 3. SYNC health check associations — diff observed against desired.
+          // 3. SYNC health check associations -- diff observed against desired.
           yield* syncHealthChecks(
             protection.Id,
             protection.HealthCheckIds ?? [],
@@ -310,7 +310,7 @@ export const ProtectionProvider = () =>
             news.applicationLayerAutomaticResponse,
           );
 
-          // 3c. SYNC tags — diff against OBSERVED cloud tags.
+          // 3c. SYNC tags -- diff against OBSERVED cloud tags.
           yield* syncTags(protection.ProtectionArn!, desiredTags);
 
           // 4. RETURN fresh attributes.

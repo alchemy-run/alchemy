@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { GraphqlApi } from "./GraphqlApi.ts";
 
 /**
- * Runtime binding for `appsync:FlushApiCache` — flush a {@link GraphqlApi}'s
+ * Runtime binding for `appsync:FlushApiCache` -- flush a {@link GraphqlApi}'s
  * server-side cache from a Lambda (or other AWS runtime), e.g. after
  * writing to the underlying data store out of band.
  *
@@ -18,7 +18,7 @@ import type { GraphqlApi } from "./GraphqlApi.ts";
  * const flushCache = yield* AppSync.FlushApiCache(api);
  *
  * yield* flushCache().pipe(
- *   // no cache provisioned — nothing to flush
+ *   // no cache provisioned -- nothing to flush
  *   Effect.catchTag("NotFoundException", () => Effect.void),
  * );
  * ```

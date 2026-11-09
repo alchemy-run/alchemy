@@ -180,7 +180,7 @@ export const replaceOnIdentity = (input: {
 /**
  * Wait for a Database Migration Service long-running operation. Cloud SQL /
  * AlloyDB destination connection profiles provision a database instance
- * (20–40 minutes).
+ * (20-40 minutes).
  * `ALREADY_EXISTS` (a concurrent create won) always succeeds;
  * `notFoundOk` also accepts a `NOT_FOUND` result or an operation that has
  * already been garbage-collected (deletes).

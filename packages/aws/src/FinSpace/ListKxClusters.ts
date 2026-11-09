@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { KxEnvironment } from "./KxEnvironment.ts";
 
 /**
- * Runtime binding for `finspace:ListKxClusters` — lists the kdb clusters of the bound environment, optionally filtered by cluster type.
+ * Runtime binding for `finspace:ListKxClusters` -- lists the kdb clusters of the bound environment, optionally filtered by cluster type.
  * Provide the implementation with
  * `Effect.provide(AWS.FinSpace.ListKxClustersHttp)`.
  * ### Monitoring Clusters

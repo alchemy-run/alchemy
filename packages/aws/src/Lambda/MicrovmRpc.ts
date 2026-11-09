@@ -11,11 +11,11 @@ import * as Redacted from "effect/Redacted";
 export interface MicrovmConnection {
   /**
    * The MicroVM endpoint hostname (no scheme), e.g.
-   * `<id>.lambda-microvm.<region>.on.aws` — from `RunMicrovm`'s response.
+   * `<id>.lambda-microvm.<region>.on.aws` -- from `RunMicrovm`'s response.
    */
   endpoint: string;
   /**
-   * The auth token from `CreateAuthToken` — a map of header name → value that
+   * The auth token from `CreateAuthToken` -- a map of header name -> value that
    * authorizes requests to the MicroVM endpoint (the AWS proxy validates them).
    * Values may be {@link Redacted.Redacted}.
    */
@@ -43,7 +43,7 @@ export const microvmAuthHeaders = (
  * stub. The stub mirrors the image's tagged RPC `Shape`: value methods
  * `yield*` as `Effect`s, streaming methods pipe as `Stream`s. Each call is a
  * `POST https://<endpoint>/__rpc__/<method>` with the auth-token entries set as
- * request headers — the mirror of {@link serveRpc} running inside the MicroVM.
+ * request headers -- the mirror of {@link serveRpc} running inside the MicroVM.
  *
  * @example
  * ```typescript

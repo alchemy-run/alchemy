@@ -10,8 +10,8 @@
  * - Retention is bounded: once the parser has consumed past a slab and the
  *   retained total exceeds `retainBytes`, the oldest slab is dropped. A
  *   later read below the retained window (a delta base far behind) is
- *   served by the `fallback` reader — the spilled object, readable once the
- *   body has ended — or fails when there is none.
+ *   served by the `fallback` reader -- the spilled object, readable once the
+ *   body has ended -- or fails when there is none.
  * - Backpressure: `push` waits while more than `backpressureBytes` of
  *   unconsumed bytes are buffered, so a slow parser throttles the upload
  *   instead of growing memory.
@@ -133,7 +133,7 @@ export const makeStreamingSource = (options?: {
   };
   /**
    * Backpressure must never park the feeder while a reader is waiting for
-   * bytes past the buffer — that reader is the only thing that will ever
+   * bytes past the buffer -- that reader is the only thing that will ever
    * consume, so parking would deadlock (a 64 KiB probe against a 1 KiB
    * budget, or an entry larger than the budget). A waiting reader always
    * releases the feeder.
@@ -191,7 +191,7 @@ export const makeStreamingSource = (options?: {
   });
   const wakeFallback = () => {
     // Once the body has ended, evicted reads either get the fallback reader
-    // or fail — they must never wait forever. When a fallback is expected
+    // or fail -- they must never wait forever. When a fallback is expected
     // (the spill completes after the body ends), they wait for it.
     if (ended && (fallback !== undefined || !fallbackExpected || failure !== undefined)) {
       const ws = fallbackWaiters.splice(0);

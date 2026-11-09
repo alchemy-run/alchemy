@@ -14,28 +14,28 @@ type TypeId = typeof TypeId;
 export interface ZoneTransferIncomingProps {
   /**
    * Secondary zone whose incoming transfer configuration is managed.
-   * Stable — the configuration is a per-zone singleton, so changing the
+   * Stable -- the configuration is a per-zone singleton, so changing the
    * zone triggers a replacement.
    */
   zoneId: string;
   /**
    * Zone name (e.g. `example.com.`).
    *
-   * Mutable — updated in place (PUT).
+   * Mutable -- updated in place (PUT).
    */
   name: string;
   /**
    * Peers (by id) Cloudflare transfers the zone in from. Reference
    * {@link ZoneTransferPeer} resources via their `peerId` attribute.
    *
-   * Mutable — updated in place (PUT).
+   * Mutable -- updated in place (PUT).
    */
   peers: string[];
   /**
    * How often (seconds) the secondary zone auto-refreshes regardless of
    * DNS NOTIFY.
    *
-   * Mutable — updated in place (PUT).
+   * Mutable -- updated in place (PUT).
    */
   autoRefreshSeconds: number;
 }
@@ -71,7 +71,7 @@ export type ZoneTransferIncoming = Resource<
 
 /**
  * The incoming zone-transfer configuration of a secondary zone
- * (`/zones/{zone_id}/secondary_dns/incoming`) — links the zone to the
+ * (`/zones/{zone_id}/secondary_dns/incoming`) -- links the zone to the
  * {@link ZoneTransferPeer | peers} Cloudflare transfers it in from and
  * sets the auto-refresh interval.
  *
@@ -116,7 +116,7 @@ export const ZoneTransferIncomingProvider = () =>
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // No account-wide API for this per-zone singleton — enumerate
+      // No account-wide API for this per-zone singleton -- enumerate
       // every zone and read its incoming transfer config. Only
       // secondary zones with a configured transfer have one, so skip
       // the rest (`IncomingZoneTransferNotFound`).
@@ -138,7 +138,7 @@ export const ZoneTransferIncomingProvider = () =>
       const o = olds as ZoneTransferIncomingProps;
       const n = news as ZoneTransferIncomingProps;
       // zoneId is the resource's identity (per-zone singleton).
-      // Input<string> — compare only once concrete.
+      // Input<string> -- compare only once concrete.
       const oldZoneId = output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
       if (oldZoneId !== undefined && typeof n.zoneId === "string" && oldZoneId !== n.zoneId) {
         return { action: "replace" } as const;
@@ -163,11 +163,11 @@ export const ZoneTransferIncomingProvider = () =>
       const zoneId = news.zoneId as string;
       const peers = news.peers as string[];
 
-      // Observe — singleton keyed by the zone itself.
+      // Observe -- singleton keyed by the zone itself.
       const observed = yield* getIncoming(zoneId);
 
       if (!observed) {
-        // Ensure — first-time link of the zone to its peers.
+        // Ensure -- first-time link of the zone to its peers.
         const created = yield* dns.createZoneTransferIncoming({
           zoneId,
           name: news.name,
@@ -177,7 +177,7 @@ export const ZoneTransferIncomingProvider = () =>
         return toAttributes(created, zoneId);
       }
 
-      // Sync — PUT with the full desired body; skip the call when the
+      // Sync -- PUT with the full desired body; skip the call when the
       // observed configuration already matches.
       const dirty =
         undef(observed.name) !== news.name ||

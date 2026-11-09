@@ -22,9 +22,9 @@ import { RestrictedApiKey, type StripePermission } from "./RestrictedApiKey.ts";
  * Stripe has no native Worker binding. Secrets and resource ids are
  * registered via `yield* token.value` / `yield* resource.id` so
  * RuntimeContext.set + packEnvValueKeepRedacted emit `secret_text`.
- * Do not push raw `{ type: "secret_text", text }` items — the Worker
+ * Do not push raw `{ type: "secret_text", text }` items -- the Worker
  * provider forwards those to the wire un-resolved. Do not
- * `Output.asEffect` + unwrap at bind time — that resolves before the
+ * `Output.asEffect` + unwrap at bind time -- that resolves before the
  * RestrictedApiKey exists.
  *
  * NOT exported from `index.ts`.
@@ -43,7 +43,7 @@ export interface StripeAuth {
 
 /**
  * Accessor for a bound RestrictedApiKey value. The `yield*` of `token.value`
- * is RuntimeContext.set — it does not resolve the secret at plan time.
+ * is RuntimeContext.set -- it does not resolve the secret at plan time.
  */
 const stripeRuntimeLayer = (
   credentials: Effect.Effect<StripeCredentialsConfig>,
@@ -137,7 +137,7 @@ export const asOptionalStringEffect = (
 /**
  * Mint (or reuse) the host's RestrictedApiKey and attach permissions.
  * Returns a runtime accessor for the key value (`yield* token.value`).
- * That Output is the plan-to-runtime transport on every host — do not
+ * That Output is the plan-to-runtime transport on every host -- do not
  * also `host.bind({ env })`.
  */
 const missingHostToken = {

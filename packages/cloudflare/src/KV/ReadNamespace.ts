@@ -13,7 +13,7 @@ import type { NamespaceError } from "./NamespaceTypes.ts";
  * Effect-native KV client (`get`, `getWithMetadata`, `list`).
  *
  * `ReadNamespace` is a single identifier that is simultaneously the binding's
- * Context tag, its type, and the callable —
+ * Context tag, its type, and the callable --
  * `yield* Cloudflare.KV.ReadNamespace(ns)`.
  *
  * Also accepts InstantNamespace, returning a client without metadata or

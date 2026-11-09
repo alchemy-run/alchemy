@@ -164,7 +164,7 @@ export const isDeletingState = (state: string | undefined) =>
   (state ?? "").toUpperCase() === "DELETING";
 
 /**
- * Wait on a Filestore long-running operation. Instances, backups, and snapshots take 5–20 minutes.
+ * Wait on a Filestore long-running operation. Instances, backups, and snapshots take 5-20 minutes.
  * `ALREADY_EXISTS` (a create race) counts as success; so does `NOT_FOUND`
  * when `notFoundOk` (deletes). Returns the final operation.
  */

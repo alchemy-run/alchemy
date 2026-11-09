@@ -80,7 +80,7 @@ export interface StaticSiteProps extends WebsiteServiceProps {
  * `StaticSite` runs a build command (e.g. `npm run build` / `hugo`),
  * content-hashes the output directory, and deploys a Cloud Run service
  * whose image is a tiny Node file server over those files (plus
- * `/health`). Use this when the site has its own build step — Hugo, Zola,
+ * `/health`). Use this when the site has its own build step -- Hugo, Zola,
  * Eleventy, or any custom pipeline.
  *
  * For Vite-based projects, prefer `GCP.Website.Vite`. For a bucket-backed

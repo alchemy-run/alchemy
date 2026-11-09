@@ -7,7 +7,7 @@ import type * as Effect from "effect/Effect";
  * `memorydb:BatchUpdateCluster`).
  *
  * Applies a service update (security patch, engine upgrade) to a list of
- * clusters — pair with {@link DescribeServiceUpdates} to build patch
+ * clusters -- pair with {@link DescribeServiceUpdates} to build patch
  * automation that applies available updates inside a maintenance window.
  * Clusters that cannot take the update are returned in
  * `UnprocessedClusters` (with the reason) rather than failing the call.

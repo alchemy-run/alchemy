@@ -34,13 +34,13 @@ export type WebResourceProps = {
    * `https://www.example.com/`. For `INET_DOMAIN`, a domain name such
    * as `example.com`. If omitted, a unique hostname under
    * `alchemy-site-verification.test` is generated from the stack,
-   * stage, and logical id so `list` / nuke can find it. Immutable —
+   * stage, and logical id so `list` / nuke can find it. Immutable --
    * changing it replaces the web resource.
    */
   identifier?: string;
   /**
    * Resource type. `SITE` is a URL; `INET_DOMAIN` is a domain.
-   * Immutable — changing it replaces the web resource.
+   * Immutable -- changing it replaces the web resource.
    * @default "SITE"
    */
   siteType?: SiteType;
@@ -49,7 +49,7 @@ export type WebResourceProps = {
    * resource. Must match the token previously placed on the site
    * (from {@link getWebResourceToken}). Sites use `FILE`, `META`,
    * `ANALYTICS`, or `TAG_MANAGER`. Domains use `DNS_TXT` or
-   * `DNS_CNAME`. Create-only — Google does not store it after
+   * `DNS_CNAME`. Create-only -- Google does not store it after
    * verification.
    * @default "FILE" for SITE, "DNS_TXT" for INET_DOMAIN
    */
@@ -69,7 +69,7 @@ export type WebResource = Resource<
   {
     /**
      * API id for get / update / delete. Google returns this
-     * percent-encoded (`http%3A%2F%2F…`).
+     * percent-encoded (`http%3A%2F%2F...`).
      */
     webResourceId: string;
     /** Project id used when the resource was reconciled. */
@@ -96,7 +96,7 @@ export type WebResource = Resource<
  * Site Verification has no labels or description field, so Alchemy
  * stamps ownership into generated identifiers under
  * `alchemy-site-verification.test` for `list` / nuke. User-provided
- * identifiers are identity — they are not rewritten — and are not
+ * identifiers are identity -- they are not rewritten -- and are not
  * listed for nuke unless they contain that host. `identifier` and
  * `siteType` are identity (changing either replaces the resource).
  * `owners` update in place via `webResource.update`.

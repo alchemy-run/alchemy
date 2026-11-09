@@ -13,10 +13,10 @@ export interface ListReplaysRequest extends eventbridge.ListReplaysRequest {}
  * ### Replaying Events
  * **Example:** List Running Replays
  * ```typescript
- * // init — bind the operation (provide AWS.EventBridge.ListReplaysHttp on the Function)
+ * // init -- bind the operation (provide AWS.EventBridge.ListReplaysHttp on the Function)
  * const listReplays = yield* AWS.EventBridge.ListReplays();
  *
- * // runtime — enumerate replays currently running
+ * // runtime -- enumerate replays currently running
  * const { Replays } = yield* listReplays({ State: "RUNNING" });
  * ```
  *

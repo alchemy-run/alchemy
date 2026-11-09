@@ -17,7 +17,7 @@ import { sha256 } from "../Util/sha256.ts";
 import * as RpcProvider from "./RpcProvider.ts";
 
 /**
- * # LocalProvider — the standard shape of a long-running local provider
+ * # LocalProvider -- the standard shape of a long-running local provider
  *
  * A local provider's "physical resource" is a running process (a spawned
  * dev server, a workerd instance) that lives in the dev sidecar and is
@@ -58,7 +58,7 @@ export interface LocalProviderInput<R extends ResourceLike> {
 export interface StartContext<R extends ResourceLike, Config> extends LocalProviderInput<R> {
   /**
    * The value produced by {@link LocalProviderSpec.resolveConfig} for this
-   * reconcile — the same value whose canonical hash decided that a
+   * reconcile -- the same value whose canonical hash decided that a
    * (re)start was needed, so "what changed?" and "what starts?" can never
    * drift.
    */
@@ -68,8 +68,8 @@ export interface StartContext<R extends ResourceLike, Config> extends LocalProvi
    * Removes this instance from the running registry (a no-op if it has
    * already been replaced), so the next `diff` reports `update` and the
    * next reconcile boots a fresh instance. Fork this after the process's
-   * exit — e.g. `child.exitCode.pipe(Effect.exit, Effect.flatMap(() =>
-   * invalidate), Effect.forkScoped)` — for processes that can die on their
+   * exit -- e.g. `child.exitCode.pipe(Effect.exit, Effect.flatMap(() =>
+   * invalidate), Effect.forkScoped)` -- for processes that can die on their
    * own.
    */
   invalidate: Effect.Effect<void>;
@@ -78,7 +78,7 @@ export interface StartContext<R extends ResourceLike, Config> extends LocalProvi
 export interface StopContext {
   id: string;
   /**
-   * Fully-qualified name (namespace path + logical id) — the key the
+   * Fully-qualified name (namespace path + logical id) -- the key the
    * generated instance registry uses. Cross-restart state a provider keeps
    * outside instance scopes MUST be keyed by this, not `id`: two resources
    * in different namespaces can share a logical id (two `AWS.Website.*`
@@ -108,7 +108,7 @@ export interface LocalProviderSpec<
    * Derive the restart-relevant desired config from resolved inputs.
    *
    * MUST return plain, canonically-serializable data (no closures, no
-   * Effects — `Redacted` values are unwrapped by the hasher) and must be
+   * Effects -- `Redacted` values are unwrapped by the hasher) and must be
    * cheap and side-effect-free: it runs inside `diff` on every plan. The
    * helper canonically hashes the result for the noop-vs-restart decision,
    * records it on the registry entry, and passes it to {@link start} so a
@@ -125,20 +125,20 @@ export interface LocalProviderSpec<
    * Boot one instance: acquire the long-running process in the ambient
    * `Scope` and return the resource's Attributes once it is *ready* (URL
    * extracted, first serve succeeded, ...). The scope outlives the
-   * reconcile that started it — it is forked from the provider root scope
+   * reconcile that started it -- it is forked from the provider root scope
    * and closed only when the instance is restarted (config change) or
    * deleted. The returned Effect MAY complete after readiness; liveness is
    * "registry entry with an open scope", not "unfinished fiber".
    *
    * Extra requirements beyond `Scope` (`StartR`) become requirements of
-   * the provider layer — they must be present at layer build so the
+   * the provider layer -- they must be present at layer build so the
    * lifecycle wrapper can hand them to `start` at runtime.
    */
   start: (
     ctx: StartContext<R, Config>,
   ) => Effect.Effect<R["Attributes"], any, Scope.Scope | StartR>;
   /**
-   * Extra cleanup on delete, after the instance scope has closed — for
+   * Extra cleanup on delete, after the instance scope has closed -- for
    * state that intentionally spans restarts and therefore cannot live in
    * the instance scope (proxy servers kept for URL stability, restart
    * hooks, ...). NOT called on restarts: a restarting instance keeps that
@@ -165,7 +165,7 @@ export interface LocalProviderSpec<
 }
 
 /**
- * {@link ProviderService} with every requirement channel widened to `any` —
+ * {@link ProviderService} with every requirement channel widened to `any` --
  * passthrough spec hooks may use lifecycle-scoped services (`Stack`,
  * `ResourceContext`, ...) that the RpcProvider wrapper provides per call.
  */
@@ -201,7 +201,7 @@ interface Instance<Attributes> {
  * We deliberately do NOT use `Hash.structure`: Effect's structural hash
  * folds sibling fields together with XOR, so the same value change
  * appearing in two sibling subtrees cancels out and the hash is unchanged
- * — exactly the shape of a Worker config that mirrors `env` values into
+ * -- exactly the shape of a Worker config that mirrors `env` values into
  * derived `bindings`. An exact canonical serialization avoids the lossy
  * fingerprint; SHA-256 keeps the retained signature a fixed 64-char digest.
  */
@@ -231,20 +231,20 @@ export const canonicalHash = (value: unknown): Effect.Effect<string> => {
  *
  * Generated lifecycle:
  *
- * - **diff** — `undefined` while inputs are unresolved; otherwise resolve
+ * - **diff** -- `undefined` while inputs are unresolved; otherwise resolve
  *   the config and compare its canonical hash against the running
- *   instance: running + equal → `noop`, anything else → `update`. This is
- *   what encodes "the process may or may not be running" — state alone can
+ *   instance: running + equal -> `noop`, anything else -> `update`. This is
+ *   what encodes "the process may or may not be running" -- state alone can
  *   never answer it.
- * - **reconcile** — same hash + running instance → join its fiber for the
+ * - **reconcile** -- same hash + running instance -> join its fiber for the
  *   Attributes (redundant reconciles are free). Otherwise tear the old
  *   instance down and fork {@link LocalProviderSpec.start} in a fresh
  *   scope forked from the provider root scope, so the process outlives the
  *   deploy and dies with the sidecar.
- * - **delete** — tear down only if the registered instance belongs to the
+ * - **delete** -- tear down only if the registered instance belongs to the
  *   deleted `instanceId` (create-first replacement safety), then run
  *   {@link LocalProviderSpec.stop}. Idempotent.
- * - **list** — join every registered instance's fiber to its Attributes.
+ * - **list** -- join every registered instance's fiber to its Attributes.
  *
  * All reconcile/delete work for one logical resource is serialized behind
  * a per-id semaphore so restarts never interleave.
@@ -310,7 +310,7 @@ export const make = <
       // Keyed by FQN (namespace path + logical id): a restart replaces the
       // entry, a replacement's new generation overwrites it (and the old
       // generation's delete is gated on `instanceId` so it cannot kill the
-      // successor). NOT the logical id — that collides across namespaces
+      // successor). NOT the logical id -- that collides across namespaces
       // (two sites each declaring a `Command.Dev("Dev")` would evict each
       // other's running process).
       const instances = new Map<string, Instance<R["Attributes"]>>();
@@ -375,8 +375,8 @@ export const make = <
         return yield* Fiber.join(fiber).pipe(
           Effect.onExit((exit) =>
             exit._tag === "Failure"
-              ? // A failed start must not linger as "running" — the next
-                // plan should report `update` and try again — nor keep what
+              ? // A failed start must not linger as "running" -- the next
+                // plan should report `update` and try again -- nor keep what
                 // it acquired: the instance scope would otherwise hold a
                 // process that outlived its start (one still waiting for
                 // its URL when the deploy was interrupted, say) until the
@@ -491,7 +491,7 @@ export const make = <
               const existing = instances.get(fqn);
               if (existing && existing.instanceId !== instanceId) {
                 // A replacement's new generation is registered under this
-                // logical id — the old generation's delete must not touch
+                // logical id -- the old generation's delete must not touch
                 // it (nor the cross-restart state `stop` would clean up).
                 return;
               }

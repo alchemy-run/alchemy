@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `personalize:DescribeCampaign` — Reads a campaign's status and the solution version it serves — used to
+ * Runtime binding for `personalize:DescribeCampaign` -- Reads a campaign's status and the solution version it serves -- used to
  * confirm a campaign update finished before switching traffic.
  * Provide the implementation with
  * `Effect.provide(AWS.Personalize.DescribeCampaignHttp)`.

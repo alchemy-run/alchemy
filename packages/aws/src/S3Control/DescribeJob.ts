@@ -7,14 +7,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `s3:DescribeJob` (S3 Batch Operations).
  *
  * Reads an S3 Batch Operations job's configuration, status and progress
- * summary — e.g. a controller polling a bulk copy it submitted with
+ * summary -- e.g. a controller polling a bulk copy it submitted with
  * {@link CreateJob}. The account id is resolved once via
  * `sts:GetCallerIdentity`. Provide the implementation with
  * `Effect.provide(AWS.S3Control.DescribeJobHttp)`.
  * ### Running Batch Operations Jobs
  * **Example:** Poll a Job's Status
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const describeJob = yield* AWS.S3Control.DescribeJob();
  *
  * // runtime

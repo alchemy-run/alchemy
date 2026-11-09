@@ -24,7 +24,7 @@ export interface SendBulkEmailRequest extends Omit<
  * replacement data. The binding grants the function the send actions scoped
  * to the identity, the account's templates, and the configuration set.
  *
- * Bulk sends always render a template — reference one via
+ * Bulk sends always render a template -- reference one via
  * `DefaultContent.Template`.
  * ### Sending Email
  * **Example:** Send a Templated Message to Many Recipients

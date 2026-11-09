@@ -31,7 +31,7 @@ export interface AdapterOptions {
 }
 
 /**
- * Publish a custom domain's DNS records in a Cloudflare zone — e.g. a
+ * Publish a custom domain's DNS records in a Cloudflare zone -- e.g. a
  * domain registered with Cloudflare Registrar that is served by AWS, Fly,
  * Railway, Neon, Prisma, or Hetzner.
  *
@@ -71,11 +71,11 @@ export const Adapter = (options: AdapterOptions = {}): DnsConfig<typeof CLOUDFLA
 /**
  * The Cloudflare DNS adapter, registered by `Cloudflare.providers()`:
  *
- * - `alias` / `aliasSet` — a `Cloudflare.DNS.Records` CNAME set for a
+ * - `alias` / `aliasSet` -- a `Cloudflare.DNS.Records` CNAME set for a
  *   hostname target (logical id `{id}-CNAME`), or a
  *   `Cloudflare.DNS.RecordList` of `A`/`AAAA` records for an address target
  *   (`{id}-Addresses`).
- * - `records` — a `Cloudflare.DNS.RecordList`.
+ * - `records` -- a `Cloudflare.DNS.RecordList`.
  */
 export const adapter = {
   alias: (id, { zone, options, name, target }) =>

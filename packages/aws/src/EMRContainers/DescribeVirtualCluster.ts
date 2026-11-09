@@ -6,16 +6,16 @@ import type { VirtualCluster } from "./VirtualCluster.ts";
 /**
  * Runtime binding for `emr-containers:DescribeVirtualCluster`.
  *
- * Reads the bound {@link VirtualCluster}'s live state — its lifecycle state
+ * Reads the bound {@link VirtualCluster}'s live state -- its lifecycle state
  * (`RUNNING`/`TERMINATING`/`TERMINATED`/`ARRESTED`), the backing EKS
  * container provider, and the attached security configuration. The virtual
- * cluster ID is injected from the binding — the runtime callable takes no
+ * cluster ID is injected from the binding -- the runtime callable takes no
  * arguments. Provide the implementation with
  * `Effect.provide(AWS.EMRContainers.DescribeVirtualClusterHttp)`.
  * ### Virtual Clusters
  * **Example:** Read The Bound Virtual Cluster
  * ```typescript
- * // init — bind the operation to the virtual cluster
+ * // init -- bind the operation to the virtual cluster
  * const describeVirtualCluster =
  *   yield* AWS.EMRContainers.DescribeVirtualCluster(virtualCluster);
  *

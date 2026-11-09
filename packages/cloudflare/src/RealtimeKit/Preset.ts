@@ -230,7 +230,7 @@ export type PresetAttributes = {
 export type Preset = Resource<TypeId, PresetProps, PresetAttributes, never, Providers>;
 
 /**
- * A Cloudflare RealtimeKit preset — a named participant role (e.g. `host`,
+ * A Cloudflare RealtimeKit preset -- a named participant role (e.g. `host`,
  * `guest`) bundling permissions, media quality, and UI design tokens for a
  * RealtimeKit app.
  *
@@ -345,7 +345,7 @@ export const defaultRealtimeKitPresetUi = (): PresetUi => ({
 
 /**
  * The default permissions used when `permissions` is omitted: a conservative
- * attendee role — chat, polls, and media production allowed; recording,
+ * attendee role -- chat, polls, and media production allowed; recording,
  * livestreaming, and moderation denied.
  */
 export const defaultRealtimeKitPresetPermissions = (): PresetPermissions => ({
@@ -397,7 +397,7 @@ export const PresetProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      // The app is a path parameter — a preset cannot move between apps in
+      // The app is a path parameter -- a preset cannot move between apps in
       // place. By diff time both sides are resolved strings.
       const oldAppId = output?.appId ?? olds?.appId;
       if (
@@ -419,7 +419,7 @@ export const PresetProvider = () =>
         const observed = yield* getPreset(acct, appId, output.presetId);
         return observed ? toAttributes(observed, acct, appId) : undefined;
       }
-      // Cold read — recover from lost state by matching the deterministic
+      // Cold read -- recover from lost state by matching the deterministic
       // physical name. Names are not unique on Cloudflare's side; an exact
       // match on our generated/explicit name is the best identity we have.
       const name = yield* createPresetName(id, olds?.name);
@@ -441,14 +441,14 @@ export const PresetProvider = () =>
         permissions: withPermissionsDefaults(news.permissions),
       };
 
-      // Observe — the presetId cached on `output` is a hint, not a
+      // Observe -- the presetId cached on `output` is a hint, not a
       // guarantee: a missing preset falls through and we recreate.
       const observed = output?.presetId
         ? yield* getPreset(output.accountId ?? accountId, appId, output.presetId)
         : undefined;
 
       if (!observed) {
-        // Ensure — greenfield (or out-of-band delete): create with the full
+        // Ensure -- greenfield (or out-of-band delete): create with the full
         // desired body. The API rejects a duplicate name in the same app
         // with a 409 (`RealtimeKitPresetExists`); this happens when a prior
         // run leaked a same-named preset (lost state) or when a retried
@@ -463,7 +463,7 @@ export const PresetProvider = () =>
         }
         const existing = yield* findByName(accountId, appId, name);
         if (!existing?.id) {
-          // Conflict reported but the preset isn't visible yet — let the
+          // Conflict reported but the preset isn't visible yet -- let the
           // engine retry the reconcile rather than silently succeeding.
           return yield* realtimeKit
             .createPreset({ accountId, appId, ...desired })
@@ -483,7 +483,7 @@ export const PresetProvider = () =>
         return toAttributes(adopted.data, accountId, appId);
       }
 
-      // Sync — diff what the user asked for against observed cloud state.
+      // Sync -- diff what the user asked for against observed cloud state.
       // The API fills/echoes extra server-side fields (e.g. `simulcast`),
       // so compare only the desired keys against the observed echo.
       if (subsetEquals(desired, observed)) {
@@ -495,7 +495,7 @@ export const PresetProvider = () =>
         presetId: observed.id,
         ...desired,
       });
-      // The PATCH response omits the preset id — re-read for fresh state.
+      // The PATCH response omits the preset id -- re-read for fresh state.
       const fresh = yield* realtimeKit.getPresetByIdPreset({
         accountId,
         appId,
@@ -640,7 +640,7 @@ const createPresetName = (id: string, name: string | undefined) =>
 
 const withUiDefaults = (ui: PresetUi | undefined): PresetUi & { configDiff: unknown } => {
   const base = ui ?? defaultRealtimeKitPresetUi();
-  // `config_diff` is required by the API even though it's incidental —
+  // `config_diff` is required by the API even though it's incidental --
   // default it so users don't have to care.
   return { ...base, configDiff: base.configDiff ?? {} };
 };
@@ -701,7 +701,7 @@ const toAttributes = (
   appId,
   name: preset.name,
   // Distilled widens generated string enums to open unions (`string & {}`)
-  // and marks echoes readonly — re-shape into our prop types.
+  // and marks echoes readonly -- re-shape into our prop types.
   config: {
     maxScreenshareCount: preset.config.maxScreenshareCount,
     maxVideoStreams: {

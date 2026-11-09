@@ -92,13 +92,13 @@ export interface ClusterProps {
    */
   sseEnabled?: boolean;
   /**
-   * Encryption in transit for the cluster endpoint — `"NONE"` or `"TLS"`.
+   * Encryption in transit for the cluster endpoint -- `"NONE"` or `"TLS"`.
    * Changing this replaces the cluster.
    * @default "NONE"
    */
   clusterEndpointEncryptionType?: dax.ClusterEndpointEncryptionType;
   /**
-   * IP address type — `"ipv4"`, `"ipv6"` or `"dual_stack"`. Changing this
+   * IP address type -- `"ipv4"`, `"ipv6"` or `"dual_stack"`. Changing this
    * replaces the cluster.
    * @default "ipv4"
    */
@@ -159,7 +159,7 @@ export interface ClusterLookup {
 }
 
 /**
- * An Amazon DAX cluster — a fully managed, in-memory write-through cache for
+ * An Amazon DAX cluster -- a fully managed, in-memory write-through cache for
  * DynamoDB.
  *
  * Clusters are VPC-only and take roughly 5-10 minutes to provision; they are
@@ -222,7 +222,7 @@ const DEFAULT_NODE_TYPE = "dax.t3.small";
 const DEFAULT_REPLICATION_FACTOR = 1;
 
 // A freshly created IAM role is not immediately assumable by dax.amazonaws.com
-// — CreateCluster rejects with "No permission to assume role" until IAM
+// -- CreateCluster rejects with "No permission to assume role" until IAM
 // propagates (typically a few seconds). Bounded retry through that window.
 const retryIamRolePropagation = <A, E extends { _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
@@ -392,10 +392,10 @@ export const ClusterProvider = () =>
           const desiredTags = { ...internalTags, ...props.tags };
           const desiredReplicationFactor = props.replicationFactor ?? DEFAULT_REPLICATION_FACTOR;
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* readCluster(name);
 
-          // 2. Ensure — create if missing; tolerate AlreadyExists as a race.
+          // 2. Ensure -- create if missing; tolerate AlreadyExists as a race.
           if (observed === undefined) {
             yield* dax
               .createCluster({
@@ -430,7 +430,7 @@ export const ClusterProvider = () =>
           // calls do not hit InvalidClusterStateFault.
           observed = yield* waitForAvailable(name);
 
-          // 3. Sync — compute the update delta from OBSERVED state.
+          // 3. Sync -- compute the update delta from OBSERVED state.
           const update: dax.UpdateClusterRequest = { ClusterName: name };
           let mutated = false;
           if (props.description !== undefined && props.description !== observed.Description) {
@@ -473,7 +473,7 @@ export const ClusterProvider = () =>
             observed = yield* waitForAvailable(name);
           }
 
-          // 3b. Sync replication factor — DAX has dedicated add/remove-node
+          // 3b. Sync replication factor -- DAX has dedicated add/remove-node
           // APIs instead of a general update.
           const observedFactor = observed.TotalNodes;
           if (observedFactor !== undefined && observedFactor !== desiredReplicationFactor) {
@@ -491,7 +491,7 @@ export const ClusterProvider = () =>
             observed = yield* waitForAvailable(name);
           }
 
-          // 3c. Sync tags — diff against OBSERVED cloud tags.
+          // 3c. Sync tags -- diff against OBSERVED cloud tags.
           const arn = observed.ClusterArn;
           if (arn) {
             const observedTags = yield* readDaxTags(arn);
@@ -511,7 +511,7 @@ export const ClusterProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           const name = output.clusterName;
           // A cluster mid-create/modify rejects deletion with
-          // InvalidClusterStateFault — wait (bounded) for it to settle
+          // InvalidClusterStateFault -- wait (bounded) for it to settle
           // first. A cluster already deleting (or gone) is success.
           const settled = yield* waitUntilSettled(name).pipe(Effect.orElseSucceed(() => undefined));
           if (settled === undefined) {
@@ -526,7 +526,7 @@ export const ClusterProvider = () =>
               }),
               // Exhausted retries: the cluster is in a state (e.g. an
               // out-of-band delete already in flight) where deletion is
-              // already converging — treat as success like the NotFound case.
+              // already converging -- treat as success like the NotFound case.
               Effect.catchTag("InvalidClusterStateFault", () => Effect.void),
             );
           }

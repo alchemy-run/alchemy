@@ -22,7 +22,7 @@ export interface ReadWriteTableClient extends ReadTableClient, WriteTableClient 
  *     `SELECT SUM(score) AS total FROM \`${yield* tableId}\``,
  *   );
  * });
- * // …provided with Effect.provide(GCP.BigQuery.ReadWriteTableHttp)
+ * // ...provided with Effect.provide(GCP.BigQuery.ReadWriteTableHttp)
  * ```
  *
  * @binding

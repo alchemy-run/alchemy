@@ -13,7 +13,7 @@ const TypeId = "Cloudflare.Workers.AI" as const;
 type TypeId = typeof TypeId;
 
 /**
- * Error raised by Workers AI runtime operations (`ai.run`, `ai.models`, …).
+ * Error raised by Workers AI runtime operations (`ai.run`, `ai.models`, ...).
  */
 export class WorkersAIError extends Data.TaggedError("WorkersAIError")<{
   /**
@@ -27,7 +27,7 @@ export class WorkersAIError extends Data.TaggedError("WorkersAIError")<{
 }> {}
 
 /**
- * The native Cloudflare Workers AI binding — run inference on Workers AI
+ * The native Cloudflare Workers AI binding -- run inference on Workers AI
  * models directly from a Worker, with no AI Gateway (or any other cloud
  * resource) required. This is the plain `{ type: "ai" }` Worker binding: the
  * runtime value is the same `env.AI` handle you would declare in
@@ -35,7 +35,7 @@ export class WorkersAIError extends Data.TaggedError("WorkersAIError")<{
  *
  * `AI` is a single value that is at once the `Binding.Service` tag, the
  * callable that produces an {@link AIBinding}, and the type. Declare it on a
- * Worker's `env` (it flows through `InferEnv` → the runtime `Ai` handle) or
+ * Worker's `env` (it flows through `InferEnv` -> the runtime `Ai` handle) or
  * `yield*` it inside an Effect-native Worker to attach the binding and obtain
  * the {@link AIClient}.
  *
@@ -67,7 +67,7 @@ export class WorkersAIError extends Data.TaggedError("WorkersAIError")<{
  * `model(options)` produces a `Layer<LanguageModel, never, RuntimeContext>`
  * that translates `LanguageModel.generateText` / `streamText` calls
  * (including tool calls) into `ai.run(...)` against the bound Workers AI
- * model — the same adapter AI Gateway's `QueryGateway` uses, minus the
+ * model -- the same adapter AI Gateway's `QueryGateway` uses, minus the
  * gateway routing.
  * ```typescript
  * const ai = yield* Cloudflare.Workers.AI();
@@ -102,7 +102,7 @@ export class WorkersAIError extends Data.TaggedError("WorkersAIError")<{
  */
 export interface AI extends Binding.Service<AI, TypeId, AIClient> {
   /**
-   * @param name Binding name (logical id) — the `env` key it resolves to.
+   * @param name Binding name (logical id) -- the `env` key it resolves to.
    * @default "AI"
    */
   (name?: string): AIBinding;
@@ -130,7 +130,7 @@ export interface AIClient {
   raw: Effect.Effect<Ai, never, RuntimeContext>;
   /**
    * Run inference on a Workers AI model. Typed by the model catalog from
-   * `@cloudflare/workers-types` — pass `options` (e.g. `returnRawResponse`,
+   * `@cloudflare/workers-types` -- pass `options` (e.g. `returnRawResponse`,
    * `gateway`) through to the runtime binding.
    */
   run<Name extends keyof AiModels>(

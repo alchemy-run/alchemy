@@ -29,7 +29,7 @@ export interface AccountDnsNameservers {
 
 /**
  * Components of the default SOA record for new zones. Every field is
- * optional — omitted fields keep their current value.
+ * optional -- omitted fields keep their current value.
  */
 export interface AccountDnsSoa {
   /** Time in seconds after which secondaries stop answering (`expire`). */
@@ -105,7 +105,7 @@ export interface AccountDnsSettingsProps {
    * Force all proxied DNS records in the account to behave as DNS-only
    * at the edge, regardless of each record's individual proxy setting.
    *
-   * Mutable — patched in place.
+   * Mutable -- patched in place.
    * @default false
    */
   enforceDnsOnly?: boolean;
@@ -114,7 +114,7 @@ export interface AccountDnsSettingsProps {
    * Only the fields you declare are compared and patched; the rest keep
    * their live values.
    *
-   * Mutable — patched in place.
+   * Mutable -- patched in place.
    */
   zoneDefaults?: AccountDnsZoneDefaults;
 }
@@ -166,7 +166,7 @@ export interface AccountDnsSettingsAttributes extends AccountDnsSettingsSnapshot
   initialSettings: AccountDnsSettingsSnapshot;
   /**
    * Which settings this resource has managed (union across all
-   * reconciles). Only these are restored on destroy — settings the user
+   * reconciles). Only these are restored on destroy -- settings the user
    * never touched are left alone.
    */
   managedKeys: ReadonlyArray<string>;
@@ -182,11 +182,11 @@ export type AccountDnsSettings = Resource<
 
 /**
  * The DNS settings of a Cloudflare account
- * (`/accounts/{account_id}/dns_settings`) — the account-wide
+ * (`/accounts/{account_id}/dns_settings`) -- the account-wide
  * `enforceDnsOnly` override and the default DNS settings applied to
  * every new zone (`zoneDefaults`).
  *
- * The settings object is a per-account singleton — it always exists
+ * The settings object is a per-account singleton -- it always exists
  * with Cloudflare defaults, so this resource never creates or deletes
  * anything physical. Reconcile patches only the fields you declare
  * (and only when the observed value differs); destroy restores the
@@ -248,7 +248,7 @@ export const AccountDnsSettingsProvider = () =>
   Provider.succeed(AccountDnsSettings, {
     stables: ["accountId", "initialSettings", "managedKeys"],
 
-    // Account singleton — the DNS settings object always exists for the
+    // Account singleton -- the DNS settings object always exists for the
     // ambient account. There is no enumeration API, so read the single
     // object and return it as a one-element array (mirrors `read` with no
     // prior output: the observed snapshot is its own `initialSettings`,
@@ -269,7 +269,7 @@ export const AccountDnsSettingsProvider = () =>
 
     diff: Effect.fn(function* ({ output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // The settings object is an account singleton — a different
+      // The settings object is an account singleton -- a different
       // account is a different resource.
       if (output !== undefined && output.accountId !== accountId) {
         return { action: "replace" } as const;
@@ -283,7 +283,7 @@ export const AccountDnsSettingsProvider = () =>
       const observed = yield* dns.getSettingAccount({ accountId: acct });
       const snapshot = toSnapshot(observed);
       // Settings are a singleton that always exists with Cloudflare
-      // defaults — there is nothing to "own", so a cold read adopts
+      // defaults -- there is nothing to "own", so a cold read adopts
       // freely (never `Unowned`). The observed snapshot at adoption
       // time becomes the baseline restored on destroy.
       return {
@@ -297,11 +297,11 @@ export const AccountDnsSettingsProvider = () =>
     reconcile: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
-      // 1. Observe — the settings object always exists for an account.
+      // 1. Observe -- the settings object always exists for an account.
       const observed = yield* dns.getSettingAccount({ accountId });
       let snapshot = toSnapshot(observed);
 
-      // 2. Capture — the pre-management snapshot, restored on destroy.
+      // 2. Capture -- the pre-management snapshot, restored on destroy.
       const initialSettings = output?.initialSettings ?? snapshot;
       // Track every key we have ever managed so destroy restores fields
       // even after the user drops them from props.
@@ -309,7 +309,7 @@ export const AccountDnsSettingsProvider = () =>
         ...new Set([...(output?.managedKeys ?? []), ...declaredKeys(news)]),
       ].sort();
 
-      // 3. Sync — patch only the declared fields whose observed value
+      // 3. Sync -- patch only the declared fields whose observed value
       //    differs from the desired one; skip the API on no delta.
       const delta = computeDelta(news, snapshot);
       if (delta !== undefined) {
@@ -426,7 +426,7 @@ const soaDiffers = (
   (desired.ttl !== undefined && desired.ttl !== observed.ttl);
 
 /**
- * Build the PATCH body converging observed → desired for the fields the
+ * Build the PATCH body converging observed -> desired for the fields the
  * user declared. Returns `undefined` when nothing differs.
  */
 const computeDelta = (

@@ -10,15 +10,15 @@ import type { Application } from "./Application.ts";
  * Every EMR Serverless data-plane operation is addressed by an
  * `applicationId`, so every binding is scoped to a bound {@link Application}:
  * the deploy-time half grants `actions` on the application's ARN (plus any
- * `subresources` wildcards — job runs and sessions are authorized against
+ * `subresources` wildcards -- job runs and sessions are authorized against
  * `{applicationArn}/jobruns/*` / `{applicationArn}/sessions/*` sub-resource
  * ARNs), and the runtime half injects the application's id into every
  * request. Operations that hand the service an execution role to assume
  * (`StartJobRun`, `StartSession`) additionally grant `iam:PassRole`
  * conditioned to `emr-serverless.amazonaws.com`.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, makeEmrServerlessHttpBinding({ … }))`.
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, makeEmrServerlessHttpBinding({ ... }))`.
  */
 export const makeEmrServerlessHttpBinding = <I, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `AWS.EMRServerless.StartJobRun`. */
@@ -44,7 +44,7 @@ export const makeEmrServerlessHttpBinding = <I, A, E, R>(options: {
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (application: Application) {
-      // Outputs yield a DEFERRED effect — resolve again per invocation below.
+      // Outputs yield a DEFERRED effect -- resolve again per invocation below.
       const ApplicationId = yield* application.applicationId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const passRoleStatements: PolicyStatement[] = options.passRole

@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 export interface RegisterDomainRequest extends route53domains.RegisterDomainRequest {}
 
 /**
- * Runtime binding for `route53domains:RegisterDomain` — register a domain
+ * Runtime binding for `route53domains:RegisterDomain` -- register a domain
  * name with Route 53 programmatically. Registration is asynchronous: the
  * response carries an `OperationId` you can poll with
  * `AWS.Route53Domains.GetOperationDetail`.

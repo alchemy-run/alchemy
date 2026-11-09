@@ -17,7 +17,7 @@ export interface AuthorizeSecurityGroupIngressRequest extends Omit<
  * the bound {@link SecurityGroup} (IAM action
  * `ec2:AuthorizeSecurityGroupIngress` on the security group ARN).
  *
- * Adds an inbound rule to the group at runtime — the classic dynamic
+ * Adds an inbound rule to the group at runtime -- the classic dynamic
  * IP-allowlisting Lambda that opens a port for an operator's current address.
  * Pair with {@link RevokeSecurityGroupIngress} to remove the rule afterwards.
  * Provide the implementation with
@@ -25,10 +25,10 @@ export interface AuthorizeSecurityGroupIngressRequest extends Omit<
  * ### Dynamic Security Group Rules
  * **Example:** Allowlist an address for SSH
  * ```typescript
- * // init — bind the operation to the security group
+ * // init -- bind the operation to the security group
  * const authorizeIngress = yield* AWS.EC2.AuthorizeSecurityGroupIngress(group);
  *
- * // runtime — open port 22 for the caller's address
+ * // runtime -- open port 22 for the caller's address
  * yield* authorizeIngress({
  *   IpProtocol: "tcp",
  *   FromPort: 22,

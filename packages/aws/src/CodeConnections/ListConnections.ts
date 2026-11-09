@@ -18,7 +18,7 @@ export interface ListConnectionsRequest extends codeconnections.ListConnectionsI
  * ### Inspecting a Connection
  * **Example:** List Connections by Provider
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const listConnections = yield* AWS.CodeConnections.ListConnections();
  *
  * // runtime

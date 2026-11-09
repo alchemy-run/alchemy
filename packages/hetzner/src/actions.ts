@@ -121,7 +121,7 @@ export const waitForActions = (
 /**
  * Poll a Hetzner Cloud DNS Zone Action (`GET /zones/actions/{id}`) until it
  * reaches `success` or `error`. Zone actions live in a separate namespace
- * from compute `/actions/{id}` — do not use {@link waitForAction} for them.
+ * from compute `/actions/{id}` -- do not use {@link waitForAction} for them.
  *
  * Bounded: at most 10 polls, exponential backoff starting at 500ms and
  * capped at 5s (under 60s total). Already-finished actions return

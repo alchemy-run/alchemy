@@ -26,25 +26,25 @@ import { resourceNameFromOperation, waitForOperation, waitUntilPresent } from ".
 export type DeviceProps = {
   /**
    * Customer that owns the device (`customers/my_customer` or
-   * `customers/{customer}`). Immutable — changing it replaces the
+   * `customers/{customer}`). Immutable -- changing it replaces the
    * device.
    * @default "customers/my_customer"
    */
   customer?: string;
   /**
    * Serial number. If omitted, a unique value is generated. Immutable
-   * — changing it replaces the device. Only company-owned devices can
+   * -- changing it replaces the device. Only company-owned devices can
    * be created.
    */
   serialNumber?: string;
   /**
-   * Device type. Immutable — changing it replaces the device.
+   * Device type. Immutable -- changing it replaces the device.
    * @default "LINUX"
    */
   deviceType?: cloudidentity.GoogleAppsCloudidentityDevicesV1DeviceDeviceTypeEnum | (string & {});
   /**
    * Asset tag. Devices have no labels field, so Alchemy stores
-   * ownership in a `[alchemy …]` prefix and strips it from attributes.
+   * ownership in a `[alchemy ...]` prefix and strips it from attributes.
    */
   assetTag?: string;
   /**
@@ -104,7 +104,7 @@ export type Device = Resource<
  * A Cloud Identity company-owned device.
  *
  * Device create is limited to company-owned inventory (Enterprise /
- * Cloud Identity Premium). There is no update API — serial number,
+ * Cloud Identity Premium). There is no update API -- serial number,
  * type, and customer are identity. Alchemy stamps ownership into
  * `assetTag` for `list` / nuke.
  *

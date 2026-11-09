@@ -11,12 +11,12 @@ export interface SolidStartProps extends FrameworkSiteProps {
    * Nitro options forwarded into the nitro plugin the integration appends
    * (prerendering, route rules, storage, ...). `preset` is owned by the
    * Node deploy target and may not be set here. JSON-serializable values
-   * only — no functions or plugin instances.
+   * only -- no functions or plugin instances.
    *
    * This is a prop (rather than project config) because the integration
    * owns the nitro plugin instance: a `nitroV2Plugin()` in your project's
    * `vite.config.*` is rejected, so this prop is the one home for nitro
-   * options — and it accepts values derived from other resources' Outputs,
+   * options -- and it accepts values derived from other resources' Outputs,
    * which a config file cannot.
    */
   nitro?: Record<string, unknown>;
@@ -28,7 +28,7 @@ export interface SolidStartProps extends FrameworkSiteProps {
  * baked into the image, served assets-first then the framework handler.
  *
  * The build runs through `@alchemy.run/frontend-frameworks/solidstart` with
- * the `@alchemy.run/frontend-frameworks/solidstart/node` deploy target —
+ * the `@alchemy.run/frontend-frameworks/solidstart/node` deploy target --
  * both must be installed in your project, alongside `@solidjs/start` and
  * `@solidjs/vite-plugin-nitro-2`.
  *
@@ -67,8 +67,8 @@ export interface SolidStartProps extends FrameworkSiteProps {
  *
  * ### Prerendering
  * The integration owns the nitro plugin instance (a `nitroV2Plugin()` in
- * your `vite.config.*` is rejected), so nitro options — prerendering
- * included — go on the `nitro` prop. Prerendered pages are baked into the
+ * your `vite.config.*` is rejected), so nitro options -- prerendering
+ * included -- go on the `nitro` prop. Prerendered pages are baked into the
  * image and served as static files.
  *
  * **Example:** Prerender Routes

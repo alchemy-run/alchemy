@@ -6,7 +6,7 @@ export interface GetInsightEventsRequest extends xray.GetInsightEventsRequest {}
 
 /**
  * Retrieve the intermediate states (events) X-Ray recorded while
- * re-evaluating an insight — the insight's impact timeline.
+ * re-evaluating an insight -- the insight's impact timeline.
  *
  * Bind the operation in the function's init phase to get a runtime callable;
  * provide the implementation with `Effect.provide(XRay.GetInsightEventsHttp)`.
@@ -17,7 +17,7 @@ export interface GetInsightEventsRequest extends xray.GetInsightEventsRequest {}
  * ```typescript
  * import * as XRay from "@alchemy.run/aws/XRay";
  *
- * // init — grants xray:GetInsightEvents
+ * // init -- grants xray:GetInsightEvents
  * const getInsightEvents = yield* XRay.GetInsightEvents();
  *
  * // runtime

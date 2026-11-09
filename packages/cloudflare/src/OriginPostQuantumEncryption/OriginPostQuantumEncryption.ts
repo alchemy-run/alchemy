@@ -13,23 +13,23 @@ type TypeId = typeof TypeId;
 /**
  * Value of the Origin Post-Quantum Encryption setting.
  *
- * - `"preferred"` — advertise post-quantum key agreement to the origin and
+ * - `"preferred"` -- advertise post-quantum key agreement to the origin and
  *   use it whenever the origin supports it.
- * - `"supported"` — accept post-quantum key agreement if the origin
+ * - `"supported"` -- accept post-quantum key agreement if the origin
  *   initiates it (Cloudflare's default).
- * - `"off"` — never use post-quantum key agreement to the origin.
+ * - `"off"` -- never use post-quantum key agreement to the origin.
  */
 export type Value = "preferred" | "supported" | "off";
 
 export type Props = {
   /**
-   * Zone the Origin Post-Quantum Encryption setting belongs to. Stable —
+   * Zone the Origin Post-Quantum Encryption setting belongs to. Stable --
    * changing the zone triggers a replacement (the old zone's setting is
    * restored to the value it had before Alchemy managed it).
    */
   zoneId: string;
   /**
-   * Desired value of the setting. Mutable — updated in place.
+   * Desired value of the setting. Mutable -- updated in place.
    *
    * @default "supported"
    */
@@ -66,7 +66,7 @@ export type OriginPostQuantumEncryption = Resource<TypeId, Props, Attributes, ne
  * `/cache/` API path, this is an SSL/origin-connection setting, not a
  * caching one.
  *
- * The setting is a singleton — it always exists on every zone with a
+ * The setting is a singleton -- it always exists on every zone with a
  * Cloudflare default of `"supported"`, so this resource never creates or
  * deletes anything physical. Reconcile updates the setting when the
  * observed value differs from the desired one; destroy restores the value
@@ -124,7 +124,7 @@ export const OriginPostQuantumEncryptionProvider = () =>
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // No account-wide API for this zone singleton — enumerate every
+      // No account-wide API for this zone singleton -- enumerate every
       // zone in the account and read its setting (every zone has one).
       const allZones = yield* listAllZones(accountId);
       const rows = yield* Effect.forEach(
@@ -132,7 +132,7 @@ export const OriginPostQuantumEncryptionProvider = () =>
         (zoneId) =>
           pqe.getOriginPostQuantumEncryption({ zoneId }).pipe(
             Effect.map((observed) => toAttributes(zoneId, observed, toValue(observed.value))),
-            // Zone gone out-of-band / not resolvable — skip it. (Transient
+            // Zone gone out-of-band / not resolvable -- skip it. (Transient
             // 403/429 "Authentication error" blips under concurrency are
             // retried globally by the Cloudflare retry policy, so they never
             // reach here as a real failure.)
@@ -158,12 +158,12 @@ export const OriginPostQuantumEncryptionProvider = () =>
       const zoneId = output?.zoneId ?? (olds?.zoneId as string | undefined);
       if (!zoneId) return undefined;
       const observed = yield* pqe.getOriginPostQuantumEncryption({ zoneId }).pipe(
-        // Zone deleted out-of-band — the setting is gone with it.
+        // Zone deleted out-of-band -- the setting is gone with it.
         Effect.catchTag("InvalidZoneIdentifier", () => Effect.undefined),
       );
       if (observed === undefined) return undefined;
       // The setting is a singleton that always exists with a Cloudflare
-      // default — there is nothing to "own", so a cold read adopts freely
+      // default -- there is nothing to "own", so a cold read adopts freely
       // (never `Unowned`). The observed value at adoption time becomes the
       // `initialValue` restored on destroy.
       const initialValue = output !== undefined ? output.initialValue : toValue(observed.value);
@@ -175,16 +175,16 @@ export const OriginPostQuantumEncryptionProvider = () =>
       const zoneId = news.zoneId as string;
       const desired: Value = news.value ?? "supported";
 
-      // 1. Observe — the setting always exists; read its live value.
+      // 1. Observe -- the setting always exists; read its live value.
       const observed = yield* pqe.getOriginPostQuantumEncryption({ zoneId });
 
-      // 2. Capture — the pre-management value, restored on destroy.
+      // 2. Capture -- the pre-management value, restored on destroy.
       //    `output` (including an adoption read) already carries it;
       //    otherwise this is our first touch and the observed value is
       //    the zone's original.
       const initialValue = output !== undefined ? output.initialValue : toValue(observed.value);
 
-      // 3. Sync — update only when the observed value differs.
+      // 3. Sync -- update only when the observed value differs.
       if (toValue(observed.value) === desired) {
         return toAttributes(zoneId, observed, initialValue);
       }
@@ -197,7 +197,7 @@ export const OriginPostQuantumEncryptionProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { zoneId, initialValue } = output;
-      // Observe — if the zone itself is gone, so is the setting.
+      // Observe -- if the zone itself is gone, so is the setting.
       const observed = yield* pqe
         .getOriginPostQuantumEncryption({ zoneId })
         .pipe(Effect.catchTag("InvalidZoneIdentifier", () => Effect.undefined));
@@ -214,7 +214,7 @@ export const OriginPostQuantumEncryptionProvider = () =>
 /**
  * Narrow the distilled response's open
  * `"preferred" | "supported" | "off" | (string & {})` value to the closed
- * triple — Cloudflare only ever returns the three literals for this
+ * triple -- Cloudflare only ever returns the three literals for this
  * setting; anything else collapses to the documented default.
  */
 const toValue = (value: string): Value =>

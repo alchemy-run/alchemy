@@ -6,14 +6,14 @@ import type { Queue } from "./Queue.ts";
 /**
  * Runtime binding for `deadline:GetTask`.
  *
- * Reads a task's detail for a step in the bound {@link Queue} — run status,
+ * Reads a task's detail for a step in the bound {@link Queue} -- run status,
  * parameters, retry count, latest session action. The queue's
  * `farmId`/`queueId` are injected from the binding. Provide the
  * implementation with `Effect.provide(AWS.Deadline.GetTaskHttp)`.
  * ### Monitoring Tasks
  * **Example:** Inspect A Task
  * ```typescript
- * // init — bind the operation to the queue
+ * // init -- bind the operation to the queue
  * const getTask = yield* AWS.Deadline.GetTask(queue);
  *
  * // runtime

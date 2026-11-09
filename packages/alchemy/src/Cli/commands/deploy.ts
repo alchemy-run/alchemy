@@ -207,7 +207,7 @@ const runStack = Effect.fn(function* (options: StackCommandOptions) {
       ),
       Effect.catchTag("NonInteractiveTerminal", () =>
         Interaction.warning(
-          `Cannot prompt for approval in a non-interactive terminal. Nothing was changed — re-run with --yes to ${operation.toLowerCase()}.`,
+          `Cannot prompt for approval in a non-interactive terminal. Nothing was changed \u2014 re-run with --yes to ${operation.toLowerCase()}.`,
         ).pipe(Effect.as(false)),
       ),
     );

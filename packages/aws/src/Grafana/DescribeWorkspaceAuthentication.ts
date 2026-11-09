@@ -8,7 +8,7 @@ import type { Workspace } from "./Workspace.ts";
  * action `grafana:DescribeWorkspaceAuthentication`), scoped to one
  * {@link Workspace}.
  *
- * Reads the workspace's authentication configuration — the enabled providers
+ * Reads the workspace's authentication configuration -- the enabled providers
  * (`AWS_SSO`, `SAML`) and, for SAML, the IdP metadata, assertion-attribute
  * mapping, and role values. Provide the implementation with
  * `Effect.provide(AWS.Grafana.DescribeWorkspaceAuthenticationHttp)`.
@@ -18,8 +18,8 @@ import type { Workspace } from "./Workspace.ts";
  * const describeAuth = yield* Grafana.DescribeWorkspaceAuthentication(workspace);
  *
  * const { authentication } = yield* describeAuth();
- * // authentication.providers → ["SAML"]
- * // authentication.saml?.status → "CONFIGURED" | "NOT_CONFIGURED"
+ * // authentication.providers -> ["SAML"]
+ * // authentication.saml?.status -> "CONFIGURED" | "NOT_CONFIGURED"
  * ```
  *
  * @binding

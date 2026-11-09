@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `servicequotas:ListServices` — list the services that
+ * Runtime binding for `servicequotas:ListServices` -- list the services that
  * integrate with Service Quotas (and their service codes) from inside a
  * Function.
  *

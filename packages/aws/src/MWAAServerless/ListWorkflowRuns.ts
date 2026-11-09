@@ -18,7 +18,7 @@ export type ListWorkflowRunsInput = Omit<mwaa.ListWorkflowRunsRequest, "Workflow
  * ### Observing Runs
  * **Example:** List Recent Runs
  * ```typescript
- * // init — bind the operation to the workflow
+ * // init -- bind the operation to the workflow
  * const listWorkflowRuns = yield* AWS.MWAAServerless.ListWorkflowRuns(workflow);
  *
  * // runtime

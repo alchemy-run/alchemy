@@ -27,7 +27,7 @@ export interface TaskProps {
    */
   name?: string;
   /**
-   * Transfer options — verification mode, overwrite behaviour, metadata
+   * Transfer options -- verification mode, overwrite behaviour, metadata
    * preservation, bandwidth throttle, logging, etc. Updatable in place.
    */
   options?: datasync.Options;
@@ -89,7 +89,7 @@ export interface TaskLookup {
 }
 
 /**
- * A DataSync task — the transfer definition binding a source location to a
+ * A DataSync task -- the transfer definition binding a source location to a
  * destination location, together with the filters, schedule, and transfer
  * options that govern each run.
  *
@@ -99,7 +99,7 @@ export interface TaskLookup {
  * (name, options, filters, schedule, log group, tags) is updated in place.
  *
  * ### Creating Tasks
- * **Example:** S3 → S3 transfer
+ * **Example:** S3 -> S3 transfer
  * ```typescript
  * import * as AWS from "@alchemy.run/aws";
  *
@@ -212,11 +212,11 @@ export const TaskProvider = () =>
           const desiredTags = { ...news.tags, ...internalTags };
           const name = yield* createName(id, news);
 
-          // 1. OBSERVE — output cache, else re-discover by deterministic name.
+          // 1. OBSERVE -- output cache, else re-discover by deterministic name.
           let arn = output?.taskArn ?? (yield* findByName(name));
           let t = arn ? yield* describe(arn) : undefined;
 
-          // 2. ENSURE — create if missing.
+          // 2. ENSURE -- create if missing.
           if (t === undefined) {
             const created = yield* datasync
               .createTask({
@@ -247,7 +247,7 @@ export const TaskProvider = () =>
             arn = created.TaskArn!;
             t = yield* describe(arn);
           } else {
-            // 3a. SYNC updatable fields — only on a real delta.
+            // 3a. SYNC updatable fields -- only on a real delta.
             const changed =
               t.Name !== name ||
               (t.CloudWatchLogGroupArn ?? "") !== (news.cloudWatchLogGroupArn ?? "") ||

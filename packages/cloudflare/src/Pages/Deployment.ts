@@ -27,14 +27,14 @@ export class DeploymentFailed extends Data.TaggedError("DeploymentFailed")<{
 export interface DeploymentProps {
   /**
    * Name of the Pages project to deploy to (e.g. `project.name`).
-   * Deployments are immutable and belong to exactly one project —
+   * Deployments are immutable and belong to exactly one project --
    * changing the project triggers a replacement.
    */
   projectName: string;
   /**
    * The branch the deployment is attributed to. Deploying to the project's
    * production branch produces a production deployment; any other branch
-   * produces a preview deployment. Deployments are immutable — changing
+   * produces a preview deployment. Deployments are immutable -- changing
    * the branch triggers a replacement (a new deployment).
    * @default the project's production branch
    */
@@ -93,7 +93,7 @@ export type Deployment = Resource<TypeId, DeploymentProps, DeploymentAttributes,
  *
  * Creating the resource POSTs a new deployment to the project and waits
  * (bounded) for it to reach a successful `deploy` stage. Deployments are
- * immutable — every prop change triggers a replacement (a brand-new
+ * immutable -- every prop change triggers a replacement (a brand-new
  * deployment that supersedes the previous one).
  *
  * The deployment is created with an **empty asset manifest**: the full
@@ -106,7 +106,7 @@ export type Deployment = Resource<TypeId, DeploymentProps, DeploymentAttributes,
  * `Cloudflare.Website` (Workers Assets).
  *
  * Deleting the resource deletes the deployment (with `force`), except when
- * it is the project's active production deployment — Cloudflare refuses to
+ * it is the project's active production deployment -- Cloudflare refuses to
  * delete the live deployment, so delete tolerates that case and the
  * deployment is cleaned up when the project itself is deleted.
  * ### Creating a Deployment
@@ -178,7 +178,7 @@ export const DeploymentProvider = () =>
     }),
     read: Effect.fn(function* ({ output }) {
       // Deployment ids are server-assigned and carry no deterministic
-      // identity, so there is no cold lookup — without persisted state the
+      // identity, so there is no cold lookup -- without persisted state the
       // deployment is reported missing and reconcile creates a fresh one.
       if (!output?.deploymentId) return undefined;
       const observed = yield* getDeployment(
@@ -197,7 +197,7 @@ export const DeploymentProvider = () =>
       const projects = yield* pages.listProjects.pages({ accountId }).pipe(
         Stream.runCollect,
         Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.result ?? [])),
-        // Account without a Pages entitlement can't list projects → nothing.
+        // Account without a Pages entitlement can't list projects -> nothing.
         Effect.catchTag("Forbidden", () => Effect.succeed([])),
       );
       const rows = yield* Effect.forEach(
@@ -222,14 +222,14 @@ export const DeploymentProvider = () =>
       // Inputs have been resolved to concrete strings by Plan.
       const projectName = news.projectName as string;
 
-      // 1. Observe — `output.deploymentId` is a cache of the only handle we
+      // 1. Observe -- `output.deploymentId` is a cache of the only handle we
       //    have on the deployment; a vanished deployment falls through to
       //    "missing" and we create a fresh one.
       let observed = output?.deploymentId
         ? yield* getDeployment(accountId, projectName, output.deploymentId)
         : undefined;
 
-      // 2. Ensure — create the deployment when missing. Deployments are
+      // 2. Ensure -- create the deployment when missing. Deployments are
       //    immutable, so there is no sync step beyond waiting for the
       //    pipeline to finish; an empty manifest means no assets to upload.
       if (!observed) {
@@ -250,9 +250,9 @@ export const DeploymentProvider = () =>
     }),
     delete: Effect.fn(function* ({ output }) {
       // Idempotent: the deployment may already be gone (DeploymentNotFound)
-      // or the whole project deleted (ProjectNotFound) — both are success.
+      // or the whole project deleted (ProjectNotFound) -- both are success.
       // The active production deployment cannot be deleted even with
-      // `force` (Cloudflare error 8000034) — it is removed when the project
+      // `force` (Cloudflare error 8000034) -- it is removed when the project
       // itself is deleted, so tolerate and move on.
       yield* pages
         .deleteProjectDeployment({
@@ -283,7 +283,7 @@ type ObservedDeployment =
   | pages.CreateProjectDeploymentResponse;
 
 /**
- * Read a deployment by id, mapping "gone" to `undefined` — either the
+ * Read a deployment by id, mapping "gone" to `undefined` -- either the
  * deployment was deleted (`DeploymentNotFound`, code 8000009) or the whole
  * project no longer exists (`ProjectNotFound`, code 8000007).
  */
@@ -301,7 +301,7 @@ const isTerminalStage = (stage: ObservedDeployment["latestStage"]): boolean =>
   stage.status === "canceled";
 
 /**
- * Poll the deployment until its pipeline reaches a terminal stage —
+ * Poll the deployment until its pipeline reaches a terminal stage --
  * bounded so a stuck deployment fails fast instead of hanging the engine.
  * Anything other than a successful `deploy` stage is a typed failure.
  */
@@ -334,7 +334,7 @@ const awaitDeployment = (accountId: string, projectName: string, created: Observ
   });
 
 /**
- * Minimal structural shape `toAttributes` reads — satisfied by both the
+ * Minimal structural shape `toAttributes` reads -- satisfied by both the
  * get/create deployment responses and a `listProjectDeployments` row.
  */
 type DeploymentAttributesSource = {

@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 /**
  * App Runner documents configuration statuses as `ACTIVE`/`INACTIVE` but
  * the wire returns lowercase `active`/`inactive` (observed live for auto
- * scaling configurations and VPC connectors) — compare case-insensitively.
+ * scaling configurations and VPC connectors) -- compare case-insensitively.
  */
 export const isActiveStatus = (status: string | undefined): boolean =>
   status?.toUpperCase() === "ACTIVE";
@@ -28,7 +28,7 @@ export const toTagRecord = (
 
 /**
  * Read the observed tags of an App Runner resource. Tag reads are
- * best-effort — a failure (e.g. a race with deletion) reports no tags.
+ * best-effort -- a failure (e.g. a race with deletion) reports no tags.
  */
 export const readAppRunnerTags = Effect.fn(function* (arn: string) {
   const response = yield* apprunner

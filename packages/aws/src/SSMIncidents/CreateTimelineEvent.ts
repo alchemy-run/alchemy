@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `ssm-incidents:CreateTimelineEvent`.
  *
- * Adds a custom event to an incident's timeline — automation can annotate the
+ * Adds a custom event to an incident's timeline -- automation can annotate the
  * incident as it works (diagnosis steps, mitigation actions, links). Timeline
  * events live under runtime incident-record ARNs, so the deploy-time grant is
  * account-level (`Resource: "*"`).

@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `ListDomainMaintenances` operation (IAM action
  * `es:ListDomainMaintenances`).
  *
- * Lists a domain's maintenance actions — status and timestamps of past and in-progress reboots and process restarts. Provide the implementation with
+ * Lists a domain's maintenance actions -- status and timestamps of past and in-progress reboots and process restarts. Provide the implementation with
  * `Effect.provide(AWS.OpenSearch.ListDomainMaintenancesHttp)`.
  * ### Domain Maintenance
  * **Example:** List a Domain's Maintenance History
@@ -14,7 +14,7 @@ import type * as Effect from "effect/Effect";
  * const listDomainMaintenances = yield* OpenSearch.ListDomainMaintenances();
  *
  * const result = yield* listDomainMaintenances({ DomainName: name });
- * // result.DomainMaintenances → maintenance history
+ * // result.DomainMaintenances -> maintenance history
  * ```
  *
  * @binding

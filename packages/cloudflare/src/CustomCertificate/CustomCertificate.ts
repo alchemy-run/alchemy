@@ -34,8 +34,8 @@ export type BundleMethod = "ubiquitous" | "optimal" | "force";
 export type Type = "legacy_custom" | "sni_custom";
 
 /**
- * Lifecycle status of a custom certificate. Uploads are asynchronous —
- * a certificate transitions `initializing` → `active`.
+ * Lifecycle status of a custom certificate. Uploads are asynchronous --
+ * a certificate transitions `initializing` -> `active`.
  */
 export type Status =
   | "active"
@@ -63,15 +63,15 @@ export interface Props {
    * Zone the certificate is uploaded to. Custom certificates are a
    * zone-level feature (Business and Enterprise plans only).
    *
-   * Immutable — moving a certificate between zones triggers a replacement.
+   * Immutable -- moving a certificate between zones triggers a replacement.
    */
   zoneId: string;
   /**
-   * The zone's SSL certificate — the leaf certificate plus any
+   * The zone's SSL certificate -- the leaf certificate plus any
    * intermediates, in PEM format. Plain `string` (not `string`) so
    * its content hash is statically computable.
    *
-   * Mutable — Cloudflare PATCHes a new certificate onto the same record,
+   * Mutable -- Cloudflare PATCHes a new certificate onto the same record,
    * keeping the certificate id stable across rotations.
    */
   certificate: string;
@@ -80,7 +80,7 @@ export interface Props {
    * `customCsrId` is provided, in which case the private key is retrieved
    * from the CSR record held by Cloudflare.
    *
-   * Write-only — Cloudflare never echoes the key back; a content hash of
+   * Write-only -- Cloudflare never echoes the key back; a content hash of
    * the certificate/key pair is persisted in the attributes for diffing.
    */
   privateKey?: Redacted.Redacted<string>;
@@ -98,7 +98,7 @@ export interface Props {
    * SNI support: `sni_custom` (recommended) or `legacy_custom` (supports
    * non-SNI clients; requires dedicated IPs).
    *
-   * Immutable — the PATCH endpoint does not accept `type`, so changing it
+   * Immutable -- the PATCH endpoint does not accept `type`, so changing it
    * triggers a replacement.
    * @default "legacy_custom"
    */
@@ -117,7 +117,7 @@ export interface Props {
   policy?: string;
   /**
    * The environment to deploy the certificate to. Staging deploys are an
-   * Enterprise feature. Write-only — not echoed back by the API.
+   * Enterprise feature. Write-only -- not echoed back by the API.
    * @default "production"
    */
   deploy?: "staging" | "production";
@@ -150,11 +150,11 @@ export interface Attributes {
   modifiedOn: string | undefined;
   /** How Cloudflare builds the certificate chain served to clients. */
   bundleMethod: BundleMethod | undefined;
-  /** SNI support the certificate was uploaded with. Not echoed by the API — persisted from the input props. */
+  /** SNI support the certificate was uploaded with. Not echoed by the API -- persisted from the input props. */
   type: Type;
   /** The order/priority in which the certificate is used in a request. */
   priority: number | undefined;
-  /** Lifecycle status of the certificate (`initializing` → `active`). */
+  /** Lifecycle status of the certificate (`initializing` -> `active`). */
   status: Status | undefined;
   /** Geo Key Manager policy expression, as echoed by the API for the `policy` prop. */
   policyRestrictions: string | undefined;
@@ -172,7 +172,7 @@ export interface Attributes {
 export type CustomCertificate = Resource<TypeId, Props, Attributes, never, Providers>;
 
 /**
- * A Cloudflare custom (BYO) edge certificate — upload your own SSL
+ * A Cloudflare custom (BYO) edge certificate -- upload your own SSL
  * certificate and private key to be served at Cloudflare's edge for a zone.
  *
  * Custom certificates are a **Business / Enterprise** feature; on lower
@@ -210,7 +210,7 @@ export type CustomCertificate = Resource<TypeId, Props, Attributes, never, Provi
  * ### Rotating the certificate
  * **Example:** Rotate in place
  * ```typescript
- * // Changing `certificate`/`privateKey` PATCHes the same certificate id —
+ * // Changing `certificate`/`privateKey` PATCHes the same certificate id --
  * // no replacement, no coverage gap.
  * yield* Cloudflare.CustomCertificate.CustomCertificate("EdgeCert", {
  *   zoneId: zone.zoneId,
@@ -254,8 +254,8 @@ export const CustomCertificateProvider = () =>
 
     // Zone-scoped collection: fan out over every zone and exhaustively
     // paginate that zone's custom certificates. The PEM contents and the
-    // uploaded `type` are write-only (never echoed back), so — exactly like
-    // `read`'s cold adoption path — the unknowable `type`/`contentHash`
+    // uploaded `type` are write-only (never echoed back), so -- exactly like
+    // `read`'s cold adoption path -- the unknowable `type`/`contentHash`
     // default to `legacy_custom`/`""`. Plan-gated zones reject the route with
     // the typed `PlanLevelNotAllowed` (custom certs are Business/Enterprise),
     // zones that can't host custom certs (partial/pending/deleted between
@@ -341,7 +341,7 @@ export const CustomCertificateProvider = () =>
         return Unowned(
           toAttributes(observed, {
             type: olds.type ?? "legacy_custom",
-            // The live cert/key contents are unknowable — force one
+            // The live cert/key contents are unknowable -- force one
             // convergence PATCH after adoption.
             contentHash: "",
           }),
@@ -357,13 +357,13 @@ export const CustomCertificateProvider = () =>
       const type = news.type ?? output?.type ?? "legacy_custom";
       const desiredHash = yield* hashContent(news);
 
-      // 1. Observe — the certificate id cached on `output` is a hint, not
+      // 1. Observe -- the certificate id cached on `output` is a hint, not
       //    a guarantee: a missing certificate falls through to create.
       let observed = output?.certificateId
         ? yield* getCertificate(zoneId, output.certificateId)
         : undefined;
 
-      // 2. Ensure — upload when missing. Certificates have no uniqueness
+      // 2. Ensure -- upload when missing. Certificates have no uniqueness
       //    constraint on Cloudflare's side, so there is no AlreadyExists
       //    race to tolerate.
       if (!observed) {
@@ -383,7 +383,7 @@ export const CustomCertificateProvider = () =>
         return toAttributes(observed, { type, contentHash: desiredHash });
       }
 
-      // 3. Sync — diff observed cloud state against desired. The PEM
+      // 3. Sync -- diff observed cloud state against desired. The PEM
       //    contents are write-only, so the persisted content hash is the
       //    baseline for the certificate/key pair; everything else diffs
       //    against the observed response.

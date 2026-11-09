@@ -15,7 +15,7 @@ export class NodeOperationFailed extends Data.TaggedError("NodeOperationFailed")
  *
  * Relative user paths (Vite roots, asset directories) must resolve against
  * this instead of a live `process.cwd()` read: third-party code sharing the
- * process can change the working directory transiently — most notably
+ * process can change the working directory transiently -- most notably
  * cross-spawn, which `process.chdir`s into a spawn's `cwd` to resolve its
  * binary on PATH and then chdirs back. A live read racing that window
  * resolves against an unrelated directory. (`State/LocalState.ts` anchors
@@ -36,10 +36,10 @@ export const moduleExtension = (importMetaUrl: string) =>
  * Opt out of cross-spawn's temporary `process.chdir` dance.
  *
  * cross-spawn (bundled inside vite, wrangler, next, tinyexec, playwright,
- * tsx, prisma, …) resolves a spawn's binary by `process.chdir`ing the
+ * tsx, prisma, ...) resolves a spawn's binary by `process.chdir`ing the
  * WHOLE parent process into the spawn's `cwd`, calling `which.sync`, and
- * chdiring back. In an alchemy process — which runs many resource builds
- * and hashers concurrently on one event loop — every fiber that touches a
+ * chdiring back. In an alchemy process -- which runs many resource builds
+ * and hashers concurrently on one event loop -- every fiber that touches a
  * relative path can race that window and resolve against an unrelated
  * directory.
  *
@@ -47,7 +47,7 @@ export const moduleExtension = (importMetaUrl: string) =>
  * on `process.chdir` inside worker threads (where chdir is forbidden),
  * and cross-spawn checks it to skip the dance. Setting it on the main
  * thread opts us into the exact mode every cross-spawn copy already runs
- * in inside jest/vitest/playwright workers daily — not an untested path.
+ * in inside jest/vitest/playwright workers daily -- not an untested path.
  * The flag is purely advisory: `process.chdir` itself keeps working, and
  * an audit of the dependency tree shows the only readers are bundled
  * cross-spawn copies; nothing else writes or consults it.
@@ -55,7 +55,7 @@ export const moduleExtension = (importMetaUrl: string) =>
  * Behavior delta: a spawn combining a custom `cwd` with a command that is
  * neither absolute nor on PATH (e.g. `./scripts/build.sh`). POSIX still
  * works (cross-spawn falls back to the raw command; the OS resolves it in
- * the child's cwd). On Windows that shape can fail to resolve — the same
+ * the child's cwd). On Windows that shape can fail to resolve -- the same
  * limitation those tools already have inside worker threads. Everything
  * alchemy and its toolchains spawn is absolute or on PATH, and `Command`
  * resources use effect's ChildProcess (plain spawn, no cross-spawn).
@@ -67,8 +67,8 @@ export const disableCrossSpawnChdir = (): void => {
 /**
  * Node arguments that install alchemy's Oxc loader in a child process, the
  * same way `bin/cli.js` installs it for the CLI itself. Every `.ts`/`.tsx`
- * a Node process loads — alchemy's own source in a checkout, the user's
- * stack everywhere — goes through it; nothing relies on Node's built-in
+ * a Node process loads -- alchemy's own source in a checkout, the user's
+ * stack everywhere -- goes through it; nothing relies on Node's built-in
  * TypeScript support (strip-only, and Node 26 removed the transform flag).
  *
  * A `.ts` entry means a checkout: `bin/register-dev-mode.js` adds the
@@ -96,7 +96,7 @@ export const nodeLoaderArgs = (entry: string): string[] => [
  * node: with the hooks installed, the Oxc loader handles every `.ts`/`.tsx`
  * file regardless of Node's own TypeScript support.
  *
- * `bin/cli.js` mirrors this predicate inline — it must run under plain node
+ * `bin/cli.js` mirrors this predicate inline -- it must run under plain node
  * before any `.ts` can load. Keep the two in sync.
  */
 export const isRegisterHooksSupported = (version = process.versions.node): boolean => {

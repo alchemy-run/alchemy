@@ -11,7 +11,7 @@ export const toTagRecord = (tags: frauddetector.Tag[] | undefined): Record<strin
 
 /**
  * Read the observed tags of a FraudDetector resource by ARN. Tag reads are
- * best-effort — a failure (e.g. a race with deletion) reports no tags.
+ * best-effort -- a failure (e.g. a race with deletion) reports no tags.
  */
 export const readFraudDetectorTags = Effect.fn(function* (arn: string) {
   const response = yield* frauddetector

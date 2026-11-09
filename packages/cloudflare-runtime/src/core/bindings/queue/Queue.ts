@@ -60,7 +60,7 @@ export const QueueLive = Layer.effect(
     // Captured for the pull loops (consumers of REAL Cloudflare queues):
     // the distilled pull/ack ops need cloud credentials + an HttpClient.
     // The full ambient context is captured lazily so a credential-free
-    // embedder (e.g. the local-only test suites) pays nothing — pull
+    // embedder (e.g. the local-only test suites) pays nothing -- pull
     // consumers simply require an embedder that provides `Credentials`.
     const ambient = yield* Effect.context<never>();
 
@@ -121,7 +121,7 @@ export const QueueLive = Layer.effect(
         // `defer` phases run concurrently across plugins, so a registry
         // `subscribe` issued from inside this plugin's defer can land after
         // the RegistryProxy's defer has already decided (from an empty
-        // subscriber list) not to emit the proxy service — the DLQ binding
+        // subscriber list) not to emit the proxy service -- the DLQ binding
         // would then reference `cloudflare-runtime:registry-proxy` without it
         // being defined and workerd would fail to start.
         const dlqNames = new Set(consumers.flatMap((consumer) => consumer.deadLetterQueue ?? []));
@@ -259,7 +259,7 @@ export const QueueLive = Layer.effect(
                 if (response.status >= 200 && response.status < 300) {
                   acks.push({ leaseId: message.leaseId });
                 }
-                // Non-ok: leave unacked — the visibility timeout redelivers.
+                // Non-ok: leave unacked -- the visibility timeout redelivers.
               }
               if (acks.length > 0) {
                 yield* queues.ackMessage({
@@ -420,7 +420,7 @@ export interface QueueRemoteProducerProps {
  * `send()`/`sendBatch()` on its real queue binding.
  *
  * Producer-only: consuming a remote queue locally is not covered by this
- * binding — Cloudflare pushes to deployed consumers.
+ * binding -- Cloudflare pushes to deployed consumers.
  */
 export const remote = (
   props: QueueRemoteProducerProps,

@@ -2,7 +2,7 @@ import type * as Effect from "effect/Effect";
 
 /**
  * Typed `env` for an async (non-Effect) {@link Function}. Railway
- * bindings are environment variables, so every entry is a `string` —
+ * bindings are environment variables, so every entry is a `string` --
  * the same object the handler receives as its second argument
  * (`process.env` keys declared on `env`).
  *

@@ -9,11 +9,11 @@ export interface UpdateResolverRuleRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `route53resolver:UpdateResolverRule` — update the
+ * Runtime binding for `route53resolver:UpdateResolverRule` -- update the
  * bound {@link ResolverRule}'s mutable configuration (name, target IPs,
  * outbound endpoint); the rule ID is injected automatically.
  *
- * The canonical runtime use: DNS failover automation — a Lambda health-checks
+ * The canonical runtime use: DNS failover automation -- a Lambda health-checks
  * the on-premises resolvers a FORWARD rule targets and swaps `TargetIps` to
  * the healthy set when one goes dark.
  *
@@ -22,7 +22,7 @@ export interface UpdateResolverRuleRequest extends Omit<
  * ### Updating Rules at Runtime
  * **Example:** Fail Over the Rule's Target IPs
  * ```typescript
- * // init — grants route53resolver:UpdateResolverRule on the rule
+ * // init -- grants route53resolver:UpdateResolverRule on the rule
  * const updateRule = yield* AWS.Route53Resolver.UpdateResolverRule(rule);
  *
  * // runtime

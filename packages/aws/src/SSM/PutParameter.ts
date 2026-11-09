@@ -9,13 +9,13 @@ export interface PutParameterRequest extends Omit<SSM.PutParameterRequest, "Name
  * Runtime binding for `ssm:PutParameter`.
  *
  * Bind this operation to a `Parameter` inside a function runtime to get a
- * callable that writes a new version of the bound parameter — e.g. flipping a
+ * callable that writes a new version of the bound parameter -- e.g. flipping a
  * feature flag or rotating a stored secret at runtime. For `SecureString`
  * parameters the binding also grants `kms:Encrypt` and `kms:GenerateDataKey`
  * on the parameter's encryption key.
  *
  * Pass `Overwrite: true` to update the existing parameter (the parameter
- * already exists — it is managed by the `Parameter` resource). Note that a
+ * already exists -- it is managed by the `Parameter` resource). Note that a
  * runtime write drifts the value from the deployed desired state; the next
  * deploy converges it back.
  * ### Writing a Parameter

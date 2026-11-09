@@ -172,7 +172,7 @@ export interface KeyLookup {
  * // init
  * const generateDataKey = yield* AWS.KMS.GenerateDataKey(key);
  *
- * // runtime — encrypt locally with the plaintext key, store the blob
+ * // runtime -- encrypt locally with the plaintext key, store the blob
  * const { Plaintext, CiphertextBlob } = yield* generateDataKey({
  *   KeySpec: "AES_256",
  * });
@@ -236,8 +236,8 @@ export const KeyProvider = () =>
         includeAwsManaged: true,
       }),
     read: Effect.fn(function* ({ olds = {}, output }) {
-      // KMS keys have no stable user-assignable identity — only a
-      // cloud-generated keyId — so there is nothing to adopt. We only refresh
+      // KMS keys have no stable user-assignable identity -- only a
+      // cloud-generated keyId -- so there is nothing to adopt. We only refresh
       // a key we already own (via output.keyId); with no prior output the
       // engine treats this as a greenfield create and mints a fresh key.
       if (!output?.keyId) return undefined;
@@ -276,7 +276,7 @@ export const KeyProvider = () =>
             ? news.policy
             : stringifyPolicyDocument(news.policy);
 
-      // Observe via the cached identifier only — no tag-based discovery. On a
+      // Observe via the cached identifier only -- no tag-based discovery. On a
       // create or replacement the engine calls reconcile with
       // `output === undefined`, so we fall through to `createKey` and mint a
       // fresh key rather than adopting an unrelated one (which would collapse a

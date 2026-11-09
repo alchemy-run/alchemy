@@ -21,7 +21,7 @@ export class WirelessDeviceUnexpectedResponse extends Data.TaggedError(
 
 /**
  * LoRaWAN OTAA v1.1 activation keys. The root keys (`AppKey`, `NwkKey`) are
- * secrets — wrap them with `Redacted.make(...)`.
+ * secrets -- wrap them with `Redacted.make(...)`.
  */
 export interface OtaaV1_1Props {
   /** The AppKey root key. Secret key material. */
@@ -34,7 +34,7 @@ export interface OtaaV1_1Props {
 
 /**
  * LoRaWAN OTAA v1.0.x activation keys. The root keys (`AppKey`, `GenAppKey`)
- * are secrets — wrap them with `Redacted.make(...)`.
+ * are secrets -- wrap them with `Redacted.make(...)`.
  */
 export interface OtaaV1_0_xProps {
   /** The AppKey root key. Secret key material. */
@@ -48,7 +48,7 @@ export interface OtaaV1_0_xProps {
 }
 
 /**
- * LoRaWAN ABP v1.1 session keys. All four keys are secrets — wrap them with
+ * LoRaWAN ABP v1.1 session keys. All four keys are secrets -- wrap them with
  * `Redacted.make(...)`.
  */
 export interface SessionKeysAbpV1_1Props {
@@ -73,7 +73,7 @@ export interface AbpV1_1Props {
 }
 
 /**
- * LoRaWAN ABP v1.0.x session keys. Both keys are secrets — wrap them with
+ * LoRaWAN ABP v1.0.x session keys. Both keys are secrets -- wrap them with
  * `Redacted.make(...)`.
  */
 export interface SessionKeysAbpV1_0_xProps {
@@ -142,8 +142,8 @@ export interface WirelessDeviceProps {
    * LoRaWAN device configuration: `DevEui`, the device/service profile IDs,
    * and the activation keys (`OtaaV1_0_x`, `OtaaV1_1`, `AbpV1_0_x`,
    * `AbpV1_1`). The `DevEui` and activation keys are the device's radio
-   * identity — changing them replaces the device; the profile IDs and
-   * `FPorts` update in place. Key material is secret — wrap each key with
+   * identity -- changing them replaces the device; the profile IDs and
+   * `FPorts` update in place. Key material is secret -- wrap each key with
    * `Redacted.make(...)`.
    */
   loRaWAN?: LoRaWANDeviceProps;
@@ -184,13 +184,13 @@ export interface WirelessDevice extends Resource<
 > {}
 
 /**
- * An AWS IoT Core for LoRaWAN (or Amazon Sidewalk) wireless device — the
+ * An AWS IoT Core for LoRaWAN (or Amazon Sidewalk) wireless device -- the
  * cloud registration of a physical radio, wired to a {@link Destination}
  * for uplink routing and to a {@link DeviceProfile} / {@link ServiceProfile}
  * pair for its radio parameters.
  *
  * The device's radio identity (`type`, `DevEui`, activation keys) is
- * immutable — changing it replaces the device. The name, description,
+ * immutable -- changing it replaces the device. The name, description,
  * destination, positioning, profile references, and tags update in place.
  * ### Creating Devices
  * **Example:** OTAA v1.0.x LoRaWAN Device
@@ -320,7 +320,7 @@ export const WirelessDeviceProvider = () =>
           if (found !== undefined) return found;
         }
         // Recover identity by the device's radio identifier when state was
-        // lost — the DevEui / Sidewalk serial is unique per account.
+        // lost -- the DevEui / Sidewalk serial is unique per account.
         if (props.loRaWAN?.DevEui !== undefined) {
           return yield* getBy(props.loRaWAN.DevEui, "DevEui");
         }
@@ -406,10 +406,10 @@ export const WirelessDeviceProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — cloud state is authoritative; output is an id cache.
+          // 1. OBSERVE -- cloud state is authoritative; output is an id cache.
           let device = yield* observe(output, news);
 
-          // 2. ENSURE — create if missing; a Conflict means the radio
+          // 2. ENSURE -- create if missing; a Conflict means the radio
           //    identity is already registered, so re-observe by it.
           if (device === undefined) {
             yield* session.note(`creating wireless device ${name}`);
@@ -437,7 +437,7 @@ export const WirelessDeviceProvider = () =>
           }
           const attrs = yield* toAttrs(device, name);
 
-          // 3. SYNC — apply the mutable-aspect delta from OBSERVED state.
+          // 3. SYNC -- apply the mutable-aspect delta from OBSERVED state.
           const nameDelta = device.Name !== name;
           const descriptionDelta =
             news.description !== undefined && device.Description !== news.description;
@@ -473,7 +473,7 @@ export const WirelessDeviceProvider = () =>
             });
           }
 
-          // 3b. SYNC tags — diff against OBSERVED cloud tags.
+          // 3b. SYNC tags -- diff against OBSERVED cloud tags.
           yield* syncIotWirelessTags(attrs.wirelessDeviceArn, desiredTags);
 
           // 4. RETURN fresh attributes.

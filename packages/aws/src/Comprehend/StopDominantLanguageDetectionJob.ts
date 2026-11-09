@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `comprehend:StopDominantLanguageDetectionJob` — request termination
+ * Runtime binding for `comprehend:StopDominantLanguageDetectionJob` -- request termination
  * of an in-progress asynchronous dominant-language detection job. The job moves to
  * `STOP_REQUESTED` and then `STOPPED`; documents already processed are
  * written to the output location.

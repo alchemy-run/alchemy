@@ -9,7 +9,7 @@ import { Database, type DatabaseService, type DirectDatabase } from "./Database.
 import { BetterAuthMigrationError } from "./Errors.ts";
 
 /**
- * Minimal shape of the RDS Data API surface the Kysely dialect drives —
+ * Minimal shape of the RDS Data API surface the Kysely dialect drives --
  * promise-based so the same dialect serves the runtime (backed by the
  * `AWS.RDSData.*` bindings) and deploy-time migrations (backed by
  * distilled with ambient credentials).
@@ -175,7 +175,7 @@ const isAuroraLike = (value: object): value is AuroraLike =>
 /**
  * A freshly-created cluster answers `DatabaseNotFoundException` until its
  * writer instance registers, and a Serverless v2 cluster answers
- * `DatabaseResumingException` while scaling from zero — both transient.
+ * `DatabaseResumingException` while scaling from zero -- both transient.
  * Bounded per the speed doctrine (~1 minute of backoff).
  */
 const transientRetry = <A, E extends { _tag: string }, R>(
@@ -191,8 +191,8 @@ const transientRetry = <A, E extends { _tag: string }, R>(
   );
 
 /**
- * Aurora (RDS Data API) database layer for Better Auth — the optimal
- * Lambda → Aurora pairing: SQL over HTTPS with IAM auth, no VPC
+ * Aurora (RDS Data API) database layer for Better Auth -- the optimal
+ * Lambda -> Aurora pairing: SQL over HTTPS with IAM auth, no VPC
  * attachment, no `pg`, no connection pooling concerns.
  *
  * Runtime access flows through the `AWS.RDSData.*` bindings, which grant
@@ -202,7 +202,7 @@ const transientRetry = <A, E extends { _tag: string }, R>(
  *
  *
  * ### Lambda with an Aurora-backed BetterAuth
- * Pass the `AWS.RDS.Aurora` composite directly — the layer wires the
+ * Pass the `AWS.RDS.Aurora` composite directly -- the layer wires the
  * cluster, credentials secret, and the writer-instance dependency (so
  * deploy-time migrations wait for the cluster to be queryable) from one
  * value.
@@ -306,7 +306,7 @@ export const AuroraDataApi = (
               ...(composite === undefined ? {} : { writerArn: composite.writer.dbInstanceArn }),
             } as Record<string, unknown>,
             connect: Effect.gen(function* () {
-              // Init half — capture the ARNs as Action dependencies.
+              // Init half -- capture the ARNs as Action dependencies.
               const clusterArn = yield* db.dbClusterArn;
               const secretArn = yield* secret.secretArn;
               if (composite !== undefined) {
@@ -314,7 +314,7 @@ export const AuroraDataApi = (
                 yield* composite.writer.dbInstanceArn.asEffect().pipe(Effect.asVoid);
               }
               const ambient = yield* Effect.context<never>();
-              // Apply half — Data API dialect over distilled.
+              // Apply half -- Data API dialect over distilled.
               return Effect.gen(function* () {
                 const resourceArn = yield* clusterArn;
                 const resolvedSecretArn = yield* secretArn;

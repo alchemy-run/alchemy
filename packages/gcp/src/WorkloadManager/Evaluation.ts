@@ -80,11 +80,11 @@ export type EvaluationProps = {
    * Evaluation id (the `{evaluation}` segment of
    * `projects/{project}/locations/{location}/evaluations/{evaluation}`).
    * If omitted, a unique RFC1035 name is generated from the stack, stage,
-   * and logical id. Immutable — changing it replaces the evaluation.
+   * and logical id. Immutable -- changing it replaces the evaluation.
    */
   evaluationId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the evaluation. `US-CENTRAL1` is accepted and normalized
    * to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
@@ -107,7 +107,7 @@ export type EvaluationProps = {
   /**
    * Customer-managed encryption key
    * `projects/{project}/locations/{location}/keyRings/{keyRing}/cryptoKeys/{cryptoKey}`.
-   * Immutable — changing it replaces the evaluation.
+   * Immutable -- changing it replaces the evaluation.
    */
   kmsKey?: string;
   /**
@@ -115,7 +115,7 @@ export type EvaluationProps = {
    */
   bigQueryDestination?: BigQueryDestination;
   /**
-   * Workload type (`SAP`, `SQL_SERVER`, `OTHER`, …).
+   * Workload type (`SAP`, `SQL_SERVER`, `OTHER`, ...).
    */
   evaluationType?: EvaluationType;
   /**
@@ -188,7 +188,7 @@ export interface EvaluationLookup {
    */
   evaluationId: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * Region (`us-central1`, `us-east1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -200,7 +200,7 @@ export interface EvaluationLookup {
 }
 
 /**
- * A Workload Manager evaluation — a named set of best-practice rules
+ * A Workload Manager evaluation -- a named set of best-practice rules
  * validated against a scope of Cloud resources (SAP, SQL Server, or
  * custom).
  *

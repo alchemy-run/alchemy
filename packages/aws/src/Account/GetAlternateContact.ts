@@ -14,7 +14,7 @@ import type * as Effect from "effect/Effect";
  * ### Reading Account Settings
  * **Example:** Read the Billing Contact
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getAlternateContact = yield* AWS.Account.GetAlternateContact();
  *
  * // runtime

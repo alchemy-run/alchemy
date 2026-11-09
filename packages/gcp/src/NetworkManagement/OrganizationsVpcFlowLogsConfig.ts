@@ -59,18 +59,18 @@ export type OrganizationsVpcFlowLogsConfigProps = {
   /**
    * Config id (the `{vpc_flow_logs_config}` segment of
    * `organizations/{organization}/locations/global/vpcFlowLogsConfigs/{vpc_flow_logs_config}`).
-   * If omitted, a unique RFC1035 name is generated. Immutable — changing
+   * If omitted, a unique RFC1035 name is generated. Immutable -- changing
    * it replaces the config.
    */
   vpcFlowLogsConfigId?: string;
   /**
    * Organization id or `organizations/{organization}`. If omitted,
    * Alchemy uses `GOOGLE_ORGANIZATION_ID` or the project's Resource
-   * Manager parent. Immutable — changing it replaces the config.
+   * Manager parent. Immutable -- changing it replaces the config.
    */
   organization?: string;
   /**
-   * Location. Must be `global`. Immutable — changing it replaces the
+   * Location. Must be `global`. Immutable -- changing it replaces the
    * config.
    * @default "global"
    */

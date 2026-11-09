@@ -6,12 +6,12 @@ import type { FeatureGroup } from "./FeatureGroup.ts";
 export interface PutRecordRequest extends Omit<featurestore.PutRecordRequest, "FeatureGroupName"> {}
 
 /**
- * Runtime binding for `sagemaker:PutRecord` — write a record to a
+ * Runtime binding for `sagemaker:PutRecord` -- write a record to a
  * `FeatureGroup`'s online store (and, when configured, its offline store).
  *
  * Bind this operation to a `FeatureGroup` inside a function runtime to get a
  * callable that automatically injects the feature group name. Every feature
- * value is passed as a string (`ValueAsString`) — the feature group's schema
+ * value is passed as a string (`ValueAsString`) -- the feature group's schema
  * declares the actual types.
  * ### Writing Records
  * **Example:** Put a Record

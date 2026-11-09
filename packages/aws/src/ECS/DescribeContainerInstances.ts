@@ -13,7 +13,7 @@ export interface DescribeContainerInstancesRequest extends Omit<
  *
  * Bind this operation to a `Cluster` inside a function runtime to get a
  * callable that describes container instances registered to the bound
- * cluster — remaining resources, running-task counts, agent status. The
+ * cluster -- remaining resources, running-task counts, agent status. The
  * cluster ARN is injected automatically and the host is granted
  * `ecs:DescribeContainerInstances` on the cluster's container instances.
  * ### Container Instances

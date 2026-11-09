@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Cluster } from "./Cluster.ts";
 
 /**
- * Runtime binding for `elasticmapreduce:ModifyInstanceGroups` — resizes or reconfigures the bound cluster's instance groups (target counts, EC2 configurations, shrink policies).
+ * Runtime binding for `elasticmapreduce:ModifyInstanceGroups` -- resizes or reconfigures the bound cluster's instance groups (target counts, EC2 configurations, shrink policies).
  * ### Scaling the Cluster
  * **Example:** Resize the Core Group
  * ```typescript

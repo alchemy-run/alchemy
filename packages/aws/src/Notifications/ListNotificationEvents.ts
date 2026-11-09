@@ -18,7 +18,7 @@ export interface ListNotificationEventsRequest
  * ### Reading Notification Events
  * **Example:** List Recent Notification Events
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const listNotificationEvents = yield* AWS.Notifications.ListNotificationEvents();
  *
  * // runtime

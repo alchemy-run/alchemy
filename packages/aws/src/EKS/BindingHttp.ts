@@ -6,8 +6,8 @@ import type { Cluster } from "./Cluster.ts";
 /**
  * Shared scaffolding for AWS EKS HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, makeEKS…HttpBinding({ … }))` over one of the
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, makeEKS...HttpBinding({ ... }))` over one of the
  * builders below. Everything except the operation, the request key carrying
  * the cluster name, and the IAM action list is boilerplate.
  */
@@ -15,7 +15,7 @@ import type { Cluster } from "./Cluster.ts";
 /**
  * Build the impl Effect for an account-level operation (cluster enumeration,
  * managed access-policy catalog, Kubernetes/add-on version catalogs). The
- * deploy-time half grants `actions` on `*` — these read-only catalog and
+ * deploy-time half grants `actions` on `*` -- these read-only catalog and
  * enumeration actions span the whole account/region and take no resource ARN.
  */
 export const makeEKSAccountHttpBinding = <I, A, E, R>(options: {
@@ -52,15 +52,15 @@ export const makeEKSAccountHttpBinding = <I, A, E, R>(options: {
  * Which ARNs an action authorizes against, per the EKS service authorization
  * reference:
  *
- * - `cluster` — the cluster ARN itself (`DescribeCluster`, the `List*`
+ * - `cluster` -- the cluster ARN itself (`DescribeCluster`, the `List*`
  *   enumerations, insights).
- * - `subresources` — the cluster's sub-resources. Nodegroups, add-ons,
+ * - `subresources` -- the cluster's sub-resources. Nodegroups, add-ons,
  *   Fargate profiles, pod identity associations, and access entries all share
- *   the ARN shape `arn:aws:eks:{region}:{acct}:{type}/{clusterName}/…`, so a
+ *   the ARN shape `arn:aws:eks:{region}:{acct}:{type}/{clusterName}/...`, so a
  *   single wildcard pattern derived from the cluster ARN (resource type
  *   replaced by a `*` and a trailing `/{star}` appended) covers them without
  *   granting anything on other clusters.
- * - `both` — actions like `ListUpdates`/`DescribeUpdate` that authorize
+ * - `both` -- actions like `ListUpdates`/`DescribeUpdate` that authorize
  *   against the cluster OR a sub-resource depending on the request.
  */
 export type EKSIamScope = "cluster" | "subresources" | "both";

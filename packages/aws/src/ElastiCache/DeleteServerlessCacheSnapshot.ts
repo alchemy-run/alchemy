@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `DeleteServerlessCacheSnapshot` operation (IAM
  * action `elasticache:DeleteServerlessCacheSnapshot`).
  *
- * Deletes a serverless cache snapshot by name — e.g. rotating out old manual
+ * Deletes a serverless cache snapshot by name -- e.g. rotating out old manual
  * backups from a maintenance Lambda. Available for valkey, redis, and
  * serverless memcached. Provide the implementation with
  * `Effect.provide(AWS.ElastiCache.DeleteServerlessCacheSnapshotHttp)`.

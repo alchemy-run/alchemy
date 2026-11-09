@@ -40,13 +40,13 @@ export interface MountedFileSystem {
  * `yield* EFS.mount(accessPoint, { path: "/mnt/data" })` inside a compute
  * body wires the file system into whatever host the code deploys to:
  *
- * - **Lambda** — injects a `FileSystemConfigs` entry (the access point ARN +
+ * - **Lambda** -- injects a `FileSystemConfigs` entry (the access point ARN +
  *   local mount path) through the Function's binding channel and grants the
  *   execution role `elasticfilesystem:ClientMount`/`ClientWrite` scoped to
  *   the access point. Lambda requires an `AWS.EFS.AccessPoint` (not a bare
- *   file system) and a `/mnt/…` path, and the Function must have `vpc` set
+ *   file system) and a `/mnt/...` path, and the Function must have `vpc` set
  *   to subnets that can reach an EFS mount target.
- * - **ECS Task** — injects a task-level EFS volume (transit encryption on,
+ * - **ECS Task** -- injects a task-level EFS volume (transit encryption on,
  *   IAM auth on, access-point scoped when one is given) plus a container
  *   mount point, and grants the task role the matching client actions.
  *
@@ -64,7 +64,7 @@ export interface Mount extends Binding.Service<
 export const Mount = Binding.Service<Mount>("AWS.EFS.Mount");
 
 /**
- * Ergonomic alias of {@link Mount} — `yield* EFS.mount(accessPoint, { path })`.
+ * Ergonomic alias of {@link Mount} -- `yield* EFS.mount(accessPoint, { path })`.
  */
 export const mount = Mount;
 
@@ -142,7 +142,7 @@ export const MountLive = Layer.effect(
           if (!isAccessPoint(target)) {
             return yield* Effect.die(
               new Error(
-                `AWS.EFS.Mount(${target.LogicalId}): Lambda can only mount an EFS access point — create an AWS.EFS.AccessPoint for the file system and mount that instead`,
+                `AWS.EFS.Mount(${target.LogicalId}): Lambda can only mount an EFS access point \u2014 create an AWS.EFS.AccessPoint for the file system and mount that instead`,
               ),
             );
           }
@@ -176,7 +176,7 @@ export const MountLive = Layer.effect(
         } else {
           return yield* Effect.die(
             new Error(
-              `AWS.EFS.Mount(${target.LogicalId}): unsupported host ${(host as { Type?: string }).Type} — EFS mounts are supported on AWS.Lambda.Function and AWS.ECS.Task`,
+              `AWS.EFS.Mount(${target.LogicalId}): unsupported host ${(host as { Type?: string }).Type} \u2014 EFS mounts are supported on AWS.Lambda.Function and AWS.ECS.Task`,
             ),
           );
         }

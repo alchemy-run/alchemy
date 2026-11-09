@@ -40,13 +40,13 @@ export interface Plan extends Resource<
 > {}
 
 /**
- * The engagement plan of an Incident Manager contact — the staged sequence
+ * The engagement plan of an Incident Manager contact -- the staged sequence
  * of contact channels (for `PERSONAL` contacts), contacts (for `ESCALATION`
  * plans), or rotations (for `ONCALL_SCHEDULE` contacts) that Incident
  * Manager engages during an incident.
  *
  * Manage a contact's plan either inline via the `plan` prop on
- * `SSMContacts.Contact` or standalone with this resource — not both.
+ * `SSMContacts.Contact` or standalone with this resource -- not both.
  * Deleting this resource resets the contact's plan to empty.
  *
  * ### Managing Engagement Plans
@@ -91,7 +91,7 @@ export const PlanProvider = () =>
       return PlanResource.Provider.of({
         stables: ["contactArn"],
 
-        // Settings sub-resource of a contact — nothing to enumerate.
+        // Settings sub-resource of a contact -- nothing to enumerate.
         list: () => Effect.succeed([]),
 
         read: Effect.fn(function* ({ olds, output }) {
@@ -100,7 +100,7 @@ export const PlanProvider = () =>
           const contact = yield* getContact(arn);
           if (contact === undefined) return undefined;
           // The plan is a setting on the contact, not a distinct cloud
-          // object — it "exists" when the contact has stages or rotations.
+          // object -- it "exists" when the contact has stages or rotations.
           const hasPlan =
             (contact.Plan.Stages?.length ?? 0) > 0 || (contact.Plan.RotationIds?.length ?? 0) > 0;
           return hasPlan ? buildAttrs(contact) : undefined;
@@ -114,12 +114,12 @@ export const PlanProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ news, session }) {
-          // 1. OBSERVE — the contact is authoritative for its current plan.
+          // 1. OBSERVE -- the contact is authoritative for its current plan.
           const contact = yield* contacts.getContact({
             ContactId: news.contactId,
           });
 
-          // 2/3. SYNC — apply the desired plan when it differs from the
+          // 2/3. SYNC -- apply the desired plan when it differs from the
           //      observed one (updateContact fully replaces the plan).
           const desired: contacts.Plan = {
             Stages: news.stages ?? [],

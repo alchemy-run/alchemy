@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `auditmanager:GetEvidenceFileUploadUrl`.
  *
  * Creates a presigned Amazon S3 URL that can be used to upload a
- * manual-evidence file — pair with
+ * manual-evidence file -- pair with
  * {@link BatchImportEvidenceToAssessmentControl} to attach the uploaded
  * file to a control. Provide the
  * implementation with `Effect.provide(AWS.AuditManager.GetEvidenceFileUploadUrlHttp)`.

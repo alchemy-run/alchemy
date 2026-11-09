@@ -6,7 +6,7 @@ import type { Cluster } from "./Cluster.ts";
 /**
  * Runtime binding for `eks:DescribeUpdate`.
  *
- * Reads one update's status and parameters — poll it to track an in-flight version upgrade or config change.
+ * Reads one update's status and parameters -- poll it to track an in-flight version upgrade or config change.
  * The cluster `name` is injected from the bound {@link Cluster} and `eks:DescribeUpdate` is granted on the cluster's ARN and sub-resource ARNs.
  * Provide the implementation with
  * `Effect.provide(AWS.EKS.DescribeUpdateHttp)`.

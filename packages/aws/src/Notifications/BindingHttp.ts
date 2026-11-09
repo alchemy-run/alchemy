@@ -6,14 +6,14 @@ import type { NotificationConfiguration } from "./NotificationConfiguration.ts";
 /**
  * Shared HTTP scaffolding for the AWS User Notifications runtime bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the builders
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the builders
  * below. Everything except the operation, the IAM action, and (for the
  * configuration-scoped builder) the injected ARN is boilerplate.
  *
  * User Notifications is a global service managed from `us-east-1` (other
  * regions reject management calls), so every operation is resolved with the
- * Region pinned via {@link pinNotificationsRegion} — exactly like the
+ * Region pinned via {@link pinNotificationsRegion} -- exactly like the
  * resource providers in `internal.ts`.
  *
  * Per the `notifications` service authorization reference, the event/read
@@ -26,7 +26,7 @@ import type { NotificationConfiguration } from "./NotificationConfiguration.ts";
 
 /**
  * Build the impl Effect for an account-level User Notifications operation
- * (the notification-event and managed-notification read APIs — none of
+ * (the notification-event and managed-notification read APIs -- none of
  * which are scoped to a caller-owned resource).
  */
 export const makeNotificationsHttpBinding = <I extends object, A, E, R>(options: {
@@ -58,7 +58,7 @@ export const makeNotificationsHttpBinding = <I extends object, A, E, R>(options:
       }
       return Effect.fn(`AWS.Notifications.${options.capability}`)(function* (request?: I) {
         // The region must also be pinned at the call site: the yield-time
-        // snapshot is only a fallback — the calling fiber's ambient Region
+        // snapshot is only a fallback -- the calling fiber's ambient Region
         // (the host Function's own region) wins over it.
         return yield* pinNotificationsRegion(op((request ?? {}) as I));
       });
@@ -106,7 +106,7 @@ export const makeNotificationConfigurationHttpBinding = <
       }
       return Effect.fn(`AWS.Notifications.${options.capability}(${configuration.LogicalId})`)(
         function* (request?: Omit<I, "notificationConfigurationArn">) {
-          // Call-site region pin — see makeNotificationsHttpBinding above.
+          // Call-site region pin -- see makeNotificationsHttpBinding above.
           return yield* pinNotificationsRegion(
             op({
               ...request,

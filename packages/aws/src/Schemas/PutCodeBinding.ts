@@ -8,7 +8,7 @@ import type { Schema } from "./Schema.ts";
  *
  * Kicks off code-binding generation for the bound {@link Schema} in a target
  * language (`Java8`, `Python36`, `TypeScript3`, or `Go1`). Generation is
- * asynchronous — poll {@link DescribeCodeBinding} until the status is
+ * asynchronous -- poll {@link DescribeCodeBinding} until the status is
  * `CREATE_COMPLETE`, then download the package with
  * {@link GetCodeBindingSource}. The registry and schema names are injected
  * from the binding. Provide the implementation with
@@ -16,7 +16,7 @@ import type { Schema } from "./Schema.ts";
  * ### Code Bindings
  * **Example:** Generate Python Bindings
  * ```typescript
- * // init — bind the operation to the schema
+ * // init -- bind the operation to the schema
  * const putCodeBinding = yield* AWS.Schemas.PutCodeBinding(schema);
  *
  * // runtime

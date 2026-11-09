@@ -5,7 +5,7 @@ import type { DataSource } from "./DataSource.ts";
 
 /**
  * The `GetIngestionJob` request with the binding-injected `knowledgeBaseId`
- * and `dataSourceId` removed — they are supplied automatically from the
+ * and `dataSourceId` removed -- they are supplied automatically from the
  * bound {@link DataSource}.
  */
 export interface GetIngestionJobRequest extends Omit<
@@ -14,7 +14,7 @@ export interface GetIngestionJobRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `bedrock-agent:GetIngestionJob` — read the status and
+ * Runtime binding for `bedrock-agent:GetIngestionJob` -- read the status and
  * statistics of an ingestion job started on the bound {@link DataSource}.
  *
  * The binding grants the function `bedrock:GetIngestionJob` scoped to the

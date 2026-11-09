@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { QApp } from "./QApp.ts";
 
 /**
- * Request for {@link DisassociateLibraryItemReview} — `instanceId` is injected from the bound Q App.
+ * Request for {@link DisassociateLibraryItemReview} -- `instanceId` is injected from the bound Q App.
  */
 export interface DisassociateLibraryItemReviewRequest extends Omit<
   qapps.DisassociateLibraryItemReviewInput,
@@ -19,7 +19,7 @@ export interface DisassociateLibraryItemReviewRequest extends Omit<
  * ### Library Items
  * **Example:** Remove an Upvote
  * ```typescript
- * // init — bind the operation to the Q App
+ * // init -- bind the operation to the Q App
  * const disassociateLibraryItemReview = yield* AWS.QApps.DisassociateLibraryItemReview(app);
  *
  * // runtime

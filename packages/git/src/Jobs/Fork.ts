@@ -4,11 +4,11 @@
  * A fork streams a row snapshot from the parent Repo DO over an RPC
  * `Stream` and copies it in batches:
  *
- * - `config` — only the fork-relevant keys (`default_branch`,
+ * - `config` -- only the fork-relevant keys (`default_branch`,
  *   `description`); identity keys (repoId/owner/name/created_at/status)
  *   belong to the fork itself.
- * - `refs`, `commits`, `commit_parents` — copied verbatim.
- * - `objects` — `location='row'` rows carry their `zdata` BLOB;
+ * - `refs`, `commits`, `commit_parents` -- copied verbatim.
+ * - `objects` -- `location='row'` rows carry their `zdata` BLOB;
  *   `location='r2'` rows are copied **by reference**: the `r2_key` column
  *   carries the parent's full key, which is immutable and shared
  *   (DESIGN.md §3.2). The parent's R2 prefix is retained while the
@@ -27,16 +27,16 @@ import { StoreError } from "../Protocol/Store.ts";
 import { LIVE_OBJECTS } from "../Store/ObjectStore.ts";
 import type { CommitParentRow, CommitRow, ObjectRow, RefRow, SqlClient } from "../Store/Sql.ts";
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Snapshot wire shapes
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /**
  * A snapshotted `objects` row. `zdata` is `null` when `location != 'row'`.
  *
  * NOTE: `zdata` crosses the RPC boundary as **base64**, not raw bytes. The
  * snapshot is a `Stream` of plain objects, which the RPC layer serializes
- * as JSONL — a `Uint8Array` inside one of those objects would arrive as
+ * as JSONL -- a `Uint8Array` inside one of those objects would arrive as
  * `{"0":31,"1":139,...}` and silently corrupt every forked object.
  */
 export interface SnapshotObjectRow {
@@ -47,7 +47,7 @@ export interface SnapshotObjectRow {
   readonly location: string;
   /** base64 of `zlib(content)`, or `null` when the bytes live in R2. */
   readonly zdata: string | null;
-  /** Full R2 key — may point into the PARENT repo's prefix (shared). */
+  /** Full R2 key -- may point into the PARENT repo's prefix (shared). */
   readonly r2_key: string | null;
   readonly pack_id: string | null;
   readonly pack_offset: number | null;
@@ -101,17 +101,17 @@ const PAGE_SIZE = 400;
 /** Rows per page for `objects` (each `zdata` BLOB may be up to 1 MiB). */
 const OBJECTS_PAGE_SIZE = 8;
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Parent side: produce the snapshot stream
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
 /**
  * Streams a point-in-time row snapshot of one repo (the parent side of a
- * fork). Backs the Repo DO's `snapshotRows` RPC method — DO RPC methods may
+ * fork). Backs the Repo DO's `snapshotRows` RPC method -- DO RPC methods may
  * return `Stream`s, and the caller (the fork's alarm job) sees chunks live.
  *
  * Staged (in-flight push) objects are excluded; keyed pagination keeps
- * per-batch memory bounded. The stream is not transactional across pages —
+ * per-batch memory bounded. The stream is not transactional across pages --
  * a concurrent push may add rows mid-snapshot; forks take whatever refs
  * page they observe, which is the same semantics as `git clone` during a
  * push.
@@ -218,11 +218,11 @@ export const snapshotStream = (sql: SqlClient): Stream.Stream<SnapshotChunk, Sto
   );
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Fork side: apply the snapshot
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 
-/** Zero-copy-when-possible Uint8Array → ArrayBuffer for BLOB binding. */
+/** Zero-copy-when-possible Uint8Array -> ArrayBuffer for BLOB binding. */
 const toArrayBuffer = (bytes: Uint8Array): ArrayBuffer =>
   bytes.byteOffset === 0 &&
   bytes.byteLength === bytes.buffer.byteLength &&
@@ -232,7 +232,7 @@ const toArrayBuffer = (bytes: Uint8Array): ArrayBuffer =>
 
 /**
  * Applies one snapshot chunk to the fork's own SQLite. All inserts are
- * `INSERT OR IGNORE` on the natural primary key — re-running the whole
+ * `INSERT OR IGNORE` on the natural primary key -- re-running the whole
  * snapshot after a crash converges without duplicating rows.
  */
 export const applySnapshotChunk = Effect.fn(function* (sql: SqlClient, chunk: SnapshotChunk) {
@@ -303,7 +303,7 @@ export interface ForkJobOptions {
   /** The fork's own SQL client. */
   readonly sql: SqlClient;
   /**
-   * The parent's snapshot stream — `parentStub.snapshotRows()` from the
+   * The parent's snapshot stream -- `parentStub.snapshotRows()` from the
    * fork DO's alarm handler. Error type is widened to `unknown` because
    * the stream crosses the RPC boundary.
    */

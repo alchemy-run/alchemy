@@ -5,14 +5,14 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `organizations:CancelHandshake`.
  *
- * Cancels a pending handshake from the originator side — e.g. withdrawing an invitation before the recipient responds.
- * Account-level operation — Organizations is a management-account-scoped
+ * Cancels a pending handshake from the originator side -- e.g. withdrawing an invitation before the recipient responds.
+ * Account-level operation -- Organizations is a management-account-scoped
  * global service, so the binding takes no resource argument. Provide the
  * implementation with `Effect.provide(AWS.Organizations.CancelHandshakeHttp)`.
  * ### Handshakes & Invitations
  * **Example:** Withdraw an Invitation
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const cancelHandshake = yield* AWS.Organizations.CancelHandshake();
  *
  * // runtime

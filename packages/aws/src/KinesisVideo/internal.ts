@@ -22,7 +22,7 @@ export class SignalingEndpointUnavailable extends Data.TaggedError("SignalingEnd
 }> {}
 
 /**
- * Bounded retry through transient `ResourceInUseException` states — e.g.
+ * Bounded retry through transient `ResourceInUseException` states -- e.g.
  * deleting a stream or channel that is still `CREATING`/`UPDATING`, or
  * re-creating one whose previous incarnation is still `DELETING`.
  *
@@ -44,7 +44,7 @@ export const retryWhileResourceInUse = <A, E extends { _tag: string }, R>(
  * previous async transition settles: `ResourceInUseException` and the
  * synthetic `StreamNotActive` (Kinesis Video overloads
  * `ResourceNotFoundException` with "not found or not active" while a
- * stream/channel is CREATING/UPDATING — patched into a typed tag in
+ * stream/channel is CREATING/UPDATING -- patched into a typed tag in
  * distilled). Explicitly typed for the declaration-emit reason above.
  */
 export const retryWhileSettling = <A, E extends { _tag: string }, R>(
@@ -56,7 +56,7 @@ export const retryWhileSettling = <A, E extends { _tag: string }, R>(
   });
 
 /**
- * Bounded retry through `ResourceNotFoundException` — a freshly-created
+ * Bounded retry through `ResourceNotFoundException` -- a freshly-created
  * stream/channel can be invisible to `Describe*` for a few seconds
  * (eventual consistency). Explicitly typed for the same declaration-emit
  * reason as above.
@@ -70,7 +70,7 @@ export const retryWhileNotFound = <A, E extends { _tag: string }, R>(
   });
 
 /**
- * Repeat a describe poll until `done` holds (bounded — streams and channels
+ * Repeat a describe poll until `done` holds (bounded -- streams and channels
  * typically become active within seconds). Explicitly typed for the
  * declaration-emit reason above.
  */
@@ -90,7 +90,7 @@ const untilConverged = <A, E, R>(
  * post-create window where the stream is not yet describable.
  *
  * Mutations (`UpdateStream`/`UpdateDataRetention`) are asynchronous AND bump
- * the stream version — a describe issued immediately after can still show
+ * the stream version -- a describe issued immediately after can still show
  * the pre-mutation `ACTIVE` state with the stale version. Pass
  * `previousVersion` after a mutation to also wait for the version bump, so
  * the returned `Version` is safe to use in the next versioned call.
@@ -172,7 +172,7 @@ export const waitForStreamGone = Effect.fn("AWS.KinesisVideo.waitForStreamGone")
 
 /**
  * Poll `DescribeSignalingChannel` until the channel is fully purged
- * (NotFound) — see {@link waitForStreamGone}.
+ * (NotFound) -- see {@link waitForStreamGone}.
  */
 export const waitForChannelGone = Effect.fn("AWS.KinesisVideo.waitForChannelGone")(function* (
   channelName: string,
@@ -209,7 +209,7 @@ export const compactTags = (
   return out;
 };
 
-// Per-stream data endpoints are stable for the life of the stream — cache
+// Per-stream data endpoints are stable for the life of the stream -- cache
 // them per (arn, API) so repeated data-plane calls skip the extra
 // GetDataEndpoint round-trip.
 const dataEndpointCache = new Map<string, string>();

@@ -13,7 +13,7 @@ import type { Queue } from "./Queue.ts";
  * ### Monitoring Sessions
  * **Example:** Inspect A Session Action
  * ```typescript
- * // init — bind the operation to the queue
+ * // init -- bind the operation to the queue
  * const getSessionAction = yield* AWS.Deadline.GetSessionAction(queue);
  *
  * // runtime

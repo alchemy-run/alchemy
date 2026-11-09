@@ -9,16 +9,16 @@ export interface DeleteJobRequest extends Omit<amplify.DeleteJobRequest, "appId"
  * Runtime binding for `amplify:DeleteJob`.
  *
  * Bind an {@link App} in the function's init phase to get a callable that
- * deletes a build job from a branch's history — e.g. a maintenance function
+ * deletes a build job from a branch's history -- e.g. a maintenance function
  * pruning old build records. Provide the implementation with
  * `Effect.provide(AWS.Amplify.DeleteJobHttp)`.
  * ### Controlling Jobs
  * **Example:** Prune an Old Build Record
  * ```typescript
- * // init — bind the operation to the app
+ * // init -- bind the operation to the app
  * const deleteJob = yield* AWS.Amplify.DeleteJob(app);
  *
- * // runtime — remove the job from the branch's history
+ * // runtime -- remove the job from the branch's history
  * yield* deleteJob({ branchName: "main", jobId: "42" });
  * ```
  *

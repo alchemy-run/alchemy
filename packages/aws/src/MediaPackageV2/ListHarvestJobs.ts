@@ -7,14 +7,14 @@ import type { ChannelGroup } from "./ChannelGroup.ts";
  * Runtime binding for `mediapackagev2:ListHarvestJobs`.
  *
  * Enumerates the harvest jobs in the bound {@link ChannelGroup}, optionally
- * filtered by channel, endpoint, or status — e.g. a dashboard Lambda
+ * filtered by channel, endpoint, or status -- e.g. a dashboard Lambda
  * listing in-progress clip exports. The group's name is injected from the
  * binding. Provide the implementation with
  * `Effect.provide(AWS.MediaPackageV2.ListHarvestJobsHttp)`.
  * ### Harvesting Live-to-VOD Clips
  * **Example:** List the Group's Queued Harvest Jobs
  * ```typescript
- * // init — bind the operation to the channel group
+ * // init -- bind the operation to the channel group
  * const listHarvestJobs = yield* AWS.MediaPackageV2.ListHarvestJobs(group);
  *
  * // runtime

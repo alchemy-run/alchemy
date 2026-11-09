@@ -57,7 +57,7 @@ export type StudySpec = {
 
 export type StudyProps = {
   /**
-   * Region (`us-central1`, …). Immutable — changing it replaces the Study.
+   * Region (`us-central1`, ...). Immutable -- changing it replaces the Study.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
@@ -70,7 +70,7 @@ export type StudyProps = {
    */
   displayName?: string;
   /**
-   * Study configuration. Immutable — changing it replaces the Study.
+   * Study configuration. Immutable -- changing it replaces the Study.
    */
   studySpec: StudySpec;
 };
@@ -105,7 +105,7 @@ export type Study = Resource<
 /**
  * A Vertex AI Vizier Study for hyperparameter search.
  *
- * Studies have no labels field and no update RPC — Alchemy stamps an
+ * Studies have no labels field and no update RPC -- Alchemy stamps an
  * ownership hash onto the display name. Location and study spec are immutable.
  *
  * ### Creating a Study

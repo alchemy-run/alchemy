@@ -77,7 +77,7 @@ export interface NamedQueryLookup {
 }
 
 /**
- * An Amazon Athena named (saved) query — a reusable SQL statement stored
+ * An Amazon Athena named (saved) query -- a reusable SQL statement stored
  * against a Glue database inside a workgroup. Its identity is the
  * server-assigned `NamedQueryId`; the `name`, `description`, and `queryString`
  * are updatable in place, while changing `database` or `workGroup` replaces it.
@@ -153,7 +153,7 @@ export const NamedQueryProvider = () =>
           return nq ? toAttributes(nq) : undefined;
         }),
         read: Effect.fn(function* ({ output }) {
-          // Named queries have no deterministic name-based lookup — identity is
+          // Named queries have no deterministic name-based lookup -- identity is
           // the server-assigned id. Without a cached id there's nothing to read.
           if (!output?.namedQueryId) return undefined;
           const nq = yield* getOne(output.namedQueryId);
@@ -186,11 +186,11 @@ export const NamedQueryProvider = () =>
           const name = yield* toName(id, news);
           const workGroup = news.workGroup ?? "primary";
 
-          // Observe — cloud state (by cached id) is authoritative.
+          // Observe -- cloud state (by cached id) is authoritative.
           let nq = output?.namedQueryId ? yield* getOne(output.namedQueryId) : undefined;
 
           if (nq) {
-            // Sync — Name/Description/QueryString are updatable in place.
+            // Sync -- Name/Description/QueryString are updatable in place.
             if (
               nq.Name !== name ||
               nq.Description !== news.description ||
@@ -204,7 +204,7 @@ export const NamedQueryProvider = () =>
               });
             }
           } else {
-            // Ensure — create with a deterministic idempotency token.
+            // Ensure -- create with a deterministic idempotency token.
             const token = yield* toToken(id);
             const created = yield* athena.createNamedQuery({
               Name: name,

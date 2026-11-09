@@ -7,13 +7,13 @@ import type * as Effect from "effect/Effect";
  *
  * An account-level operation (no resource argument) that reads the Insights
  * metric time series (API call rate / error rate) for a given event source
- * and event name — empty when Insights has recorded no anomalies. Provide
+ * and event name -- empty when Insights has recorded no anomalies. Provide
  * the implementation with
  * `Effect.provide(AWS.CloudTrail.ListInsightsMetricDataHttp)`.
  * ### Reading Insights Metrics
  * **Example:** Read API Call Rate Metrics
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const listInsightsMetricData =
  *   yield* AWS.CloudTrail.ListInsightsMetricData();
  *

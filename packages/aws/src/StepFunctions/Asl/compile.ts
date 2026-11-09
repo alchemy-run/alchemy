@@ -2,12 +2,12 @@ import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import { toSeconds as toWholeSeconds } from "alchemy/Util/Duration";
 /**
- * The Step Functions program compiler: `SfnEffect` AST → a plain JSONata-mode
+ * The Step Functions program compiler: `SfnEffect` AST -> a plain JSONata-mode
  * ASL `definition` object (with embedded `Output`s the engine resolves) plus
  * the IAM `policyStatements` its Task states require.
  *
- * The output is deliberately deterministic — state names and variable names
- * are per-compile ordinals, no timestamps — so `StateMachine`'s
+ * The output is deliberately deterministic -- state names and variable names
+ * are per-compile ordinals, no timestamps -- so `StateMachine`'s
  * `normalizeDefinition` drift comparison stays quiet across deploys of an
  * unchanged program.
  */
@@ -26,7 +26,7 @@ import type { AslNode, RetryOptions } from "./Node.ts";
 import { isSfnEffect, type SfnEffect } from "./Program.ts";
 
 /**
- * A program failed to compile to ASL — e.g. yielding a non-`Sfn` value
+ * A program failed to compile to ASL -- e.g. yielding a non-`Sfn` value
  * inside `Sfn.gen`, or unreachable steps after an unconditional `Sfn.fail`.
  */
 export class SfnCompileError extends Data.TaggedError("SfnCompileError")<{
@@ -37,7 +37,7 @@ export class SfnCompileError extends Data.TaggedError("SfnCompileError")<{
 export interface CompiledProgram {
   /**
    * The ASL definition (JSONata query language). A plain object with
-   * embedded `Output`s — exactly what `StateMachineProps.definition`
+   * embedded `Output`s -- exactly what `StateMachineProps.definition`
    * accepts.
    */
   readonly definition: Record<string, unknown>;
@@ -224,7 +224,7 @@ export const compileNode = (ctx: Ctx, node: AslNode, v: string): Fragment => {
 
     case "forEach": {
       const name = allocName(ctx, "Map");
-      // the item arrives as the ItemProcessor's state input — bind it to a
+      // the item arrives as the ItemProcessor's state input -- bind it to a
       // variable in a prologue Pass so the body can reference it anywhere
       // ($states.context.Map.Item.Value only exists inside ItemSelector)
       const itemVar = allocVar(ctx);
@@ -438,7 +438,7 @@ export const compileNode = (ctx: Ctx, node: AslNode, v: string): Fragment => {
         if (!isSfnEffect(program)) {
           throw new SfnCompileError({
             message:
-              "Sfn.gen may only yield Sfn effects (Sfn.invoke, Sfn.when, ...) — real Effects cannot compile to ASL",
+              "Sfn.gen may only yield Sfn effects (Sfn.invoke, Sfn.when, ...) \u2014 real Effects cannot compile to ASL",
           });
         }
         const stepVar = allocVar(ctx);
@@ -462,7 +462,7 @@ export const compileNode = (ctx: Ctx, node: AslNode, v: string): Fragment => {
         if (chained.terminals.length === 0) {
           throw new SfnCompileError({
             message:
-              "unreachable steps after an unconditional Sfn.fail — move the failure into a branch or make it the final step",
+              "unreachable steps after an unconditional Sfn.fail \u2014 move the failure into a branch or make it the final step",
           });
         }
         return chain(chained, fragment);
@@ -485,7 +485,7 @@ const compileBranch = (
   let fragment = compileNode(ctx, program.node, branchVar);
   if (intro !== undefined) fragment = chain(intro, fragment);
   if (fragment.terminals.length === 0) {
-    // the branch always fails — no output state needed
+    // the branch always fails -- no output state needed
     return seal(fragment);
   }
   const name = allocName(ctx, "Result");
@@ -506,7 +506,7 @@ const compileBranch = (
  *
  * This is sugar over the raw path: feed the result straight into the
  * existing `StateMachine` resource (`StateMachine.fromProgram` does exactly
- * that), or inspect/extend the definition first — the raw
+ * that), or inspect/extend the definition first -- the raw
  * `definition: Record<string, unknown>` escape hatch stays first-class.
  */
 export const compileProgram = (program: SfnEffect<any, any>): CompiledProgram => {

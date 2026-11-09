@@ -16,7 +16,7 @@ export interface GetSavingsPlansCoverageRequest extends ce.GetSavingsPlansCovera
  * ### Savings Plans
  * **Example:** Check Savings Plans Coverage
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const getSavingsPlansCoverage = yield* AWS.CostExplorer.GetSavingsPlansCoverage();
  *
  * // runtime

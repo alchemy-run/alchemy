@@ -60,7 +60,7 @@ export class DistilledDevEnvironment extends vite.DevEnvironment {
   /**
    * Asks the Worker to evaluate the entry module and classify its exports.
    *
-   * Resolves to `undefined` if the Worker could not evaluate the entry — the
+   * Resolves to `undefined` if the Worker could not evaluate the entry -- the
    * error is surfaced to the user by whichever request hits the entry next, and
    * the dev server keeps whatever export types it already has.
    */
@@ -93,7 +93,7 @@ export class DistilledDevEnvironment extends vite.DevEnvironment {
   ): Promise<vite.FetchResult> {
     // Additional modules (CompiledWasm, Data, Text) are resolved to
     // `__CLOUDFLARE_MODULE__...` ids and must be externalized so the module
-    // runner loads them via native `import()` → workerd's module fallback.
+    // runner loads them via native `import()` -> workerd's module fallback.
     if (MODULE_REFERENCE_REGEX.test(id)) {
       return {
         externalize: id,
@@ -153,13 +153,13 @@ class HotChannel implements vite.HotChannel {
 
   listen() {
     assert(this.#ws, "WebSocket is not connected");
-    // Already dispatching — see the `ws` setter.
+    // Already dispatching -- see the `ws` setter.
   }
 
   close() {
     // The channel can be closed before a runner ever connected (e.g. a dev
     // server created and torn down during a framework's type generation), so
-    // tolerate a missing socket — and close it so the runtime connection does
+    // tolerate a missing socket -- and close it so the runtime connection does
     // not leak across server restarts.
     if (!this.#ws) return;
     this.#ws.removeEventListener("message", this.boundDispatch);

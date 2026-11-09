@@ -28,7 +28,7 @@ export interface SearchPlaceIndexForTextRequest extends Omit<
  *   Text: "Space Needle, Seattle, WA",
  *   MaxResults: 3,
  * });
- * // results.Results[0].Place.Geometry.Point → [longitude, latitude]
+ * // results.Results[0].Place.Geometry.Point -> [longitude, latitude]
  * ```
  *
  * @binding

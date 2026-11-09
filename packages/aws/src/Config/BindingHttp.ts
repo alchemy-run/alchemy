@@ -7,8 +7,8 @@ import type { DeliveryChannel } from "./DeliveryChannel.ts";
 /**
  * Shared scaffolding for AWS Config HTTP bindings.
  *
- * NOT exported from `index.ts` — every single-operation `{Op}Http.ts` in
- * this service is a thin `Layer.effect(Cap, make…HttpBinding({ … }))` over
+ * NOT exported from `index.ts` -- every single-operation `{Op}Http.ts` in
+ * this service is a thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over
  * one of the two builders below. Everything except the operation, the IAM
  * action, and the injected identifier is boilerplate.
  *

@@ -4,13 +4,13 @@
  * Registering an internal extension buys the Shutdown phase: a sandbox
  * with no registered extensions is killed with no signal at all (0 ms);
  * with an internal extension Lambda sends SIGTERM and allows 500 ms before
- * SIGKILL — the entry closes the instance scope in that window.
+ * SIGKILL -- the entry closes the instance scope in that window.
  *
  * The extension deliberately subscribes to NO events (`events: []`).
  * Subscribing to `INVOKE` and holding `/event/next` open as a
  * post-response work window was tried and rejected: a buffered Function
  * URL does not return the response to the caller until the entire Invoke
- * phase completes, so held work showed up as response latency anyway — and
+ * phase completes, so held work showed up as response latency anyway -- and
  * environments whose invoke phase was extended this way were observed
  * being condemned and recycled (no END/REPORT, SIGTERM within seconds,
  * fresh INIT on the next request). Per-invocation cleanup therefore
@@ -40,7 +40,7 @@ export const registerLambdaExtension = async (): Promise<void> => {
       }).catch(() => undefined);
     }
   } catch {
-    // Not running on Lambda (or the Extensions API refused) — the function
+    // Not running on Lambda (or the Extensions API refused) -- the function
     // still works, it just gets no shutdown window.
   }
 };

@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `comprehend:DescribeEntitiesDetectionJob` — get the
+ * Runtime binding for `comprehend:DescribeEntitiesDetectionJob` -- get the
  * properties (status, input/output config, timings) of an asynchronous
  * entity detection job started with {@link StartEntitiesDetectionJob}.
  *
@@ -18,7 +18,7 @@ import type * as Effect from "effect/Effect";
  *
  * // runtime
  * const job = yield* describeEntitiesDetectionJob({ JobId: jobId });
- * // job.EntitiesDetectionJobProperties?.JobStatus: "SUBMITTED" | "IN_PROGRESS" | "COMPLETED" | …
+ * // job.EntitiesDetectionJobProperties?.JobStatus: "SUBMITTED" | "IN_PROGRESS" | "COMPLETED" | ...
  * ```
  *
  * @binding

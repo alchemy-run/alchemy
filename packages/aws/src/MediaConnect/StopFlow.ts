@@ -15,10 +15,10 @@ import type { Flow } from "./Flow.ts";
  * ### Controlling Flows
  * **Example:** Stop the Flow After the Broadcast
  * ```typescript
- * // init — bind the operation to the flow
+ * // init -- bind the operation to the flow
  * const stopFlow = yield* AWS.MediaConnect.StopFlow(flow);
  *
- * // runtime — a flow that is already in STANDBY answers with the typed
+ * // runtime -- a flow that is already in STANDBY answers with the typed
  * // BadRequestException tag
  * yield* stopFlow().pipe(
  *   Effect.catchTag("BadRequestException", () => Effect.void),

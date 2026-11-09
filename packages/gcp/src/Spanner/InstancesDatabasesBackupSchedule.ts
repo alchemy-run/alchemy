@@ -50,12 +50,12 @@ export type BackupScheduleSpec = {
 
 export type InstancesDatabasesBackupScheduleProps = {
   /**
-   * Parent instance id or full name. Immutable — changing it replaces
+   * Parent instance id or full name. Immutable -- changing it replaces
    * the schedule.
    */
   instance: string;
   /**
-   * Parent database id or full name. Immutable — changing it replaces
+   * Parent database id or full name. Immutable -- changing it replaces
    * the schedule.
    */
   database: string;
@@ -63,7 +63,7 @@ export type InstancesDatabasesBackupScheduleProps = {
    * Backup schedule id (the `{schedule}` segment of
    * `.../databases/{database}/backupSchedules/{schedule}`). If omitted,
    * a unique name is generated. Must match `^[a-z][-a-z0-9]*[a-z0-9]$`
-   * (2–60 characters). Immutable — changing it replaces the schedule.
+   * (2-60 characters). Immutable -- changing it replaces the schedule.
    */
   backupScheduleId?: string;
   /**
@@ -82,7 +82,7 @@ export type InstancesDatabasesBackupScheduleProps = {
   encryptionConfig?: BackupScheduleEncryptionConfig;
   /**
    * When true, create incremental backup chains (Enterprise Plus).
-   * Default creates full backups. Immutable — changing it replaces
+   * Default creates full backups. Immutable -- changing it replaces
    * the schedule.
    * @default false
    */
@@ -132,7 +132,7 @@ export interface InstancesDatabasesBackupScheduleLookup {
   /**
    * Backup schedule id (the `{schedule}` segment of
    * `.../databases/{database}/backupSchedules/{schedule}`). Must match
-   * `^[a-z][-a-z0-9]*[a-z0-9]$` (2–60 characters).
+   * `^[a-z][-a-z0-9]*[a-z0-9]$` (2-60 characters).
    */
   backupScheduleId: string;
   /**

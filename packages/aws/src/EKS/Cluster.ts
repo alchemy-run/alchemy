@@ -155,7 +155,7 @@ export interface Cluster extends Resource<
     /**
      * The cluster-agnostic `Kubernetes.Connection` for this cluster.
      * Passing the whole cluster resource as a `Kubernetes.*` workload's
-     * `cluster` prop resolves through this — auth uses SigV4 tokens
+     * `cluster` prop resolves through this -- auth uses SigV4 tokens
      * minted from the ambient AWS credentials.
      */
     connection: Connection;
@@ -275,10 +275,10 @@ const normalizeTags = (tags: Record<string, string | undefined> | undefined) =>
     Object.entries(tags ?? {}).filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
 
-// Wait budget: ~30 min at 10s spacing. Cluster create/delete takes ~10–15 min
-// and async config/version updates ~5–15 min. The interval MUST be flat, not
+// Wait budget: ~30 min at 10s spacing. Cluster create/delete takes ~10-15 min
+// and async config/version updates ~5-15 min. The interval MUST be flat, not
 // exponential: `Schedule.exponential` with no delay cap sleeps 8.5/17/34 min
-// between late attempts — a silent multi-minute park that presents as a
+// between late attempts -- a silent multi-minute park that presents as a
 // deadlocked (0% CPU, no output) deploy and blows any hook budget.
 const updateRetrySchedule = Schedule.max([Schedule.spaced("10 seconds"), Schedule.recurs(180)]);
 
@@ -395,7 +395,7 @@ interface ClusterConfigUpdate {
  * EKS's UpdateClusterConfig API accepts exactly ONE update category per call
  * (`InvalidParameterException: Only one type of update can be allowed.`), so
  * drift is computed per category and each drifted category becomes its own
- * request — the caller issues them serially, waiting for each async update
+ * request -- the caller issues them serially, waiting for each async update
  * to complete before the next.
  *
  * Comparison is desired-subset only: a field the user did not specify is
@@ -409,7 +409,7 @@ const planClusterConfigUpdates = (
 ): ClusterConfigUpdate[] => {
   const updates: ClusterConfigUpdate[] = [];
 
-  // Access config — authenticationMode is the only mutable field.
+  // Access config -- authenticationMode is the only mutable field.
   const desiredAuthMode = desired.accessConfig?.authenticationMode;
   if (
     desiredAuthMode !== undefined &&
@@ -421,7 +421,7 @@ const planClusterConfigUpdates = (
     });
   }
 
-  // Auto Mode trio — computeConfig, storageConfig and kubernetesNetworkConfig
+  // Auto Mode trio -- computeConfig, storageConfig and kubernetesNetworkConfig
   // count as ONE update category and must ship together in a single call.
   const desiredCompute = desired.computeConfig;
   const observedCompute = observed.computeConfig;
@@ -456,7 +456,7 @@ const planClusterConfigUpdates = (
           },
         },
         // serviceIpv4Cidr / ipFamily are create-only (diff replaces on
-        // change) — never send them on update.
+        // change) -- never send them on update.
         kubernetesNetworkConfig: {
           elasticLoadBalancing: {
             enabled:
@@ -494,7 +494,7 @@ const planClusterConfigUpdates = (
     });
   }
 
-  // VPC subnet / security-group membership — separate from endpoint access.
+  // VPC subnet / security-group membership -- separate from endpoint access.
   const subnetsDrift =
     desiredVpc.subnetIds !== undefined &&
     !stringSetEqual(desiredVpc.subnetIds, observedVpc.subnetIds);
@@ -513,7 +513,7 @@ const planClusterConfigUpdates = (
     });
   }
 
-  // Control-plane logging — compare per log type; types the user didn't
+  // Control-plane logging -- compare per log type; types the user didn't
   // mention are "don't care".
   if (desired.logging !== undefined) {
     const observedLogging = loggingByType(observed.logging);
@@ -949,7 +949,7 @@ export const ClusterProvider = () =>
             nodeRoleArn,
           });
 
-          // Observe — fetch live cloud state. We always fetch fresh so
+          // Observe -- fetch live cloud state. We always fetch fresh so
           // adoption, drift, and partial-prior-runs all converge.
           let state = yield* readCluster({
             clusterName,
@@ -965,7 +965,7 @@ export const ClusterProvider = () =>
             );
           }
 
-          // Ensure — create cluster if missing. Tolerate
+          // Ensure -- create cluster if missing. Tolerate
           // `ResourceInUseException` as a race with a peer reconciler:
           // re-read and continue with the sync path. The control plane
           // takes 10+ minutes; we wait for ACTIVE before any sync work.
@@ -994,9 +994,9 @@ export const ClusterProvider = () =>
 
           const clusterArn = state.clusterArn;
 
-          // Sync cluster config — EKS's UpdateClusterConfig accepts exactly
+          // Sync cluster config -- EKS's UpdateClusterConfig accepts exactly
           // ONE update category per call ("Only one type of update can be
-          // allowed"), so we plan the observed↔desired drift per category and
+          // allowed"), so we plan the observed<->desired drift per category and
           // issue one serialized updateClusterConfig per drifted category,
           // waiting for each async update to land (Successful + cluster back
           // to ACTIVE) before the next. Everything settable at create time is
@@ -1020,7 +1020,7 @@ export const ClusterProvider = () =>
             }
           }
 
-          // Sync version — observed ↔ desired.
+          // Sync version -- observed <-> desired.
           if (effective.version && state.version !== effective.version) {
             const versionUpdate = yield* eks.updateClusterVersion({
               name: clusterName,
@@ -1039,7 +1039,7 @@ export const ClusterProvider = () =>
             }
           }
 
-          // Sync tags — diff observed cloud tags against desired.
+          // Sync tags -- diff observed cloud tags against desired.
           const { removed, upsert } = diffTags(state.tags, desiredTags);
           if (upsert.length > 0) {
             yield* eks.tagResource({

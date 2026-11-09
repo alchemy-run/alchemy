@@ -57,7 +57,7 @@ export type PrefixDelegation = Resource<
  * that account to use the delegated CIDR (e.g. for its own service
  * bindings).
  *
- * Delegations are create/delete only — every prop change forces a
+ * Delegations are create/delete only -- every prop change forces a
  * replacement.
  * ### Delegating a Prefix
  * **Example:** Delegate a /26 to another account
@@ -90,7 +90,7 @@ export const PrefixDelegationProvider = () =>
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (olds === undefined) return undefined;
       if (!isResolved(news) || !isResolved(olds)) return undefined;
-      // Create/delete only — any change forces a replacement.
+      // Create/delete only -- any change forces a replacement.
       const oldPrefixId = output?.prefixId ?? olds.prefixId;
       if (
         typeof oldPrefixId === "string" &&
@@ -120,7 +120,7 @@ export const PrefixDelegationProvider = () =>
         output?.prefixId ?? (typeof olds?.prefixId === "string" ? olds.prefixId : undefined);
       if (!prefixId) return undefined;
 
-      // There is no get-by-id op — list and filter. Cold reads match on
+      // There is no get-by-id op -- list and filter. Cold reads match on
       // (cidr, delegatedAccountId), which identify a delegation uniquely.
       const delegations = yield* listDelegations(acct, prefixId);
       const match = output?.delegationId
@@ -143,7 +143,7 @@ export const PrefixDelegationProvider = () =>
       const prefixId = news.prefixId as string;
       const delegatedAccountId = news.delegatedAccountId as string;
 
-      // 1. Observe — find an existing delegation with the same identity.
+      // 1. Observe -- find an existing delegation with the same identity.
       const delegations = yield* listDelegations(acct, prefixId);
       const observed =
         (output?.delegationId
@@ -153,11 +153,11 @@ export const PrefixDelegationProvider = () =>
           (d) => d.cidr === news.cidr && d.delegatedAccountId === delegatedAccountId,
         );
       if (observed) {
-        // Nothing is mutable — converged.
+        // Nothing is mutable -- converged.
         return toAttributes(observed, prefixId, acct);
       }
 
-      // 2. Ensure — create the delegation.
+      // 2. Ensure -- create the delegation.
       const created = yield* addressing.createPrefixDelegation({
         accountId: acct,
         prefixId,

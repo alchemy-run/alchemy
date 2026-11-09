@@ -45,11 +45,11 @@ export type AgentsEnvironmentsExperimentProps = {
   /**
    * Parent environment resource name
    * `projects/{project}/locations/{location}/agents/{agent}/environments/{environment}`.
-   * Immutable — changing it replaces the experiment.
+   * Immutable -- changing it replaces the experiment.
    */
   environment: string;
   /**
-   * Experiment id. Server-assigned on create. Immutable — changing it
+   * Experiment id. Server-assigned on create. Immutable -- changing it
    * replaces the experiment.
    */
   experimentId?: string;

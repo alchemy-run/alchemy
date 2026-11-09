@@ -8,13 +8,13 @@ export interface GetAssetRequest extends Omit<datazone.GetAssetInput, "domainIde
 /**
  * Runtime binding for `datazone:GetAsset`.
  *
- * Reads an asset in the bound domain — its forms, glossary terms, and latest revision. The domain id is injected from the binding.
+ * Reads an asset in the bound domain -- its forms, glossary terms, and latest revision. The domain id is injected from the binding.
  * Provide the implementation with
  * `Effect.provide(AWS.DataZone.GetAssetHttp)`.
  * ### Searching the Catalog
  * **Example:** Read an Asset
  * ```typescript
- * // init — bind the operation to the domain
+ * // init -- bind the operation to the domain
  * const getAsset = yield* AWS.DataZone.GetAsset(domain);
  *
  * // runtime

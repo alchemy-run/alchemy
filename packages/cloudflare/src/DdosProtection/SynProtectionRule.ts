@@ -38,7 +38,7 @@ export interface SynProtectionRuleProps {
   /**
    * The scope of the rule: `global`, `region`, or `datacenter`.
    *
-   * Immutable — the API only patches mode/sensitivities, so changing the
+   * Immutable -- the API only patches mode/sensitivities, so changing the
    * scope triggers a replacement.
    */
   scope: SynProtectionRuleScope;
@@ -47,24 +47,24 @@ export interface SynProtectionRuleProps {
    * is `global`; for `region`/`datacenter` scope it is the region or data
    * center name (e.g. `WEUR`, `SJC`).
    *
-   * Immutable — changing the name triggers a replacement.
+   * Immutable -- changing the name triggers a replacement.
    * @default "global"
    */
   name?: string;
   /**
-   * Operating mode of the rule. Mutable — patched in place.
+   * Operating mode of the rule. Mutable -- patched in place.
    */
   mode: SynProtectionRuleMode;
   /**
-   * The burst sensitivity. Mutable — patched in place.
+   * The burst sensitivity. Mutable -- patched in place.
    */
   burstSensitivity: SynProtectionRuleSensitivity;
   /**
-   * The rate sensitivity. Mutable — patched in place.
+   * The rate sensitivity. Mutable -- patched in place.
    */
   rateSensitivity: SynProtectionRuleSensitivity;
   /**
-   * The type of mitigation applied to matched SYN floods. Mutable —
+   * The type of mitigation applied to matched SYN floods. Mutable --
    * patched in place.
    * @default "challenge"
    */
@@ -107,7 +107,7 @@ export type SynProtectionRule = Resource<
  *
  * Rules tune how Cloudflare mitigates SYN floods on Magic Transit prefixes,
  * per scope (`global`, a region, or a data center). The rule's identity is
- * its `scope` + `name` pair — only `mode`, sensitivities, and
+ * its `scope` + `name` pair -- only `mode`, sensitivities, and
  * `mitigationType` are mutable in place.
  *
  * Requires the **Magic Transit / Advanced TCP Protection** entitlement; on
@@ -161,7 +161,7 @@ export const SynProtectionRuleProvider = () =>
 
     // Account-scoped collection: paginate every rule in the ambient
     // account. Accounts without the Advanced TCP Protection entitlement (or
-    // lacking read permission) yield no rules — treat the typed rejection as
+    // lacking read permission) yield no rules -- treat the typed rejection as
     // an empty enumeration rather than an error.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -182,9 +182,9 @@ export const SynProtectionRuleProvider = () =>
     diff: Effect.fn(function* ({ olds, news }) {
       if (olds === undefined) return undefined;
       // `news` runs at plan time and may still carry unresolved
-      // expressions — bail out and let the engine apply default logic.
+      // expressions -- bail out and let the engine apply default logic.
       if (!isResolved(news)) return undefined;
-      // The API only patches mode/sensitivities/mitigationType — the
+      // The API only patches mode/sensitivities/mitigationType -- the
       // scope + name pair is the rule's identity and cannot change.
       if (olds.scope !== news.scope || ruleName(olds) !== ruleName(news)) {
         return { action: "replace" } as const;
@@ -203,7 +203,7 @@ export const SynProtectionRuleProvider = () =>
       }
 
       // Adoption path: a rule for this scope + name may already exist.
-      // Rules carry no ownership markers, so brand the match `Unowned` —
+      // Rules carry no ownership markers, so brand the match `Unowned` --
       // the engine refuses to take over unless `adopt` is set.
       const identity = output ?? olds;
       if (identity?.scope) {
@@ -217,7 +217,7 @@ export const SynProtectionRuleProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = ruleName(news);
 
-      // 1. Observe — the rule id cached on `output` is a hint, not a
+      // 1. Observe -- the rule id cached on `output` is a hint, not a
       //    guarantee: a missing rule falls through to the scope + name
       //    scan and then to create.
       let observed = output?.ruleId ? yield* getRule(accountId, output.ruleId) : undefined;
@@ -228,7 +228,7 @@ export const SynProtectionRuleProvider = () =>
         observed = yield* findByScopeAndName(accountId, news.scope, name);
       }
 
-      // 3. Ensure — create when missing.
+      // 3. Ensure -- create when missing.
       if (!observed) {
         observed = yield* ddos.createAdvancedTcpProtectionSynProtectionRule({
           accountId,
@@ -241,7 +241,7 @@ export const SynProtectionRuleProvider = () =>
         });
       }
 
-      // 4. Sync — diff observed mutable aspects against desired; skip the
+      // 4. Sync -- diff observed mutable aspects against desired; skip the
       //    patch entirely on a no-op.
       const dirty =
         observed.mode !== news.mode ||

@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Service } from "./Service.ts";
 
 /**
- * Runtime binding for `servicediscovery:GetServiceAttributes` — reads the
+ * Runtime binding for `servicediscovery:GetServiceAttributes` -- reads the
  * custom key/value attributes stored on the bound {@link Service} (declared
  * via the Service resource's `attributes` prop or written out-of-band).
  * Use it to distribute small pieces of service-level configuration to

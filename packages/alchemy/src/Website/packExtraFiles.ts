@@ -21,7 +21,7 @@ const exists = (target: string) =>
  *
  * - `"client"`: the build's dist directory at the image/unit root.
  * - `"next"`: `.next`, `public/`, and `next.config.*` from `from` (the
- *   Next.js app root — for the node target that is also `distDirectory`).
+ *   Next.js app root -- for the node target that is also `distDirectory`).
  */
 export const packSiteExtraFiles = (
   from: string,

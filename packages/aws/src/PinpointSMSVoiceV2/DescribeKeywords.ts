@@ -16,7 +16,7 @@ export interface DescribeKeywordsRequest extends Omit<
  * Runtime binding for `sms-voice:DescribeKeywords`.
  *
  * Lists the keywords configured on the bound origination phone number
- * (one page per call — pass `NextToken` from the previous response to
+ * (one page per call -- pass `NextToken` from the previous response to
  * continue). The deploy-time half grants `sms-voice:DescribeKeywords` on
  * the number. Provide the implementation with
  * `Effect.provide(AWS.PinpointSMSVoiceV2.DescribeKeywordsHttp)`.

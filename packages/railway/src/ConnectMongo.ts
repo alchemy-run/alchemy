@@ -9,7 +9,7 @@ import type { Mongo } from "./Mongo.ts";
  * Bind a {@link Mongo} service to a Railway {@link Service} and obtain
  * the Effect-native connection string for the MongoDB driver.
  *
- * `ConnectMongo` is the Context tag, the type, and the callable —
+ * `ConnectMongo` is the Context tag, the type, and the callable --
  * `yield* Railway.ConnectMongo(Db)`. Provide {@link ConnectMongoHttp}.
  *
  * **Example:** Bind Mongo in a Service

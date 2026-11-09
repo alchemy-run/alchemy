@@ -32,7 +32,7 @@ export interface ExecuteSqlRequest extends Omit<
  *   database: "app",
  * });
  *
- * // runtime — statements are passed as a single string, no parameters
+ * // runtime -- statements are passed as a single string, no parameters
  * const result = yield* executeSql({ sqlStatements: "SELECT 1" });
  * ```
  *

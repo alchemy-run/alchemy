@@ -19,7 +19,7 @@ export type SubscriptionAutoRenew = "ENABLED" | "DISABLED";
 export interface SubscriptionProps {
   /**
    * Whether the subscription renews automatically at the end of the 1-year
-   * commitment. Mutable — but AWS only allows changing it in the 30 days
+   * commitment. Mutable -- but AWS only allows changing it in the 30 days
    * before the current period ends.
    * @default "ENABLED"
    */
@@ -77,7 +77,7 @@ const SubscriptionResource = Resource<Subscription>("AWS.Shield.Subscription");
 export { SubscriptionResource as Subscription };
 
 // `describeSubscription` fails with the (patched) typed `SubscriptionNotFound`
-// when the account is not subscribed — collapse it to `undefined`.
+// when the account is not subscribed -- collapse it to `undefined`.
 const observeSubscription = shield.describeSubscription({}).pipe(
   Effect.map((r) => r.Subscription),
   Effect.catchTag("SubscriptionNotFound", () => Effect.undefined),
@@ -109,17 +109,17 @@ export const SubscriptionProvider = () =>
           return output ? attrs : Unowned(attrs);
         }),
 
-        // Account-level singleton — report the single subscription, if any.
+        // Account-level singleton -- report the single subscription, if any.
         list: () =>
           observeSubscription.pipe(
             Effect.map((subscription) => (subscription ? [buildAttrs(subscription)] : [])),
           ),
 
         reconcile: Effect.fn(function* ({ news, session }) {
-          // 1. OBSERVE — cloud state is authoritative.
+          // 1. OBSERVE -- cloud state is authoritative.
           let subscription = yield* observeSubscription;
 
-          // 2. ENSURE — subscribe if not already; tolerate the AlreadyExists
+          // 2. ENSURE -- subscribe if not already; tolerate the AlreadyExists
           //    race.
           if (!subscription) {
             yield* shield
@@ -135,7 +135,7 @@ export const SubscriptionProvider = () =>
             }
           }
 
-          // 3. SYNC auto-renew — observed ↔ desired; AWS only accepts the
+          // 3. SYNC auto-renew -- observed <-> desired; AWS only accepts the
           //    change within 30 days of the period end, so skip the call on
           //    a no-op.
           const desiredAutoRenew = news.autoRenew ?? "ENABLED";

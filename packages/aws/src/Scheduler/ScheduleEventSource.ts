@@ -134,7 +134,7 @@ export type ScheduleEventSourceService = <Req = never>(
 ) => Effect.Effect<void, never, never>;
 
 /**
- * Consume a schedule's invocations on the host Lambda Function — the "cron
+ * Consume a schedule's invocations on the host Lambda Function -- the "cron
  * handler" DX. Build the cadence with `every`/`cron`/`at` and pass the handler
  * as the last argument; the runtime layer provisions the backing schedule,
  * the execution role, and the typed event dispatch.

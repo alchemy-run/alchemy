@@ -7,7 +7,7 @@ import * as Schedule from "effect/Schedule";
 import type { Providers } from "../Providers.ts";
 
 /**
- * An image asset (logo, favicon, background, …) attached to a managed login
+ * An image asset (logo, favicon, background, ...) attached to a managed login
  * branding style, per color mode.
  */
 export interface ManagedLoginBrandingAsset {
@@ -58,7 +58,7 @@ export interface ManagedLoginBrandingProps {
    */
   useCognitoProvidedValues?: boolean;
   /**
-   * The branding settings JSON document (colors, component styles, …) in
+   * The branding settings JSON document (colors, component styles, ...) in
    * the shape produced by the managed login branding designer / returned by
    * `DescribeManagedLoginBranding`.
    */
@@ -88,7 +88,7 @@ export interface ManagedLoginBranding extends Resource<
 /**
  * A managed login branding style for an Amazon Cognito user pool app
  * client. Assigning a style (even just Cognito's provided defaults) is what
- * activates the hosted managed login pages — a `UserPoolDomain` with
+ * activates the hosted managed login pages -- a `UserPoolDomain` with
  * `managedLoginVersion: 2` serves them end-to-end without any console step.
  * ### Activating Managed Login
  * **Example:** Default Branding for a Hosted Login Domain
@@ -218,7 +218,7 @@ export const ManagedLoginBrandingProvider = () =>
         stables: ["managedLoginBrandingId", "userPoolId", "clientId"],
 
         // Sub-resource keyed entirely by its user pool (userPoolId) with no
-        // global enumeration API of its own — nuke reaches it through the
+        // global enumeration API of its own -- nuke reaches it through the
         // parent's deletion, so enumeration returns empty per the
         // ProviderService doctrine.
         list: () => Effect.succeed([]),
@@ -252,7 +252,7 @@ export const ManagedLoginBrandingProvider = () =>
           const { userPoolId, clientId } = news;
           const useProvided = desiredUseProvidedValues(news);
 
-          // 1. OBSERVE — output.managedLoginBrandingId is only a cache;
+          // 1. OBSERVE -- output.managedLoginBrandingId is only a cache;
           //    fall back to the by-client lookup so state loss converges.
           let observed =
             output?.managedLoginBrandingId !== undefined
@@ -262,7 +262,7 @@ export const ManagedLoginBrandingProvider = () =>
             observed = yield* describeByClient(userPoolId, clientId);
           }
 
-          // 2. ENSURE — create when missing; a branding created out-of-band
+          // 2. ENSURE -- create when missing; a branding created out-of-band
           //    (or by a concurrent run) for the same client surfaces as
           //    ManagedLoginBrandingExistsException and is taken over.
           if (observed === undefined) {
@@ -284,7 +284,7 @@ export const ManagedLoginBrandingProvider = () =>
 
           const managedLoginBrandingId = observed?.ManagedLoginBrandingId!;
 
-          // 3. SYNC — diff observed style against desired; skip the update
+          // 3. SYNC -- diff observed style against desired; skip the update
           //    entirely on no-op.
           const drift =
             (observed?.UseCognitoProvidedValues ?? false) !== useProvided ||

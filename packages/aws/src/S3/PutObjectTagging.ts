@@ -9,7 +9,7 @@ export interface PutObjectTaggingRequest extends Omit<S3.PutObjectTaggingRequest
  * Runtime binding for `s3:PutObjectTagging`.
  *
  * Bind this operation to a bucket to get a callable that replaces an object's
- * tag set — the bucket name is injected automatically and
+ * tag set -- the bucket name is injected automatically and
  * `s3:PutObjectTagging`/`s3:PutObjectVersionTagging` are granted on the
  * bucket's objects. Provide the implementation with
  * `Effect.provide(AWS.S3.PutObjectTaggingHttp)`.

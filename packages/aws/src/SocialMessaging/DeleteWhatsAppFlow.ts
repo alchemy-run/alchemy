@@ -26,7 +26,7 @@ export interface DeleteWhatsAppFlowRequest extends Omit<
  * ### Managing WhatsApp Flows
  * **Example:** Delete a Flow
  * ```typescript
- * // init — bind the operation to the linked WABA
+ * // init -- bind the operation to the linked WABA
  * const deleteFlow = yield* AWS.SocialMessaging.DeleteWhatsAppFlow(account);
  *
  * // runtime

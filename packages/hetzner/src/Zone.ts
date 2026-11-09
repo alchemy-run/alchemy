@@ -49,7 +49,7 @@ export interface ZoneProps {
   /**
    * Zone mode. Primary zones are edited via the Cloud API (RRSets);
    * secondary zones are transferred from primary nameservers via AXFR.
-   * Cannot be changed after creation — triggers a replacement.
+   * Cannot be changed after creation -- triggers a replacement.
    *
    * @default "primary"
    */
@@ -121,7 +121,7 @@ export interface ZoneLookup {
 }
 
 /**
- * A Hetzner Cloud DNS zone — an apex domain hosted on Hetzner's
+ * A Hetzner Cloud DNS zone -- an apex domain hosted on Hetzner's
  * authoritative nameservers.
  *
  * The zone `name` is the identity: changing it replaces the zone. Default
@@ -338,7 +338,7 @@ export const ZoneProvider = () =>
 
       const zoneRef = String(current.id);
 
-      // 3. Sync — labels (PUT overwrites the full set)
+      // 3. Sync -- labels (PUT overwrites the full set)
       const labels = yield* desiredLabels(id, news.labels);
       const observedLabels = tagRecord(current.labels);
       if (!recordsEqual(observedLabels, labels)) {
@@ -348,7 +348,7 @@ export const ZoneProvider = () =>
         current = updated.zone;
       }
 
-      // Sync — default TTL (primary zones only; secondary ignores it)
+      // Sync -- default TTL (primary zones only; secondary ignores it)
       if (news.ttl !== undefined && news.ttl !== current.ttl && current.mode === "primary") {
         const { action } = yield* retryLocked(
           Hetzner.zoneActions.changeZoneTtl({ id_or_name: zoneRef, ttl: news.ttl }),
@@ -357,7 +357,7 @@ export const ZoneProvider = () =>
         current = (yield* getZoneBy(zoneRef)) ?? current;
       }
 
-      // Sync — delete protection
+      // Sync -- delete protection
       const desiredProtection = news.deleteProtection ?? false;
       if (current.protection.delete !== desiredProtection) {
         const { action } = yield* retryLocked(

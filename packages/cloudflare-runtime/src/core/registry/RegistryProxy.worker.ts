@@ -332,7 +332,7 @@ export class ExternalService extends WorkerEntrypoint<Env, Subscriber.Worker> {
    * session. We call the remote worker's `tailStream()` over the debug port;
    * the handler it returns comes back as an RPC stub (a callable function
    * stub, or an object whose per-event-type members are stubs), which stays
-   * alive for the duration of this invocation — exactly the lifetime of the
+   * alive for the duration of this invocation -- exactly the lifetime of the
    * streaming session. Each event is round-tripped through JSON (preserving
    * Dates/BigInts) because `TailEvent`s are host objects that cannot be
    * serialized over RPC directly.

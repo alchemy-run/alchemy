@@ -6,7 +6,7 @@ import type { MetricStream } from "./MetricStream.ts";
 export interface GetMetricStreamRequest extends Omit<cloudwatch.GetMetricStreamInput, "Name"> {}
 
 /**
- * Runtime binding for `cloudwatch:GetMetricStream` — read the
+ * Runtime binding for `cloudwatch:GetMetricStream` -- read the
  * configuration and state of the bound {@link MetricStream}; the stream
  * name is injected automatically.
  *
@@ -15,7 +15,7 @@ export interface GetMetricStreamRequest extends Omit<cloudwatch.GetMetricStreamI
  * ### Reading Metric Streams
  * **Example:** Read a Bound Metric Stream
  * ```typescript
- * // init — grants cloudwatch:GetMetricStream on the stream
+ * // init -- grants cloudwatch:GetMetricStream on the stream
  * const getMetricStream = yield* AWS.CloudWatch.GetMetricStream(metricStream);
  *
  * // runtime

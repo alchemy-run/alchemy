@@ -75,12 +75,12 @@ export const createHostRuntimeContext =
         Effect.sync(() => {
           const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
           // `packEnvValue` marker-packs Redacted values so they survive the
-          // Output → env round-trip.
+          // Output -> env round-trip.
           env[key] = output.pipe(Output.map(packEnvValue));
           return key;
         }),
       get: <T>(key: string) =>
-        // Read straight from `process.env` — see `unpackEnvValue` for why
+        // Read straight from `process.env` -- see `unpackEnvValue` for why
         // this must never resolve through `Config.String`.
         // oxlint-disable-next-line effecttsgo/process-env-in-effect -- must read process.env directly, never through Config (see unpackEnvValue)
         Effect.sync(() => unpackEnvValue<T>(process.env[key]) as T),
@@ -134,7 +134,7 @@ export const createContainerRuntimeContext =
   (id: string): HostRuntimeContext => {
     const base = createHostRuntimeContext(type)(id);
     // Capture the host serve BEFORE Object.assign overwrites `base.serve`
-    // with the wrapper below — calling `base.serve` inside the wrapper would
+    // with the wrapper below -- calling `base.serve` inside the wrapper would
     // resolve to the wrapper itself (property lookup happens at call time)
     // and recurse without bound the moment an impl declares `fetch`.
     const serveBase = base.serve;
@@ -146,7 +146,7 @@ export const createContainerRuntimeContext =
           // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- `run` is a user program; the host runner surfaces its failures
           yield* base.run(run as Effect.Effect<void, never, any>);
         }
-        // Boot the HTTP server only for an impl that declared `fetch` — a
+        // Boot the HTTP server only for an impl that declared `fetch` -- a
         // pure one-shot `{ run }` program must exit when `run` completes
         // rather than parking behind the 404 fallback server forever.
         if (shape === undefined || shape.fetch !== undefined) {

@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 export interface GetMetricStatisticsRequest extends cloudwatch.GetMetricStatisticsInput {}
 
 /**
- * Runtime binding for `cloudwatch:GetMetricStatistics` — fetch aggregated
+ * Runtime binding for `cloudwatch:GetMetricStatistics` -- fetch aggregated
  * datapoints for a single metric (the older single-metric query API;
  * prefer {@link GetMetricData} for metric math or multi-metric queries).
  *
@@ -14,7 +14,7 @@ export interface GetMetricStatisticsRequest extends cloudwatch.GetMetricStatisti
  * ### Querying Metrics
  * **Example:** Fetch Hourly Sums for a Metric
  * ```typescript
- * // init — grants cloudwatch:GetMetricStatistics
+ * // init -- grants cloudwatch:GetMetricStatistics
  * const getMetricStatistics = yield* AWS.CloudWatch.GetMetricStatistics();
  *
  * // runtime

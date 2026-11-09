@@ -62,12 +62,12 @@ export type DatastoreProps = {
   /**
    * Datastore id (the `{datastore}` segment of
    * `projects/{project}/locations/{location}/datastores/{datastore}`).
-   * If omitted, a unique RFC1035 name is generated. Immutable — changing
+   * If omitted, a unique RFC1035 name is generated. Immutable -- changing
    * it replaces the datastore.
    */
   datastoreId?: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). Immutable — changing it
+   * Region (`us-central1`, `us-east1`, ...). Immutable -- changing it
    * replaces the datastore. `US-CENTRAL1` is accepted and normalized.
    * @default the stack's GCP region (`GCP.Region`, else the profile
    *   region, else `us-central1`)
@@ -80,7 +80,7 @@ export type DatastoreProps = {
   nfsDatastore: NfsDatastore;
   /**
    * Human-readable description. Datastores have no labels field, so
-   * Alchemy stamps ownership into a `[alchemy …]` prefix and strips it
+   * Alchemy stamps ownership into a `[alchemy ...]` prefix and strips it
    * from attributes.
    */
   description?: string;
@@ -132,7 +132,7 @@ export interface DatastoreLookup {
    */
   datastoreId: string;
   /**
-   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * Region (`us-central1`, `us-east1`, ...). `US-CENTRAL1` is accepted and
    * normalized.
    */
   location?: string;

@@ -13,7 +13,7 @@ const build = Command.make(
   {},
   Effect.fn(function* () {
     // Build, then persist the BuildOutput to dist/build.json (the harness's
-    // E2E persistence mechanism — `e2e preview` serves from it).
+    // E2E persistence mechanism -- `e2e preview` serves from it).
     yield* Server.buildAndPersist;
   }),
 );

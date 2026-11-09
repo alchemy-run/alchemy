@@ -16,7 +16,7 @@ import {
 } from "./Browser.ts";
 
 // Shared HTTP scaffolding for the Browser Rendering binding. NOT re-exported
-// from `index.ts` — only the contract and the impl layers are public. A future
+// from `index.ts` -- only the contract and the impl layers are public. A future
 // token-scoped `BrowserHttp` layer reuses this builder with an auth minted from
 // an `AccountApiToken`; `BrowserLocal` builds the auth from the ambient
 // current-credentials context.
@@ -42,11 +42,11 @@ type BrowserByteStream = Stream.Stream<Uint8Array, BrowserError, RuntimeContext>
  * (`/accounts/{id}/browser-rendering/*`).
  *
  * The following client members `Effect.die` (or fail the stream) because they
- * have no Cloudflare REST equivalent — use a native `BrowserBinding` inside a
+ * have no Cloudflare REST equivalent -- use a native `BrowserBinding` inside a
  * deployed Worker for them:
- * - `raw` / `fetch` — the raw `BrowserRun` transport used by
+ * - `raw` / `fetch` -- the raw `BrowserRun` transport used by
  *   `@cloudflare/puppeteer` is a Worker-runtime object, not an HTTP call.
- * - `screenshot` / `pdf` — the binary endpoints stream image/PDF bytes, which
+ * - `screenshot` / `pdf` -- the binary endpoints stream image/PDF bytes, which
  *   the distilled REST codec models as JSON status, not a byte stream.
  *
  * Because the REST data-plane only returns the action `result` (not the
@@ -141,7 +141,7 @@ export const makeHttpBrowserClient = (auth: BrowserAuth): BrowserClient => {
     );
 
   // Binary actions have no REST byte-stream equivalent through the distilled
-  // codec — fail the stream with a defect explaining the native-binding path.
+  // codec -- fail the stream with a defect explaining the native-binding path.
   const binaryUnsupported = (action: string): BrowserByteStream =>
     Stream.fromEffect(
       Effect.die(
@@ -173,7 +173,7 @@ export const makeHttpBrowserClient = (auth: BrowserAuth): BrowserClient => {
   return {
     raw: Effect.die(
       new Error(
-        "Browser over HTTP: `raw` (the native BrowserRun binding) is only available inside a deployed Worker — use BrowserBinding.",
+        "Browser over HTTP: `raw` (the native BrowserRun binding) is only available inside a deployed Worker \u2014 use BrowserBinding.",
       ),
     ),
     fetch: () =>

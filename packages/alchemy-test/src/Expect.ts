@@ -34,7 +34,7 @@ export class AssertionError extends Error {
 }
 
 // ---------------------------------------------------------------------------
-// stringify — small, cycle-safe inspector for failure messages
+// stringify -- small, cycle-safe inspector for failure messages
 // ---------------------------------------------------------------------------
 
 const MAX_DEPTH = 4;
@@ -44,7 +44,7 @@ const MAX_STRING = 2000;
 export const stringify = (value: unknown): string => {
   try {
     const out = inspect(value, 0, new Set());
-    return out.length > MAX_STRING ? `${out.slice(0, MAX_STRING)}…` : out;
+    return out.length > MAX_STRING ? `${out.slice(0, MAX_STRING)}\u2026` : out;
   } catch {
     // Coercion-hostile values (e.g. alchemy Output proxies throw on string
     // coercion) must never break assertion-message rendering.
@@ -81,12 +81,12 @@ const inspectUnsafe = (value: unknown, depth: number, seen: Set<unknown>): strin
   if (value instanceof RegExp) return value.toString();
   if (value instanceof Error) return `${value.name}(${JSON.stringify(value.message)})`;
   if (seen.has(value)) return "[Circular]";
-  if (depth > MAX_DEPTH) return Array.isArray(value) ? "[…]" : "{…}";
+  if (depth > MAX_DEPTH) return Array.isArray(value) ? "[\u2026]" : "{\u2026}";
   seen.add(value);
   try {
     if (Array.isArray(value)) {
       const items = value.slice(0, MAX_ITEMS).map((v) => inspect(v, depth + 1, seen));
-      if (value.length > MAX_ITEMS) items.push(`… ${value.length - MAX_ITEMS} more`);
+      if (value.length > MAX_ITEMS) items.push(`\u2026 ${value.length - MAX_ITEMS} more`);
       return `[ ${items.join(", ")} ]`;
     }
     if (value instanceof Map) {
@@ -181,7 +181,7 @@ const eq = (a: unknown, b: unknown, strict: boolean, seen: Map<unknown, unknown>
     }
     if (a instanceof Error || b instanceof Error) {
       // Vitest semantics: errors match on class, message and own enumerable
-      // fields (e.g. Data.TaggedError payloads) — never on `stack`.
+      // fields (e.g. Data.TaggedError payloads) -- never on `stack`.
       if (!(a instanceof Error) || !(b instanceof Error)) return false;
       if (a.name !== b.name || a.message !== b.message) return false;
       const fieldsOf = (error: Error): Record<string, unknown> => {
@@ -372,7 +372,7 @@ const check = (
 
 const resolveThrown = (actual: unknown): { threw: boolean; error: unknown } => {
   if (typeof actual !== "function") {
-    // expect(error).toThrow — vitest allows passing an already-caught error
+    // expect(error).toThrow -- vitest allows passing an already-caught error
     return { threw: true, error: actual };
   }
   try {

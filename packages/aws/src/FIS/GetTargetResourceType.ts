@@ -5,14 +5,14 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `fis:GetTargetResourceType`.
  *
- * Reads a single targetable resource type from the FIS catalog — its
+ * Reads a single targetable resource type from the FIS catalog -- its
  * description and the parameters targets of that type accept (e.g.
  * `aws:ec2:instance`). Provide the implementation with
  * `Effect.provide(AWS.FIS.GetTargetResourceTypeHttp)`.
  * ### Browsing the Action Catalog
  * **Example:** Inspect a Target Resource Type
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getTargetResourceType = yield* AWS.FIS.GetTargetResourceType();
  *
  * // runtime

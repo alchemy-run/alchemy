@@ -160,7 +160,7 @@ const cloudflareAdapter: ReturnType<
         res = app.fetch(req);
       }
       // Workaround https://github.com/cloudflare/workers-sdk/issues/6577
-      // NOTE: must stay the literal `import.meta.env?.PROD` expression — the
+      // NOTE: must stay the literal `import.meta.env?.PROD` expression -- the
       // bundler replaces it statically; any other access pattern throws
       // "[module runner] Dynamic access of import.meta.env" in dev.
       if (import.meta.env?.PROD && !isProductionWorker(req)) {
@@ -202,7 +202,7 @@ const cloudflareAdapter: ReturnType<
         await server.close();
       },
       buildOptions,
-      // Upstream lists its build-enhancer module here — the ONLY
+      // Upstream lists its build-enhancer module here -- the ONLY
       // wrangler-config writer in waku. Dropped: no wrangler files, ever.
       buildEnhancers: [],
       defaultExport: {

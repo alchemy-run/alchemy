@@ -53,7 +53,7 @@ export interface RuleProps {
   /**
    * Zone the rule applies to.
    *
-   * Stable — moving a rule between zones triggers a replacement.
+   * Stable -- moving a rule between zones triggers a replacement.
    */
   zoneId: string;
   /**
@@ -78,7 +78,7 @@ export interface RuleProps {
    */
   action: RuleAction;
   /**
-   * Rule expression — requests that fail it are subject to `action`,
+   * Rule expression -- requests that fail it are subject to `action`,
    * e.g. `is_jwt_valid("<configId>")`. Reference a
    * {@link TokenConfiguration} by interpolating its `configId` output.
    */
@@ -124,7 +124,7 @@ export interface RuleAttributes {
 export type Rule = Resource<TypeId, RuleProps, RuleAttributes, never, Providers>;
 
 /**
- * An API Shield JWT validation rule — selects operations/hosts on a zone
+ * An API Shield JWT validation rule -- selects operations/hosts on a zone
  * and enforces a token validation expression with a `log` or `block`
  * action.
  *
@@ -133,7 +133,7 @@ export type Rule = Resource<TypeId, RuleProps, RuleAttributes, never, Providers>
  * depending on the configuration through its output so destroy order is
  * rule first, configuration second.
  *
- * JWT validation is an API Shield feature (Enterprise add-on) — accounts
+ * JWT validation is an API Shield feature (Enterprise add-on) -- accounts
  * without the entitlement receive the typed `TokenValidationNotEntitled`
  * error (Cloudflare code 10403) on every call.
  *
@@ -212,7 +212,7 @@ export const RuleProvider = () =>
         if (observed) return toAttributes(observed, zoneId);
       }
 
-      // Cold read — recover from lost state by matching the deterministic
+      // Cold read -- recover from lost state by matching the deterministic
       // physical title (client-side; the list API cannot filter by title).
       // Rules carry no ownership markers, so an existing match is reported
       // as `Unowned` and the engine gates takeover behind the adopt policy.
@@ -239,11 +239,11 @@ export const RuleProvider = () =>
         selector: toApiSelector(news.selector),
       };
 
-      // 1. Observe — the UUID cached on `output` is a hint, not a
+      // 1. Observe -- the UUID cached on `output` is a hint, not a
       //    guarantee: a 404 falls through to "missing" and we recreate.
       const observed = output?.ruleId ? yield* getRule(zoneId, output.ruleId) : undefined;
 
-      // 2. Ensure — greenfield (or out-of-band delete): create with the
+      // 2. Ensure -- greenfield (or out-of-band delete): create with the
       //    full desired body. Titles are not unique on Cloudflare's side,
       //    so there is no AlreadyExists race to tolerate.
       if (!observed) {
@@ -263,9 +263,9 @@ export const RuleProvider = () =>
         return toAttributes(created, zoneId);
       }
 
-      // 3. Sync — diff observed cloud state against desired field by
+      // 3. Sync -- diff observed cloud state against desired field by
       //    field; PATCH only when something differs (or an explicit
-      //    `position` must be enforced — ordering cannot be observed
+      //    `position` must be enforced -- ordering cannot be observed
       //    cheaply, so a set position is re-asserted on every deploy).
       const dirty =
         observed.title !== desired.title ||
@@ -297,7 +297,7 @@ export const RuleProvider = () =>
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       // Token validation rules live inside a zone with no account-wide
-      // enumeration API — fan out across every zone and list rules per
+      // enumeration API -- fan out across every zone and list rules per
       // zone, paginating each zone exhaustively.
       const zones = yield* listAllZones(accountId);
       const rows = yield* Effect.forEach(
@@ -312,7 +312,7 @@ export const RuleProvider = () =>
             ),
             // JWT validation is an API Shield (Enterprise) feature; zones
             // without the entitlement, or with partial permissions, reject
-            // the route — skip them rather than failing the whole listing.
+            // the route -- skip them rather than failing the whole listing.
             Effect.catchTag(["TokenValidationNotEntitled", "Forbidden"], () =>
               Effect.succeed([] as RuleAttributes[]),
             ),

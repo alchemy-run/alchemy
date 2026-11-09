@@ -274,7 +274,7 @@ export const CachePolicyProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* createName(id, news);
 
-          // Observe — locate the policy by id (cached on `output`) or by
+          // Observe -- locate the policy by id (cached on `output`) or by
           // name. Trust observed cloud state, not stale `olds`.
           let observed = output?.cachePolicyId
             ? yield* getById(output.cachePolicyId).pipe(
@@ -285,7 +285,7 @@ export const CachePolicyProvider = () =>
             observed = yield* getByName(name);
           }
 
-          // Ensure — create the policy if it's missing. Tolerate
+          // Ensure -- create the policy if it's missing. Tolerate
           // `CachePolicyAlreadyExists` as a race with a peer reconciler:
           // re-read by name and continue with the sync path.
           if (!observed) {
@@ -329,7 +329,7 @@ export const CachePolicyProvider = () =>
             );
           }
 
-          // Sync — diff observed config against desired and patch via
+          // Sync -- diff observed config against desired and patch via
           // `updateCachePolicy` with the freshly observed ETag.
           const desired = buildConfig(observed.config.Name, news);
           const updated = yield* cloudfront.updateCachePolicy({

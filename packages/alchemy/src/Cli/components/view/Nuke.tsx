@@ -84,7 +84,7 @@ export function NukeProgress({ store }: { store: NukeProgressStore }) {
           </Row>
         ))}
         {state.inFlight.length > 10 ? (
-          <Text tone="muted">…and {state.inFlight.length - 10} more</Text>
+          <Text tone="muted">&#x2026;and {state.inFlight.length - 10} more</Text>
         ) : null}
         {state.total === 0 ? (
           <Row gap={1}>

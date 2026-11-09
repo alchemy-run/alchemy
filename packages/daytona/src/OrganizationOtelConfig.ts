@@ -112,7 +112,7 @@ export const OrganizationOtelConfigProvider = () =>
       }),
       reconcile: Effect.fn(function* ({ news, olds }) {
         const organizationId = yield* organizationIdFor(news.organization);
-        // Observe — header values aren't returned, so they are written
+        // Observe -- header values aren't returned, so they are written
         // whenever they changed since the last deploy (or on first deploy).
         const current = yield* observeOtelConfig(organizationId);
         const headers = plainHeaders(news.headers);

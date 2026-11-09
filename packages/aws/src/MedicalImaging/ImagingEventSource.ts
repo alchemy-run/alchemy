@@ -8,26 +8,26 @@ import {
 
 /**
  * The `detail` payload AWS HealthImaging delivers to EventBridge. Which
- * fields are present depends on the event kind — import job events carry
+ * fields are present depends on the event kind -- import job events carry
  * `jobId`/`jobStatus`, image set events carry
  * `imageSetId`/`imageSetState`/`imageSetWorkflowStatus`, data store events
- * carry only the data store fields — so everything event-specific is
+ * carry only the data store fields -- so everything event-specific is
  * optional.
  */
 export interface MedicalImagingEventDetail {
   /** Id of the data store the event originates from. */
   datastoreId?: string;
-  /** Data store lifecycle status on `Data Store …` events. */
+  /** Data store lifecycle status on `Data Store ...` events. */
   datastoreStatus?: string;
-  /** Import job id on `Import Job …` events. */
+  /** Import job id on `Import Job ...` events. */
   jobId?: string;
   /** Import job status (`SUBMITTED`, `IN_PROGRESS`, `COMPLETED`, `FAILED`). */
   jobStatus?: string;
-  /** Image set id on `Image Set …` events. */
+  /** Image set id on `Image Set ...` events. */
   imageSetId?: string;
   /** Image set state (`ACTIVE`, `LOCKED`, `DELETED`). */
   imageSetState?: string;
-  /** Image set workflow status (`CREATED`, `COPIED`, `UPDATED`, …). */
+  /** Image set workflow status (`CREATED`, `COPIED`, `UPDATED`, ...). */
   imageSetWorkflowStatus?: string;
   /** Additional event fields (the schema grows over time). */
   [key: string]: unknown;
@@ -69,7 +69,7 @@ export interface ImagingEventSourceProps extends EventRouteProps {
  * (e.g. read the new image sets with `SearchImageSets` +
  * `GetImageSetMetadata`) or alert on failures.
  *
- * HealthImaging publishes to EventBridge automatically — no additional
+ * HealthImaging publishes to EventBridge automatically -- no additional
  * resource is created besides the EventBridge rule targeting the host.
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.

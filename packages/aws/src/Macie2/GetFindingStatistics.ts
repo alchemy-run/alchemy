@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `macie2:GetFindingStatistics`.
  *
  * Retrieves (queries) aggregated statistical data about findings.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.Macie2.GetFindingStatisticsHttp)`.
  * ### Working with Findings
  * **Example:** Group Findings by Severity
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getFindingStatistics = yield* AWS.Macie2.GetFindingStatistics();
  *
  * // runtime

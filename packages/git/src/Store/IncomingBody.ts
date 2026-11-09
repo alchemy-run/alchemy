@@ -21,7 +21,7 @@ import type { StreamingFeeder } from "./StreamingSource.ts";
 export const HEAD_BYTES = 1024 * 1024;
 
 /**
- * Uniform multipart part size — also the hasher part size, since each
+ * Uniform multipart part size -- also the hasher part size, since each
  * hasher isolate writes the part it verifies (DESIGN §22.10). 8 MiB is
  * above R2's 5 MiB minimum and its 10,000-part limit still allows ~78 GiB.
  */

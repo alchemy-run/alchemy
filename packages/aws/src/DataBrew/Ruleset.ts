@@ -99,7 +99,7 @@ export interface RulesetLookup {
 }
 
 /**
- * An AWS Glue DataBrew ruleset — a set of data-quality rules bound to a
+ * An AWS Glue DataBrew ruleset -- a set of data-quality rules bound to a
  * dataset. Attach it to a profile job via `validationConfigurations` to
  * produce pass/fail validation results alongside the data profile.
  * ### Creating Rulesets
@@ -245,7 +245,7 @@ export const RulesetProvider = () =>
           // 1. OBSERVE
           const ruleset = yield* observe(name);
 
-          // 2. ENSURE / 3. SYNC — UpdateRuleset is a full PUT of the rules
+          // 2. ENSURE / 3. SYNC -- UpdateRuleset is a full PUT of the rules
           if (ruleset === undefined) {
             yield* databrew
               .createRuleset({

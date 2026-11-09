@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `resource-groups:GetAccountSettings`.
  *
- * Reads the account's Resource Groups settings — most importantly whether
+ * Reads the account's Resource Groups settings -- most importantly whether
  * group lifecycle events (the EventBridge feed consumed by
  * {@link consumeGroupEvents}) are `ACTIVE`, `INACTIVE`, or stuck in
  * `ERROR`. Provide the implementation with

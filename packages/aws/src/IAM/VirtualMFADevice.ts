@@ -214,7 +214,7 @@ export const VirtualMFADeviceProvider = () =>
             ...news.tags,
           };
 
-          // Observe — virtual MFA devices have AWS-generated serial
+          // Observe -- virtual MFA devices have AWS-generated serial
           // numbers, so we can only locate the existing device when we
           // already have its serial from a prior output.
           const observed = output
@@ -224,7 +224,7 @@ export const VirtualMFADeviceProvider = () =>
               })
             : undefined;
 
-          // Ensure — create the device when missing. The seed and QR
+          // Ensure -- create the device when missing. The seed and QR
           // code are only returned on creation, so on adoption the best
           // we can do is preserve the existing redacted values.
           let serialNumber = observed?.SerialNumber ?? output?.serialNumber;

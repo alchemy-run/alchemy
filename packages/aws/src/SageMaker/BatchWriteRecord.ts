@@ -21,7 +21,7 @@ export interface BatchWriteRecordRequest {
 }
 
 /**
- * Runtime binding for `sagemaker:BatchWriteRecord` — bulk-ingest records
+ * Runtime binding for `sagemaker:BatchWriteRecord` -- bulk-ingest records
  * into a `FeatureGroup`'s online (and offline) store in one call.
  *
  * Bind this operation to a `FeatureGroup` inside a function runtime to get a

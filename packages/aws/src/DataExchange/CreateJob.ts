@@ -5,10 +5,10 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `dataexchange:CreateJob`.
  *
- * Creates an import/export job — the Data Exchange work unit that moves
+ * Creates an import/export job -- the Data Exchange work unit that moves
  * assets between S3 (or signed URLs, Redshift datashares, API Gateway
  * APIs, Lake Formation permissions) and a revision. Import/export jobs
- * additionally need S3 permissions on the source/destination bucket —
+ * additionally need S3 permissions on the source/destination bucket --
  * attach the matching `AWS.S3` bindings to the same host.
  * Provide the implementation with
  * `Effect.provide(AWS.DataExchange.CreateJobHttp)`.

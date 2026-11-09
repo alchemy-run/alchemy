@@ -7,12 +7,12 @@ import type { EventDataStore } from "./EventDataStore.ts";
  * Runtime binding for `cloudtrail:DescribeQuery`.
  *
  * Reads a CloudTrail Lake query's status, statistics, and error message by
- * `QueryId` — the polling half of the start/poll/results flow. Provide the
+ * `QueryId` -- the polling half of the start/poll/results flow. Provide the
  * implementation with `Effect.provide(AWS.CloudTrail.DescribeQueryHttp)`.
  * ### Querying CloudTrail Lake
  * **Example:** Poll a Query to Completion
  * ```typescript
- * // init — bind the operation to the event data store
+ * // init -- bind the operation to the event data store
  * const describeQuery = yield* AWS.CloudTrail.DescribeQuery(store);
  *
  * // runtime

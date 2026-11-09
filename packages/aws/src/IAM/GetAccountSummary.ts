@@ -3,9 +3,9 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `iam:GetAccountSummary` — read IAM entity usage and
+ * Runtime binding for `iam:GetAccountSummary` -- read IAM entity usage and
  * quota counters for the account (`Users`, `Roles`, `PoliciesQuota`, `MFADevices`,
- * `AccountMFAEnabled`, …). The quick health snapshot behind quota alarms and
+ * `AccountMFAEnabled`, ...). The quick health snapshot behind quota alarms and
  * security dashboards.
  *
  * Account-singleton operation: the binding takes no arguments and grants

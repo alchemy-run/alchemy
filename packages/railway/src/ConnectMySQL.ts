@@ -10,7 +10,7 @@ import type { MySQL } from "./MySQL.ts";
  * the Effect-native connection string for `Drizzle.MySQL` /
  * `SQL.MySQL`.
  *
- * `ConnectMySQL` is the Context tag, the type, and the callable —
+ * `ConnectMySQL` is the Context tag, the type, and the callable --
  * `yield* Railway.ConnectMySQL(Db)`. Provide {@link ConnectMySQLHttp}.
  *
  * **Example:** Bind MySQL in a Service
@@ -73,7 +73,7 @@ export interface ConnectMySQLClient {
    */
   connectionString: Effect.Effect<Redacted.Redacted<string>, MySQLUrlMissing, RuntimeContext>;
   /**
-   * Same private URI — Railway MySQL has no proxy-pooler split. Kept so
+   * Same private URI -- Railway MySQL has no proxy-pooler split. Kept so
    * callers matching the `ConnectPostgres` shape keep working.
    */
   directConnectionString: Effect.Effect<Redacted.Redacted<string>, MySQLUrlMissing, RuntimeContext>;

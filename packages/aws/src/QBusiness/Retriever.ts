@@ -31,7 +31,7 @@ export interface RetrieverProps {
    */
   applicationId: string;
   /**
-   * The retriever type — `NATIVE_INDEX` (an Amazon Q Business index) or
+   * The retriever type -- `NATIVE_INDEX` (an Amazon Q Business index) or
    * `KENDRA_INDEX` (an existing Amazon Kendra index). Changing it replaces
    * the retriever.
    */
@@ -42,7 +42,7 @@ export interface RetrieverProps {
    */
   displayName?: string;
   /**
-   * The index the retriever queries — `nativeIndexConfiguration` for a
+   * The index the retriever queries -- `nativeIndexConfiguration` for a
    * `NATIVE_INDEX` retriever, `kendraIndexConfiguration` for a
    * `KENDRA_INDEX` retriever.
    */
@@ -116,7 +116,7 @@ export type RetrieverLookup =
     };
 
 /**
- * An Amazon Q Business retriever — the query engine that fetches relevant
+ * An Amazon Q Business retriever -- the query engine that fetches relevant
  * passages from an index (native or Kendra) to ground chat responses.
  *
  * ### Creating Retrievers
@@ -211,7 +211,7 @@ const findRetrieverByName = Effect.fn(function* (applicationId: string, displayN
 });
 
 /**
- * A retriever still transitioning toward `ACTIVE` — retried by
+ * A retriever still transitioning toward `ACTIVE` -- retried by
  * {@link waitForRetrieverActive}'s bounded schedule.
  */
 class RetrieverNotReady extends Data.TaggedError("RetrieverNotReady")<{
@@ -227,7 +227,7 @@ export class RetrieverProvisioningFailed extends Data.TaggedError("RetrieverProv
   readonly retrieverId: string;
 }> {}
 
-// Explicitly-typed retry wrapper — an inline `Effect.retry` in provider
+// Explicitly-typed retry wrapper -- an inline `Effect.retry` in provider
 // lifecycle code leaks `Retry.Return`'s conditional type into declaration
 // emit and widens the provider layer to `unknown` for every consumer of
 // `AWS.providers()`.
@@ -261,7 +261,7 @@ export const RetrieverProvider = () =>
       return {
         stables: ["retrieverId", "applicationId", "retrieverArn"],
         // Keyed by a parent application; cannot be enumerated account-wide
-        // without iterating every application — treated as a sub-resource per
+        // without iterating every application -- treated as a sub-resource per
         // the factory list() convention.
         list: () => Effect.succeed([]),
         lookup: Effect.fn(function* (props) {
@@ -301,13 +301,13 @@ export const RetrieverProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // Observe — prefer the cached id; fall back to a name lookup so a
+          // Observe -- prefer the cached id; fall back to a name lookup so a
           // create whose state failed to persist is adopted, not duplicated.
           let state = output?.retrieverId
             ? yield* readRetrieverById(applicationId, output.retrieverId)
             : yield* findRetrieverByName(applicationId, displayName);
 
-          // Ensure — create if missing, then wait for ACTIVE.
+          // Ensure -- create if missing, then wait for ACTIVE.
           if (state === undefined) {
             const created = yield* qbusiness.createRetriever({
               applicationId,
@@ -335,7 +335,7 @@ export const RetrieverProvider = () =>
             }
           }
 
-          // Sync mutable settings via UpdateRetriever — only when drifted.
+          // Sync mutable settings via UpdateRetriever -- only when drifted.
           const described = state.described;
           const desiredNativeIndexId = news.configuration.nativeIndexConfiguration?.indexId;
           const observedNativeIndexId = described.configuration?.nativeIndexConfiguration?.indexId;
@@ -358,7 +358,7 @@ export const RetrieverProvider = () =>
             yield* session.note(`Updated retriever ${displayName}`);
           }
 
-          // Sync tags — diff against observed cloud tags.
+          // Sync tags -- diff against observed cloud tags.
           const { removed, upsert } = diffTags(state.attrs.tags, desiredTags);
           if (removed.length > 0) {
             yield* qbusiness.untagResource({

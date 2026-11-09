@@ -33,12 +33,12 @@ export type GroupProps = {
   /**
    * Group id (the `{group}` segment of
    * `projects/{project}/locations/{location}/groups/{group}`). If omitted,
-   * a unique RFC1035 name is generated. Immutable — changing it replaces
+   * a unique RFC1035 name is generated. Immutable -- changing it replaces
    * the group.
    */
   groupId?: string;
   /**
-   * Region (`us-central1`, …). Immutable — changing it replaces the
+   * Region (`us-central1`, ...). Immutable -- changing it replaces the
    * group. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
    */
@@ -49,12 +49,12 @@ export type GroupProps = {
   displayName?: string;
   /**
    * Free-text description. Groups have no labels field, so Alchemy
-   * ownership is stored in a `[alchemy …]` prefix and stripped from
+   * ownership is stored in a `[alchemy ...]` prefix and stripped from
    * attributes.
    */
   description?: string;
   /**
-   * Target type of this group. Immutable — changing it replaces the
+   * Target type of this group. Immutable -- changing it replaces the
    * group.
    * @default "MIGRATION_TARGET_TYPE_GCE"
    */
@@ -100,7 +100,7 @@ export interface GroupLookup {
    */
   groupId: string;
   /**
-   * Region (`us-central1`, …). `US-CENTRAL1` is accepted and normalized to
+   * Region (`us-central1`, ...). `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    */
   location?: string;
@@ -115,7 +115,7 @@ export interface GroupLookup {
  * A VM Migration group that bundles migrating VMs so they can be
  * managed together.
  *
- * Groups have no labels field — Alchemy stamps ownership into the
+ * Groups have no labels field -- Alchemy stamps ownership into the
  * description so `list` / nuke can find them. `groupId`, `location`, and
  * `migrationTargetType` are immutable. Display name and description
  * update in place.

@@ -8,7 +8,7 @@ import type * as Effect from "effect/Effect";
 export interface CreateTokenRequest extends licensemanager.CreateTokenRequest {}
 
 /**
- * Runtime binding for `license-manager:CreateToken` — mint a long-lived
+ * Runtime binding for `license-manager:CreateToken` -- mint a long-lived
  * refresh token for a license. The token (a claims-based JWT, `Redacted`
  * end-to-end) is distributed to license consumers, who exchange it for
  * temporary credentials with `GetAccessToken` +
@@ -22,7 +22,7 @@ export interface CreateTokenRequest extends licensemanager.CreateTokenRequest {}
  * // init
  * const createToken = yield* AWS.LicenseManager.CreateToken();
  *
- * // runtime — Token is Redacted; hand it to the consumer without logging it
+ * // runtime -- Token is Redacted; hand it to the consumer without logging it
  * const { TokenId, Token } = yield* createToken({
  *   LicenseArn: licenseArn,
  *   ClientToken: crypto.randomUUID(),

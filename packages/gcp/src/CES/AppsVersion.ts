@@ -30,7 +30,7 @@ export type AppsVersionProps = {
   /**
    * Parent CES app. Full name
    * `projects/{project}/locations/{location}/apps/{app}` or the app id
-   * (combined with `location`). Immutable — changing it replaces the
+   * (combined with `location`). Immutable -- changing it replaces the
    * version.
    */
   app: string;
@@ -40,7 +40,7 @@ export type AppsVersionProps = {
    */
   location?: string;
   /**
-   * App version id. If omitted, a unique name is generated. Immutable —
+   * App version id. If omitted, a unique name is generated. Immutable --
    * changing it replaces the version.
    */
   appVersionId?: string;
@@ -115,7 +115,7 @@ export interface AppsVersionLookup {
 }
 
 /**
- * A Customer Engagement Suite app version — an immutable snapshot of an
+ * A Customer Engagement Suite app version -- an immutable snapshot of an
  * app at a point in time.
  *
  * Versions have no labels field and no patch RPC. Alchemy stamps

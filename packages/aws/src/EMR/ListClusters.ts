@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `elasticmapreduce:ListClusters` — lists the account's EMR clusters (optionally filtered by state or creation window) — the building block of cluster-inventory automation.
+ * Runtime binding for `elasticmapreduce:ListClusters` -- lists the account's EMR clusters (optionally filtered by state or creation window) -- the building block of cluster-inventory automation.
  * ### Discovering Clusters
  * **Example:** List Active Clusters
  * ```typescript

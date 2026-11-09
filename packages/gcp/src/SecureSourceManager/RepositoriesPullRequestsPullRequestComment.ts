@@ -56,7 +56,7 @@ export type RepositoriesPullRequestsPullRequestCommentProps = {
   /**
    * Parent pull request. Full name
    * `projects/{project}/locations/{location}/repositories/{repository}/pullRequests/{pullRequest}`
-   * or the pull-request id (combined with `repository`). Immutable —
+   * or the pull-request id (combined with `repository`). Immutable --
    * changing it replaces the comment.
    */
   pullRequest: string;
@@ -70,7 +70,7 @@ export type RepositoriesPullRequestsPullRequestCommentProps = {
    */
   location?: string;
   /**
-   * Server-assigned comment id. Set after create. Immutable — changing
+   * Server-assigned comment id. Set after create. Immutable -- changing
    * it replaces the comment.
    */
   commentId?: string;
@@ -140,7 +140,7 @@ export type RepositoriesPullRequestsPullRequestComment = Resource<
  * Comment ids are server-assigned. Changing `commentId` or `pullRequest`
  * replaces the comment. Body updates in place. Ownership for `list` /
  * nuke is stamped into the comment body (comments have no labels field).
- * Create a general `comment`, a `review`, or a `code` reply — batch
+ * Create a general `comment`, a `review`, or a `code` reply -- batch
  * review-plus-code threads use the distilled batch-create API.
  *
  * ### Creating a Pull Request Comment

@@ -6,7 +6,7 @@ import { makeReadSubscriptionClient } from "./ReadSubscriptionHttp.ts";
 import type { Subscription } from "./Subscription.ts";
 
 /**
- * Local implementation of the {@link ReadSubscription} service — leases
+ * Local implementation of the {@link ReadSubscription} service -- leases
  * batches over the K2 subscription HTTP API with the **current
  * credentials** instead of a scoped token. Provide it on an Action (or any
  * deploy-time Effect), or on a polling event source run in-process.
@@ -38,7 +38,7 @@ export const ReadSubscriptionLocal = Layer.effect(
   Effect.gen(function* () {
     const auth = yield* makeK2LocalAuth;
     return Effect.fn(function* (subscription: Subscription) {
-      // Deferred accessors — resolved at apply time. No `host.bind`: the
+      // Deferred accessors -- resolved at apply time. No `host.bind`: the
       // local variant registers no binding.
       return makeReadSubscriptionClient(auth, {
         streamId: yield* subscription.streamId,

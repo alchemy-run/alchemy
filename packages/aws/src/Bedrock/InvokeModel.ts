@@ -9,7 +9,7 @@ import type * as Effect from "effect/Effect";
  *
  * `body` is the raw, model-specific request payload (e.g. the Anthropic
  * Messages API shape for Claude models, the Nova messages-v1 shape for
- * Amazon Nova) — there is no auto-marshalling. The response `body` is a
+ * Amazon Nova) -- there is no auto-marshalling. The response `body` is a
  * byte `Stream` of the model-specific JSON response.
  */
 export interface InvokeModelRequest extends Omit<bedrock.InvokeModelRequest, "modelId"> {
@@ -22,7 +22,7 @@ export interface InvokeModelRequest extends Omit<bedrock.InvokeModelRequest, "mo
 }
 
 /**
- * Runtime binding for `bedrock-runtime:InvokeModel` — run inference with a
+ * Runtime binding for `bedrock-runtime:InvokeModel` -- run inference with a
  * model-specific request body (text, image, or embedding models).
  *
  * Bind one or more model references inside a function runtime to get a
@@ -31,11 +31,11 @@ export interface InvokeModelRequest extends Omit<bedrock.InvokeModelRequest, "mo
  * reference may be a foundation-model id, a cross-region inference profile
  * id (e.g. `us.amazon.nova-micro-v1:0`), or a full Bedrock ARN.
  *
- * Prefer {@link Converse} for conversational models — it is model-agnostic.
+ * Prefer {@link Converse} for conversational models -- it is model-agnostic.
  * `InvokeModel` is for model-native payloads (embeddings, image generation,
  * or provider-specific request features).
  *
- * Model access is an account entitlement — enable the model in the Bedrock
+ * Model access is an account entitlement -- enable the model in the Bedrock
  * console (Model access) before invoking, otherwise calls fail with
  * `AccessDeniedException`.
  *
@@ -45,7 +45,7 @@ export interface InvokeModelRequest extends Omit<bedrock.InvokeModelRequest, "mo
  * // init
  * const invokeModel = yield* Bedrock.InvokeModel("us.amazon.nova-micro-v1:0");
  *
- * // runtime — body is the raw Nova messages-v1 payload
+ * // runtime -- body is the raw Nova messages-v1 payload
  * const result = yield* invokeModel({
  *   contentType: "application/json",
  *   accept: "application/json",

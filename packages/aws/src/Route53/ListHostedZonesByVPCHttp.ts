@@ -8,7 +8,7 @@ export const ListHostedZonesByVPCHttp = Layer.effect(
   makeRoute53AccountHttpBinding({
     tag: "AWS.Route53.ListHostedZonesByVPC",
     operation: route53.listHostedZonesByVPC,
-    // Route 53 verifies the VPC on the caller's behalf via ec2:DescribeVpcs —
+    // Route 53 verifies the VPC on the caller's behalf via ec2:DescribeVpcs --
     // without that grant every call fails with AccessDeniedException
     // ("Failed to verify the given VPC by calling ec2:DescribeVpcs").
     actions: ["route53:ListHostedZonesByVPC", "ec2:DescribeVpcs"],

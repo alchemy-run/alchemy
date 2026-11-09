@@ -16,7 +16,7 @@ const notFound = (kind: CatalogKind, ref: string | number) =>
   new CatalogNotFound({ kind, ref: String(ref) });
 
 /**
- * Resolve a Hetzner Location by name (`nbg1`, `fsn1`, `hel1`, …) or
+ * Resolve a Hetzner Location by name (`nbg1`, `fsn1`, `hel1`, ...) or
  * numeric id.
  */
 export const findLocation = (ref: string | number) =>
@@ -40,7 +40,7 @@ export const findLocation = (ref: string | number) =>
   });
 
 /**
- * Resolve a Hetzner Server Type by name (`cx22`, `cpx11`, …) or numeric id.
+ * Resolve a Hetzner Server Type by name (`cx22`, `cpx11`, ...) or numeric id.
  */
 export const findServerType = (ref: string | number) =>
   Effect.gen(function* () {
@@ -63,7 +63,7 @@ export const findServerType = (ref: string | number) =>
   });
 
 /**
- * Resolve a Hetzner Image by name (`ubuntu-24.04`, …) or numeric id.
+ * Resolve a Hetzner Image by name (`ubuntu-24.04`, ...) or numeric id.
  */
 export const findImage = (ref: string | number) =>
   Effect.gen(function* () {
@@ -107,7 +107,7 @@ export const findIso = (ref: string | number) =>
   });
 
 /**
- * Resolve a Hetzner Load Balancer Type by name (`lb11`, `lb21`, …) or
+ * Resolve a Hetzner Load Balancer Type by name (`lb11`, `lb21`, ...) or
  * numeric id.
  */
 export const findLoadBalancerType = (ref: string | number) =>

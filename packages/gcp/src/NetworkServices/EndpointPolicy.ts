@@ -73,11 +73,11 @@ export type EndpointPolicyProps = {
    * `projects/{project}/locations/{location}/endpointPolicies/{endpointPolicy}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Must be 1-63 characters and not start with a number.
-   * Immutable — changing it replaces the policy.
+   * Immutable -- changing it replaces the policy.
    */
   endpointPolicyId?: string;
   /**
-   * Location (`global`, `us-central1`, …). Immutable — changing it
+   * Location (`global`, `us-central1`, ...). Immutable -- changing it
    * replaces the policy. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default "global"
@@ -131,7 +131,7 @@ export type EndpointPolicy = Resource<
     endpointPolicyId: string;
     /** Project id. */
     project: string;
-    /** Location id (`global`, `us-central1`, …). */
+    /** Location id (`global`, `us-central1`, ...). */
     location: string;
     /** Endpoint policy type. */
     type: string;
@@ -173,7 +173,7 @@ export interface EndpointPolicyLookup {
    */
   endpointPolicyId: string;
   /**
-   * Location (`global`, `us-central1`, …). `US-CENTRAL1` is accepted and
+   * Location (`global`, `us-central1`, ...). `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
   location?: string;
@@ -185,7 +185,7 @@ export interface EndpointPolicyLookup {
 }
 
 /**
- * A Network Services EndpointPolicy — applies TLS and authorization
+ * A Network Services EndpointPolicy -- applies TLS and authorization
  * configuration to Traffic Director endpoints that match a metadata
  * selector.
  *

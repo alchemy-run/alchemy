@@ -23,11 +23,11 @@ export interface ListExclusionWindowsRequest extends Omit<
  * ### Managing Exclusion Windows
  * **Example:** List the SLO's Exclusion Windows
  * ```typescript
- * // init — bind the operation to the SLO
+ * // init -- bind the operation to the SLO
  * const listExclusionWindows =
  *   yield* AWS.ApplicationSignals.ListServiceLevelObjectiveExclusionWindows(slo);
  *
- * // runtime — the SLO's ARN is injected as Id
+ * // runtime -- the SLO's ARN is injected as Id
  * const page = yield* listExclusionWindows();
  * yield* Effect.log(`${page.ExclusionWindows.length} windows`);
  * ```

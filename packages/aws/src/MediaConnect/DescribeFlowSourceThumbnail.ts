@@ -7,7 +7,7 @@ import type { Flow } from "./Flow.ts";
  * Runtime binding for `mediaconnect:DescribeFlowSourceThumbnail`.
  *
  * Fetches a thumbnail of the content currently arriving at the bound
- * {@link Flow}'s source (base64-encoded, refreshed every few seconds) —
+ * {@link Flow}'s source (base64-encoded, refreshed every few seconds) --
  * the building block for visual confidence monitoring. Thumbnails are
  * only generated while the flow is running and `sourceMonitoringConfig`
  * has thumbnails enabled; otherwise the response carries
@@ -17,7 +17,7 @@ import type { Flow } from "./Flow.ts";
  * ### Observing Flows
  * **Example:** Render a Confidence Thumbnail
  * ```typescript
- * // init — bind the operation to the flow
+ * // init -- bind the operation to the flow
  * const sourceThumbnail = yield* AWS.MediaConnect.DescribeFlowSourceThumbnail(flow);
  *
  * // runtime

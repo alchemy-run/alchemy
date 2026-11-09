@@ -17,7 +17,7 @@ export interface DescribeRecoveryPointRequest extends Omit<
  * `backup:DescribeRecoveryPoint`).
  *
  * Returns metadata for a recovery point stored in the bound
- * {@link BackupVault} — status, lifecycle, size, and restorability. Provide
+ * {@link BackupVault} -- status, lifecycle, size, and restorability. Provide
  * the implementation with
  * `Effect.provide(AWS.Backup.DescribeRecoveryPointHttp)`.
  * ### Recovery Points

@@ -8,7 +8,7 @@ import { MigrationError, type SqlExecutor } from "./Format.ts";
  * auto-commits regardless, matching the previous statement-by-statement
  * behavior).
  *
- * The `mysql2` import is type-only — how the connection is opened stays
+ * The `mysql2` import is type-only -- how the connection is opened stays
  * with the database provider.
  */
 export const makeMySQLMigrationExecutor = (connection: Connection): SqlExecutor => ({

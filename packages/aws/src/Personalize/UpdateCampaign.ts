@@ -3,8 +3,8 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `personalize:UpdateCampaign` — Points a live campaign at a newly trained solution version (or adjusts
- * its provisioned TPS) — the deploy step of the MLOps retraining loop.
+ * Runtime binding for `personalize:UpdateCampaign` -- Points a live campaign at a newly trained solution version (or adjusts
+ * its provisioned TPS) -- the deploy step of the MLOps retraining loop.
  * Provide the implementation with
  * `Effect.provide(AWS.Personalize.UpdateCampaignHttp)`.
  *

@@ -16,7 +16,7 @@ type TypeId = typeof TypeId;
 export interface IpsecTunnelProps {
   /**
    * The name of the IPsec tunnel. Cannot share a name with other tunnels.
-   * Immutable in practice — changing it triggers a replacement.
+   * Immutable in practice -- changing it triggers a replacement.
    */
   name: string;
   /**
@@ -43,7 +43,7 @@ export interface IpsecTunnelProps {
    */
   description?: string;
   /**
-   * Pre-shared key for the tunnel. Write-only — Cloudflare never returns
+   * Pre-shared key for the tunnel. Write-only -- Cloudflare never returns
    * it, so the value is carried in state. When omitted, Cloudflare leaves
    * the tunnel without a PSK until one is generated via the dashboard/API.
    */
@@ -95,7 +95,7 @@ export interface IpsecTunnelAttributes {
   /** The tunnel description, if set. */
   description: string | undefined;
   /**
-   * The pre-shared key as configured. Write-only on Cloudflare's side —
+   * The pre-shared key as configured. Write-only on Cloudflare's side --
    * this is the value from props, carried in state, never read back.
    */
   psk: Redacted.Redacted<string> | undefined;
@@ -121,11 +121,11 @@ export type IpsecTunnel = Resource<
  * A Magic Transit / Magic WAN IPsec tunnel between Cloudflare and a
  * customer device.
  *
- * Requires a Magic Transit or Magic WAN subscription on the account —
+ * Requires a Magic Transit or Magic WAN subscription on the account --
  * accounts that are not onboarded receive a typed
  * `MagicTransitNotOnboarded` error (Cloudflare code 1012).
  *
- * The tunnel `name` is unique per account and immutable in practice —
+ * The tunnel `name` is unique per account and immutable in practice --
  * changing it triggers a replacement. The `psk` is write-only: Cloudflare
  * never returns it, so the configured value is carried in state.
  * ### Creating an IPsec tunnel
@@ -183,10 +183,10 @@ export const IpsecTunnelProvider = () =>
 
       if (output?.tunnelId) {
         const observed = yield* getTunnel(acct, output.tunnelId);
-        // The PSK is write-only — carry the persisted value forward.
+        // The PSK is write-only -- carry the persisted value forward.
         if (observed) return toAttributes(observed, acct, output.psk);
       }
-      // Cold read — tunnel names are unique per account. Tunnels carry no
+      // Cold read -- tunnel names are unique per account. Tunnels carry no
       // ownership markers; report as Unowned so takeover is gated behind
       // the adopt policy.
       const name = output?.name ?? olds?.name;
@@ -202,7 +202,7 @@ export const IpsecTunnelProvider = () =>
     reconcile: Effect.fn(function* ({ news, olds, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
-      // Observe — the id on `output` is a hint; fall through to the
+      // Observe -- the id on `output` is a hint; fall through to the
       // unique-name lookup when it is gone.
       let observed = output?.tunnelId ? yield* getTunnel(accountId, output.tunnelId) : undefined;
       if (!observed) {
@@ -211,7 +211,7 @@ export const IpsecTunnelProvider = () =>
 
       const psk = news.psk ? Redacted.value(news.psk) : undefined;
 
-      // Ensure — create when missing.
+      // Ensure -- create when missing.
       if (!observed) {
         const created = yield* magicTransit.createIpsecTunnel({
           accountId,
@@ -232,7 +232,7 @@ export const IpsecTunnelProvider = () =>
         return toAttributes(created, accountId, news.psk);
       }
 
-      // Sync — diff observed cloud state against desired; the update API
+      // Sync -- diff observed cloud state against desired; the update API
       // is a full PUT, so send everything, but skip the call on a no-op.
       // The PSK cannot be observed: it is dirty when the desired value
       // differs from the last-applied props.
@@ -275,7 +275,7 @@ export const IpsecTunnelProvider = () =>
 
     // Account-scoped collection. The list API returns the full tunnel set in
     // a single response (non-paginated). The PSK is write-only and never
-    // returned, so it is `undefined` here — matching `read`'s cold-read shape.
+    // returned, so it is `undefined` here -- matching `read`'s cold-read shape.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       return yield* magicTransit.listIpsecTunnels({ accountId, xMagicNewHcTarget: true }).pipe(
@@ -283,7 +283,7 @@ export const IpsecTunnelProvider = () =>
           (r.ipsecTunnels ?? []).map((tunnel) => toAttributes(tunnel, accountId, undefined)),
         ),
         // Accounts that aren't onboarded onto Magic Transit (code 1012)
-        // or lack the entitlement can't enumerate tunnels — treat as none.
+        // or lack the entitlement can't enumerate tunnels -- treat as none.
         Effect.catchTag(
           ["MagicTransitNotOnboarded", "Forbidden"],
           (): Effect.Effect<IpsecTunnelAttributes[]> => Effect.succeed([]),

@@ -5,16 +5,16 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `servicecatalog:ExecuteProvisionedProductServiceAction`.
  *
- * Executes a self-service action (e.g. restart, snapshot — an SSM-document-backed operation the administrator attached to the product) on a provisioned product.
+ * Executes a self-service action (e.g. restart, snapshot -- an SSM-document-backed operation the administrator attached to the product) on a provisioned product.
  *
- * Account-level operation — which products the caller can see and act on
+ * Account-level operation -- which products the caller can see and act on
  * is governed by portfolio principal associations, so the binding takes no
  * resource argument. Provide the implementation with
  * `Effect.provide(AWS.ServiceCatalog.ExecuteProvisionedProductServiceActionHttp)`.
  * ### Service Actions
  * **Example:** Execute a Self-Service Action
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const executeProvisionedProductServiceAction = yield* AWS.ServiceCatalog.ExecuteProvisionedProductServiceAction();
  *
  * // runtime

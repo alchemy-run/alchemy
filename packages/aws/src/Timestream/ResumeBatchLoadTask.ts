@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 export interface ResumeBatchLoadTaskRequest extends TSW.ResumeBatchLoadTaskRequest {}
 
 /**
- * Runtime binding for `timestream-write:ResumeBatchLoadTask` — resume a bulk
+ * Runtime binding for `timestream-write:ResumeBatchLoadTask` -- resume a bulk
  * import that Timestream paused (e.g. after transient S3 or throttling
  * failures).
  *
@@ -17,7 +17,7 @@ export interface ResumeBatchLoadTaskRequest extends TSW.ResumeBatchLoadTaskReque
  * ### Batch Loading
  * **Example:** Resume a paused import
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const resumeBatchLoadTask = yield* Timestream.ResumeBatchLoadTask();
  *
  * // runtime

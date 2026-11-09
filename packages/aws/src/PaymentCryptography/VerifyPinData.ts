@@ -9,7 +9,7 @@ export interface VerifyPinDataRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `payment-cryptography:VerifyPinData` — verifies an
+ * Runtime binding for `payment-cryptography:VerifyPinData` -- verifies an
  * encrypted PIN block against PIN verification data (e.g. a Visa PVV) using
  * a PIN verification {@link Key} (PVK) and the PIN encryption {@link Key}
  * (PEK) the block is encrypted under. A mismatch fails with the typed

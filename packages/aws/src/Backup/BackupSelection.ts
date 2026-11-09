@@ -39,34 +39,34 @@ export interface BackupSelectionProps {
    * Display name for the selection. If omitted, a unique name is generated
    * from the app, stage, and logical ID.
    *
-   * A backup selection is immutable — changing the name replaces it.
+   * A backup selection is immutable -- changing the name replaces it.
    */
   selectionName?: string;
   /**
    * ARN of the IAM role AWS Backup assumes to create and manage backups on
    * your behalf. The role's trust policy must allow `backup.amazonaws.com`.
    *
-   * Immutable — changing the role replaces the selection.
+   * Immutable -- changing the role replaces the selection.
    */
   iamRoleArn: string;
   /**
    * ARNs of the resources to assign to the backup plan. Use `["*"]` to
    * assign all supported resources.
    *
-   * Immutable — changing the resource list replaces the selection.
+   * Immutable -- changing the resource list replaces the selection.
    */
   resources?: string[];
   /**
    * ARNs of resources to explicitly exclude from the plan.
    *
-   * Immutable — changing this replaces the selection.
+   * Immutable -- changing this replaces the selection.
    */
   notResources?: string[];
   /**
    * Tag-based conditions selecting resources by their tags (legacy
-   * `ListOfTags` selector — conditions are ANDed together).
+   * `ListOfTags` selector -- conditions are ANDed together).
    *
-   * Immutable — changing this replaces the selection.
+   * Immutable -- changing this replaces the selection.
    */
   listOfTags?: BackupSelectionTagCondition[];
 }
@@ -93,7 +93,7 @@ export interface BackupSelection extends Resource<
 > {}
 
 /**
- * An AWS Backup selection — assigns AWS resources to a {@link BackupPlan}
+ * An AWS Backup selection -- assigns AWS resources to a {@link BackupPlan}
  * either by explicit ARN or by matching resource tags, using an IAM role that
  * AWS Backup assumes to perform the backups.
  *
@@ -166,7 +166,7 @@ export const BackupSelectionProvider = () =>
           if (!output?.selectionId || !output?.backupPlanId) return undefined;
           // AWS Backup returns InvalidParameterValueException (not
           // ResourceNotFoundException) for a selection id that no longer
-          // exists — treat both as "absent".
+          // exists -- treat both as "absent".
           const found = yield* backup
             .getBackupSelection({
               BackupPlanId: output.backupPlanId,
@@ -206,7 +206,7 @@ export const BackupSelectionProvider = () =>
           const name = output?.selectionName ?? (yield* createName(id, news));
           const backupPlanId = news.backupPlanId;
 
-          // OBSERVE — confirm an existing selection by id; a selection is
+          // OBSERVE -- confirm an existing selection by id; a selection is
           // immutable so there is nothing to sync when it already exists.
           if (output?.selectionId) {
             const existing = yield* backup
@@ -230,7 +230,7 @@ export const BackupSelectionProvider = () =>
             }
           }
 
-          // ENSURE — create (retrying while the IAM role propagates).
+          // ENSURE -- create (retrying while the IAM role propagates).
           const created = yield* retryRolePropagation(
             backup.createBackupSelection({
               BackupPlanId: backupPlanId,

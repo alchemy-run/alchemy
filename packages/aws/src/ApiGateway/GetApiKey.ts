@@ -6,7 +6,7 @@ export interface GetApiKeyRequest extends ag.GetApiKeyRequest {}
 
 /**
  * Runtime binding for reading a single API Gateway API key
- * (`apigateway:GET` on `/apikeys/{id}`). Account-scoped — takes no
+ * (`apigateway:GET` on `/apikeys/{id}`). Account-scoped -- takes no
  * resource.
  *
  * With `includeValue: true` the response's `value` is `Redacted<string>`.

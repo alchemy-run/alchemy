@@ -25,7 +25,7 @@ export const unredact = (
 
 /**
  * AgentCore Memory / Runtime / CodeInterpreter / Browser names must match
- * `[a-zA-Z][a-zA-Z0-9_]{0,47}` — underscores, no hyphens. Derive a
+ * `[a-zA-Z][a-zA-Z0-9_]{0,47}` -- underscores, no hyphens. Derive a
  * deterministic physical name and swap hyphens for underscores.
  */
 export const createAgentCoreName = Effect.fn(function* (id: string) {
@@ -38,7 +38,7 @@ export const createAgentCoreName = Effect.fn(function* (id: string) {
 });
 
 /**
- * Gateway names must match `([0-9a-zA-Z][-]?){1,48}` — hyphens allowed but
+ * Gateway names must match `([0-9a-zA-Z][-]?){1,48}` -- hyphens allowed but
  * never consecutive, no underscores. Collapse runs of hyphens.
  */
 export const createGatewayName = Effect.fn(function* (id: string) {
@@ -47,7 +47,7 @@ export const createGatewayName = Effect.fn(function* (id: string) {
 });
 
 /**
- * Read the observed tags of an AgentCore resource by ARN. Best-effort — a
+ * Read the observed tags of an AgentCore resource by ARN. Best-effort -- a
  * failure (e.g. a race with deletion) reports no tags.
  */
 export const readAgentCoreTags = Effect.fn(function* (resourceArn: string) {
@@ -97,7 +97,7 @@ export const retryWhileConflict = <A, E extends { readonly _tag: string }, R>(
   });
 
 /**
- * Bounded retry through `ValidationException` during create — a freshly
+ * Bounded retry through `ValidationException` during create -- a freshly
  * created IAM role referenced by `roleArn` is not instantly assumable by the
  * AgentCore service principal (IAM eventual consistency).
  */

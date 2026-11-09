@@ -11,7 +11,7 @@ import type { List } from "./List.ts";
 export interface UpdateListRequest extends Omit<frauddetector.UpdateListRequest, "name"> {}
 
 /**
- * Mutate the elements of a bound Amazon Fraud Detector list at runtime — the
+ * Mutate the elements of a bound Amazon Fraud Detector list at runtime -- the
  * effectful write call made from a deployed Lambda or Task, e.g. to append a
  * newly-confirmed fraudulent IP to a deny-list the detector's rules reference.
  *

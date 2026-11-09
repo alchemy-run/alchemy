@@ -17,7 +17,7 @@ export interface StartRestoreJobRequest extends Omit<backup.StartRestoreJobInput
 
 /**
  * Runtime binding for the `StartRestoreJob` operation (IAM actions
- * `backup:StartRestoreJob` + `iam:PassRole` on the restore role) — restore a
+ * `backup:StartRestoreJob` + `iam:PassRole` on the restore role) -- restore a
  * recovery point from a deployed Function.
  *
  * The binding is constructed with the **restore role** (the IAM role AWS

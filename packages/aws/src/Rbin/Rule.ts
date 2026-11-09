@@ -205,12 +205,12 @@ const validateLock = (props: RuleProps) =>
     ? Effect.fail(
         new RbinLockUnsupported({
           message:
-            "lockConfiguration is only supported on Region-level retention rules without excludeResourceTags — remove resourceTags/excludeResourceTags or the lock.",
+            "lockConfiguration is only supported on Region-level retention rules without excludeResourceTags \u2014 remove resourceTags/excludeResourceTags or the lock.",
         }),
       )
     : Effect.void;
 
-/** All resource types a retention rule can cover — used to enumerate rules. */
+/** All resource types a retention rule can cover -- used to enumerate rules. */
 const RULE_RESOURCE_TYPES = ["EBS_SNAPSHOT", "EC2_IMAGE", "EBS_VOLUME"] as const;
 
 const toRetentionPeriod = (p: Duration.Input): rbin.RetentionPeriod => ({
@@ -373,7 +373,7 @@ export const RuleProvider = () =>
           if (!isResolved(news)) return undefined;
           yield* validateLock(news);
           // The resource type of a retention rule cannot be changed after
-          // creation — a change requires replacement.
+          // creation -- a change requires replacement.
           if (news.resourceType !== olds.resourceType) {
             return { action: "replace" } as const;
           }
@@ -386,11 +386,11 @@ export const RuleProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // OBSERVE — `output.identifier` is only a cache; a rule deleted
+          // OBSERVE -- `output.identifier` is only a cache; a rule deleted
           // out-of-band falls through to create.
           let live = output?.identifier ? yield* readRule(output.identifier) : undefined;
 
-          // ENSURE — create if missing, then wait out the transient
+          // ENSURE -- create if missing, then wait out the transient
           // `pending` status so downstream sync reads settled state.
           if (live === undefined) {
             const created = yield* rbin.createRule({
@@ -416,7 +416,7 @@ export const RuleProvider = () =>
           const identifier = live.Identifier!;
           const ruleArn = live.RuleArn!;
 
-          // SYNC mutable settings — diff OBSERVED cloud state against the
+          // SYNC mutable settings -- diff OBSERVED cloud state against the
           // desired props and apply only the delta. A no-op skips the API
           // call entirely (a fresh create always lands here as a no-op).
           const desiredRetention = toRetentionPeriod(news.retentionPeriod);
@@ -441,7 +441,7 @@ export const RuleProvider = () =>
             live = yield* waitForRuleAvailable(identifier);
           }
 
-          // SYNC lock state — observed lock state vs desired. Unlocking
+          // SYNC lock state -- observed lock state vs desired. Unlocking
           // starts the unlock delay (`pending_unlock`); re-locking during
           // that window is allowed and converges back to `locked`.
           if (news.lockConfiguration !== undefined) {
@@ -466,7 +466,7 @@ export const RuleProvider = () =>
             );
           }
 
-          // SYNC tags — diff against OBSERVED cloud tags (never olds/output)
+          // SYNC tags -- diff against OBSERVED cloud tags (never olds/output)
           // so adoption converges.
           const currentTags = yield* readRuleTags(ruleArn);
           const { upsert, removed } = diffTags(currentTags, desiredTags);
@@ -487,7 +487,7 @@ export const RuleProvider = () =>
         }),
 
         // Idempotent: a rule already gone is success. A locked rule fails
-        // with the typed ConflictException (INVALID_RULE_STATE) — it must be
+        // with the typed ConflictException (INVALID_RULE_STATE) -- it must be
         // unlocked and its unlock delay must expire before deletion.
         delete: Effect.fn(function* ({ output }) {
           yield* rbin

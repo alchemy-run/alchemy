@@ -12,7 +12,7 @@ export interface UpdateCampaignRequest extends Omit<iotfleetwise.UpdateCampaignR
  * Runtime binding for the `UpdateCampaign` operation (IAM action
  * `iotfleetwise:UpdateCampaign`), scoped to one {@link Campaign}.
  *
- * Approves, suspends, or resumes the bound campaign at runtime — e.g. an
+ * Approves, suspends, or resumes the bound campaign at runtime -- e.g. an
  * operations Lambda pausing data collection during an incident. Provide
  * the implementation with
  * `Effect.provide(AWS.IoTFleetWise.UpdateCampaignHttp)`.

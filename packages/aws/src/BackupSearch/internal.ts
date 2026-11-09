@@ -15,7 +15,7 @@ export const toTagRecord = (
 
 /**
  * Read the observed tags of a BackupSearch resource by ARN. Tag reads are
- * best-effort — a failure (e.g. a race with job expiry) reports no tags.
+ * best-effort -- a failure (e.g. a race with job expiry) reports no tags.
  */
 export const readBackupSearchTags = Effect.fn(function* (arn: string) {
   const response = yield* backupsearch

@@ -13,14 +13,14 @@ export interface ListSearchJobBackupsRequest extends Omit<
  * Runtime binding for `backup-search:ListSearchJobBackups`.
  *
  * Pages through the recovery points included in the bound search job, with
- * each backup's per-job status — including backups skipped because their
+ * each backup's per-job status -- including backups skipped because their
  * index is not `ACTIVE` or a permissions issue marked them `FAILED`. Provide
  * the implementation with
  * `Effect.provide(AWS.BackupSearch.ListSearchJobBackupsHttp)`.
  * ### Reading Searched Backups
  * **Example:** List the Search Job's Backups
  * ```typescript
- * // init — bind the operation to the search job
+ * // init -- bind the operation to the search job
  * const listSearchJobBackups =
  *   yield* AWS.BackupSearch.ListSearchJobBackups(search);
  *

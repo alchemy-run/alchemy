@@ -1,5 +1,5 @@
 /**
- * @alchemy.run/git — a Git hosting service on Cloudflare Workers,
+ * @alchemy.run/git -- a Git hosting service on Cloudflare Workers,
  * Durable Objects, and R2, built with Alchemy Effect-native Workers.
  *
  * Public surface:
@@ -16,7 +16,7 @@
  *   hasher blocks.
  *
  * Internals (wire-protocol codecs under `Protocol/`, storage under `Store/`,
- * alarm jobs under `Jobs/`) are deliberately not re-exported here — deep
+ * alarm jobs under `Jobs/`) are deliberately not re-exported here -- deep
  * import them via `@alchemy.run/git/Protocol/Pkt` style paths when
  * needed.
  */

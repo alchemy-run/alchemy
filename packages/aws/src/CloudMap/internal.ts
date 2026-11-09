@@ -18,7 +18,7 @@ export class CloudMapOperationFailed extends Data.TaggedError("CloudMapOperation
 
 /**
  * Repeat a `getOperation` poll until the operation reaches a terminal status
- * (`SUCCESS` | `FAIL`), spaced 2s and bounded at 60 repetitions (~2 minutes —
+ * (`SUCCESS` | `FAIL`), spaced 2s and bounded at 60 repetitions (~2 minutes --
  * namespace operations typically take 30-60s).
  *
  * Expressed as an explicitly-typed helper: inlining `Effect.repeat` in
@@ -60,7 +60,7 @@ export const awaitOperation = Effect.fn("AWS.CloudMap.awaitOperation")(function*
 });
 
 /**
- * Bounded retry through transient `ResourceInUse` dependency violations —
+ * Bounded retry through transient `ResourceInUse` dependency violations --
  * e.g. deleting a namespace while its last service deletion is still
  * propagating, or deleting a service while an instance deregistration is in
  * flight. Explicitly typed for the same declaration-emit reason as above.
@@ -76,7 +76,7 @@ export const retryWhileResourceInUse = <A, E extends { _tag: string }, R>(
 /**
  * Deregister every instance still registered on a service and await the
  * async deregistration operations. Instances registered at runtime (via the
- * `RegisterInstance` binding) are data-plane ephemera owned by the service —
+ * `RegisterInstance` binding) are data-plane ephemera owned by the service --
  * they would otherwise block `DeleteService` with `ResourceInUse` forever.
  * Deregistrations already in flight surface as `DuplicateRequest` and are
  * tolerated; `DeleteService`'s own `ResourceInUse` retry rides out the
@@ -99,7 +99,7 @@ export const deregisterAllInstances = Effect.fn("AWS.CloudMap.deregisterAllInsta
       const response = yield* sd
         .deregisterInstance({ ServiceId: serviceId, InstanceId: instance.Id })
         .pipe(
-          // already gone / a deregistration already in flight — both mean
+          // already gone / a deregistration already in flight -- both mean
           // the instance is on its way out
           Effect.catchTag(["InstanceNotFound", "DuplicateRequest"], () => Effect.undefined),
         );
@@ -162,7 +162,7 @@ export const observeNamespace = Effect.fn("AWS.CloudMap.observeNamespace")(funct
 
 /**
  * Ensure a namespace exists: submit `create`, await its async operation, and
- * observe the created namespace **by the operation's target id** — the
+ * observe the created namespace **by the operation's target id** -- the
  * `listNamespaces` name lookup is eventually consistent and can miss a
  * namespace created milliseconds earlier.
  *
@@ -171,7 +171,7 @@ export const observeNamespace = Effect.fn("AWS.CloudMap.observeNamespace")(funct
  * `NamespaceAlreadyExists` while remaining invisible to observation; the
  * whole create+observe sequence retries (bounded, ~40s) until the deletion
  * completes and the create goes through. A `DuplicateRequest` means an
- * identical create is already in flight — its operation is awaited instead.
+ * identical create is already in flight -- its operation is awaited instead.
  */
 const retryWhileNamespaceNotVisible = <A, E extends { _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
@@ -183,7 +183,7 @@ const retryWhileNamespaceNotVisible = <A, E extends { _tag: string }, R>(
 
 /**
  * The (identical) typed error union of the three namespace create operations.
- * Kept concrete — a generic error parameter here would flow into
+ * Kept concrete -- a generic error parameter here would flow into
  * `Effect.catchTag`, leaving an un-narrowable `{ _tag: unknown }` residue in
  * the handler under TypeScript 7.
  */
@@ -205,14 +205,14 @@ export const ensureNamespace = <R>(
       } = yield* create.pipe(
         Effect.catchTag(["NamespaceAlreadyExists", "DuplicateRequest"], (e) =>
           e._tag === "NamespaceAlreadyExists"
-            ? // the name is taken — by an ACTIVE namespace (observed below)
+            ? // the name is taken -- by an ACTIVE namespace (observed below)
               // or by one still deleting (observation misses it and the
               // bounded outer retry re-submits the create)
               Effect.succeed({
                 OperationId: undefined,
                 NamespaceId: e.NamespaceId,
               })
-            : // an identical create is already in flight — await THAT one
+            : // an identical create is already in flight -- await THAT one
               Effect.succeed({
                 OperationId: e.DuplicateOperationId,
                 NamespaceId: undefined,

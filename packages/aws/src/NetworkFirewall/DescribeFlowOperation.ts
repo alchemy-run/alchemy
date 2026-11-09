@@ -9,7 +9,7 @@ export interface DescribeFlowOperationRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `network-firewall:DescribeFlowOperation` — read the
+ * Runtime binding for `network-firewall:DescribeFlowOperation` -- read the
  * status and definition of a flow capture/flush operation running on the
  * bound {@link Firewall}; the firewall ARN is injected automatically.
  *
@@ -18,7 +18,7 @@ export interface DescribeFlowOperationRequest extends Omit<
  * ### Flow Operations
  * **Example:** Poll a Flow Operation
  * ```typescript
- * // init — grants network-firewall:DescribeFlowOperation on the firewall
+ * // init -- grants network-firewall:DescribeFlowOperation on the firewall
  * const describeFlowOperation =
  *   yield* AWS.NetworkFirewall.DescribeFlowOperation(firewall);
  *

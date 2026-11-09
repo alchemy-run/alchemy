@@ -23,7 +23,7 @@ export interface GetQueryResultsRequest extends Logs.GetQueryResultsRequest {}
  *
  * **Example:** Poll Until Complete
  * ```typescript
- * // Bounded, declarative polling — never a while-loop.
+ * // Bounded, declarative polling -- never a while-loop.
  * const results = yield* getQueryResults({ queryId }).pipe(
  *   Effect.repeat({
  *     schedule: Schedule.spaced("2 seconds"),

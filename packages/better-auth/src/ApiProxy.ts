@@ -38,7 +38,7 @@ export const makeApiProxy = <A extends { api: unknown }>(
     {},
     {
       get(_target, key) {
-        // Never look like a thenable / iterable — the proxy is a plain
+        // Never look like a thenable / iterable -- the proxy is a plain
         // record of endpoint wrappers.
         if (typeof key !== "string" || key === "then") {
           return undefined;

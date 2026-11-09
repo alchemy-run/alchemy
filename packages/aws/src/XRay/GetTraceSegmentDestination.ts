@@ -18,7 +18,7 @@ export interface GetTraceSegmentDestinationRequest extends xray.GetTraceSegmentD
  * ```typescript
  * import * as XRay from "@alchemy.run/aws/XRay";
  *
- * // init — grants xray:GetTraceSegmentDestination
+ * // init -- grants xray:GetTraceSegmentDestination
  * const getTraceSegmentDestination =
  *   yield* XRay.GetTraceSegmentDestination();
  *

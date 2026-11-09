@@ -7,14 +7,14 @@ import type { Schema } from "./Schema.ts";
  * Runtime binding for `schemas:DescribeCodeBinding`.
  *
  * Reads the code-binding generation status for the bound {@link Schema} in a
- * target language — poll it after {@link PutCodeBinding} until the status is
+ * target language -- poll it after {@link PutCodeBinding} until the status is
  * `CREATE_COMPLETE`. The registry and schema names are injected from the
  * binding. Provide the implementation with
  * `Effect.provide(AWS.Schemas.DescribeCodeBindingHttp)`.
  * ### Code Bindings
  * **Example:** Poll Generation Status
  * ```typescript
- * // init — bind the operation to the schema
+ * // init -- bind the operation to the schema
  * const describeCodeBinding = yield* AWS.Schemas.DescribeCodeBinding(schema);
  *
  * // runtime

@@ -7,11 +7,11 @@ import type * as rolldown from "rolldown";
 import { Docker } from "./Docker.ts";
 
 /**
- * INTERNAL — image machinery for the effectful `Docker.Service` platform.
+ * INTERNAL -- image machinery for the effectful `Docker.Service` platform.
  *
  * NOT exported from the Docker barrel. Bundles a `main` Effect program with
  * rolldown, bakes it into a generated bun Dockerfile, and builds the image
- * with the Docker CLI against the service's Docker context — so the image is
+ * with the Docker CLI against the service's Docker context -- so the image is
  * present in the exact engine the Swarm service schedules from. There is no
  * registry push: the built image is content-addressed (`<name>:<hash>`) and
  * only rebuilt when the bundle, Dockerfile, or environment image changes.
@@ -45,7 +45,7 @@ export interface ResolvedServiceImage {
 
 /**
  * The generated entry for `Docker.Service` containers: a shim importing only
- * `@alchemy.run/docker/Bootstrap` plus the user's `main` — see that
+ * `@alchemy.run/docker/Bootstrap` plus the user's `main` -- see that
  * module for why the entry never imports alchemy's own dependencies.
  */
 export const makeServiceBunBootstrap =
@@ -141,7 +141,7 @@ export const makeServiceImage = Effect.gen(function* () {
       `FROM ${source.image ?? "oven/bun:1"}`,
       `WORKDIR /app`,
       `COPY index.mjs /app/index.mjs`,
-      // Copy any additional rolldown chunks (`chunk-XXX.js`, …). Non-trivial
+      // Copy any additional rolldown chunks (`chunk-XXX.js`, ...). Non-trivial
       // bundles always emit at least one; minimal bundles emit none and the
       // COPY no-ops.
       `COPY *.js /app/`,
@@ -155,9 +155,9 @@ export const makeServiceImage = Effect.gen(function* () {
 
   /**
    * Bundle a `main` source and compute its content-addressed code hash. The
-   * hash covers the full image identity — the bundle output (bootstrap entry
+   * hash covers the full image identity -- the bundle output (bootstrap entry
    * included, so bootstrap-template changes invalidate it) and the generated
-   * Dockerfile — so `diff` and `resolve` always agree.
+   * Dockerfile -- so `diff` and `resolve` always agree.
    */
   const computeCodeHash = Effect.fn(function* (options: {
     source: BundledServiceSource;
@@ -172,7 +172,7 @@ export const makeServiceImage = Effect.gen(function* () {
     return { bundled, dockerfile, codeHash };
   });
 
-  /** Observe a locally-present tag in the target engine. Missing → undefined. */
+  /** Observe a locally-present tag in the target engine. Missing -> undefined. */
   const imageExists = (imageRef: string, context: string | undefined) =>
     docker.image.inspect(imageRef, context).pipe(
       Effect.map(() => true),
@@ -185,7 +185,7 @@ export const makeServiceImage = Effect.gen(function* () {
    * target Docker context (crash-safe convergence).
    */
   const resolve = Effect.fn(function* (options: {
-    /** Logical resource id — keys the stable build-context directory. */
+    /** Logical resource id -- keys the stable build-context directory. */
     id: string;
     source: BundledServiceSource;
     /** Image repository name (the service's physical name). */
@@ -233,7 +233,7 @@ export const makeServiceImage = Effect.gen(function* () {
   /**
    * Content hash without building the image. Runs the bundler (bootstrap
    * entry included) so the hash reflects the exact image `resolve` would
-   * build — bootstrap-template changes and user-code edits both surface as
+   * build -- bootstrap-template changes and user-code edits both surface as
    * drift. The provider calls this from `diff` and compares against
    * `output.code.hash`.
    */

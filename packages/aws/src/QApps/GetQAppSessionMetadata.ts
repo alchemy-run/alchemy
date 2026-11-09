@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { QApp } from "./QApp.ts";
 
 /**
- * Request for {@link GetQAppSessionMetadata} — `instanceId` is injected from the bound Q App.
+ * Request for {@link GetQAppSessionMetadata} -- `instanceId` is injected from the bound Q App.
  */
 export interface GetQAppSessionMetadataRequest extends Omit<
   qapps.GetQAppSessionMetadataInput,
@@ -14,12 +14,12 @@ export interface GetQAppSessionMetadataRequest extends Omit<
 /**
  * Runtime binding for `qapps:GetQAppSessionMetadata`.
  *
- * Retrieves a Q App session's metadata — name, sharing configuration, and ownership. Provide the implementation with
+ * Retrieves a Q App session's metadata -- name, sharing configuration, and ownership. Provide the implementation with
  * `Effect.provide(AWS.QApps.GetQAppSessionMetadataHttp)`.
  * ### Sessions
  * **Example:** Read Session Sharing Configuration
  * ```typescript
- * // init — bind the operation to the Q App
+ * // init -- bind the operation to the Q App
  * const getQAppSessionMetadata = yield* AWS.QApps.GetQAppSessionMetadata(app);
  *
  * // runtime

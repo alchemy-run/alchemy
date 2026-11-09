@@ -17,7 +17,7 @@ export interface GetSavingsPlansUtilizationDetailsRequest
  * ### Savings Plans
  * **Example:** Per-Plan Utilization Details
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const getSavingsPlansUtilizationDetails = yield* AWS.CostExplorer.GetSavingsPlansUtilizationDetails();
  *
  * // runtime

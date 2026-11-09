@@ -36,7 +36,7 @@ export interface BatchedSinkOptions<In, Out, Err> {
   /**
    * Extract entries the API reports as *permanently* rejected (returned in
    * input order). Distinct from `unprocessed`: rejected entries are never
-   * retried — they are dropped and surfaced via `onRejected`.
+   * retried -- they are dropped and surfaced via `onRejected`.
    */
   readonly rejected?: (out: Out, batch: readonly In[]) => readonly In[];
   /**
@@ -46,7 +46,7 @@ export interface BatchedSinkOptions<In, Out, Err> {
   readonly onRejected?: (entries: readonly In[]) => Effect.Effect<void>;
   /**
    * Bounded retry for the unprocessed subset.
-   * @default Schedule.recurs(5) ∩ Schedule.exponential("200 millis")
+   * @default Schedule.recurs(5) intersect Schedule.exponential("200 millis")
    */
   readonly retrySchedule?: Schedule.Schedule<unknown>;
 }
@@ -65,7 +65,7 @@ export interface BatchedSinkOptions<In, Out, Err> {
  * - exhausting retries fails the sink with a typed
  *   {@link BatchRetryExhaustedError} carrying the stranded entries.
  *
- * Internal — NOT exported from the `AWS` barrel.
+ * Internal -- NOT exported from the `AWS` barrel.
  */
 export const makeBatchedSink = <In, Out, Err>(
   options: BatchedSinkOptions<In, Out, Err>,

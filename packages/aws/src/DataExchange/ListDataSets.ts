@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `dataexchange:ListDataSets`.
  *
- * Enumerates the account's data sets — `Origin: "OWNED"` for data sets
+ * Enumerates the account's data sets -- `Origin: "OWNED"` for data sets
  * this account publishes, `Origin: "ENTITLED"` for active
  * subscriptions.
  * Provide the implementation with
@@ -13,7 +13,7 @@ import type * as Effect from "effect/Effect";
  * ### Reading Data Sets
  * **Example:** List Entitled Data Sets
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listDataSets = yield* AWS.DataExchange.ListDataSets();
  *
  * // runtime

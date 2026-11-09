@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `mediatailor:UpdateProgram` — move or re-configure a
+ * Runtime binding for `mediatailor:UpdateProgram` -- move or re-configure a
  * scheduled program on a channel-assembly channel (e.g. change its
  * transition or ad breaks) before it plays.
  *

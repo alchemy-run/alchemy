@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `ssm-incidents:GetIncidentRecord`.
  *
- * Returns the details of an incident record — title, impact, status, chat
+ * Returns the details of an incident record -- title, impact, status, chat
  * channel, and notification targets. Incident-record ARNs only exist at
  * runtime, so the deploy-time grant is account-level (`Resource: "*"`).
  * Provide the implementation with

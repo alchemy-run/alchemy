@@ -16,7 +16,7 @@ export interface ListImageSetVersionsRequest extends Omit<
  * Runtime binding for the `ListImageSetVersions` operation (IAM action
  * `medical-imaging:ListImageSetVersions`), scoped to one {@link Datastore}.
  *
- * Lists every version of an image set — each {@link UpdateImageSetMetadata}
+ * Lists every version of an image set -- each {@link UpdateImageSetMetadata}
  * call produces a new version, and older versions remain readable and
  * revertible. Provide the implementation with
  * `Effect.provide(AWS.MedicalImaging.ListImageSetVersionsHttp)`.

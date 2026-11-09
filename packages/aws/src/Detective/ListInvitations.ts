@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `detective:ListInvitations`.
  *
- * Lists open behavior-graph invitations *received by this account* — the
+ * Lists open behavior-graph invitations *received by this account* -- the
  * member-account side of the Detective handshake, ready for an automation
  * that auto-accepts invitations from the security account.
  * Provide the implementation with
@@ -13,7 +13,7 @@ import type * as Effect from "effect/Effect";
  * ### Responding to Invitations
  * **Example:** List Pending Invitations
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listInvitations = yield* AWS.Detective.ListInvitations();
  *
  * // runtime

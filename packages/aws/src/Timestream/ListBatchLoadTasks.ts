@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 export interface ListBatchLoadTasksRequest extends TSW.ListBatchLoadTasksRequest {}
 
 /**
- * Runtime binding for `timestream-write:ListBatchLoadTasks` — enumerate the
+ * Runtime binding for `timestream-write:ListBatchLoadTasks` -- enumerate the
  * account's bulk imports, optionally filtered by status.
  *
  * Account-level binding invoked with no resource argument.
@@ -16,7 +16,7 @@ export interface ListBatchLoadTasksRequest extends TSW.ListBatchLoadTasksRequest
  * ### Batch Loading
  * **Example:** List in-progress imports
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listBatchLoadTasks = yield* Timestream.ListBatchLoadTasks();
  *
  * // runtime

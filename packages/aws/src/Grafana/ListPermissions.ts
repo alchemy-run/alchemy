@@ -18,7 +18,7 @@ import type { Workspace } from "./Workspace.ts";
  *
  * const { permissions } = yield* listPermissions();
  * for (const entry of permissions) {
- *   yield* Effect.logInfo(`${entry.user.id} → ${entry.role}`);
+ *   yield* Effect.logInfo(`${entry.user.id} -> ${entry.role}`);
  * }
  * ```
  *

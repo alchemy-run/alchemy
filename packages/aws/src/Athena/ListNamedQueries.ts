@@ -6,13 +6,13 @@ import type { WorkGroup } from "./WorkGroup.ts";
 /**
  * Runtime binding for `athena:ListNamedQueries`.
  *
- * Lists the IDs of the saved (named) queries in the bound workgroup — the
+ * Lists the IDs of the saved (named) queries in the bound workgroup -- the
  * workgroup name is injected automatically. Provide the implementation with
  * `Effect.provide(AWS.Athena.ListNamedQueriesHttp)`.
  * ### Saved Queries
  * **Example:** List the Workgroup's Named Queries
  * ```typescript
- * // init — bind the operation to the workgroup
+ * // init -- bind the operation to the workgroup
  * const listNamedQueries = yield* AWS.Athena.ListNamedQueries(workGroup);
  *
  * // runtime

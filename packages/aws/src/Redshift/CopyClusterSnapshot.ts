@@ -7,7 +7,7 @@ import type * as Effect from "effect/Effect";
  * `redshift:CopyClusterSnapshot`).
  *
  * Copies an automated cluster snapshot to a manual one so it survives the
- * automated retention window — e.g. an archival job that preserves the
+ * automated retention window -- e.g. an archival job that preserves the
  * nightly snapshot before a risky migration. Provide the implementation with
  * `Effect.provide(AWS.Redshift.CopyClusterSnapshotHttp)`.
  * ### Managing Snapshots

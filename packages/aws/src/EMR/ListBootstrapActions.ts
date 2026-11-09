@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Cluster } from "./Cluster.ts";
 
 /**
- * Runtime binding for `elasticmapreduce:ListBootstrapActions` — lists the bootstrap actions the bound cluster ran at launch.
+ * Runtime binding for `elasticmapreduce:ListBootstrapActions` -- lists the bootstrap actions the bound cluster ran at launch.
  * ### Inspecting the Cluster
  * **Example:** List Bootstrap Actions
  * ```typescript

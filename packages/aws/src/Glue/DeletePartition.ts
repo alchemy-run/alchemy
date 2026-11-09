@@ -23,7 +23,7 @@ export interface DeletePartitionRequest extends Omit<
  * // init
  * const deletePartition = yield* AWS.Glue.DeletePartition(table);
  *
- * // runtime — idempotent removal
+ * // runtime -- idempotent removal
  * yield* deletePartition({ PartitionValues: ["2026-01-01"] }).pipe(
  *   Effect.catchTag("EntityNotFoundException", () => Effect.void),
  * );

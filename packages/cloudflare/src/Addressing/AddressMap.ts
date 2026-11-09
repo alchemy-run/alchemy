@@ -39,7 +39,7 @@ export interface AddressMapMembership {
 export interface AddressMapProps {
   /**
    * An optional description used to describe the types of IPs or zones on
-   * the map. Mutable — patched in place.
+   * the map. Mutable -- patched in place.
    */
   description?: string;
   /**
@@ -50,18 +50,18 @@ export interface AddressMapProps {
   enabled?: boolean;
   /**
    * Default SNI to present to legacy TLS clients that do not send the TLS
-   * server name indicator. Mutable — patch-only (set in a post-create sync
+   * server name indicator. Mutable -- patch-only (set in a post-create sync
    * step).
    */
   defaultSni?: string;
   /**
-   * The set of IPs on the Address Map. Mutable — synced per-IP via
+   * The set of IPs on the Address Map. Mutable -- synced per-IP via
    * PUT/DELETE against observed cloud state.
    * @default []
    */
   ips?: string[];
   /**
-   * Zones and accounts assigned IPs on this Address Map. Mutable — synced
+   * Zones and accounts assigned IPs on this Address Map. Mutable -- synced
    * per-membership via PUT/DELETE against observed cloud state.
    * @default []
    */
@@ -102,7 +102,7 @@ export interface AddressMapAttributes {
 export type AddressMap = Resource<TypeId, AddressMapProps, AddressMapAttributes, never, Providers>;
 
 /**
- * A Cloudflare Address Map — assigns account-owned or Cloudflare-assigned
+ * A Cloudflare Address Map -- assigns account-owned or Cloudflare-assigned
  * static IPs to zones (BYOIP / Enterprise static IPs).
  *
  * Requires the BYOIP add-on or Cloudflare-assigned static IPs on the
@@ -180,7 +180,7 @@ export const AddressMapProvider = () =>
 
     read: Effect.fn(function* ({ output }) {
       // Address Maps have no name field to match on, so there is no
-      // reliable cold-lookup — lost state is treated as gone and the
+      // reliable cold-lookup -- lost state is treated as gone and the
       // engine recreates.
       if (!output?.addressMapId) return undefined;
       const observed = yield* getMap(output.accountId, output.addressMapId);
@@ -191,11 +191,11 @@ export const AddressMapProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
 
-      // 1. Observe — the map id cached on `output` is a hint, not a
+      // 1. Observe -- the map id cached on `output` is a hint, not a
       //    guarantee: a missing map falls through to create.
       let observed = output?.addressMapId ? yield* getMap(acct, output.addressMapId) : undefined;
 
-      // 2. Ensure — create with the full desired body (ips + memberships
+      // 2. Ensure -- create with the full desired body (ips + memberships
       //    are accepted inline on create). `defaultSni` is patch-only and
       //    handled by the sync step below.
       if (!observed) {
@@ -222,7 +222,7 @@ export const AddressMapProvider = () =>
 
       const addressMapId = observed.id!;
 
-      // 3a. Sync scalar fields (description / enabled / defaultSni) —
+      // 3a. Sync scalar fields (description / enabled / defaultSni) --
       //     skip the patch entirely on a no-op.
       const scalarDirty =
         (news.description ?? "") !== (observed.description ?? "") ||
@@ -238,7 +238,7 @@ export const AddressMapProvider = () =>
         });
       }
 
-      // 3b. Sync IPs — diff observed cloud IPs against desired, apply
+      // 3b. Sync IPs -- diff observed cloud IPs against desired, apply
       //     only the per-IP delta.
       const observedIps = (observed.ips ?? []).flatMap((ip) => (ip.ip ? [ip.ip] : []));
       const wantedIps = desiredIps(news);
@@ -261,7 +261,7 @@ export const AddressMapProvider = () =>
         }
       }
 
-      // 3c. Sync memberships — same observed-vs-desired delta, routed to
+      // 3c. Sync memberships -- same observed-vs-desired delta, routed to
       //     the zone/account variant per membership kind.
       const observedMemberships = narrowMemberships(observed.memberships);
       const wantedMemberships = desiredMemberships(news);
@@ -302,7 +302,7 @@ export const AddressMapProvider = () =>
         }
       }
 
-      // 4. Return — re-read so the persisted attributes reflect the final
+      // 4. Return -- re-read so the persisted attributes reflect the final
       //    converged cloud state.
       const final = yield* getMap(acct, addressMapId);
       if (!final) {
@@ -334,7 +334,7 @@ const getMap = (accountId: string, addressMapId: string) =>
     .getAddressMap({ accountId, addressMapId })
     .pipe(Effect.catchTag("AddressMapNotFound", () => Effect.undefined));
 
-/** Desired IPs — inputs have been resolved to concrete strings by Plan. */
+/** Desired IPs -- inputs have been resolved to concrete strings by Plan. */
 const desiredIps = (news: AddressMapProps): string[] => (news.ips ?? []).map((ip) => ip as string);
 
 /** Desired memberships with inputs resolved to concrete strings. */

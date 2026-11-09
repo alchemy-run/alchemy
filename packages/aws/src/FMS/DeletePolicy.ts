@@ -15,7 +15,7 @@ export interface DeletePolicyRequest extends fms.DeletePolicyRequest {}
  * ### Managing Policies
  * **Example:** Delete a Policy
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const deletePolicy = yield* AWS.FMS.DeletePolicy();
  *
  * // runtime

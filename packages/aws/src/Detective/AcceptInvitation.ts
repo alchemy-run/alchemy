@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `detective:AcceptInvitation`.
  *
- * Accepts an invitation into an administrator account's behavior graph —
+ * Accepts an invitation into an administrator account's behavior graph --
  * the graph belongs to the admin account, so its ARN arrives at runtime
  * (typically from `ListInvitations`) rather than from a bound resource.
  * Provide the implementation with
@@ -13,7 +13,7 @@ import type * as Effect from "effect/Effect";
  * ### Responding to Invitations
  * **Example:** Auto-Accept An Invitation
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const acceptInvitation = yield* AWS.Detective.AcceptInvitation();
  *
  * // runtime

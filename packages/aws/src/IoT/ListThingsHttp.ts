@@ -4,7 +4,7 @@ import { makeIotAccountHttpBinding } from "./BindingHttp.ts";
 import { ListThings } from "./ListThings.ts";
 
 /**
- * HTTP implementation of the {@link ListThings} capability — grants
+ * HTTP implementation of the {@link ListThings} capability -- grants
  * `iot:ListThings` on `*` and calls the IoT `ListThings` API.
  */
 export const ListThingsHttp = Layer.effect(

@@ -2,7 +2,7 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import type { R2Error, ReadWriteBucketClient } from "@alchemy.run/cloudflare/R2/index";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 /**
- * `Git.BlobStoreR2` — Cloudflare R2 implementation of {@link BlobStore}
+ * `Git.BlobStoreR2` -- Cloudflare R2 implementation of {@link BlobStore}
  * (the default), over the `Cloudflare.R2.ReadWriteBucket` capability.
  */
 import * as Effect from "effect/Effect";
@@ -43,7 +43,7 @@ export const makeBlobStoreR2 = (bucket: ReadWriteBucketClient): BlobStoreShape =
       ),
     ),
   put: (key, body, options) => {
-    // A stream body's own BlobStoreError joins R2's error union — map
+    // A stream body's own BlobStoreError joins R2's error union -- map
     // only the R2 side, pass ours through.
     const write: Effect.Effect<unknown, R2Error | BlobStoreError, RuntimeContext> =
       body instanceof Uint8Array

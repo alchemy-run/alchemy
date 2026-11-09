@@ -55,13 +55,13 @@ export type AgentsTransitionRouteGroupProps = {
   /**
    * Parent agent resource name
    * `projects/{project}/locations/{location}/agents/{agent}` or a bare
-   * agent id (combined with `location`). Immutable — changing it
+   * agent id (combined with `location`). Immutable -- changing it
    * replaces the route group.
    */
   agent: string;
   /**
    * Transition route group id (the `{transitionRouteGroup}` segment).
-   * Server-assigned on create. Immutable — changing it replaces the
+   * Server-assigned on create. Immutable -- changing it replaces the
    * group.
    */
   transitionRouteGroupId?: string;
@@ -73,7 +73,7 @@ export type AgentsTransitionRouteGroupProps = {
   /**
    * Human-readable name, unique within the agent (max 30 characters
    * including Alchemy's ownership marker). Route groups have no labels
-   * field, so ownership is stored in a compact `[alc …]` prefix and
+   * field, so ownership is stored in a compact `[alc ...]` prefix and
    * stripped from attributes.
    */
   displayName?: string;
@@ -111,7 +111,7 @@ export type AgentsTransitionRouteGroup = Resource<
  *
  * Agent-level groups are shared across flows. Route groups have no labels
  * field, so Alchemy stamps ownership into `displayName` (30-character
- * limit; compact `[alc …]` marker) for `list` / nuke. Parent agent and id
+ * limit; compact `[alc ...]` marker) for `list` / nuke. Parent agent and id
  * are immutable. Display name and routes update in place.
  *
  * ### Creating a Route Group

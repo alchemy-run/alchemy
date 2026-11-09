@@ -51,7 +51,7 @@ export const buildMicrovmDockerfile = (
     installRuntime,
     "WORKDIR /app",
     // The entry (`index.mjs`) and every rolldown chunk are emitted with a
-    // `.mjs` extension, which Node always treats as ESM — so the entry's named
+    // `.mjs` extension, which Node always treats as ESM -- so the entry's named
     // imports of a chunk resolve without needing a `package.json` `"type"`
     // marker (which would risk clobbering a user-provided base image's file).
     "COPY *.mjs /app/",

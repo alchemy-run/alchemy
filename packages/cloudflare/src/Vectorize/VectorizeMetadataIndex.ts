@@ -19,12 +19,12 @@ export type MetadataIndexProps = {
   /**
    * The metadata property to index. Filter expressions in `query` use this
    * name (e.g. `{ category: { $eq: "books" } }`). Cannot be changed after
-   * creation — updating triggers a replacement.
+   * creation -- updating triggers a replacement.
    */
   propertyName: string;
   /**
    * The type of metadata values stored under `propertyName`. Cannot be
-   * changed after creation — updating triggers a replacement.
+   * changed after creation -- updating triggers a replacement.
    */
   indexType: MetadataIndexType;
 };
@@ -53,7 +53,7 @@ export type MetadataIndex = Resource<
  * the `filter` of a `query()` call.
  *
  * A metadata index is identified by its parent index and `propertyName` and
- * is immutable — changing the property name, type, or parent index triggers
+ * is immutable -- changing the property name, type, or parent index triggers
  * a replacement.
  * ### Creating a Metadata Index
  * **Example:** Index a string metadata property
@@ -128,11 +128,11 @@ export const MetadataIndexProvider = () =>
       const acct = output?.accountId ?? accountId;
       const indexName = news.indexName;
 
-      // Observe — list metadata indexes on the parent and look for one
+      // Observe -- list metadata indexes on the parent and look for one
       // matching propertyName.
       const existing = yield* findExisting(acct, indexName, news.propertyName);
 
-      // Ensure — create if missing. Cloudflare returns 409 Conflict on
+      // Ensure -- create if missing. Cloudflare returns 409 Conflict on
       // duplicate; tolerate the race by reusing the prior mutationId.
       let mutationId = output?.mutationId;
       if (!existing) {
@@ -185,7 +185,7 @@ export const MetadataIndexProvider = () =>
         ),
         // A parent index deleted by a concurrent operation mid-enumeration
         // can fail the account-scoped pagination with "index deleted" (typed
-        // as Gone) — skip the whole enumeration rather than throw.
+        // as Gone) -- skip the whole enumeration rather than throw.
         Effect.catchTag(["NotFound", "Gone"], () => Effect.succeed<string[]>([])),
       );
 

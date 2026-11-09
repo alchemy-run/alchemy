@@ -1406,7 +1406,7 @@ export function renderLimitedResponse(req: Request) {
                             target="_blank"
                             rel="noopener noreferrer"
                         >
-                            Learn more about this issue →
+                            Learn more about this issue \u2192
                         </a>
                     </p>
                 </div>

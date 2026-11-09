@@ -8,13 +8,13 @@ export interface SearchRequest extends Omit<datazone.SearchInput, "domainIdentif
 /**
  * Runtime binding for `datazone:Search`.
  *
- * Searches the bound domain's inventory — assets, glossaries, and data products visible to the calling project. The domain id is injected from the binding.
+ * Searches the bound domain's inventory -- assets, glossaries, and data products visible to the calling project. The domain id is injected from the binding.
  * Provide the implementation with
  * `Effect.provide(AWS.DataZone.SearchHttp)`.
  * ### Searching the Catalog
  * **Example:** Search Assets by Text
  * ```typescript
- * // init — bind the operation to the domain
+ * // init -- bind the operation to the domain
  * const search = yield* AWS.DataZone.Search(domain);
  *
  * // runtime

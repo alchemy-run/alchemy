@@ -25,7 +25,7 @@ export type CatalogsModelProps = {
   /**
    * Parent catalog resource name
    * `projects/{project}/locations/{location}/catalogs/{catalog}` or a
-   * catalog id (combined with `location`). Immutable — changing it
+   * catalog id (combined with `location`). Immutable -- changing it
    * replaces the model.
    * @default "default_catalog"
    */
@@ -37,7 +37,7 @@ export type CatalogsModelProps = {
   location?: string;
   /**
    * Model id (4-40 characters). If omitted, a unique id is generated.
-   * Immutable — changing it replaces the model.
+   * Immutable -- changing it replaces the model.
    */
   modelId?: string;
   /**

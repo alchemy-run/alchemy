@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `translate:ListTerminologies` — list the custom
+ * Runtime binding for `translate:ListTerminologies` -- list the custom
  * terminologies in the account and region.
  *
  * ### Reading Terminologies
@@ -14,7 +14,7 @@ import type * as Effect from "effect/Effect";
  *
  * // runtime
  * const result = yield* listTerminologies({ MaxResults: 50 });
- * // result.TerminologyPropertiesList -> [{ Name, Arn, TermCount, … }, …]
+ * // result.TerminologyPropertiesList -> [{ Name, Arn, TermCount, ... }, ...]
  * ```
  *
  * @binding

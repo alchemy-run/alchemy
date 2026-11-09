@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `greengrass:UpdateConnectivityInfo`.
  *
- * Replaces a core device's connectivity information — the endpoints and
+ * Replaces a core device's connectivity information -- the endpoints and
  * ports client devices use to reach the core's local MQTT broker. Typically
  * driven by automation that knows the core's current IP (e.g. reacting to a
  * DHCP change). The caller supplies the core device's thing name and the new
@@ -14,7 +14,7 @@ import type * as Effect from "effect/Effect";
  * ### Managing Client Devices
  * **Example:** Publish A Core's Broker Endpoint
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const updateConnectivityInfo = yield* AWS.GreengrassV2.UpdateConnectivityInfo();
  *
  * // runtime

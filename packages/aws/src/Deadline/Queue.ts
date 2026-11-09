@@ -147,7 +147,7 @@ export type QueueLookup =
     };
 
 /**
- * An AWS Deadline Cloud queue — accepts render jobs within a farm and
+ * An AWS Deadline Cloud queue -- accepts render jobs within a farm and
  * schedules them onto associated fleets.
  *
  * ### Creating Queues
@@ -243,7 +243,7 @@ const findQueueByDisplayName = Effect.fn(function* (
 });
 
 /**
- * A queue still present after delete was initiated — retried by the bounded
+ * A queue still present after delete was initiated -- retried by the bounded
  * wait-until-gone schedule.
  */
 class QueueStillExists extends Data.TaggedError("QueueStillExists")<{
@@ -270,7 +270,7 @@ export const QueueProvider = () =>
       return {
         stables: ["farmId", "queueId", "queueArn"],
         // Keyed by a parent farm; cannot be enumerated account-wide without
-        // iterating every farm — treated as a sub-resource per the factory
+        // iterating every farm -- treated as a sub-resource per the factory
         // list() convention.
         list: () => Effect.succeed([]),
         lookup: Effect.fn(function* (props) {
@@ -342,7 +342,7 @@ export const QueueProvider = () =>
             }
           }
 
-          // Sync mutable settings — compute the delta from OBSERVED state.
+          // Sync mutable settings -- compute the delta from OBSERVED state.
           const described = state.described;
           const fslDelta = stringSetDelta(
             described.requiredFileSystemLocationNames ?? [],
@@ -390,7 +390,7 @@ export const QueueProvider = () =>
             yield* session.note(`Updated queue ${displayName}`);
           }
 
-          // Sync tags — diff against observed cloud tags.
+          // Sync tags -- diff against observed cloud tags.
           yield* syncDeadlineTags(state.attrs.queueArn, desiredTags);
 
           yield* session.note(state.attrs.queueArn);
@@ -425,7 +425,7 @@ export const QueueProvider = () =>
             Effect.catchTag("QueueStillExists", () => Effect.void),
           );
           // Deadline auto-creates /aws/deadline/{farmId}/{queueId} for the
-          // queue's job/session logs and deleteQueue does NOT remove it —
+          // queue's job/session logs and deleteQueue does NOT remove it --
           // reap it so a deleted queue leaves no orphaned log group.
           yield* reapDeadlineLogGroups(`/aws/deadline/${output.farmId}/${output.queueId}`);
         }),

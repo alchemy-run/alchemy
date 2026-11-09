@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Cluster } from "./Cluster.ts";
 
 /**
- * Runtime binding for `elasticmapreduce:RemoveManagedScalingPolicy` — detaches the bound cluster's managed scaling policy.
+ * Runtime binding for `elasticmapreduce:RemoveManagedScalingPolicy` -- detaches the bound cluster's managed scaling policy.
  * ### Scaling the Cluster
  * **Example:** Disable Managed Scaling
  * ```typescript

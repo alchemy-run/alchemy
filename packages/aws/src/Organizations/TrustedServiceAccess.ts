@@ -87,7 +87,7 @@ export const TrustedServiceAccessProvider = () =>
           const servicePrincipal = output?.servicePrincipal ?? olds?.servicePrincipal;
           if (servicePrincipal === undefined) {
             // Output-valued props don't survive a `creating`-state round-trip
-            // (they deserialize as `undefined`) — report "not found" so the
+            // (they deserialize as `undefined`) -- report "not found" so the
             // engine re-drives the create.
             return undefined;
           }
@@ -98,7 +98,7 @@ export const TrustedServiceAccessProvider = () =>
             // Enumerate every service principal granted trusted access to the
             // organization. The list response already carries the full `read`
             // shape (servicePrincipal + dateEnabled), so each enabled principal
-            // maps directly to one Attributes — no per-item hydration needed.
+            // maps directly to one Attributes -- no per-item hydration needed.
             const principals = yield* retryOrganizations(
               collectPages(
                 (NextToken) =>
@@ -125,7 +125,7 @@ export const TrustedServiceAccessProvider = () =>
                   }) satisfies TrustedServiceAccess["Attributes"],
               );
           }).pipe(
-            // Not an org management account (or lacking access) — there's no
+            // Not an org management account (or lacking access) -- there's no
             // organization to enumerate, so degrade to an empty list.
             Effect.catchTags({
               AWSOrganizationsNotInUseException: () =>
@@ -135,11 +135,11 @@ export const TrustedServiceAccessProvider = () =>
             }),
           ),
         reconcile: Effect.fn(function* ({ news, session }) {
-          // Observe — fetch live trusted-access state. We never trust prior
+          // Observe -- fetch live trusted-access state. We never trust prior
           // `output` blindly; if access was disabled out-of-band we re-enable.
           let state = yield* readTrustedServiceAccess(news.servicePrincipal);
 
-          // Ensure — enable trusted access if it's missing. This API is
+          // Ensure -- enable trusted access if it's missing. This API is
           // effectively idempotent for already-enabled principals, but we
           // gate the call to avoid unnecessary churn.
           if (!state) {

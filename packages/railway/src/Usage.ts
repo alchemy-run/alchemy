@@ -90,7 +90,7 @@ export interface UsageQuery {
    */
   workspace?: string | UsageLimitWorkspace;
   /**
-   * Measurements to aggregate (`CPU_USAGE`, `MEMORY_USAGE_GB`, …).
+   * Measurements to aggregate (`CPU_USAGE`, `MEMORY_USAGE_GB`, ...).
    */
   measurements: ReadonlyArray<MetricMeasurement>;
   /**
@@ -103,7 +103,7 @@ export interface UsageQuery {
    */
   endDate?: string;
   /**
-   * Tags to group by (`PROJECT_ID`, `SERVICE_ID`, …). Default is the
+   * Tags to group by (`PROJECT_ID`, `SERVICE_ID`, ...). Default is the
    * whole project / workspace.
    */
   groupBy?: ReadonlyArray<MetricTag>;
@@ -126,7 +126,7 @@ export interface EstimatedUsageQuery {
    */
   workspace?: string | UsageLimitWorkspace;
   /**
-   * Measurements to estimate (`CPU_USAGE`, `MEMORY_USAGE_GB`, …).
+   * Measurements to estimate (`CPU_USAGE`, `MEMORY_USAGE_GB`, ...).
    */
   measurements: ReadonlyArray<MetricMeasurement>;
   /**
@@ -326,7 +326,7 @@ const UsageLimitResource = Resource<UsageLimit>("Railway.UsageLimit");
  * @see https://docs.railway.com/reference/pricing
  *
  * ### Query usage
- * {@link usage} is a catalog helper — not a resource. It returns
+ * {@link usage} is a catalog helper -- not a resource. It returns
  * aggregated rows for the current workspace (or a project).
  *
  * **Example:** Workspace usage

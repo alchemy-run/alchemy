@@ -41,18 +41,18 @@ export type RegionInstanceGroupManagerResizeRequestProps = {
    */
   region?: string;
   /**
-   * Parent regional managed instance group name or URL. Immutable —
+   * Parent regional managed instance group name or URL. Immutable --
    * changing it replaces the request.
    */
   instanceGroupManager: string;
   /**
    * Number of instances to create. The group's target size increases by
-   * this number. Immutable — changing it replaces the request.
+   * this number. Immutable -- changing it replaces the request.
    */
   resizeBy: number;
   /**
    * Optional description. Resize requests have no labels field, so
-   * Alchemy ownership is stored in a `[alchemy …]` prefix for `list` /
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix for `list` /
    * nuke.
    */
   description?: string;
@@ -103,7 +103,7 @@ export type RegionInstanceGroupManagerResizeRequest = Resource<
  * A regional managed instance group resize request.
  *
  * Resize requests provision (or queue) additional VMs on a regional MIG.
- * They are immutable after create — changing `resizeBy`, duration, the
+ * They are immutable after create -- changing `resizeBy`, duration, the
  * parent group, or the name replaces the request. Delete cancels an
  * in-flight request first when the API requires it.
  *

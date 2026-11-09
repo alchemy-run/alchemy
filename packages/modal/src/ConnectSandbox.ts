@@ -18,7 +18,7 @@ export interface ConnectedPersistentSandbox extends Omit<
   PersistentSandboxHandleOf<RuntimeContext>,
   "persistentSandboxId"
 > {
-  /** The box's id (`ps-…`). */
+  /** The box's id (`ps-...`). */
   readonly persistentSandboxId: Effect.Effect<string>;
 }
 

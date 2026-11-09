@@ -7,7 +7,7 @@ import type { Graph } from "./Graph.ts";
  * Runtime binding for the `ResetGraph` operation (IAM action `neptune-graph:ResetGraph`),
  * scoped to one {@link Graph}.
  *
- * Empties all data from the bound graph while keeping the graph itself (and optionally snapshotting first) — e.g. refresh a demo or staging dataset before a re-import. Provide the implementation with
+ * Empties all data from the bound graph while keeping the graph itself (and optionally snapshotting first) -- e.g. refresh a demo or staging dataset before a re-import. Provide the implementation with
  * `Effect.provide(AWS.NeptuneGraph.ResetGraphHttp)`.
  * ### Resetting a Graph
  * **Example:** Wipe all data from a graph

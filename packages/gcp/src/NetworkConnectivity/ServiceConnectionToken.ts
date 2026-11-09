@@ -32,12 +32,12 @@ const COLLECTION = "serviceConnectionTokens";
 export type ServiceConnectionTokenProps = {
   /**
    * Token id (the `{service_connection_token}` segment). If omitted, a
-   * unique name is generated. Immutable — changing it replaces the
+   * unique name is generated. Immutable -- changing it replaces the
    * token.
    */
   serviceConnectionTokenId?: string;
   /**
-   * Location (`us-central1`, …). Immutable — changing it replaces the
+   * Location (`us-central1`, ...). Immutable -- changing it replaces the
    * token. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile
    *   region, else `us-central1`)
@@ -46,7 +46,7 @@ export type ServiceConnectionTokenProps = {
   /**
    * VPC network associated with this token
    * (`projects/{project}/global/networks/{network}` or a Compute
-   * self-link). Immutable — changing it replaces the token.
+   * self-link). Immutable -- changing it replaces the token.
    */
   network: string;
   /**

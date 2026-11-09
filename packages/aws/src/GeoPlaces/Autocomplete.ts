@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `geo-places:Autocomplete` — complete potential places
+ * Runtime binding for `geo-places:Autocomplete` -- complete potential places
  * and addresses as the user types, based on partial input.
  *
  * geo-places is a standalone, pay-per-call Amazon Location API with no

@@ -20,7 +20,7 @@ export class AddonInstanceUnexpectedResponse extends Data.TaggedError(
 export interface AddonInstanceProps {
   /**
    * ID of the {@link AddonSubscription} this instance is created from.
-   * Immutable — changing the subscription replaces the instance.
+   * Immutable -- changing the subscription replaces the instance.
    */
   addonSubscriptionId: string;
   /**
@@ -48,7 +48,7 @@ export interface AddonInstance extends Resource<
 > {}
 
 /**
- * An SES Mail Manager Add On instance — a usable deployment of a subscribed
+ * An SES Mail Manager Add On instance -- a usable deployment of a subscribed
  * Add On that rule-set conditions and traffic-policy statements reference as
  * an analyzer.
  *
@@ -110,7 +110,7 @@ export const AddonInstanceProvider = () =>
         Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.AddonInstances ?? [])),
       );
 
-      // Instances have no user-supplied name — recover identity after a lost
+      // Instances have no user-supplied name -- recover identity after a lost
       // state write by searching for our ownership tags.
       const findByAlchemyTags = Effect.fn(function* (id: string) {
         const instances = yield* listAll;
@@ -174,7 +174,7 @@ export const AddonInstanceProvider = () =>
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
-        // The subscription is create-only — changing it replaces the
+        // The subscription is create-only -- changing it replaces the
         // instance.
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
@@ -187,11 +187,11 @@ export const AddonInstanceProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — by cached id, falling back to an ownership-tag
+          // 1. OBSERVE -- by cached id, falling back to an ownership-tag
           //    search.
           let instance = yield* observe(id, output);
 
-          // 2. ENSURE — create if missing; a Conflict race re-observes via
+          // 2. ENSURE -- create if missing; a Conflict race re-observes via
           //    the tag search.
           if (instance === undefined) {
             yield* session.note(
@@ -222,7 +222,7 @@ export const AddonInstanceProvider = () =>
             });
           }
 
-          // 3. SYNC — only tags are mutable.
+          // 3. SYNC -- only tags are mutable.
           yield* syncMailManagerTags(attrs.addonInstanceArn, desiredTags);
 
           yield* session.note(attrs.addonInstanceId);
@@ -230,7 +230,7 @@ export const AddonInstanceProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // DeleteAddonInstance is natively idempotent — deleting a
+          // DeleteAddonInstance is natively idempotent -- deleting a
           // nonexistent instance succeeds (verified live).
           yield* mm
             .deleteAddonInstance({ AddonInstanceId: output.addonInstanceId })

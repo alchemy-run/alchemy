@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `dms:DescribeOrderableReplicationInstances`.
  *
  * Bind this operation (account-level) to enumerate the replication instance
- * classes and storage ranges orderable in the region — e.g. for tooling that
+ * classes and storage ranges orderable in the region -- e.g. for tooling that
  * right-sizes migration infrastructure. Provide the implementation with
  * `Effect.provide(AWS.DMS.DescribeOrderableReplicationInstancesHttp)`.
  * ### Sizing Replication Instances
  * **Example:** List Orderable Instance Classes
  * ```typescript
- * // init — account-level, no target resource
+ * // init -- account-level, no target resource
  * const orderable = yield* AWS.DMS.DescribeOrderableReplicationInstances();
  *
  * // runtime

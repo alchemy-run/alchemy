@@ -4,7 +4,7 @@ import { makePaymentCryptographyKeyHttpBinding } from "./BindingHttp.ts";
 import { GenerateMac } from "./GenerateMac.ts";
 
 /**
- * HTTP implementation of {@link GenerateMac} — grants the host Function
+ * HTTP implementation of {@link GenerateMac} -- grants the host Function
  * `payment-cryptography:GenerateMac` on the key and calls the
  * Payment Cryptography Data API at runtime.
  * @example Provide on a Lambda Function

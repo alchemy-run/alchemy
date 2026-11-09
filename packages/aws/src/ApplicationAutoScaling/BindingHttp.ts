@@ -7,16 +7,16 @@ import type { ScalingPolicy } from "./ScalingPolicy.ts";
 /**
  * Shared scaffolding for Application Auto Scaling HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the two
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the two
  * builders below. Everything except the operation and the IAM action list is
  * boilerplate: the runtime callable injects the scalable target's identity
- * triple (`ServiceNamespace`/`ResourceId`/`ScalableDimension`) — plus
- * `PolicyName` for policy-scoped operations — from the bound resource.
+ * triple (`ServiceNamespace`/`ResourceId`/`ScalableDimension`) -- plus
+ * `PolicyName` for policy-scoped operations -- from the bound resource.
  *
  * All grants use `Resource: ["*"]` because Application Auto Scaling's
  * describe/get actions do not support resource-level permissions (only the
- * tagging actions accept the `scalable-target/…` ARN).
+ * tagging actions accept the `scalable-target/...` ARN).
  */
 
 /** The request fields identifying a scalable target, injected from the bound resource. */

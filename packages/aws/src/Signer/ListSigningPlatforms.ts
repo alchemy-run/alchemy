@@ -6,14 +6,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `signer:ListSigningPlatforms`.
  *
  * Lists the AWS-managed signing platforms (Lambda, Notation/OCI, IoT,
- * FreeRTOS, …), filterable by category, partner, and target. Account-level
+ * FreeRTOS, ...), filterable by category, partner, and target. Account-level
  * operation over the AWS-managed platform catalog, so the binding takes no
  * resource argument. Provide the implementation with
  * `Effect.provide(AWS.Signer.ListSigningPlatformsHttp)`.
  * ### Discovering Platforms
  * **Example:** Enumerate Available Platforms
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listSigningPlatforms = yield* AWS.Signer.ListSigningPlatforms();
  *
  * // runtime

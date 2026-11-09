@@ -80,7 +80,7 @@ export interface FolderLookup {
 }
 
 /**
- * A Cloud Resource Manager folder — a node in an organization's resource
+ * A Cloud Resource Manager folder -- a node in an organization's resource
  * hierarchy used to group projects and other folders.
  *
  * Folders have no labels, so a folder found without prior state is

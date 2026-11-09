@@ -30,7 +30,7 @@ export const GetBinding = Layer.effect(
       }
 
       const raw = Effect.sync(
-        // Lazy — the WorkerEnvironment binding is not populated until runtime.
+        // Lazy -- the WorkerEnvironment binding is not populated until runtime.
         () => (env as Record<string, DispatchNamespace>)[namespace.LogicalId]!,
       );
 

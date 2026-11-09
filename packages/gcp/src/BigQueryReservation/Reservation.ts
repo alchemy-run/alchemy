@@ -53,11 +53,11 @@ export type ReservationProps = {
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Must contain only lowercase letters, digits, or dashes;
    * start with a letter; not end with a dash; max 64 characters.
-   * Immutable — changing it replaces the reservation.
+   * Immutable -- changing it replaces the reservation.
    */
   reservationId?: string;
   /**
-   * BigQuery location (`us-central1`, `US`, `EU`, …). Immutable —
+   * BigQuery location (`us-central1`, `US`, `EU`, ...). Immutable --
    * changing it replaces the reservation. Multi-regions `US` and `EU`
    * stay uppercase; regional ids are lowercased (`US-CENTRAL1` becomes
    * `us-central1`).
@@ -78,7 +78,7 @@ export type ReservationProps = {
    */
   ignoreIdleSlots?: boolean;
   /**
-   * Reservation edition. Immutable — changing it replaces the
+   * Reservation edition. Immutable -- changing it replaces the
    * reservation. `STANDARD` cannot set a non-zero baseline
    * `slotCapacity` (use `autoscale.maxSlots` instead).
    * @default "ENTERPRISE"
@@ -122,7 +122,7 @@ export type ReservationProps = {
   /**
    * Place the reservation in the organization's DR secondary region
    * (multi-region `US` or `EU` only). Preview; the project must be
-   * allow-listed. Immutable — changing it replaces the reservation.
+   * allow-listed. Immutable -- changing it replaces the reservation.
    */
   multiRegionAuxiliary?: boolean;
   /**
@@ -141,7 +141,7 @@ export type Reservation = Resource<
     reservationId: string;
     /** Project id. */
     project: string;
-    /** Location id (`us-central1`, `US`, …). */
+    /** Location id (`us-central1`, `US`, ...). */
     location: string;
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;
@@ -149,7 +149,7 @@ export type Reservation = Resource<
     slotCapacity: string | undefined;
     /** Whether idle slots from siblings are ignored. */
     ignoreIdleSlots: boolean;
-    /** Reservation edition (`STANDARD`, `ENTERPRISE`, …). */
+    /** Reservation edition (`STANDARD`, `ENTERPRISE`, ...). */
     edition: string | undefined;
     /** Autoscale settings, including current extra slots. */
     autoscale: bigqueryreservation.Autoscale | undefined;
@@ -197,7 +197,7 @@ export interface ReservationLookup {
    */
   reservationId: string;
   /**
-   * BigQuery location (`us-central1`, `US`, `EU`, …). Multi-regions `US`
+   * BigQuery location (`us-central1`, `US`, `EU`, ...). Multi-regions `US`
    * and `EU` stay uppercase; regional ids are lowercased (`US-CENTRAL1`
    * becomes `us-central1`).
    */
@@ -210,7 +210,7 @@ export interface ReservationLookup {
 }
 
 /**
- * A BigQuery slot reservation — a named pool of slots that assignments
+ * A BigQuery slot reservation -- a named pool of slots that assignments
  * can consume.
  *
  * Changing `reservationId`, `location`, `edition`, or

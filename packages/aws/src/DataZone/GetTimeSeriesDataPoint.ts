@@ -17,7 +17,7 @@ export interface GetTimeSeriesDataPointRequest extends Omit<
  * ### Time Series Metadata
  * **Example:** Read One Data Point
  * ```typescript
- * // init — bind the operation to the domain
+ * // init -- bind the operation to the domain
  * const getTimeSeriesDataPoint = yield* AWS.DataZone.GetTimeSeriesDataPoint(domain);
  *
  * // runtime

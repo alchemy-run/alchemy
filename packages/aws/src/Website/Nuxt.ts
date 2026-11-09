@@ -14,12 +14,12 @@ export const NUXT_WEB_TARGET_SPECIFIER = "@alchemy.run/frontend-frameworks/nuxt/
 export type NuxtProps = FrameworkSiteProps<{
   /**
    * Nuxt config overrides merged over the project's own `nuxt.config.ts`
-   * (the highest-priority c12 layer — a value here wins over the file).
+   * (the highest-priority c12 layer -- a value here wins over the file).
    * Use it for deploy-time values the config file can't express, e.g.
    * per-stage `runtimeConfig`; `nuxt.config.ts` remains the primary home
    * for everything else.
    *
-   * Must be JSON-serializable — no functions, plugins, or modules (the
+   * Must be JSON-serializable -- no functions, plugins, or modules (the
    * value persists in state and participates in the rebuild hash).
    * `nitro.preset` is always owned by the deploy target and cannot be
    * overridden here.
@@ -42,7 +42,7 @@ export type NuxtProps = FrameworkSiteProps<{
  *
  * The build runs through `@alchemy.run/frontend-frameworks/nuxt` with the
  * `@alchemy.run/frontend-frameworks/nuxt/aws` deploy target (nitro's `aws-lambda` preset,
- * streaming enabled) — both must be installed in your project.
+ * streaming enabled) -- both must be installed in your project.
  *
  * ### Creating Nuxt Sites
  * **Example:** Basic Nuxt App
@@ -76,11 +76,11 @@ export type NuxtProps = FrameworkSiteProps<{
  * ```
  *
  * ### Config Overrides
- * `nuxt.config.ts` is the primary home for Nuxt configuration — it loads
+ * `nuxt.config.ts` is the primary home for Nuxt configuration -- it loads
  * natively. The `nuxt` prop layers deploy-time overrides on top (the
  * highest-priority c12 layer) for values the file can't express, like
- * per-stage settings. The bag must be JSON-serializable — no functions,
- * plugins, or modules — and `nitro.preset` stays owned by the deploy
+ * per-stage settings. The bag must be JSON-serializable -- no functions,
+ * plugins, or modules -- and `nitro.preset` stays owned by the deploy
  * target.
  *
  * **Example:** Deploy-time config overrides

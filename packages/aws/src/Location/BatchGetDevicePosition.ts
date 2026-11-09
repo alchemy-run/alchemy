@@ -25,7 +25,7 @@ export interface BatchGetDevicePositionRequest extends Omit<
  * const batchGet = yield* Location.BatchGetDevicePosition(tracker);
  *
  * const result = yield* batchGet({ DeviceIds: ["vehicle-1", "vehicle-2"] });
- * // result.DevicePositions → found positions, result.Errors → per-device failures
+ * // result.DevicePositions -> found positions, result.Errors -> per-device failures
  * ```
  *
  * @binding

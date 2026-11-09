@@ -10,7 +10,7 @@ import { requireLiveResource } from "../HttpBindingDev.ts";
 import { authorizeWith } from "../HttpClientUtils.ts";
 
 /**
- * Shared scaffolding for the HTTP-backed K2 services. Internal — not
+ * Shared scaffolding for the HTTP-backed K2 services. Internal -- not
  * exported from the K2 barrel.
  */
 
@@ -66,7 +66,7 @@ export const makeK2HttpAuth = Effect.gen(function* () {
 /**
  * Capture the ambient credentials (the stack's providers layer during
  * stack-eval) so a client can run with the current credentials instead of a
- * scoped token — for Actions and other deploy-time Effects.
+ * scoped token -- for Actions and other deploy-time Effects.
  */
 export const makeK2LocalAuth = Effect.gen(function* () {
   const context = yield* Effect.context<Credentials | HttpClient.HttpClient>();

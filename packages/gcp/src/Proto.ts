@@ -6,7 +6,7 @@
  * proto3 message drops default-valued fields.
  *
  * Use in reconcilers to decide whether an update call is needed for a
- * partial config the user supplied (GKE addons, Shielded VM settings, …). *
+ * partial config the user supplied (GKE addons, Shielded VM settings, ...). *
  * NOT exported from `index.ts`.
  */
 export const matchesDesired = (observed: unknown, desired: unknown): boolean => {

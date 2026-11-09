@@ -28,13 +28,13 @@ export type BackupProps = {
   /**
    * Source cluster id or full resource name
    * (`projects/{project}/locations/{location}/clusters/{cluster}`).
-   * Immutable — changing it replaces the backup.
+   * Immutable -- changing it replaces the backup.
    */
   clusterName: string;
   /**
-   * Region of the backup (`us-central1`, …). Ignored when
+   * Region of the backup (`us-central1`, ...). Ignored when
    * `clusterName` is a full resource name unless set explicitly.
-   * Immutable — changing it replaces the backup. `US-CENTRAL1` is
+   * Immutable -- changing it replaces the backup. `US-CENTRAL1` is
    * accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -43,7 +43,7 @@ export type BackupProps = {
    * Backup id (the `{backup}` segment of
    * `projects/{project}/locations/{location}/backups/{backup}`). If
    * omitted, a unique RFC1035 name is generated. Must match
-   * `[a-z]([a-z0-9-]{0,61}[a-z0-9])?`. Immutable — changing it
+   * `[a-z]([a-z0-9-]{0,61}[a-z0-9])?`. Immutable -- changing it
    * replaces the backup.
    */
   backupId?: string;
@@ -69,7 +69,7 @@ export type BackupProps = {
    */
   type?: alloydb.BackupTypeEnum | (string & {});
   /**
-   * Customer-managed encryption. Immutable — changing it replaces the
+   * Customer-managed encryption. Immutable -- changing it replaces the
    * backup.
    */
   encryptionConfig?: EncryptionConfig;
@@ -93,7 +93,7 @@ export type Backup = Resource<
     clusterId: string;
     /** Project id. */
     project: string;
-    /** Region id (`us-central1`, …). */
+    /** Region id (`us-central1`, ...). */
     location: string;
     /** User-facing display name. */
     displayName: string | undefined;
@@ -103,7 +103,7 @@ export type Backup = Resource<
     labels: Record<string, string>;
     /** Client annotations. */
     annotations: Record<string, string>;
-    /** Serving state (`READY`, `CREATING`, `FAILED`, …). */
+    /** Serving state (`READY`, `CREATING`, `FAILED`, ...). */
     state: string | undefined;
     /** Backup type (`ON_DEMAND`, `AUTOMATED`, `CONTINUOUS`). */
     type: string;

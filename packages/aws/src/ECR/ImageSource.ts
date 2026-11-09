@@ -9,7 +9,7 @@ import { roleHostBundle } from "../AWSBindings.ts";
 import { getEcrRegistryCredentials } from "./Image.ts";
 
 /**
- * INTERNAL — the ECR target for the shared container image-source machinery
+ * INTERNAL -- the ECR target for the shared container image-source machinery
  * ([Docker/ImageSource.ts](../../Docker/ImageSource.ts)), used by the AWS
  * container platforms (`AWS.ECS.Task`, `AWS.ECS.Service`, `AWS.EKS.*`).
  *
@@ -46,7 +46,7 @@ export interface ResolvedImage {
 }
 
 export interface ResolveImageOptions {
-  /** Logical resource id — keys the stable build-context directory. */
+  /** Logical resource id -- keys the stable build-context directory. */
   id: string;
   /**
    * The props bag carrying the image source fields (`main` / `context` /
@@ -73,7 +73,7 @@ export interface ResolveImageOptions {
    */
   port?: number;
   /**
-   * True when the resource was declared without an inline Effect impl —
+   * True when the resource was declared without an inline Effect impl --
    * `main` is then bundled as-is without the virtual-entry bootstrap.
    */
   isExternal?: boolean;
@@ -91,7 +91,7 @@ export interface ResolveImageOptions {
 /**
  * The generated entry for `AWS.ECS.Task` / `AWS.ECS.Service` containers: a
  * shim importing only `@alchemy.run/aws/Bootstrap/Ecs` (resolvable from any
- * consumer — `alchemy` is its direct dependency) plus the user's `main`.
+ * consumer -- `alchemy` is its direct dependency) plus the user's `main`.
  * Everything the runtime needs lives in that real module, so the virtual
  * entry never imports alchemy's own dependencies (`@distilled.cloud/*`,
  * `@effect/platform-bun`), which an isolated install cannot resolve from
@@ -157,7 +157,7 @@ export const makeImageSource = Effect.gen(function* () {
     return repository.repositoryUri;
   });
 
-  /** Observe a pushed tag in ECR. Missing repository or tag → false. */
+  /** Observe a pushed tag in ECR. Missing repository or tag -> false. */
   const hasTag = (repositoryName: string) =>
     Effect.fn(function* (imageTag: string) {
       const described = yield* ecr

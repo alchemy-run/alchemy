@@ -7,12 +7,12 @@ import type { WorkGroup } from "./WorkGroup.ts";
  * Runtime binding for `athena:ListPreparedStatements`.
  *
  * Lists the prepared statements (name + last-modified time) in the bound
- * workgroup — the workgroup name is injected automatically. Provide the
+ * workgroup -- the workgroup name is injected automatically. Provide the
  * implementation with `Effect.provide(AWS.Athena.ListPreparedStatementsHttp)`.
  * ### Prepared Statements
  * **Example:** List the Workgroup's Prepared Statements
  * ```typescript
- * // init — bind the operation to the workgroup
+ * // init -- bind the operation to the workgroup
  * const listPreparedStatements =
  *   yield* AWS.Athena.ListPreparedStatements(workGroup);
  *

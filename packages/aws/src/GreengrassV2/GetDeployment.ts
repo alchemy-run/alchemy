@@ -6,16 +6,16 @@ import type { Deployment } from "./Deployment.ts";
 /**
  * Runtime binding for `greengrass:GetDeployment`.
  *
- * Reads the bound {@link Deployment}'s full detail — status (`ACTIVE`,
+ * Reads the bound {@link Deployment}'s full detail -- status (`ACTIVE`,
  * `COMPLETED`, `CANCELED`, `FAILED`), component specs, IoT job linkage, and
- * whether it is still the latest revision for its target — so a function can
+ * whether it is still the latest revision for its target -- so a function can
  * monitor a rollout. The deployment id is injected from the binding. Provide
  * the implementation with
  * `Effect.provide(AWS.GreengrassV2.GetDeploymentHttp)`.
  * ### Monitoring Deployments
  * **Example:** Check A Deployment's Status
  * ```typescript
- * // init — bind the operation to the deployment
+ * // init -- bind the operation to the deployment
  * const getDeployment = yield* AWS.GreengrassV2.GetDeployment(deployment);
  *
  * // runtime

@@ -4,7 +4,7 @@ import { makeIotClientHttpBinding } from "./BindingHttp.ts";
 import { ListSubscriptions } from "./ListSubscriptions.ts";
 
 /**
- * HTTP implementation of the {@link ListSubscriptions} capability — grants
+ * HTTP implementation of the {@link ListSubscriptions} capability -- grants
  * `iot:ListSubscriptions` on the bound client filter and calls the IoT
  * data-plane `ListSubscriptions` API.
  */

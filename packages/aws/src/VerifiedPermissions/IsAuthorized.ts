@@ -55,7 +55,7 @@ export interface IsAuthorizedClient {
 }
 
 /**
- * Runtime binding for Verified Permissions authorization — bind it to a
+ * Runtime binding for Verified Permissions authorization -- bind it to a
  * `PolicyStore` inside a function runtime to get a client that evaluates
  * authorization requests against the store's Cedar policies.
  *

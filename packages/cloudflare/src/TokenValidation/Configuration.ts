@@ -20,11 +20,11 @@ type TypeId = typeof TypeId;
  */
 export type JwkKey =
   | {
-      /** Key type — RSA. */
+      /** Key type -- RSA. */
       kty: "RSA";
       /** RSA signing algorithm the key is used with. */
       alg: "RS256" | "RS384" | "RS512" | "PS256" | "PS384" | "PS512";
-      /** Key ID — must match the `kid` header of incoming JWTs. */
+      /** Key ID -- must match the `kid` header of incoming JWTs. */
       kid: string;
       /** RSA modulus (base64url). */
       n: string;
@@ -32,13 +32,13 @@ export type JwkKey =
       e: string;
     }
   | {
-      /** Key type — elliptic curve. */
+      /** Key type -- elliptic curve. */
       kty: "EC";
       /** ECDSA P-256 signing algorithm. */
       alg: "ES256";
-      /** Curve — P-256. */
+      /** Curve -- P-256. */
       crv: "P-256";
-      /** Key ID — must match the `kid` header of incoming JWTs. */
+      /** Key ID -- must match the `kid` header of incoming JWTs. */
       kid: string;
       /** EC x coordinate (base64url). */
       x: string;
@@ -46,13 +46,13 @@ export type JwkKey =
       y: string;
     }
   | {
-      /** Key type — elliptic curve. */
+      /** Key type -- elliptic curve. */
       kty: "EC";
       /** ECDSA P-384 signing algorithm. */
       alg: "ES384";
-      /** Curve — P-384. */
+      /** Curve -- P-384. */
       crv: "P-384";
-      /** Key ID — must match the `kid` header of incoming JWTs. */
+      /** Key ID -- must match the `kid` header of incoming JWTs. */
       kid: string;
       /** EC x coordinate (base64url). */
       x: string;
@@ -64,7 +64,7 @@ export interface TokenConfigurationProps {
   /**
    * Zone the token configuration belongs to.
    *
-   * Stable — moving a configuration between zones triggers a replacement.
+   * Stable -- moving a configuration between zones triggers a replacement.
    */
   zoneId: string;
   /**
@@ -79,7 +79,7 @@ export interface TokenConfigurationProps {
    */
   description?: string;
   /**
-   * Where to look for the token on incoming requests, as firewall fields —
+   * Where to look for the token on incoming requests, as firewall fields --
    * e.g. `http.request.headers["authorization"][0]`.
    */
   tokenSources: string[];
@@ -90,7 +90,7 @@ export interface TokenConfigurationProps {
   keys: JwkKey[];
   /**
    * The token format. Only JWT is supported today. Cannot be changed after
-   * creation — updating this property triggers a replacement.
+   * creation -- updating this property triggers a replacement.
    * @default "JWT"
    */
   tokenType?: "JWT";
@@ -126,7 +126,7 @@ export type TokenConfiguration = Resource<
 >;
 
 /**
- * An API Shield JWT validation token configuration — the JWKS key material
+ * An API Shield JWT validation token configuration -- the JWKS key material
  * and token source locations used to validate JSON Web Tokens on a zone.
  *
  * A configuration holds a set of public JWKs (`keys`) plus the request
@@ -135,7 +135,7 @@ export type TokenConfiguration = Resource<
  * their expression (e.g. `is_jwt_valid("<configId>")`) to enforce
  * validation on selected hosts/operations.
  *
- * JWT validation is an API Shield feature (Enterprise add-on) — accounts
+ * JWT validation is an API Shield feature (Enterprise add-on) -- accounts
  * without the entitlement receive the typed `TokenValidationNotEntitled`
  * error (Cloudflare code 10403) on every call.
  *
@@ -163,7 +163,7 @@ export type TokenConfiguration = Resource<
  * ### Rotating Keys
  * **Example:** Replace the key set in place
  * ```typescript
- * // Changing `keys` PUTs the full key set to the credentials endpoint —
+ * // Changing `keys` PUTs the full key set to the credentials endpoint --
  * // the configuration (and its UUID) stays in place.
  * const config = yield* Cloudflare.TokenValidation.TokenConfiguration("ApiJwt", {
  *   zoneId: zone.zoneId,
@@ -213,7 +213,7 @@ export const TokenConfigurationProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk).map((c) => toAttributes(c, zone.id))),
             // JWT validation is entitlement-gated and freshly minted tokens
-            // can briefly 403 — skip zones we can't enumerate.
+            // can briefly 403 -- skip zones we can't enumerate.
             Effect.catchTag(["TokenValidationNotEntitled", "Forbidden"], () => Effect.succeed([])),
           ),
         { concurrency: 10 },
@@ -246,7 +246,7 @@ export const TokenConfigurationProvider = () =>
         if (observed) return toAttributes(observed, zoneId);
       }
 
-      // Cold read — recover from lost state by matching the deterministic
+      // Cold read -- recover from lost state by matching the deterministic
       // physical title. Configurations carry no ownership markers, so an
       // existing match is reported as `Unowned` and the engine gates
       // takeover behind the adopt policy.
@@ -261,13 +261,13 @@ export const TokenConfigurationProvider = () =>
       const zoneId = news.zoneId as string;
       const title = yield* createConfigurationTitle(id, news.title);
 
-      // 1. Observe — the UUID cached on `output` is a hint, not a
+      // 1. Observe -- the UUID cached on `output` is a hint, not a
       //    guarantee: a 404 falls through to "missing" and we recreate.
       let observed = output?.configId
         ? yield* getConfiguration(zoneId, output.configId)
         : undefined;
 
-      // 2. Ensure — greenfield (or out-of-band delete): create with the
+      // 2. Ensure -- greenfield (or out-of-band delete): create with the
       //    full desired body. Titles are not unique on Cloudflare's side,
       //    so there is no AlreadyExists race to tolerate.
       if (!observed) {
@@ -282,7 +282,7 @@ export const TokenConfigurationProvider = () =>
         return toAttributes(observed, zoneId);
       }
 
-      // 3. Sync metadata — diff observed title/description/tokenSources
+      // 3. Sync metadata -- diff observed title/description/tokenSources
       //    against desired; PATCH only the delta, skip on no-op.
       const desiredDescription = news.description ?? "";
       const metadataDirty =
@@ -299,7 +299,7 @@ export const TokenConfigurationProvider = () =>
         });
       }
 
-      // 4. Sync key set — compare the observed JWKS against the desired
+      // 4. Sync key set -- compare the observed JWKS against the desired
       //    one by full key material; PUT the full set on any difference
       //    (the credentials endpoint replaces the whole key set).
       if (!sameKeys(observed.credentials.keys, news.keys)) {
@@ -310,14 +310,14 @@ export const TokenConfigurationProvider = () =>
         });
       }
 
-      // 5. Return — re-read so attributes reflect the final cloud state.
+      // 5. Return -- re-read so attributes reflect the final cloud state.
       const final = yield* getConfiguration(zoneId, observed.id);
       return toAttributes(final ?? observed, zoneId);
     }),
 
     delete: Effect.fn(function* ({ output }) {
       // Cloudflare may answer DELETE for an already-gone configuration with
-      // `result: null`, which the typed response decode rejects — observe
+      // `result: null`, which the typed response decode rejects -- observe
       // first and treat missing as done.
       const observed = yield* getConfiguration(output.zoneId, output.configId);
       if (!observed) return;

@@ -19,7 +19,7 @@ export type StartJobRunInput = Omit<emr.StartJobRunRequest, "applicationId" | "c
 /**
  * Runtime binding for `emr-serverless:StartJobRun`.
  *
- * Submits a Spark or Hive job to the bound {@link Application} — the
+ * Submits a Spark or Hive job to the bound {@link Application} -- the
  * serverless equivalent of `spark-submit`. The application id is injected
  * from the binding; the caller supplies the job driver, the execution role
  * the job assumes, and optional configuration overrides. Grants
@@ -29,7 +29,7 @@ export type StartJobRunInput = Omit<emr.StartJobRunRequest, "applicationId" | "c
  * ### Running Jobs
  * **Example:** Submit A Spark Job
  * ```typescript
- * // init — bind the operation to the application
+ * // init -- bind the operation to the application
  * const startJobRun = yield* AWS.EMRServerless.StartJobRun(app);
  *
  * // runtime

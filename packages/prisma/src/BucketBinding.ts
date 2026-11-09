@@ -15,7 +15,7 @@ export type BucketCapability = "Read" | "Write" | "ReadWrite";
  * Logical ID of the {@link BucketAccessKey} a bucket binding creates on the
  * caller's behalf.
  *
- * Derived from the bucket and the access level only — deliberately not from
+ * Derived from the bucket and the access level only -- deliberately not from
  * the host. The deployed bundle re-runs the same composition code with no host
  * resolved, and it has to arrive at the same identity, or the runtime half
  * would look for credentials under a different name than the deploy-time half
@@ -30,13 +30,13 @@ export const bucketAccessKeyLogicalId = (
 /**
  * Shared scaffolding for the Prisma bucket bindings.
  *
- * NOT exported from `index.ts` — the capability modules (`ReadBucket.ts`,
+ * NOT exported from `index.ts` -- the capability modules (`ReadBucket.ts`,
  * `WriteBucket.ts`, `ReadWriteBucket.ts`) are each a thin
- * `Layer.effect(Cap, makeBucketBinding({ … }))` over this builder;
+ * `Layer.effect(Cap, makeBucketBinding({ ... }))` over this builder;
  * `makeClient` receives the resolved credential accessors and knows nothing
  * about where they came from.
  *
- * Binding a bucket creates a {@link BucketAccessKey} for it — the logical ID
+ * Binding a bucket creates a {@link BucketAccessKey} for it -- the logical ID
  * is derived from the bucket and the access level (see
  * {@link bucketAccessKeyLogicalId}), so repeated binds reconcile onto the same
  * key instead of minting a new credential every deploy. The key's outputs are
@@ -47,8 +47,8 @@ export const bucketAccessKeyLogicalId = (
  * `read` and `read_write`; there is no write-only role. A `Read` binding mints
  * a `read` key and is genuinely scoped, but a `Write` binding mints a
  * `read_write` key, so its credential can also read. The split between `Write`
- * and `ReadWrite` is therefore a forward contract enforced client-side — the
- * `Write` client exposes no read operations — and it becomes an enforced
+ * and `ReadWrite` is therefore a forward contract enforced client-side -- the
+ * `Write` client exposes no read operations -- and it becomes an enforced
  * server-side boundary if Prisma grows a write-only role.
  */
 export const makeBucketBinding = <Client>(options: {

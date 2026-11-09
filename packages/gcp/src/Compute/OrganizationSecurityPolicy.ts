@@ -44,25 +44,25 @@ export type OrganizationSecurityPolicyProps = {
   /**
    * User-provided RFC1035 name (`shortName`). Unique within the parent
    * organization. If omitted, a unique name is generated from the stack,
-   * stage, and logical id. Immutable — changing it replaces the policy.
+   * stage, and logical id. Immutable -- changing it replaces the policy.
    * After create, GCP also assigns a numeric `name`.
    */
   shortName?: string;
   /**
    * Parent organization or folder. Format `organizations/{organization}`
    * or `folders/{folder}`. If omitted, Alchemy uses the project parent
-   * from Cloud Resource Manager. Immutable — changing it replaces the
+   * from Cloud Resource Manager. Immutable -- changing it replaces the
    * policy.
    */
   parent?: string;
   /**
    * Optional description. Organization security policies have no
-   * `setLabels` API, so Alchemy ownership is stored in a `[alchemy …]`
+   * `setLabels` API, so Alchemy ownership is stored in a `[alchemy ...]`
    * prefix for `list` / nuke.
    */
   description?: string;
   /**
-   * Intended use of the policy. Set only at create time — changing it
+   * Intended use of the policy. Set only at create time -- changing it
    * replaces the policy.
    * @default "CLOUD_ARMOR"
    */

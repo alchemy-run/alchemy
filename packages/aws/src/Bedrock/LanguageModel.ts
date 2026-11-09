@@ -40,7 +40,7 @@ export interface LanguageModelParameters {
   stopSequences?: string[];
   /**
    * Model-specific request fields passed through verbatim as the Converse
-   * API's `additionalModelRequestFields` — e.g. `{ top_k: 50 }` for
+   * API's `additionalModelRequestFields` -- e.g. `{ top_k: 50 }` for
    * Anthropic models or `{ inferenceConfig: { topK: 5 } }` for Amazon Nova.
    */
   additionalModelRequestFields?: unknown;
@@ -112,9 +112,9 @@ export const withModelParameters =
  * Effect AI program (`LanguageModel.generateText`, `streamText`, `Chat`,
  * toolkits, ...) runs against Bedrock without code changes.
  *
- * Calls are translated to the Bedrock Converse API — Bedrock's unified
+ * Calls are translated to the Bedrock Converse API -- Bedrock's unified
  * messages API that works across all conversational foundation models
- * (Amazon Nova, Anthropic Claude, Meta Llama, Mistral, ...) — so one binding
+ * (Amazon Nova, Anthropic Claude, Meta Llama, Mistral, ...) -- so one binding
  * covers every model. Bind one model or a list of models: the function is
  * granted `bedrock:InvokeModel` and `bedrock:InvokeModelWithResponseStream`
  * scoped to exactly those models, the first is the default, and runtime code
@@ -123,7 +123,7 @@ export const withModelParameters =
  * id, a cross-region inference profile id (e.g. `us.amazon.nova-micro-v1:0`),
  * or a full Bedrock ARN.
  *
- * Model access is an account entitlement — enable the model in the Bedrock
+ * Model access is an account entitlement -- enable the model in the Bedrock
  * console (Model access) before invoking, otherwise calls fail with
  * `AccessDeniedException`. Many newer models are only invocable through a
  * cross-region inference profile id, not their bare foundation-model id.
@@ -154,7 +154,7 @@ export const withModelParameters =
  *
  * ### Runtime Configuration
  * **Example:** Override Parameters Per Call
- * The binding's `parameters` are only defaults — scope overrides onto any
+ * The binding's `parameters` are only defaults -- scope overrides onto any
  * call with `withModelParameters`.
  * ```typescript
  * const response = yield* LanguageModel.generateText({ prompt }).pipe(
@@ -287,11 +287,11 @@ export const makeLanguageModel = ({
   });
 
 // ---------------------------------------------------------------------------
-// Prompt → Converse messages
+// Prompt -> Converse messages
 //
 // The Converse API separates system prompts from the message list, requires
 // strict user/assistant alternation, and carries tool results inside *user*
-// messages — so conversion merges consecutive same-role messages after
+// messages -- so conversion merges consecutive same-role messages after
 // mapping.
 // ---------------------------------------------------------------------------
 
@@ -314,7 +314,7 @@ const fileToImageBlock = (
   mediaType: string,
 ): bedrock.ContentBlock | undefined => {
   const format = IMAGE_FORMATS[mediaType];
-  // Converse only accepts inline bytes (or S3 locations) — remote URLs and
+  // Converse only accepts inline bytes (or S3 locations) -- remote URLs and
   // non-image documents are not representable, so they are dropped.
   if (format === undefined || data instanceof URL) return undefined;
   const bytes =
@@ -447,7 +447,7 @@ const toToolConfig = (
   const mapped = tools.map(toToolSpec);
 
   if (toolChoice === "none") {
-    // Converse has no "none" mode. Omit toolConfig entirely — unless the
+    // Converse has no "none" mode. Omit toolConfig entirely -- unless the
     // conversation already contains toolUse/toolResult blocks, which the API
     // rejects without a toolConfig; then send the tools with auto choice.
     return hasToolBlocks(messages) ? { tools: mapped, toolChoice: { auto: {} } } : undefined;
@@ -476,7 +476,7 @@ const toToolConfig = (
 // ---------------------------------------------------------------------------
 
 /**
- * Merge per-call overrides over construction-time defaults, field by field —
+ * Merge per-call overrides over construction-time defaults, field by field --
  * an undefined override field never clobbers a configured default.
  */
 const mergeParameters = (
@@ -551,7 +551,7 @@ const mapStopReason = (raw: bedrock.StopReason | undefined): Response.FinishReas
 
 const mapUsage = (usage: bedrock.TokenUsage | undefined): Response.Usage => {
   // Bedrock's `inputTokens` excludes cache reads/writes, which are reported
-  // separately — so `total` is the sum of all three.
+  // separately -- so `total` is the sum of all three.
   const input = usage?.inputTokens ?? 0;
   const cacheRead = usage?.cacheReadInputTokens ?? 0;
   const cacheWrite = usage?.cacheWriteInputTokens ?? 0;
@@ -571,7 +571,7 @@ const mapUsage = (usage: bedrock.TokenUsage | undefined): Response.Usage => {
 };
 
 // ---------------------------------------------------------------------------
-// generateText: ConverseResponse → Response.PartEncoded[]
+// generateText: ConverseResponse -> Response.PartEncoded[]
 // ---------------------------------------------------------------------------
 
 const toResponseParts = (response: bedrock.ConverseResponse): Array<Response.PartEncoded> => {
@@ -608,7 +608,7 @@ const toResponseParts = (response: bedrock.ConverseResponse): Array<Response.Par
 };
 
 // ---------------------------------------------------------------------------
-// streamText: ConverseStreamOutput events → Stream<Response.StreamPartEncoded>
+// streamText: ConverseStreamOutput events -> Stream<Response.StreamPartEncoded>
 //
 // Bedrock's stream is fully structured: content blocks are opened by index
 // (`contentBlockStart` for tool use; text/reasoning open implicitly on the

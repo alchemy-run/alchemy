@@ -267,7 +267,7 @@ export default Worker(
         })
         .handle("deleteState", ({ params }) => {
           const fqn = decodeURIComponent(params.fqn);
-          // The DO method is `remove`, not `delete` — `delete` is
+          // The DO method is `remove`, not `delete` -- `delete` is
           // reserved by Cloudflare's RPC stub proxy.
           return store
             .getByName(params.stack)

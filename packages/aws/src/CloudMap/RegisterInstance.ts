@@ -6,7 +6,7 @@ import type { Service } from "./Service.ts";
 export interface RegisterInstanceRequest extends Omit<SD.RegisterInstanceRequest, "ServiceId"> {}
 
 /**
- * Runtime binding for `servicediscovery:RegisterInstance` — lets a
+ * Runtime binding for `servicediscovery:RegisterInstance` -- lets a
  * self-registering workload create or update its own Cloud Map instance
  * (an upsert on the instance ID).
  *

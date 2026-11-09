@@ -6,7 +6,7 @@ import type { DataSet } from "./DataSet.ts";
 /**
  * Runtime binding for `dataexchange:SendApiAsset`.
  *
- * Invokes an API asset of an entitled `API_GATEWAY_API` data set — the
+ * Invokes an API asset of an entitled `API_GATEWAY_API` data set -- the
  * Data Exchange data plane proxies the request to the provider's API
  * Gateway. The data set id is injected from the binding; pass the
  * revision and asset ids of the API asset to call.

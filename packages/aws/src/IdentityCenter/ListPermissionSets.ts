@@ -13,7 +13,7 @@ import type { Instance } from "./Instance.ts";
  * ### Reading Permission Sets
  * **Example:** Enumerate Permission Sets
  * ```typescript
- * // init — bind the operation to the Identity Center instance
+ * // init -- bind the operation to the Identity Center instance
  * const listPermissionSets = yield* AWS.IdentityCenter.ListPermissionSets(instance);
  *
  * // runtime

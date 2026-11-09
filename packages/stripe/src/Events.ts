@@ -77,7 +77,7 @@ export class CustomerSubscriptionDeleted {
   constructor(readonly object: Subscription) {}
 }
 /**
- * Fires whenever a Connect account changes — most usefully when a merchant
+ * Fires whenever a Connect account changes -- most usefully when a merchant
  * finishes hosted onboarding and `charges_enabled` / `payouts_enabled`
  * flip to `true`.
  */

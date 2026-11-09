@@ -35,7 +35,7 @@ export type TaxonomiesPolicyTagProps = {
   /**
    * Parent taxonomy. Full name
    * `projects/{project}/locations/{location}/taxonomies/{taxonomy}` or
-   * the taxonomy id (combined with `location`). Immutable — changing it
+   * the taxonomy id (combined with `location`). Immutable -- changing it
    * replaces the policy tag.
    */
   taxonomy: string;
@@ -51,7 +51,7 @@ export type TaxonomiesPolicyTagProps = {
   displayName?: string;
   /**
    * Human-readable description (max 2000 bytes). Policy tags have no
-   * labels field, so Alchemy ownership is stored in a `[alchemy …]`
+   * labels field, so Alchemy ownership is stored in a `[alchemy ...]`
    * prefix and stripped from attributes.
    */
   description?: string;

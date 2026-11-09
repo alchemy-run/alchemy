@@ -32,11 +32,11 @@ export type TraceSamplingConfig = {
 export type EnvironmentsTraceConfigOverrideProps = {
   /**
    * Apigee organization id or `organizations/{org}`. Defaults to the
-   * current GCP project id. Immutable — changing it replaces the override.
+   * current GCP project id. Immutable -- changing it replaces the override.
    */
   organization?: string;
   /**
-   * Environment id or `organizations/{org}/environments/{env}`. Immutable —
+   * Environment id or `organizations/{org}/environments/{env}`. Immutable --
    * changing it replaces the override.
    */
   environment: string;

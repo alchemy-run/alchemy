@@ -6,7 +6,7 @@ export interface CreateApiKeyRequest extends ag.CreateApiKeyRequest {}
 
 /**
  * Runtime binding for issuing API Gateway API keys
- * (`apigateway:POST` on `/apikeys`). Account-scoped — takes no resource.
+ * (`apigateway:POST` on `/apikeys`). Account-scoped -- takes no resource.
  *
  * The response's `value` is `Redacted<string>` (distilled marks it
  * sensitive), so the plaintext key never leaks into logs. Provide
@@ -18,7 +18,7 @@ export interface CreateApiKeyRequest extends ag.CreateApiKeyRequest {}
  * ```typescript
  * import * as Redacted from "effect/Redacted";
  *
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const createApiKey = yield* ApiGateway.CreateApiKey();
  *
  * // runtime

@@ -12,7 +12,7 @@ export interface BeginTransactionOptions {
 }
 
 /**
- * Runtime binding for `rds-data:BeginTransaction` — open a Data API
+ * Runtime binding for `rds-data:BeginTransaction` -- open a Data API
  * transaction and get back a `transactionId` to thread through subsequent
  * `ExecuteStatement`/`BatchExecuteStatement` calls.
  *

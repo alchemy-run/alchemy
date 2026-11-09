@@ -39,7 +39,7 @@ export type WebFunctionAuthType = "ApplicationManaged" | "IamAuth";
  */
 export interface WebFunctionCanary {
   /**
-   * Percent of traffic (0–100) for the revision this deploy publishes. `0`
+   * Percent of traffic (0-100) for the revision this deploy publishes. `0`
    * rolls back: all traffic returns to the previous revision. `100`
    * promotes, the same as removing `canary`.
    */
@@ -115,7 +115,7 @@ export const validateWebFunctionSettings = (
       const upper = Math.min(10_000, Math.ceil(rateLimit / step) * step);
       return invalid(
         "rateLimit",
-        `rateLimit ${rateLimit} is not allowed: use 0–1,000 in steps of 100 or 1,000–10,000 in steps of 1,000 (e.g. ${lower} or ${upper}).`,
+        `rateLimit ${rateLimit} is not allowed: use 0\u20131,000 in steps of 100 or 1,000\u201310,000 in steps of 1,000 (e.g. ${lower} or ${upper}).`,
       );
     }
   }

@@ -44,7 +44,7 @@ export interface AuthenticationSettings {
 
 /**
  * The writable fraud-detection settings of a zone. Only fields you
- * explicitly set are ever sent to Cloudflare — unset fields are left
+ * explicitly set are ever sent to Cloudflare -- unset fields are left
  * untouched on the zone.
  */
 export interface DetectionSettingsValues {
@@ -71,7 +71,7 @@ export interface DetectionSettingsValues {
 
 export interface DetectionSettingsProps extends DetectionSettingsValues {
   /**
-   * Zone whose fraud-detection settings are managed. Stable — changing
+   * Zone whose fraud-detection settings are managed. Stable -- changing
    * the zone triggers a replacement (which re-adopts the new zone's
    * singleton and restores the old zone's snapshot).
    */
@@ -101,7 +101,7 @@ export type DetectionSettings = Resource<
 
 /**
  * The fraud-detection (Fraud User Profiles) settings of a Cloudflare zone
- * (`/zones/{zone_id}/fraud_detection/settings`) — a zone-scoped
+ * (`/zones/{zone_id}/fraud_detection/settings`) -- a zone-scoped
  * **singleton**: every zone always has exactly one fraud-detection
  * settings object, so there is no create or delete on the Cloudflare
  * side. Reconciling this resource adopts the singleton and PUTs only the
@@ -182,7 +182,7 @@ export const DetectionSettingsProvider = () =>
 
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // No account-wide API for this zone singleton — enumerate every
+      // No account-wide API for this zone singleton -- enumerate every
       // zone in the account and read its settings (every live zone has
       // exactly one). `getFraud` only reads, so the entitlement gate
       // (which is on `putFraud`) never trips here.
@@ -214,12 +214,12 @@ export const DetectionSettingsProvider = () =>
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
-      // The settings object is a singleton — it exists iff the zone exists.
+      // The settings object is a singleton -- it exists iff the zone exists.
       const zoneId = output?.zoneId ?? (olds?.zoneId as string | undefined);
       if (!zoneId) return undefined;
       const observed = yield* observe(zoneId);
       if (!observed) return undefined;
-      // Singletons always exist with a Cloudflare default — there is
+      // Singletons always exist with a Cloudflare default -- there is
       // nothing to "own", so a cold read adopts freely (never `Unowned`).
       // The observed values at adoption time become the snapshot restored
       // on destroy.
@@ -230,14 +230,14 @@ export const DetectionSettingsProvider = () =>
       // Inputs are resolved to concrete strings by Plan.
       const zoneId = (output?.zoneId ?? news.zoneId) as string;
 
-      // 1. Observe — the singleton always exists for a live zone.
+      // 1. Observe -- the singleton always exists for a live zone.
       let observed: ObservedFraudSettings = yield* fraud.getFraud({ zoneId });
 
-      // 2. Snapshot — capture pre-management values once; `output` acts
+      // 2. Snapshot -- capture pre-management values once; `output` acts
       //    as the cache that keeps the very first observation sticky.
       const initialSettings = output?.initialSettings ?? pickSettings(observed);
 
-      // 3. Sync — diff observed against the fields the user set and PUT
+      // 3. Sync -- diff observed against the fields the user set and PUT
       //    only when something actually differs. Unset fields are never
       //    sent (omit-means-unchanged on Cloudflare's side), and set
       //    fields are always sent in full (the API treats the expression
@@ -252,13 +252,13 @@ export const DetectionSettingsProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output, olds }) {
-      // Singleton — nothing to delete on the Cloudflare side. Restore the
+      // Singleton -- nothing to delete on the Cloudflare side. Restore the
       // fields this resource managed (i.e. the props that were set) to
       // their pre-management snapshot values. Fields whose snapshot value
       // is absent (e.g. authenticationSettings that never existed before
       // our first write) cannot be restored and are left as-is.
       const observed = yield* observe(output.zoneId);
-      if (!observed) return; // zone is gone — nothing to restore
+      if (!observed) return; // zone is gone -- nothing to restore
       const managed = pickSettings(olds ?? {});
       const current = pickSettings(observed);
       const restore: DetectionSettingsValues = {};
@@ -274,7 +274,7 @@ export const DetectionSettingsProvider = () =>
       }
       if (Object.keys(restore).length > 0) {
         yield* fraud.putFraud({ zoneId: output.zoneId, ...restore }).pipe(
-          // The zone lost its fraud detection subscription out-of-band —
+          // The zone lost its fraud detection subscription out-of-band --
           // the snapshot cannot be restored, but delete stays idempotent.
           Effect.catchTag("FraudDetectionNotEntitled", () => Effect.void),
         );
@@ -351,7 +351,7 @@ const pickSettings = (
 
 /**
  * True when every field set in `desired` matches `observed`. Unset
- * desired fields are ignored — they are dashboard-managed.
+ * desired fields are ignored -- they are dashboard-managed.
  */
 const settingsEqual = (
   desired: DetectionSettingsValues,

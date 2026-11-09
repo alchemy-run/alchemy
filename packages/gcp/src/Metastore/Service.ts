@@ -59,12 +59,12 @@ export type ServiceProps = {
    * Service id (the `{service}` segment of
    * `projects/{project}/locations/{location}/services/{service}`). If
    * omitted, a unique RFC1035 name is generated. Must be 2-63 characters,
-   * start with a letter, and end with a letter or number. Immutable —
+   * start with a letter, and end with a letter or number. Immutable --
    * changing it replaces the service.
    */
   serviceId?: string;
   /**
-   * Region (`us-central1`, …). Immutable — changing it replaces the
+   * Region (`us-central1`, ...). Immutable -- changing it replaces the
    * service. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -210,7 +210,7 @@ export interface ServiceLookup {
    */
   serviceId: string;
   /**
-   * Region (`us-central1`, …). `US-CENTRAL1` is accepted and normalized to
+   * Region (`us-central1`, ...). `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    */
   location?: string;
@@ -222,7 +222,7 @@ export interface ServiceLookup {
 }
 
 /**
- * A Dataproc Metastore service — a managed Hive metastore.
+ * A Dataproc Metastore service -- a managed Hive metastore.
  *
  * Changing `serviceId`, `location`, Hive `version`, `network`,
  * `databaseType`, `encryptionConfig`, `networkConfig`, or

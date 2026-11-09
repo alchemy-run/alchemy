@@ -11,7 +11,7 @@ export interface GenerateMacEmvPinChangeRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `payment-cryptography:GenerateMacEmvPinChange` —
+ * Runtime binding for `payment-cryptography:GenerateMacEmvPinChange` --
  * generates the issuer-script MAC (and re-encrypted PIN block) for an EMV
  * PIN change command. Binds three {@link Key}s: the new PIN encryption key
  * (PEK) the changed PIN is encrypted under, and the secure-messaging

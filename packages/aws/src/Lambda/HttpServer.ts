@@ -147,7 +147,7 @@ export const makeFunctionHttpHandler = <Req>(
 
 const functionUrlEventToWebRequest = (event: LambdaFunctionURLEvent): Request => {
   // `requestContext.http.protocol` is the HTTP version ("HTTP/1.1"), never a
-  // URL scheme — without `x-forwarded-proto` (real Function URLs always set
+  // URL scheme -- without `x-forwarded-proto` (real Function URLs always set
   // it; local emulators may not) fall back to https.
   const protocol = event.headers["x-forwarded-proto"] ?? "https";
   const host = event.headers.host ?? event.requestContext.domainName;
@@ -201,7 +201,7 @@ const albEventToWebRequest = (event: ALBEvent): Request => {
   const host = headers.get("host") ?? headers.get("Host") ?? "alb";
 
   // Unlike API Gateway, ALB does NOT URL-decode the path or query-string
-  // parameters — they arrive still percent-encoded, so join them verbatim
+  // parameters -- they arrive still percent-encoded, so join them verbatim
   // (re-encoding would double-encode).
   const queryParts: string[] = [];
   if (event.multiValueQueryStringParameters) {

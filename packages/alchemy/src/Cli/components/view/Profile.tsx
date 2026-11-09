@@ -29,7 +29,7 @@ export interface ProfileListDisplay {
   }>;
 }
 
-/** Provider credential status → glyph + color + label, shared with the dashboard. */
+/** Provider credential status -> glyph + color + label, shared with the dashboard. */
 export const providerStatusStyle = {
   ready: {
     color: theme.color.success,
@@ -209,7 +209,7 @@ const splitDetail = (
  * One provider in the table: `[cursor] name  method  status` on the header
  * row, its details indented beneath. Blocks are separated by a blank row
  * rather than a rule, and the focused block is marked by the cursor glyph and
- * a brand-coloured name — never by a rail.
+ * a brand-coloured name -- never by a rail.
  */
 export function ProviderBlock({
   provider,
@@ -262,7 +262,7 @@ export function ProviderBlock({
           {reauthHint !== undefined &&
           provider.status === "reauth" &&
           (focusedProvider === undefined || provider.name === focusedProvider) ? (
-            <Text tone="muted"> — {reauthHint}</Text>
+            <Text tone="muted"> &#x2014; {reauthHint}</Text>
           ) : null}
         </Box>
       </Gutter>
@@ -271,7 +271,7 @@ export function ProviderBlock({
           <Gutter>
             <Box paddingLeft={detailIndent}>
               <Spinner
-                label={`refreshing ${provider.method.toLowerCase() === "oauth" ? "OAuth" : provider.method} credentials…`}
+                label={`refreshing ${provider.method.toLowerCase() === "oauth" ? "OAuth" : provider.method} credentials\u2026`}
               />
             </Box>
           </Gutter>

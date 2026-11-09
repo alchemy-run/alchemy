@@ -31,11 +31,11 @@ export interface GenerateEmbedUrlForRegisteredUserRequest extends Omit<
  * ### Embedding Dashboards
  * **Example:** Embed The Bound Dashboard For A Registered User
  * ```typescript
- * // init — bind the operation to the dashboard
+ * // init -- bind the operation to the dashboard
  * const generateEmbedUrl =
  *   yield* AWS.QuickSight.GenerateEmbedUrlForRegisteredUser(dashboard);
  *
- * // runtime — the embed experience defaults to the bound dashboard
+ * // runtime -- the embed experience defaults to the bound dashboard
  * const { EmbedUrl } = yield* generateEmbedUrl({
  *   UserArn: userArn,
  *   SessionLifetimeInMinutes: 60,

@@ -109,8 +109,8 @@ export const DESCRIPTION_MAX = 256;
 
 /**
  * Ownership marker for IAM resources that have no labels (service accounts,
- * workload identity pools and providers). Alchemy stamps `[alchemy alchemy-stack=… alchemy-stage=…
- * alchemy-id=…]` in front of the user description and strips it back out of
+ * workload identity pools and providers). Alchemy stamps `[alchemy alchemy-stack=... alchemy-stage=...
+ * alchemy-id=...]` in front of the user description and strips it back out of
  * the `description` attribute.
  */
 export const encodeOwnedDescription = (

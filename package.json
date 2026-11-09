@@ -71,6 +71,7 @@
     "@alchemy.run/scripts": "workspace:*",
     "@alchemy.run/test": "workspace:*",
     "@effect/tsgo": "catalog:",
+    "@oxlint/plugins": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "alchemy": "workspace:*",

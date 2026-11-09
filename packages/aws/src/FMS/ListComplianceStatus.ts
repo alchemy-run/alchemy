@@ -10,12 +10,12 @@ export interface ListComplianceStatusRequest extends fms.ListComplianceStatusReq
 /**
  * Runtime binding for `fms:ListComplianceStatus`.
  *
- * Returns an array of `PolicyComplianceStatus` objects — use it to get a summary of which member accounts are protected by the specified policy. Provide the
+ * Returns an array of `PolicyComplianceStatus` objects -- use it to get a summary of which member accounts are protected by the specified policy. Provide the
  * implementation with `Effect.provide(AWS.FMS.ListComplianceStatusHttp)`.
  * ### Compliance and Protection Status
  * **Example:** List a Policy's Compliance Status
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const listComplianceStatus = yield* AWS.FMS.ListComplianceStatus();
  *
  * // runtime

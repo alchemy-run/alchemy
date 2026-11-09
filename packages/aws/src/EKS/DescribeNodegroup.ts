@@ -6,7 +6,7 @@ import type { Cluster } from "./Cluster.ts";
 /**
  * Runtime binding for `eks:DescribeNodegroup`.
  *
- * Reads one managed node group's full state — scaling config, instance types, AMI release version, health issues.
+ * Reads one managed node group's full state -- scaling config, instance types, AMI release version, health issues.
  * The cluster `clusterName` is injected from the bound {@link Cluster} and `eks:DescribeNodegroup` is granted on the cluster's sub-resource ARNs.
  * Provide the implementation with
  * `Effect.provide(AWS.EKS.DescribeNodegroupHttp)`.

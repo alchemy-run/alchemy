@@ -6,14 +6,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `guardduty:DisableOrganizationAdminAccount`.
  *
  * Removes an account's delegation as the organization's GuardDuty administrator (management account only).
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.GuardDuty.DisableOrganizationAdminAccountHttp)`.
  * ### Organization Administration
  * **Example:** Remove a Delegated Administrator
  * ```typescript
  * // init
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const disableOrganizationAdminAccount = yield* AWS.GuardDuty.DisableOrganizationAdminAccount();
  *
  * // runtime

@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `iam:GetServiceLastAccessedDetails` — poll and read the
+ * Runtime binding for `iam:GetServiceLastAccessedDetails` -- poll and read the
  * access-advisor report started by {@link GenerateServiceLastAccessedDetails}:
  * job status plus, when `COMPLETED`, the per-service last-authenticated
  * timeline for the entity.

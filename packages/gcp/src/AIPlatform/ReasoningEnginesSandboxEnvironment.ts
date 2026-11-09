@@ -41,7 +41,7 @@ export type SandboxEnvironmentSpec = {
 
 export type ReasoningEnginesSandboxEnvironmentProps = {
   /**
-   * Parent Reasoning Engine. Full name or engine id. Immutable —
+   * Parent Reasoning Engine. Full name or engine id. Immutable --
    * changing it replaces the sandbox.
    */
   reasoningEngine: string;
@@ -52,7 +52,7 @@ export type ReasoningEnginesSandboxEnvironmentProps = {
   location?: string;
   /**
    * Display name. Required by the API. SandboxEnvironment has no labels
-   * field, so Alchemy ownership is stored in a compact `[alc …]`
+   * field, so Alchemy ownership is stored in a compact `[alc ...]`
    * displayName prefix for `list` / nuke.
    */
   displayName?: string;
@@ -114,7 +114,7 @@ export type ReasoningEnginesSandboxEnvironment = Resource<
 >;
 
 /**
- * A Vertex AI sandbox environment — a containerized secure execution
+ * A Vertex AI sandbox environment -- a containerized secure execution
  * runtime for Agent Engine workloads.
  *
  * There is no update API. Changing parent or location replaces the

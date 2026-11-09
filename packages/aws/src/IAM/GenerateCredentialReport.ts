@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `iam:GenerateCredentialReport` — kick off generation of
+ * Runtime binding for `iam:GenerateCredentialReport` -- kick off generation of
  * the account-wide credential report (per-user password/key/MFA hygiene as
  * CSV). Pair with {@link GetCredentialReport} to retrieve the report once the
  * returned `State` is `COMPLETE`.

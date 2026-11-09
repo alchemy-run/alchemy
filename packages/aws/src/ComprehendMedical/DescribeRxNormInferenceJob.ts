@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `comprehendmedical:DescribeRxNormInferenceJob` — get the properties and status of an asynchronous RxNorm ontology linking job.
+ * Runtime binding for `comprehendmedical:DescribeRxNormInferenceJob` -- get the properties and status of an asynchronous RxNorm ontology linking job.
  *
  * Comprehend Medical has no resource-level IAM, so the binding takes no
  * arguments and grants `comprehendmedical:DescribeRxNormInferenceJob` on `*`. Provide the

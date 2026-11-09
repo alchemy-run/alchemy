@@ -11,7 +11,7 @@ import type * as Effect from "effect/Effect";
  * ### Cost Estimation
  * **Example:** Estimate the Cost of Coverage
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const startCostEstimation = yield* AWS.DevOpsGuru.StartCostEstimation();
  *
  * // runtime

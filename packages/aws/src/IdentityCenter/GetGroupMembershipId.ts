@@ -13,7 +13,7 @@ import type { Instance } from "./Instance.ts";
  * ### Querying Group Memberships
  * **Example:** Resolve a MembershipId
  * ```typescript
- * // init — bind the operation to the Identity Center instance
+ * // init -- bind the operation to the Identity Center instance
  * const getGroupMembershipId = yield* AWS.IdentityCenter.GetGroupMembershipId(instance);
  *
  * // runtime

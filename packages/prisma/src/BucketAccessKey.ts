@@ -229,7 +229,7 @@ const ProviderLive = () =>
           const persisted = output && !isPrismaDevId(output.bucketAccessKeyId) ? output : undefined;
           if (persisted) {
             // Prisma returns the secret exactly once, at creation. Persisted
-            // state is authoritative afterwards — but only while the key
+            // state is authoritative afterwards -- but only while the key
             // still exists; a revoked key falls through to mint fresh
             // credentials.
             const keys = yield* listKeys(persisted.bucketId);

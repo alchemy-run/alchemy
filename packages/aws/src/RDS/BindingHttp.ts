@@ -7,8 +7,8 @@ import type { DBInstance } from "./DBInstance.ts";
 /**
  * Shared scaffolding for Amazon RDS HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the builders
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the builders
  * below. Everything except the operation, the identifier resolver, and the
  * IAM action list is boilerplate.
  */
@@ -16,7 +16,7 @@ import type { DBInstance } from "./DBInstance.ts";
 /**
  * Build the impl Effect for an account-level operation (cluster/instance
  * discovery, event history, snapshot administration). The deploy-time half
- * grants `actions` on `*` — these operations span every database in the
+ * grants `actions` on `*` -- these operations span every database in the
  * account and the identifiers they filter on are runtime data.
  */
 export const makeRdsAccountHttpBinding = <I, A, E, R>(options: {

@@ -19,7 +19,7 @@ export const toTagRecord = (tags: personalize.Tag[] | undefined): Record<string,
 
 /**
  * Read the observed tags of a Personalize resource by ARN. Tag reads are
- * best-effort — a failure (e.g. a race with deletion) reports no tags.
+ * best-effort -- a failure (e.g. a race with deletion) reports no tags.
  */
 export const readPersonalizeTags = Effect.fn(function* (arn: string) {
   const response = yield* personalize
@@ -45,7 +45,7 @@ export const syncPersonalizeTags = Effect.fn(function* (
     });
   }
   if (removed.length > 0) {
-    // tagKeys decodes as SensitiveString — wrap in Redacted for the encoder
+    // tagKeys decodes as SensitiveString -- wrap in Redacted for the encoder
     // (which unwraps back to the plain string on the wire).
     yield* personalize.untagResource({
       resourceArn: arn,

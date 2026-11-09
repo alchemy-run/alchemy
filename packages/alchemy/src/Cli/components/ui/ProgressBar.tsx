@@ -31,7 +31,7 @@ export function ProgressBar({
   const cells = Math.max(1, Math.floor(width));
   const steps = Math.floor(cells * ratio * (unicode ? 2 : 1));
   const filled = unicode ? Math.floor(steps / 2) : steps;
-  const partial = unicode && steps % 2 !== 0 ? "⡇" : "";
+  const partial = unicode && steps % 2 !== 0 ? "\u2847" : "";
   const remaining = cells - filled - (partial === "" ? 0 : 1);
   return (
     <Box
@@ -43,7 +43,7 @@ export function ProgressBar({
       <Text>
         <Text tone="muted">[</Text>
         <Text color={statusPaint(variant)}>
-          {(unicode ? "⣿" : "#").repeat(filled)}
+          {(unicode ? "\u28ff" : "#").repeat(filled)}
           {partial}
         </Text>
         <Text tone="muted">{(unicode ? " " : ".").repeat(remaining)}]</Text>

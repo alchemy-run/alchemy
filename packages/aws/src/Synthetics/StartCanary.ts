@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Canary } from "./Canary.ts";
 
 /**
- * Runtime binding for `synthetics:StartCanary` — start the bound
+ * Runtime binding for `synthetics:StartCanary` -- start the bound
  * {@link Canary} running on its configured schedule (e.g. trigger an
  * on-demand smoke test after a deployment); the canary name is injected
  * automatically.
@@ -14,10 +14,10 @@ import type { Canary } from "./Canary.ts";
  * ### Controlling the Canary
  * **Example:** Start the Canary
  * ```typescript
- * // init — grants synthetics:StartCanary on the canary
+ * // init -- grants synthetics:StartCanary on the canary
  * const startCanary = yield* AWS.Synthetics.StartCanary(canary);
  *
- * // runtime — a ConflictException means it is already starting/running
+ * // runtime -- a ConflictException means it is already starting/running
  * yield* startCanary().pipe(
  *   Effect.catchTag("ConflictException", () => Effect.void),
  * );

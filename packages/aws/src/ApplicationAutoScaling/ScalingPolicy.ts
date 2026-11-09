@@ -40,7 +40,7 @@ export interface ScalingPolicyProps {
    */
   scalableDimension: aas.ScalableDimension;
   /**
-   * Target tracking configuration — track a predefined metric
+   * Target tracking configuration -- track a predefined metric
    * (e.g. `ECSServiceAverageCPUUtilization`) or a customized CloudWatch
    * metric specification against a target value.
    *
@@ -48,7 +48,7 @@ export interface ScalingPolicyProps {
    */
   targetTracking?: aas.TargetTrackingScalingPolicyConfiguration;
   /**
-   * Step scaling configuration — apply step adjustments in response to a
+   * Step scaling configuration -- apply step adjustments in response to a
    * CloudWatch alarm you manage.
    *
    * Exactly one of `targetTracking` or `stepScaling` must be provided.
@@ -112,7 +112,7 @@ export interface ScalingPolicy extends Resource<
  * your own alarm). The policy applies to the scalable target identified by
  * the (`serviceNamespace`, `resourceId`, `scalableDimension`) triple, which
  * must be registered (see {@link ScalableTarget}) before the policy is
- * created — pass the target's outputs so deployment orders correctly.
+ * created -- pass the target's outputs so deployment orders correctly.
  * ### Target Tracking
  * **Example:** Track ECS Service CPU
  * ```typescript
@@ -181,7 +181,7 @@ export const ScalingPolicy = Resource<ScalingPolicy>("AWS.ApplicationAutoScaling
 
 /**
  * Raised before any AWS call when a `ScalingPolicy` declares both or neither
- * of `targetTracking` / `stepScaling` — the two configurations are mutually
+ * of `targetTracking` / `stepScaling` -- the two configurations are mutually
  * exclusive and exactly one is required.
  */
 export class ScalingPolicyConfigurationConflict extends Data.TaggedError(
@@ -212,7 +212,7 @@ export const ScalingPolicyProvider = () =>
       // Narrow by the target triple only when it is complete: the API rejects
       // a ScalableDimension without a ResourceId ("Scalable dimension cannot
       // be provided without a resource ID"), and a row persisted by an
-      // interrupted create can carry one without the other — which would
+      // interrupted create can carry one without the other -- which would
       // wedge `read` and therefore every destroy of the stack.
       const describe = (props: {
         serviceNamespace: aas.ServiceNamespace;
@@ -279,7 +279,7 @@ export const ScalingPolicyProvider = () =>
           if (oldName !== newName) {
             return { action: "replace" } as const;
           }
-          // The target triple pins the policy to a scalable target — any
+          // The target triple pins the policy to a scalable target -- any
           // change replaces the policy. Only compare sides that are known:
           // a half-created state row may have lost Output-valued props.
           for (const key of ["serviceNamespace", "resourceId", "scalableDimension"] as const) {
@@ -310,12 +310,12 @@ export const ScalingPolicyProvider = () =>
             ? "TargetTrackingScaling"
             : "StepScaling";
 
-          // Ensure + sync — `putScalingPolicy` is the single
+          // Ensure + sync -- `putScalingPolicy` is the single
           // create-or-update API, keyed by (name, target triple); it
           // overwrites the policy configuration on every call, so one
           // unconditional put converges any starting state. A put issued
           // immediately after the target registers can race its
-          // propagation — retry the typed ObjectNotFoundException briefly.
+          // propagation -- retry the typed ObjectNotFoundException briefly.
           yield* retryWhileTargetPropagates(
             aas.putScalingPolicy({
               PolicyName: policyName,

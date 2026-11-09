@@ -109,14 +109,14 @@ export interface SandboxProps {
    */
   environment: Ref<SandboxEnvironment>;
   /**
-   * Region to place the sandbox in (`us-west2`, `us-east4-eqdc4a`, …).
+   * Region to place the sandbox in (`us-west2`, `us-east4-eqdc4a`, ...).
    * Defaults to US West when omitted. Changing it replaces the Sandbox.
    */
   region?: string;
   /**
    * Minutes of idle time before Railway auto-destroys the sandbox.
    * Plan-dependent default and maximum. Changing it replaces the
-   * Sandbox — there is no update API.
+   * Sandbox -- there is no update API.
    */
   idleTimeoutMinutes?: number;
   /**
@@ -166,7 +166,7 @@ export type Sandbox = Resource<
     projectId: string | undefined;
     /** Region the sandbox was placed in. */
     region: string;
-    /** Observed status (`CREATING`, `RUNNING`, `FAILED`, …). */
+    /** Observed status (`CREATING`, `RUNNING`, `FAILED`, ...). */
     status: SandboxStatus;
     /** Idle timeout in minutes, or `undefined` when Railway omitted it. */
     idleTimeoutMinutes: number | undefined;
@@ -208,7 +208,7 @@ const SandboxResource = Resource<Sandbox>("Railway.Sandbox");
  * destroy it when the task is done. Sandboxes are available on every plan.
  *
  * Railway has no labels and sandboxes have no names. Identity is the
- * Railway sandbox id. There is no in-place update — changing
+ * Railway sandbox id. There is no in-place update -- changing
  * `environment`, `region`, `idleTimeoutMinutes`, `networkIsolation`,
  * `template`, `variables`, `publicDomains`, `resources`, or `sourceSandboxId`
  * replaces the Sandbox. Removing a previously configured option also replaces it.
@@ -513,7 +513,7 @@ const sandboxDestroy = Query.fn((environmentId: string, id: string) =>
 
 /**
  * Execute a command inside a running sandbox. Does not fail on a
- * non-zero exit code — inspect `exitCode`.
+ * non-zero exit code -- inspect `exitCode`.
  */
 export const execSandbox = Effect.fn(function* (input: {
   sandboxId: string;
@@ -608,7 +608,7 @@ export type ExecRequest = { command: string; timeoutSec?: number };
 export type ExecResult = Effect.Success<ReturnType<typeof execSandbox>>;
 
 /**
- * Run a command inside a {@link Sandbox}. Control-plane GraphQL —
+ * Run a command inside a {@link Sandbox}. Control-plane GraphQL --
  * provide {@link ExecHttp}. The inner Effect requires
  * {@link RuntimeContext} so it is typed as runtime-only; from tests
  * prefer {@link execSandbox}.

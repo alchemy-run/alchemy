@@ -9,7 +9,7 @@ export interface StopPipelineExecutionRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `codepipeline:StopPipelineExecution` — stops an
+ * Runtime binding for `codepipeline:StopPipelineExecution` -- stops an
  * in-progress execution, either finishing in-flight actions first or
  * abandoning them (`abandon: true`).
  * ### Running Pipelines

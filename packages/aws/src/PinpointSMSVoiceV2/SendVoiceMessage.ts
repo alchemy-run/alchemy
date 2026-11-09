@@ -15,7 +15,7 @@ export interface SendVoiceMessageRequest extends Omit<
 /**
  * Runtime binding for `sms-voice:SendVoiceMessage`.
  *
- * Sends a voice message from the bound origination phone number — Amazon
+ * Sends a voice message from the bound origination phone number -- Amazon
  * Polly converts the text (or SSML) `MessageBody` into speech. The
  * deploy-time half grants `sms-voice:SendVoiceMessage` on the number and
  * the runtime half injects its ARN as the request's `OriginationIdentity`.

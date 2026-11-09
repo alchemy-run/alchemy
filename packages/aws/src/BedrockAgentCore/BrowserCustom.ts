@@ -87,7 +87,7 @@ export interface BrowserCustomLookup {
 }
 
 /**
- * A custom Amazon Bedrock AgentCore Browser — a managed, isolated cloud
+ * A custom Amazon Bedrock AgentCore Browser -- a managed, isolated cloud
  * browser that agents drive to interact with websites.
  *
  * A custom browser controls the sandbox's network mode, execution role, and
@@ -135,7 +135,7 @@ export const BrowserCustomProvider = () =>
         return props.name ?? (yield* createAgentCoreName(id));
       });
 
-      // getBrowser still resolves soft-deleted browsers — DELETED/DELETING
+      // getBrowser still resolves soft-deleted browsers -- DELETED/DELETING
       // count as gone.
       const getLiveOrUndefined = Effect.fn(function* (browserId: string) {
         const found = yield* control
@@ -195,7 +195,7 @@ export const BrowserCustomProvider = () =>
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
-        // Everything except tags is create-only — any change replaces.
+        // Everything except tags is create-only -- any change replaces.
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return undefined;
           const oldProps = olds ?? ({} as BrowserCustomProps);
@@ -227,7 +227,7 @@ export const BrowserCustomProvider = () =>
             browser = yield* findByName(name);
           }
 
-          // 2. ENSURE — creation is synchronous (READY on return); tolerate
+          // 2. ENSURE -- creation is synchronous (READY on return); tolerate
           // the name-exists race and transient IAM propagation.
           if (browser === undefined) {
             const created = yield* control
@@ -261,7 +261,7 @@ export const BrowserCustomProvider = () =>
             });
           }
 
-          // 3. SYNC — only tags are mutable.
+          // 3. SYNC -- only tags are mutable.
           yield* syncAgentCoreTags(browser.browserArn, desiredTags);
 
           // 4. RETURN fresh attributes.

@@ -16,7 +16,7 @@ export interface UpdateKeysRequest extends Omit<kvs.UpdateKeysRequest, "KvsARN">
  * ### Writing KeyValueStore Data
  * **Example:** Batch Put + Delete
  * ```typescript
- * // init — bind the operations to the store
+ * // init -- bind the operations to the store
  * const describeStore = yield* CloudFront.DescribeKeyValueStore(store);
  * const updateKeys = yield* CloudFront.UpdateKeys(store);
  *

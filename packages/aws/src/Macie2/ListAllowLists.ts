@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `macie2:ListAllowLists`.
  *
  * Retrieves a subset of information about all the allow lists for an account.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.Macie2.ListAllowListsHttp)`.
  * ### Custom Data Identifiers & Lists
  * **Example:** List Allow Lists
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listAllowLists = yield* AWS.Macie2.ListAllowLists();
  *
  * // runtime

@@ -1,7 +1,7 @@
 export * from "./BackupPlan.ts";
 export * from "./BackupSelection.ts";
 export * from "./BackupVault.ts";
-// NOTE: BindingHttp.ts is shared scaffolding — intentionally NOT exported.
+// NOTE: BindingHttp.ts is shared scaffolding -- intentionally NOT exported.
 export * from "./DeleteRecoveryPoint.ts";
 export * from "./DeleteRecoveryPointHttp.ts";
 export * from "./DescribeBackupJob.ts";

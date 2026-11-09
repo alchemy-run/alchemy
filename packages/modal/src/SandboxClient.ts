@@ -220,7 +220,7 @@ export interface SandboxFileStat extends SandboxFileEntry {
 
 /** A tunnel to a port inside the sandbox. */
 export interface SandboxTunnel {
-  /** `https://…` (or `tcp://…` for unencrypted tunnels). */
+  /** `https://...` (or `tcp://...` for unencrypted tunnels). */
   readonly url: string;
   readonly host: string;
   readonly port: number;

@@ -64,7 +64,7 @@ export type ScanConfig = Resource<TypeId, ScanConfigProps, ScanConfigAttributes,
  * read back via the scan-results API; the config itself is the only
  * declarative piece.
  *
- * Requires the `cfone.port_scan` entitlement (Cloudforce One subscription) —
+ * Requires the `cfone.port_scan` entitlement (Cloudforce One subscription) --
  * accounts without it receive an `Unauthorized` error for every scan-config
  * operation.
  * ### Creating a Scan Config
@@ -124,7 +124,7 @@ export const ScanConfigProvider = () =>
     }),
     read: Effect.fn(function* ({ output }) {
       // There is no get-by-id endpoint and configs carry no name, so a cold
-      // read (lost state, no cached configId) has no identity to match — we
+      // read (lost state, no cached configId) has no identity to match -- we
       // can only observe through the cached configId.
       if (!output?.configId) return undefined;
       const acct = output.accountId;
@@ -141,21 +141,21 @@ export const ScanConfigProvider = () =>
           ),
         ),
         // Accounts without the cfone.port_scan entitlement reject every
-        // scan-config call with the typed Unauthorized — treat as "none".
+        // scan-config call with the typed Unauthorized -- treat as "none".
         Effect.catchTag("Unauthorized", () => Effect.succeed<ScanConfigAttributes[]>([])),
       );
     }),
     reconcile: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
-      // Observe — the configId cached on `output` is a hint, not a
+      // Observe -- the configId cached on `output` is a hint, not a
       // guarantee: missing from the list falls through to create.
       const observed = output?.configId
         ? yield* findConfig(output.accountId ?? accountId, output.configId)
         : undefined;
 
       if (!observed) {
-        // Ensure — greenfield (or out-of-band delete).
+        // Ensure -- greenfield (or out-of-band delete).
         const created = yield* cloudforceOne.createScanConfig({
           accountId,
           ips: news.ips,
@@ -165,7 +165,7 @@ export const ScanConfigProvider = () =>
         return toAttributes(created, accountId);
       }
 
-      // Sync — diff observed cloud state against desired; PATCH accepts
+      // Sync -- diff observed cloud state against desired; PATCH accepts
       // partial bodies, so send only what the user pinned, and skip the
       // call entirely on a no-op.
       const dirty =
@@ -186,7 +186,7 @@ export const ScanConfigProvider = () =>
           ports: news.ports,
         })
         .pipe(
-          // Deleted out-of-band between observe and patch — recreate.
+          // Deleted out-of-band between observe and patch -- recreate.
           Effect.catchTag("ScanConfigNotFound", () =>
             cloudforceOne.createScanConfig({
               accountId,

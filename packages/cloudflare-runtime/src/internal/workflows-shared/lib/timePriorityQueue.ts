@@ -110,7 +110,7 @@ export class TimePriorityQueue {
     this.#ctx.storage.transactionSync(() => {
       const entries = this.#heap.toArray();
 
-      // Wipe the table — removes all historical add/remove rows
+      // Wipe the table -- removes all historical add/remove rows
       this.#ctx.storage.sql.exec("DELETE FROM priority_queue");
 
       const newEntries = entries.map((value) => ({

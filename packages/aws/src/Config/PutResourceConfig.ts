@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `config:PutResourceConfig` — record the
+ * Runtime binding for `config:PutResourceConfig` -- record the
  * configuration item of a custom (third-party) resource type with AWS
  * Config, e.g. `MyCompany::Service::Widget`.
  *
@@ -12,7 +12,7 @@ import type * as Effect from "effect/Effect";
  * ### Recording Custom Resources
  * **Example:** Record a Custom Resource
  * ```typescript
- * // init — grants config:PutResourceConfig
+ * // init -- grants config:PutResourceConfig
  * const putResourceConfig = yield* AWS.Config.PutResourceConfig();
  *
  * // runtime

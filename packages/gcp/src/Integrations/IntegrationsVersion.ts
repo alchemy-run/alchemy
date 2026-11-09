@@ -29,17 +29,17 @@ export type IntegrationsVersionProps = {
   /**
    * Integration id (the `{integration}` segment of
    * `projects/{project}/locations/{location}/integrations/{integration}`).
-   * If omitted, a unique id is generated. Immutable — changing it
+   * If omitted, a unique id is generated. Immutable -- changing it
    * replaces the version.
    */
   integrationId?: string;
   /**
    * Version id (the `{version}` segment). Server-assigned on create.
-   * Immutable — changing it replaces the version.
+   * Immutable -- changing it replaces the version.
    */
   versionId?: string;
   /**
-   * Location (`us-central1`, …). Immutable — changing it replaces the
+   * Location (`us-central1`, ...). Immutable -- changing it replaces the
    * version. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile
    *   region, else `us-central1`)
@@ -47,7 +47,7 @@ export type IntegrationsVersionProps = {
   location?: string;
   /**
    * Human-readable description. Integration versions have no labels
-   * field, so Alchemy ownership is stored in a `[alchemy …]` prefix and
+   * field, so Alchemy ownership is stored in a `[alchemy ...]` prefix and
    * stripped from attributes.
    */
   description?: string;
@@ -90,7 +90,7 @@ export type IntegrationsVersion = Resource<
     userLabel: string | undefined;
     /** Trigger configurations. */
     triggerConfigs: TriggerConfig[] | undefined;
-    /** Server-reported status (`DRAFT`, `ACTIVE`, …). */
+    /** Server-reported status (`DRAFT`, `ACTIVE`, ...). */
     status: string | undefined;
     /** Server-reported state. */
     state: string | undefined;
@@ -109,7 +109,7 @@ export type IntegrationsVersion = Resource<
  * An Application Integration version (a draft or published snapshot of
  * an integration).
  *
- * Versions have no labels field — Alchemy stamps ownership into the
+ * Versions have no labels field -- Alchemy stamps ownership into the
  * description. Location, integration id, and version id are immutable.
  * Description, user label, and trigger configs update in place. Draft
  * versions cannot be deleted via the versions API; Alchemy deletes the

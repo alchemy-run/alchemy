@@ -8,7 +8,7 @@ import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
 
 /**
- * Create a Stripe Terminal Reader over HTTP. Account-scoped — binds the
+ * Create a Stripe Terminal Reader over HTTP. Account-scoped -- binds the
  * API key onto the host, not a specific reader resource.
  *
  * ### Creating a Reader at runtime

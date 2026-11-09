@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 export interface GetOperationDetailRequest extends route53domains.GetOperationDetailRequest {}
 
 /**
- * Runtime binding for `route53domains:GetOperationDetail` — return the
+ * Runtime binding for `route53domains:GetOperationDetail` -- return the
  * current status of an asynchronous Route 53 Domains operation (a domain
  * registration, renewal, transfer, or nameserver update identified by the
  * `OperationId` those calls return).

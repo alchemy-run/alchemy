@@ -5,16 +5,16 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `servicecatalog:DescribeServiceActionExecutionParameters`.
  *
- * Gets the parameters required to execute a self-service action on a provisioned product — call it before `ExecuteProvisionedProductServiceAction` to build the parameter form.
+ * Gets the parameters required to execute a self-service action on a provisioned product -- call it before `ExecuteProvisionedProductServiceAction` to build the parameter form.
  *
- * Account-level operation — which products the caller can see and act on
+ * Account-level operation -- which products the caller can see and act on
  * is governed by portfolio principal associations, so the binding takes no
  * resource argument. Provide the implementation with
  * `Effect.provide(AWS.ServiceCatalog.DescribeServiceActionExecutionParametersHttp)`.
  * ### Service Actions
  * **Example:** Read a Service Action's Parameters
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const describeServiceActionExecutionParameters = yield* AWS.ServiceCatalog.DescribeServiceActionExecutionParameters();
  *
  * // runtime

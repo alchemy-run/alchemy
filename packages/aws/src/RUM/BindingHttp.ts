@@ -5,8 +5,8 @@ import type { AppMonitor } from "./AppMonitor.ts";
 /**
  * Shared scaffolding for CloudWatch RUM HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over the builder below
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over the builder below
  * (or reuses {@link bindRumAppMonitorPolicy} when the runtime callable needs
  * bespoke request shaping, like `PutRumEvents` injecting the monitor id and
  * details). Everything except the operation and the IAM action list is

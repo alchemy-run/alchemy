@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `personalize:GetPersonalizedRanking` — Re-ranks a caller-supplied list of items for a user using a campaign
+ * Runtime binding for `personalize:GetPersonalizedRanking` -- Re-ranks a caller-supplied list of items for a user using a campaign
  * backed by the Personalized-Ranking recipe. Campaign ARNs are chosen at
  * runtime, so the binding takes no arguments and grants
  * `personalize:GetPersonalizedRanking` on `*`.

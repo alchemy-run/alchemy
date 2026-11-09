@@ -15,7 +15,7 @@ export interface GetProtocolsListRequest extends fms.GetProtocolsListRequest {}
  * ### Protocols Lists
  * **Example:** Read a Protocols List
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const getProtocolsList = yield* AWS.FMS.GetProtocolsList();
  *
  * // runtime

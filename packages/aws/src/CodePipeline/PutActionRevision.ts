@@ -9,7 +9,7 @@ export interface PutActionRevisionRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `codepipeline:PutActionRevision` — informs
+ * Runtime binding for `codepipeline:PutActionRevision` -- informs
  * CodePipeline about a new revision available to a source action, starting
  * an execution if the revision is new.
  * ### Sources

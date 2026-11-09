@@ -10,8 +10,8 @@ import type { Providers } from "../Providers.ts";
 /**
  * The type of a Resource Explorer index.
  *
- * - `LOCAL` — indexes resources in its own region only.
- * - `AGGREGATOR` — additionally replicates resource information from every
+ * - `LOCAL` -- indexes resources in its own region only.
+ * - `AGGREGATOR` -- additionally replicates resource information from every
  *   other region's local index, enabling account-wide search from this
  *   region. Only one aggregator index may exist per account.
  */
@@ -50,7 +50,7 @@ export interface Index extends Resource<
 > {}
 
 /**
- * An AWS Resource Explorer index — the region singleton that turns on
+ * An AWS Resource Explorer index -- the region singleton that turns on
  * resource indexing so resources in the region can be searched.
  *
  * Only one index can exist per region, so this is a capture-and-restore
@@ -75,7 +75,7 @@ export interface Index extends Resource<
  * ```
  *
  * ### Searching
- * Search always goes through a view — see `AWS.ResourceExplorer.View` and
+ * Search always goes through a view -- see `AWS.ResourceExplorer.View` and
  * the `AWS.ResourceExplorer.Search` binding.
  */
 const IndexResource = Resource<Index>("AWS.ResourceExplorer.Index");
@@ -96,12 +96,12 @@ const observeIndex = re2.getIndex({}).pipe(
 );
 
 /**
- * Repeat a poll until the predicate holds (bounded — a fresh index becomes
+ * Repeat a poll until the predicate holds (bounded -- a fresh index becomes
  * `ACTIVE` in ~15s; type changes usually settle in seconds when no other
  * regions replicate). Expressed as an explicitly-typed helper: inlining
  * `Effect.repeat`/`Effect.retry` in a provider lifecycle op leaves a
  * conditional type unresolved in the provider's inferred layer type, which
- * declaration emit widens to an `unknown` R — poisoning `AWS.providers()`.
+ * declaration emit widens to an `unknown` R -- poisoning `AWS.providers()`.
  */
 const repeatUntil = <A, E, R>(
   self: Effect.Effect<A, E, R>,
@@ -114,7 +114,7 @@ const repeatUntil = <A, E, R>(
   });
 
 /**
- * Retry `ConflictException` on a bounded schedule — creating an index
+ * Retry `ConflictException` on a bounded schedule -- creating an index
  * while the previous one is still `DELETING` (or racing a peer create)
  * conflicts transiently.
  */
@@ -157,7 +157,7 @@ export const IndexProvider = () =>
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
-        // Region singleton — report the single index, if any.
+        // Region singleton -- report the single index, if any.
         list: () =>
           Effect.gen(function* () {
             const live = yield* observeIndex;
@@ -169,11 +169,11 @@ export const IndexProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — cloud state is authoritative. A DELETED index is
+          // 1. OBSERVE -- cloud state is authoritative. A DELETED index is
           //    treated as absent (see observeIndex).
           let live = yield* observeIndex;
 
-          // 2. ENSURE — create when missing. ConflictException covers both
+          // 2. ENSURE -- create when missing. ConflictException covers both
           //    a race with a peer create and a previous index still
           //    DELETING; retry bounded, then fall through to observation.
           if (live === undefined) {
@@ -184,7 +184,7 @@ export const IndexProvider = () =>
             live = yield* repeatUntil(re2.getIndex({}), (r) => r.State === "ACTIVE");
           }
 
-          // 3. SYNC TYPE — LOCAL <-> AGGREGATOR is an in-place update.
+          // 3. SYNC TYPE -- LOCAL <-> AGGREGATOR is an in-place update.
           //    Wait (bounded) for the asynchronous replication tasks to
           //    settle back to ACTIVE; if they take longer, return the
           //    observed UPDATING state and converge on the next deploy.
@@ -193,7 +193,7 @@ export const IndexProvider = () =>
             live = yield* repeatUntil(re2.getIndex({}), (r) => r.State === "ACTIVE");
           }
 
-          // 4. SYNC TAGS — diff against OBSERVED cloud tags so adoption
+          // 4. SYNC TAGS -- diff against OBSERVED cloud tags so adoption
           //    converges (createIndex Tags only apply on first create).
           const observedTags = toTagRecord(live.Tags);
           const { upsert, removed } = diffTags(observedTags, desiredTags);
@@ -220,7 +220,7 @@ export const IndexProvider = () =>
 
         delete: Effect.fn(function* ({ output }) {
           // Idempotent: the index may already be gone (or replaced by a
-          // foreign one with a different ARN — never delete that one).
+          // foreign one with a different ARN -- never delete that one).
           yield* re2.deleteIndex({ Arn: output.indexArn }).pipe(
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             Effect.asVoid,

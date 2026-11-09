@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `comprehend:ContainsPiiEntities` — check whether the
+ * Runtime binding for `comprehend:ContainsPiiEntities` -- check whether the
  * input text contains personally identifiable information, returning the
  * PII entity-type labels present (without offsets; use
  * {@link DetectPiiEntities} to locate them).

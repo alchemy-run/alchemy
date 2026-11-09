@@ -17,7 +17,7 @@ export interface CountTokensRequest extends Omit<bedrock.CountTokensRequest, "mo
 }
 
 /**
- * Runtime binding for `bedrock-runtime:CountTokens` — count the input tokens
+ * Runtime binding for `bedrock-runtime:CountTokens` -- count the input tokens
  * a `Converse` or `InvokeModel` request would consume, using the bound
  * model's tokenizer, without invoking the model (and without inference
  * cost).
@@ -26,7 +26,7 @@ export interface CountTokensRequest extends Omit<bedrock.CountTokensRequest, "mo
  * the bound models.
  *
  * Only a subset of models support token counting, addressed by their BARE
- * foundation-model id (e.g. `anthropic.claude-haiku-4-5-20251001-v1:0`) —
+ * foundation-model id (e.g. `anthropic.claude-haiku-4-5-20251001-v1:0`) --
  * Amazon Nova models and cross-region inference-profile ids are rejected
  * with a `ValidationException` ("The provided model doesn't support
  * counting tokens").

@@ -12,7 +12,7 @@ import type { EventDataStore } from "./EventDataStore.ts";
  * ### Querying CloudTrail Lake
  * **Example:** Cancel a Running Query
  * ```typescript
- * // init — bind the operation to the event data store
+ * // init -- bind the operation to the event data store
  * const cancelQuery = yield* AWS.CloudTrail.CancelQuery(store);
  *
  * // runtime

@@ -30,7 +30,7 @@ export type TensorboardsExperimentsRunsTimeSeriesProps = {
   /**
    * Parent TensorboardRun resource name
    * (`projects/{project}/locations/{location}/tensorboards/{tensorboard}/experiments/{experiment}/runs/{run}`).
-   * Immutable — changing it replaces the time series.
+   * Immutable -- changing it replaces the time series.
    */
   parent: string;
   /**
@@ -45,7 +45,7 @@ export type TensorboardsExperimentsRunsTimeSeriesProps = {
   displayName?: string;
   /**
    * Human-readable description. TensorboardTimeSeries has no labels field,
-   * so Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
+   * so Alchemy ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes.
    */
   description?: string;
@@ -55,7 +55,7 @@ export type TensorboardsExperimentsRunsTimeSeriesProps = {
    */
   valueType?: TimeSeriesValueType;
   /**
-   * Plugin name this time series belongs to (`scalars`, `tensors`, …).
+   * Plugin name this time series belongs to (`scalars`, `tensors`, ...).
    * Immutable.
    */
   pluginName?: string;
@@ -101,7 +101,7 @@ export type TensorboardsExperimentsRunsTimeSeries = Resource<
 /**
  * A Vertex AI TensorboardTimeSeries of scalar, tensor, or blob values.
  *
- * Time series have no labels field — Alchemy stamps ownership into the
+ * Time series have no labels field -- Alchemy stamps ownership into the
  * description so `read`, `list`, and `pnpm nuke:gcp` can find them.
  * Parent run, id, value type, and plugin name are immutable.
  *

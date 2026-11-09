@@ -16,7 +16,7 @@ import { type WriteDnsClient } from "./WriteDns.ts";
  * ### Managing DNS records at runtime
  * **Example:** Full CRUD from inside a Worker
  * Bind the client in the Worker's Init phase and provide
- * {@link ReadWriteDnsBinding}. The zone is fixed by `ReadWriteDnsBinding(zone)` — the
+ * {@link ReadWriteDnsBinding}. The zone is fixed by `ReadWriteDnsBinding(zone)` -- the
  * provisioned token only grants access to that zone, so calls take no
  * `zoneId`. Pass the {@link Zone} resource directly (it's an `Effect`), or
  * `yield* Zone` for a resolved value.
@@ -31,7 +31,7 @@ import { type WriteDnsClient } from "./WriteDns.ts";
  *   "Worker",
  *   { main: import.meta.url },
  *   Effect.gen(function* () {
- *     // Init phase — bind the full CRUD client scoped to the zone.
+ *     // Init phase -- bind the full CRUD client scoped to the zone.
  *     const dns = yield* Cloudflare.DNS.ReadWriteDns(Zone);
  *
  *     return {

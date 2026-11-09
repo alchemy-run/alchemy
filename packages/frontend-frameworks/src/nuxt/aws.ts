@@ -1,5 +1,5 @@
 /**
- * `@alchemy.run/frontend-frameworks/nuxt/aws` — the AWS Lambda deploy
+ * `@alchemy.run/frontend-frameworks/nuxt/aws` -- the AWS Lambda deploy
  * target for the Nuxt integration.
  *
  * Nuxt's AWS story is nitro's `aws-lambda` preset: `.output/server` is a
@@ -7,18 +7,18 @@
  * `.output/public` holds the static assets (prerendered pages included) for
  * the CDN. What this target owns:
  *
- * - **`nitroPreset`** — `"aws-lambda"`, enforced as the last word on the
+ * - **`nitroPreset`** -- `"aws-lambda"`, enforced as the last word on the
  *   resolved nitro config.
- * - **`configureNitro`** — enables response streaming by default
+ * - **`configureNitro`** -- enables response streaming by default
  *   (`awsLambda.streaming: true`): the emitted handler wraps
  *   `awslambda.streamifyResponse` and expects a Lambda Function URL with
  *   `invokeMode: RESPONSE_STREAM`. Set `streaming: false` on the target
  *   config for the buffered APIGW-style handler. Also wires the user-entry
  *   seam: a configured `main` becomes nitro's `entry`.
- * - **`entry`** — surfaces `config.main` as the generic user-entry carriage
+ * - **`entry`** -- surfaces `config.main` as the generic user-entry carriage
  *   (a module that re-exports nitro's runtime handler and adds its own
  *   exports).
- * - **`bundle`** — Node resolve conditions and the `@aws-sdk/` externals
+ * - **`bundle`** -- Node resolve conditions and the `@aws-sdk/` externals
  *   (the Lambda Node.js runtime ships SDK v3) for callers that post-process
  *   server code.
  *
@@ -34,7 +34,7 @@ import { make, type NuxtTarget, type NuxtTargetConfig } from "./Nuxt.ts";
 export const NITRO_PRESET = "aws-lambda";
 
 /**
- * The importable specifier of nitro's aws-lambda streaming runtime handler —
+ * The importable specifier of nitro's aws-lambda streaming runtime handler --
  * the module a USER entry re-exports to wrap the framework's handler:
  *
  * ```ts
@@ -60,7 +60,7 @@ const fail = (message: string, cause?: unknown) =>
   new DeployTargetError({ platform: "aws", message, cause });
 
 /**
- * The adapter-driven target — the shape the framework's regular nitro
+ * The adapter-driven target -- the shape the framework's regular nitro
  * build pipeline consumes. Used directly in the build child (where
  * `cwd === root` holds); {@link makeAwsTarget} wraps it with the wholesale
  * `build` hook that spawns the child.
@@ -84,7 +84,7 @@ const makeAwsAdapterTarget = (config: NuxtAwsTargetConfig = {}): NuxtTarget =>
         ...awsLambda,
         streaming: config.streaming ?? true,
       };
-      // NOTE: the user entry (context.entry) is deliberately NOT wired here —
+      // NOTE: the user entry (context.entry) is deliberately NOT wired here --
       // the framework package sets it on the nitro INSTANCE at `nitro:init`
       // (a config-level entry would leak into the prerenderer's Node-preset
       // clone). See the matching note in ./cloudflare.ts.
@@ -93,7 +93,7 @@ const makeAwsAdapterTarget = (config: NuxtAwsTargetConfig = {}): NuxtTarget =>
 
 /**
  * `loadNuxt` executes the user's `nuxt.config.ts` and modules, which may
- * read the cwd, mutate `process.env`, or `process.chdir` — none of which
+ * read the cwd, mutate `process.env`, or `process.chdir` -- none of which
  * may touch the engine process (many deploys share one event loop). This
  * target's wholesale `build` therefore runs the framework in a disposable
  * child process whose working directory IS the project root (see
@@ -142,7 +142,7 @@ export const makeAwsTarget = (config: NuxtAwsTargetConfig = {}): NuxtTarget => (
 
 /**
  * The deploy-target module contract (`resolveDeployTarget` accepts the
- * default export — or the named `target` export — as a value or factory).
+ * default export -- or the named `target` export -- as a value or factory).
  */
 export const target = makeAwsTarget;
 

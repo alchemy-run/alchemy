@@ -9,7 +9,7 @@ export interface ListActionExecutionsRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `codepipeline:ListActionExecutions` — enumerates the
+ * Runtime binding for `codepipeline:ListActionExecutions` -- enumerates the
  * action-level execution history of the pipeline, optionally filtered to a
  * single execution.
  * ### Observing Pipelines

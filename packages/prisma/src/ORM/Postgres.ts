@@ -78,7 +78,7 @@ export interface PostgresDatabase<C extends AnyPostgresContract, E = never, R = 
     f: (client: PostgresClient<C>) => PromiseLike<A>,
   ) => Effect.Effect<A, ClientError | E, R>;
   /**
-   * The Effect-native orm lane — chain like Prisma, yield the terminal:
+   * The Effect-native orm lane -- chain like Prisma, yield the terminal:
    *
    * ```typescript
    * const user = yield* db.orm.public.User.where({ email }).include("posts").first();
@@ -86,7 +86,7 @@ export interface PostgresDatabase<C extends AnyPostgresContract, E = never, R = 
    */
   readonly orm: EffectOrm<C, ClientError | E, R>;
   /**
-   * The pure `sql` builder lane (no connection — plans are data):
+   * The pure `sql` builder lane (no connection -- plans are data):
    * `db.sql.public.user.select("id", "email").build()`.
    */
   readonly sql: PostgresStaticContext<C>["sql"];
@@ -112,9 +112,9 @@ export interface PostgresDatabase<C extends AnyPostgresContract, E = never, R = 
  * Open a Prisma ORM v8 Postgres client from a connection URL, with
  * Effect-native query surfaces over Prisma's own builders and engine.
  *
- * The client is built at most once per execution — a Worker
+ * The client is built at most once per execution -- a Worker
  * `fetch`/`queue`/`scheduled` event, a Durable Object call, a Workflow run,
- * or a Lambda invocation — and memoized on the execution's `Scope` (via
+ * or a Lambda invocation -- and memoized on the execution's `Scope` (via
  * {@link makeExecutionMemo}), with `close()` registered as a scope finalizer
  * so the underlying `pg` pool never outlives its event. That per-execution
  * lifecycle is what makes the client safe on workerd, where sockets are
@@ -140,14 +140,14 @@ export interface PostgresDatabase<C extends AnyPostgresContract, E = never, R = 
  * );
  *
  * fetch: Effect.gen(function* () {
- *   // orm lane — queries ARE Effects, with typed errors
+ *   // orm lane -- queries ARE Effects, with typed errors
  *   const user = yield* db.orm.public.User.where({ email }).include("posts").first();
  *   const made = yield* db.orm.public.Post.create({ title, authorId: user.id });
  *
- *   // sql builder lane — pure plans, Effect executor
+ *   // sql builder lane -- pure plans, Effect executor
  *   const rows = yield* db.execute(db.sql.public.user.select("id", "email").build());
  *
- *   // transactions — commit on success, rollback on failure/interrupt
+ *   // transactions -- commit on success, rollback on failure/interrupt
  *   yield* db.transaction((tx) =>
  *     Effect.gen(function* () {
  *       const u = yield* tx.orm.public.User.create({ email });
@@ -311,7 +311,7 @@ export const Postgres = <C extends AnyPostgresContract, E = never, R = never>(
             ),
           (scope) =>
             // Rollback on any non-committed exit (failure, interrupt, or
-            // commit failure), then return the connection to the pool —
+            // commit failure), then return the connection to the pool --
             // destroying it if cleanup itself failed.
             Effect.promise(async () => {
               try {

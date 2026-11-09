@@ -30,7 +30,7 @@ export type TanStackStartProps = FrameworkSiteProps;
  *
  * The build runs through
  * `@alchemy.run/frontend-frameworks/tanstack-start` with the
- * `@alchemy.run/frontend-frameworks/tanstack-start/aws` deploy target — both
+ * `@alchemy.run/frontend-frameworks/tanstack-start/aws` deploy target -- both
  * must be installed in your project, alongside `@tanstack/react-start` (or
  * `@tanstack/solid-start`) and `vite`.
  *

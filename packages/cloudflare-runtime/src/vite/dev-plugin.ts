@@ -44,7 +44,7 @@ export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
   let optionsApi: OptionsApi | undefined;
   const plugins: Array<vite.Plugin> = [];
   // The proxy middleware registers in a `configureServer` post callback, which
-  // Vite runs in plugin order — so when this plugin is appended after a
+  // Vite runs in plugin order -- so when this plugin is appended after a
   // framework's plugins, the framework's own post middlewares (e.g. a Node
   // request bridge that assumes a runnable environment) would see requests
   // first. With `middlewareOrder: "pre"` the proxy is instead inserted
@@ -78,15 +78,15 @@ export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
             // Framework integrations strip `configureServer` off this plugin
             // when they create throwaway dev servers (e.g. Astro's type-gen
             // during `build`/`sync`) so we don't boot workerd mid-build. In
-            // that case there is no runtime to proxy to — degrade to Vite's
+            // that case there is no runtime to proxy to -- degrade to Vite's
             // default runnable environment. Check this exact plugin instance
             // (not the resolved plugin list) so multiple instances and
             // renamed/wrapped plugins behave predictably.
             if (!hasConfigureServerHook(plugin)) {
               return vite.createRunnableDevEnvironment(name, config);
             }
-            // With no Worker entry at all — no `main`, and nothing the app's
-            // config names for the entry environment — workerd serves assets
+            // With no Worker entry at all -- no `main`, and nothing the app's
+            // config names for the entry environment -- workerd serves assets
             // alone and evaluates nothing, so there is no runtime for these
             // environments to run modules in. Taking them over anyway would
             // only strip the app's own server-side dev tooling of the runnable

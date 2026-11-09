@@ -8,7 +8,7 @@ import * as Layer from "effect/Layer";
 /**
  * Fully-resolved Hetzner Cloud environment for a stack.
  *
- * A Hetzner Cloud token is issued per project — the token IS the project
+ * A Hetzner Cloud token is issued per project -- the token IS the project
  * scope, so this service only carries `{ token, apiBaseUrl }`. Resolve
  * it inside lifecycle operations with `HetznerEnvironment.current`.
  */

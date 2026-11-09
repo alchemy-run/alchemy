@@ -20,7 +20,7 @@ export interface StartTopicsDetectionJobRequest extends Omit<
 }
 
 /**
- * Runtime binding for `comprehend:StartTopicsDetectionJob` — start an asynchronous
+ * Runtime binding for `comprehend:StartTopicsDetectionJob` -- start an asynchronous
  * topic modeling job over a collection of documents in S3.
  *
  * The binding is constructed with the **data-access role** (the IAM role
@@ -34,7 +34,7 @@ export interface StartTopicsDetectionJobRequest extends Omit<
  * ### Starting Analysis Jobs
  * **Example:** Start a Topic Modeling Job
  * ```typescript
- * // deploy time — bind the Comprehend data-access role
+ * // deploy time -- bind the Comprehend data-access role
  * const startTopicsDetectionJob = yield* AWS.Comprehend.StartTopicsDetectionJob(dataAccessRole);
  *
  * // runtime

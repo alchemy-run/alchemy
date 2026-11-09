@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `rekognition:DescribeStreamProcessor` — describe a stream processor — status, input/output configuration, and settings.
+ * Runtime binding for `rekognition:DescribeStreamProcessor` -- describe a stream processor -- status, input/output configuration, and settings.
  *
  * The binding takes no arguments and grants the function
  * `rekognition:DescribeStreamProcessor` on `*` (Rekognition data-plane resources such

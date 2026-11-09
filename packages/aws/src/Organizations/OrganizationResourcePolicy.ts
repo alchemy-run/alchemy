@@ -43,7 +43,7 @@ export interface OrganizationResourcePolicy extends Resource<
 > {}
 
 /**
- * The singleton AWS Organizations resource policy — an org-level
+ * The singleton AWS Organizations resource policy -- an org-level
  * resource-based policy that grants other principals (typically delegated
  * administrator accounts) permission to call Organizations APIs.
  *
@@ -123,10 +123,10 @@ export const OrganizationResourcePolicyProvider = () =>
         reconcile: Effect.fn(function* ({ news, session }) {
           const desiredContent = JSON.stringify(news.document);
 
-          // Observe — fetch the live resource policy (or absence).
+          // Observe -- fetch the live resource policy (or absence).
           let state = yield* readResourcePolicy();
 
-          // Sync — `putResourcePolicy` is a single upsert that handles both
+          // Sync -- `putResourcePolicy` is a single upsert that handles both
           // first-create and update. We diff observed content against
           // desired so the call only fires when there's drift. Reading by
           // ID isn't possible (resource is a singleton with a server-issued

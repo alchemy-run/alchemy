@@ -1,7 +1,7 @@
 /**
  * R2 key scheme (DESIGN.md §3.2).
  *
- * All R2 keys are **immutable and content-addressed** — this sidesteps the
+ * All R2 keys are **immutable and content-addressed** -- this sidesteps the
  * 1-write/s/key limit, makes conditional-put re-runs (idempotent alarm jobs)
  * safe, and makes cross-repo fork references safe: a fork's `objects.r2_key`
  * may point into the parent repo's prefix, since the bytes at a key never
@@ -14,7 +14,7 @@
  * {repoId}/lfs/{sha256}             LFS objects (reserved)
  * ```
  *
- * `list()` is never used on a hot path — the `objects` table is the sole
+ * `list()` is never used on a hot path -- the `objects` table is the sole
  * inventory. The prefix helpers exist for the delete-purge and GC alarm jobs
  * only.
  */
@@ -22,7 +22,7 @@
 /**
  * R2 key for an oversize loose object: `{repoId}/objects/{oid}`.
  *
- * The stored bytes are `zlib(content)` without the loose header — byte-equal
+ * The stored bytes are `zlib(content)` without the loose header -- byte-equal
  * to what an `objects.location = 'row'` row would hold in `zdata`.
  */
 export const objectKey = (repoId: string, oid: string): string => `${repoId}/objects/${oid}`;
@@ -56,7 +56,7 @@ export const bundleSidebandKey = (repoId: string, refsHash: string): string =>
 
 /**
  * R2 key for a streamed incoming push pack (v1.x upgrade seam, DESIGN.md
- * §3.6): `{repoId}/incoming/{pushId}.pack`. Reserved — unused in v1's
+ * §3.6): `{repoId}/incoming/{pushId}.pack`. Reserved -- unused in v1's
  * buffered ingest.
  */
 export const incomingKey = (repoId: string, pushId: string): string =>
@@ -74,7 +74,7 @@ export const WIRE_PACK_PREFIX = "wire-";
 export const wirePackId = (receiveId: string): string => `${WIRE_PACK_PREFIX}${receiveId}`;
 export const isWirePackId = (packId: string): boolean => packId.startsWith(WIRE_PACK_PREFIX);
 
-/** R2 key of any pack by id — compacted (`packKey`) or promoted wire pack. */
+/** R2 key of any pack by id -- compacted (`packKey`) or promoted wire pack. */
 export const packKeyOf = (repoId: string, packId: string): string =>
   isWirePackId(packId)
     ? incomingKey(repoId, packId.slice(WIRE_PACK_PREFIX.length))
@@ -87,7 +87,7 @@ export const packKeyOf = (repoId: string, packId: string): string =>
 export const lfsKey = (repoId: string, sha256: string): string => `${repoId}/lfs/${sha256}`;
 
 /**
- * The whole-repo R2 prefix (`{repoId}/`) — the unit the delete-purge alarm
+ * The whole-repo R2 prefix (`{repoId}/`) -- the unit the delete-purge alarm
  * job lists and deletes (retained while the Registry reports
  * `fork_count > 0`, since forks reference keys under it).
  */

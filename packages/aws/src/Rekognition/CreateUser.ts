@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `rekognition:CreateUser` — create a user in a face collection to aggregate multiple face IDs of the same person.
+ * Runtime binding for `rekognition:CreateUser` -- create a user in a face collection to aggregate multiple face IDs of the same person.
  *
  * The binding takes no arguments and grants the function
  * `rekognition:CreateUser` on `*` (Rekognition data-plane resources such

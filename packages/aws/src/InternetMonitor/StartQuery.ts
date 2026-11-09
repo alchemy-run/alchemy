@@ -6,7 +6,7 @@ import type { Monitor } from "./Monitor.ts";
 export interface StartQueryRequest extends Omit<im.StartQueryInput, "MonitorName"> {}
 
 /**
- * Runtime binding for `internetmonitor:StartQuery` — start a query against
+ * Runtime binding for `internetmonitor:StartQuery` -- start a query against
  * the bound {@link Monitor}'s measurement data with the Internet Monitor
  * query interface; the monitor name is injected automatically.
  *
@@ -15,7 +15,7 @@ export interface StartQueryRequest extends Omit<im.StartQueryInput, "MonitorName
  * ### Querying Measurements
  * **Example:** Start a Measurements Query
  * ```typescript
- * // init — grants internetmonitor:StartQuery on the monitor
+ * // init -- grants internetmonitor:StartQuery on the monitor
  * const startQuery = yield* AWS.InternetMonitor.StartQuery(monitor);
  *
  * // runtime

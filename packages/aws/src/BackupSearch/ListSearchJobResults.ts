@@ -19,7 +19,7 @@ export interface ListSearchJobResultsRequest extends Omit<
  * ### Reading Search Results
  * **Example:** List the Search Job's Results
  * ```typescript
- * // init — bind the operation to the search job
+ * // init -- bind the operation to the search job
  * const listSearchJobResults =
  *   yield* AWS.BackupSearch.ListSearchJobResults(search);
  *

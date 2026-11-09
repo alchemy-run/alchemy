@@ -7,15 +7,15 @@ import type { PolicyStatement } from "../IAM/Policy.ts";
  * bindings.
  *
  * MediaConvert jobs are created *at runtime* with server-assigned ids, so
- * their ARNs are unknowable at deploy time — every binding is account-level
+ * their ARNs are unknowable at deploy time -- every binding is account-level
  * and grants its action(s) on `Resource: ["*"]`. The only variation between
  * bindings is the distilled operation, the IAM action, and whether the
  * operation passes an S3-access role to the service (`CreateJob`, which
  * additionally needs `iam:PassRole` conditioned to
  * `mediaconvert.amazonaws.com`).
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, makeMediaConvertHttpBinding({ … }))`.
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, makeMediaConvertHttpBinding({ ... }))`.
  */
 export const makeMediaConvertHttpBinding = <I, A, E, R>(options: {
   /**

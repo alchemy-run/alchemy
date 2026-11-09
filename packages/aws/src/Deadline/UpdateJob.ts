@@ -6,14 +6,14 @@ import type { Queue } from "./Queue.ts";
 /**
  * Runtime binding for `deadline:UpdateJob`.
  *
- * Mutates a job in the bound {@link Queue} — reprioritize, cap failures, or
+ * Mutates a job in the bound {@link Queue} -- reprioritize, cap failures, or
  * cancel/suspend/requeue it by setting `targetTaskRunStatus`. The queue's
  * `farmId`/`queueId` are injected from the binding. Provide the
  * implementation with `Effect.provide(AWS.Deadline.UpdateJobHttp)`.
  * ### Managing Jobs
  * **Example:** Cancel A Job
  * ```typescript
- * // init — bind the operation to the queue
+ * // init -- bind the operation to the queue
  * const updateJob = yield* AWS.Deadline.UpdateJob(queue);
  *
  * // runtime

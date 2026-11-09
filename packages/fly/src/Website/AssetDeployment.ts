@@ -24,7 +24,7 @@ const s3Concurrency = 16;
 /**
  * Unwrap Tigris {@link Bucket} attrs for the S3 client. Credentials and
  * the endpoint are `Redacted<string>`; names are plain strings. This is
- * Fly Bucket plumbing, not website MIME — it stays here because this
+ * Fly Bucket plumbing, not website MIME -- it stays here because this
  * resource is the only Website helper that speaks Tigris.
  */
 const asPlain = (value: unknown): string | undefined => {

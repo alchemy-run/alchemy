@@ -5,8 +5,8 @@ import type { InvestigationGroup } from "./InvestigationGroup.ts";
 /**
  * Shared scaffolding for the CloudWatch investigations (AIOps) HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the two builders
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the two builders
  * below. Everything except the operation, the IAM action list, and (for
  * group-scoped ops) how the group's ARN maps onto the request is boilerplate.
  */
@@ -55,7 +55,7 @@ export const makeAIOpsGroupHttpBinding = <I, A, E, R>(options: {
 /**
  * Build the impl Effect for an account-level AIOps operation (enumerating
  * the Region's investigation groups). The deploy-time half grants `actions`
- * on `*` — `aiops:ListInvestigationGroups` is a list action that is not
+ * on `*` -- `aiops:ListInvestigationGroups` is a list action that is not
  * scoped to a single group resource.
  */
 export const makeAIOpsAccountHttpBinding = <I, A, E, R>(options: {

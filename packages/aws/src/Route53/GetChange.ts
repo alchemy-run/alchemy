@@ -7,7 +7,7 @@ import type * as Effect from "effect/Effect";
  * `route53:GetChange` on `arn:aws:route53:::change/*`).
  *
  * Polls the status of a record change submitted via
- * {@link ChangeResourceRecordSets} — `PENDING` until the change has
+ * {@link ChangeResourceRecordSets} -- `PENDING` until the change has
  * propagated to all authoritative name servers, then `INSYNC`. Pass the
  * bare change id (strip a leading `/change/` from `ChangeInfo.Id`).
  * Provide the implementation with

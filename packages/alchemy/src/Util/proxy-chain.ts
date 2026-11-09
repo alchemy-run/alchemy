@@ -11,7 +11,7 @@ interface ChainState {
 /**
  * Every proxy produced by {@link chain} is registered here so that a chain
  * passed as an *argument* to another chain over the same `cached` effect
- * (e.g. `` sql`... ${sql.insert(row)}` `` — the nested `sql.insert(row)` is
+ * (e.g. `` sql`... ${sql.insert(row)}` `` -- the nested `sql.insert(row)` is
  * itself a proxy) can be recognized and replayed against the same resolved
  * root instead of being handed to the real client as an opaque proxy.
  */
@@ -19,7 +19,7 @@ const chainStates = new WeakMap<object, ChainState>();
 
 /**
  * Replay an op chain against a real value. `get` reads a property,
- * `call` invokes — bound to the previous receiver so `this` resolves
+ * `call` invokes -- bound to the previous receiver so `this` resolves
  * to the object the method was read from (drizzle's `select()` etc.
  * read `this._.session`, so dropping `this` would throw).
  */
@@ -87,47 +87,47 @@ const replayArg = (
 
 /**
  * Wrap a cached `Effect<T>` in a chainable Proxy so callers can use the
- * returned value as if it were `T` itself — every property read and call
+ * returned value as if it were `T` itself -- every property read and call
  * records a step, and the chain is replayed against the resolved value
  * when it's finally yielded as an Effect.
  *
  * Compare:
  *
  * ```typescript
- * // Without proxyChain — caller has to yield the cached Effect first:
+ * // Without proxyChain -- caller has to yield the cached Effect first:
  * const conn = yield* makeConnection();      // Effect<Db>
  * fetch: Effect.gen(function* () {
  *   const db = yield* conn;
  *   const rows = yield* db.select().from(users);
  * });
  *
- * // With proxyChain — caller treats the return as the value directly:
+ * // With proxyChain -- caller treats the return as the value directly:
  * const db = proxyChain(yield* Effect.cached(makeDb));   // T
  * fetch: Effect.gen(function* () {
  *   const rows = yield* db.select().from(users);
  * });
  * ```
  *
- * The chain ends when the proxy is yielded as an Effect — the resolved
+ * The chain ends when the proxy is yielded as an Effect -- the resolved
  * value at that point must be a `Yieldable` (an Effect, drizzle query
  * builder, etc). Anything before that is recorded as ops.
  *
- * A chain passed as an *argument* to another chain over the same effect —
+ * A chain passed as an *argument* to another chain over the same effect --
  * e.g. `` sql`INSERT INTO users ${sql.insert(row)}` ``, where `sql.insert(row)`
- * is itself a deferred proxy — is replayed against the same resolved root
+ * is itself a deferred proxy -- is replayed against the same resolved root
  * before the outer call runs, so synchronous fragment helpers compose.
  */
 export const proxyChain = <T>(cached: Effect.Effect<T, any, any>): T => chain(cached) as T;
 
 /**
- * Property reads the Effect runtime uses as *brand probes* — `symbol` keys
- * and `~effect/...` type-id strings (`~effect/Exit`, `~effect/Effect`, …).
+ * Property reads the Effect runtime uses as *brand probes* -- `symbol` keys
+ * and `~effect/...` type-id strings (`~effect/Exit`, `~effect/Effect`, ...).
  * The fiber's generator runner distinguishes a yielded Effect from an Exit
- * with `value[ExitTypeId] !== undefined` (effect ≥ 4.0.0-rc.113; earlier
+ * with `value[ExitTypeId] !== undefined` (effect >= 4.0.0-rc.113; earlier
  * releases used `in`, which the `has` trap already answers). Recording such
  * a read as a chain step would hand back a truthy proxy, so the runner
  * would treat every chain as an already-settled Exit and resume the
- * generator with `proxy.value` — another proxy — instead of running it.
+ * generator with `proxy.value` -- another proxy -- instead of running it.
  * Brand probes therefore answer `undefined` when the underlying effect
  * lacks the key; the `has` trap keeps `in`-based probes correct too.
  */

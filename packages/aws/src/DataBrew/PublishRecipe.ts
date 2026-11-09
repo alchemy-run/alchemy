@@ -6,7 +6,7 @@ import type { Recipe } from "./Recipe.ts";
 export interface PublishRecipeRequest extends Omit<SVC.PublishRecipeRequest, "Name"> {}
 
 /**
- * Runtime binding for `databrew:PublishRecipe` — snapshots the bound
+ * Runtime binding for `databrew:PublishRecipe` -- snapshots the bound
  * recipe's `LATEST_WORKING` steps as the next numbered published version
  * (recipe jobs consume the latest published version by default).
  * ### Publishing Recipes

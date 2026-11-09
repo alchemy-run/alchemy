@@ -25,7 +25,7 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  * A Cloudflare Worker deployed from a Vite project.
  *
  * `Vite` uses the Cloudflare Vite plugin to build both the server bundle
- * and client assets in a single `vite build` invocation — no manual
+ * and client assets in a single `vite build` invocation -- no manual
  * `main` entrypoint, build command, output directory, or Wrangler
  * configuration required.
  *
@@ -45,7 +45,7 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  *
  * ### SSR Frameworks
  * SSR frameworks like TanStack Start or SolidStart work with a single
- * call — the `nodejs_compat` compatibility flag is enabled by default
+ * call -- the `nodejs_compat` compatibility flag is enabled by default
  * so the server bundle can use Node.js APIs.
  *
  * **Example:** TanStack Start
@@ -93,8 +93,8 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  * ### Custom Worker Entry
  * By default the deployed Worker entry is the server bundle the
  * framework produces. When the Worker must export more than the
- * framework's fetch handler — Durable Object classes, additional
- * handlers — point `main` at your own module that wraps the framework
+ * framework's fetch handler -- Durable Object classes, additional
+ * handlers -- point `main` at your own module that wraps the framework
  * handler and re-exports the extras. `main` takes precedence over any
  * entry configured in the Vite config.
  *
@@ -124,7 +124,7 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  *
  * **Example:** Foldkit
  * [Foldkit](https://foldkit.dev) apps are Vite projects, so a single call
- * deploys them — the Foldkit Vite plugin in the app's own `vite.config.ts`
+ * deploys them -- the Foldkit Vite plugin in the app's own `vite.config.ts`
  * composes with the injected Cloudflare plugin, and with `ssr.build` set
  * there its `fetch` handler is the server bundle this resource deploys,
  * exactly as TanStack Start's is. A client-only Foldkit app wants
@@ -142,7 +142,7 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  *
  * **Example:** Octane SPA
  * A client-only [OctaneJS](https://octanejs.dev) app (no `octane.config.ts`
- * routes) is a plain Vite SPA — the `octane()` compiler plugin in the app's
+ * routes) is a plain Vite SPA -- the `octane()` compiler plugin in the app's
  * own `vite.config.ts` composes with the injected Cloudflare plugin:
  * ```typescript
  * const app = yield* Cloudflare.Website.Vite("Octane", {
@@ -152,14 +152,14 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  * });
  * ```
  * Fullstack Octane apps (routes + SSR in `octane.config.ts`) run their own
- * two-pass build through Octane's Cloudflare adapter — deploy those with
+ * two-pass build through Octane's Cloudflare adapter -- deploy those with
  * `Cloudflare.Website.Octane` instead.
  *
  * ### Serving on a Zone Route with a Path Prefix
  * Cloudflare matches static assets against the full request pathname,
  * so a site attached to a route like `example.com/docs*` only serves
  * assets whose uploaded paths carry the `/docs` prefix. Set Vite's
- * `base` in your `vite.config.ts` — the emitted HTML references its
+ * `base` in your `vite.config.ts` -- the emitted HTML references its
  * assets under the prefix, and Alchemy keys the uploaded asset manifest
  * with the same resolved `base` so the two always agree.
  *
@@ -219,7 +219,7 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  * The default scope only hashes files under the project root (plus the
  * nearest lockfile), so edits to a sibling workspace package the app
  * imports do not retrigger the build on their own. Add the sibling's
- * sources with a `../` include glob — and keep `lockfile: true`, since
+ * sources with a `../` include glob -- and keep `lockfile: true`, since
  * providing `include` otherwise drops the lockfile from the hash:
  * ```typescript
  * const site = yield* Cloudflare.Website.Vite("Web", {
@@ -235,7 +235,7 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
  * Calling `Vite` with no arguments returns a constructor you can
  * `extend` to declare the Worker as a named class. The class is both
  * an `Effect` you can `yield*` to deploy and a type you can reference
- * elsewhere — useful when other resources need to bind to this Worker.
+ * elsewhere -- useful when other resources need to bind to this Worker.
  *
  * **Example:** Declaring a Worker class
  * ```typescript

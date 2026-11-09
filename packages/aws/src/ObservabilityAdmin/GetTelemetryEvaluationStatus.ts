@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `observabilityadmin:GetTelemetryEvaluationStatus` —
+ * Runtime binding for `observabilityadmin:GetTelemetryEvaluationStatus` --
  * reads the account's telemetry config onboarding status (`RUNNING`,
  * `STOPPED`, `NOT_STARTED`, ...), e.g. for a compliance function that
  * verifies telemetry auditing stays enabled.
@@ -13,7 +13,7 @@ import type * as Effect from "effect/Effect";
  * ### Reading Onboarding Status
  * **Example:** Verify telemetry auditing is enabled
  * ```typescript
- * // init — grants observabilityadmin:GetTelemetryEvaluationStatus
+ * // init -- grants observabilityadmin:GetTelemetryEvaluationStatus
  * const getEvaluationStatus = yield* AWS.ObservabilityAdmin.GetTelemetryEvaluationStatus();
  *
  * // runtime

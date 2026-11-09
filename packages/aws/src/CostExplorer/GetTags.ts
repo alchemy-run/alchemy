@@ -16,7 +16,7 @@ export interface GetTagsRequest extends ce.GetTagsRequest {}
  * ### Exploring Dimensions and Tags
  * **Example:** List Cost Allocation Tag Values
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const getTags = yield* AWS.CostExplorer.GetTags();
  *
  * // runtime

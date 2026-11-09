@@ -4,7 +4,7 @@ import { makeIotThingHttpBinding } from "./BindingHttp.ts";
 import { DescribeThing } from "./DescribeThing.ts";
 
 /**
- * HTTP implementation of the {@link DescribeThing} capability — grants
+ * HTTP implementation of the {@link DescribeThing} capability -- grants
  * `iot:DescribeThing` on the thing ARN and calls the IoT `DescribeThing`
  * API.
  */

@@ -67,7 +67,7 @@ export interface ConfigurationSetLookup {
 
 /**
  * An AWS End User Messaging SMS (Pinpoint SMS Voice v2) configuration
- * set — a named set of rules applied to SMS and voice messages sent
+ * set -- a named set of rules applied to SMS and voice messages sent
  * through it.
  *
  * Attach `EventDestination`s to a configuration set to route message
@@ -118,7 +118,7 @@ export const ConfigurationSet = Resource<ConfigurationSet>(
 
 /**
  * Raised when a configuration set cannot be observed immediately after
- * it was created — the create call succeeded (or raced a peer) but the
+ * it was created -- the create call succeeded (or raced a peer) but the
  * follow-up describe found nothing.
  */
 export class SmsVoiceConfigurationSetMissing extends Data.TaggedError(
@@ -185,10 +185,10 @@ export const ConfigurationSetProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* getByName(name);
 
-          // 2. Ensure — create if missing; a ConflictException is a race
+          // 2. Ensure -- create if missing; a ConflictException is a race
           // with a peer reconciler, so fall through to re-observe.
           if (observed === undefined) {
             yield* smsvoice
@@ -209,7 +209,7 @@ export const ConfigurationSetProvider = () =>
             });
           }
 
-          // 3. Sync default message type — diff observed against desired;
+          // 3. Sync default message type -- diff observed against desired;
           // an absent prop clears any observed default.
           if (
             news.defaultMessageType !== undefined &&
@@ -232,7 +232,7 @@ export const ConfigurationSetProvider = () =>
             );
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           yield* syncSmsVoiceTags(observed.ConfigurationSetArn, desiredTags);
 
           yield* session.note(observed.ConfigurationSetArn);

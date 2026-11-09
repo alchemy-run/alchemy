@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `elasticmapreduce:DescribeReleaseLabel` — reads one EMR release label — the applications (with versions) it ships and the OS releases it supports.
+ * Runtime binding for `elasticmapreduce:DescribeReleaseLabel` -- reads one EMR release label -- the applications (with versions) it ships and the OS releases it supports.
  * ### Release Catalog
  * **Example:** Inspect a Release's Applications
  * ```typescript

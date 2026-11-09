@@ -101,11 +101,11 @@ export type WasmPluginProps = {
    * `projects/{project}/locations/{location}/wasmPlugins/{wasmPlugin}`).
    * If omitted, a unique name is generated from the stack, stage, and
    * logical id. Must be 1-63 characters and not start with a number.
-   * Immutable — changing it replaces the plugin.
+   * Immutable -- changing it replaces the plugin.
    */
   wasmPluginId?: string;
   /**
-   * Location. Wasm plugins live in `global`. Immutable — changing it
+   * Location. Wasm plugins live in `global`. Immutable -- changing it
    * replaces the plugin. `GLOBAL` is accepted and normalized to `global`.
    * @default "global"
    */
@@ -130,7 +130,7 @@ export type WasmPluginProps = {
   logConfig?: WasmPluginLogConfig;
   /**
    * Inline versions keyed by version id. When set, this map is
-   * authoritative on create and update — omitted keys are deleted.
+   * authoritative on create and update -- omitted keys are deleted.
    * Leave unset to manage versions through `WasmPluginsVersion` without
    * the plugin wiping them on reconcile.
    */
@@ -196,7 +196,7 @@ export interface WasmPluginLookup {
 }
 
 /**
- * A Network Services WasmPlugin — a Service Extensions plugin that
+ * A Network Services WasmPlugin -- a Service Extensions plugin that
  * runs a customer-provided Wasm module.
  *
  * Changing `wasmPluginId` or `location` replaces the plugin.

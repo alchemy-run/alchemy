@@ -15,7 +15,7 @@ export interface GenerateDataKeyPairWithoutPlaintextRequest extends Omit<
  * Bind this operation to a symmetric-encryption KMS {@link Key} (or the
  * `alias/...` name of a pre-existing key) to get a callable that
  * automatically injects the `KeyId`. Returns the public key and the private
- * key encrypted under the bound symmetric key — the plaintext private key
+ * key encrypted under the bound symmetric key -- the plaintext private key
  * never exists in this process; decrypt the blob later with the `Decrypt`
  * binding where it is actually needed.
  *
@@ -25,8 +25,8 @@ export interface GenerateDataKeyPairWithoutPlaintextRequest extends Omit<
  * const generatePair = yield* AWS.KMS.GenerateDataKeyPairWithoutPlaintext(key);
  *
  * const pair = yield* generatePair({ KeyPairSpec: "ECC_NIST_P256" });
- * // pair.PublicKey                — hand out for encryption/verification
- * // pair.PrivateKeyCiphertextBlob — persist for the consuming service
+ * // pair.PublicKey                -- hand out for encryption/verification
+ * // pair.PrivateKeyCiphertextBlob -- persist for the consuming service
  * ```
  *
  * @binding

@@ -76,10 +76,10 @@ export class ContainerProviderUnexpectedResponse extends Data.TaggedError(
  * The image source resolved from a {@link ContainerApplicationProps}. Selects
  * one of three strategies used by `buildAndPushImage`:
  *
- * - `effectful` — bundle an Effect-native `main` and build a generated image.
- * - `external` — build a user-supplied Dockerfile against a context directory.
- * - `remote` — pull a pre-built remote image and re-push it to Cloudflare.
- * - `prepushed` — the image already lives in the target registry; use the
+ * - `effectful` -- bundle an Effect-native `main` and build a generated image.
+ * - `external` -- build a user-supplied Dockerfile against a context directory.
+ * - `remote` -- pull a pre-built remote image and re-push it to Cloudflare.
+ * - `prepushed` -- the image already lives in the target registry; use the
  *   reference as-is with no docker pull/build/push at all.
  */
 type ImageBuild =
@@ -104,7 +104,7 @@ type ImageBuild =
     };
 
 /**
- * Whether an image reference already points at the target registry host —
+ * Whether an image reference already points at the target registry host --
  * e.g. `registry.cloudflare.com/<accountId>/repo@sha256:...` pushed by CI.
  * Such references are deployed as-is; there is nothing to pull or push.
  */
@@ -113,9 +113,9 @@ const isTargetRegistryRef = (image: string, registryId: string) =>
 
 /**
  * Insert the account namespace into a Cloudflare-registry reference that
- * omits it (`registry.cloudflare.com/app:tag` →
+ * omits it (`registry.cloudflare.com/app:tag` ->
  * `registry.cloudflare.com/<accountId>/app:tag`), mirroring wrangler's
- * `resolveImageName`. Custom registries are left untouched — the account
+ * `resolveImageName`. Custom registries are left untouched -- the account
  * namespace rule is specific to Cloudflare's managed registry.
  */
 const normalizePrepushedRef = (image: string, registryId: string, accountId: string) => {
@@ -224,7 +224,7 @@ export const LiveContainerProvider = () =>
       // `list` endpoint stays eventually-consistent for a short window and can
       // keep returning the now-deleted row. A subsequent recreate that
       // re-discovers the application by name (`createApplication`) would then
-      // "adopt" that stale row and try to UPDATE it — which fails permanently
+      // "adopt" that stale row and try to UPDATE it -- which fails permanently
       // with `ContainerApplicationNotFound` (the app is really gone) and
       // exhausts the readiness retry. Block until the deleted id no longer
       // appears under that name (or a different id has taken the name, i.e. a
@@ -284,11 +284,11 @@ export const LiveContainerProvider = () =>
       //   - max_instances: 20            (`container.max_instances ?? 20`)
       //   - instances: 0                 (wrangler forces 0 whenever
       //                                    max_instances is set, which we always
-      //                                    do — pure scale-from-zero)
+      //                                    do -- pure scale-from-zero)
       //   - scheduling_policy: "default"
       // (wrangler also defaults `constraints.tiers` to `[1, 2]`, but the
       // distilled SDK models constraints as singular `tier`, not the `tiers`
-      // array, so we leave constraints untouched — it's a minor placement hint
+      // array, so we leave constraints untouched -- it's a minor placement hint
       // next to the scaling defaults.)
       // A maxInstances default of 1 (the previous value) silently serialised
       // every Durable Object instance through a single container slot, which is
@@ -447,7 +447,7 @@ export const LiveContainerProvider = () =>
         yield* validateContainerImageProps(id, props);
 
         // Preserve serialized imageName keys so existing publication hashes remain valid.
-        // Variant 1 — Effect-native program. Bundle `main` and build a
+        // Variant 1 -- Effect-native program. Bundle `main` and build a
         // generated Dockerfile around it; the environment preamble comes
         // from `image` / inline `dockerfile` (default: the runtime base).
         if (props.main) {
@@ -476,7 +476,7 @@ export const LiveContainerProvider = () =>
           // The dev image is the deterministic build-context directory that
           // `buildAndPushImage` materializes into (and that the local provider
           // regenerates on the next `alchemy dev`). We persist the path here so
-          // a dev run after a live deploy has an image to `docker build` — the
+          // a dev run after a live deploy has an image to `docker build` -- the
           // live deploy pushes to Cloudflare's registry, which the local
           // `workerd` runtime can't pull. See `prepareContainerBuildContext`.
           const contextDir = yield* getStableContextDir(
@@ -496,7 +496,7 @@ export const LiveContainerProvider = () =>
           };
         }
 
-        // Variant 2 — pre-built remote image. The image reference is the
+        // Variant 2 -- pre-built remote image. The image reference is the
         // identity; we pull and re-push it without building anything.
         if (props.image) {
           const imageHash = (yield* sha256Object({
@@ -504,7 +504,7 @@ export const LiveContainerProvider = () =>
             imageName: props.publish?.repository?.toLowerCase(),
           })).slice(0, 16);
           // Already in the target registry (e.g. pushed by CI as a digest
-          // reference) — deploy the reference as-is and skip the docker
+          // reference) -- deploy the reference as-is and skip the docker
           // pull/tag/push round-trip entirely.
           if (isTargetRegistryRef(props.image, registryId)) {
             const prepushedRef = normalizePrepushedRef(props.image, registryId, accountId);
@@ -527,7 +527,7 @@ export const LiveContainerProvider = () =>
           };
         }
 
-        // Variant 3a — inline Dockerfile content (`Dockerfile.inline`), no
+        // Variant 3a -- inline Dockerfile content (`Dockerfile.inline`), no
         // build context. Materialize the content into a stable generated
         // context directory and build that.
         if (props.dockerfile !== undefined && isInlineDockerfile(props.dockerfile)) {
@@ -535,7 +535,7 @@ export const LiveContainerProvider = () =>
           if (typeof content !== "string") {
             return yield* Effect.die(
               new Error(
-                "Inline `dockerfile` content is an unresolved Output at image-build time — its dependencies have not resolved yet (e.g. during precreate of a circular binding). Break the cycle or inline the resolved value.",
+                "Inline `dockerfile` content is an unresolved Output at image-build time \u2014 its dependencies have not resolved yet (e.g. during precreate of a circular binding). Break the cycle or inline the resolved value.",
               ),
             );
           }
@@ -567,7 +567,7 @@ export const LiveContainerProvider = () =>
           };
         }
 
-        // Variant 3b — user-supplied Dockerfile path + build context
+        // Variant 3b -- user-supplied Dockerfile path + build context
         // directory.
         const context = yield* fs.realPath(props.context ?? ".");
         const dockerfile = props.dockerfile
@@ -619,7 +619,7 @@ export const LiveContainerProvider = () =>
         const platform = publicationPlatform;
 
         if (build.kind === "prepushed") {
-          // The reference already lives in the target registry — nothing to
+          // The reference already lives in the target registry -- nothing to
           // pull, build, or push.
           yield* Effect.logInfo(`Cloudflare Container image: using pre-pushed ${imageRef}`);
           return yield* resolvePublishedImageRef(props, imageRef);
@@ -1182,7 +1182,7 @@ export const LiveContainerProvider = () =>
         bindings: ResourceBinding<ContainerApplication["Binding"]>[];
         existing: ContainerApplication["Attributes"];
         // The DO attachment to (re)create with if the "existing" application
-        // turns out to be gone. Threaded through so the update→create fallback
+        // turns out to be gone. Threaded through so the update->create fallback
         // below preserves the binding.
         durableObjects: { namespaceId: string } | undefined;
         session: ScopedPlanStatusSession;
@@ -1239,7 +1239,7 @@ export const LiveContainerProvider = () =>
           }),
         ).pipe(
           // The "existing" application was observed from an eventually-
-          // consistent list/get but is actually gone — e.g. a stale row that
+          // consistent list/get but is actually gone -- e.g. a stale row that
           // lingered after a replacement/DO-recreate delete, surfaced by
           // either the by-name or by-namespace lookup. Updating a ghost
           // exhausts the readiness window and then fails permanently with
@@ -1431,7 +1431,7 @@ export const LiveContainerProvider = () =>
           }
         }),
         observe: Effect.fn(function* ({ id, news = {}, previous }) {
-          // Precreate creates — or adopts and updates — the application
+          // Precreate creates -- or adopts and updates -- the application
           // named here; ownership follows `read`.
           if (!isResolved(nameOf(news))) return Unresolved;
           const name = yield* createApplicationName(id, nameOf(news));
@@ -1531,13 +1531,13 @@ export const LiveContainerProvider = () =>
           const { accountId } = yield* yield* CloudflareEnvironment;
           const env = makeContainerEnv(news, accountId, bindings);
 
-          // Observe — re-fetch the cached application to confirm it still
+          // Observe -- re-fetch the cached application to confirm it still
           // exists. Cloudflare reports a deleted container application as
           // `ContainerApplicationNotFound`; we fall back to a name lookup
           // so we can recover from out-of-band deletes or partial state
           // persistence failures.
           let existing: ContainerApplication["Attributes"] | undefined;
-          // A `dev:` applicationId never exists on Cloudflare — skip the
+          // A `dev:` applicationId never exists on Cloudflare -- skip the
           // cached-id fetch and fall through to the name lookup / create path
           // so we promote the local resource to a real application.
           if (output?.applicationId && isLiveId(output.applicationId)) {
@@ -1668,7 +1668,7 @@ export const LiveContainerProvider = () =>
             };
           }
 
-          // Sync — application exists with correct DO attachment. Apply
+          // Sync -- application exists with correct DO attachment. Apply
           // the desired configuration (image + scheduling + secrets, etc.)
           // through the upsert path, which builds and pushes the image
           // only when the hash changed and creates a rollout if the
@@ -1686,7 +1686,7 @@ export const LiveContainerProvider = () =>
             });
           }
 
-          // Ensure — no application exists. Build and push the image,
+          // Ensure -- no application exists. Build and push the image,
           // then create. `createApplication` itself tolerates concurrent
           // creates by adopting an existing application with the same
           // name or namespace.
@@ -1725,7 +1725,7 @@ export const LiveContainerProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
-          // A `dev:` applicationId only exists locally — there is no live
+          // A `dev:` applicationId only exists locally -- there is no live
           // application to delete on Cloudflare.
           if (!output.applicationId || !isLiveId(output.applicationId)) return;
           yield* Effect.logInfo(`Cloudflare Container delete: deleting ${output.applicationName}`);
@@ -1747,7 +1747,7 @@ export const LiveContainerProvider = () =>
                 ...toAttributes(existing),
                 hash: output?.hash,
                 // The dev image is a local build-context reference that the
-                // API can't return — preserve the persisted one so a refresh
+                // API can't return -- preserve the persisted one so a refresh
                 // doesn't wipe it (which would break a later `alchemy dev`).
                 dev: output?.dev,
                 image: output?.image,
@@ -1755,7 +1755,7 @@ export const LiveContainerProvider = () =>
             });
 
           let attrs: ContainerApplication["Attributes"] | undefined;
-          // A `dev:` applicationId never exists on Cloudflare — look the
+          // A `dev:` applicationId never exists on Cloudflare -- look the
           // application up by its (deterministic) name instead of hitting the
           // API with a fake id.
           if (output?.applicationId && !isLiveId(output.applicationId)) {
@@ -1791,7 +1791,7 @@ export const LiveContainerProvider = () =>
             const { accountId } = yield* yield* CloudflareEnvironment;
             // Account-scoped collection. `listContainerApplications` returns
             // the full application objects in one (non-paginated) response, so
-            // each item already carries the complete `read` attributes shape —
+            // each item already carries the complete `read` attributes shape --
             // no per-item hydration is required.
             return yield* Containers.listContainerApplications({
               accountId,
@@ -1862,7 +1862,7 @@ const resolveDurableObjectApplicationRecovery = ({
 // Cap each delay at 3s so the readiness window is ~30s over 10 attempts; an
 // uncapped `Schedule.exponential(150)` reaches a ~76s single delay by the 10th
 // retry (~150s total), which both blows test budgets and needlessly stalls the
-// update→create fallback when the target is genuinely gone.
+// update->create fallback when the target is genuinely gone.
 const containerApplicationReadinessSchedule = Schedule.max([
   Schedule.min([Schedule.exponential(150), Schedule.spaced("3 seconds")]),
   Schedule.recurs(10),

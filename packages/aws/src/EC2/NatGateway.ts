@@ -318,8 +318,8 @@ export type NatGatewayLookup =
  *   secondaryPrivateIpAddressCount: 3,
  * });
  * ```
- * Secondary private addresses — via `secondaryPrivateIpAddressCount`,
- * `secondaryPrivateIpAddresses`, or `secondaryAllocationIds` — raise the number
+ * Secondary private addresses -- via `secondaryPrivateIpAddressCount`,
+ * `secondaryPrivateIpAddresses`, or `secondaryAllocationIds` -- raise the number
  * of simultaneous connections a private gateway can sustain to busy
  * destinations, which is only valid for private gateways.
  *
@@ -539,7 +539,7 @@ export const NatGatewayProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const desiredTags = yield* createTags(id, news.tags);
 
-          // Observe — try the cached id first; if missing, search by alchemy
+          // Observe -- try the cached id first; if missing, search by alchemy
           // tags so an interrupted create can recover before re-running the
           // API. We treat a non-deleted match as ours because diff/replace
           // already covers immutable property changes upstream.
@@ -560,7 +560,7 @@ export const NatGatewayProvider = () =>
             gw = undefined;
           }
 
-          // Ensure — create the NAT gateway when missing.
+          // Ensure -- create the NAT gateway when missing.
           if (gw === undefined) {
             yield* session.note("Creating NAT Gateway...");
             const result = yield* ec2.createNatGateway({
@@ -595,10 +595,10 @@ export const NatGatewayProvider = () =>
 
           const natGatewayId = gw.NatGatewayId!;
 
-          // Sync manual-mode zone addresses — observed associations vs desired.
+          // Sync manual-mode zone addresses -- observed associations vs desired.
           if (news.availabilityZoneAddresses) {
             // An in-flight association has no AssociationId yet, so it can be
-            // neither diffed nor disassociated — let it settle first.
+            // neither diffed nor disassociated -- let it settle first.
             const settled = yield* waitForNatGatewayAddresses(
               natGatewayId,
               (a) => a.Status === "associating",
@@ -678,7 +678,7 @@ export const NatGatewayProvider = () =>
             }
           }
 
-          // Sync tags — observed cloud tags vs desired.
+          // Sync tags -- observed cloud tags vs desired.
           const currentTags =
             (yield* ec2
               .describeTags({

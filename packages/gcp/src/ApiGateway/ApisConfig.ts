@@ -44,13 +44,13 @@ export type ApisConfigProps = {
   /**
    * Parent API. Full name
    * `projects/{project}/locations/global/apis/{api}` or the API id.
-   * Immutable — changing it replaces the config.
+   * Immutable -- changing it replaces the config.
    */
   api: string;
   /**
    * Config id (the `{apiConfig}` segment of
    * `.../apis/{api}/configs/{apiConfig}`). If omitted, a unique RFC1035
-   * id is generated. Immutable — changing it replaces the config.
+   * id is generated. Immutable -- changing it replaces the config.
    */
   apiConfigId?: string;
   /**
@@ -59,23 +59,23 @@ export type ApisConfigProps = {
   displayName?: string;
   /**
    * OpenAPI specification documents. Mutually exclusive with
-   * `grpcServices`. Immutable — changing them replaces the config.
+   * `grpcServices`. Immutable -- changing them replaces the config.
    */
   openapiDocuments?: readonly ApiConfigOpenApiDocument[];
   /**
    * gRPC service definitions. Mutually exclusive with `openapiDocuments`.
-   * Immutable — changing them replaces the config.
+   * Immutable -- changing them replaces the config.
    */
   grpcServices?: readonly ApiConfigGrpcServiceDefinition[];
   /**
    * Service Configuration files used with gRPC service definitions.
-   * Immutable — changing them replaces the config.
+   * Immutable -- changing them replaces the config.
    */
   managedServiceConfigs?: readonly ApiConfigFile[];
   /**
    * IAM service account Gateways should use to authenticate to backends.
    * Email (`{account}@{project}.iam.gserviceaccount.com`) or full resource
-   * name. Immutable — changing it replaces the config.
+   * name. Immutable -- changing it replaces the config.
    */
   gatewayServiceAccount?: string;
   /**
@@ -142,7 +142,7 @@ export interface ApisConfigLookup {
 }
 
 /**
- * An API Gateway API config — OpenAPI or gRPC settings for a managed
+ * An API Gateway API config -- OpenAPI or gRPC settings for a managed
  * API that Gateways serve.
  *
  * Parent API, config id, documents, gRPC definitions, and gateway

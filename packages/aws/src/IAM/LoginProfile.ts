@@ -89,12 +89,12 @@ export const LoginProfileProvider = () =>
       };
     }),
     reconcile: Effect.fn(function* ({ news, session }) {
-      // Observe — read the live login profile (or absence) for the user.
+      // Observe -- read the live login profile (or absence) for the user.
       const observed = yield* iam
         .getLoginProfile({ UserName: news.userName })
         .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
 
-      // Ensure / Sync — the password is write-only, so we always send the
+      // Ensure / Sync -- the password is write-only, so we always send the
       // desired value. Use `createLoginProfile` when the profile is
       // missing and `updateLoginProfile` otherwise. A race that turns the
       // create into `EntityAlreadyExistsException` is recovered by

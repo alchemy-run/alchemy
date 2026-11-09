@@ -12,7 +12,7 @@ export interface StartSyncExecutionRequest extends Omit<
  * Runtime binding for `states:StartSyncExecution`.
  *
  * Bind this operation to an `EXPRESS` {@link StateMachine} inside a function
- * runtime to run the workflow synchronously — the call returns once the
+ * runtime to run the workflow synchronously -- the call returns once the
  * execution finishes, with its status and output. Not available for
  * `STANDARD` workflows.
  * ### Synchronous Execution

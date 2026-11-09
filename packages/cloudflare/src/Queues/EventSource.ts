@@ -14,7 +14,7 @@ import { Consumer } from "./Consumer.ts";
 import type { Queue } from "./Queue.ts";
 
 /**
- * Subscriber settings — the same shape Cloudflare's `Consumer`
+ * Subscriber settings -- the same shape Cloudflare's `Consumer`
  * accepts. `consumeQueueMessages(queue, props, handler)` passes these
  * through to the auto-created `Cloudflare.Queues.Consumer` so a single
  * call captures both runtime and deploy-time intent.
@@ -193,7 +193,7 @@ export function consumeQueueMessages<Body = unknown>(
 // `Req` is the handler's requirements. The service registers the
 // handler with the Worker's runtime context, where the runtime
 // machinery provides bindings and `WorkerEnvironment` when the
-// dispatch fires — so the requirement is satisfied at handler
+// dispatch fires -- so the requirement is satisfied at handler
 // invocation, NOT at subscribe time. We drop `Req` from the return
 // to keep init effects clean (mirrors `AWS.SQS.EventSourceService`).
 export type EventSourceService = <Body = unknown>(
@@ -262,7 +262,7 @@ export const EventSourceLive = Layer.effect(
       const ctx = (yield* RuntimeContext) as unknown as FunctionContext;
       // Capture the queue-name accessor once; the listener body
       // re-resolves it per event via `yield* QueueName`. A worker
-      // can consume multiple queues — each subscribe registers its
+      // can consume multiple queues -- each subscribe registers its
       // own listener and they all see every queue event, so the
       // queue-name match is what scopes the handler.
       const QueueName = yield* queue.queueName;

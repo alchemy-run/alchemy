@@ -13,7 +13,7 @@ import type { EmailIdentity } from "./EmailIdentity.ts";
  * the address-verification flow. Pass the template name and the address to
  * verify; SES takes the FROM address from the template.
  *
- * Bind it to the identity the function is allowed to VERIFY — SES authorizes
+ * Bind it to the identity the function is allowed to VERIFY -- SES authorizes
  * this action against the identity of the address in the request, not against
  * the template's FROM identity. Bind a domain to allow any address at it, or
  * a single address to allow exactly that one. Without a bound identity the
@@ -21,7 +21,7 @@ import type { EmailIdentity } from "./EmailIdentity.ts";
  * The identity is not injected into the request. Optionally bind a
  * {@link ConfigurationSet}, which is injected into each request.
  *
- * The identity may be a managed {@link EmailIdentity} or a plain reference —
+ * The identity may be a managed {@link EmailIdentity} or a plain reference --
  * `{ emailIdentity: "signups.example.com" }`. The reference form creates no
  * resource edge and takes no ownership, so it can scope the grant to an
  * identity the stack does not manage without a destroy ever deleting it.
@@ -30,12 +30,12 @@ import type { EmailIdentity } from "./EmailIdentity.ts";
  * `Effect.provide(AWS.SES.SendCustomVerificationEmailHttp)`.
  *
  * Note: actually sending a custom verification email requires the account to
- * be out of the SES sandbox — in the sandbox the call fails with the typed
+ * be out of the SES sandbox -- in the sandbox the call fails with the typed
  * `BadRequestException`.
  * ### Verifying Addresses
  * **Example:** Send a Custom Verification Email
  * ```typescript
- * // init — the function may verify addresses at this identity's domain
+ * // init -- the function may verify addresses at this identity's domain
  * const sendVerification = yield* SES.SendCustomVerificationEmail(identity);
  *
  * // runtime
@@ -48,7 +48,7 @@ import type { EmailIdentity } from "./EmailIdentity.ts";
  * **Example:** Scope to a Domain the Stack Does Not Manage
  * ```typescript
  * // Any address at signups.example.com may be verified. No resource edge and
- * // no ownership — nothing is created, adopted, or destroyed.
+ * // no ownership -- nothing is created, adopted, or destroyed.
  * const sendVerification = yield* SES.SendCustomVerificationEmail({
  *   emailIdentity: "signups.example.com",
  * });

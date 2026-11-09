@@ -8,7 +8,7 @@ import { StartMessageMoveTask, type StartMessageMoveTaskRequest } from "./StartM
 
 // Bespoke (not the shared scaffold): redrive spans TWO queues. The source
 // (DLQ) needs the start/receive/delete/get-attributes actions, and the
-// destination needs send/get-attributes — on `*` when no explicit
+// destination needs send/get-attributes -- on `*` when no explicit
 // destination is given, because "redrive to original source queues" targets
 // queues unknowable at deploy time.
 export const StartMessageMoveTaskHttp = Layer.effect(

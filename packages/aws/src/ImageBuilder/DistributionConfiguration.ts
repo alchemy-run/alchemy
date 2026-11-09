@@ -74,7 +74,7 @@ export interface DistributionConfigurationLookup {
 }
 
 /**
- * An EC2 Image Builder distribution configuration — defines where and how
+ * An EC2 Image Builder distribution configuration -- defines where and how
  * the output AMIs (or containers) of a pipeline are distributed across
  * regions and accounts.
  * ### Creating a Distribution Configuration
@@ -177,7 +177,7 @@ export const DistributionConfigurationProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ id, news, olds, output, session }) {
-          // One idempotency token per reconcile — retries within this run
+          // One idempotency token per reconcile -- retries within this run
           // are deduplicated by the API.
           const random = yield* SecureRandom.SecureRandom;
           const clientToken = yield* random.uuidV4();
@@ -189,7 +189,7 @@ export const DistributionConfigurationProvider = () =>
           const arn = output?.distributionConfigurationArn ?? (yield* toArn(name));
           let observed = yield* getConfiguration(arn);
 
-          // 2. Ensure — create if missing; tolerate an AlreadyExists race.
+          // 2. Ensure -- create if missing; tolerate an AlreadyExists race.
           if (observed === undefined) {
             const created = yield* imagebuilder
               .createDistributionConfiguration({
@@ -208,7 +208,7 @@ export const DistributionConfigurationProvider = () =>
             }
           }
 
-          // 3. Sync — compare OBSERVED distributions/description against
+          // 3. Sync -- compare OBSERVED distributions/description against
           //    desired; a full-PUT update converges any drift.
           const drifted =
             driftedFrom(observed.distributions, news.distributions) ||
@@ -224,7 +224,7 @@ export const DistributionConfigurationProvider = () =>
             observed = (yield* getConfiguration(observed.arn)) ?? observed;
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           if (observed.arn) {
             yield* syncImageBuilderTags(observed.arn, desiredTags);
           }

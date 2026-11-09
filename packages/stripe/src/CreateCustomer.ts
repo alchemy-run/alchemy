@@ -8,7 +8,7 @@ import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
 
 /**
- * Create a Stripe Customer over HTTP. Account-scoped — binds the API key
+ * Create a Stripe Customer over HTTP. Account-scoped -- binds the API key
  * onto the host, not a specific customer resource.
  *
  * ### Creating a Customer at runtime

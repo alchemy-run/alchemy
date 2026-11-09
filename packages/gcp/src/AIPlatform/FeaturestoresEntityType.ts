@@ -123,7 +123,7 @@ export interface FeaturestoresEntityTypeLookup {
 }
 
 /**
- * A Vertex AI Feature Store Entity Type — a class of objects (for
+ * A Vertex AI Feature Store Entity Type -- a class of objects (for
  * example `user` or `movie`) whose feature values live in a Featurestore.
  *
  * Parent store, entity type id, and location are identity. Description,

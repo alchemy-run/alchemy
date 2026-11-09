@@ -41,7 +41,7 @@ export interface ResourcePolicy extends Resource<
 
 /**
  * The resource-based policy of an Amazon OpenSearch Ingestion (OSIS)
- * VPC pipeline — grants other accounts `osis:CreatePipelineEndpoint` so they
+ * VPC pipeline -- grants other accounts `osis:CreatePipelineEndpoint` so they
  * can attach a pipeline endpoint from their own VPC (cross-account
  * ingestion). Principals must be 12-digit account IDs, not ARNs. A resource
  * has at most one.
@@ -95,7 +95,7 @@ export const ResourcePolicyProvider = () =>
       /**
        * Read the attached policy. OSIS reports "no policy" two ways: a typed
        * `ResourceNotFoundException`, or (observed live) a success response
-       * whose `Policy` is the empty document `"{}"` — normalize both to
+       * whose `Policy` is the empty document `"{}"` -- normalize both to
        * `undefined`.
        */
       const getPolicy = Effect.fn(function* (resourceArn: string) {
@@ -121,7 +121,7 @@ export const ResourcePolicyProvider = () =>
           if (!resourceArn) return undefined;
           const policy = yield* getPolicy(resourceArn);
           if (policy === undefined) return undefined;
-          // Resource policies are not taggable — ownership is implied by
+          // Resource policies are not taggable -- ownership is implied by
           // the owned parent pipeline.
           return { resourceArn, policy };
         }),
@@ -129,10 +129,10 @@ export const ResourcePolicyProvider = () =>
         reconcile: Effect.fn(function* ({ news, session }) {
           const resourceArn = news!.resourceArn;
 
-          // 1. Observe — the live policy is authoritative.
+          // 1. Observe -- the live policy is authoritative.
           const observed = yield* getPolicy(resourceArn);
 
-          // 2/3. Ensure + sync — `putResourcePolicy` is a true upsert;
+          // 2/3. Ensure + sync -- `putResourcePolicy` is a true upsert;
           // call it only when the canonical document drifts.
           if (observed === undefined || canonicalJson(observed) !== canonicalJson(news!.policy)) {
             yield* osis.putResourcePolicy({

@@ -41,12 +41,12 @@ export type PluginProps = {
   /**
    * Plugin id (the `{plugin}` segment of
    * `projects/{project}/locations/{location}/plugins/{plugin}`). If
-   * omitted, a unique id is generated. Immutable — changing it replaces
+   * omitted, a unique id is generated. Immutable -- changing it replaces
    * the plugin.
    */
   pluginId?: string;
   /**
-   * Location of the API Hub instance (`us-central1`, …). Immutable —
+   * Location of the API Hub instance (`us-central1`, ...). Immutable --
    * changing it replaces the plugin.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
@@ -57,7 +57,7 @@ export type PluginProps = {
   displayName?: string;
   /**
    * Human-readable description. Plugins have no labels field, so Alchemy
-   * stamps ownership into a `[alchemy …]` prefix and strips it from
+   * stamps ownership into a `[alchemy ...]` prefix and strips it from
    * attributes. The API has no patch for plugins, so changing description
    * (or other body fields) replaces the plugin.
    */
@@ -156,7 +156,7 @@ export interface PluginLookup {
    */
   pluginId: string;
   /**
-   * Location of the API Hub instance (`us-central1`, …).
+   * Location of the API Hub instance (`us-central1`, ...).
    */
   location?: string;
   /**
@@ -167,7 +167,7 @@ export interface PluginLookup {
 }
 
 /**
- * An API Hub plugin — a user-owned or system-owned connector that
+ * An API Hub plugin -- a user-owned or system-owned connector that
  * publishes API metadata into Hub.
  *
  * Plugins have no labels and no patch RPC, so Alchemy stamps ownership

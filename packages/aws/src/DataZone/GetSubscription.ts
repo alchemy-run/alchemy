@@ -17,7 +17,7 @@ export interface GetSubscriptionRequest extends Omit<
  * ### Subscription Workflows
  * **Example:** Read a Subscription
  * ```typescript
- * // init — bind the operation to the domain
+ * // init -- bind the operation to the domain
  * const getSubscription = yield* AWS.DataZone.GetSubscription(domain);
  *
  * // runtime

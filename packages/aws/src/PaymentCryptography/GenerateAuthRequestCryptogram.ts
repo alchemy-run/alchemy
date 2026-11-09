@@ -9,7 +9,7 @@ export interface GenerateAuthRequestCryptogramRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `payment-cryptography:GenerateAuthRequestCryptogram` —
+ * Runtime binding for `payment-cryptography:GenerateAuthRequestCryptogram` --
  * generates an Authorization Request Cryptogram (ARQC) for AS2805 terminal
  * transactions under an EMV issuer master {@link Key}. Provide
  * `GenerateAuthRequestCryptogramHttp` on the Function to satisfy this

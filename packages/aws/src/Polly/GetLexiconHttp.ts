@@ -7,7 +7,7 @@ import type { Lexicon } from "./Lexicon.ts";
 
 // GetLexicon is one of the few Polly actions with resource-level IAM (the
 // `lexicon` resource type), so the grant is scoped to the lexicon's ARN
-// rather than `*` — that's why this binding is bespoke instead of a
+// rather than `*` -- that's why this binding is bespoke instead of a
 // makePollyHttpBinding thin call.
 export const GetLexiconHttp = Layer.effect(
   GetLexicon,

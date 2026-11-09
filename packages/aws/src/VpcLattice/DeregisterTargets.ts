@@ -16,7 +16,7 @@ export interface DeregisterTargetsRequest extends Omit<
  * Runtime binding for the `DeregisterTargets` operation (IAM action
  * `vpc-lattice:DeregisterTargets` on the target group ARN).
  *
- * Deregisters targets from the bound {@link TargetGroup} at runtime — the
+ * Deregisters targets from the bound {@link TargetGroup} at runtime -- the
  * graceful-drain half of dynamic self-registration. Provide the
  * implementation with `Effect.provide(AWS.VpcLattice.DeregisterTargetsHttp)`.
  * ### Managing Targets at Runtime

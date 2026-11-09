@@ -69,7 +69,7 @@ export interface InsightEventSourceProps extends EventRouteProps {
  * subscribes the host Function to those events so it can page, annotate
  * incidents, or drive remediation.
  *
- * X-Ray publishes to EventBridge automatically — no additional resource is
+ * X-Ray publishes to EventBridge automatically -- no additional resource is
  * created besides the EventBridge rule targeting the host. Provide the
  * host-specific implementation layer (e.g. `AWS.Lambda.EventSource`) on the
  * Function effect.

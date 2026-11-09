@@ -8,8 +8,8 @@ import type { Recipe } from "./Recipe.ts";
 /**
  * Shared scaffolding for AWS Glue DataBrew HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the builders
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the builders
  * below. Every DataBrew data-plane operation addresses its resource by a
  * `Name` path parameter and authorizes against that resource's ARN, so each
  * builder injects the bound resource's name and grants `actions` on its ARN;
@@ -34,7 +34,7 @@ export const makeDataBrewJobHttpBinding = <I extends { Name?: string }, A, E, R>
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <J extends Job>(job: J) {
-      // Outputs yield a DEFERRED effect — resolve again per invocation below.
+      // Outputs yield a DEFERRED effect -- resolve again per invocation below.
       const JobName = yield* job.jobName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${job})`({

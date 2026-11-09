@@ -9,7 +9,7 @@ export interface UploadPartCopyRequest extends Omit<S3.UploadPartCopyRequest, "B
  * Runtime binding for `s3:UploadPartCopy`.
  *
  * Bind this operation to a bucket to get a callable that uploads a multipart
- * part by copying from an existing object — the destination bucket name is
+ * part by copying from an existing object -- the destination bucket name is
  * injected automatically and `s3:PutObject`, `s3:GetObject`, and
  * `s3:GetObjectVersion` are granted on the bucket's objects. Select a source
  * version by appending `?versionId=<encoded version ID>` to the URL-encoded

@@ -303,13 +303,13 @@ const createRuntimeContext = (id: string): DurableObjectRuntimeContext => {
  * Effect runs once per instance and returns its RPC methods, `fetch` and
  * `alarm`.
  *
- * Where it runs is a pool Layer provided to the outer Effect —
- * `RivetDocker.SwarmPool("Default")`, `RivetAWS.EcsPool("Default")` — and the
+ * Where it runs is a pool Layer provided to the outer Effect --
+ * `RivetDocker.SwarmPool("Default")`, `RivetAWS.EcsPool("Default")` -- and the
  * pool is given the control plane. Every Durable Object given the same pool
  * runs on the same nodes.
  *
- * `yield* Counter` from any runtime — a Cloudflare Worker, a Lambda, a
- * container, another Durable Object — returns its namespace. Calls go
+ * `yield* Counter` from any runtime -- a Cloudflare Worker, a Lambda, a
+ * container, another Durable Object -- returns its namespace. Calls go
  * through the control plane's gateway over plain `fetch`, which creates the
  * instance in its pool on first use, so callers need no RivetKit and no
  * route to the nodes.

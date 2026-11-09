@@ -28,7 +28,7 @@ export interface SearchPlaceIndexForPositionRequest extends Omit<
  *   Position: [-122.3493, 47.6205], // [longitude, latitude]
  *   MaxResults: 1,
  * });
- * // results.Results[0].Place.Label → nearest address
+ * // results.Results[0].Place.Label -> nearest address
  * ```
  *
  * @binding

@@ -67,7 +67,7 @@ export interface CompositeAlarmLookup {
 }
 
 /**
- * A CloudWatch composite alarm — combines the states of other alarms with
+ * A CloudWatch composite alarm -- combines the states of other alarms with
  * a boolean `AlarmRule` expression so a single alarm (and its actions)
  * reflects overall health.
  * ### Creating Composite Alarms
@@ -174,13 +174,13 @@ export const CompositeAlarmProvider = () =>
           return (yield* hasAlchemyTags(id, state.tags)) ? state : Unowned(state);
         }),
         reconcile: Effect.fn(function* ({ id, news, olds, output, session }) {
-          // Observe — pin the physical name from `output` if present so we
+          // Observe -- pin the physical name from `output` if present so we
           // never rename an existing alarm; otherwise derive from desired
           // props.
           const name = output?.alarmName ?? (yield* createAlarmName(id, news));
           const existing = yield* readCompositeAlarm(name);
 
-          // Ensure — `putCompositeAlarm` is an upsert. We always send the
+          // Ensure -- `putCompositeAlarm` is an upsert. We always send the
           // full desired config so the cloud converges to `news` whether
           // the alarm pre-existed or not.
           yield* retryConcurrent(
@@ -190,7 +190,7 @@ export const CompositeAlarmProvider = () =>
             }),
           );
 
-          // Sync tags — diff observed (or prior) tags against desired.
+          // Sync tags -- diff observed (or prior) tags against desired.
           // `olds` is undefined on adoption, so fall back to what we just
           // observed.
           const tags = yield* updateResourceTags({

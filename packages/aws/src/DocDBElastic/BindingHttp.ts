@@ -6,8 +6,8 @@ import type { Cluster } from "./Cluster.ts";
 /**
  * Shared scaffolding for AWS DocDBElastic HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the builders
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the builders
  * below. Everything except the operation and the IAM action list is
  * boilerplate.
  */
@@ -21,7 +21,7 @@ export const SNAPSHOT_ARN_WILDCARD = "arn:aws:docdb-elastic:*:*:cluster-snapshot
 /**
  * Build the impl Effect for an account-level operation (snapshot management,
  * restore, pending maintenance). The deploy-time half grants `actions` on
- * `resources` (default `*`) — these operations address snapshots and
+ * `resources` (default `*`) -- these operations address snapshots and
  * clusters by ARNs that are runtime data.
  */
 export const makeDocDBElasticAccountHttpBinding = <I, A, E, R>(options: {

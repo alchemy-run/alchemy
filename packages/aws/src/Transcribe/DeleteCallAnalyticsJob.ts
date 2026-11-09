@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `transcribe:DeleteCallAnalyticsJob` — delete a Call Analytics job.
+ * Runtime binding for `transcribe:DeleteCallAnalyticsJob` -- delete a Call Analytics job.
  *
  * Amazon Transcribe batch actions have no resource-level IAM; the host is
  * granted `transcribe:DeleteCallAnalyticsJob` on `*`.

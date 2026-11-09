@@ -12,7 +12,7 @@ import type { MatchingWorkflow } from "./MatchingWorkflow.ts";
  * ### Running Matching Jobs
  * **Example:** Poll a Job's Status
  * ```typescript
- * // init — bind the operation to the workflow
+ * // init -- bind the operation to the workflow
  * const getMatchingJob = yield* AWS.EntityResolution.GetMatchingJob(workflow);
  *
  * // runtime

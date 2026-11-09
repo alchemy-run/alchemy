@@ -9,7 +9,7 @@ export interface VerifyMacRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `payment-cryptography:VerifyMac` — verifies a Message
+ * Runtime binding for `payment-cryptography:VerifyMac` -- verifies a Message
  * Authentication Code against hex-encoded message data under a {@link Key}.
  * A mismatched MAC fails with the typed `VerificationFailedException`.
  * Provide `VerifyMacHttp` on the Function to satisfy this service.
@@ -19,7 +19,7 @@ export interface VerifyMacRequest extends Omit<
  * // init
  * const verifyMac = yield* PaymentCryptography.VerifyMac(macKey);
  *
- * // runtime — MessageData and Mac are hex-encoded
+ * // runtime -- MessageData and Mac are hex-encoded
  * yield* verifyMac({
  *   MessageData: "31323334353637383930313233343536",
  *   Mac: mac,

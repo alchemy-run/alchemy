@@ -8,8 +8,8 @@ import type { WorkGroup } from "./WorkGroup.ts";
 /**
  * Shared scaffolding for Athena HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the two builders
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the two builders
  * below. Everything except the operation, the IAM action list, and the
  * injected identifier is boilerplate.
  */
@@ -62,7 +62,7 @@ export const makeWorkGroupScopedHttpBinding = <I, A, E, R>(options: {
   });
 
 // The datacatalog ARN is `arn:aws:athena:{region}:{account}:datacatalog/{name}`
-// — the Glue Data Catalog ARNs share that partition/region/account.
+// -- the Glue Data Catalog ARNs share that partition/region/account.
 const glueArns = (dataCatalogArn: OutputType<string>) => {
   const base = dataCatalogArn.pipe(
     Output.map((arn) => {

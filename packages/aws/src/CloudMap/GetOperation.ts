@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `servicediscovery:GetOperation` — reads the status of
+ * Runtime binding for `servicediscovery:GetOperation` -- reads the status of
  * an asynchronous Cloud Map operation. `RegisterInstance` and
  * `DeregisterInstance` return an `OperationId`; poll it with this binding
  * to await completion (`SUCCESS` / `FAIL`) before relying on the

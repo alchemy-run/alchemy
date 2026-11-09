@@ -12,7 +12,7 @@ import type * as Effect from "effect/Effect";
  * ### Discovering Services
  * **Example:** Get a Discovered Service
  * ```typescript
- * // init — account-level, no resource argument
+ * // init -- account-level, no resource argument
  * const getService = yield* AWS.ApplicationSignals.GetService();
  *
  * // runtime

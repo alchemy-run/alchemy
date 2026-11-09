@@ -6,8 +6,8 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `DescribeDBInstances` operation (IAM action
  * `rds:DescribeDBInstances`).
  *
- * Lists the account's RDS instances (or one instance by identifier) —
- * status, endpoint, storage, engine version — for health checks and
+ * Lists the account's RDS instances (or one instance by identifier) --
+ * status, endpoint, storage, engine version -- for health checks and
  * instance discovery. Provide the implementation with
  * `Effect.provide(AWS.RDS.DescribeDBInstancesHttp)`.
  * ### Monitoring Databases

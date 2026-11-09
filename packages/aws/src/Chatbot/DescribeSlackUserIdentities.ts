@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `chatbot:DescribeSlackUserIdentities`.
  *
  * Lists the Slack user identities linked to AWS user identities, optionally
- * filtered to one channel configuration — the read half of identity
+ * filtered to one channel configuration -- the read half of identity
  * offboarding automation. Provide the implementation with
  * `Effect.provide(AWS.Chatbot.DescribeSlackUserIdentitiesHttp)`.
  * ### Slack Identity Management

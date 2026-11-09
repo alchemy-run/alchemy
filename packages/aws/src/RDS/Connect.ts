@@ -23,7 +23,7 @@ export interface ConnectionInfo {
   password?: string;
   ssl: boolean;
   /**
-   * RFC-3986 connection URL — feeds `Drizzle.Postgres` / a Hyperdrive
+   * RFC-3986 connection URL -- feeds `Drizzle.Postgres` / a Hyperdrive
    * origin directly. `Redacted` because it embeds the password.
    */
   url: Redacted.Redacted<string>;
@@ -31,7 +31,7 @@ export interface ConnectionInfo {
    * IAM auth mode only: re-mints a fresh short-lived (15 minute) IAM
    * database authentication token.
    *
-   * Per-execution pools (Lambda invoke, Worker event) never need it — the
+   * Per-execution pools (Lambda invoke, Worker event) never need it -- the
    * `Connect` runtime effect re-runs on each execution and mints a fresh
    * token as `password`/`url`. Long-lived serverful pools (ECS Task /
    * ServerHost) should wire this into the driver's lazy-password hook
@@ -49,7 +49,7 @@ interface ConnectOptionsBase {
   /**
    * Subnets the host Function should be attached to so it can open a
    * socket to the database. Wired through the host's `vpc` binding
-   * channel — equivalent to setting the Function's `vpc` prop manually.
+   * channel -- equivalent to setting the Function's `vpc` prop manually.
    */
   subnetIds?: Input<SubnetId[]>;
   /**
@@ -87,7 +87,7 @@ export interface SecretConnectOptions extends ConnectOptionsBase {
  * runtime half presigns a short-lived auth token as the password. Requires
  * `enableIAMDatabaseAuthentication: true` on the database and a database
  * user granted the `rds_iam` role (Postgres) / `AWSAuthenticationPlugin`
- * (MySQL). TLS is mandatory — `ssl` is forced to `true`.
+ * (MySQL). TLS is mandatory -- `ssl` is forced to `true`.
  */
 export interface IamConnectOptions extends ConnectOptionsBase {
   auth: "iam";
@@ -103,7 +103,7 @@ export type ConnectOptions = SecretConnectOptions | IamConnectOptions;
  * IAM database authentication.
  *
  * Binding it yields an Effect (not a callable) that resolves a
- * `ConnectionInfo` — host, port, credentials, and a ready-to-use `url` —
+ * `ConnectionInfo` -- host, port, credentials, and a ready-to-use `url` --
  * fresh on every execution. No socket is opened; feed the result into your
  * database driver. Provide the implementation with
  * `Effect.provide(AWS.RDS.ConnectHttp)`.
@@ -117,7 +117,7 @@ export type ConnectOptions = SecretConnectOptions | IamConnectOptions;
  *       subnetIds: [subnetA.subnetId, subnetB.subnetId],
  *       securityGroupIds: [dbSecurityGroup.groupId],
  *     });
- *     // init — bind the cluster + admin secret; grants
+ *     // init -- bind the cluster + admin secret; grants
  *     // secretsmanager:GetSecretValue and (optionally) attaches the
  *     // function to the given subnets/security groups
  *     const connect = yield* AWS.RDS.Connect(db.cluster, {
@@ -129,7 +129,7 @@ export type ConnectOptions = SecretConnectOptions | IamConnectOptions;
  *
  *     return {
  *       fetch: Effect.gen(function* () {
- *         // runtime — resolve host/port/credentials, hand `info.url`
+ *         // runtime -- resolve host/port/credentials, hand `info.url`
  *         // (Redacted) to SQL.Postgres / Drizzle.Postgres
  *         const info = yield* connect;
  *         return yield* HttpServerResponse.json({
@@ -153,7 +153,7 @@ export type ConnectOptions = SecretConnectOptions | IamConnectOptions;
  *   dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
  *   vpcSecurityGroupIds: [dbSecurityGroup.groupId],
  * });
- * // no `secret` — reads the RDS-managed master user secret
+ * // no `secret` -- reads the RDS-managed master user secret
  * const connect = yield* AWS.RDS.Connect(instance, {
  *   database: "postgres",
  *   subnetIds: [subnetA.subnetId, subnetB.subnetId],
@@ -163,7 +163,7 @@ export type ConnectOptions = SecretConnectOptions | IamConnectOptions;
  *
  * **Example:** IAM Database Authentication
  * ```typescript
- * // init — grants rds-db:connect for the `app_iam` user; the runtime half
+ * // init -- grants rds-db:connect for the `app_iam` user; the runtime half
  * // presigns a short-lived (15 minute) auth token as the password
  * const connect = yield* AWS.RDS.Connect(db.cluster, {
  *   auth: "iam",
@@ -171,7 +171,7 @@ export type ConnectOptions = SecretConnectOptions | IamConnectOptions;
  *   database: "app",
  * });
  *
- * // runtime — long-lived pools should wire info.refreshPassword into the
+ * // runtime -- long-lived pools should wire info.refreshPassword into the
  * // driver's lazy-password hook so each new connection gets a fresh token
  * const info = yield* connect;
  * ```

@@ -4,11 +4,11 @@ import type * as Effect from "effect/Effect";
 
 /**
  * Runtime binding for the `DescribePendingMaintenanceActions` operation
- * (IAM action `rds:DescribePendingMaintenanceActions` — DocumentDB shares
+ * (IAM action `rds:DescribePendingMaintenanceActions` -- DocumentDB shares
  * the RDS control plane).
  *
  * Lists pending maintenance actions (engine patches, certificate
- * rotations) across the account's DocumentDB clusters and instances —
+ * rotations) across the account's DocumentDB clusters and instances --
  * pairs with `ApplyPendingMaintenanceAction` for maintenance automation.
  * Provide the implementation with
  * `Effect.provide(AWS.DocDB.DescribePendingMaintenanceActionsHttp)`.

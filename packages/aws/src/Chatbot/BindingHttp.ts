@@ -5,8 +5,8 @@ import { inChatbotRegion } from "./internal.ts";
 /**
  * Shared scaffolding for AWS Chatbot HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, makeChatbotAccountHttpBinding({ … }))` over the
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, makeChatbotAccountHttpBinding({ ... }))` over the
  * builder below. Everything except the operation and the IAM action list is
  * boilerplate.
  *

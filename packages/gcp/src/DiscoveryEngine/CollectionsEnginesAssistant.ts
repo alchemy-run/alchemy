@@ -14,12 +14,12 @@ export type CollectionsEnginesAssistantProps = {
   /**
    * Parent Engine resource name
    * `projects/{project}/locations/{location}/collections/{collection}/engines/{engine}`.
-   * Immutable — changing it replaces the assistant.
+   * Immutable -- changing it replaces the assistant.
    */
   engine: string;
   /**
    * Assistant id. If omitted, a unique RFC-1034 id is generated.
-   * Immutable — changing it replaces the assistant.
+   * Immutable -- changing it replaces the assistant.
    */
   assistantId?: string;
   /**

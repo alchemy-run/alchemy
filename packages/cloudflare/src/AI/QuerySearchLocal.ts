@@ -8,7 +8,7 @@ import { makeLocalSearchClient, type SearchAuth } from "./SearchHttpClient.ts";
 import type { SearchInstance } from "./SearchInstance.ts";
 
 /**
- * Local implementation of the {@link QuerySearch} binding — queries an AI
+ * Local implementation of the {@link QuerySearch} binding -- queries an AI
  * Search instance over the Cloudflare HTTP API using the **current
  * credentials** instead of a native Worker binding (`QuerySearchBinding`).
  *
@@ -52,7 +52,7 @@ export const QuerySearchLocal = Layer.effect(
     };
 
     return Effect.fn(function* (instance: SearchInstance) {
-      // Deferred accessors — resolved against the tracker at apply time.
+      // Deferred accessors -- resolved against the tracker at apply time.
       const instanceId = yield* instance.instanceId;
       const namespace = yield* instance.namespace;
       return makeLocalSearchClient(auth, Effect.all({ id: instanceId, name: namespace }));

@@ -137,7 +137,7 @@ export const ensureSecret = Effect.fn(function* (input: {
   const current = existing ?? (yield* findSecretByName(input.name));
   if (current === undefined)
     return yield* Effect.die(`Daytona secret ${input.name} vanished during create`);
-  // Sync — the value can't be observed, so it is rewritten unless the
+  // Sync -- the value can't be observed, so it is rewritten unless the
   // hash we last wrote matches. Description and hosts diff against cloud.
   const hostsChanged =
     input.hosts !== undefined && !deepEqual([...input.hosts].sort(), [...current.hosts].sort());

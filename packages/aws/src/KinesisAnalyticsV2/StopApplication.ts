@@ -9,7 +9,7 @@ export interface StopApplicationRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `kinesisanalytics:StopApplication` — stops the bound
+ * Runtime binding for `kinesisanalytics:StopApplication` -- stops the bound
  * Flink application. By default the job is stopped gracefully (taking a
  * snapshot when snapshots are enabled); `Force: true` skips the snapshot.
  * ### Operating the Application

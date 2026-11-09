@@ -8,7 +8,7 @@ import {
 
 /**
  * The `event` values RAM publishes inside the `Resource Sharing State
- * Change` detail — which sharing activity changed state.
+ * Change` detail -- which sharing activity changed state.
  */
 export type ResourceShareEventName =
   | "Resource Share Association"
@@ -18,7 +18,7 @@ export type ResourceShareEventName =
 /**
  * The `detail` payload AWS RAM delivers to EventBridge for
  * `Resource Sharing State Change` events. RAM emits these on a best-effort
- * basis for changes to resource shares — for both the share owner and the
+ * basis for changes to resource shares -- for both the share owner and the
  * principals granted access.
  */
 export interface ResourceShareEventDetail {
@@ -56,13 +56,13 @@ export interface ResourceShareEventSourceProps extends EventRouteProps {
 /**
  * Event source connecting AWS RAM resource-sharing events to the hosting
  * compute. RAM publishes `Resource Sharing State Change` events (source
- * `aws.ram`) to the default EventBridge bus in near-real time — for both the
- * share owner and the principals granted access — whenever a resource share
+ * `aws.ram`) to the default EventBridge bus in near-real time -- for both the
+ * share owner and the principals granted access -- whenever a resource share
  * changes state; this subscribes the host Function to those events so it can
  * drive invitation-acceptance or failure-alerting automation.
  *
- * RAM publishes to EventBridge automatically (best effort — events can be
- * dropped) — no additional resource is created besides the EventBridge rule
+ * RAM publishes to EventBridge automatically (best effort -- events can be
+ * dropped) -- no additional resource is created besides the EventBridge rule
  * targeting the host. Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.
  *

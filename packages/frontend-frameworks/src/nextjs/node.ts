@@ -15,7 +15,7 @@ import { runBuildChild } from "../core/BuildChild.ts";
 import { makeChildOutput } from "../core/ChildOutput.ts";
 import { logChildOutput } from "../core/ChildOutput.ts";
 /**
- * `@alchemy.run/frontend-frameworks/nextjs/node` — Next.js on a Node
+ * `@alchemy.run/frontend-frameworks/nextjs/node` -- Next.js on a Node
  * container (`next build` + a custom `next({ dev: false })` server).
  *
  * Unlike the Cloudflare (`./index.ts`, OpenNext CF) and AWS (`./aws.ts`,
@@ -53,7 +53,7 @@ export interface NextjsNodeOptions {
   readonly root?: string | undefined;
   /**
    * The deploy target module specifier the caller resolved this module as.
-   * This module IS the Node target — accepted and ignored (parity with
+   * This module IS the Node target -- accepted and ignored (parity with
    * `./aws`).
    */
   readonly target?: string | undefined;

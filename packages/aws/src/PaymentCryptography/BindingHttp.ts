@@ -5,8 +5,8 @@ import type { Key } from "./Key.ts";
 /**
  * Shared scaffolding for the AWS Payment Cryptography HTTP bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the builders
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the builders
  * below. Everything except the operation, the IAM action, and (for two-key
  * operations) the injected request fields is boilerplate.
  *
@@ -38,7 +38,7 @@ export const makePaymentCryptographyKeyHttpBinding = <
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <K extends Key>(key: K) {
-      // Outputs yield a DEFERRED effect — resolve again per invocation below.
+      // Outputs yield a DEFERRED effect -- resolve again per invocation below.
       const KeyArn = yield* key.keyArn;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${key})`({

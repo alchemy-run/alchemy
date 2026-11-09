@@ -16,7 +16,7 @@ export type DataStoresSiteSearchEngineTargetSiteProps = {
   /**
    * Parent Data Store resource name
    * `projects/{project}/locations/{location}/dataStores/{dataStore}`.
-   * The data store must use `PUBLIC_WEBSITE` content. Immutable —
+   * The data store must use `PUBLIC_WEBSITE` content. Immutable --
    * changing it replaces the target site.
    */
   dataStore: string;
@@ -27,7 +27,7 @@ export type DataStoresSiteSearchEngineTargetSiteProps = {
    */
   providedUriPattern: string;
   /**
-   * When true, match the provided URI pattern exactly. Immutable —
+   * When true, match the provided URI pattern exactly. Immutable --
    * changing it replaces the target site.
    * @default false
    */

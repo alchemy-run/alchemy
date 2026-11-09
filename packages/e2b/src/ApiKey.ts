@@ -64,7 +64,7 @@ export interface ApiKey extends Resource<
 export const ApiKey = Resource<ApiKey>("E2B.ApiKey");
 
 const maskOf = (mask: apiKeys.IdentifierMaskingDetails) =>
-  `${mask.prefix}${mask.maskedValuePrefix}…${mask.maskedValueSuffix}`;
+  `${mask.prefix}${mask.maskedValuePrefix}\u2026${mask.maskedValueSuffix}`;
 
 const findById = (apiKeyId: string) =>
   apiKeys.listApiKeys({}).pipe(Effect.map((all) => all.find((key) => key.id === apiKeyId)));
@@ -91,7 +91,7 @@ export const ApiKeyProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = news.name ?? output?.name ?? (yield* e2bName(id, undefined));
 
-          // Observe — E2B shows a key's value only at creation, so the only
+          // Observe -- E2B shows a key's value only at creation, so the only
           // usable key is one whose value is in state.
           const held =
             output === undefined
@@ -112,7 +112,7 @@ export const ApiKeyProvider = () =>
 
           const { stored, observed } = held;
 
-          // Sync — the name is the only mutable aspect.
+          // Sync -- the name is the only mutable aspect.
           if (observed.name !== name) {
             yield* apiKeys.updateApiKey({ apiKeyID: observed.id, name });
             const renamed = yield* findById(observed.id);

@@ -63,7 +63,7 @@ export * from "./StartInsightsRefreshHttp.ts";
 /**
  * @deprecated The Kubernetes workloads moved to the cluster-agnostic
  * `@alchemy.run/kubernetes` namespace (`Kubernetes.Deployment`,
- * `Kubernetes.Job`, `Kubernetes.Manifest`, `Kubernetes.HelmChart`) — they
+ * `Kubernetes.Job`, `Kubernetes.Manifest`, `Kubernetes.HelmChart`) -- they
  * take an `AWS.EKS.Cluster` (or any cluster) as their `cluster` prop and
  * are registered by `Kubernetes.providers()`. These re-exports keep old
  * imports compiling for one release; existing state migrates in place via

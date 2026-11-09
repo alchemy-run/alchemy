@@ -26,7 +26,7 @@ export interface GetWhatsAppMessageTemplateRequest extends Omit<
  * ### Managing Message Templates
  * **Example:** Read a Template
  * ```typescript
- * // init — bind the operation to the linked WABA
+ * // init -- bind the operation to the linked WABA
  * const getTemplate = yield* AWS.SocialMessaging.GetWhatsAppMessageTemplate(account);
  *
  * // runtime

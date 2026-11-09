@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Adapter } from "./Adapter.ts";
 
 /**
- * Runtime binding for `textract:ListAdapterVersions` — list the versions
+ * Runtime binding for `textract:ListAdapterVersions` -- list the versions
  * of the bound adapter and their training status.
  *
  * ### Managing Adapters

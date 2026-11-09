@@ -17,18 +17,18 @@ export interface GetBudgetReportRequest extends Omit<
  * `application-signals:BatchGetServiceLevelObjectiveBudgetReport`, scoped
  * to one {@link ServiceLevelObjective}.
  *
- * Retrieves the bound SLO's error-budget report — health indicator,
- * attainment, and remaining budget — at the requested timestamp. Provide
+ * Retrieves the bound SLO's error-budget report -- health indicator,
+ * attainment, and remaining budget -- at the requested timestamp. Provide
  * the implementation with
  * `Effect.provide(AWS.ApplicationSignals.BatchGetServiceLevelObjectiveBudgetReportHttp)`.
  * ### Reading SLOs
  * **Example:** Check the SLO's Error Budget
  * ```typescript
- * // init — bind the operation to the SLO
+ * // init -- bind the operation to the SLO
  * const getBudgetReport =
  *   yield* AWS.ApplicationSignals.BatchGetServiceLevelObjectiveBudgetReport(slo);
  *
- * // runtime — the SLO's ARN is injected as SloIds
+ * // runtime -- the SLO's ARN is injected as SloIds
  * const result = yield* getBudgetReport({ Timestamp: new Date() });
  * const report = result.Reports[0];
  * yield* Effect.log(`${report?.BudgetStatus}: ${report?.Attainment}%`);

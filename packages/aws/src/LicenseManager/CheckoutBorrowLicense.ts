@@ -8,7 +8,7 @@ import type * as Effect from "effect/Effect";
 export interface CheckoutBorrowLicenseRequest extends licensemanager.CheckoutBorrowLicenseRequest {}
 
 /**
- * Runtime binding for `license-manager:CheckoutBorrowLicense` — check out
+ * Runtime binding for `license-manager:CheckoutBorrowLicense` -- check out
  * an offline-capable (borrow) entitlement from a seller-issued license
  * that allows borrowing. The signed token proves the entitlement while the
  * consumer is disconnected.

@@ -1,7 +1,7 @@
 import * as Duration from "effect/Duration";
 import { theme } from "../Util/Theme.ts";
 
-/** `450ms`, `1.2s`, `12m 34s` or `1h 3s`, by size — shared by every renderer. */
+/** `450ms`, `1.2s`, `12m 34s` or `1h 3s`, by size -- shared by every renderer. */
 export const formatElapsed = (ms: number): string => {
   if (ms < 1000) return `${Math.max(0, Math.round(ms))}ms`;
   // 59.95s and up would round to a misleading `60.0s`.

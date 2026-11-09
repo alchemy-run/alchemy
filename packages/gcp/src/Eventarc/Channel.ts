@@ -31,11 +31,11 @@ export type ChannelProps = {
    * `projects/{project}/locations/{location}/channels/{channel}`). If
    * omitted, a unique name is generated from the stack, stage, and
    * logical id. Must match `[a-z]([a-z0-9-]*[a-z0-9])?` and be 1-63
-   * characters. Immutable — changing it replaces the channel.
+   * characters. Immutable -- changing it replaces the channel.
    */
   channelId?: string;
   /**
-   * Eventarc location (`us-central1`, `us-east1`, …). Immutable —
+   * Eventarc location (`us-central1`, `us-east1`, ...). Immutable --
    * changing it replaces the channel. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile
@@ -48,7 +48,7 @@ export type ChannelProps = {
    * `projects/{project}/locations/{location}/providers/{providerId}` or
    * the `{providerId}` segment. The provider is granted permission to
    * publish events on the channel. Omit for a Google channel with no
-   * third-party partner. Immutable — changing it replaces the channel.
+   * third-party partner. Immutable -- changing it replaces the channel.
    */
   provider?: string;
   /**
@@ -73,7 +73,7 @@ export type Channel = Resource<
     channelId: string;
     /** Project id. */
     project: string;
-    /** Location id (`us-central1`, …). */
+    /** Location id (`us-central1`, ...). */
     location: string;
     /** Event provider resource name, if any. */
     provider: string | undefined;
@@ -86,7 +86,7 @@ export type Channel = Resource<
      * (`projects/{project}/topics/{topic}`).
      */
     pubsubTopic: string | undefined;
-    /** Channel lifecycle state (`PENDING`, `ACTIVE`, `INACTIVE`, …). */
+    /** Channel lifecycle state (`PENDING`, `ACTIVE`, `INACTIVE`, ...). */
     state: ChannelState | undefined;
     /**
      * Activation token the provider uses to register the channel. Present
@@ -120,7 +120,7 @@ export interface ChannelLookup {
    */
   channelId: string;
   /**
-   * Eventarc location (`us-central1`, `us-east1`, …). `US-CENTRAL1` is
+   * Eventarc location (`us-central1`, `us-east1`, ...). `US-CENTRAL1` is
    * accepted and normalized to `us-central1`.
    */
   location?: string;
@@ -136,7 +136,7 @@ export interface ChannelLookup {
  * events from an event provider. Published events are delivered over
  * the transport Eventarc associates with the channel.
  *
- * `channelId`, `location`, and `provider` are identity — changing any
+ * `channelId`, `location`, and `provider` are identity -- changing any
  * of them replaces the channel. Labels and `cryptoKeyName` update in
  * place. A Google channel (no third-party `provider`) is valid; SaaS
  * partner channels stay `PENDING` until the partner activates them.

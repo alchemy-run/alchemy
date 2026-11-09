@@ -6,8 +6,8 @@ import { keyLabel, keyPolicyStatement, type KeyLike } from "./KeyBinding.ts";
 import { ReEncrypt, type ReEncryptRequest } from "./ReEncrypt.ts";
 
 /**
- * Bespoke (not scaffolded): ReEncrypt spans two keys — `kms:ReEncryptTo` on
- * the destination and `kms:ReEncryptFrom` on the source — and injects
+ * Bespoke (not scaffolded): ReEncrypt spans two keys -- `kms:ReEncryptTo` on
+ * the destination and `kms:ReEncryptFrom` on the source -- and injects
  * `DestinationKeyId` (plus `SourceKeyId` when a source key is bound).
  */
 export const ReEncryptHttp = Layer.effect(
@@ -40,7 +40,7 @@ export const ReEncryptHttp = Layer.effect(
       ) {
         const destinationKeyId = yield* DestinationKeyId;
         // Always pin the source key (AWS best practice for symmetric
-        // ciphertexts) — and required for alias-bound IAM, where the
+        // ciphertexts) -- and required for alias-bound IAM, where the
         // `kms:RequestAlias` condition only matches when the alias appears
         // in the request.
         const sourceKeyId = yield* SourceKeyId;

@@ -26,7 +26,7 @@ export interface ListWhatsAppFlowsRequest extends Omit<
  * ### Managing WhatsApp Flows
  * **Example:** List Flows
  * ```typescript
- * // init — bind the operation to the linked WABA
+ * // init -- bind the operation to the linked WABA
  * const listFlows = yield* AWS.SocialMessaging.ListWhatsAppFlows(account);
  *
  * // runtime

@@ -116,7 +116,7 @@ export const RoutingProvider = () =>
     stables: ["zoneId", "routingId"],
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // Email Routing settings are a per-zone singleton — no account-wide
+      // Email Routing settings are a per-zone singleton -- no account-wide
       // enumeration API. Enumerate every zone in the account and read the
       // settings in each (every zone has one).
       const allZones = yield* listAllZones(accountId);

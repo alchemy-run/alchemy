@@ -18,7 +18,7 @@ export interface ListRetrievedTracesRequest extends xray.ListRetrievedTracesRequ
  * ```typescript
  * import * as XRay from "@alchemy.run/aws/XRay";
  *
- * // init — grants xray:ListRetrievedTraces
+ * // init -- grants xray:ListRetrievedTraces
  * const listRetrievedTraces = yield* XRay.ListRetrievedTraces();
  *
  * // runtime

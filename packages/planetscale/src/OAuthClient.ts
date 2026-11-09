@@ -6,7 +6,7 @@ export { OAuthCredentials, OAuthError, type Authorization } from "alchemy/Auth/O
 /**
  * Registered PlanetScale OAuth application credentials.
  *
- * Unlike Cloudflare, PlanetScale OAuth has **no public-client flow** — the
+ * Unlike Cloudflare, PlanetScale OAuth has **no public-client flow** -- the
  * token endpoint requires client authentication for every grant (PKCE is
  * advertised in their discovery doc but does not lift that requirement), so
  * exchanging the authorization code (and refreshing the token) requires the
@@ -32,7 +32,7 @@ export const OAUTH_REDIRECT_URI = "https://alchemy.run/auth/callback";
 export const OAUTH_LOCAL_CALLBACK_URI = "http://localhost:9976/auth/callback";
 export const OAUTH_ENDPOINTS = {
   // PlanetScale's own .well-known OAuth discovery doc declares this as
-  // the authorization_endpoint — NOT auth.planetscale.com/oauth/authorize
+  // the authorization_endpoint -- NOT auth.planetscale.com/oauth/authorize
   // (which their public docs cite). The auth.planetscale.com alias does
   // render a consent screen but emits codes whose resulting tokens lack
   // a `sub` claim, so the resource API at api.planetscale.com rejects

@@ -25,7 +25,7 @@ export { handleRpcExit } from "alchemy/Workers/Worker";
 /**
  * The isolate-lifetime artifacts produced by a single layer build: the built
  * service Context, the resolved export for this entrypoint, the user's
- * RPC shape (a thunk — the shape is only populated once `serve` has run),
+ * RPC shape (a thunk -- the shape is only populated once `serve` has run),
  * and the telemetry Layer override registered during init (a thunk for the
  * same reason).
  */

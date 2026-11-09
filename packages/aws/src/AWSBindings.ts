@@ -31,7 +31,7 @@ import { CurrentRegion } from "./Region.ts";
 /**
  * How an AWS binding reaches AWS from its host:
  *
- * - the host runs as an IAM role (Lambda, ECS, EC2, …): statements go on that
+ * - the host runs as an IAM role (Lambda, ECS, EC2, ...): statements go on that
  *   role, and calls use its ambient credentials;
  * - the host runs as a Google service account (Cloud Run, Cloud Functions):
  *   Alchemy creates a Role that trusts that account's Google ID tokens, puts
@@ -63,7 +63,7 @@ import { CurrentRegion } from "./Region.ts";
  *         ],
  *       });
  *     }
- *     return (request) => sendMessage({ ...request, QueueUrl: … });
+ *     return (request) => sendMessage({ ...request, QueueUrl: ... });
  *   });
  * })
  * ```
@@ -233,7 +233,7 @@ const toOutput = (value: unknown) => (Output.isOutput(value) ? value : Output.li
  *   const bind = yield* AWSBindings.Bind;
  *   return Effect.fn(function* (queue: Queue) {
  *     if (!globalThis.__ALCHEMY_RUNTIME__) {
- *       yield* bind`AWS.SQS.SendMessage(${queue})`({ policyStatements: [ … ] });
+ *       yield* bind`AWS.SQS.SendMessage(${queue})`({ policyStatements: [ ... ] });
  *     }
  *   });
  * })

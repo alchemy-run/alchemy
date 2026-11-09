@@ -6,14 +6,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `ram:GetResourceShareInvitations`.
  *
  * Retrieves the invitations to resource shares that other accounts extended to you.
- * Account-level operation — the target shares, invitations, and permissions
+ * Account-level operation -- the target shares, invitations, and permissions
  * are chosen per request at runtime, so the binding takes no resource
  * argument. Provide the implementation with
  * `Effect.provide(AWS.RAM.GetResourceShareInvitationsHttp)`.
  * ### Invitations
  * **Example:** List Your Pending Invitations
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getResourceShareInvitations = yield* AWS.RAM.GetResourceShareInvitations();
  *
  * // runtime

@@ -8,14 +8,14 @@ import type { DBCluster } from "./DBCluster.ts";
  * `rds:CreateDBClusterSnapshot` +
  * `rds:AddTagsToResource`).
  *
- * Takes a manual snapshot of the bound {@link DBCluster} — e.g. a
+ * Takes a manual snapshot of the bound {@link DBCluster} -- e.g. a
  * pre-migration backup function or a scheduled snapshot-rotation job. The
  * cluster identifier is injected from the binding. Provide the implementation with
  * `Effect.provide(AWS.RDS.CreateDBClusterSnapshotHttp)`.
  * ### Managing Cluster Snapshots
  * **Example:** Take a Manual Cluster Snapshot
  * ```typescript
- * // init — bind the operation to the cluster
+ * // init -- bind the operation to the cluster
  * const createDBClusterSnapshot =
  *   yield* AWS.RDS.CreateDBClusterSnapshot(cluster);
  *

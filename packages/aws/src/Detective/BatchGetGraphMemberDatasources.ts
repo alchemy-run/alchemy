@@ -6,7 +6,7 @@ import type { Graph } from "./Graph.ts";
 /**
  * Runtime binding for `detective:BatchGetGraphMemberDatasources`.
  *
- * Reads per-member data source ingest history for the behavior graph —
+ * Reads per-member data source ingest history for the behavior graph --
  * which packages each member account is contributing and when their ingest
  * state last changed. The graph ARN is injected from the bound {@link Graph}.
  * Provide the implementation with

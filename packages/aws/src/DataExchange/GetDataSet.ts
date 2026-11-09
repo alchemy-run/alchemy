@@ -6,7 +6,7 @@ import type { DataSet } from "./DataSet.ts";
 /**
  * Runtime binding for `dataexchange:GetDataSet`.
  *
- * Reads the bound data set's detail — name, description, asset type,
+ * Reads the bound data set's detail -- name, description, asset type,
  * origin (`OWNED` or `ENTITLED`), and origin details. The data set id is
  * injected from the binding.
  * Provide the implementation with
@@ -14,7 +14,7 @@ import type { DataSet } from "./DataSet.ts";
  * ### Reading Data Sets
  * **Example:** Read The Bound Data Set
  * ```typescript
- * // init — bind the operation to the data set
+ * // init -- bind the operation to the data set
  * const getDataSet = yield* AWS.DataExchange.GetDataSet(dataSet);
  *
  * // runtime

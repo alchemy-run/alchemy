@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { KxEnvironment } from "./KxEnvironment.ts";
 
 /**
- * Runtime binding for `finspace:UpdateKxUser` — re-points a kdb user of the bound environment at a different IAM role.
+ * Runtime binding for `finspace:UpdateKxUser` -- re-points a kdb user of the bound environment at a different IAM role.
  * Provide the implementation with
  * `Effect.provide(AWS.FinSpace.UpdateKxUserHttp)`.
  * ### Managing kdb Users

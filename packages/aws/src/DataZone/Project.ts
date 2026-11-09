@@ -15,7 +15,7 @@ export interface ProjectProps {
   domainId: string;
   /**
    * Name of the project. If omitted, a deterministic physical name is
-   * generated from the app, stage, and logical ID. The name is mutable — it
+   * generated from the app, stage, and logical ID. The name is mutable -- it
    * converges via `UpdateProject` without replacement.
    */
   name?: string;
@@ -70,7 +70,7 @@ export type ProjectLookup =
     };
 
 /**
- * An Amazon DataZone project — the collaboration space within a domain where
+ * An Amazon DataZone project -- the collaboration space within a domain where
  * teams catalog, publish, and subscribe to data assets.
  *
  * The creating principal is automatically the project owner. DataZone
@@ -139,7 +139,7 @@ export const ProjectProvider = () =>
         return props.name ?? (yield* createPhysicalName({ id, maxLength: 64 }));
       });
 
-      // A deleted project — or a project inside a deleted domain — is
+      // A deleted project -- or a project inside a deleted domain -- is
       // reported as AccessDeniedException, NOT ResourceNotFoundException:
       // DataZone evaluates domain-scoped authorization before existence.
       // Both mean "absent".
@@ -167,7 +167,7 @@ export const ProjectProvider = () =>
         return summary?.id;
       });
 
-      // Poll the project to a settled (non-transient) status — project
+      // Poll the project to a settled (non-transient) status -- project
       // operations settle within seconds.
       const waitForSettled = Effect.fn(function* (domainId: string, projectId: string) {
         return yield* getProjectOrUndefined(domainId, projectId).pipe(
@@ -182,7 +182,7 @@ export const ProjectProvider = () =>
         );
       });
 
-      // Poll the project until it no longer exists — deletion is async but
+      // Poll the project until it no longer exists -- deletion is async but
       // settles within seconds for empty projects.
       const waitForGone = Effect.fn(function* (domainId: string, projectId: string) {
         yield* getProjectOrUndefined(domainId, projectId).pipe(
@@ -206,7 +206,7 @@ export const ProjectProvider = () =>
       return Project.Provider.of({
         stables: ["projectId", "domainId", "createdBy"],
 
-        // Projects are keyed by their parent domain — there is no
+        // Projects are keyed by their parent domain -- there is no
         // account-level enumeration without a domain identifier.
         list: () => Effect.succeed([]),
 
@@ -229,7 +229,7 @@ export const ProjectProvider = () =>
           if (project === undefined || project.projectStatus === "DELETING") {
             return undefined;
           }
-          // Projects have no tags — ownership is tracked purely by identity.
+          // Projects have no tags -- ownership is tracked purely by identity.
           return toAttributes(project);
         }),
 
@@ -245,7 +245,7 @@ export const ProjectProvider = () =>
           const domainId = news.domainId;
           const name = yield* createName(id, news);
 
-          // 1. OBSERVE — cloud state is authoritative; output is only an id
+          // 1. OBSERVE -- cloud state is authoritative; output is only an id
           //    cache. Fall back to a name lookup after state loss.
           let project = output?.projectId
             ? yield* getProjectOrUndefined(domainId, output.projectId)
@@ -258,7 +258,7 @@ export const ProjectProvider = () =>
           }
 
           if (project === undefined) {
-            // 2. ENSURE — create (retrying the user-profile propagation
+            // 2. ENSURE -- create (retrying the user-profile propagation
             //    window right after domain creation).
             project = yield* retryWhileUserProfilePropagates(
               datazone.createProject({
@@ -270,7 +270,7 @@ export const ProjectProvider = () =>
             );
             project = (yield* waitForSettled(domainId, project.id)) ?? project;
           } else {
-            // 3. SYNC — wait out any in-flight transition, then converge the
+            // 3. SYNC -- wait out any in-flight transition, then converge the
             //    mutable aspects by diffing OBSERVED state against desired.
             project = (yield* waitForSettled(domainId, project.id)) ?? project;
             const observedTerms = project.glossaryTerms ?? [];
@@ -308,7 +308,7 @@ export const ProjectProvider = () =>
               Effect.catchTags({
                 ResourceNotFoundException: () => Effect.void,
                 // deleting a project whose domain is already gone surfaces as
-                // AccessDenied — auth is checked before existence.
+                // AccessDenied -- auth is checked before existence.
                 AccessDeniedException: () => Effect.void,
               }),
             );

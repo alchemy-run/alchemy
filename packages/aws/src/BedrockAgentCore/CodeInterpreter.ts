@@ -82,7 +82,7 @@ export interface CodeInterpreterLookup {
 }
 
 /**
- * A custom Amazon Bedrock AgentCore Code Interpreter — an isolated sandbox
+ * A custom Amazon Bedrock AgentCore Code Interpreter -- an isolated sandbox
  * where agents execute Python/JavaScript/TypeScript code.
  *
  * A custom interpreter controls the sandbox's network mode and execution
@@ -153,7 +153,7 @@ export const CodeInterpreterProvider = () =>
         return props.name ?? (yield* createAgentCoreName(id));
       });
 
-      // getCodeInterpreter still resolves soft-deleted interpreters —
+      // getCodeInterpreter still resolves soft-deleted interpreters --
       // DELETED/DELETING count as gone.
       const getLiveOrUndefined = Effect.fn(function* (codeInterpreterId: string) {
         const found = yield* control
@@ -215,7 +215,7 @@ export const CodeInterpreterProvider = () =>
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
-        // Everything except tags is create-only — any change replaces.
+        // Everything except tags is create-only -- any change replaces.
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return undefined;
           const oldProps = olds ?? ({} as CodeInterpreterProps);
@@ -247,7 +247,7 @@ export const CodeInterpreterProvider = () =>
             ci = yield* findByName(name);
           }
 
-          // 2. ENSURE — creation is synchronous (READY on return); tolerate
+          // 2. ENSURE -- creation is synchronous (READY on return); tolerate
           // the name-exists race and transient IAM propagation.
           if (ci === undefined) {
             const created = yield* control
@@ -280,7 +280,7 @@ export const CodeInterpreterProvider = () =>
             });
           }
 
-          // 3. SYNC — only tags are mutable.
+          // 3. SYNC -- only tags are mutable.
           yield* syncAgentCoreTags(ci.codeInterpreterArn, desiredTags);
 
           // 4. RETURN fresh attributes.

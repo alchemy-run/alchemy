@@ -17,7 +17,7 @@ import type { StreamSendError } from "./WriteStream.ts";
  *
  * Provide `StreamSinkBinding` (native Worker binding), `StreamSinkHttp`
  * (scoped `Pipelines Send` token) or `StreamSinkLocal` (current
- * credentials, for Actions) — each is the sink layered over the matching
+ * credentials, for Actions) -- each is the sink layered over the matching
  * `WriteStream` implementation.
  * ### Draining a Stream into a Pipelines Stream
  * **Example:** Run an Effect Stream into a Pipelines stream

@@ -99,7 +99,7 @@ export interface WorkspaceLookup {
 }
 
 /**
- * An Amazon Managed Grafana workspace — a fully-managed Grafana server for
+ * An Amazon Managed Grafana workspace -- a fully-managed Grafana server for
  * visualizing operational metrics, logs, and traces.
  *
  * Grafana workspaces require IAM Identity Center (AWS SSO) to be enabled in
@@ -146,7 +146,7 @@ export const WorkspaceProvider = () =>
         status: ws.status,
       });
 
-      /** Describe a workspace by id; typed not-found → undefined. */
+      /** Describe a workspace by id; typed not-found -> undefined. */
       const describe = Effect.fn(function* (id: string) {
         const response = yield* grafana
           .describeWorkspace({ workspaceId: id })
@@ -213,11 +213,11 @@ export const WorkspaceProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news!.tags };
 
-          // 1. Observe — cloud state is authoritative; output is an id cache.
+          // 1. Observe -- cloud state is authoritative; output is an id cache.
           let ws =
             output?.workspaceId !== undefined ? yield* describe(output.workspaceId) : undefined;
 
-          // 2. Ensure — create if missing, then wait for ACTIVE.
+          // 2. Ensure -- create if missing, then wait for ACTIVE.
           if (ws === undefined) {
             const created = yield* grafana.createWorkspace({
               accountAccessType: news!.accountAccessType ?? "CURRENT_ACCOUNT",
@@ -250,7 +250,7 @@ export const WorkspaceProvider = () =>
             }
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          // 3b. Sync tags -- diff against OBSERVED cloud tags.
           const arn = arnFor(accountId, region, ws.id);
           yield* syncGrafanaTags(arn, desiredTags);
 

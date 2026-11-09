@@ -17,7 +17,7 @@ export interface VinextProps extends FrameworkSiteProps {}
  * are installed with `npm install` rather than bundled.
  *
  * Do not use the Cloudflare Worker entry (`vinext/server/fetch-handler`)
- * — that is workerd.
+ * -- that is workerd.
  *
  * During `alchemy dev` the site is `vinext dev` and no cloud resources
  * are declared; `Alchemy.remote()` opts back into the live Cloud Run

@@ -32,7 +32,7 @@ export type AppsExampleProps = {
   /**
    * Parent CES app. Full name
    * `projects/{project}/locations/{location}/apps/{app}` or the app id
-   * (combined with `location`). Immutable — changing it replaces the
+   * (combined with `location`). Immutable -- changing it replaces the
    * example.
    */
   app: string;
@@ -42,7 +42,7 @@ export type AppsExampleProps = {
    */
   location?: string;
   /**
-   * Example id. If omitted, a unique name is generated. Immutable —
+   * Example id. If omitted, a unique name is generated. Immutable --
    * changing it replaces the example.
    */
   exampleId?: string;
@@ -134,7 +134,7 @@ export interface AppsExampleLookup {
  * A Customer Engagement Suite few-shot example conversation inside an
  * app.
  *
- * Examples have no labels field — Alchemy stamps ownership into
+ * Examples have no labels field -- Alchemy stamps ownership into
  * `description` so `list` / nuke can find them. Parent app, location,
  * and example id are immutable.
  *

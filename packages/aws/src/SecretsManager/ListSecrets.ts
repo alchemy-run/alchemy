@@ -12,10 +12,10 @@ import * as Effect from "effect/Effect";
  * ### Listing Secrets
  * **Example:** List Secrets by Name
  * ```typescript
- * // init — account-level, no resource argument
+ * // init -- account-level, no resource argument
  * const listSecrets = yield* AWS.SecretsManager.ListSecrets();
  *
- * // runtime — filter server-side by name
+ * // runtime -- filter server-side by name
  * const result = yield* listSecrets({
  *   Filters: [{ Key: "name", Values: ["my-app/"] }],
  * });

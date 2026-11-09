@@ -5,16 +5,16 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `servicecatalog:GetProvisionedProductOutputs`.
  *
- * Gets the CloudFormation stack outputs of a provisioned product — how downstream code discovers the endpoints and IDs a launched product created.
+ * Gets the CloudFormation stack outputs of a provisioned product -- how downstream code discovers the endpoints and IDs a launched product created.
  *
- * Account-level operation — which products the caller can see and act on
+ * Account-level operation -- which products the caller can see and act on
  * is governed by portfolio principal associations, so the binding takes no
  * resource argument. Provide the implementation with
  * `Effect.provide(AWS.ServiceCatalog.GetProvisionedProductOutputsHttp)`.
  * ### Tracking Provisioned Products
  * **Example:** Read a Provisioned Product's Stack Outputs
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getProvisionedProductOutputs = yield* AWS.ServiceCatalog.GetProvisionedProductOutputs();
  *
  * // runtime

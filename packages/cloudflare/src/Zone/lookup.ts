@@ -105,7 +105,7 @@ export const listAllZones = (
     ),
   );
 
-/** Hostname plus each parent label, longest first — used to infer a zone. */
+/** Hostname plus each parent label, longest first -- used to infer a zone. */
 export const zoneNameCandidates = (hostname: string): string[] => {
   const parts = hostname.split(".");
   return parts.slice(0, -1).map((_, index) => parts.slice(index).join("."));

@@ -7,12 +7,12 @@ import type * as Effect from "effect/Effect";
  * `redshift-serverless:ListSnapshots`).
  *
  * Lists snapshots in the account, optionally filtered by namespace or
- * time window — the discovery half of snapshot-rotation and DR tooling. Provide the implementation with
+ * time window -- the discovery half of snapshot-rotation and DR tooling. Provide the implementation with
  * `Effect.provide(AWS.RedshiftServerless.ListSnapshotsHttp)`.
  * ### Managing Snapshots
  * **Example:** List Snapshots for a Namespace
  * ```typescript
- * // init — resolve the runtime client
+ * // init -- resolve the runtime client
  * const listSnapshots = yield* AWS.RedshiftServerless.ListSnapshots();
  *
  * const { snapshots } = yield* listSnapshots({ namespaceName });

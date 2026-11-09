@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { ConfigRule } from "./ConfigRule.ts";
 
 /**
- * Runtime binding for `config:StartConfigRulesEvaluation` — run an
+ * Runtime binding for `config:StartConfigRulesEvaluation` -- run an
  * on-demand evaluation of the bound {@link ConfigRule} against the last
  * known configuration state of your resources; the rule name is injected
  * automatically.
@@ -14,7 +14,7 @@ import type { ConfigRule } from "./ConfigRule.ts";
  * ### Rule Evaluation Status
  * **Example:** Re-Evaluate a Rule On Demand
  * ```typescript
- * // init — grants config:StartConfigRulesEvaluation
+ * // init -- grants config:StartConfigRulesEvaluation
  * const startRulesEvaluation =
  *   yield* AWS.Config.StartConfigRulesEvaluation(rule);
  *

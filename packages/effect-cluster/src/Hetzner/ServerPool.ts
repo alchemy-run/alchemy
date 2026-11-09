@@ -26,7 +26,7 @@ const POOL_LABEL = "cluster-pool";
  * runners as a `Hetzner.Service`, behind a Load Balancer that serves their
  * gateway to callers anywhere. Runners talk to each other and the database
  * over the Network; their firewall only lets SSH in, which deploys them.
- * Requires a database on a Hetzner Network — `ClusterHetzner.Database`.
+ * Requires a database on a Hetzner Network -- `ClusterHetzner.Database`.
  *
  * ### Running on Hetzner
  * **Example:** Two runners

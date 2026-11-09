@@ -41,11 +41,11 @@ export type FolderSavedQueryOpsAnalyticsQuery = {
 export type FolderSavedQueryProps = {
   /**
    * Folder id (`folders/{folder}` or the numeric id). When omitted, the
-   * stack project is used. Immutable — changing it replaces the query.
+   * stack project is used. Immutable -- changing it replaces the query.
    */
   folderId?: string;
   /**
-   * Location of the saved query. Immutable — changing it replaces the
+   * Location of the saved query. Immutable -- changing it replaces the
    * query.
    * @default "global"
    */
@@ -55,7 +55,7 @@ export type FolderSavedQueryProps = {
    * `{parent}/locations/{location}/savedQueries/{query}`). If omitted, a
    * unique name is generated. Limited to 100 characters: letters, digits,
    * underscores, hyphens, periods; first character must be alphanumeric.
-   * Immutable — changing it replaces the query.
+   * Immutable -- changing it replaces the query.
    */
   savedQueryId?: string;
   /**
@@ -70,7 +70,7 @@ export type FolderSavedQueryProps = {
   visibility?: "PRIVATE" | "SHARED";
   /**
    * Human-readable description. Saved queries have no labels field, so
-   * Alchemy ownership is stored in a `[alchemy …]` prefix and stripped
+   * Alchemy ownership is stored in a `[alchemy ...]` prefix and stripped
    * from attributes.
    */
   description?: string;
@@ -153,7 +153,7 @@ export interface FolderSavedQueryLookup {
  *
  * Saved queries have no labels field, so Alchemy stamps ownership into
  * the description for `list` / nuke. `folderId`, `savedQueryId`, and
- * `location` are identity — changing any of them replaces the query.
+ * `location` are identity -- changing any of them replaces the query.
  * Display name, visibility, description, and query text update in place.
  *
  * ### Creating a Folder Saved Query

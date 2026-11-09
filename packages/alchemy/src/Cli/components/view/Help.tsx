@@ -97,7 +97,7 @@ function BrandLine(): JSX.Element {
       <Text bold tone="emphasis">
         alchemy
       </Text>{" "}
-      <Text tone="muted">— Infrastructure as Effects</Text>
+      <Text tone="muted">&#x2014; Infrastructure as Effects</Text>
     </Text>
   );
 }
@@ -125,7 +125,7 @@ function SubHelp({ doc, root = false }: SubHelpProps): JSX.Element {
   };
   const argLabel = (arg: (typeof args)[number]) =>
     arg.required ? `<${arg.name}>` : `[${arg.name}]`;
-  // width from labels only — enum types (--log-level's choice list) would
+  // width from labels only -- enum types (--log-level's choice list) would
   // otherwise blow the column out; long types truncate inside the cell
   const nameWidth =
     Math.min(

@@ -8,7 +8,7 @@ import type { User } from "./User.ts";
  *
  * Removes an SSH public key from the bound {@link User} by
  * `SshPublicKeyId` (returned by {@link ImportSshPublicKey} or listed via
- * {@link DescribeUser}) — the revocation half of key rotation. The
+ * {@link DescribeUser}) -- the revocation half of key rotation. The
  * `ServerId` and `UserName` are injected from the binding. Deleting a key
  * that no longer exists fails with the typed `ResourceNotFoundException`.
  * Provide the implementation with
@@ -16,7 +16,7 @@ import type { User } from "./User.ts";
  * ### Managing SSH Keys at Runtime
  * **Example:** Revoke a User's Key
  * ```typescript
- * // init — bind the operation to the user
+ * // init -- bind the operation to the user
  * const deleteSshPublicKey = yield* AWS.Transfer.DeleteSshPublicKey(user);
  *
  * // runtime

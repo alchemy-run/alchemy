@@ -18,10 +18,10 @@ export interface CreateDeploymentRequest extends Omit<amplify.CreateDeploymentRe
  * ### Manual Deployments
  * **Example:** Stage a Zip Deployment
  * ```typescript
- * // init — bind the operation to the app
+ * // init -- bind the operation to the app
  * const createDeployment = yield* AWS.Amplify.CreateDeployment(app);
  *
- * // runtime — obtain the upload URL for the deployment artifact
+ * // runtime -- obtain the upload URL for the deployment artifact
  * const { jobId, zipUploadUrl } = yield* createDeployment({
  *   branchName: "main",
  * });

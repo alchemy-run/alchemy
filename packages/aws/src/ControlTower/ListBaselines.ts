@@ -13,7 +13,7 @@ import type * as Effect from "effect/Effect";
  * ### Browsing the Baseline Catalog
  * **Example:** List the Available Baselines
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const listBaselines = yield* AWS.ControlTower.ListBaselines();
  *
  * // runtime

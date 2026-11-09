@@ -7,15 +7,15 @@ import type { ReportGroup } from "./ReportGroup.ts";
 /**
  * Shared scaffolding for AWS CodeBuild HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the builders
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the builders
  * below. Everything except the operation, the IAM action, and (for
  * name-injecting operations) the injected `projectName`/`reportGroupArn` is
  * boilerplate.
  *
  * CodeBuild authorizes builds, batch builds, sandboxes, and cache operations
  * against the *project* ARN, and report operations against the
- * *report-group* ARN — even when the request addresses a build/report id —
+ * *report-group* ARN -- even when the request addresses a build/report id --
  * so every builder grants on the bound resource's ARN.
  */
 
@@ -43,7 +43,7 @@ export const makeCodeBuildProjectNameHttpBinding = <
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* <P extends Project>(project: P) {
-      // Outputs yield a DEFERRED effect — resolve again per invocation below.
+      // Outputs yield a DEFERRED effect -- resolve again per invocation below.
       const ProjectName = yield* project.projectName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${project})`({
@@ -73,7 +73,7 @@ export const makeCodeBuildProjectNameHttpBinding = <
  * as-is and the deploy-time half grants `actions` on the project ARN
  * (CodeBuild authorizes build-/batch-addressed operations against the
  * project the id belongs to). Sandbox-addressed actions authorize against
- * the *sandbox* ARN (`…:sandbox/{project-name}:{uuid}`) — set
+ * the *sandbox* ARN (`...:sandbox/{project-name}:{uuid}`) -- set
  * `sandboxScoped` to additionally grant on the project's sandbox pattern.
  */
 export const makeCodeBuildProjectHttpBinding = <I, A, E, R>(options: {
@@ -83,7 +83,7 @@ export const makeCodeBuildProjectHttpBinding = <I, A, E, R>(options: {
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** IAM actions granted on the project ARN. */
   actions: readonly string[];
-  /** Also grant on `…:sandbox/{project-name}:*` (sandbox-addressed actions). */
+  /** Also grant on `...:sandbox/{project-name}:*` (sandbox-addressed actions). */
   sandboxScoped?: boolean;
 }) =>
   Effect.gen(function* () {

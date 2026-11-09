@@ -31,7 +31,7 @@ export type Tls = "off" | "flexible" | "full" | "strict";
 export type ProxyProtocol = "off" | "v1" | "v2" | "simple";
 
 /**
- * The edge DNS record Spectrum creates for the application — the hostname
+ * The edge DNS record Spectrum creates for the application -- the hostname
  * clients connect to. Must live inside the application's zone.
  */
 export interface Dns {
@@ -90,13 +90,13 @@ export interface EdgeIps {
 
 export interface ApplicationProps {
   /**
-   * Zone the application is created in. Stable — moving an application to
+   * Zone the application is created in. Stable -- moving an application to
    * a different zone triggers a replacement.
    */
   zoneId: string;
   /**
    * The edge DNS record (hostname + record type) for the application.
-   * Mutable — the PUT update accepts a new `dns`, but note `dns.name` +
+   * Mutable -- the PUT update accepts a new `dns`, but note `dns.name` +
    * `protocol` is the identity used for cold-state recovery.
    */
   dns: Dns;
@@ -127,7 +127,7 @@ export interface ApplicationProps {
   originPort?: number | string;
   /**
    * TLS termination at the edge. Only meaningful for `http`/`https`
-   * traffic types — Cloudflare rejects the field on `direct` TCP apps, so
+   * traffic types -- Cloudflare rejects the field on `direct` TCP apps, so
    * leave it unset for those.
    */
   tls?: Tls;
@@ -200,13 +200,13 @@ export type Application = Resource<
 >;
 
 /**
- * A Cloudflare Spectrum application — DDoS protection and proxying for
+ * A Cloudflare Spectrum application -- DDoS protection and proxying for
  * arbitrary TCP/UDP services (SSH, Minecraft, RDP, custom protocols), not
  * just HTTP.
  *
  * An application is identified by its auto-assigned `appId`; its
  * user-visible identity within a zone is the edge hostname (`dns.name`) +
- * `protocol` pair. All configuration is mutable in place via PUT — only
+ * `protocol` pair. All configuration is mutable in place via PUT -- only
  * `zoneId` forces a replacement.
  *
  * Spectrum is plan-gated: Pro zones get SSH (`tcp/22`) and Minecraft
@@ -276,7 +276,7 @@ export const ApplicationProvider = () =>
     stables: ["appId", "zoneId", "createdOn"],
 
     diff: Effect.fn(function* ({ olds, news }) {
-      // `news` may still contain unresolved plan-time expressions — defer
+      // `news` may still contain unresolved plan-time expressions -- defer
       // to the engine's default update logic until everything is concrete.
       if (!isResolved(news)) return undefined;
       // Everything is mutable through the PUT update except the zone the
@@ -303,7 +303,7 @@ export const ApplicationProvider = () =>
 
       // Adoption path: an application with this hostname + protocol may
       // already exist in the zone. Spectrum apps carry no ownership
-      // markers, so we cannot prove we created it — brand it `Unowned` so
+      // markers, so we cannot prove we created it -- brand it `Unowned` so
       // the engine refuses to take over unless `adopt` is set.
       const dnsName = output?.dnsName ?? olds?.dns.name;
       const protocol = output?.protocol ?? olds?.protocol;
@@ -318,20 +318,20 @@ export const ApplicationProvider = () =>
       // Inputs have been resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
 
-      // 1. Observe — the app id cached on `output` is a hint, not a
+      // 1. Observe -- the app id cached on `output` is a hint, not a
       //    guarantee: a missing application falls through to the identity
       //    scan and then to create.
       let observed = output?.appId ? yield* getApp(zoneId, output.appId) : undefined;
 
       // 2. Fall back to scanning the zone for a hostname + protocol match.
-      //    Ownership has already been verified upstream — `read` reports
+      //    Ownership has already been verified upstream -- `read` reports
       //    existing applications as `Unowned` and the engine gates
       //    takeover behind the adopt policy before reconcile ever runs.
       if (!observed) {
         observed = yield* findByIdentity(zoneId, news.dns.name, news.protocol);
       }
 
-      // 3. Ensure — create when missing.
+      // 3. Ensure -- create when missing.
       if (!observed) {
         const created = yield* spectrum.createApp({
           zoneId,
@@ -340,7 +340,7 @@ export const ApplicationProvider = () =>
         return toAttributes(created, zoneId);
       }
 
-      // 4. Sync — diff observed cloud state against desired; the update
+      // 4. Sync -- diff observed cloud state against desired; the update
       //    API is a PUT that requires the full body, so send everything,
       //    but skip the call entirely on a no-op.
       if (!isDirty(observed, news)) {
@@ -357,7 +357,7 @@ export const ApplicationProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       // Deleting the app also removes the Spectrum-managed edge DNS
       // record. An already-gone app answers with the typed
-      // `SpectrumAppNotFound` (Cloudflare code 10006) — idempotent.
+      // `SpectrumAppNotFound` (Cloudflare code 10006) -- idempotent.
       yield* spectrum
         .deleteApp({ zoneId: output.zoneId, appId: output.appId })
         .pipe(Effect.catchTag("SpectrumAppNotFound", () => Effect.void));
@@ -367,7 +367,7 @@ export const ApplicationProvider = () =>
     // are listed per-zone (`/zones/{zone_id}/spectrum/apps`). Enumerate every
     // zone, exhaustively paginate each zone's apps, and hydrate into the same
     // `Attributes` shape `read` returns. Zones without Spectrum entitlement
-    // reject the route with the typed `Forbidden` tag — skip them.
+    // reject the route with the typed `Forbidden` tag -- skip them.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const zones = yield* listAllZones(accountId);
@@ -397,7 +397,7 @@ type ObservedApp = spectrum.GetAppResponse;
 
 /**
  * Distilled types `getApp`/`listApps` results as a union whose second
- * variant omits the optional configuration fields — normalize to a single
+ * variant omits the optional configuration fields -- normalize to a single
  * partial shape.
  */
 type FullApp = Extract<ObservedApp, { trafficType: unknown }>;
@@ -415,7 +415,7 @@ const getApp = (zoneId: string, appId: string) =>
   );
 
 /**
- * Find an application by exact `dns.name` + `protocol` within the zone —
+ * Find an application by exact `dns.name` + `protocol` within the zone --
  * the pair is the application's user-visible identity.
  */
 const findByIdentity = (zoneId: string, dnsName: string, protocol: string) =>
@@ -428,7 +428,7 @@ const findByIdentity = (zoneId: string, dnsName: string, protocol: string) =>
 
 /**
  * The full PUT/POST body derived from the desired props. Optional fields
- * the user did not set are omitted so the API applies its defaults — in
+ * the user did not set are omitted so the API applies its defaults -- in
  * particular `tls`, which Cloudflare rejects on `direct` TCP apps.
  */
 const toRequestBody = (news: ApplicationProps) => ({
@@ -495,7 +495,7 @@ const toAttributes = (
   return {
     appId: a.id,
     zoneId,
-    // Cloudflare always echoes both dns fields for a persisted app —
+    // Cloudflare always echoes both dns fields for a persisted app --
     // distilled just types them as optional/nullable.
     dnsName: a.dns.name ?? "",
     dnsType: (a.dns.type ?? "CNAME") as "CNAME" | "ADDRESS",

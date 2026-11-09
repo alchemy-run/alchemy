@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `transcribe:CreateMedicalVocabulary` — create a custom medical vocabulary from a text file in S3 (asynchronous: created `PENDING`, poll to `READY` with {@link GetMedicalVocabulary}).
+ * Runtime binding for `transcribe:CreateMedicalVocabulary` -- create a custom medical vocabulary from a text file in S3 (asynchronous: created `PENDING`, poll to `READY` with {@link GetMedicalVocabulary}).
  *
  * Amazon Transcribe batch actions have no resource-level IAM; the host is
  * granted `transcribe:CreateMedicalVocabulary` on `*`.

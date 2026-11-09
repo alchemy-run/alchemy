@@ -9,8 +9,8 @@ const WorkerEntrypointTypeId: WorkerEntrypointTypeId = "Cloudflare.WorkerEntrypo
 
 export interface WorkerEntrypointOptions {
   /**
-   * Named entrypoint on the target Worker — the exported
-   * `WorkerEntrypoint` class the binding calls. Omitted → the default
+   * Named entrypoint on the target Worker -- the exported
+   * `WorkerEntrypoint` class the binding calls. Omitted -> the default
    * entrypoint (equivalent to binding the Worker directly, but with
    * {@link props} support).
    */
@@ -29,7 +29,7 @@ export interface WorkerEntrypointOptions {
 }
 
 /**
- * A service binding to an entrypoint of another Worker or of this Worker —
+ * A service binding to an entrypoint of another Worker or of this Worker --
  * the value form accepted in an async Worker's `env`. See
  * {@link WorkerEntrypoint}.
  */
@@ -53,8 +53,8 @@ export interface WorkerEntrypointBinding<
  *
  * Binding a Worker directly in `env` (`env: { TARGET: worker }`) targets
  * its *default* entrypoint. A Worker that exposes additional
- * `WorkerEntrypoint` classes — workerd treats every named class export of
- * an entry module as an entrypoint — is bound with `WorkerEntrypoint`,
+ * `WorkerEntrypoint` classes -- workerd treats every named class export of
+ * an entry module as an entrypoint -- is bound with `WorkerEntrypoint`,
  * which selects the class by name and can deliver `ctx.props` to it.
  *
  * ### Defining the Target Entrypoint
@@ -151,7 +151,7 @@ export interface WorkerEntrypointBinding<
  *
  * ### Delivering ctx.props
  * The options form attaches properties the target reads from
- * `this.ctx.props` — workerd's per-binding configuration channel. `Output`
+ * `this.ctx.props` -- workerd's per-binding configuration channel. `Output`
  * values resolve at deploy time. An Effect Worker reads them with
  * `yield* ctx.props` on `Cloudflare.WorkerExecutionContext`.
  *

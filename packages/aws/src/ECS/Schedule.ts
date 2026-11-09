@@ -12,7 +12,7 @@ export interface ScheduleProps {
    * ECS task definition and roles to invoke on each schedule tick.
    *
    * This is typically an `AWS.ECS.Task` resource (whose attributes are
-   * `Output`s — the fields are `Input`-typed because `every` is a helper
+   * `Output`s -- the fields are `Input`-typed because `every` is a helper
    * function, not resource Props).
    */
   task: {

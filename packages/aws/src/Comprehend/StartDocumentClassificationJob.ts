@@ -20,7 +20,7 @@ export interface StartDocumentClassificationJobRequest extends Omit<
 }
 
 /**
- * Runtime binding for `comprehend:StartDocumentClassificationJob` — start an asynchronous
+ * Runtime binding for `comprehend:StartDocumentClassificationJob` -- start an asynchronous
  * document classification job over a collection of documents in S3.
  *
  * The binding is constructed with the **data-access role** (the IAM role
@@ -34,7 +34,7 @@ export interface StartDocumentClassificationJobRequest extends Omit<
  * ### Starting Analysis Jobs
  * **Example:** Start an Asynchronous Document Classification Job
  * ```typescript
- * // deploy time — bind the Comprehend data-access role
+ * // deploy time -- bind the Comprehend data-access role
  * const startDocumentClassificationJob = yield* AWS.Comprehend.StartDocumentClassificationJob(dataAccessRole);
  *
  * // runtime

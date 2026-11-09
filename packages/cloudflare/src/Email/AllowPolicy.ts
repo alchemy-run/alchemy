@@ -21,7 +21,7 @@ export type PatternType = "EMAIL" | "DOMAIN" | "IP";
 export interface AllowPolicyProps {
   /**
    * The email address, domain, IP, or regular expression to match.
-   * The pattern is the policy's identity for cold-state recovery — a
+   * The pattern is the policy's identity for cold-state recovery -- a
    * pre-existing policy with the same pattern is reported as unowned and
    * only taken over when adoption is enabled.
    */
@@ -52,7 +52,7 @@ export interface AllowPolicyProps {
    */
   isTrustedSender?: boolean;
   /**
-   * Enforce DMARC, SPF, or DKIM authentication — when on, Email Security
+   * Enforce DMARC, SPF, or DKIM authentication -- when on, Email Security
    * only honors the policy when the message passes authentication.
    * @default true
    */
@@ -99,7 +99,7 @@ export type AllowPolicy = Resource<
 >;
 
 /**
- * A Cloudflare Email Security (Area 1) allow policy — exempts messages
+ * A Cloudflare Email Security (Area 1) allow policy -- exempts messages
  * matching a sender/recipient pattern from detections.
  *
  * All fields are mutable in place. Requires the Email Security enterprise
@@ -170,7 +170,7 @@ export const AllowPolicyProvider = () =>
         // `EmailSecurityNotEntitled`, while a credential lacking the
         // Email Security scope (e.g. Cloudflare OAuth) answers a bare
         // `Forbidden`. Neither can enumerate, so both mean "none
-        // visible" — matching `Domain.list()`. Returning `[]` is the
+        // visible" -- matching `Domain.list()`. Returning `[]` is the
         // safe direction for the callers of `list` (orphan detection
         // never deletes what it cannot see).
         Effect.catchTag(["EmailSecurityNotEntitled", "Forbidden"], () =>
@@ -204,14 +204,14 @@ export const AllowPolicyProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const desired = withDefaults(news);
 
-      // 1. Observe — the id on `output` is a hint, not a guarantee; a
+      // 1. Observe -- the id on `output` is a hint, not a guarantee; a
       //    missing policy falls through to the pattern scan and create.
       let observed = output?.policyId ? yield* getPolicy(accountId, output.policyId) : undefined;
       if (!observed) {
         observed = yield* findByPattern(accountId, news.pattern);
       }
 
-      // 2. Ensure — create when missing.
+      // 2. Ensure -- create when missing.
       if (!observed) {
         const created = yield* emailSecurity.createSettingAllowPolicy({
           accountId,
@@ -220,7 +220,7 @@ export const AllowPolicyProvider = () =>
         return toAttributes(created, accountId);
       }
 
-      // 3. Sync — diff observed cloud state against desired and patch only
+      // 3. Sync -- diff observed cloud state against desired and patch only
       //    on a delta.
       const dirty =
         (observed.pattern ?? "") !== desired.pattern ||

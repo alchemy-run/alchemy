@@ -20,13 +20,13 @@ export type TagBindingProps = {
    * `//cloudresourcemanager.googleapis.com/projects/{project}`. Accepts
    * `projects/{project}`, `folders/{folder}`, or `organizations/{org}`
    * and expands them. If omitted, the current project is used (as a
-   * project-number full name). Immutable — changing it replaces the
+   * project-number full name). Immutable -- changing it replaces the
    * binding.
    */
   parent?: string;
   /**
    * TagValue to bind. Accepts `tagValues/{id}` or the namespaced name
-   * `{parent}/{tag-key}/{tag-value}`. Immutable — changing it replaces
+   * `{parent}/{tag-key}/{tag-value}`. Immutable -- changing it replaces
    * the binding.
    */
   tagValue: string;
@@ -58,7 +58,7 @@ export type TagBinding = Resource<
 >;
 
 /**
- * A Resource Manager TagBinding — a connection between a TagValue and a
+ * A Resource Manager TagBinding -- a connection between a TagValue and a
  * Google Cloud resource (project, folder, or organization). Creating the
  * binding applies the TagValue to the resource and its descendants.
  *

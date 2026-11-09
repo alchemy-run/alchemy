@@ -37,7 +37,7 @@ export interface StepReport {
 
 /**
  * A failed story expectation. `message` starts with `reason`, then lists every
- * step (✓ passed, ✗ failed, blank: not run) and the events each touched
+ * step (ok passed, x failed, blank: not run) and the events each touched
  * aggregate committed so far.
  */
 export class StoryFailure extends Data.TaggedError("StoryFailure")<{
@@ -51,8 +51,8 @@ export class StoryFailure extends Data.TaggedError("StoryFailure")<{
   readonly events: Readonly<Record<string, ReadonlyArray<string>>>;
   /**
    * When the story failed only in another order of its concurrent work: what
-   * ran earlier than it was queued, e.g. `policy Settlement ← Settled
-   * (Subject/s#2) ran before saga Process/s → admit-next`. Empty otherwise.
+   * ran earlier than it was queued, e.g. `policy Settlement <- Settled
+   * (Subject/s#2) ran before saga Process/s -> admit-next`. Empty otherwise.
    */
   readonly order: ReadonlyArray<string>;
 }> {}
@@ -651,7 +651,7 @@ const normalize = (value: unknown, redact = false): unknown => {
 const show = (value: unknown) => JSON.stringify(normalize(value, true));
 
 const clip = (text: string, max: number) =>
-  text.length > max ? `${text.slice(0, max - 1)}…` : text;
+  text.length > max ? `${text.slice(0, max - 1)}\u2026` : text;
 
 /** A short, one-line form of a value: `Tag { field: value }`, nested values elided. */
 const brief = (value: unknown, depth = 0): string => {
@@ -664,7 +664,7 @@ const brief = (value: unknown, depth = 0): string => {
   if (Array.isArray(value))
     return depth > 0 ? `[${value.length}]` : `[${value.map((v) => brief(v, 1)).join(", ")}]`;
   const tag = typeof (value as any)._tag === "string" ? ((value as any)._tag as string) : undefined;
-  if (depth > 1) return tag ?? "{…}";
+  if (depth > 1) return tag ?? "{\u2026}";
   const fields = Object.keys(value)
     .filter((key) => key !== "_tag")
     .map((key) => `${key}: ${brief((value as any)[key], depth + 1)}`);
@@ -740,7 +740,7 @@ const describeStep = (s: Step): string => {
     case "Call":
       return `${callName(s.tag, s.op)} ${summarize(s.args)}`;
     case "Answer":
-      return `${callName(s.tag, s.op)} → ${
+      return `${callName(s.tag, s.op)} \u2192 ${
         Exit.isSuccess(s.exit)
           ? summarize(s.exit.value)
           : Option.match(Cause.findErrorOption(s.exit.cause), {
@@ -749,7 +749,7 @@ const describeStep = (s: Step): string => {
             })
       }`;
     case "Returned":
-      return `${callName(s.tag, s.op)} → ${
+      return `${callName(s.tag, s.op)} \u2192 ${
         s.expected._tag === "Success"
           ? summarize(s.expected.value)
           : s.expected._tag === "Failure"
@@ -772,7 +772,7 @@ const renderReport = (
   const width = String(steps.length).length;
   const lines: Array<string> = [];
   for (const s of steps) {
-    const mark = s.status === "passed" ? "✓" : s.status === "failed" ? "✗" : " ";
+    const mark = s.status === "passed" ? "\u2713" : s.status === "failed" ? "\u2717" : " ";
     const head = `  ${mark} ${String(s.step).padStart(width)} ${s.kind.padEnd(10)} `;
     const indent = " ".repeat(head.length);
     if (s.status !== "failed") {
@@ -790,7 +790,7 @@ const renderReport = (
     if (failure.detail !== undefined) lines.push(indent + failure.detail);
   }
   if (failure.atEnd) {
-    const head = `  ✗ ${" ".repeat(width)} ${"end".padEnd(10)} `;
+    const head = `  \u2717 ${" ".repeat(width)} ${"end".padEnd(10)} `;
     const detail = failure.detail?.split("\n") ?? [];
     lines.push(detail.length > 0 ? head + detail[0] : head.trimEnd());
     for (const line of detail.slice(1)) lines.push(" ".repeat(head.length) + line);
@@ -799,7 +799,9 @@ const renderReport = (
   const streams = Object.entries(events);
   if (streams.length === 0) lines.push("    nothing");
   for (const [stream, tags] of streams)
-    lines.push(`    ${stream}: ${tags.length === 0 ? "nothing" : clip(tags.join(" → "), 120)}`);
+    lines.push(
+      `    ${stream}: ${tags.length === 0 ? "nothing" : clip(tags.join(" \u2192 "), 120)}`,
+    );
   return lines.join("\n");
 };
 

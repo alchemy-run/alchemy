@@ -32,7 +32,7 @@ export type AttackMitigation = {
 
 export type FirewallProps = {
   /**
-   * DNS Firewall cluster name. Changing the name triggers a replacement —
+   * DNS Firewall cluster name. Changing the name triggers a replacement --
    * the name is the identity used for cold-state recovery. If omitted, a
    * unique name is generated from the app, stage, and logical ID.
    * @default ${app}-${stage}-${id}
@@ -91,7 +91,7 @@ export type FirewallProps = {
    */
   retries?: number;
   /**
-   * Reverse DNS (PTR) mappings for the cluster's assigned IPs — a map of
+   * Reverse DNS (PTR) mappings for the cluster's assigned IPs -- a map of
    * cluster IP address to PTR record content. Only the entries listed here
    * are managed: entries are upserted, and removing an entry from this map
    * leaves the PTR in place (clear it explicitly with an empty string).
@@ -251,7 +251,7 @@ export const FirewallProvider = () =>
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
-      // The name is the cold-state recovery identity — renames replace.
+      // The name is the cold-state recovery identity -- renames replace.
       const oldName = output?.name ?? (yield* createClusterName(id, olds.name));
       // Auto-generated names are engine-owned: the deployed name stays
       // authoritative even if the generator would name this id differently
@@ -274,7 +274,7 @@ export const FirewallProvider = () =>
         return toAttributes(observed, acct, reverseDns);
       }
 
-      // Cold read — recover from lost state by matching the deterministic
+      // Cold read -- recover from lost state by matching the deterministic
       // physical name. Cluster names are not guaranteed unique and carry
       // no ownership markers, so report the match as `Unowned`: the
       // engine refuses to take it over unless `adopt` is set.
@@ -289,7 +289,7 @@ export const FirewallProvider = () =>
       // Account-scoped collection: exhaustively paginate the DNS Firewall
       // list for the ambient account. Each list item already carries the
       // full cluster shape (identical to `getDnsFirewall`), so it maps
-      // directly into the `read` Attributes shape — no per-item hydration
+      // directly into the `read` Attributes shape -- no per-item hydration
       // needed. `reverseDns` is left `undefined` (the same shape `read`
       // produces when no managed PTR map is tracked).
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -310,7 +310,7 @@ export const FirewallProvider = () =>
       // cluster if the generator's output for this id ever drifts.
       const name = output?.name ?? (yield* createClusterName(id, news.name));
 
-      // Observe — the id cached on `output` is a hint, not a guarantee: a
+      // Observe -- the id cached on `output` is a hint, not a guarantee: a
       // missing cluster falls through to "missing" and we recreate.
       const observed = output?.dnsFirewallId
         ? yield* getCluster(output.accountId ?? accountId, output.dnsFirewallId)
@@ -318,7 +318,7 @@ export const FirewallProvider = () =>
 
       let synced: ObservedCluster;
       if (!observed) {
-        // Ensure — greenfield (or out-of-band delete): create with the
+        // Ensure -- greenfield (or out-of-band delete): create with the
         // full desired body. Names are not unique on Cloudflare's side,
         // so there is no AlreadyExists race to tolerate.
         const created = yield* dnsFirewall.createDnsFirewall({
@@ -336,7 +336,7 @@ export const FirewallProvider = () =>
         });
         synced = { ...created, accountId };
       } else {
-        // Sync — diff observed cloud state against the desired settings
+        // Sync -- diff observed cloud state against the desired settings
         // (props with their documented defaults applied) and PATCH only
         // when something actually differs.
         const desired = {
@@ -382,7 +382,7 @@ export const FirewallProvider = () =>
       }
 
       // Sync reverse DNS (PTR) entries when managed. Only the entries in
-      // the desired map are reconciled — observed entries outside the map
+      // the desired map are reconciled -- observed entries outside the map
       // are left untouched.
       let reverseDns: Record<string, string> | undefined;
       if (news.reverseDns !== undefined) {

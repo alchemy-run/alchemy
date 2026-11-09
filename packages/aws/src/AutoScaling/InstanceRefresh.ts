@@ -40,7 +40,7 @@ export interface InstanceRefreshClient {
   ) => Effect.Effect<autoscaling.StartInstanceRefreshAnswer, autoscaling.StartInstanceRefreshError>;
   /**
    * Cancel the in-progress refresh. Instances already replaced are not rolled
-   * back — use `rollback` for that.
+   * back -- use `rollback` for that.
    */
   cancel: (
     request?: CancelInstanceRefreshRequest,
@@ -69,7 +69,7 @@ export interface InstanceRefreshClient {
 }
 
 /**
- * Runtime binding for the instance refresh operations — `StartInstanceRefresh`,
+ * Runtime binding for the instance refresh operations -- `StartInstanceRefresh`,
  * `CancelInstanceRefresh`, `RollbackInstanceRefresh` (IAM actions scoped to
  * the group ARN) and `DescribeInstanceRefreshes` (granted on `*`; EC2 Auto
  * Scaling `Describe*` actions do not support resource-level permissions).
@@ -80,15 +80,15 @@ export interface InstanceRefreshClient {
  * ### Rolling Deployments
  * **Example:** Roll the fleet and watch progress
  * ```typescript
- * // init — bind the operations to the group
+ * // init -- bind the operations to the group
  * const refresh = yield* AWS.AutoScaling.InstanceRefresh(group);
  *
- * // runtime — start a rolling replacement with auto-rollback
+ * // runtime -- start a rolling replacement with auto-rollback
  * const { InstanceRefreshId } = yield* refresh.start({
  *   Preferences: { MinHealthyPercentage: 90, AutoRollback: true },
  * });
  *
- * // runtime — check on it
+ * // runtime -- check on it
  * const page = yield* refresh.describe({
  *   InstanceRefreshIds: [InstanceRefreshId!],
  * });

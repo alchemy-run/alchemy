@@ -1,7 +1,7 @@
 export * from "./Application.ts";
 export * from "./AttributeGroup.ts";
 export * from "./AttributeGroupAssociation.ts";
-// NOTE: BindingHttp.ts is shared scaffolding — intentionally NOT exported.
+// NOTE: BindingHttp.ts is shared scaffolding -- intentionally NOT exported.
 export * from "./GetApplication.ts";
 export * from "./GetApplicationHttp.ts";
 export * from "./GetAssociatedResource.ts";

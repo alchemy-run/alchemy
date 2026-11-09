@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `securityhub:ListInvitations`.
  *
  * Lists the Security Hub membership invitations received by this account.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.SecurityHub.ListInvitationsHttp)`.
  * ### Members & Organization
  * **Example:** List Invitations
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listInvitations = yield* AWS.SecurityHub.ListInvitations();
  *
  * // runtime

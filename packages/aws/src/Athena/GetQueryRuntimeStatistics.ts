@@ -12,7 +12,7 @@ import type { WorkGroup } from "./WorkGroup.ts";
  * ### Inspecting Query Executions
  * **Example:** Read a Query's Runtime Statistics
  * ```typescript
- * // init — bind the operation to the workgroup
+ * // init -- bind the operation to the workgroup
  * const getQueryRuntimeStatistics =
  *   yield* AWS.Athena.GetQueryRuntimeStatistics(workGroup);
  *

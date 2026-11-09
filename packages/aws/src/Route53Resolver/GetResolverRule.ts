@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { ResolverRule } from "./ResolverRule.ts";
 
 /**
- * Runtime binding for `route53resolver:GetResolverRule` — read the bound
+ * Runtime binding for `route53resolver:GetResolverRule` -- read the bound
  * {@link ResolverRule}'s live state (domain name, target IPs, endpoint,
  * status); the rule ID is injected automatically.
  *
@@ -13,7 +13,7 @@ import type { ResolverRule } from "./ResolverRule.ts";
  * ### Reading Rule State
  * **Example:** Read the Rule's Target IPs
  * ```typescript
- * // init — grants route53resolver:GetResolverRule on the rule
+ * // init -- grants route53resolver:GetResolverRule on the rule
  * const getRule = yield* AWS.Route53Resolver.GetResolverRule(rule);
  *
  * // runtime

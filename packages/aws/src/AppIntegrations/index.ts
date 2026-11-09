@@ -18,4 +18,4 @@ export * from "./ListEventIntegrations.ts";
 export * from "./ListEventIntegrationsHttp.ts";
 export * from "./UpdateDataIntegrationAssociation.ts";
 export * from "./UpdateDataIntegrationAssociationHttp.ts";
-// BindingHttp.ts is internal scaffolding — intentionally not exported.
+// BindingHttp.ts is internal scaffolding -- intentionally not exported.

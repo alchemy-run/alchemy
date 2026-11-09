@@ -12,14 +12,14 @@ import {
  * kind are optional (the schema grows over time).
  */
 export interface DeploymentEventDetail {
-  /** The deployment's id (`d-…`). */
+  /** The deployment's id (`d-...`). */
   deploymentId?: string;
   /** Name of the CodeDeploy application. */
   application?: string;
   /** Name of the deployment group. */
   deploymentGroup?: string;
   /**
-   * The new state — `START`, `READY`, `SUCCESS`, `FAILURE`, or `STOP`.
+   * The new state -- `START`, `READY`, `SUCCESS`, `FAILURE`, or `STOP`.
    */
   state?: string;
   /** Region the deployment runs in. */
@@ -75,7 +75,7 @@ export interface DeploymentEventSourceProps extends EventRouteProps {
  * events so it can alert on failed deployments or chain post-deploy
  * automation.
  *
- * CodeDeploy publishes to EventBridge automatically — no additional
+ * CodeDeploy publishes to EventBridge automatically -- no additional
  * resource is created besides the EventBridge rule targeting the host.
  * Provide the host-specific implementation layer (e.g.
  * `AWS.Lambda.EventSource`) on the Function effect.

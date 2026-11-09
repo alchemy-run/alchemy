@@ -8,9 +8,9 @@ import type { ServerlessCluster } from "./ServerlessCluster.ts";
 /**
  * Shared scaffolding for the MSK connect bindings.
  *
- * NOT exported from `index.ts` — `ConnectReadHttp.ts` / `ConnectWriteHttp.ts`
+ * NOT exported from `index.ts` -- `ConnectReadHttp.ts` / `ConnectWriteHttp.ts`
  * / `ConnectReadWriteHttp.ts` are thin
- * `Layer.effect(Cap, makeKafkaConnectHttpBinding({ … }))` calls over the
+ * `Layer.effect(Cap, makeKafkaConnectHttpBinding({ ... }))` calls over the
  * builder below. Only the IAM action sets differ per access level.
  */
 
@@ -61,11 +61,11 @@ export const makeKafkaConnectHttpBinding = (options: {
   tag: string;
   /** IAM actions granted on the cluster ARN. */
   clusterActions: readonly string[];
-  /** IAM actions granted on the cluster's `topic/…/*` ARNs. */
+  /** IAM actions granted on the cluster's `topic/.../*` ARNs. */
   topicActions: readonly string[];
-  /** IAM actions granted on the cluster's `group/…/*` ARNs. */
+  /** IAM actions granted on the cluster's `group/.../*` ARNs. */
   groupActions?: readonly string[];
-  /** IAM actions granted on the cluster's `transactional-id/…/*` ARNs. */
+  /** IAM actions granted on the cluster's `transactional-id/.../*` ARNs. */
   transactionActions?: readonly string[];
 }) =>
   Effect.gen(function* () {

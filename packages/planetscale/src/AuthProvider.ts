@@ -103,7 +103,7 @@ const options: Array<{
   {
     value: "oauth",
     label: "OAuth",
-    description: "recommended — browser-based login with automatic token refresh",
+    description: "recommended \u2014 browser-based login with automatic token refresh",
   },
   {
     value: "stored",
@@ -116,7 +116,7 @@ const options: Array<{
  * Typed values stored in a PlanetScale provider profile document. Both
  * service-token and OAuth values are inline. PlanetScale has no PKCE flow,
  * so the OAuth application's
- *   `client_secret` ships in the CLI — see {@link OAuthClient}.
+ *   `client_secret` ships in the CLI -- see {@link OAuthClient}.
  */
 export const PlanetscaleAuthConfigSchema = Schema.Union([
   Schema.Struct({
@@ -199,7 +199,7 @@ export const PlanetscaleAuth = AuthProviderLayer<
       // Use the just-issued access token to list the user's orgs and let
       // them pick (mirrors Cloudflare's selectAccount). Requires the
       // `user:read_organizations` scope. If the call fails for any
-      // reason — missing scope, network, off-spec response — fall back
+      // reason -- missing scope, network, off-spec response -- fall back
       // to a manual prompt so login still completes.
       const organization = yield* oauthCreds.access.pipe(
         Redacted.value,
@@ -357,7 +357,7 @@ export const PlanetscaleAuth = AuthProviderLayer<
                 creds.expires > now + 10_000
                   ? creds
                   : yield* OAuthClient.refresh(creds).pipe(
-                      // Only the refresh round-trip maps to NeedsReauth — a
+                      // Only the refresh round-trip maps to NeedsReauth -- a
                       // failed persist afterwards is a local I/O AuthError and
                       // passes through untouched.
                       Effect.mapError((e) =>

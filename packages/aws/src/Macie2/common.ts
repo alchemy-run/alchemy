@@ -6,7 +6,7 @@ import * as Schedule from "effect/Schedule";
  */
 
 /**
- * Macie enablement is eventually consistent — resource creation can briefly
+ * Macie enablement is eventually consistent -- resource creation can briefly
  * reject with the synthetic `MacieNotEnabled` tag right after the session is
  * enabled. Retry on a bounded schedule (< 30s total). The explicit
  * `Effect.Effect<A, E, R>` return annotation keeps `Retry.Return`'s

@@ -15,7 +15,7 @@ export interface UpdateWhatsAppMessageTemplateRequest extends Omit<
 /**
  * Runtime binding for `social-messaging:UpdateWhatsAppMessageTemplate`.
  *
- * Updates an existing WhatsApp message template on the bound account — its
+ * Updates an existing WhatsApp message template on the bound account -- its
  * category or component JSON. Edits re-enter Meta review.
  *
  * The deploy-time half grants `social-messaging:UpdateWhatsAppMessageTemplate` on the
@@ -26,7 +26,7 @@ export interface UpdateWhatsAppMessageTemplateRequest extends Omit<
  * ### Managing Message Templates
  * **Example:** Update a Template
  * ```typescript
- * // init — bind the operation to the linked WABA
+ * // init -- bind the operation to the linked WABA
  * const updateTemplate = yield* AWS.SocialMessaging.UpdateWhatsAppMessageTemplate(account);
  *
  * // runtime

@@ -44,13 +44,13 @@ export type SingleTenantHsmInstanceProposalProps = {
   /**
    * Parent SingleTenantHsmInstance. Full name
    * `projects/{project}/locations/{location}/singleTenantHsmInstances/{instance}`
-   * or the instance id (combined with `location`). Immutable — changing
+   * or the instance id (combined with `location`). Immutable -- changing
    * it replaces the proposal.
    */
   singleTenantHsmInstance: string;
   /**
-   * Cloud KMS location (`us-central1`, `global`, `us`, …). Used when
-   * `singleTenantHsmInstance` is a bare id. Immutable — changing it
+   * Cloud KMS location (`us-central1`, `global`, `us`, ...). Used when
+   * `singleTenantHsmInstance` is a bare id. Immutable -- changing it
    * replaces the proposal. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, profile region, `us-central1`)
@@ -59,7 +59,7 @@ export type SingleTenantHsmInstanceProposalProps = {
   /**
    * Proposal id (the last path segment). If omitted, a unique name is
    * generated from the stack, stage, and logical id. Must match
-   * `[a-zA-Z0-9_-]{1,63}`. Immutable — changing it replaces the
+   * `[a-zA-Z0-9_-]{1,63}`. Immutable -- changing it replaces the
    * proposal.
    */
   proposalId?: string;
@@ -113,7 +113,7 @@ export type SingleTenantHsmInstanceProposalAttrs = {
   proposalId: string;
   /** Parent SingleTenantHsmInstance resource name. */
   singleTenantHsmInstance: string;
-  /** Location id (`us-central1`, `global`, …). */
+  /** Location id (`us-central1`, `global`, ...). */
   location: string;
   /** Project id. */
   project: string;
@@ -172,7 +172,7 @@ export interface SingleTenantHsmInstanceProposalLookup {
    */
   singleTenantHsmInstance: string;
   /**
-   * Cloud KMS location (`us-central1`, `global`, `us`, …). Used when
+   * Cloud KMS location (`us-central1`, `global`, `us`, ...). Used when
    * `singleTenantHsmInstance` is a bare id. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    */
@@ -185,7 +185,7 @@ export interface SingleTenantHsmInstanceProposalLookup {
 }
 
 /**
- * A Cloud KMS SingleTenantHsmInstanceProposal — a quorum-gated operation
+ * A Cloud KMS SingleTenantHsmInstanceProposal -- a quorum-gated operation
  * on a single-tenant HSM instance (refresh, enable, disable, delete,
  * register 2FA keys, add/remove quorum members).
  *

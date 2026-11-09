@@ -6,7 +6,7 @@ import type { Monitor } from "./Monitor.ts";
 export interface GetQueryResultsRequest extends Omit<im.GetQueryResultsInput, "MonitorName"> {}
 
 /**
- * Runtime binding for `internetmonitor:GetQueryResults` — fetch the result
+ * Runtime binding for `internetmonitor:GetQueryResults` -- fetch the result
  * rows of a `SUCCEEDED` query on the bound {@link Monitor}; the monitor name
  * is injected automatically.
  *
@@ -15,7 +15,7 @@ export interface GetQueryResultsRequest extends Omit<im.GetQueryResultsInput, "M
  * ### Querying Measurements
  * **Example:** Read Query Results
  * ```typescript
- * // init — grants internetmonitor:GetQueryResults on the monitor
+ * // init -- grants internetmonitor:GetQueryResults on the monitor
  * const getQueryResults = yield* AWS.InternetMonitor.GetQueryResults(monitor);
  *
  * // runtime

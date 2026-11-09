@@ -6,14 +6,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `s3:ListAccessPoints`.
  *
  * Lists the access points in the caller's account, optionally filtered to a
- * single bucket — e.g. an inventory Lambda that audits which endpoints
+ * single bucket -- e.g. an inventory Lambda that audits which endpoints
  * expose a shared dataset. The account id is resolved once via
  * `sts:GetCallerIdentity`. Provide the implementation with
  * `Effect.provide(AWS.S3Control.ListAccessPointsHttp)`.
  * ### Listing Access Points
  * **Example:** List the Access Points on a Bucket
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listAccessPoints = yield* AWS.S3Control.ListAccessPoints();
  *
  * // runtime

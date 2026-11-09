@@ -1,5 +1,5 @@
 /**
- * `@alchemy.run/frontend-frameworks/solidstart/aws` — the AWS Lambda deploy
+ * `@alchemy.run/frontend-frameworks/solidstart/aws` -- the AWS Lambda deploy
  * target for the SolidStart integration.
  *
  * SolidStart's server half is nitro (`@solidjs/vite-plugin-nitro-2`), so its
@@ -8,14 +8,14 @@
  * `handler`, and `.output/public` holds the client assets (prerendered pages
  * included) for the CDN. What this target owns:
  *
- * - **`nitroPreset`** — `"aws-lambda"`, enforced as the last word on the
+ * - **`nitroPreset`** -- `"aws-lambda"`, enforced as the last word on the
  *   nitro config the integration hands to the appended nitro plugin.
- * - **`configureNitro`** — enables response streaming by default
+ * - **`configureNitro`** -- enables response streaming by default
  *   (`awsLambda.streaming: true`): the emitted handler wraps
  *   `awslambda.streamifyResponse` and expects a Lambda Function URL with
  *   `invokeMode: RESPONSE_STREAM`. Set `streaming: false` on the target
  *   config for the buffered APIGW-style handler.
- * - **`bundle`** — Node resolve conditions and the `@aws-sdk/` externals
+ * - **`bundle`** -- Node resolve conditions and the `@aws-sdk/` externals
  *   (the Lambda Node.js runtime ships SDK v3) for callers that post-process
  *   server code.
  *
@@ -35,7 +35,7 @@ import { make, type SolidStartTarget, type SolidStartTargetConfig } from "./Soli
 export const NITRO_PRESET = "aws-lambda";
 
 /**
- * The importable specifier of nitro's aws-lambda streaming runtime handler —
+ * The importable specifier of nitro's aws-lambda streaming runtime handler --
  * the module a custom entry would re-export to wrap the framework's handler.
  */
 export const NITRO_HANDLER_SPECIFIER = "nitropack/presets/aws-lambda/runtime/aws-lambda-streaming";
@@ -56,7 +56,7 @@ const fail = (message: string, cause?: unknown) =>
   new DeployTargetError({ platform: "aws", message, cause });
 
 /**
- * The adapter-driven target — the shape the framework's regular vite/nitro
+ * The adapter-driven target -- the shape the framework's regular vite/nitro
  * build pipeline consumes. Used directly in the build child (where
  * `cwd === root` holds); {@link makeAwsTarget} wraps it with the wholesale
  * `build` hook that spawns the child.
@@ -85,7 +85,7 @@ const makeAwsAdapterTarget = (config: SolidStartAwsTargetConfig = {}): SolidStar
 /**
  * A SolidStart build loads and executes the project's `vite.config.*` (its
  * `solidStart()` plugin scans the route directory from `process.cwd()`, and
- * user plugins may mutate `process.env` or `process.chdir`) — none of which
+ * user plugins may mutate `process.env` or `process.chdir`) -- none of which
  * may touch the engine process, where many deploys share one event loop.
  * This target's wholesale `build` therefore runs the framework in a
  * disposable child process whose working directory IS the project root (see
@@ -131,7 +131,7 @@ export const makeAwsTarget = (config: SolidStartAwsTargetConfig = {}): SolidStar
 
 /**
  * The deploy-target module contract (`resolveDeployTarget` accepts the
- * default export — or the named `target` export — as a value or factory).
+ * default export -- or the named `target` export -- as a value or factory).
  */
 export const target = makeAwsTarget;
 

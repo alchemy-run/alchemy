@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `sesv2:PutSuppressedDestination`.
  *
- * Adds an email address to the account-level suppression list — the
+ * Adds an email address to the account-level suppression list -- the
  * data-plane half of bounce/complaint handling: consume feedback events and
  * suppress the offending address so SES never attempts it again.
  * Account-level operation. Provide the implementation with
@@ -13,7 +13,7 @@ import type * as Effect from "effect/Effect";
  * ### Suppression List
  * **Example:** Suppress a Hard-Bouncing Address
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const suppress = yield* SES.PutSuppressedDestination();
  *
  * // runtime

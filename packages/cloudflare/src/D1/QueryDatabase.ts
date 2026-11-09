@@ -9,7 +9,7 @@ import type { Database } from "./Database.ts";
  * connection client (`prepare`, `exec`, `batch`, `raw`).
  *
  * `QueryDatabase` is a single identifier that is simultaneously the binding's
- * Context tag, its type, and the callable —
+ * Context tag, its type, and the callable --
  * `yield* Cloudflare.D1.QueryDatabase(db)`.
  *
  * **Example:** Querying a database inside a Worker
@@ -33,7 +33,7 @@ export const QueryDatabase = Binding.Service<QueryDatabase>("Cloudflare.D1.Query
 /**
  * Effect-native wrapper around a Cloudflare D1 prepared statement.
  *
- * Construction (`prepare`) and binding (`bind`) are synchronous —
+ * Construction (`prepare`) and binding (`bind`) are synchronous --
  * they're plan builders and don't touch D1. Only the executors
  * (`all`, `first`, `run`, `raw`) round-trip to the database, and
  * those return Effects so they participate in the Effect runtime.
@@ -115,7 +115,7 @@ export interface QueryDatabaseClient {
    */
   raw: Effect.Effect<runtime.D1Database, never, RuntimeContext>;
   /**
-   * Prepare a SQL statement. Returns synchronously — the network
+   * Prepare a SQL statement. Returns synchronously -- the network
    * round-trip happens when you yield one of the statement's
    * executors (`all`, `first`, `run`, `raw`).
    */

@@ -71,7 +71,7 @@ export interface NotificationConfiguration extends Resource<
 > {}
 
 /**
- * An AWS User Notifications **notification configuration** — the container
+ * An AWS User Notifications **notification configuration** -- the container
  * that groups {@link EventRule}s (which events to notify on) and delivery
  * channels (where notifications go: Console bell, email contacts, chat).
  *
@@ -195,21 +195,21 @@ export const NotificationConfigurationProvider = () =>
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
-        // Everything (including the name) is mutable in place — no diff
+        // Everything (including the name) is mutable in place -- no diff
         // needed; the engine's default update path always reconciles.
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const desiredName = yield* createName(id, news);
           const desiredDescription = news.description ?? DEFAULT_DESCRIPTION;
 
-          // OBSERVE — cloud state is authoritative; the cached ARN falls
+          // OBSERVE -- cloud state is authoritative; the cached ARN falls
           // through to a name scan when it no longer resolves.
           let live = output?.notificationConfigurationArn
             ? yield* getByArn(output.notificationConfigurationArn)
             : yield* findByName(desiredName);
 
-          // ENSURE — create when missing; ConflictException means a peer
-          // created the same-named configuration concurrently → re-observe.
+          // ENSURE -- create when missing; ConflictException means a peer
+          // created the same-named configuration concurrently -> re-observe.
           if (live === undefined) {
             const created = yield* pinNotificationsRegion(
               notifications
@@ -225,7 +225,7 @@ export const NotificationConfigurationProvider = () =>
           }
           const arn = live!.arn;
 
-          // SYNC settings — diff observed name/description/aggregation
+          // SYNC settings -- diff observed name/description/aggregation
           // against desired and update only on change. An absent
           // aggregationDuration prop leaves the observed value untouched.
           const wantsAggregation = news.aggregationDuration;
@@ -249,7 +249,7 @@ export const NotificationConfigurationProvider = () =>
             );
           }
 
-          // SYNC tags — against observed cloud tags (adoption-safe).
+          // SYNC tags -- against observed cloud tags (adoption-safe).
           yield* syncNotificationsTags(arn, id, news.tags);
 
           const fresh = yield* getByArn(arn);
@@ -258,7 +258,7 @@ export const NotificationConfigurationProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // Idempotent — deleting also cascades any remaining event rules.
+          // Idempotent -- deleting also cascades any remaining event rules.
           // Retry the transitional lock (a rule still DELETING blocks the
           // configuration delete with a ConflictException).
           yield* notifications

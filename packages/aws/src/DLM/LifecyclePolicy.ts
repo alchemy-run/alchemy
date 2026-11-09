@@ -12,7 +12,7 @@ import type { Providers } from "../Providers.ts";
 
 /**
  * The activation state of a lifecycle policy. `ERROR` is only ever observed
- * (e.g. when the execution role was deleted out-of-band) — it cannot be set.
+ * (e.g. when the execution role was deleted out-of-band) -- it cannot be set.
  */
 export type LifecyclePolicyState = "ENABLED" | "DISABLED" | "ERROR";
 
@@ -695,7 +695,7 @@ export const LifecyclePolicyProvider = () =>
         // Enumerate every lifecycle policy in the ambient account/region.
         // getLifecyclePolicies is unpaginated; hydrate each summary because
         // the full attributes (ARN, role) only appear on the detail call. A
-        // policy can vanish between enumeration and hydration — drop it.
+        // policy can vanish between enumeration and hydration -- drop it.
         list: () =>
           Effect.gen(function* () {
             const { Policies } = yield* dlm.getLifecyclePolicies({});
@@ -756,7 +756,7 @@ export const LifecyclePolicyProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // Ensure the execution role first — the policy cannot exist
+          // Ensure the execution role first -- the policy cannot exist
           // without one. Managed unless an explicit executionRoleArn is
           // provided.
           let executionRoleArn = news.executionRoleArn;
@@ -770,14 +770,14 @@ export const LifecyclePolicyProvider = () =>
             });
           }
 
-          // 1. OBSERVE — cloud state is authoritative; `output` is only an
+          // 1. OBSERVE -- cloud state is authoritative; `output` is only an
           //    id cache. Policy ids are server-assigned, so with no cached
           //    id the policy is (as far as we can know) missing.
           let policyId = output?.policyId;
           let observed = policyId === undefined ? undefined : yield* getOrUndefined(policyId);
 
           if (observed === undefined) {
-            // 2. ENSURE — create. IAM propagation of a fresh role is
+            // 2. ENSURE -- create. IAM propagation of a fresh role is
             //    eventually consistent; DLM rejects it with a transient
             //    InvalidRequestException, so retry briefly.
             const created = yield* retryWhileRolePropagates(
@@ -792,7 +792,7 @@ export const LifecyclePolicyProvider = () =>
             policyId = created.PolicyId!;
             observed = yield* getOrUndefined(policyId);
           } else {
-            // 3. SYNC — diff OBSERVED cloud state against desired and issue
+            // 3. SYNC -- diff OBSERVED cloud state against desired and issue
             //    a single update only when something actually drifted. DLM
             //    normalizes documents on read (defaults like PolicyLanguage
             //    or ResourceLocations appear), so the comparison projects
@@ -821,14 +821,14 @@ export const LifecyclePolicyProvider = () =>
             observed.PolicyArn === undefined ||
             observed.ExecutionRoleArn === undefined
           ) {
-            // The policy vanished between create/update and the final read —
+            // The policy vanished between create/update and the final read --
             // surface as a typed not-found so the engine can retry the plan.
             return yield* dlm.ResourceNotFoundException.make({
               message: `DLM lifecycle policy ${policyId} disappeared during reconcile`,
             });
           }
 
-          // 3b. SYNC TAGS — against OBSERVED cloud tags so adoption
+          // 3b. SYNC TAGS -- against OBSERVED cloud tags so adoption
           //     converges (create-time tags only apply on first create).
           const observedTags = fromWireTagMap(observed.Tags);
           const { upsert, removed } = diffTags(observedTags, desiredTags);

@@ -5,14 +5,14 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `account:GetAccountInformation`.
  *
- * Reads the calling account's metadata — account id, account name, creation
+ * Reads the calling account's metadata -- account id, account name, creation
  * date, and account state. Account Management is an account singleton, so the
  * binding takes no resource argument. Provide the implementation with
  * `Effect.provide(AWS.Account.GetAccountInformationHttp)`.
  * ### Reading Account Settings
  * **Example:** Read the Account's Name and State
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getAccountInformation = yield* AWS.Account.GetAccountInformation();
  *
  * // runtime

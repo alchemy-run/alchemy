@@ -5,14 +5,14 @@ import type * as Effect from "effect/Effect";
 export interface PollForJobsRequest extends SVC.PollForJobsInput {}
 
 /**
- * Runtime binding for `codepipeline:PollForJobs` — fetches pending jobs for
+ * Runtime binding for `codepipeline:PollForJobs` -- fetches pending jobs for
  * a custom action type so a job worker can claim and execute them. Valid
  * only for action types with `Custom` in the owner field; returned jobs
  * include the temporary artifact-store credentials (as `Redacted` values)
  * and any secret configuration values.
  *
  * CodePipeline grants job-worker polling on `*` (the action-type sub-ARN is
- * also honored, but the binding takes no resource — the action type is a
+ * also honored, but the binding takes no resource -- the action type is a
  * request field).
  * ### Job Workers
  * **Example:** Poll for Custom-Action Jobs

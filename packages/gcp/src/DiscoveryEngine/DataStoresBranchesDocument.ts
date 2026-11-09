@@ -20,7 +20,7 @@ import {
 export type DataStoresDocumentContent = {
   /**
    * MIME type (`text/plain`, `text/html`, `application/pdf`,
-   * `application/json`, …).
+   * `application/json`, ...).
    */
   mimeType?: string;
   /**
@@ -38,18 +38,18 @@ export type DataStoresBranchesDocumentProps = {
   /**
    * Parent Data Store resource name
    * `projects/{project}/locations/{location}/dataStores/{dataStore}`.
-   * Immutable — changing it replaces the document.
+   * Immutable -- changing it replaces the document.
    */
   dataStore: string;
   /**
    * Branch id. Use `default_branch` for the default branch.
-   * Immutable — changing it replaces the document.
+   * Immutable -- changing it replaces the document.
    * @default "default_branch"
    */
   branch?: string;
   /**
    * Document id (RFC-1034, max 128 characters). If omitted, a unique id
-   * is generated. Immutable — changing it replaces the document.
+   * is generated. Immutable -- changing it replaces the document.
    */
   documentId?: string;
   /**

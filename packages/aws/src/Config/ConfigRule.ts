@@ -155,7 +155,7 @@ export interface ConfigRule extends Resource<
 
 /**
  * An AWS Config rule that evaluates whether your AWS resources comply with
- * a desired configuration — either an AWS-managed rule, a custom Lambda
+ * a desired configuration -- either an AWS-managed rule, a custom Lambda
  * rule, or a Guard custom-policy rule.
  *
  * The account/region must have an AWS Config configuration recorder before
@@ -393,10 +393,10 @@ export const ConfigRuleProvider = () =>
           const desiredTags = { ...news.tags, ...internalTags };
           const desired = toWireRule(ruleName, news);
 
-          // 1. OBSERVE — cloud state is authoritative.
+          // 1. OBSERVE -- cloud state is authoritative.
           const observed = yield* observeRule(ruleName);
 
-          // 2+3. ENSURE + SYNC — PutConfigRule is a full upsert, so a single
+          // 2+3. ENSURE + SYNC -- PutConfigRule is a full upsert, so a single
           //    call covers both the missing-rule and the drifted-rule case.
           //    Skip the API entirely on no-op. A rule stuck in `DELETING`
           //    rejects with the typed ResourceInUseException; bounded retry.
@@ -409,7 +409,7 @@ export const ConfigRuleProvider = () =>
             );
           }
 
-          // 4. RETURN fresh attributes — re-observe for the ARN and ID
+          // 4. RETURN fresh attributes -- re-observe for the ARN and ID
           //    (PutConfigRule returns an empty body).
           const live = yield* retryWhileNotVisible(
             observeRule(ruleName).pipe(
@@ -425,7 +425,7 @@ export const ConfigRuleProvider = () =>
             ),
           );
 
-          // 3b. SYNC TAGS — diff against OBSERVED cloud tags so adoption
+          // 3b. SYNC TAGS -- diff against OBSERVED cloud tags so adoption
           //     converges (Put-time Tags only apply on first create).
           const currentTags = yield* observedTags(live.ConfigRuleArn!);
           const { upsert, removed } = diffTags(currentTags, desiredTags);
@@ -447,7 +447,7 @@ export const ConfigRuleProvider = () =>
         }),
         delete: Effect.fn(function* ({ output }) {
           // Rule deletion is asynchronous (state DELETING); a concurrent
-          // put/delete surfaces as ResourceInUseException — bounded retry.
+          // put/delete surfaces as ResourceInUseException -- bounded retry.
           yield* retryWhileRuleInUse(
             config.deleteConfigRule({
               ConfigRuleName: output.configRuleName,

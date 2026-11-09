@@ -6,8 +6,8 @@ import type { WirelessGateway } from "./WirelessGateway.ts";
 /**
  * Shared HTTP scaffolding for the AWS IoT Wireless runtime bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the builders
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the builders
  * below. Everything except the operation, the IAM action, and the request
  * shaping is boilerplate.
  */
@@ -34,7 +34,7 @@ export const makeIotWirelessDeviceHttpBinding = <I, A, E, R, Req>(options: {
    * IAM resource scope. Defaults to the bound device's ARN. The position
    * operations (`GetResourcePosition` / `UpdateResourcePosition`) must use
    * `"any"`: IoT Wireless authorizes them against a type-level ARN
-   * (`…:WirelessDevice/WirelessDevice`, built from the `resourceType`
+   * (`...:WirelessDevice/WirelessDevice`, built from the `resourceType`
    * query parameter), which the device ARN never matches.
    */
   resourceScope?: "device" | "any";
@@ -44,7 +44,7 @@ export const makeIotWirelessDeviceHttpBinding = <I, A, E, R, Req>(options: {
     const op = yield* AWSBindings.withCredentials(options.operation);
 
     return Effect.fn(function* (device: WirelessDevice) {
-      // Output yields a DEFERRED effect — resolve again per invocation below.
+      // Output yields a DEFERRED effect -- resolve again per invocation below.
       const DeviceId = yield* device.wirelessDeviceId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`AWS.IoTWireless.${options.capability}(${device})`({

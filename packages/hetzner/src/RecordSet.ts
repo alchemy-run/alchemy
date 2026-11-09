@@ -61,7 +61,7 @@ export type RecordSetType =
 
 export interface RecordSetRecord {
   /**
-   * Record value. Interpretation depends on `type` — an A record is an
+   * Record value. Interpretation depends on `type` -- an A record is an
    * IPv4 address, AAAA an IPv6 address, CNAME a hostname, etc. Must be
    * unique within the RRSet. Accepts a primitive Output (e.g. a Primary
    * IP's `ip`).
@@ -90,17 +90,17 @@ export interface RecordSetProps {
    */
   name?: string;
   /**
-   * DNS record type. All `records` share this type — two A values are one
+   * DNS record type. All `records` share this type -- two A values are one
    * RRSet, not two resources. Changing this replaces the RRSet.
    */
   type: RecordSetType;
   /**
    * Records in this RRSet. Must be non-empty and contain distinct values.
-   * Order is not significant. Mutable — updates in place.
+   * Order is not significant. Mutable -- updates in place.
    */
   records: RecordSetRecord[];
   /**
-   * TTL in seconds (`60`–`2147483647`). Omit to use the Zone's default TTL
+   * TTL in seconds (`60`-`2147483647`). Omit to use the Zone's default TTL
    * on create and leave the live value alone on update.
    */
   ttl?: number;
@@ -175,7 +175,7 @@ export interface RecordSetLookup {
 }
 
 /**
- * A Hetzner Cloud DNS resource record set (RRSet) — one `(name, type)`
+ * A Hetzner Cloud DNS resource record set (RRSet) -- one `(name, type)`
  * with one or more records. Two A values are a single resource, not two.
  *
  * Identity is `(zone, name, type)`: changing any of those replaces the
@@ -499,7 +499,7 @@ export const RecordSetProvider = () =>
 
       const zoneRef = String(zoneId);
 
-      // 3. Sync — labels (PUT overwrites the full set)
+      // 3. Sync -- labels (PUT overwrites the full set)
       const observedLabels = tagRecord(current.labels);
       if (!labelsEqual(observedLabels, labels)) {
         const updated = yield* retryLocked(
@@ -513,7 +513,7 @@ export const RecordSetProvider = () =>
         current = updated.rrset;
       }
 
-      // Sync — TTL
+      // Sync -- TTL
       if (news.ttl !== undefined && news.ttl !== (current.ttl ?? undefined)) {
         const { action } = yield* retryLocked(
           Hetzner.zoneRrsetActions.changeZoneRrsetTtl({
@@ -527,7 +527,7 @@ export const RecordSetProvider = () =>
         current = (yield* getRrset(zoneId, name, type)) ?? current;
       }
 
-      // Sync — records (order-insensitive; value identifies a record)
+      // Sync -- records (order-insensitive; value identifies a record)
       if (!recordsEqual(current.records.map(compactRecord), desiredRecords)) {
         const { action } = yield* retryLocked(
           Hetzner.zoneRrsetActions.setZoneRrsetRecords({
@@ -541,7 +541,7 @@ export const RecordSetProvider = () =>
         current = (yield* getRrset(zoneId, name, type)) ?? current;
       }
 
-      // Sync — change protection
+      // Sync -- change protection
       if (current.protection.change !== desiredProtection) {
         const { action } = yield* retryLocked(
           Hetzner.zoneRrsetActions.changeZoneRrsetProtection({

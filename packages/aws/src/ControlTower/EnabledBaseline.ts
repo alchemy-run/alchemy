@@ -29,7 +29,7 @@ export interface EnabledBaselineProps {
    */
   targetIdentifier: string;
   /**
-   * Parameters applied to the baseline, as `{ key, value }` pairs — e.g.
+   * Parameters applied to the baseline, as `{ key, value }` pairs -- e.g.
    * `IdentityCenterEnabledBaselineArn` for the `AWSControlTowerBaseline`.
    * Updated in place via `UpdateEnabledBaseline`.
    */
@@ -125,7 +125,7 @@ class BaselineOperationPending extends Data.TaggedError("BaselineOperationPendin
   readonly status: string | undefined;
 }> {}
 
-// Explicitly-typed retry wrappers — an inline `Effect.retry` in provider
+// Explicitly-typed retry wrappers -- an inline `Effect.retry` in provider
 // lifecycle code leaks `Retry.Return`'s conditional type into declaration
 // emit and widens the provider layer to `unknown` for every consumer of
 // `AWS.providers()`.
@@ -139,7 +139,7 @@ const retryWhileBaselineOperationPending = <A, E extends { readonly _tag: string
     schedule: Schedule.max([Schedule.spaced("10 seconds"), Schedule.recurs(120)]),
   });
 
-// Control Tower serializes baseline operations per target — a concurrent
+// Control Tower serializes baseline operations per target -- a concurrent
 // operation surfaces as a typed ConflictException. Retry through it on a
 // bounded schedule.
 const retryWhileBaselineConflict = <A, E extends { readonly _tag: string }, R>(
@@ -179,7 +179,7 @@ const readEnabledBaseline = (enabledBaselineArn: string) =>
     Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
   );
 
-// Find an enabled baseline by (baselineIdentifier, targetIdentifier) —
+// Find an enabled baseline by (baselineIdentifier, targetIdentifier) --
 // covers the create-race and lost-output cases where we don't have the
 // ARN cached.
 const findEnabledBaselineArn = (baselineIdentifier: string, targetIdentifier: string) =>
@@ -259,7 +259,7 @@ export const EnabledBaselineProvider = () =>
           }
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          // 1. Observe — cloud state is authoritative; output is only an
+          // 1. Observe -- cloud state is authoritative; output is only an
           //    ARN cache.
           let arn = output?.enabledBaselineArn;
           let details = arn === undefined ? undefined : yield* readEnabledBaseline(arn);
@@ -268,7 +268,7 @@ export const EnabledBaselineProvider = () =>
             details = arn === undefined ? undefined : yield* readEnabledBaseline(arn);
           }
 
-          // 2. Ensure — enable if missing and wait for the asynchronous
+          // 2. Ensure -- enable if missing and wait for the asynchronous
           //    operation to converge.
           if (details === undefined || arn === undefined) {
             const internalTags = yield* createInternalTags(id);
@@ -286,7 +286,7 @@ export const EnabledBaselineProvider = () =>
             yield* waitForBaselineOperation(enabled.operationIdentifier);
             details = yield* readEnabledBaseline(arn);
           } else {
-            // 3. Sync — version and parameters are updated in place. Diff
+            // 3. Sync -- version and parameters are updated in place. Diff
             //    observed state against desired; skip the API on a no-op.
             //    Parameters cannot be cleared (only replaced), so an
             //    absent `parameters` prop leaves observed parameters

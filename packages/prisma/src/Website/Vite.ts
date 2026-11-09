@@ -13,7 +13,7 @@ export interface ViteProps extends FrameworkSiteProps {
 }
 
 /**
- * Static Vite assets served on Prisma Compute. The project’s Vite plugins and configuration drive the build; native Vite HMR runs during development.
+ * Static Vite assets served on Prisma Compute. The project's Vite plugins and configuration drive the build; native Vite HMR runs during development.
  *
  * Native framework development and HMR run without Prisma cloud resources.
  * Apply `Alchemy.remote()` to use the live Compute deployment during dev.

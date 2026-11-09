@@ -7,7 +7,7 @@ import type { Graph } from "./Graph.ts";
  * Runtime binding for the `CreateGraphSnapshot` operation (IAM actions `neptune-graph:CreateGraphSnapshot` + `neptune-graph:TagResource`),
  * scoped to one {@link Graph}.
  *
- * Takes an on-demand snapshot of the bound graph — e.g. a pre-import backup from an operational Lambda. Snapshot creation is asynchronous; poll it with {@link GetGraphSnapshot}. Provide the implementation with
+ * Takes an on-demand snapshot of the bound graph -- e.g. a pre-import backup from an operational Lambda. Snapshot creation is asynchronous; poll it with {@link GetGraphSnapshot}. Provide the implementation with
  * `Effect.provide(AWS.NeptuneGraph.CreateGraphSnapshotHttp)`.
  * ### Managing Snapshots
  * **Example:** Take an on-demand snapshot
@@ -15,7 +15,7 @@ import type { Graph } from "./Graph.ts";
  * const createSnapshot = yield* NeptuneGraph.CreateGraphSnapshot(graph);
  *
  * const snapshot = yield* createSnapshot({ snapshotName: "pre-import" });
- * // snapshot.status → "CREATING"
+ * // snapshot.status -> "CREATING"
  * ```
  *
  * @binding

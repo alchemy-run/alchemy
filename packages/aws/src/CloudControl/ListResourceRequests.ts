@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `cloudformation:ListResourceRequests`.
  *
  * Lists resource operation requests made in the account and Region over the
- * last 7 days — useful for surfacing in-flight or failed provisioning
+ * last 7 days -- useful for surfacing in-flight or failed provisioning
  * operations from a management Function.
  * ### Tracking Requests
  * **Example:** List in-progress operations

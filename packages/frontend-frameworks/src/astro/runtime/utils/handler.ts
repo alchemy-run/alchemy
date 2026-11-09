@@ -59,7 +59,7 @@ export async function handle(
   env: Env,
   context: ExecutionContext,
 ): Promise<CfResponse> {
-  // Sessions must be wired before the prerender branch below — prerender
+  // Sessions must be wired before the prerender branch below -- prerender
   // requests return from `handlePrerenderRequest` without falling through,
   // and session-touching pages render inside it.
   injectSessionBinding(app.manifest, env);
@@ -72,8 +72,8 @@ export async function handle(
       // Install the isolate's render scope so concurrent prerender requests
       // each collect their metadata in their own per-render store. The
       // loader thunk is generated into the virtual config module only for the
-      // prerender environment, keeping the module — and its `node:async_hooks`
-      // import — out of production worker output entirely; the install
+      // prerender environment, keeping the module -- and its `node:async_hooks`
+      // import -- out of production worker output entirely; the install
       // itself is first-wins, making the per-request call idempotent.
       (await loadPrerenderScope?.())?.ensurePrerenderScope();
       // Without build-time image optimization, prerendered pages keep the runtime image URLs.

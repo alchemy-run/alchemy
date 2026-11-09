@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Repository } from "./Repository.ts";
 
 /**
- * Request for {@link PutImage} — `repositoryName` is injected from the
+ * Request for {@link PutImage} -- `repositoryName` is injected from the
  * bound {@link Repository} (the registry defaults to the caller's account).
  */
 export interface PutImageRequest extends Omit<
@@ -15,7 +15,7 @@ export interface PutImageRequest extends Omit<
 /**
  * Runtime binding for `ecr:PutImage`.
  *
- * Writes an image manifest to the bound repository — the final step of a push, and the write half of re-tagging (`BatchGetImage` → `PutImage` with a new tag). Provide the implementation with
+ * Writes an image manifest to the bound repository -- the final step of a push, and the write half of re-tagging (`BatchGetImage` -> `PutImage` with a new tag). Provide the implementation with
  * `Effect.provide(AWS.ECR.PutImageHttp)`.
  * ### Pushing Images
  * **Example:** Re-tag an Existing Image

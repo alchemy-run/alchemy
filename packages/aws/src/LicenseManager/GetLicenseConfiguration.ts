@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { LicenseConfiguration } from "./LicenseConfiguration.ts";
 
 /**
- * Runtime binding for `license-manager:GetLicenseConfiguration` — read the
+ * Runtime binding for `license-manager:GetLicenseConfiguration` -- read the
  * bound license configuration's live state (counting type, license count,
  * consumed count, rules, status) from a deployed Lambda or Task.
  *

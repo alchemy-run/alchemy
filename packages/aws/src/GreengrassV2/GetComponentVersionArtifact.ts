@@ -15,7 +15,7 @@ import type { ComponentVersion } from "./ComponentVersion.ts";
  * ### Reading Components
  * **Example:** Mint An Artifact Download URL
  * ```typescript
- * // init — bind the operation to the component version
+ * // init -- bind the operation to the component version
  * const getArtifact = yield* AWS.GreengrassV2.GetComponentVersionArtifact(component);
  *
  * // runtime

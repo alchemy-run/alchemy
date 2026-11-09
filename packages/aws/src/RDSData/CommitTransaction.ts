@@ -15,7 +15,7 @@ export interface CommitTransactionRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `rds-data:CommitTransaction` — commit a Data API
+ * Runtime binding for `rds-data:CommitTransaction` -- commit a Data API
  * transaction opened with `AWS.RDSData.BeginTransaction`.
  *
  * Bind it to the same `DBCluster` and credentials secret as the rest of the
@@ -29,7 +29,7 @@ export interface CommitTransactionRequest extends Omit<
  *   secret: db.secret,
  * });
  *
- * // runtime — after statements executed with tx.transactionId
+ * // runtime -- after statements executed with tx.transactionId
  * const commit = yield* commitTransaction({ transactionId: tx.transactionId! });
  * // commit.transactionStatus === "Transaction Committed"
  * ```

@@ -5,8 +5,8 @@ import type { Stack } from "./Stack.ts";
 /**
  * Shared scaffolding for AWS CloudFormation HTTP bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the two
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the two
  * builders below. Everything except the operation, the IAM action list, and
  * (for stack-scoped operations) the injected `StackName` is boilerplate.
  */
@@ -61,7 +61,7 @@ export const makeCloudFormationStackHttpBinding = <
 /**
  * Build the impl Effect for an account-level operation (cross-stack export
  * discovery, drift-detection polling, template validation). The deploy-time
- * half grants `actions` on `*` — these CloudFormation actions are not
+ * half grants `actions` on `*` -- these CloudFormation actions are not
  * resource-scoped.
  */
 export const makeCloudFormationAccountHttpBinding = <I, A, E, R>(options: {

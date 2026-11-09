@@ -44,28 +44,28 @@ import {
 export type NodesDeploymentsDeviceProps = {
   /**
    * Parent SAS deployment under a node, as `nodes/{node}/deployments/{deployment}`.
-   * Immutable — changing it replaces the device.
+   * Immutable -- changing it replaces the device.
    */
   parent: string;
   /**
    * Server-assigned device resource name
-   * (`nodes/{node}/deployments/{deployment}/devices/{device}`). Immutable — changing it
+   * (`nodes/{node}/deployments/{deployment}/devices/{device}`). Immutable -- changing it
    * replaces the device.
    */
   name?: string;
   /**
    * Display name. SAS Portal devices have no labels field, so Alchemy
-   * stamps ownership into a `[alchemy …]` prefix and strips it from
+   * stamps ownership into a `[alchemy ...]` prefix and strips it from
    * attributes.
    */
   displayName?: string;
   /**
-   * Manufacturer serial number. Immutable — changing it replaces the
+   * Manufacturer serial number. Immutable -- changing it replaces the
    * device.
    */
   serialNumber?: string;
   /**
-   * FCC identifier of the CBSD. Immutable — changing it replaces the
+   * FCC identifier of the CBSD. Immutable -- changing it replaces the
    * device.
    */
   fccId?: string;

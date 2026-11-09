@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `macie2:GetRevealConfiguration`.
  *
  * Retrieves the status and configuration settings for retrieving occurrences of sensitive data reported by findings.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.Macie2.GetRevealConfigurationHttp)`.
  * ### Retrieving Sensitive Data Samples
  * **Example:** Read the Reveal Configuration
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getRevealConfiguration = yield* AWS.Macie2.GetRevealConfiguration();
  *
  * // runtime

@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `geo-maps:GetTile` — fetch a single map tile addressed
+ * Runtime binding for `geo-maps:GetTile` -- fetch a single map tile addressed
  * by tileset, zoom level, and X/Y grid coordinates.
  *
  * geo-maps is a standalone, pay-per-call Amazon Location API with no resource
@@ -21,7 +21,7 @@ import type * as Effect from "effect/Effect";
  * // init
  * const getTile = yield* AWS.GeoMaps.GetTile();
  *
- * // runtime — Z/X/Y are string coordinates in the tile grid
+ * // runtime -- Z/X/Y are string coordinates in the tile grid
  * const tile = yield* getTile({
  *   Tileset: "vector.basemap",
  *   Z: "0",

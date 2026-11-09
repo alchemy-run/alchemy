@@ -17,11 +17,11 @@ import { PutObjectHttp } from "@alchemy.run/aws/S3";
 import { UploadPart } from "@alchemy.run/aws/S3";
 import { UploadPartHttp } from "@alchemy.run/aws/S3";
 /**
- * `Git.BlobStoreS3` — AWS S3 implementation of {@link BlobStore}.
+ * `Git.BlobStoreS3` -- AWS S3 implementation of {@link BlobStore}.
  *
  * Runs the git service's bulk bytes (packs, clone bundles, oversize
  * objects, push spill) on an S3 bucket while compute stays on Cloudflare.
- * It is built over the S3 bindings (`AWS.S3.GetObject`, `PutObject`, …),
+ * It is built over the S3 bindings (`AWS.S3.GetObject`, `PutObject`, ...),
  * so one provision serves the Worker and the Repo DO alike, exactly like
  * {@link BlobStoreR2}: the bucket is an `AWS.S3.Bucket` resource, the
  * Worker gets a least-privilege IAM identity minted for it, and every

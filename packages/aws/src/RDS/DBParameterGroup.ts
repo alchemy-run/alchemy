@@ -37,7 +37,7 @@ export interface DBParameterGroupProps {
    * and undeclared user overrides are reset to engine defaults. Omitting the
    * map is equivalent to `{}`, including on adoption and unchanged-input deploys.
    *
-   * Values must be in the form RDS reports back (it canonicalises some — a
+   * Values must be in the form RDS reports back (it canonicalises some -- a
    * boolean set as `ON` reads back as `1`). Reconciliation waits for those
    * reported values and fails if they do not converge within the observation budget.
    *
@@ -97,7 +97,7 @@ export interface DBParameterGroupLookup {
 }
 
 /**
- * An RDS DB parameter group — instance-level engine settings, applied to a
+ * An RDS DB parameter group -- instance-level engine settings, applied to a
  * `DBInstance` (as opposed to the cluster-wide `DBClusterParameterGroup`).
  *
  * Name, family, and description changes force a replacement (RDS has no
@@ -122,7 +122,7 @@ export interface DBParameterGroupLookup {
  * });
  * ```
  * Dynamic parameters apply immediately, static ones on the next reboot.
- * Cluster-wide settings belong on `DBClusterParameterGroup` instead — Postgres
+ * Cluster-wide settings belong on `DBClusterParameterGroup` instead -- Postgres
  * `timezone`, for example, is a cluster parameter on Aurora.
  *
  * **Example:** Attach to an Instance
@@ -152,7 +152,7 @@ export const DBParameterGroup = Resource<DBParameterGroup>("AWS.RDS.DBParameterG
 /**
  * A parameter modify/reset issued immediately after another change fails with
  * `InvalidDBParameterGroupStateFault` ("has pending changes") until the prior
- * change settles — retry it on a short bounded schedule.
+ * change settles -- retry it on a short bounded schedule.
  */
 const retryWhileParameterGroupBusy = <A, E extends { _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
@@ -195,7 +195,7 @@ export const DBParameterGroupProvider = () =>
       });
 
       // All parameters (defaults + overrides) with their current values and
-      // apply types — the observed baseline for the parameter sync.
+      // apply types -- the observed baseline for the parameter sync.
       const readParameters = Effect.fn(function* (name: string) {
         return yield* rds.describeDBParameters.pages({ DBParameterGroupName: name }).pipe(
           Stream.runCollect,
@@ -203,7 +203,7 @@ export const DBParameterGroupProvider = () =>
         );
       });
 
-      // The subset the user has overridden (Source `user`) — used to compute
+      // The subset the user has overridden (Source `user`) -- used to compute
       // resets when a prop entry is removed.
       const readUserParameters = Effect.fn(function* (name: string) {
         return yield* rds.describeDBParameters
@@ -278,7 +278,7 @@ export const DBParameterGroupProvider = () =>
                     } =>
                       g.DBParameterGroupName != null &&
                       // AWS-managed `default.*` groups cannot be deleted
-                      // (InvalidDBParameterGroupStateFault) — don't enumerate.
+                      // (InvalidDBParameterGroupStateFault) -- don't enumerate.
                       !g.DBParameterGroupName.startsWith("default."),
                   )
                   .map((g) => ({
@@ -334,10 +334,10 @@ export const DBParameterGroupProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // Observe — fetch live parameter-group state.
+          // Observe -- fetch live parameter-group state.
           let observed = yield* readGroup(name);
 
-          // Ensure — create if missing. Tolerate
+          // Ensure -- create if missing. Tolerate
           // `DBParameterGroupAlreadyExistsFault` as a race with a peer
           // reconciler by re-reading.
           if (!observed?.DBParameterGroupName) {

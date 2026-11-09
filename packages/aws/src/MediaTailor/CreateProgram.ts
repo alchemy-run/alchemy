@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `mediatailor:CreateProgram` — schedule a VOD or live
+ * Runtime binding for `mediatailor:CreateProgram` -- schedule a VOD or live
  * source as a program on a channel-assembly channel. Dynamic program
  * scheduling is the core runtime workflow of channel assembly: applications
  * insert programs into a linear channel's schedule as content becomes

@@ -7,14 +7,14 @@ import type { Cluster } from "./Cluster.ts";
  * Runtime binding for the `RebootCluster` operation (IAM action
  * `redshift:RebootCluster`).
  *
- * Reboots the bound {@link Cluster} (a momentary outage while it restarts) —
+ * Reboots the bound {@link Cluster} (a momentary outage while it restarts) --
  * e.g. an ops function that applies pending static parameter-group changes.
  * The cluster identifier is injected from the binding. Provide the
  * implementation with `Effect.provide(AWS.Redshift.RebootClusterHttp)`.
  * ### Operating a Cluster
  * **Example:** Reboot to Apply Static Parameters
  * ```typescript
- * // init — bind the operation to the cluster
+ * // init -- bind the operation to the cluster
  * const rebootCluster = yield* AWS.Redshift.RebootCluster(cluster);
  *
  * // runtime

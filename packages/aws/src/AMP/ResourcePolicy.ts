@@ -35,7 +35,7 @@ export interface ResourcePolicy extends Resource<
 
 /**
  * The resource-based policy of an Amazon Managed Service for Prometheus
- * workspace — grants cross-account or fine-grained same-account access to
+ * workspace -- grants cross-account or fine-grained same-account access to
  * the workspace's data plane (remote-write, query). A workspace has at most
  * one.
  *
@@ -86,7 +86,7 @@ export const ResourcePolicyProvider = () =>
   Provider.effect(
     ResourcePolicy,
     Effect.gen(function* () {
-      /** Describe the policy; typed not-found → undefined. */
+      /** Describe the policy; typed not-found -> undefined. */
       const describe = Effect.fn(function* (workspaceId: string) {
         return yield* amp
           .describeResourcePolicy({ workspaceId })
@@ -117,7 +117,7 @@ export const ResourcePolicyProvider = () =>
           if (!workspaceId) return undefined;
           const policy = yield* describe(workspaceId);
           if (policy === undefined) return undefined;
-          // Resource policies are not taggable — ownership is implied by
+          // Resource policies are not taggable -- ownership is implied by
           // the owned parent workspace.
           return toAttrs(workspaceId, policy);
         }),
@@ -125,10 +125,10 @@ export const ResourcePolicyProvider = () =>
         reconcile: Effect.fn(function* ({ news, session }) {
           const workspaceId = news!.workspaceId;
 
-          // 1. Observe — the live policy is authoritative.
+          // 1. Observe -- the live policy is authoritative.
           const existing = yield* describe(workspaceId);
 
-          // 2/3. Ensure + sync — `putResourcePolicy` is a true upsert;
+          // 2/3. Ensure + sync -- `putResourcePolicy` is a true upsert;
           // call it only when the canonical document drifts.
           const policy =
             existing !== undefined &&

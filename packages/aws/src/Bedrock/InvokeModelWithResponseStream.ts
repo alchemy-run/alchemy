@@ -7,7 +7,7 @@ import type * as Effect from "effect/Effect";
  * `modelId` made optional: it defaults to the first bound model id and may
  * be overridden per call with any of the bound model ids.
  *
- * `body` is the raw, model-specific request payload — there is no
+ * `body` is the raw, model-specific request payload -- there is no
  * auto-marshalling. The response `body` is an event `Stream` whose `chunk`
  * events carry raw model-specific bytes.
  */
@@ -24,7 +24,7 @@ export interface InvokeModelWithResponseStreamRequest extends Omit<
 }
 
 /**
- * Runtime binding for `bedrock-runtime:InvokeModelWithResponseStream` — the
+ * Runtime binding for `bedrock-runtime:InvokeModelWithResponseStream` -- the
  * streaming variant of {@link InvokeModel}. The response arrives as an event
  * `Stream` of `chunk` events carrying model-specific payload bytes.
  *
@@ -34,10 +34,10 @@ export interface InvokeModelWithResponseStreamRequest extends Omit<
  * cross-region inference profile id (e.g. `us.amazon.nova-micro-v1:0`), or a
  * full Bedrock ARN.
  *
- * Prefer {@link ConverseStream} for conversational models — it is
+ * Prefer {@link ConverseStream} for conversational models -- it is
  * model-agnostic and its events are typed.
  *
- * Model access is an account entitlement — enable the model in the Bedrock
+ * Model access is an account entitlement -- enable the model in the Bedrock
  * console (Model access) before invoking, otherwise calls fail with
  * `AccessDeniedException`.
  *
@@ -49,7 +49,7 @@ export interface InvokeModelWithResponseStreamRequest extends Omit<
  *   "us.amazon.nova-micro-v1:0",
  * );
  *
- * // runtime — body is the raw Nova messages-v1 payload
+ * // runtime -- body is the raw Nova messages-v1 payload
  * const result = yield* invokeModelStream({
  *   contentType: "application/json",
  *   body: JSON.stringify({

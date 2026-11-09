@@ -8,7 +8,7 @@ import type { Stack } from "./Stack.ts";
  * `cloudformation:DescribeStackResources`).
  *
  * Bind this operation to a {@link Stack} to resolve the physical ids of the
- * stack's resources — e.g. look up a resource created by the template by its
+ * stack's resources -- e.g. look up a resource created by the template by its
  * logical id from inside a function runtime. Provide the implementation with
  * `Effect.provide(AWS.CloudFormation.DescribeStackResourcesHttp)`.
  * ### Reading Stack Resources

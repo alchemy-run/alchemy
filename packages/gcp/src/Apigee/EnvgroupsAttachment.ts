@@ -22,19 +22,19 @@ import {
 export type EnvgroupsAttachmentProps = {
   /**
    * Apigee organization id or `organizations/{org}`. Defaults to the
-   * current GCP project id. Immutable — changing it replaces the
+   * current GCP project id. Immutable -- changing it replaces the
    * attachment.
    */
   organization?: string;
   /**
    * Parent environment group id or
-   * `organizations/{org}/envgroups/{envgroup}`. Immutable — changing it
+   * `organizations/{org}/envgroups/{envgroup}`. Immutable -- changing it
    * replaces the attachment.
    */
   envgroup: string;
   /**
    * Attached environment id (the `{env}` segment of
-   * `organizations/{org}/environments/{env}`). Immutable — changing it
+   * `organizations/{org}/environments/{env}`). Immutable -- changing it
    * replaces the attachment.
    */
   environment: string;

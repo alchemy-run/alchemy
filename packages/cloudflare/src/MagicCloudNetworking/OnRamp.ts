@@ -28,7 +28,7 @@ export interface OnRampProps {
   /**
    * The cloud provider this on-ramp connects to.
    *
-   * Immutable — changing the cloud type triggers a replacement.
+   * Immutable -- changing the cloud type triggers a replacement.
    */
   cloudType: OnRampCloudType;
   /**
@@ -36,14 +36,14 @@ export interface OnRampProps {
    * `OnrampTypeHub` provisions a hub (e.g. AWS Transit Gateway) that VPCs
    * attach to.
    *
-   * Immutable — changing the topology triggers a replacement.
+   * Immutable -- changing the topology triggers a replacement.
    */
   type: OnRampType;
   /**
    * Enables BGP routing. When enabled, set both `installRoutesInCloud` and
    * `installRoutesInMagicWan` to `false`.
    *
-   * Immutable — the API offers no way to change it, so a change triggers a
+   * Immutable -- the API offers no way to change it, so a change triggers a
    * replacement.
    */
   dynamicRouting: boolean;
@@ -67,7 +67,7 @@ export interface OnRampProps {
   /**
    * Cloud region the on-ramp is provisioned in (e.g. `us-east-1`).
    *
-   * Immutable — changing the region triggers a replacement.
+   * Immutable -- changing the region triggers a replacement.
    */
   region?: string;
   /**
@@ -79,7 +79,7 @@ export interface OnRampProps {
    * Cloud-side ASN for BGP. If unset or zero, the cloud's default ASN
    * takes effect.
    *
-   * Immutable — the API offers no way to change it, so a change triggers a
+   * Immutable -- the API offers no way to change it, so a change triggers a
    * replacement.
    */
   cloudAsn?: number;
@@ -91,7 +91,7 @@ export interface OnRampProps {
    * Adopt an existing hub (e.g. an existing Transit Gateway) instead of
    * provisioning one (`type: "OnrampTypeHub"`).
    *
-   * Immutable — hub identity cannot change, so a change triggers a
+   * Immutable -- hub identity cannot change, so a change triggers a
    * replacement.
    */
   adoptedHubId?: string;
@@ -99,7 +99,7 @@ export interface OnRampProps {
    * Cloud integration that owns the hub when it lives in a different
    * provider account.
    *
-   * Immutable — hub identity cannot change, so a change triggers a
+   * Immutable -- hub identity cannot change, so a change triggers a
    * replacement.
    */
   hubProviderId?: string;
@@ -121,7 +121,7 @@ export interface OnRampProps {
   manageVpcToHubAttachments?: boolean;
   /**
    * Whether deleting the on-ramp also destroys the cloud-side resources it
-   * provisioned (VPN gateways, Transit Gateway, …). Consumed only at
+   * provisioned (VPN gateways, Transit Gateway, ...). Consumed only at
    * delete time.
    * @default false
    */
@@ -168,7 +168,7 @@ export interface OnRampAttributes {
 export type OnRamp = Resource<TypeId, OnRampProps, OnRampAttributes, never, Providers>;
 
 /**
- * A Magic Cloud Networking on-ramp — connects cloud VPCs/VNets to Magic WAN
+ * A Magic Cloud Networking on-ramp -- connects cloud VPCs/VNets to Magic WAN
  * by provisioning VPN/Transit-Gateway constructs inside the cloud account
  * registered via a `CloudIntegration`.
  *
@@ -250,7 +250,7 @@ export const OnRampProvider = () =>
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;
       const old = olds !== undefined && isResolved(olds) ? olds : undefined;
-      // Immutable identity/topology properties — the PATCH body accepts
+      // Immutable identity/topology properties -- the PATCH body accepts
       // none of these, so any change is a replacement.
       const oldCloudType = output?.cloudType ?? old?.cloudType;
       if (oldCloudType !== undefined && oldCloudType !== news.cloudType) {
@@ -293,7 +293,7 @@ export const OnRampProvider = () =>
         return undefined;
       }
 
-      // Cold read — recover from lost state by matching the deterministic
+      // Cold read -- recover from lost state by matching the deterministic
       // physical name. On-ramps carry no ownership markers, so report a
       // match as Unowned and let the engine gate adoption.
       const name = yield* onRampName(id, olds?.name);
@@ -306,7 +306,7 @@ export const OnRampProvider = () =>
       const name = yield* onRampName(id, news.name);
       const destroyOnDelete = news.destroyOnDelete ?? false;
 
-      // 1. Observe — the id cached on `output` is a hint, not a guarantee:
+      // 1. Observe -- the id cached on `output` is a hint, not a guarantee:
       //    a missing on-ramp falls through to the name scan and create.
       let observed = output?.onRampId
         ? yield* getOnRamp(output.accountId ?? accountId, output.onRampId)
@@ -315,7 +315,7 @@ export const OnRampProvider = () =>
         observed = yield* findByName(accountId, name);
       }
 
-      // 2. Ensure — create when missing. Names are not unique on
+      // 2. Ensure -- create when missing. Names are not unique on
       //    Cloudflare's side so there is no AlreadyExists race to tolerate.
       if (!observed) {
         observed = yield* mcn.createOnRamp({
@@ -340,7 +340,7 @@ export const OnRampProvider = () =>
         return toAttributes(observed, accountId, destroyOnDelete);
       }
 
-      // 3. Sync — diff observed cloud state against desired; PATCH only the
+      // 3. Sync -- diff observed cloud state against desired; PATCH only the
       //    delta and skip the call entirely on a no-op.
       const patch: mcn.PatchOnRampRequest = {
         accountId,
@@ -404,7 +404,7 @@ export const OnRampProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       // Deleting an on-ramp tears down cloud-side infrastructure when
-      // `destroy` is set — slow and eventually consistent on Cloudflare's
+      // `destroy` is set -- slow and eventually consistent on Cloudflare's
       // side, but the DELETE call itself returns promptly.
       yield* mcn
         .deleteOnRamp({
@@ -422,7 +422,7 @@ export const OnRampProvider = () =>
       // `getOnRamp`. The list item omits some fields (`vpc`, `region`), so
       // a per-item get is required for a fully-faithful Attributes object.
       // Magic Cloud Networking is an entitlement-gated add-on; on accounts
-      // without it every call fails with `FeatureNotEnabled` — treat that
+      // without it every call fails with `FeatureNotEnabled` -- treat that
       // as a non-listable account and return `[]`.
       const ids = yield* mcn.listOnRamps.items({ accountId }).pipe(
         Stream.map((onramp) => onramp.id),

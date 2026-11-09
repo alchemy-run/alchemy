@@ -6,7 +6,7 @@ import type { ServerlessCluster } from "./ServerlessCluster.ts";
 
 /**
  * Connection descriptor for an MSK {@link ServerlessCluster}. Alchemy does
- * not bundle a Kafka client — pass these settings to the Kafka client of
+ * not bundle a Kafka client -- pass these settings to the Kafka client of
  * your choice (`kafkajs` + `aws-msk-iam-sasl-signer-js`, `@confluentinc/kafka-javascript`, ...),
  * which speaks the Kafka wire protocol against the cluster's SASL/IAM
  * bootstrap endpoint.
@@ -14,7 +14,7 @@ import type { ServerlessCluster } from "./ServerlessCluster.ts";
 export interface ClusterConnectionInfo {
   /**
    * Comma-separated SASL/IAM bootstrap broker string
-   * (`boot-….kafka-serverless.….amazonaws.com:9098`).
+   * (`boot-....kafka-serverless.....amazonaws.com:9098`).
    */
   bootstrapServers: string;
   /** Bootstrap brokers as individual `host:port` entries (kafkajs `brokers`). */
@@ -22,7 +22,7 @@ export interface ClusterConnectionInfo {
   /** ARN of the cluster (MSK IAM SASL signers take the cluster's region). */
   clusterArn: string;
   /**
-   * SASL mechanism the endpoint requires — always IAM (`AWS_MSK_IAM` over
+   * SASL mechanism the endpoint requires -- always IAM (`AWS_MSK_IAM` over
    * TLS) for MSK Serverless.
    */
   authentication: "iam";
@@ -49,7 +49,7 @@ export const connectEnvPrefix = (logicalId: string): string =>
  * variables on the host Function, and resolves a typed
  * {@link ClusterConnectionInfo} at runtime.
  *
- * The Kafka data plane is VPC-only — the host Function must be attached to
+ * The Kafka data plane is VPC-only -- the host Function must be attached to
  * the cluster's VPC and allowed ingress on port 9098 by the cluster's
  * security groups. Provide the implementation with
  * `Effect.provide(AWS.Kafka.ConnectReadHttp)`.
@@ -84,7 +84,7 @@ export const ConnectRead = Binding.Service<ConnectRead>("AWS.Kafka.ConnectRead")
  * variables on the host Function, and resolves a typed
  * {@link ClusterConnectionInfo} at runtime.
  *
- * The Kafka data plane is VPC-only — the host Function must be attached to
+ * The Kafka data plane is VPC-only -- the host Function must be attached to
  * the cluster's VPC and allowed ingress on port 9098 by the cluster's
  * security groups. Provide the implementation with
  * `Effect.provide(AWS.Kafka.ConnectWriteHttp)`.
@@ -117,7 +117,7 @@ export const ConnectWrite = Binding.Service<ConnectWrite>("AWS.Kafka.ConnectWrit
  * host Function, and resolves a typed {@link ClusterConnectionInfo} at
  * runtime.
  *
- * The Kafka data plane is VPC-only — the host Function must be attached to
+ * The Kafka data plane is VPC-only -- the host Function must be attached to
  * the cluster's VPC and allowed ingress on port 9098 by the cluster's
  * security groups. Provide the implementation with
  * `Effect.provide(AWS.Kafka.ConnectReadWriteHttp)`.

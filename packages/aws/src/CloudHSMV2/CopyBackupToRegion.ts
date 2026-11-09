@@ -8,7 +8,7 @@ import type * as Effect from "effect/Effect";
  * `cloudhsm:TagResource` so user tags on the source backup can be copied to
  * the destination backup).
  *
- * Copies a CloudHSM cluster backup into another region — the building block
+ * Copies a CloudHSM cluster backup into another region -- the building block
  * of cross-region disaster-recovery automation. Provide the implementation
  * with `Effect.provide(AWS.CloudHSMV2.CopyBackupToRegionHttp)`.
  * ### Managing Backups

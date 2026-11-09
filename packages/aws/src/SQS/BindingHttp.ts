@@ -6,8 +6,8 @@ import type { Queue } from "./Queue.ts";
 /**
  * Shared scaffolding for AWS SQS HTTP bindings.
  *
- * NOT exported from `index.ts` — every near-identical `{Op}Http.ts` in this
- * service is a thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of
+ * NOT exported from `index.ts` -- every near-identical `{Op}Http.ts` in this
+ * service is a thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of
  * the builders below. Everything except the operation, the IAM action list,
  * and the injected identifier is boilerplate. Genuinely-different bindings
  * (the batched `QueueSink`, the dual-queue `StartMessageMoveTask`) stay
@@ -34,7 +34,7 @@ const GrantOnQueue = Effect.gen(function* () {
 /**
  * Build the impl Effect for a queue-scoped operation whose request carries
  * the queue identity as `QueueUrl` (`SendMessage`, `ReceiveMessage`,
- * `PurgeQueue`, …): the runtime callable injects the bound {@link Queue}'s
+ * `PurgeQueue`, ...): the runtime callable injects the bound {@link Queue}'s
  * URL and the deploy-time half grants `actions` on the queue's ARN.
  */
 export const makeQueueUrlHttpBinding = <I extends { QueueUrl?: string }, A, E, R>(options: {

@@ -15,7 +15,7 @@ export type SvelteKitProps = FrameworkSiteProps<{
   /**
    * SvelteKit config overrides for the `sveltekit(...)` plugin call, merged
    * over the options of the user's own call (these win). JSON-serializable
-   * only — no `preprocess`/`vitePlugin`/functions; construction-time options
+   * only -- no `preprocess`/`vitePlugin`/functions; construction-time options
    * (`preprocess`, `extensions`, `compilerOptions`, `vitePlugin`) can only
    * apply when no user `vite.config.*` exists. The `adapter` field is
    * always owned by alchemy.
@@ -38,7 +38,7 @@ export type SvelteKitProps = FrameworkSiteProps<{
  *
  * The build runs through `@alchemy.run/frontend-frameworks/sveltekit` with the
  * `@alchemy.run/frontend-frameworks/sveltekit/aws` deploy target (an in-memory
- * kit adapter emitting a streaming Lambda handler) — both must be
+ * kit adapter emitting a streaming Lambda handler) -- both must be
  * installed in your project.
  *
  * ### Creating SvelteKit Sites
@@ -75,7 +75,7 @@ export type SvelteKitProps = FrameworkSiteProps<{
  * ### Kit Overrides
  * Kit options live in the `sveltekit(...)` call in your `vite.config.ts`,
  * which loads natively. The `kit` prop is a deploy-time override bag
- * merged over your own options (the prop wins) — useful for per-stage
+ * merged over your own options (the prop wins) -- useful for per-stage
  * values the config file can't compute. JSON-serializable values only.
  *
  * **Example:** Deploy-time kit overrides

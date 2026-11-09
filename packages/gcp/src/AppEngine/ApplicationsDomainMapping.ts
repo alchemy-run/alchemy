@@ -50,24 +50,24 @@ export type ApplicationsDomainMappingResourceRecord = {
 
 export type ApplicationsDomainMappingProps = {
   /**
-   * GCP project id. Defaults to the current project. Immutable —
+   * GCP project id. Defaults to the current project. Immutable --
    * changing it replaces the mapping.
    */
   project?: string;
   /**
-   * App Engine location (`us-central`, `us-east1`, …). Defaults to the
-   * application's `locationId`. Immutable — changing it replaces the
+   * App Engine location (`us-central`, `us-east1`, ...). Defaults to the
+   * application's `locationId`. Immutable -- changing it replaces the
    * mapping.
    */
   location?: string;
   /**
    * Application id (usually the project id). Defaults to the current
-   * project. Immutable — changing it replaces the mapping.
+   * project. Immutable -- changing it replaces the mapping.
    */
   applicationsId?: string;
   /**
    * Domain name served by the application (for example `www.example.com`).
-   * Immutable — changing it replaces the mapping. Domain mappings have
+   * Immutable -- changing it replaces the mapping. Domain mappings have
    * no labels field; `list` / nuke discover owned mappings by joining
    * `sslSettings.certificateId` to an Alchemy-owned AuthorizedCertificate,
    * or a domain that starts with `alchemy-`.
@@ -129,7 +129,7 @@ export interface ApplicationsDomainMappingLookup {
    */
   applicationsId?: string;
   /**
-   * App Engine location (`us-central`, `us-east1`, …).
+   * App Engine location (`us-central`, `us-east1`, ...).
    */
   location?: string;
   /**

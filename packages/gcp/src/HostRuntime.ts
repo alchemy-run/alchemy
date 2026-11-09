@@ -165,7 +165,7 @@ export const releaseHostIdentity = (output: {
 
 /**
  * Env every Effect-native container needs to rebuild its `Stack` at boot
- * (`stackFromEnv` in the bootstrap) — the GCP counterpart of the
+ * (`stackFromEnv` in the bootstrap) -- the GCP counterpart of the
  * `alchemyEnv` block on `AWS.ECS.Task` / `AWS.Lambda.Function`.
  */
 export const alchemyRuntimeEnv = Effect.gen(function* () {
@@ -197,7 +197,7 @@ export const mergeContainerEnv = <V extends ContainerEnvVar>(
   for (const source of injected) {
     for (const [name, value] of Object.entries(source ?? {})) {
       if (value === undefined) continue;
-      // A string is already an env value — the runtime context packed its
+      // A string is already an env value -- the runtime context packed its
       // bound values (a `Redacted` marker among them) when it recorded them;
       // packing it again would wrap the marker in a second layer of JSON
       // that the runtime `get` unwraps only once.

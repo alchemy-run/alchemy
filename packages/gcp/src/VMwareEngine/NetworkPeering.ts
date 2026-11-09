@@ -60,7 +60,7 @@ export type NetworkPeeringProps = {
    */
   peerNetwork: string;
   /**
-   * Type of the peer network (`STANDARD`, `VMWARE_ENGINE_NETWORK`, …).
+   * Type of the peer network (`STANDARD`, `VMWARE_ENGINE_NETWORK`, ...).
    * Immutable.
    */
   peerNetworkType: NetworkPeeringPeerNetworkType;
@@ -96,7 +96,7 @@ export type NetworkPeeringProps = {
   peerMtu?: number;
   /**
    * Human-readable description. Network peerings have no labels field, so
-   * Alchemy stamps ownership into a `[alchemy …]` prefix and strips it
+   * Alchemy stamps ownership into a `[alchemy ...]` prefix and strips it
    * from attributes. Description is the only in-place update.
    */
   description?: string;

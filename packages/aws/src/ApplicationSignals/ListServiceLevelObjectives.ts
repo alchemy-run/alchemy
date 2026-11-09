@@ -12,7 +12,7 @@ import type * as Effect from "effect/Effect";
  * ### Listing Service Level Objectives
  * **Example:** List All SLOs
  * ```typescript
- * // init — account-level, no resource argument
+ * // init -- account-level, no resource argument
  * const listSlos = yield* AWS.ApplicationSignals.ListServiceLevelObjectives();
  *
  * // runtime

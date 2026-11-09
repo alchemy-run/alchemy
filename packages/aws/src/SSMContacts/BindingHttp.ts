@@ -3,22 +3,22 @@ import * as Effect from "effect/Effect";
  * Shared scaffolding for the Incident Manager Contacts (SSM Contacts) HTTP
  * bindings.
  *
- * NOT exported from `index.ts` — every thin `{Op}Http.ts` in this service is
- * a `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the builders
+ * NOT exported from `index.ts` -- every thin `{Op}Http.ts` in this service is
+ * a `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the builders
  * below. Everything except the operation and the IAM action list is
  * boilerplate:
  *
  * - Contact-scoped operations (`ssm-contacts:StartEngagement`,
  *   `ssm-contacts:ListPagesByContact`) inject the bound {@link Contact}'s
  *   ARN as the request's `ContactId` and are granted on the contact ARN.
- * - Channel-scoped operations (`ssm-contacts:ActivateContactChannel`, …)
+ * - Channel-scoped operations (`ssm-contacts:ActivateContactChannel`, ...)
  *   inject the bound {@link ContactChannel}'s ARN as `ContactChannelId` and
  *   are granted on the channel ARN.
  * - Rotation-scoped operations (`ssm-contacts:ListRotationShifts`, rotation
  *   overrides) inject the bound {@link Rotation}'s ARN as `RotationId` and
  *   are granted on the rotation ARN.
  * - Account-level operations (engagement / page reads and controls) take
- *   the caller's request as-is and are granted on `*` — engagement and page
+ *   the caller's request as-is and are granted on `*` -- engagement and page
  *   ARNs are minted at runtime and cannot be scoped statically.
  */
 import * as AWSBindings from "../AWSBindings.ts";
@@ -160,7 +160,7 @@ export const makeRotationHttpBinding = <I extends { RotationId: string }, A, E, 
 /**
  * Build the impl Effect for an account-level SSM Contacts operation
  * (engagement and page reads/controls). The deploy-time half grants
- * `actions` on `*` — engagement and page ARNs embed runtime-generated ids
+ * `actions` on `*` -- engagement and page ARNs embed runtime-generated ids
  * and cannot be scoped to a deployed resource.
  */
 export const makeAccountHttpBinding = <I, A, E, R>(options: {

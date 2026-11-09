@@ -37,7 +37,7 @@ export interface DictProps {
 }
 
 export interface DictAttributes {
-  /** Dict ID (`di-…`). */
+  /** Dict ID (`di-...`). */
   dictId: string;
   /** Dict name. */
   name: string;

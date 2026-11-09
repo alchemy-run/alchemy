@@ -27,7 +27,7 @@ const unsupported = (path: string, what: string) =>
   });
 
 // ---------------------------------------------------------------------------
-// Effect Schema → column descriptor
+// Effect Schema -> column descriptor
 // ---------------------------------------------------------------------------
 
 const INT32_MIN = -2147483648;
@@ -262,7 +262,7 @@ export const normalizeColumns = (fields: readonly TableColumn[]): TableColumn[] 
     ...(f.doc ? { doc: f.doc } : {}),
   }));
 
-/** Iceberg wire struct fields → column descriptors. */
+/** Iceberg wire struct fields -> column descriptors. */
 export const fromIcebergFields = (fields: readonly Iceberg.StructField[]): TableColumn[] =>
   fields.map((f) => ({
     name: f.name,
@@ -317,7 +317,7 @@ const describe = (t: TableColumnType): string =>
  * Compare an observed (or previously declared) schema with the desired one
  * and list every change Iceberg cannot apply without rewriting or losing
  * data: dropped columns, new required columns, required-ness tightened, and
- * type changes other than Iceberg's promotions (int→long, float→double,
+ * type changes other than Iceberg's promotions (int->long, float->double,
  * decimal precision widening).
  */
 export const destructiveChanges = (
@@ -479,7 +479,7 @@ export const maxFieldId = (fields: readonly Iceberg.StructField[]): number => {
   return max;
 };
 
-/** Dotted column path → field id, for partition source resolution. */
+/** Dotted column path -> field id, for partition source resolution. */
 export const fieldIdsByPath = (fields: readonly Iceberg.StructField[]): Map<string, number> => {
   const out = new Map<string, number>();
   const visit = (prefix: string, fs: readonly Iceberg.StructField[]) => {

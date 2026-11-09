@@ -14,7 +14,7 @@ export interface ListFailuresForLicenseConfigurationOperationsRequest extends Om
 
 /**
  * Runtime binding for
- * `license-manager:ListFailuresForLicenseConfigurationOperations` — list
+ * `license-manager:ListFailuresForLicenseConfigurationOperations` -- list
  * association/disassociation operations that failed for the bound license
  * configuration (e.g. a hard-limit rejection at instance launch).
  *

@@ -7,7 +7,7 @@ import type { OriginEndpoint } from "./OriginEndpoint.ts";
  * Runtime binding for `mediapackagev2:CreateHarvestJob`.
  *
  * Exports a clip of previously streamed content from the bound
- * {@link OriginEndpoint} to an S3 bucket as a live-to-VOD asset — e.g. a
+ * {@link OriginEndpoint} to an S3 bucket as a live-to-VOD asset -- e.g. a
  * Lambda that clips a highlight when an operator flags a moment. The
  * endpoint must have a startover window covering the requested schedule,
  * and the destination bucket needs a policy granting the
@@ -18,7 +18,7 @@ import type { OriginEndpoint } from "./OriginEndpoint.ts";
  * ### Harvesting Live-to-VOD Clips
  * **Example:** Harvest the Last Five Minutes to S3
  * ```typescript
- * // init — bind the operation to the endpoint
+ * // init -- bind the operation to the endpoint
  * const createHarvestJob = yield* AWS.MediaPackageV2.CreateHarvestJob(endpoint);
  *
  * // runtime

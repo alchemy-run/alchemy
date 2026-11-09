@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { BudgetAction } from "./BudgetAction.ts";
 
 /**
- * Request for {@link DescribeBudgetActionHistories} — the bound action's
+ * Request for {@link DescribeBudgetActionHistories} -- the bound action's
  * `AccountId`, `BudgetName`, and `ActionId` are injected automatically.
  */
 export interface DescribeBudgetActionHistoriesRequest extends Omit<
@@ -15,15 +15,15 @@ export interface DescribeBudgetActionHistoriesRequest extends Omit<
 /**
  * Runtime binding for `budgets:DescribeBudgetActionHistories`.
  *
- * Bind this operation to a {@link BudgetAction} to read its event history —
- * creations, updates, and executions with their statuses — e.g. to audit
+ * Bind this operation to a {@link BudgetAction} to read its event history --
+ * creations, updates, and executions with their statuses -- e.g. to audit
  * when a kill-switch fired and whether it succeeded. Provide the
  * implementation with
  * `Effect.provide(AWS.Budgets.DescribeBudgetActionHistoriesHttp)`.
  * ### Reading Budget Actions
  * **Example:** Read an Action's Event History
  * ```typescript
- * // init — bind the operation to the action
+ * // init -- bind the operation to the action
  * const histories = yield* AWS.Budgets.DescribeBudgetActionHistories(action);
  *
  * // runtime

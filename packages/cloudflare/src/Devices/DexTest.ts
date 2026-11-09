@@ -23,7 +23,7 @@ export interface DeviceDexTestData {
   host: string;
   /** The kind of synthetic test the WARP client runs. */
   kind: "http" | "traceroute";
-  /** The HTTP method to use — only `GET` is supported. */
+  /** The HTTP method to use -- only `GET` is supported. */
   method?: "GET" | (string & {});
 }
 
@@ -99,7 +99,7 @@ export type DeviceDexTest = Resource<
 >;
 
 /**
- * A Cloudflare Zero Trust **DEX synthetic test** — an HTTP or traceroute
+ * A Cloudflare Zero Trust **DEX synthetic test** -- an HTTP or traceroute
  * probe that enrolled WARP devices run on a schedule so the Digital
  * Experience Monitoring dashboard can chart reachability and latency to
  * your critical applications.
@@ -174,7 +174,7 @@ export const DeviceDexTestProvider = () =>
       }
 
       // Cold lookup: DEX test names are unique per account, but carry no
-      // ownership markers — brand the match `Unowned`.
+      // ownership markers -- brand the match `Unowned`.
       const name = yield* createTestName(id, olds?.name);
       const match = yield* findByName(acct, name);
       if (match) return Unowned(toAttributes(match, acct));
@@ -185,13 +185,13 @@ export const DeviceDexTestProvider = () =>
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* createTestName(id, news.name);
 
-      // 1. Observe — cached id is a hint; fall back to a name scan.
+      // 1. Observe -- cached id is a hint; fall back to a name scan.
       let observed = output?.testId ? yield* observeTest(accountId, output.testId) : undefined;
       if (!observed) {
         observed = yield* findByName(accountId, name);
       }
 
-      // 2. Ensure — create when missing.
+      // 2. Ensure -- create when missing.
       if (!observed) {
         const created = yield* zeroTrust.createDeviceDexTest({
           accountId,
@@ -206,7 +206,7 @@ export const DeviceDexTestProvider = () =>
         return toAttributes(created, accountId);
       }
 
-      // 3. Sync — PUT the full desired state when the observed state
+      // 3. Sync -- PUT the full desired state when the observed state
       //    differs; skip the call on a no-op.
       const dirty =
         (observed.name ?? "") !== name ||

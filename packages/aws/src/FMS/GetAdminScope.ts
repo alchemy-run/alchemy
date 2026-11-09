@@ -10,12 +10,12 @@ export interface GetAdminScopeRequest extends fms.GetAdminScopeRequest {}
 /**
  * Runtime binding for `fms:GetAdminScope`.
  *
- * Returns information about the specified account's administrative scope — the resources a Firewall Manager administrator can manage. Provide the
+ * Returns information about the specified account's administrative scope -- the resources a Firewall Manager administrator can manage. Provide the
  * implementation with `Effect.provide(AWS.FMS.GetAdminScopeHttp)`.
  * ### Administrator Management
  * **Example:** Read an Administrator's Scope
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const getAdminScope = yield* AWS.FMS.GetAdminScope();
  *
  * // runtime

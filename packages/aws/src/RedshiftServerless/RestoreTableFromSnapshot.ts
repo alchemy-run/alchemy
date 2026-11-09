@@ -8,13 +8,13 @@ import type { Namespace } from "./Namespace.ts";
  * `redshift-serverless:RestoreTableFromSnapshot`).
  *
  * Restores a single table from a snapshot into the bound
- * {@link Namespace} under a new name — undo for a bad table mutation
+ * {@link Namespace} under a new name -- undo for a bad table mutation
  * without rolling back the whole namespace. Provide the implementation with
  * `Effect.provide(AWS.RedshiftServerless.RestoreTableFromSnapshotHttp)`.
  * ### Restoring Data
  * **Example:** Restore One Table from a Snapshot
  * ```typescript
- * // init — resolve the runtime client
+ * // init -- resolve the runtime client
  * const restoreTable = yield* AWS.RedshiftServerless.RestoreTableFromSnapshot(namespace);
  *
  * yield* restoreTable({

@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Read a composition's detail — state, layout, destinations, and per
+ * Read a composition's detail -- state, layout, destinations, and per
  * destination progress. Compositions are addressed by the server-generated
  * ARN returned by `StartComposition`.
  *
@@ -15,7 +15,7 @@ import type * as Effect from "effect/Effect";
  *
  * // runtime
  * const { composition } = yield* getComposition({ arn: compositionArn });
- * // composition.state → "ACTIVE" | "STOPPED" | "FAILED" | …
+ * // composition.state -> "ACTIVE" | "STOPPED" | "FAILED" | ...
  * ```
  *
  * @binding

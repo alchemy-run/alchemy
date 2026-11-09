@@ -176,10 +176,10 @@ export interface Route extends Resource<
  * falls within the destination range.
  *
  * Every route has two halves:
- * - **Destination** — exactly one of `destinationCidrBlock` (IPv4),
+ * - **Destination** -- exactly one of `destinationCidrBlock` (IPv4),
  *   `destinationIpv6CidrBlock` (IPv6), or `destinationPrefixListId` (a managed
  *   prefix list, e.g. for an AWS service).
- * - **Target** — exactly one of `gatewayId` (internet/virtual private
+ * - **Target** -- exactly one of `gatewayId` (internet/virtual private
  *   gateway), `natGatewayId`, `instanceId` (NAT instance), `networkInterfaceId`,
  *   `vpcPeeringConnectionId`, `transitGatewayId`, `localGatewayId` (Outposts),
  *   `carrierGatewayId` (Wavelength), `egressOnlyInternetGatewayId` (IPv6),
@@ -189,7 +189,7 @@ export interface Route extends Resource<
  * changing only the target is applied in place via `ReplaceRoute`.
  *
  * ### IPv4 Routing
- * Use an IPv4 `destinationCidrBlock` — most commonly `0.0.0.0/0` for the
+ * Use an IPv4 `destinationCidrBlock` -- most commonly `0.0.0.0/0` for the
  * default route, or a narrower CIDR to route specific traffic.
  *
  * **Example:** Default Route to an Internet Gateway
@@ -248,7 +248,7 @@ export interface Route extends Resource<
  *   networkInterfaceId: "eni-0abc1234",
  * });
  * ```
- * Forwards traffic to a specific elastic network interface — for example a
+ * Forwards traffic to a specific elastic network interface -- for example a
  * firewall or NAT instance appliance. Use `instanceId` instead when targeting
  * a NAT instance that has exactly one network interface attached.
  *
@@ -266,7 +266,7 @@ export interface Route extends Resource<
  * });
  * ```
  * Gives IPv6-addressed instances outbound internet access while blocking
- * inbound connections — the IPv6 equivalent of routing IPv4 through a NAT
+ * inbound connections -- the IPv6 equivalent of routing IPv4 through a NAT
  * gateway.
  *
  * **Example:** IPv6 Internet Route to an Internet Gateway
@@ -281,7 +281,7 @@ export interface Route extends Resource<
  * internet gateway (unlike an egress-only gateway) allows inbound IPv6 traffic.
  *
  * ### Routing to AWS Services via Prefix Lists
- * Instead of a raw CIDR, a route can match a managed prefix list — useful for
+ * Instead of a raw CIDR, a route can match a managed prefix list -- useful for
  * AWS service ranges (e.g. an S3 gateway endpoint) where the underlying CIDRs
  * change over time.
  *
@@ -362,12 +362,12 @@ export const RouteProvider = () =>
             DryRun: false,
           } as const;
 
-          // Observe — Routes are identified by (routeTableId, destination).
+          // Observe -- Routes are identified by (routeTableId, destination).
           // Look the route up in the route table to decide between create
           // (missing) and replaceRoute (target drift).
           const observed = yield* describeRoute(news.routeTableId, news);
 
-          // Ensure / Sync — CreateRoute when missing, ReplaceRoute swaps the
+          // Ensure / Sync -- CreateRoute when missing, ReplaceRoute swaps the
           // target on an existing route in-place.
           if (observed === undefined) {
             yield* ec2

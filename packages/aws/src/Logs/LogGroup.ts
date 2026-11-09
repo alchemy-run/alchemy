@@ -79,7 +79,7 @@ export interface LogGroupLookup {
 }
 
 /**
- * A CloudWatch Logs log group — the container for log streams and the unit
+ * A CloudWatch Logs log group -- the container for log streams and the unit
  * that retention, encryption, metric filters, and subscriptions attach to.
  * ### Creating Log Groups
  * **Example:** ECS Task Log Group
@@ -182,7 +182,7 @@ export const LogGroupProvider = () =>
       const toLogGroupClass = (props: { logGroupClass?: LogGroupClass } = {}): LogGroupClass =>
         props.logGroupClass ?? "STANDARD";
       // describeLogGroups returns ARNs with a trailing `:*` while reconcile
-      // constructs them without — normalize so refresh/adoption never reports
+      // constructs them without -- normalize so refresh/adoption never reports
       // phantom drift and interpolated IAM ARNs (`${arn}:*`) stay correct.
       const normalizeLogGroupArn = (arn: string): LogGroupArn =>
         (arn.endsWith(":*") ? arn.slice(0, -2) : arn) as LogGroupArn;
@@ -305,7 +305,7 @@ export const LogGroupProvider = () =>
           const logGroupName = output?.logGroupName ?? (yield* toLogGroupName(id, news));
           // `output.logGroupArn` may be state written by an older provider
           // version (or anything else) that persisted `describeLogGroups`'
-          // trailing `:*` form — normalize before it reaches the tagging
+          // trailing `:*` form -- normalize before it reaches the tagging
           // APIs, which reject that suffix with "Invalid resourceArn".
           const arn = normalizeLogGroupArn(
             (output?.logGroupArn ??

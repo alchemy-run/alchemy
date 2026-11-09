@@ -6,14 +6,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `ram:ListPermissionVersions`.
  *
  * Lists the available versions of the specified RAM permission.
- * Account-level operation — the target shares, invitations, and permissions
+ * Account-level operation -- the target shares, invitations, and permissions
  * are chosen per request at runtime, so the binding takes no resource
  * argument. Provide the implementation with
  * `Effect.provide(AWS.RAM.ListPermissionVersionsHttp)`.
  * ### Managed Permissions
  * **Example:** List the Versions of a Permission
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listPermissionVersions = yield* AWS.RAM.ListPermissionVersions();
  *
  * // runtime

@@ -25,7 +25,7 @@ export interface VinextProps extends FrameworkSiteProps {
  * image; `vinext` is installed unbundled.
  *
  * Do not use the Cloudflare Worker entry (`vinext/server/fetch-handler`)
- * — that is workerd.
+ * -- that is workerd.
  *
  * ISR / `"use cache"` persist in Redis when you pass {@link VinextProps.redis}.
  * The resource injects the adapter automatically. Missing `REDIS_URL`

@@ -11,7 +11,7 @@ export interface GetReferenceImportJobRequest extends Omit<
 /**
  * Runtime binding for `omics:GetReferenceImportJob`.
  *
- * Bind this operation to a `ReferenceStore` to get a callable that reads the status of a reference import job — the
+ * Bind this operation to a `ReferenceStore` to get a callable that reads the status of a reference import job -- the
  * store/workflow id is injected automatically and the action is granted on the
  * bound resource. Provide the implementation with
  * `Effect.provide(AWS.Omics.GetReferenceImportJobHttp)`.

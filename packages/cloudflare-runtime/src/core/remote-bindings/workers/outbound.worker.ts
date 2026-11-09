@@ -17,8 +17,8 @@ export default {
 
 /**
  * Preview tokens expire after 1 hour (hardcoded in the Workers control
- * plane). Proactively refresh at 50 minutes so no request ever pays for —
- * or worse, surfaces — an expired session. Mirrors wrangler's
+ * plane). Proactively refresh at 50 minutes so no request ever pays for --
+ * or worse, surfaces -- an expired session. Mirrors wrangler's
  * `PREVIEW_TOKEN_REFRESH_INTERVAL` (workers-sdk #13016).
  */
 const SESSION_MAX_AGE_MS = 50 * 60 * 1000;
@@ -33,8 +33,8 @@ interface Session {
  * shapes:
  *
  *  - HTTP 400 with an HTML body containing "Invalid Workers Preview
- *    configuration" — the classic expired-preview-token page.
- *  - HTTP 400 with a text/plain body containing "error code: 1031" —
+ *    configuration" -- the classic expired-preview-token page.
+ *  - HTTP 400 with a text/plain body containing "error code: 1031" --
  *    returned by remote bindings (D1, R2, Workers AI, ...) when their
  *    underlying session has timed out.
  *  - HTTP 400 from OUR OWN uploaded remote worker: a `BindingNotFound`

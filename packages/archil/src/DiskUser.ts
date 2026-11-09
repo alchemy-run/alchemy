@@ -341,7 +341,7 @@ export const DiskUserProvider = () =>
             type === "awssts" ||
             (type === "s3" ? output?.secretAccessKey !== undefined : output?.token !== undefined);
           if (observed && output && hasSecret) return output;
-          // Ensure — a user we hold no secret for (a lost create, or an
+          // Ensure -- a user we hold no secret for (a lost create, or an
           // adoption) is revoked and created again.
           if (observed) {
             yield* session.note(`Re-creating disk user ${nickname}...`);

@@ -14,7 +14,7 @@ import type { Task } from "./Task.ts";
  * ### Monitoring Tasks
  * **Example:** List The Task's Runs
  * ```typescript
- * // init — bind the operation to the task
+ * // init -- bind the operation to the task
  * const listTaskExecutions = yield* AWS.DataSync.ListTaskExecutions(task);
  *
  * // runtime

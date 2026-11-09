@@ -7,14 +7,14 @@ import type { SyncConfiguration } from "./SyncConfiguration.ts";
  * Runtime binding for `codeconnections:GetResourceSyncStatus`.
  *
  * Bind this operation to a {@link SyncConfiguration} to read the sync
- * status of its Amazon Web Services resource — the desired state revision
- * and the latest successful/attempted syncs — from inside a function
+ * status of its Amazon Web Services resource -- the desired state revision
+ * and the latest successful/attempted syncs -- from inside a function
  * runtime. Provide the implementation with
  * `Effect.provide(AWS.CodeConnections.GetResourceSyncStatusHttp)`.
  * ### Monitoring Git Sync
  * **Example:** Read the Resource's Sync Status
  * ```typescript
- * // init — bind the operation to the sync configuration
+ * // init -- bind the operation to the sync configuration
  * const getResourceSyncStatus =
  *   yield* AWS.CodeConnections.GetResourceSyncStatus(sync);
  *

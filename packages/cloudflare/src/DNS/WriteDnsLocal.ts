@@ -5,7 +5,7 @@ import { WriteDns } from "./WriteDns.ts";
 import { dnsWriteClient } from "./WriteDnsHttp.ts";
 
 /**
- * Local implementation of the {@link WriteDns} binding — creates, updates, and
+ * Local implementation of the {@link WriteDns} binding -- creates, updates, and
  * deletes Cloudflare DNS records over the HTTP API using the **current
  * credentials** instead of a scoped API token ({@link WriteDnsHttp}). DNS is a
  * zone-management capability with no native Worker binding.

@@ -53,16 +53,16 @@ export type IndexField = {
 export type DatabasesCollectionGroupsIndexProps = {
   /**
    * Parent database. Full name `projects/{project}/databases/{database}`
-   * or the database id. Immutable — changing it replaces the index.
+   * or the database id. Immutable -- changing it replaces the index.
    */
   database: string;
   /**
-   * Collection group id (`users`, `posts`, …). Immutable — changing it
+   * Collection group id (`users`, `posts`, ...). Immutable -- changing it
    * replaces the index.
    */
   collectionGroup: string;
   /**
-   * Indexed fields. Composite indexes need 2–100 fields. Immutable —
+   * Indexed fields. Composite indexes need 2-100 fields. Immutable --
    * changing fields replaces the index.
    */
   fields: IndexField[];
@@ -77,11 +77,11 @@ export type DatabasesCollectionGroupsIndexProps = {
    */
   apiScope?: IndexApiScope;
   /**
-   * Index density. Immutable — changing it replaces the index.
+   * Index density. Immutable -- changing it replaces the index.
    */
   density?: IndexDensity;
   /**
-   * Unique index. Immutable — changing it replaces the index.
+   * Unique index. Immutable -- changing it replaces the index.
    * @default false
    */
   unique?: boolean;
@@ -91,7 +91,7 @@ export type DatabasesCollectionGroupsIndexProps = {
    */
   multikey?: boolean;
   /**
-   * Shard count. Immutable — changing it replaces the index.
+   * Shard count. Immutable -- changing it replaces the index.
    */
   shardCount?: number;
 };
@@ -138,7 +138,7 @@ export type DatabasesCollectionGroupsIndex = Resource<
 /**
  * A composite Firestore index on a collection group.
  *
- * The index id is assigned by the API. Indexes are immutable — changing
+ * The index id is assigned by the API. Indexes are immutable -- changing
  * fields, scope, density, uniqueness, or the parent collection replaces
  * the index. Indexes have no labels field: `read` reports an index it
  * finds without prior state as unowned (adopt it with `--adopt`).

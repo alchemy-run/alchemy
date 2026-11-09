@@ -10,7 +10,7 @@ export interface GetParametersByPathRequest extends Omit<SSM.GetParametersByPath
  *
  * Bind this operation to a `Parameter` with a hierarchical name (e.g.
  * `/my-app/config`) to get a callable that reads every parameter stored
- * *under* that name — the bound parameter acts as the subtree root. The
+ * *under* that name -- the bound parameter acts as the subtree root. The
  * binding grants `ssm:GetParametersByPath` on the parameter's ARN and its
  * `/*` subtree wildcard, plus `kms:Decrypt` on the bound parameter's
  * encryption key so `WithDecryption: true` works for `SecureString` children
@@ -24,7 +24,7 @@ export interface GetParametersByPathRequest extends Omit<SSM.GetParametersByPath
  * });
  * const getByPath = yield* SSM.GetParametersByPath(root);
  *
- * // returns /my-app/config/db-url, /my-app/config/flags/beta, …
+ * // returns /my-app/config/db-url, /my-app/config/flags/beta, ...
  * const result = yield* getByPath({ Recursive: true });
  * ```
  *

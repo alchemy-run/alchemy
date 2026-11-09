@@ -50,7 +50,7 @@ export interface ApiMapping extends Resource<
 > {}
 
 /**
- * An API Gateway v2 API mapping — serves an API stage under a custom
+ * An API Gateway v2 API mapping -- serves an API stage under a custom
  * {@link DomainName}, optionally at a base path.
  * ### Mapping APIs onto a domain
  * **Example:** Map an API at the domain root

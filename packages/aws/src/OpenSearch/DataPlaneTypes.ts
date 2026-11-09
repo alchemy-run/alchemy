@@ -84,7 +84,7 @@ export interface GetDocumentResponse<TDoc = unknown> {
 export interface IndexDocumentOptions {
   /** Document id. Omit to let OpenSearch auto-generate one (`POST`). */
   id?: string;
-  /** Refresh behavior — `true`, `false`, or `"wait_for"`. */
+  /** Refresh behavior -- `true`, `false`, or `"wait_for"`. */
   refresh?: RefreshOption;
 }
 
@@ -100,7 +100,7 @@ export interface WriteDocumentResponse {
 
 /** Options for document writes that support `refresh`. */
 export interface WriteDocumentOptions {
-  /** Refresh behavior — `true`, `false`, or `"wait_for"`. */
+  /** Refresh behavior -- `true`, `false`, or `"wait_for"`. */
   refresh?: RefreshOption;
 }
 

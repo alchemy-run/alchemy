@@ -27,7 +27,7 @@ export type UsernameAndPassword = {
 };
 
 export type AuthToken = {
-  /** Token type (`Basic`, `Bearer`, …). */
+  /** Token type (`Basic`, `Bearer`, ...). */
   type?: string;
   /** Token value. */
   token?: string;
@@ -97,7 +97,7 @@ export type TriggerConfig = {
    * `properties` contains `Trigger name`.
    */
   triggerId?: string;
-  /** Configurable trigger properties (`Trigger name`, …). */
+  /** Configurable trigger properties (`Trigger name`, ...). */
   properties?: Record<string, string | undefined>;
   /** Human-readable description. */
   description?: string;

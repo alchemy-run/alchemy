@@ -120,13 +120,13 @@ export type ServicesServiceLevelObjectiveProps = {
   /**
    * Parent service resource name
    * (`projects/{project}/services/{service}`) or service id. Immutable
-   * — changing it replaces the SLO.
+   * -- changing it replaces the SLO.
    */
   service: string;
   /**
    * SLO id (the last path segment). If omitted, a unique id is
    * generated from the stack, stage, and logical id. Must match
-   * `[a-zA-Z0-9-_:.]`. Immutable — changing it replaces the SLO.
+   * `[a-zA-Z0-9-_:.]`. Immutable -- changing it replaces the SLO.
    */
   serviceLevelObjectiveId?: string;
   /**

@@ -16,7 +16,7 @@ export interface ListGroupsOlderThanOrderingIdRequest extends Omit<
  * `kendra:ListGroupsOlderThanOrderingId`), scoped to one {@link Index}.
  *
  * Lists groups whose principal mapping is older than the given ordering
- * id — used to find stale group mappings to refresh or delete.
+ * id -- used to find stale group mappings to refresh or delete.
  * Provide the implementation with
  * `Effect.provide(AWS.Kendra.ListGroupsOlderThanOrderingIdHttp)`.
  *

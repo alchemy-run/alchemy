@@ -80,13 +80,13 @@ export type BatchDedicatedResources = {
 
 export type BatchPredictionJobProps = {
   /**
-   * Region. Immutable — changing it replaces the job.
+   * Region. Immutable -- changing it replaces the job.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
   location?: string;
   /**
    * User-facing display name. Defaults to a generated id. Immutable after
-   * create — BatchPredictionJob has no update API.
+   * create -- BatchPredictionJob has no update API.
    */
   displayName?: string;
   /**
@@ -175,7 +175,7 @@ export type BatchPredictionJob = Resource<
 >;
 
 /**
- * A Vertex AI BatchPredictionJob — offline predictions over many
+ * A Vertex AI BatchPredictionJob -- offline predictions over many
  * instances.
  *
  * Creating a job starts it immediately. There is no update API, so

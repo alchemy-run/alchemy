@@ -43,23 +43,23 @@ export type AnnotationSpecSetProps = {
   /**
    * Annotation spec set id (the last segment of
    * `projects/{project}/annotationSpecSets/{annotation_spec_set}`).
-   * Server-assigned on create. Immutable — changing it replaces the set.
+   * Server-assigned on create. Immutable -- changing it replaces the set.
    */
   annotationSpecSetId?: string;
   /**
    * Display name. Maximum 64 characters. Required by the API; Alchemy
-   * falls back to a generated name. Immutable — changing it replaces
+   * falls back to a generated name. Immutable -- changing it replaces
    * the set.
    */
   displayName?: string;
   /**
    * Human-readable description. Annotation spec sets have no labels
-   * field, so Alchemy stamps ownership into this field. Immutable —
+   * field, so Alchemy stamps ownership into this field. Immutable --
    * changing it replaces the set.
    */
   description?: string;
   /**
-   * The possible labels for a labeling task. Required. Immutable —
+   * The possible labels for a labeling task. Required. Immutable --
    * changing them replaces the set.
    */
   annotationSpecs: AnnotationSpec[];
@@ -89,7 +89,7 @@ export type AnnotationSpecSet = Resource<
 >;
 
 /**
- * A Data Labeling annotation spec set — a collection of class labels
+ * A Data Labeling annotation spec set -- a collection of class labels
  * used by labeling tasks.
  *
  * Spec sets are immutable after create. There is no labels API, so

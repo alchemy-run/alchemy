@@ -53,7 +53,7 @@ export type BackendsDomainProps = {
   /**
    * Parent backend. Full name
    * `projects/{project}/locations/{location}/backends/{backend}` or the
-   * backend id (combined with `location`). Immutable — changing it
+   * backend id (combined with `location`). Immutable -- changing it
    * replaces the domain.
    */
   backend: string;
@@ -63,9 +63,9 @@ export type BackendsDomainProps = {
    */
   location?: string;
   /**
-   * Domain id — a valid domain name (for example `www.example.com`).
+   * Domain id -- a valid domain name (for example `www.example.com`).
    * If omitted, a unique `{id}.example.com` name is generated.
-   * Immutable — changing it replaces the domain.
+   * Immutable -- changing it replaces the domain.
    */
   domainId?: string;
   /**
@@ -143,7 +143,7 @@ export type BackendsDomain = Resource<
  */
 export interface BackendsDomainLookup {
   /**
-   * Domain id — a valid domain name (for example `www.example.com`).
+   * Domain id -- a valid domain name (for example `www.example.com`).
    */
   domainId: string;
   /**

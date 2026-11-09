@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `geo-places:Suggest` — suggest places and query
+ * Runtime binding for `geo-places:Suggest` -- suggest places and query
  * refinements for a free-form (possibly misspelled or partial) query,
  * ranked by relevance. Unlike Autocomplete, Suggest returns place
  * suggestions (with `PlaceId`s) and query suggestions, tuned for

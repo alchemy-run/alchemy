@@ -9,7 +9,7 @@ export interface GetObjectRetentionRequest extends Omit<S3.GetObjectRetentionReq
  * Runtime binding for `s3:GetObjectRetention`.
  *
  * Bind this operation to a bucket to get a callable that reads an object's
- * Object Lock retention settings — the bucket name is injected automatically
+ * Object Lock retention settings -- the bucket name is injected automatically
  * and `s3:GetObjectRetention` is granted on the bucket's objects. Requires a
  * bucket created with `objectLockEnabled: true`. Provide the implementation
  * with `Effect.provide(AWS.S3.GetObjectRetentionHttp)`.

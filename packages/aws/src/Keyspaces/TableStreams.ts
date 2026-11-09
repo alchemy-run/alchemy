@@ -17,7 +17,7 @@ export interface ListTableStreamsRequest extends Omit<
 export interface TableStreamsClient {
   /**
    * List the CDC streams of the bound table (the stream with the greatest
-   * `streamLabel` is the current one — also exposed as the table's
+   * `streamLabel` is the current one -- also exposed as the table's
    * `latestStreamArn` attribute).
    */
   listStreams: (

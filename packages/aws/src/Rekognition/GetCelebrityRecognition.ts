@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `rekognition:GetCelebrityRecognition` — get the results of an asynchronous celebrities detection job started by StartCelebrityRecognition.
+ * Runtime binding for `rekognition:GetCelebrityRecognition` -- get the results of an asynchronous celebrities detection job started by StartCelebrityRecognition.
  *
  * The binding takes no arguments and grants the function
  * `rekognition:GetCelebrityRecognition` on `*` (Rekognition data-plane resources such

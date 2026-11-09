@@ -16,7 +16,7 @@ export interface CloudflareHyperdriveOptions {
   /**
    * Deploy-resolvable ORIGIN connection source for schema migrations.
    * Hyperdrive's own connection string is minted per-invocation inside the
-   * Worker and cannot be used at deploy time — pass the origin database URL
+   * Worker and cannot be used at deploy time -- pass the origin database URL
    * (e.g. Neon `branch.connectionUri`) or leave unset to skip migrations.
    */
   readonly migrate?: MigrateSource;
@@ -24,7 +24,7 @@ export interface CloudflareHyperdriveOptions {
 }
 
 /**
- * Cloudflare Hyperdrive layer for Better Auth — pooled TCP Postgres (or
+ * Cloudflare Hyperdrive layer for Better Auth -- pooled TCP Postgres (or
  * MySQL) through a Hyperdrive connection.
  *
  * Hyperdrive's connection string is minted per-invocation inside the
@@ -69,7 +69,7 @@ export interface CloudflareHyperdriveOptions {
  * ```
  *
  * ### MySQL origins
- * Hyperdrive also fronts MySQL origins — select the dialect and the layer
+ * Hyperdrive also fronts MySQL origins -- select the dialect and the layer
  * drives `mysql2` instead of `pg`.
  * **Example:** MySQL behind Hyperdrive
  * ```typescript

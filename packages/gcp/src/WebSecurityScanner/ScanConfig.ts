@@ -94,7 +94,7 @@ export type ScanConfigLatestRun = {
   startTime?: string;
   /** RFC3339 end time. */
   endTime?: string;
-  /** Completion percent 0–100. */
+  /** Completion percent 0-100. */
   progressPercent?: number;
   /** URLs crawled so far. */
   urlsCrawledCount?: string;
@@ -107,7 +107,7 @@ export type ScanConfigLatestRun = {
 export type ScanConfigProps = {
   /**
    * Server-assigned scan config id (the `{scanConfigId}` segment of
-   * `projects/{project}/scanConfigs/{scanConfigId}`). Immutable —
+   * `projects/{project}/scanConfigs/{scanConfigId}`). Immutable --
    * changing it replaces the config.
    */
   scanConfigId?: string;
@@ -123,7 +123,7 @@ export type ScanConfigProps = {
    */
   startingUrls: string[];
   /**
-   * Maximum QPS while scanning. Valid range is 5–20. Unspecified or 0
+   * Maximum QPS while scanning. Valid range is 5-20. Unspecified or 0
    * uses the API default of 15.
    */
   maxQps?: number;
@@ -223,7 +223,7 @@ export type ScanConfig = Resource<
  * export, risk, and scan flags update in place. Changing `scanConfigId`
  * replaces the config.
  *
- * Starting URLs must belong to the project — a reserved Compute IP,
+ * Starting URLs must belong to the project -- a reserved Compute IP,
  * App Engine (`https://PROJECT.appspot.com`), Cloud Run, or Cloud
  * Functions.
  *

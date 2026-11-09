@@ -20,7 +20,7 @@ import {
 } from "./FrameworkSite.ts";
 
 // `env` comes from FrameworkSiteProps (which additionally accepts `Output`
-// values, e.g. `VITE_API_URL: api.url`) — it must be omitted from the
+// values, e.g. `VITE_API_URL: api.url`) -- it must be omitted from the
 // BuildProps side because interfaces cannot extend two parents whose `env`
 // members differ.
 export interface StaticSiteProps
@@ -31,7 +31,7 @@ export interface StaticSiteProps
    * Local dev configuration. When `alchemy dev` runs with `dev.command`,
    * the build is skipped and `command` is spawned as a long-lived child
    * (`Command.Dev`). Without `dev.command`, the site still builds and a
-   * local static server serves `outdir` — no Railway Service is created.
+   * local static server serves `outdir` -- no Railway Service is created.
    */
   dev?: {
     /**
@@ -86,7 +86,7 @@ const envRecord = (
  * `StaticSite` runs a build command (e.g. `npm run build`), content-hashes
  * the output directory, and deploys the result as a Node static-file
  * server on one `Railway.Service`. Use this when your site has its own
- * build step that produces a directory of files — Hugo, Zola, Eleventy, or
+ * build step that produces a directory of files -- Hugo, Zola, Eleventy, or
  * any custom pipeline.
  *
  * For Vite-based projects, prefer {@link Vite | Railway.Website.Vite}
@@ -98,7 +98,7 @@ const envRecord = (
  *
  * During `alchemy dev`, `dev.command` skips the build and is the site.
  * Without `dev.command`, the site still builds and a local static server
- * serves `outdir` — no Project or Service is created.
+ * serves `outdir` -- no Project or Service is created.
  *
  * ### Basic Usage
  * **Example:** Deploying a Hugo site

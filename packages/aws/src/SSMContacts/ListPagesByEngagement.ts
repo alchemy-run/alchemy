@@ -5,7 +5,7 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `ssm-contacts:ListPagesByEngagement`.
  *
- * List the pages an engagement produced — one page per engaged contact
+ * List the pages an engagement produced -- one page per engaged contact
  * and escalation stage.
  * Provide the implementation with
  * `Effect.provide(AWS.SSMContacts.ListPagesByEngagementHttp)`.

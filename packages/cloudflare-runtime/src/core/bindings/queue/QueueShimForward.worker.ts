@@ -32,7 +32,7 @@ export default {
     const target = new URL(url.pathname + url.search, env.SHIM_URL);
     const headers = new Headers(request.headers);
     headers.set("authorization", `Bearer ${env.SHIM_TOKEN}`);
-    // The body may be replayed on retry — buffer it up front.
+    // The body may be replayed on retry -- buffer it up front.
     const body = await request.arrayBuffer();
     let response: Response | undefined;
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {

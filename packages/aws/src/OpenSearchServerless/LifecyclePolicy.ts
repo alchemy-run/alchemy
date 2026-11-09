@@ -26,7 +26,7 @@ export interface LifecyclePolicyProps {
    */
   type?: LifecyclePolicyType;
   /**
-   * The lifecycle policy document — a JSON object with `Rules` matching index
+   * The lifecycle policy document -- a JSON object with `Rules` matching index
    * patterns to a retention window, e.g.
    * `{ Rules: [{ ResourceType: "index", Resource: ["index/my-collection/*"], MinIndexRetention: "30d" }] }`.
    * Use `NoMinIndexRetention: true` on a rule to retain matched indexes
@@ -67,11 +67,11 @@ export interface LifecyclePolicy extends Resource<
 /**
  * An Amazon OpenSearch Serverless data lifecycle policy. Retention lifecycle
  * policies control how long documents are retained in the indexes matched by
- * the policy's resource patterns — OpenSearch Serverless automatically deletes
+ * the policy's resource patterns -- OpenSearch Serverless automatically deletes
  * documents older than the configured `MinIndexRetention`.
  *
  * Lifecycle policies are free, provision instantly, and are matched to
- * indexes by resource pattern (e.g. `index/my-collection/*`) — the collection
+ * indexes by resource pattern (e.g. `index/my-collection/*`) -- the collection
  * does not need to exist when the policy is created.
  *
  * ### Creating Lifecycle Policies
@@ -201,7 +201,7 @@ export const LifecyclePolicyProvider = () =>
           // 1. OBSERVE
           let detail = yield* observe(type, name);
 
-          // 2. ENSURE — create if missing; tolerate a concurrent create race
+          // 2. ENSURE -- create if missing; tolerate a concurrent create race
           if (detail?.name === undefined) {
             detail = yield* aoss
               .createLifecyclePolicy({
@@ -215,7 +215,7 @@ export const LifecyclePolicyProvider = () =>
                 Effect.catchTag("ConflictException", () => observe(type, name)),
               );
           } else {
-            // 3. SYNC — update policy/description when observed drifts from desired
+            // 3. SYNC -- update policy/description when observed drifts from desired
             const policyDrift = canonicalizePolicy(detail.policy) !== canonicalizePolicy(policy);
             const descriptionDrift =
               news.description !== undefined && news.description !== detail.description;

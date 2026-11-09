@@ -17,17 +17,17 @@ export interface ExecutePolicyRequest extends Omit<
  * Runtime binding for the `ExecutePolicy` operation (IAM action
  * `autoscaling:ExecutePolicy` scoped to the group ARN).
  *
- * Executes a step or simple scaling policy on the bound group — useful for
+ * Executes a step or simple scaling policy on the bound group -- useful for
  * testing a policy's design or driving scaling from application logic.
  * Target-tracking policies cannot be executed manually. Provide the
  * implementation with `Effect.provide(AWS.AutoScaling.ExecutePolicyHttp)`.
  * ### Manual Scaling
  * **Example:** Execute a step scaling policy
  * ```typescript
- * // init — bind the operation to the group
+ * // init -- bind the operation to the group
  * const executePolicy = yield* AWS.AutoScaling.ExecutePolicy(group);
  *
- * // runtime — trigger the policy with a synthetic metric breach
+ * // runtime -- trigger the policy with a synthetic metric breach
  * yield* executePolicy({
  *   PolicyName: "scale-out-on-cpu",
  *   MetricValue: 85,

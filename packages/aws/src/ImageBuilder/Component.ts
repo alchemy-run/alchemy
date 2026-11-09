@@ -24,7 +24,7 @@ export class ComponentUnexpectedResponse extends Data.TaggedError("ComponentUnex
 
 /**
  * A Component must define its document inline (`data`) or point at an S3
- * object (`uri`) — exactly one of the two.
+ * object (`uri`) -- exactly one of the two.
  */
 export class ComponentSourceInvalid extends Data.TaggedError(
   "AWS::ImageBuilder::ComponentSourceInvalid",
@@ -33,7 +33,7 @@ export class ComponentSourceInvalid extends Data.TaggedError(
 }> {}
 
 /**
- * Image Builder component versions are immutable — the deployed document
+ * Image Builder component versions are immutable -- the deployed document
  * differs from the desired one but the semantic version was not bumped, so
  * the cloud state cannot be converged.
  */
@@ -51,7 +51,7 @@ export interface ComponentProps {
   componentName?: string;
   /**
    * Semantic version of the component (`major.minor.patch`). Components
-   * are immutable — bump the version when changing `data`/`uri`. Changing
+   * are immutable -- bump the version when changing `data`/`uri`. Changing
    * the version replaces the component.
    * @default "1.0.0"
    */
@@ -131,7 +131,7 @@ export interface ComponentLookup {
 }
 
 /**
- * An EC2 Image Builder component — a YAML document that defines the build,
+ * An EC2 Image Builder component -- a YAML document that defines the build,
  * validation, and test steps applied to an instance during image creation.
  *
  * Components are immutable versions: every property except `tags` replaces
@@ -226,7 +226,7 @@ export const ComponentProvider = () =>
       return {
         stables: ["componentName", "semanticVersion"],
 
-        // Components are immutable — any changed property except tags
+        // Components are immutable -- any changed property except tags
         // replaces. Individual keys may still hold unresolved Outputs at
         // plan time; compare per key so a resolved change still plans a
         // replacement, and let the reconcile immutability guard catch
@@ -267,7 +267,7 @@ export const ComponentProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          // One idempotency token per reconcile — retries within this run
+          // One idempotency token per reconcile -- retries within this run
           // are deduplicated by the API.
           const random = yield* SecureRandom.SecureRandom;
           const clientToken = yield* random.uuidV4();
@@ -282,21 +282,21 @@ export const ComponentProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // 1. Observe — cloud state is authoritative; output only caches
+          // 1. Observe -- cloud state is authoritative; output only caches
           //    the build-version ARN.
           const arn = output?.componentBuildVersionArn ?? (yield* toBuildVersionArn(name, version));
           let observed = yield* getComponent(arn);
 
-          // Immutability guard — the version already exists in the cloud
+          // Immutability guard -- the version already exists in the cloud
           // with a different document. It cannot be converged in place; the
           // user must bump `semanticVersion` (which replaces the component).
           if (observed !== undefined && news.data !== undefined && observed.data !== news.data) {
             return yield* new ComponentVersionImmutable({
-              message: `Image Builder component '${name}' version '${version}' already exists with a different document — bump semanticVersion to publish the change`,
+              message: `Image Builder component '${name}' version '${version}' already exists with a different document \u2014 bump semanticVersion to publish the change`,
             });
           }
 
-          // 2. Ensure — components are immutable, so a missing component is
+          // 2. Ensure -- components are immutable, so a missing component is
           //    the only create path. A same-name/version conflict (race or
           //    an unbumped document change on a fixed name) surfaces as the
           //    API's typed error.
@@ -327,7 +327,7 @@ export const ComponentProvider = () =>
             }
           }
 
-          // 3. Sync — tags are the only mutable aspect; diff against
+          // 3. Sync -- tags are the only mutable aspect; diff against
           //    OBSERVED cloud tags.
           if (observed.arn) {
             yield* syncImageBuilderTags(observed.arn, desiredTags);
@@ -382,7 +382,7 @@ export const ComponentProvider = () =>
                             summary.version !== undefined,
                         ),
                       ),
-                      // Tolerate a delete race — drop the version.
+                      // Tolerate a delete race -- drop the version.
                       Effect.catchTag("ResourceNotFoundException", () => Effect.succeed([])),
                     ),
                 { concurrency: 4 },

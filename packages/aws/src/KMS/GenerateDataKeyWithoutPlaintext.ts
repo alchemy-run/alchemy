@@ -14,7 +14,7 @@ export interface GenerateDataKeyWithoutPlaintextRequest extends Omit<
  *
  * Bind this operation to a KMS {@link Key} (or the `alias/...` name of a
  * pre-existing key) to get a callable that automatically injects the
- * `KeyId`. Returns ONLY the encrypted copy of a fresh data key — use it in
+ * `KeyId`. Returns ONLY the encrypted copy of a fresh data key -- use it in
  * the component that provisions envelope keys but must never see key
  * material; the consumer decrypts the blob later with the `Decrypt` binding.
  *

@@ -30,12 +30,12 @@ import {
 export type AppsFirewallIngressRuleProps = {
   /**
    * App Engine application id. Defaults to the current GCP project.
-   * Immutable — changing it replaces the rule.
+   * Immutable -- changing it replaces the rule.
    */
   appsId?: string;
   /**
    * Rule priority (lower is evaluated first). If omitted, a unique
-   * priority in `10000-910000` is generated. Immutable — changing it
+   * priority in `10000-910000` is generated. Immutable -- changing it
    * replaces the rule. The default catch-all (`2147483647`) cannot be
    * deleted.
    */
@@ -52,7 +52,7 @@ export type AppsFirewallIngressRuleProps = {
   sourceRange?: string;
   /**
    * Human-readable description (max 400 characters). Firewall rules have
-   * no labels field, so Alchemy ownership is stored in a `[alchemy …]`
+   * no labels field, so Alchemy ownership is stored in a `[alchemy ...]`
    * prefix and stripped from attributes.
    */
   description?: string;
@@ -84,7 +84,7 @@ export type AppsFirewallIngressRule = Resource<
  *
  * Firewall rules have no labels field, so Alchemy stamps ownership into
  * `description` for `list` / nuke. Application id and priority are
- * identity — changing either replaces the rule. Action, source range,
+ * identity -- changing either replaces the rule. Action, source range,
  * and description update in place.
  *
  * ### Creating a Rule

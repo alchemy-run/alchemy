@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `rekognition:StopStreamProcessor` — stop a running stream processor.
+ * Runtime binding for `rekognition:StopStreamProcessor` -- stop a running stream processor.
  *
  * The binding takes no arguments and grants the function
  * `rekognition:StopStreamProcessor` on `*` (Rekognition data-plane resources such

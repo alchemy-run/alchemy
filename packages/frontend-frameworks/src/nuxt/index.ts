@@ -2,7 +2,7 @@ import type * as FileSystem from "effect/FileSystem";
 import type * as Layer from "effect/Layer";
 import type * as Path from "effect/Path";
 /**
- * `@alchemy.run/frontend-frameworks/nuxt` — Nuxt integration implementing framework-core's
+ * `@alchemy.run/frontend-frameworks/nuxt` -- Nuxt integration implementing framework-core's
  * `Framework` service, with the deploy target passed as a value (Cloudflare
  * Workers by default, via the `@alchemy.run/frontend-frameworks/nuxt/cloudflare` subpath
  * module).
@@ -14,8 +14,8 @@ import type * as Path from "effect/Path";
  * Nuxt-specific options.
  *
  * This module (and `Nuxt.ts`) is target-agnostic by contract: it must not
- * import anything Cloudflare-specific. The Cloudflare half — the nitro
- * `cloudflare_module` preset selection and its wrangler-free config — lives
+ * import anything Cloudflare-specific. The Cloudflare half -- the nitro
+ * `cloudflare_module` preset selection and its wrangler-free config -- lives
  * behind `@alchemy.run/frontend-frameworks/nuxt/cloudflare`.
  */
 import type { Framework } from "../core/index.ts";
@@ -67,7 +67,7 @@ export interface HarnessWorkerOptions {
   readonly worker?:
     | {
         /**
-         * The worker's declared binding hooks — passed through to the
+         * The worker's declared binding hooks -- passed through to the
          * deploy target's dev platform wholesale (the Cloudflare target
          * serves them on `event.context.cloudflare.env` via
          * cloudflare-runtime's platform proxy).

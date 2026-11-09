@@ -11,7 +11,7 @@ const TypeId = "Cloudflare.ManagedTransforms.ManagedTransforms" as const;
 type TypeId = typeof TypeId;
 
 /**
- * Identifier of a Cloudflare managed request transform — the built-in
+ * Identifier of a Cloudflare managed request transform -- the built-in
  * request-header transforms Cloudflare offers on
  * `/zones/{zone_id}/managed_headers`. The open `(string & {})` tail keeps
  * the type forward-compatible with transforms Cloudflare adds later.
@@ -26,7 +26,7 @@ export type ManagedRequestTransformId =
   | (string & {});
 
 /**
- * Identifier of a Cloudflare managed response transform — the built-in
+ * Identifier of a Cloudflare managed response transform -- the built-in
  * response-header transforms Cloudflare offers on
  * `/zones/{zone_id}/managed_headers`. The open `(string & {})` tail keeps
  * the type forward-compatible with transforms Cloudflare adds later.
@@ -38,7 +38,7 @@ export type ManagedResponseTransformId =
 
 export interface Props {
   /**
-   * Zone whose managed transforms are managed. Stable — changing the zone
+   * Zone whose managed transforms are managed. Stable -- changing the zone
    * triggers a replacement (the old zone's managed transforms are restored
    * to the enabled states they had before Alchemy managed them).
    */
@@ -46,9 +46,9 @@ export interface Props {
   /**
    * Desired enabled state per managed **request** transform id (e.g.
    * `{ add_visitor_location_headers: true }`). Only the ids you name here
-   * are managed — every other transform on the zone is left untouched.
+   * are managed -- every other transform on the zone is left untouched.
    *
-   * Mutable — patched in place.
+   * Mutable -- patched in place.
    *
    * @default {}
    */
@@ -56,9 +56,9 @@ export interface Props {
   /**
    * Desired enabled state per managed **response** transform id (e.g.
    * `{ "remove_x-powered-by_header": true }`). Only the ids you name here
-   * are managed — every other transform on the zone is left untouched.
+   * are managed -- every other transform on the zone is left untouched.
    *
-   * Mutable — patched in place.
+   * Mutable -- patched in place.
    *
    * @default {}
    */
@@ -104,12 +104,12 @@ export type ManagedTransforms = Resource<TypeId, Props, Attributes, never, Provi
 
 /**
  * The managed request/response header transforms of a Cloudflare zone
- * (`/zones/{zone_id}/managed_headers`) — a zone-scoped **singleton**: every
+ * (`/zones/{zone_id}/managed_headers`) -- a zone-scoped **singleton**: every
  * zone always carries the full catalog of managed transforms (each with an
  * enabled flag), so there is no create or delete on the Cloudflare side.
  *
  * Reconciling this resource adopts the singleton and patches **only the
- * transform ids you name** in `requestHeaders` / `responseHeaders` — every
+ * transform ids you name** in `requestHeaders` / `responseHeaders` -- every
  * other transform is left exactly as found (dashboard- or otherwise-managed
  * toggles are never clobbered).
  *
@@ -119,7 +119,7 @@ export type ManagedTransforms = Resource<TypeId, Props, Attributes, never, Provi
  * not touched.
  *
  * Some transforms are plan-gated (e.g. `add_bot_protection_headers`
- * requires Bot Management) — enabling those fails server-side on
+ * requires Bot Management) -- enabling those fails server-side on
  * unentitled zones.
  * ### Request transforms
  * **Example:** Add visitor location headers
@@ -184,7 +184,7 @@ export const ManagedTransformsProvider = () =>
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       // The managed-transforms catalog is a per-zone singleton with no
-      // account-wide list — enumerate every zone and read its catalog.
+      // account-wide list -- enumerate every zone and read its catalog.
       const allZones = yield* listAllZones(accountId);
       const rows = yield* Effect.forEach(
         allZones.map((zone) => zone.id),
@@ -193,7 +193,7 @@ export const ManagedTransformsProvider = () =>
             Effect.map((observed) =>
               observed === undefined
                 ? undefined
-                : // Cold enumeration adopts the singleton freely — the
+                : // Cold enumeration adopts the singleton freely -- the
                   // observed enabled states become the snapshot baseline,
                   // matching the `read` cold-adopt path.
                   toAttributes(
@@ -220,12 +220,12 @@ export const ManagedTransformsProvider = () =>
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
-      // The transform catalog is a singleton — it exists iff the zone does.
+      // The transform catalog is a singleton -- it exists iff the zone does.
       const zoneId = output?.zoneId ?? (olds?.zoneId as string | undefined);
       if (!zoneId) return undefined;
       const observed = yield* observe(zoneId);
       if (!observed) return undefined;
-      // Singletons always exist with Cloudflare defaults — there is nothing
+      // Singletons always exist with Cloudflare defaults -- there is nothing
       // to "own", so a cold read adopts freely (never `Unowned`). The
       // enabled states observed at adoption time become the snapshot
       // restored on destroy.
@@ -241,17 +241,17 @@ export const ManagedTransformsProvider = () =>
       // Inputs are resolved to concrete strings by Plan.
       const zoneId = news.zoneId as string;
 
-      // 1. Observe — the singleton always exists for a live zone.
+      // 1. Observe -- the singleton always exists for a live zone.
       let observed = normalize(yield* managedTransforms.listManagedTransforms({ zoneId }));
 
-      // 2. Snapshot — capture pre-management enabled states once; `output`
+      // 2. Snapshot -- capture pre-management enabled states once; `output`
       //    acts as the cache that keeps the very first observation sticky.
       const initialRequestHeaders =
         output?.initialRequestHeaders ?? snapshot(observed.managedRequestHeaders);
       const initialResponseHeaders =
         output?.initialResponseHeaders ?? snapshot(observed.managedResponseHeaders);
 
-      // 3. Sync — diff the managed ids' desired enabled flags against the
+      // 3. Sync -- diff the managed ids' desired enabled flags against the
       //    observed states and PATCH only the deltas. Unnamed transforms
       //    are never sent, so they stay exactly as found.
       const requestDelta = delta(news.requestHeaders ?? {}, observed.managedRequestHeaders);
@@ -271,12 +271,12 @@ export const ManagedTransformsProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output, olds }) {
-      // Singleton — nothing to delete on the Cloudflare side. Restore the
+      // Singleton -- nothing to delete on the Cloudflare side. Restore the
       // ids this resource managed (i.e. the ones named in the last-applied
       // props) to their pre-management snapshot values. Ids missing from
       // the snapshot (added by Cloudflare after adoption) are left as-is.
       const observed = yield* observe(output.zoneId);
-      if (!observed) return; // zone is gone — nothing to restore
+      if (!observed) return; // zone is gone -- nothing to restore
       const o = (olds ?? {}) as Props;
       const requestRestore = restoreDelta(
         o.requestHeaders ?? {},
@@ -338,7 +338,7 @@ const observe = (zoneId: string) =>
   );
 
 /**
- * Project an observed transform list onto an id → enabled snapshot map.
+ * Project an observed transform list onto an id -> enabled snapshot map.
  */
 const snapshot = (transforms: readonly ObservedTransform[]): Record<string, boolean> => {
   const out: Record<string, boolean> = {};
@@ -348,7 +348,7 @@ const snapshot = (transforms: readonly ObservedTransform[]): Record<string, bool
 
 /**
  * The PATCH entries needed to bring the managed ids to their desired
- * enabled states — only ids whose observed state differs are included, so
+ * enabled states -- only ids whose observed state differs are included, so
  * a no-op reconcile sends nothing.
  */
 const delta = (
@@ -367,7 +367,7 @@ const delta = (
 
 /**
  * The PATCH entries needed to restore the managed ids to their snapshot
- * values — only ids that were managed, have a snapshot value, and currently
+ * values -- only ids that were managed, have a snapshot value, and currently
  * differ from it are included (idempotent re-delete after a crashed run).
  */
 const restoreDelta = (

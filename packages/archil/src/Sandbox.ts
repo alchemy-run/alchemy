@@ -115,9 +115,9 @@ export interface SandboxProps extends PlatformProps {
    * @default "node:24-bookworm"
    */
   baseImage?: string;
-  /** vCPUs, 1–32. Changing it replaces the sandbox. @default 1 */
+  /** vCPUs, 1-32. Changing it replaces the sandbox. @default 1 */
   vcpuCount?: number;
-  /** Memory in MiB, 256–65536. Changing it replaces the sandbox. @default 2048 */
+  /** Memory in MiB, 256-65536. Changing it replaces the sandbox. @default 2048 */
   memSizeMiB?: number;
   /**
    * TCP ports to serve publicly. Updated in place. When set, it is the

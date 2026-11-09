@@ -16,7 +16,7 @@ export interface DecryptRequest extends Omit<kms.DecryptRequest, "KeyId"> {}
  * to the intended key, per AWS best practice.
  *
  * The decrypted `Plaintext` in the response is wrapped in `Redacted` so it
- * never leaks into logs — unwrap with `Redacted.value(...)` at the point of
+ * never leaks into logs -- unwrap with `Redacted.value(...)` at the point of
  * use.
  *
  * ### Decrypting Data

@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Repository } from "./Repository.ts";
 
 /**
- * Request for {@link CopyPackageVersions} — `domain`, `domainOwner`, and
+ * Request for {@link CopyPackageVersions} -- `domain`, `domainOwner`, and
  * `destinationRepository` are injected from the bound {@link Repository};
  * `sourceRepository` names a sibling repository in the same domain.
  */
@@ -17,7 +17,7 @@ export interface CopyPackageVersionsRequest extends Omit<
  * Runtime binding for `codeartifact:CopyPackageVersions`.
  *
  * Copies package versions from another repository in the same domain into the
- * bound repository (the destination) — the standard promotion flow from a
+ * bound repository (the destination) -- the standard promotion flow from a
  * staging repository to a release repository. Provide the implementation with
  * `Effect.provide(AWS.CodeArtifact.CopyPackageVersionsHttp)`.
  * ### Promoting Packages

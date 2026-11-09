@@ -6,7 +6,7 @@ import type { Detector } from "./Detector.ts";
 import { ListEventPredictions } from "./ListEventPredictions.ts";
 
 /**
- * Bespoke implementation — unlike the other detector-scoped operations, the
+ * Bespoke implementation -- unlike the other detector-scoped operations, the
  * detector is a `FilterCondition` (`{ value }`) rather than a plain
  * `detectorId` field, and `frauddetector:ListEventPredictions` supports no
  * resource-level IAM scoping, so the grant is on `*`.
@@ -18,7 +18,7 @@ export const ListEventPredictionsHttp = Layer.effect(
     const op = yield* AWSBindings.withCredentials(frauddetector.listEventPredictions);
 
     return Effect.fn(function* (detector: Detector) {
-      // Output yields a DEFERRED effect — resolve again per invocation below.
+      // Output yields a DEFERRED effect -- resolve again per invocation below.
       const DetectorId = yield* detector.detectorId;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`AWS.FraudDetector.ListEventPredictions(${detector})`({

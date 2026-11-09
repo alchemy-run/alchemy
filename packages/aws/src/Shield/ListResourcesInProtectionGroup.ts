@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `shield:ListResourcesInProtectionGroup`.
  *
  * Enumerates the ARNs of the protected resources that are members of a
- * protection group. The group id is passed in the request — group membership
+ * protection group. The group id is passed in the request -- group membership
  * is often resolved dynamically at runtime (e.g. iterating the groups from a
  * `ListProtectionGroups` sweep), and a nonexistent group fails with the typed
  * `ResourceNotFoundException`.
@@ -15,7 +15,7 @@ import type * as Effect from "effect/Effect";
  * ### Grouping Protections
  * **Example:** List a Group's Members
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listResourcesInProtectionGroup =
  *   yield* AWS.Shield.ListResourcesInProtectionGroup();
  *

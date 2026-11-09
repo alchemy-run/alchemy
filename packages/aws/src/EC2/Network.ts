@@ -391,7 +391,7 @@ const resolveAvailabilityZones = (input?: number | string[]) =>
     if (globalThis.__ALCHEMY_RUNTIME__) {
       // Inside a deployed Function this composition is re-executed at init,
       // where every `yield* Subnet(...)` resolves its attributes from the
-      // injected environment — the zone names below only shape input props
+      // injected environment -- the zone names below only shape input props
       // that the runtime ignores. Skip ec2:DescribeAvailabilityZones
       // entirely: the function role does not (and should not) have that
       // permission, so calling it at init crashes with UnauthorizedOperation.

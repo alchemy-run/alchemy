@@ -1,5 +1,5 @@
 /**
- * `import source from "./hasher.ts?worker"` — the target is bundled into
+ * `import source from "./hasher.ts?worker"` -- the target is bundled into
  * one self-contained ES module (the same Cloudflare-flavored build the
  * parent gets: workerd externals, node builtins, Alchemy defines) and
  * imported as a **string**, ready to hand to a `WorkerLoader`

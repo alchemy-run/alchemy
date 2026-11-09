@@ -32,21 +32,21 @@ export interface PresignGetObjectRequest {
  * a browser or any HTTP client can read an object without credentials or a
  * Worker in the request path.
  *
- * Presigning is a pure SigV4 computation against R2's S3-compatible API — no
+ * Presigning is a pure SigV4 computation against R2's S3-compatible API -- no
  * request is made. When deployed, the binding mints a scoped account API
  * token (`Workers R2 Storage Read`) and derives R2 S3 credentials from it;
  * the URLs point at `https://{accountId}.r2.cloudflarestorage.com`.
  *
  * Under `alchemy dev`, a locally-emulated bucket is served on the Worker's
  * local S3 endpoint (`{worker url}/cdn-cgi/local/r2/s3`) and the minted URLs
- * point there — the same code runs unchanged in both modes.
+ * point there -- the same code runs unchanged in both modes.
  *
  * ### Presigning Download URLs
  * **Example:** Mint a presigned GET URL
  * ```typescript
  * const presignGet = yield* Cloudflare.R2.PresignGetObject(bucket);
  * const url = yield* presignGet({ key: "reports/2026-09.pdf" });
- * // hand `url` to a browser — it can GET the object without credentials
+ * // hand `url` to a browser -- it can GET the object without credentials
  * ```
  *
  * **Example:** Force a download with a short-lived URL

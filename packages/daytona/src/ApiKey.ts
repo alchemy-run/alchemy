@@ -63,7 +63,7 @@ export type ApiKey = Resource<"Daytona.ApiKey", ApiKeyProps, ApiKeyAttributes, n
  * A Daytona API key with a fixed set of permissions. Give each app the
  * narrowest key it needs; Daytona checks every request against it.
  *
- * The runtime bindings (`Daytona.CreateSandbox`, `Daytona.CreateVolume`, …)
+ * The runtime bindings (`Daytona.CreateSandbox`, `Daytona.CreateVolume`, ...)
  * mint one of these per host for you, with only the permissions the
  * binding needs. Declare one yourself for CI or for a program outside
  * alchemy.

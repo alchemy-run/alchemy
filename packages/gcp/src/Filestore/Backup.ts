@@ -36,12 +36,12 @@ export type BackupProps = {
   /**
    * Source Filestore instance. Full name
    * `projects/{project}/locations/{location}/instances/{instance}` or
-   * the instance id (combined with `instanceLocation`). Immutable —
+   * the instance id (combined with `instanceLocation`). Immutable --
    * changing it replaces the backup.
    */
   sourceInstance: string;
   /**
-   * File share on the source instance to back up. Immutable — changing
+   * File share on the source instance to back up. Immutable -- changing
    * it replaces the backup.
    * @default "share1"
    */
@@ -53,9 +53,9 @@ export type BackupProps = {
    */
   instanceLocation?: string;
   /**
-   * Region that stores the backup (`us-central1`, …). Backups are
+   * Region that stores the backup (`us-central1`, ...). Backups are
    * regional and may live in a different region than the instance.
-   * Immutable — changing it replaces the backup. `US-CENTRAL1` is
+   * Immutable -- changing it replaces the backup. `US-CENTRAL1` is
    * accepted and normalized to `us-central1`.
    * @default the region of the source instance
    */
@@ -65,7 +65,7 @@ export type BackupProps = {
    * `projects/{project}/locations/{location}/backups/{backup}`). If
    * omitted, a unique RFC1035 name is generated from the stack, stage,
    * and logical id. Must start with a letter, be 1-63 characters, and
-   * end with a letter or digit. Immutable — changing it replaces the
+   * end with a letter or digit. Immutable -- changing it replaces the
    * backup.
    */
   backupId?: string;
@@ -80,7 +80,7 @@ export type BackupProps = {
   /**
    * Customer-managed KMS key for backup encryption
    * (`projects/{project}/locations/{location}/keyRings/{keyRing}/cryptoKeys/{cryptoKey}`).
-   * Immutable — changing it replaces the backup.
+   * Immutable -- changing it replaces the backup.
    */
   kmsKey?: string;
   /**
@@ -122,7 +122,7 @@ export type Backup = Resource<
     description: string | undefined;
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;
-    /** Server-reported state (`READY`, `CREATING`, `FINALIZING`, …). */
+    /** Server-reported state (`READY`, `CREATING`, `FINALIZING`, ...). */
     state: string | undefined;
     /** RFC3339 creation timestamp. */
     createTime: string | undefined;
@@ -156,7 +156,7 @@ export interface BackupLookup {
    */
   instanceLocation?: string;
   /**
-   * Region that stores the backup (`us-central1`, …). Backups are regional
+   * Region that stores the backup (`us-central1`, ...). Backups are regional
    * and may live in a different region than the instance. `US-CENTRAL1` is
    * accepted and normalized to `us-central1`.
    */

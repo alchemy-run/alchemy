@@ -76,7 +76,7 @@ export interface RunGroupLookup {
 }
 
 /**
- * An Amazon HealthOmics run group — a resource-limit envelope for workflow
+ * An Amazon HealthOmics run group -- a resource-limit envelope for workflow
  * runs. A run group caps the vCPUs, GPUs, concurrent runs, and per-run
  * duration for the workflow runs assigned to it.
  *
@@ -171,7 +171,7 @@ export const RunGroupProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // OBSERVE — the run group id is a server-generated cache.
+          // OBSERVE -- the run group id is a server-generated cache.
           let group =
             output?.runGroupId === undefined
               ? undefined
@@ -179,7 +179,7 @@ export const RunGroupProvider = () =>
                   .getRunGroup({ id: output.runGroupId })
                   .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
-          // ENSURE — create if missing. `requestId` is a client idempotency
+          // ENSURE -- create if missing. `requestId` is a client idempotency
           // token; a stable value derived from the logical id keeps a retried
           // create from provisioning a duplicate group.
           if (group === undefined || group.id === undefined) {
@@ -194,7 +194,7 @@ export const RunGroupProvider = () =>
             });
             group = yield* omics.getRunGroup({ id: created.id! });
           } else {
-            // SYNC — apply the delta of mutable settings. Observed cloud state
+            // SYNC -- apply the delta of mutable settings. Observed cloud state
             // is the diff baseline.
             const patch: {
               name?: string;
@@ -224,7 +224,7 @@ export const RunGroupProvider = () =>
             }
           }
 
-          // SYNC TAGS — diff against observed cloud tags so adoption converges.
+          // SYNC TAGS -- diff against observed cloud tags so adoption converges.
           yield* syncOmicsTags(group.arn!, desiredTags);
 
           yield* session.note(group.id!);

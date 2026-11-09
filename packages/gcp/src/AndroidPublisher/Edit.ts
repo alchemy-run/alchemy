@@ -12,11 +12,11 @@ import { getEdit, ignoreMissing } from "./internal.ts";
 export type EditProps = {
   /**
    * Play package name of the app (for example `com.example.app`).
-   * Immutable — changing it replaces the edit.
+   * Immutable -- changing it replaces the edit.
    */
   packageName: string;
   /**
-   * Server-assigned edit id. Immutable — changing it replaces the edit.
+   * Server-assigned edit id. Immutable -- changing it replaces the edit.
    * An expired edit is recreated on the next reconcile.
    */
   editId?: string;
@@ -44,7 +44,7 @@ export type Edit = Resource<
  *
  * An edit is a short-lived staging session for APK, listing, and track
  * changes. The API has no list method and no labels field, so `list`
- * returns an empty set — nuke cannot discover orphaned edits, and they
+ * returns an empty set -- nuke cannot discover orphaned edits, and they
  * expire on their own. `packageName` and `editId` are identity. There is
  * nothing mutable to sync: reconcile observes the edit and inserts one
  * when it is missing or expired.

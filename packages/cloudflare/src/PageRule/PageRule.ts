@@ -12,12 +12,12 @@ const TypeId = "Cloudflare.PageRule.PageRule" as const;
 type TypeId = typeof TypeId;
 
 /**
- * A single Page Rule action — a discriminated union over every setting a
+ * A single Page Rule action -- a discriminated union over every setting a
  * Page Rule can override (e.g. `{ id: "always_use_https" }`,
  * `{ id: "cache_level", value: "cache_everything" }`,
  * `{ id: "forwarding_url", value: { url, statusCode: "301" | "302" } }`).
  *
- * Note: `forwarding_url` cannot be combined with most other actions —
+ * Note: `forwarding_url` cannot be combined with most other actions --
  * a rule either redirects or overrides settings, not both.
  */
 export type Action = pageRules.CreatePageRuleRequest["actions"][number];
@@ -30,14 +30,14 @@ export type Status = "active" | "disabled";
 
 export interface Props {
   /**
-   * Zone the Page Rule applies to. Stable — moving a rule between zones
+   * Zone the Page Rule applies to. Stable -- moving a rule between zones
    * triggers a replacement.
    */
   zoneId: string;
   /**
    * The URL pattern the rule matches, e.g. `*.example.com/images/*`.
    *
-   * Mutable — the API accepts a new target via PUT. Declared as plain
+   * Mutable -- the API accepts a new target via PUT. Declared as plain
    * `string` (not `string`) so it is statically knowable inside
    * `diff` and usable as the rule's identity for stateless recovery.
    */
@@ -45,14 +45,14 @@ export interface Props {
   /**
    * The set of actions to perform when the target matches. Actions can
    * redirect to another URL (`forwarding_url`) or override settings,
-   * but not both. Mutable — synced in place via PUT.
+   * but not both. Mutable -- synced in place via PUT.
    */
   actions: ReadonlyArray<Action>;
   /**
    * The priority of the rule relative to other Page Rules on the zone.
    * A higher number indicates a higher priority. Mutable.
    *
-   * Note: priority is positional — Cloudflare clamps it to the number of
+   * Note: priority is positional -- Cloudflare clamps it to the number of
    * Page Rules on the zone (a lone rule is always priority `1`), so the
    * echoed priority may be lower than requested.
    *
@@ -92,13 +92,13 @@ export interface Attributes {
 export type PageRule = Resource<TypeId, Props, Attributes, never, Providers>;
 
 /**
- * A Cloudflare **Page Rule** — a legacy zone-level rule that matches a URL
+ * A Cloudflare **Page Rule** -- a legacy zone-level rule that matches a URL
  * pattern (`target`) and applies a set of `actions` (cache settings, SSL
  * mode, redirects, etc.) at a given `priority`.
  *
  * :::caution[Legacy]
  * Page Rules are a legacy product superseded by Cloudflare's modern Rules
- * platform (Rulesets — Cache Rules, Redirect Rules, Configuration Rules,
+ * platform (Rulesets -- Cache Rules, Redirect Rules, Configuration Rules,
  * Origin Rules, Transform Rules). Prefer `Cloudflare.Ruleset.Ruleset` for new
  * projects; use `Cloudflare.PageRule.PageRule` only for existing setups or
  * migrations. Page Rules are also plan-limited (Free 3, Pro 20,
@@ -108,7 +108,7 @@ export type PageRule = Resource<TypeId, Props, Attributes, never, Providers>;
  * A rule's recoverable identity is its `target` URL pattern within the
  * zone. Page Rules carry no ownership markers, so when there is no prior
  * state `read` scans the zone for a rule with the same target and reports
- * it as `Unowned` — the engine refuses to take it over unless `--adopt`
+ * it as `Unowned` -- the engine refuses to take it over unless `--adopt`
  * (or `adopt(true)`) is set.
  * ### Caching
  * **Example:** Cache everything under a path
@@ -199,7 +199,7 @@ export const PageRuleProvider = () =>
             Effect.map((rules) => rules.map((rule) => toAttributes(rule as ObservedRule, zone.id))),
             // Skip plan-gated zones (`Forbidden`) and zones Cloudflare rejects
             // with "Invalid zone identifier" (e.g. pending/partial-setup zones
-            // that don't accept the page-rules endpoint) — they contribute no
+            // that don't accept the page-rules endpoint) -- they contribute no
             // rules and shouldn't fail the whole account enumeration.
             Effect.catchTag(["Forbidden", "InvalidZoneIdentifier"], () => Effect.succeed([])),
           ),
@@ -216,7 +216,7 @@ export const PageRuleProvider = () =>
         return { action: "replace" } as const;
       }
       // Everything else (target, actions, priority, status) is mutable
-      // via PUT — let the engine apply the default update logic.
+      // via PUT -- let the engine apply the default update logic.
       return undefined;
     }),
 
@@ -232,7 +232,7 @@ export const PageRuleProvider = () =>
 
       // Adoption path: a rule with this target may already exist on the
       // zone. Page Rules carry no ownership markers, so we cannot prove
-      // we created it — brand it `Unowned` so the engine refuses to take
+      // we created it -- brand it `Unowned` so the engine refuses to take
       // over unless `adopt` is set.
       const target = output?.target ?? olds?.target;
       if (target) {
@@ -247,20 +247,20 @@ export const PageRuleProvider = () =>
       const zoneId = news.zoneId as string;
       const desired = desiredBody(news);
 
-      // 1. Observe — the rule id cached on `output` is a hint, not a
+      // 1. Observe -- the rule id cached on `output` is a hint, not a
       //    guarantee: a missing rule falls through to the target scan
       //    and then to create.
       let observed = output?.pageRuleId ? yield* getRule(zoneId, output.pageRuleId) : undefined;
 
       // 2. Fall back to scanning the zone for a rule with the same
-      //    target. Ownership has already been verified upstream — `read`
+      //    target. Ownership has already been verified upstream -- `read`
       //    reports existing rules as `Unowned` and the engine gates
       //    takeover behind the adopt policy before reconcile ever runs.
       if (!observed) {
         observed = yield* findByTarget(zoneId, news.target);
       }
 
-      // 3. Ensure — create when missing. Pass the desired status
+      // 3. Ensure -- create when missing. Pass the desired status
       //    explicitly because the raw API defaults to "disabled".
       if (!observed) {
         observed = yield* pageRules.createPageRule({
@@ -269,11 +269,11 @@ export const PageRuleProvider = () =>
         });
       }
 
-      // 4. Sync — diff observed against desired; the update endpoint is
+      // 4. Sync -- diff observed against desired; the update endpoint is
       //    a PUT-style full replace, so resend the whole desired body
       //    when any mutable aspect differs. Skip the call on a no-op.
       //    A rule deleted between observe and update surfaces as the
-      //    typed `PageRuleNotFound` — converge by re-creating.
+      //    typed `PageRuleNotFound` -- converge by re-creating.
       if (!ruleMatchesDesired(observed, news)) {
         observed = yield* pageRules
           .updatePageRule({
@@ -299,7 +299,7 @@ export const PageRuleProvider = () =>
           pageruleId: output.pageRuleId,
         })
         .pipe(
-          // Already gone — deletion is idempotent.
+          // Already gone -- deletion is idempotent.
           Effect.catchTag("PageRuleNotFound", () => Effect.void),
         );
     }),
@@ -323,7 +323,7 @@ const getRule = (zoneId: string, pageruleId: string) =>
 
 /**
  * Find a rule on the zone whose URL-pattern target matches. The target is
- * the rule's only recoverable identity — Cloudflare rejects a second rule
+ * the rule's only recoverable identity -- Cloudflare rejects a second rule
  * with the same target, so at most one rule can match.
  */
 const findByTarget = (zoneId: string, target: string) =>

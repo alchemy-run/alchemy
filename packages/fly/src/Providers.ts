@@ -117,7 +117,7 @@ export const providers = () =>
         WebsiteServerProvider(),
       ),
     ),
-    // The binding layers are mutually independent — they all draw on the
+    // The binding layers are mutually independent -- they all draw on the
     // Credentials/HttpClient layers below. Merge them into one group so
     // `.pipe` stays under its 20-argument overload ceiling.
     Layer.provideMerge(

@@ -173,13 +173,13 @@ export type PipelineProps = {
    * Pipeline id (the `{pipeline}` segment of
    * `projects/{project}/locations/{location}/pipelines/{pipeline}`). If
    * omitted, a unique name is generated. Must match
-   * `[a-z]([a-z0-9-]*[a-z0-9])?` and be 1-63 characters. Immutable —
+   * `[a-z]([a-z0-9-]*[a-z0-9])?` and be 1-63 characters. Immutable --
    * changing it replaces the pipeline.
    */
   pipelineId?: string;
   /**
-   * Eventarc Advanced location (`us-central1`, `us-east4`, …). Immutable
-   * — changing it replaces the pipeline. `US-CENTRAL1` is accepted and
+   * Eventarc Advanced location (`us-central1`, `us-east4`, ...). Immutable
+   * -- changing it replaces the pipeline. `US-CENTRAL1` is accepted and
    * normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile
    *   region, else `us-central1`)
@@ -237,7 +237,7 @@ export type Pipeline = Resource<
     pipelineId: string;
     /** Project id. */
     project: string;
-    /** Location id (`us-central1`, …). */
+    /** Location id (`us-central1`, ...). */
     location: string;
     /** Configured destinations. */
     destinations: PipelineDestination[];
@@ -286,7 +286,7 @@ export interface PipelineLookup {
    */
   pipelineId: string;
   /**
-   * Eventarc Advanced location (`us-central1`, `us-east4`, …).
+   * Eventarc Advanced location (`us-central1`, `us-east4`, ...).
    * `US-CENTRAL1` is accepted and normalized to `us-central1`.
    */
   location?: string;
@@ -302,7 +302,7 @@ export interface PipelineLookup {
  * messages to a destination (HTTP, Workflows, Pub/Sub, or another
  * MessageBus), optionally transforming and retrying along the way.
  *
- * `pipelineId` and `location` are identity — changing either replaces
+ * `pipelineId` and `location` are identity -- changing either replaces
  * the pipeline. Destinations, mediations, retry policy, logging, CMEK,
  * display name, labels, and annotations update in place.
  *

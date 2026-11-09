@@ -29,7 +29,7 @@ export interface VpcConnectorProps {
   /**
    * IDs of the VPC subnets App Runner uses for outgoing (egress) traffic.
    * All subnets must belong to the same VPC. VPC connectors are
-   * immutable — changing subnets replaces the connector.
+   * immutable -- changing subnets replaces the connector.
    */
   subnets: string[];
   /**
@@ -202,7 +202,7 @@ export const VpcConnectorProvider = () =>
           if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
-          // VPC connectors are immutable — subnet or security group
+          // VPC connectors are immutable -- subnet or security group
           // changes force a replacement.
           if (
             news?.subnets !== undefined &&
@@ -239,10 +239,10 @@ export const VpcConnectorProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news?.tags };
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* findConnector(name);
 
-          // 2. Ensure — the connector is immutable, so reconcile only
+          // 2. Ensure -- the connector is immutable, so reconcile only
           // ensures existence (diff handles replacement on any change).
           if (observed === undefined) {
             const created = yield* apprunner.createVpcConnector({
@@ -254,7 +254,7 @@ export const VpcConnectorProvider = () =>
             observed = created.VpcConnector;
           }
 
-          // 3. Sync tags — diff against OBSERVED cloud tags.
+          // 3. Sync tags -- diff against OBSERVED cloud tags.
           if (observed.VpcConnectorArn) {
             yield* syncAppRunnerTags(observed.VpcConnectorArn, desiredTags);
           }
@@ -267,7 +267,7 @@ export const VpcConnectorProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           // A connector still associated with a service (App Runner
           // releases the association asynchronously after the service
-          // finishes deleting) rejects with InvalidRequestException —
+          // finishes deleting) rejects with InvalidRequestException --
           // retry through that window (bounded).
           yield* apprunner
             .deleteVpcConnector({

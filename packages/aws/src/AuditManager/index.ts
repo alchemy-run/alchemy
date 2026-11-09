@@ -1,4 +1,4 @@
-// NOTE: BindingHttp.ts is shared scaffolding — intentionally NOT exported.
+// NOTE: BindingHttp.ts is shared scaffolding -- intentionally NOT exported.
 export * from "./Assessment.ts";
 export * from "./AssociateAssessmentReportEvidenceFolder.ts";
 export * from "./AssociateAssessmentReportEvidenceFolderHttp.ts";

@@ -33,7 +33,7 @@ export interface ActionTarget extends Resource<
   "AWS.SecurityHub.ActionTarget",
   ActionTargetProps,
   {
-    /** ARN of the action target (`…:action/custom/{id}`). */
+    /** ARN of the action target (`...:action/custom/{id}`). */
     actionTargetArn: string;
     /** ID of the custom action (final ARN segment). */
     id: string;
@@ -83,7 +83,7 @@ export const ActionTargetProvider = () =>
   Provider.effect(
     ActionTargetResource,
     Effect.gen(function* () {
-      // Custom action ids are strictly alphanumeric, max 20 characters —
+      // Custom action ids are strictly alphanumeric, max 20 characters --
       // strip the physical name's delimiters and keep its trailing (random,
       // instance-stable) suffix for uniqueness.
       const toId = (id: string, props: { id?: string }) =>
@@ -98,7 +98,7 @@ export const ActionTargetProvider = () =>
           Effect.map((r) => r.ActionTargets?.[0]),
           Effect.catchTags({
             ResourceNotFoundException: () => Effect.undefined,
-            // The whole hub may be disabled — the action target is gone too.
+            // The whole hub may be disabled -- the action target is gone too.
             InvalidAccessException: () => Effect.undefined,
           }),
         );
@@ -144,7 +144,7 @@ export const ActionTargetProvider = () =>
             }
             return out;
           }).pipe(
-            // No hub — no action targets.
+            // No hub -- no action targets.
             Effect.catchTag("InvalidAccessException", () =>
               Effect.succeed([] as ActionTarget["Attributes"][]),
             ),
@@ -154,11 +154,11 @@ export const ActionTargetProvider = () =>
           const { accountId, region } = yield* AWSEnvironment.current;
           const arn = actionTargetArn(region, accountId, actionId);
 
-          // 1. OBSERVE — cloud state is authoritative.
+          // 1. OBSERVE -- cloud state is authoritative.
           const live = yield* getActionTarget(arn);
 
           if (!live) {
-            // 2. ENSURE — tolerate the create race.
+            // 2. ENSURE -- tolerate the create race.
             yield* securityhub
               .createActionTarget({
                 Name: news.name,
@@ -167,7 +167,7 @@ export const ActionTargetProvider = () =>
               })
               .pipe(Effect.catchTag("ResourceConflictException", () => Effect.void));
           } else if (live.Name !== news.name || live.Description !== news.description) {
-            // 3. SYNC — observed ↔ desired.
+            // 3. SYNC -- observed <-> desired.
             yield* securityhub.updateActionTarget({
               ActionTargetArn: arn,
               Name: news.name,
@@ -181,7 +181,7 @@ export const ActionTargetProvider = () =>
           return buildAttrs(arn, final ?? { Name: news.name, Description: news.description });
         }),
         delete: Effect.fn(function* ({ output }) {
-          // Idempotent — the action target (or the whole hub) may be gone.
+          // Idempotent -- the action target (or the whole hub) may be gone.
           yield* securityhub.deleteActionTarget({ ActionTargetArn: output.actionTargetArn }).pipe(
             Effect.catchTags({
               ResourceNotFoundException: () => Effect.void,

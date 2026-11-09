@@ -51,7 +51,7 @@ export interface CertificateProps {
    */
   revokeOnDelete?: boolean;
   /**
-   * Issuer name to prefer (`CN=…` substring, e.g. `ISRG Root X1`) when the
+   * Issuer name to prefer (`CN=...` substring, e.g. `ISRG Root X1`) when the
    * CA offers alternate chains.
    */
   preferredChain?: string;
@@ -122,7 +122,7 @@ export interface Certificate extends Resource<
  * ```
  *
  * ### Using the certificate
- * The chain and key are Outputs — pass them to whatever terminates TLS.
+ * The chain and key are Outputs -- pass them to whatever terminates TLS.
  *
  * **Example:** Upload to a Fly App
  * ```typescript
@@ -206,7 +206,7 @@ export const CertificateProvider = () =>
       const account = accountOf(news.account);
       const keyAlgorithm = news.keyAlgorithm ?? "ES256";
       const now = yield* Clock.currentTimeMillis;
-      // Observe: the stored certificate is authoritative — nothing to do
+      // Observe: the stored certificate is authoritative -- nothing to do
       // while it covers the names and isn't due.
       if (
         output !== undefined &&

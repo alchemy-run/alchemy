@@ -15,7 +15,7 @@ export class FlyOrgNotFound extends Data.TaggedError("Fly.OrgNotFound")<{
  * Fully-resolved Fly.io environment for a stack.
  *
  * `{ apiKey, apiBaseUrl }` comes from distilled `Credentials`. `orgSlug` is
- * the current token's organization (`getCurrentToken` → `tokens[0].org_slug`),
+ * the current token's organization (`getCurrentToken` -> `tokens[0].org_slug`),
  * cached for the process. Resolve it inside lifecycle operations with
  * `FlyEnvironment.current`.
  */

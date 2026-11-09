@@ -17,7 +17,7 @@ export interface InsertAdBreakRequest extends Omit<ivs.InsertAdBreakRequest, "ch
  * ### Inserting Ad Breaks
  * **Example:** Trigger a 30-Second Ad Break
  * ```typescript
- * // init — bind the operation to the channel
+ * // init -- bind the operation to the channel
  * const insertAdBreak = yield* AWS.IVS.InsertAdBreak(channel);
  *
  * // runtime

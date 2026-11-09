@@ -16,16 +16,16 @@ export interface RebootInstanceRequest extends Omit<
  * Runtime binding for the `RebootInstances` operation scoped to the bound
  * {@link Instance} (IAM action `ec2:RebootInstances` on the instance ARN).
  *
- * Requests an asynchronous reboot of the instance — e.g. a remediation Lambda
+ * Requests an asynchronous reboot of the instance -- e.g. a remediation Lambda
  * that bounces a wedged host after a failed health check. Provide the
  * implementation with `Effect.provide(AWS.EC2.RebootInstanceHttp)`.
  * ### Instance Lifecycle Control
  * **Example:** Reboot the bound instance
  * ```typescript
- * // init — bind the operation to the instance
+ * // init -- bind the operation to the instance
  * const rebootInstance = yield* AWS.EC2.RebootInstance(instance);
  *
- * // runtime — request the reboot (asynchronous)
+ * // runtime -- request the reboot (asynchronous)
  * yield* rebootInstance();
  * ```
  *

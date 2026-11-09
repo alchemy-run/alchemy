@@ -18,7 +18,7 @@ export const withGaRegion = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
  * `TransactionInProgressException` (or `ConflictException`). Retry on a
  * bounded schedule (~60s) until the in-flight transaction lands.
  *
- * NOTE: explicit return annotation is load-bearing — an inline `Effect.retry`
+ * NOTE: explicit return annotation is load-bearing -- an inline `Effect.retry`
  * in provider lifecycle code leaks `Retry.Return` conditionals into
  * declaration emit and widens the provider layer to `unknown` R.
  */

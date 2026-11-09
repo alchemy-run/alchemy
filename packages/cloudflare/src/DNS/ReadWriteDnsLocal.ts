@@ -5,7 +5,7 @@ import { ReadWriteDns } from "./ReadWriteDns.ts";
 import { dnsReadWriteClient } from "./ReadWriteDnsHttp.ts";
 
 /**
- * Local implementation of the {@link ReadWriteDns} binding — performs the full
+ * Local implementation of the {@link ReadWriteDns} binding -- performs the full
  * Cloudflare DNS record CRUD surface over the HTTP API using the **current
  * credentials** instead of a scoped API token ({@link ReadWriteDnsHttp}). DNS
  * is a zone-management capability with no native Worker binding.

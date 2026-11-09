@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `cloudtrail:ListPublicKeys`.
  *
  * An account-level operation (no resource argument) that returns the public
- * keys used to sign CloudTrail digest files in the region — the building
+ * keys used to sign CloudTrail digest files in the region -- the building
  * block for verifying log-file integrity at runtime. Provide the
  * implementation with `Effect.provide(AWS.CloudTrail.ListPublicKeysHttp)`.
  * ### Verifying Log Integrity
  * **Example:** List Digest Public Keys
  * ```typescript
- * // init — account-level binding takes no resource
+ * // init -- account-level binding takes no resource
  * const listPublicKeys = yield* AWS.CloudTrail.ListPublicKeys();
  *
  * // runtime

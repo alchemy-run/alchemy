@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { Project } from "./Project.ts";
 
 /**
- * Runtime binding for `codebuild:StartSandbox` — launches an interactive
+ * Runtime binding for `codebuild:StartSandbox` -- launches an interactive
  * sandbox environment for the bound project. Run commands in it with
  * {@link StartCommandExecution}; stop it with {@link StopSandbox}.
  * ### Sandboxes

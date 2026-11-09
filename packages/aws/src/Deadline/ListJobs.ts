@@ -12,7 +12,7 @@ import type { Queue } from "./Queue.ts";
  * ### Monitoring Jobs
  * **Example:** List The Queue's Jobs
  * ```typescript
- * // init — bind the operation to the queue
+ * // init -- bind the operation to the queue
  * const listJobs = yield* AWS.Deadline.ListJobs(queue);
  *
  * // runtime

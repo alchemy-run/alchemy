@@ -24,7 +24,7 @@ export type StudiesTrialProps = {
   /**
    * Parent Study resource name
    * (`projects/{project}/locations/{location}/studies/{study}`).
-   * Immutable — changing it replaces the Trial.
+   * Immutable -- changing it replaces the Trial.
    */
   parent: string;
   /**

@@ -6,7 +6,7 @@ import type { Graph } from "./Graph.ts";
 /**
  * Runtime binding for `detective:DeleteMembers`.
  *
- * Removes member accounts from the behavior graph — the off-boarding
+ * Removes member accounts from the behavior graph -- the off-boarding
  * counterpart to `CreateMembers` when an account leaves the fleet. The graph
  * ARN is injected from the bound {@link Graph}.
  * Provide the implementation with

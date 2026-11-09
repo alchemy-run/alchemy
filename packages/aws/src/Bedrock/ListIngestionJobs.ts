@@ -5,7 +5,7 @@ import type { DataSource } from "./DataSource.ts";
 
 /**
  * The `ListIngestionJobs` request with the binding-injected
- * `knowledgeBaseId` and `dataSourceId` removed — they are supplied
+ * `knowledgeBaseId` and `dataSourceId` removed -- they are supplied
  * automatically from the bound {@link DataSource}.
  */
 export interface ListIngestionJobsRequest extends Omit<
@@ -14,7 +14,7 @@ export interface ListIngestionJobsRequest extends Omit<
 > {}
 
 /**
- * Runtime binding for `bedrock-agent:ListIngestionJobs` — list the ingestion
+ * Runtime binding for `bedrock-agent:ListIngestionJobs` -- list the ingestion
  * jobs that have run against the bound {@link DataSource}, optionally
  * filtered and sorted.
  *

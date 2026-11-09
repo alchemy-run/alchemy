@@ -5,14 +5,14 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `organizations:ListEffectivePolicyValidationErrors`.
  *
- * Lists the validation errors in an account's effective policy of the specified type — the reasons the aggregated policy is invalid.
- * Account-level operation — Organizations is a management-account-scoped
+ * Lists the validation errors in an account's effective policy of the specified type -- the reasons the aggregated policy is invalid.
+ * Account-level operation -- Organizations is a management-account-scoped
  * global service, so the binding takes no resource argument. Provide the
  * implementation with `Effect.provide(AWS.Organizations.ListEffectivePolicyValidationErrorsHttp)`.
  * ### Policies & Effective Policy
  * **Example:** Read Effective-Policy Validation Errors
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listEffectivePolicyValidationErrors = yield* AWS.Organizations.ListEffectivePolicyValidationErrors();
  *
  * // runtime

@@ -138,14 +138,14 @@ export interface EventSubscription extends Resource<
 > {}
 
 /**
- * An Amazon Redshift event notification subscription — routes provisioned
+ * An Amazon Redshift event notification subscription -- routes provisioned
  * cluster lifecycle events (maintenance, resizes, snapshots, failures,
  * security changes) to an SNS topic.
  *
  * SNS is Redshift's native event channel for provisioned clusters: the only
  * events Redshift publishes *directly* to EventBridge are the zero-ETL
  * integration detail-types, so cluster events reach compute through an
- * `EventSubscription` → `SNS.Topic` → `SNS.consumeTopicNotifications` chain.
+ * `EventSubscription` -> `SNS.Topic` -> `SNS.consumeTopicNotifications` chain.
  * Subscriptions are free and provision instantly.
  * ### Subscribing to Cluster Events
  * **Example:** Route Cluster Events to an SNS Topic
@@ -186,7 +186,7 @@ export const EventSubscription = Resource<EventSubscription>("AWS.Redshift.Event
  * Expressed as an explicitly-typed module-scope helper: inlining
  * `Effect.retry` in a lifecycle operation leaves `Retry.Return`'s
  * conditional type unresolved in the provider's inferred layer type, which
- * declaration emit widens to an `unknown` R — poisoning `AWS.providers()`
+ * declaration emit widens to an `unknown` R -- poisoning `AWS.providers()`
  * for every downstream consumer.
  */
 const retryWhileSubscriptionTransitioning = <A, E extends { _tag: string }, R>(
@@ -262,10 +262,10 @@ export const EventSubscriptionProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
 
-          // 1. Observe — cloud state is authoritative.
+          // 1. Observe -- cloud state is authoritative.
           let observed = yield* readSubscription(name);
 
-          // 2. Ensure — create if missing; tolerate AlreadyExists as a race
+          // 2. Ensure -- create if missing; tolerate AlreadyExists as a race
           //    with a peer reconciler by re-reading.
           if (!observed?.CustSubscriptionId) {
             yield* redshift
@@ -291,7 +291,7 @@ export const EventSubscriptionProvider = () =>
             }
           }
 
-          // 3. Sync — diff OBSERVED filters against desired; modify replaces
+          // 3. Sync -- diff OBSERVED filters against desired; modify replaces
           //    the whole filter configuration, so send the full desired
           //    shape when anything drifted.
           const desiredEnabled = news.enabled ?? true;
@@ -322,7 +322,7 @@ export const EventSubscriptionProvider = () =>
             }
           }
 
-          // 3b. Sync tags — diff against OBSERVED cloud tags (describe
+          // 3b. Sync tags -- diff against OBSERVED cloud tags (describe
           //     surfaces them inline).
           const { accountId, region } = yield* AWSEnvironment.current;
           const arn = redshiftArn(region, accountId, "eventsubscription", name);

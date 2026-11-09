@@ -6,14 +6,14 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `ram:ListPrincipals`.
  *
  * Lists the principals that you are sharing resources with or that are sharing resources with you.
- * Account-level operation — the target shares, invitations, and permissions
+ * Account-level operation -- the target shares, invitations, and permissions
  * are chosen per request at runtime, so the binding takes no resource
  * argument. Provide the implementation with
  * `Effect.provide(AWS.RAM.ListPrincipalsHttp)`.
  * ### Discovering Shares & Shared Resources
  * **Example:** List the Principals You Share With
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listPrincipals = yield* AWS.RAM.ListPrincipals();
  *
  * // runtime

@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `geo-routes:CalculateIsolines` — compute areas
+ * Runtime binding for `geo-routes:CalculateIsolines` -- compute areas
  * reachable within time or distance thresholds from a point (isochrones /
  * isodistances), e.g. "everywhere within a 30-minute drive".
  *
@@ -22,7 +22,7 @@ import type * as Effect from "effect/Effect";
  * // init
  * const calculateIsolines = yield* AWS.GeoRoutes.CalculateIsolines();
  *
- * // runtime — coordinates are [longitude, latitude]; thresholds in seconds
+ * // runtime -- coordinates are [longitude, latitude]; thresholds in seconds
  * const result = yield* calculateIsolines({
  *   Origin: [-122.339, 47.61],
  *   Thresholds: { Time: [600] },

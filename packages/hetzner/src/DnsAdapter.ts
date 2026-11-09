@@ -27,7 +27,7 @@ export interface AdapterOptions {
 }
 
 /**
- * Publish a custom domain's DNS records in a Hetzner DNS zone — the default
+ * Publish a custom domain's DNS records in a Hetzner DNS zone -- the default
  * for `Hetzner.Website.*`, and usable from any other platform (an AWS site,
  * a Fly or Railway site, a Cloudflare Worker through Cloudflare for SaaS).
  *
@@ -63,7 +63,7 @@ export const Adapter = (options: AdapterOptions = {}): DnsConfig<typeof HETZNER_
 
 /**
  * A Hetzner zone can't hold a CNAME at its apex. Only a zone pinned by name
- * is checkable here — a `Hetzner.Zone` reference is an unresolved Output.
+ * is checkable here -- a `Hetzner.Zone` reference is an unresolved Output.
  */
 const rejectApexCname = (zone: Input<string> | undefined, name: string) =>
   typeof zone === "string" && normalizeDnsName(name) === normalizeDnsName(zone)
@@ -78,8 +78,8 @@ const rejectApexCname = (zone: Input<string> | undefined, name: string) =>
 
 /**
  * The Hetzner DNS adapter, registered by `Hetzner.providers()`. Every
- * method declares a `Hetzner.DNS.RecordList`: `alias` → `{id}-CNAME` or
- * `{id}-Addresses`, `aliasSet` → `{id}-CNAME`, `records` → `id`.
+ * method declares a `Hetzner.DNS.RecordList`: `alias` -> `{id}-CNAME` or
+ * `{id}-Addresses`, `aliasSet` -> `{id}-CNAME`, `records` -> `id`.
  */
 export const adapter = {
   alias: (id, { zone, name, target }) =>

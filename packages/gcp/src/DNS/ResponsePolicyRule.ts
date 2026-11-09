@@ -19,7 +19,7 @@ export type ResponsePolicyRuleLocalData = {
    */
   name?: string;
   /**
-   * DNS record type (`A`, `AAAA`, `CNAME`, `TXT`, …). SOA and NS are
+   * DNS record type (`A`, `AAAA`, `CNAME`, `TXT`, ...). SOA and NS are
    * not allowed.
    */
   type: string;
@@ -38,14 +38,14 @@ export type ResponsePolicyRuleBehavior = dns.ResponsePolicyRuleBehaviorEnum;
 
 export type ResponsePolicyRuleProps = {
   /**
-   * Response policy name that owns this rule. Immutable — changing it
+   * Response policy name that owns this rule. Immutable -- changing it
    * replaces the rule.
    */
   responsePolicy: string;
   /**
    * User-assigned rule name, unique within the response policy. If
    * omitted, a unique RFC1035 name is generated from the stack, stage,
-   * and logical id. Immutable — changing it replaces the rule.
+   * and logical id. Immutable -- changing it replaces the rule.
    */
   ruleName?: string;
   /**
@@ -338,7 +338,7 @@ export const ResponsePolicyRuleProvider = () =>
       const existing = yield* getByName(env.project, responsePolicy, ruleName);
       if (existing === undefined) return undefined;
       // Rules have no labels. Identity (policy + rule name) is
-      // ownership — same as Cloud DNS record sets.
+      // ownership -- same as Cloud DNS record sets.
       return toAttrs(existing, env.project, responsePolicy);
     }),
 

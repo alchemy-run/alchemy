@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 /**
  * Stripe metadata keys may only contain alphanumeric characters, dashes,
  * and underscores (max 40 chars). Alchemy ownership tags use `alchemy::stack`
- * / `alchemy::stage` / `alchemy::id` — map those onto `alchemy_stack` /
+ * / `alchemy::stage` / `alchemy::id` -- map those onto `alchemy_stack` /
  * `alchemy_stage` / `alchemy_id` so they survive the Stripe API.
  */
 export const ALCHEMY_METADATA_PREFIX = "alchemy_";
@@ -64,8 +64,8 @@ export const hasAlchemyMetadata = Effect.fn(function* (id: string, metadata: Tag
 
 /**
  * Diff observed Stripe metadata against desired metadata. Always pass
- * **observed** metadata as `oldTags` — never `olds.metadata` or
- * `output.metadata` — so adoption converges.
+ * **observed** metadata as `oldTags` -- never `olds.metadata` or
+ * `output.metadata` -- so adoption converges.
  */
 export const diffMetadata = diffTags;
 

@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 export interface ListMetricsRequest extends cloudwatch.ListMetricsInput {}
 
 /**
- * Runtime binding for `cloudwatch:ListMetrics` — enumerate the metrics
+ * Runtime binding for `cloudwatch:ListMetrics` -- enumerate the metrics
  * visible in the account/region, optionally filtered by namespace, metric
  * name, or dimensions.
  *
@@ -14,7 +14,7 @@ export interface ListMetricsRequest extends cloudwatch.ListMetricsInput {}
  * ### Listing Metrics
  * **Example:** List Metrics in a Namespace
  * ```typescript
- * // init — grants cloudwatch:ListMetrics
+ * // init -- grants cloudwatch:ListMetrics
  * const listMetrics = yield* AWS.CloudWatch.ListMetrics();
  *
  * // runtime

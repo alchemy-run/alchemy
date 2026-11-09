@@ -13,7 +13,7 @@ export interface ExportedResource {
   stage: string;
   /** Fully-qualified resource name (namespace path + logical ID). */
   fqn: string;
-  /** The persisted record — the same value `state.get` returns. */
+  /** The persisted record -- the same value `state.get` returns. */
   state: PersistedState;
 }
 
@@ -41,8 +41,8 @@ export interface ExportStateFilter {
  * Read every resource record in scope from the state store as one
  * document.
  *
- * Fans out over every `(stack, stage)` the store holds — see
- * {@link allStages} — with the per-resource reads bounded, so a whole
+ * Fans out over every `(stack, stage)` the store holds -- see
+ * {@link allStages} -- with the per-resource reads bounded, so a whole
  * estate is fetched in a single pass instead of a call per resource.
  * Records that disappear between `list` and `get` (a concurrent
  * deploy/destroy) are skipped rather than failing the export.

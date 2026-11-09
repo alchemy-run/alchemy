@@ -7,14 +7,14 @@ import type { SigningProfile } from "./SigningProfile.ts";
  * Runtime binding for `signer:SignPayload`.
  *
  * Signs a binary payload synchronously with the bound {@link SigningProfile}
- * and returns the signature inline — the API behind Notation container-image
+ * and returns the signature inline -- the API behind Notation container-image
  * signing (use a `Notation-OCI-SHA384-ECDSA` profile). The profile name is
  * injected from the binding. Provide the implementation with
  * `Effect.provide(AWS.Signer.SignPayloadHttp)`.
  * ### Signing Code
  * **Example:** Sign a Notation Payload
  * ```typescript
- * // init — bind the operation to the Notation profile
+ * // init -- bind the operation to the Notation profile
  * const signPayload = yield* AWS.Signer.SignPayload(profile);
  *
  * // runtime

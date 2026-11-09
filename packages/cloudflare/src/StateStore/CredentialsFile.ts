@@ -37,7 +37,7 @@ const stateStores = (store: CredentialsStoreService) => store.scoped(profileStat
  * lets `state()` detect that mismatch and re-derive.
  *
  * `accountId` is optional so legacy files written before this field existed
- * still parse — they are treated as stale (see
+ * still parse -- they are treated as stale (see
  * {@link isStateStoreCredentialsStale}) and re-derived on next use.
  */
 export const StoredStateStoreCredentials = Schema.Struct({
@@ -53,7 +53,7 @@ export type StoredStateStoreCredentials = typeof StoredStateStoreCredentials.Typ
  * `true` when cached state-store credentials must not be trusted for the
  * current account:
  *
- * - the file predates the `accountId` field (legacy cache — exactly the
+ * - the file predates the `accountId` field (legacy cache -- exactly the
  *   artifact that caused deploys to silently target the wrong account), or
  * - it was minted against a different account than the one now in use.
  *

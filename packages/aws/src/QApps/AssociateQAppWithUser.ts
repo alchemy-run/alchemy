@@ -4,7 +4,7 @@ import type * as Effect from "effect/Effect";
 import type { QApp } from "./QApp.ts";
 
 /**
- * Request for {@link AssociateQAppWithUser} — `instanceId` and `appId` are injected from the bound Q App.
+ * Request for {@link AssociateQAppWithUser} -- `instanceId` and `appId` are injected from the bound Q App.
  */
 export interface AssociateQAppWithUserRequest extends Omit<
   qapps.AssociateQAppWithUserInput,
@@ -19,7 +19,7 @@ export interface AssociateQAppWithUserRequest extends Omit<
  * ### User Inventory
  * **Example:** Favorite the App
  * ```typescript
- * // init — bind the operation to the Q App
+ * // init -- bind the operation to the Q App
  * const associateQAppWithUser = yield* AWS.QApps.AssociateQAppWithUser(app);
  *
  * // runtime

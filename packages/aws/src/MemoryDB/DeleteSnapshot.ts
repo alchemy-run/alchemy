@@ -4,10 +4,10 @@ import type * as Effect from "effect/Effect";
 
 /**
  * Runtime binding for the `DeleteSnapshot` operation (IAM action
- * `memorydb:DeleteSnapshot` on the snapshot ARN wildcard — snapshot names
+ * `memorydb:DeleteSnapshot` on the snapshot ARN wildcard -- snapshot names
  * are runtime data).
  *
- * Deletes a snapshot by name — e.g. pruning old on-demand backups from a
+ * Deletes a snapshot by name -- e.g. pruning old on-demand backups from a
  * scheduled cleanup Lambda. Provide the implementation with
  * `Effect.provide(AWS.MemoryDB.DeleteSnapshotHttp)`.
  * ### Managing Snapshots

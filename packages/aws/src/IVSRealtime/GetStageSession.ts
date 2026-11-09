@@ -10,7 +10,7 @@ export interface GetStageSessionRequest extends Omit<
 > {}
 
 /**
- * Read a session of the bound stage — its start time and, once the last
+ * Read a session of the bound stage -- its start time and, once the last
  * participant leaves, its end time.
  *
  * ### Inspecting Stage Sessions

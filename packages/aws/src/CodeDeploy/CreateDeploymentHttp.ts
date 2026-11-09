@@ -21,7 +21,7 @@ export const CreateDeploymentHttp = Layer.effect(
     const op = yield* AWSBindings.withCredentials(codedeploy.createDeployment);
 
     return Effect.fn(function* <G extends DeploymentGroup>(group: G) {
-      // Outputs yield a DEFERRED effect — resolve again per invocation below.
+      // Outputs yield a DEFERRED effect -- resolve again per invocation below.
       const ApplicationName = yield* group.applicationName;
       const DeploymentGroupName = yield* group.deploymentGroupName;
       if (!globalThis.__ALCHEMY_RUNTIME__) {

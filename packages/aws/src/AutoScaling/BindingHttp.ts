@@ -5,12 +5,12 @@ import type { AutoScalingGroup } from "./AutoScalingGroup.ts";
 /**
  * Shared scaffolding for EC2 Auto Scaling HTTP bindings.
  *
- * NOT exported from `index.ts` — every single-operation `{Op}Http.ts` in this
- * service is a thin `Layer.effect(Cap, makeGroupHttpBinding({ … }))` over the
+ * NOT exported from `index.ts` -- every single-operation `{Op}Http.ts` in this
+ * service is a thin `Layer.effect(Cap, makeGroupHttpBinding({ ... }))` over the
  * builder below. Everything except the operation and the IAM action list is
  * boilerplate: the runtime callable injects the bound
  * {@link AutoScalingGroup}'s `AutoScalingGroupName` into the request (the
- * serializer drops the field for the few operations that do not accept it —
+ * serializer drops the field for the few operations that do not accept it --
  * those are authorized against the instance's owning group) and the
  * deploy-time half grants `actions` on the group ARN, or on `*` for
  * `Describe*` actions (EC2 Auto Scaling `Describe*` actions do not support

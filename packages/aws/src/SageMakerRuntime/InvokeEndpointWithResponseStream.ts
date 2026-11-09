@@ -7,7 +7,7 @@ import type * as Effect from "effect/Effect";
  * `EndpointName` made optional: it defaults to the first bound endpoint name
  * and may be overridden per call with any of the bound endpoint names.
  *
- * `Body` is the raw, model-specific inference payload — there is no
+ * `Body` is the raw, model-specific inference payload -- there is no
  * auto-marshalling. The response `Body` is an event `Stream` whose
  * `PayloadPart` events carry raw model-specific bytes.
  */
@@ -24,7 +24,7 @@ export interface InvokeEndpointWithResponseStreamRequest extends Omit<
 }
 
 /**
- * Runtime binding for `sagemaker:InvokeEndpointWithResponseStream` — the
+ * Runtime binding for `sagemaker:InvokeEndpointWithResponseStream` -- the
  * streaming variant of {@link InvokeEndpoint}. The inference response arrives
  * incrementally as an event `Stream` of `PayloadPart` events carrying raw
  * model-specific bytes; the container behind the endpoint must support
@@ -42,7 +42,7 @@ export interface InvokeEndpointWithResponseStreamRequest extends Omit<
  *   "my-streaming-endpoint",
  * );
  *
- * // runtime — Body is the raw payload the container expects
+ * // runtime -- Body is the raw payload the container expects
  * const result = yield* invokeStream({
  *   ContentType: "application/json",
  *   Body: JSON.stringify({ inputs: "Say hello." }),

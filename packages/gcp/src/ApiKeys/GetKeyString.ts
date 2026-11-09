@@ -9,7 +9,7 @@ import type { Key } from "./Key.ts";
  *
  * Bind this operation to a {@link Key} in a Function/Action init phase.
  * Provide {@link GetKeyStringHttp}. The key string is not included on
- * `keys.get` — this is the only way to read it.
+ * `keys.get` -- this is the only way to read it.
  *
  * ### Reading the Key String
  * **Example:** Get the encrypted key string

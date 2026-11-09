@@ -3,7 +3,7 @@ import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
 
 /**
- * Runtime binding for `forecast:CreateDatasetImportJob` — start an
+ * Runtime binding for `forecast:CreateDatasetImportJob` -- start an
  * asynchronous import of training data from S3 into a Forecast dataset, the
  * standard scheduled-ingest step of a grandfathered Forecast deployment.
  * Also grants `iam:PassRole` (conditioned to `forecast.amazonaws.com`) for

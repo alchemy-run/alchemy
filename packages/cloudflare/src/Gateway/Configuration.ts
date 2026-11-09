@@ -93,7 +93,7 @@ export type ConfigurationBlockKey = keyof ConfigurationSettings;
 export interface ConfigurationProps {
   /**
    * The settings blocks to manage. Reconcile patches only the declared
-   * blocks (Cloudflare PATCH semantics — undeclared blocks are never
+   * blocks (Cloudflare PATCH semantics -- undeclared blocks are never
    * touched), and destroy restores each declared block to the value it
    * had before Alchemy first managed it.
    */
@@ -133,7 +133,7 @@ export type Configuration = Resource<
 
 /**
  * Manages the **singleton** Cloudflare Zero Trust **Gateway configuration**
- * for an account (`/accounts/{accountId}/gateway/configuration`) —
+ * for an account (`/accounts/{accountId}/gateway/configuration`) --
  * account-wide settings like activity logging, TLS decryption, the block
  * page, anti-virus scanning, and browser isolation.
  *
@@ -142,7 +142,7 @@ export type Configuration = Resource<
  * pre-management value of each managed block is captured on first touch
  * and restored on destroy (capture-and-restore). Blocks that were unset
  * before Alchemy managed them cannot be restored (Cloudflare's API has no
- * way to unset a block) — destroy leaves the last managed value and logs
+ * way to unset a block) -- destroy leaves the last managed value and logs
  * a warning.
  * ### Managing Gateway settings
  * **Example:** Enable activity logging and TLS decryption
@@ -218,7 +218,7 @@ export const ConfigurationProvider = () =>
       const observed = yield* zeroTrust.getGatewayConfiguration({
         accountId: acct,
       });
-      // The singleton always exists with account defaults — there is
+      // The singleton always exists with account defaults -- there is
       // nothing to "own", so a cold read adopts freely. The observed
       // blocks at adoption time become the restore target.
       const managed = managedKeys(olds?.settings ?? {});
@@ -232,11 +232,11 @@ export const ConfigurationProvider = () =>
       const desired = (news.settings ?? {}) as ConfigurationSettings;
       const managed = managedKeys(desired);
 
-      // 1. Observe — the singleton always exists; read its live state.
+      // 1. Observe -- the singleton always exists; read its live state.
       const observed = yield* zeroTrust.getGatewayConfiguration({ accountId });
       const observedSettings = (observed.settings ?? {}) as Record<string, unknown>;
 
-      // 2. Capture — pre-management values for every managed block,
+      // 2. Capture -- pre-management values for every managed block,
       //    restored on destroy. Blocks newly managed by this update are
       //    captured now; previously captured blocks keep their original
       //    snapshot.
@@ -245,7 +245,7 @@ export const ConfigurationProvider = () =>
         ...output?.initialSettings,
       };
 
-      // 3. Sync — patch only when a declared block diverges from the
+      // 3. Sync -- patch only when a declared block diverges from the
       //    observed state; skip the API entirely on a no-op. PATCH
       //    replaces each provided block wholly and leaves the rest alone.
       const dirty = managed.some((key) => !subsetEquals(desired[key], observedSettings[key]));
@@ -260,7 +260,7 @@ export const ConfigurationProvider = () =>
         ) as zeroTrust.PatchGatewayConfigurationRequest["settings"],
       });
 
-      // 4. Return — re-read so attrs reflect post-sync truth.
+      // 4. Return -- re-read so attrs reflect post-sync truth.
       const final = yield* zeroTrust.getGatewayConfiguration({ accountId });
       return toAttributes(accountId, final, initialSettings);
     }),
@@ -269,7 +269,7 @@ export const ConfigurationProvider = () =>
       const { accountId, initialSettings } = output;
       const managed = Object.keys(initialSettings) as ConfigurationBlockKey[];
       if (managed.length === 0) return;
-      // Observe — restore only the blocks that still diverge from their
+      // Observe -- restore only the blocks that still diverge from their
       // captured pre-management value (idempotent re-delete).
       const observed = yield* zeroTrust.getGatewayConfiguration({ accountId });
       const observedSettings = (observed.settings ?? {}) as Record<string, unknown>;
@@ -280,7 +280,7 @@ export const ConfigurationProvider = () =>
         if (deepEquals(initial ?? null, current ?? null)) continue;
         if (initial === undefined) {
           // The block was absent before we managed it. Cloudflare's PATCH
-          // ignores `null` blocks, so an absent block cannot be restored —
+          // ignores `null` blocks, so an absent block cannot be restored --
           // the last managed value is left in place.
           yield* Effect.logWarning(
             `Gateway configuration block "${key}" was unset before Alchemy managed it and cannot be restored; leaving the current value in place.`,

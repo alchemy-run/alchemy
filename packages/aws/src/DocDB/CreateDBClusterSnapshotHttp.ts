@@ -10,8 +10,8 @@ export const CreateDBClusterSnapshotHttp = Layer.effect(
     operation: docdb.createDBClusterSnapshot,
     actions: ["rds:CreateDBClusterSnapshot", "rds:AddTagsToResource"],
     // Snapshot creation authorizes against BOTH the source cluster ARN and
-    // the target snapshot ARN — widen the grant to the account's DocumentDB
-    // cluster-snapshot space (`arn:…:rds:{region}:{account}:cluster-snapshot:*`).
+    // the target snapshot ARN -- widen the grant to the account's DocumentDB
+    // cluster-snapshot space (`arn:...:rds:{region}:{account}:cluster-snapshot:*`).
     extraResources: (clusterArn) => [
       `${clusterArn.split(":").slice(0, 5).join(":")}:cluster-snapshot:*`,
     ],

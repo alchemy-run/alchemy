@@ -27,7 +27,7 @@ export type DlpJobProps = {
   /**
    * Job id (the `{dlpJob}` segment of `projects/{project}/dlpJobs/{dlpJob}`).
    * If omitted, a unique name is generated. Must match `[a-zA-Z0-9_-]+`
-   * and is at most 100 characters. Immutable — changing it replaces the
+   * and is at most 100 characters. Immutable -- changing it replaces the
    * job.
    */
   jobId?: string;
@@ -56,7 +56,7 @@ export type DlpJob = Resource<
     project: string;
     /** Job type (`INSPECT_JOB` or `RISK_ANALYSIS_JOB`). */
     type: string | undefined;
-    /** Job state (`PENDING`, `RUNNING`, `DONE`, …). */
+    /** Job state (`PENDING`, `RUNNING`, `DONE`, ...). */
     state: string | undefined;
     /** Inspect-job snapshot, if this is an inspect job. */
     inspectJob: dlp.GooglePrivacyDlpV2InspectJobConfig | undefined;
@@ -78,7 +78,7 @@ export type DlpJob = Resource<
  *
  * DLP jobs have no labels or description field. For inspect jobs Alchemy
  * stamps ownership into `storageConfig.hybridOptions.labels` so `list` /
- * nuke can find them. Jobs are not updatable — changing `jobId`,
+ * nuke can find them. Jobs are not updatable -- changing `jobId`,
  * `inspectJob`, or `riskJob` replaces the job.
  *
  * ### Creating a DLP Job

@@ -6,7 +6,7 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `ApplyPendingMaintenanceAction` operation (IAM
  * action `rds:ApplyPendingMaintenanceAction`).
  *
- * Opts a Neptune resource (by ARN) into a pending maintenance action — e.g.
+ * Opts a Neptune resource (by ARN) into a pending maintenance action -- e.g.
  * apply an engine patch during the next maintenance window, or immediately.
  * Provide the implementation with
  * `Effect.provide(AWS.Neptune.ApplyPendingMaintenanceActionHttp)`.

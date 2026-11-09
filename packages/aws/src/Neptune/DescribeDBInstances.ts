@@ -6,8 +6,8 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for the `DescribeDBInstances` operation (IAM action
  * `rds:DescribeDBInstances`).
  *
- * Lists the account's Neptune instances (or one instance by identifier) —
- * status, endpoint, instance class, cluster membership — for health checks
+ * Lists the account's Neptune instances (or one instance by identifier) --
+ * status, endpoint, instance class, cluster membership -- for health checks
  * and reader discovery. Provide the implementation with
  * `Effect.provide(AWS.Neptune.DescribeDBInstancesHttp)`.
  * ### Monitoring Clusters

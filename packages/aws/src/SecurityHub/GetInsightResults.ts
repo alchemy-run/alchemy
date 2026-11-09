@@ -6,13 +6,13 @@ import type * as Effect from "effect/Effect";
  * Runtime binding for `securityhub:GetInsightResults`.
  *
  * Returns the aggregated results of a Security Hub insight, grouped by the insight's group-by attribute.
- * Account-level operation — invoked with the caller's request as-is.
+ * Account-level operation -- invoked with the caller's request as-is.
  * Provide the implementation with
  * `Effect.provide(AWS.SecurityHub.GetInsightResultsHttp)`.
  * ### Working with Insights
  * **Example:** Read Insight Results
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const getInsightResults = yield* AWS.SecurityHub.GetInsightResults();
  *
  * // runtime

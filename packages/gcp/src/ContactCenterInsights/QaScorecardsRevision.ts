@@ -23,12 +23,12 @@ export type QaScorecardsRevisionProps = {
   /**
    * Parent QaScorecard resource name
    * (`projects/{project}/locations/{location}/qaScorecards/{qa_scorecard}`).
-   * Immutable — changing it replaces the revision.
+   * Immutable -- changing it replaces the revision.
    */
   parent: string;
   /**
    * Revision id (the `{revision}` segment). If omitted, a unique id is
-   * generated. Must match `^[a-z0-9-]{4,64}$`. Immutable — changing it
+   * generated. Must match `^[a-z0-9-]{4,64}$`. Immutable -- changing it
    * replaces the revision.
    */
   qaScorecardRevisionId?: string;
@@ -48,7 +48,7 @@ export type QaScorecardsRevision = Resource<
     location: string;
     /** Project id. */
     project: string;
-    /** Server-reported revision state (`EDITABLE`, `READY`, …). */
+    /** Server-reported revision state (`EDITABLE`, `READY`, ...). */
     state: string | undefined;
     /** Alternate ids such as `latest`. */
     alternateIds: string[];
@@ -90,7 +90,7 @@ export interface QaScorecardsRevisionLookup {
  * new revision instead of mutating the current one.
  *
  * Parent scorecard and revision id are immutable. Revisions have no
- * labels or display name — Alchemy stamps ownership into
+ * labels or display name -- Alchemy stamps ownership into
  * `snapshot.description` on create (and list also matches revisions whose
  * parent scorecard snapshot already carries an Alchemy marker). There is
  * no update API; reconcile is observe-ensure only. A `READY` revision is

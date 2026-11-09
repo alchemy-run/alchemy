@@ -21,7 +21,7 @@ export interface AddonSubscriptionProps {
   /**
    * Name of the Add On product to subscribe to (e.g. `TRENDMICRO_VSAPI`,
    * `SPAMHAUS_DBL`, `ABUSIX_MAIL_INTELLIGENCE`). Subscribing accepts the Add
-   * On's terms of use and additional pricing. Immutable — changing the name
+   * On's terms of use and additional pricing. Immutable -- changing the name
    * replaces the subscription.
    */
   addonName: string;
@@ -48,7 +48,7 @@ export interface AddonSubscription extends Resource<
 > {}
 
 /**
- * An SES Mail Manager Add On subscription — the acceptance of a third-party
+ * An SES Mail Manager Add On subscription -- the acceptance of a third-party
  * Add On's terms of use and additional pricing. An
  * {@link AddonInstance} created from the subscription is what rule sets and
  * traffic policies actually reference.
@@ -89,7 +89,7 @@ export const AddonSubscriptionProvider = () =>
         Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.AddonSubscriptions ?? [])),
       );
 
-      // Subscriptions have no user-supplied name — recover identity after a
+      // Subscriptions have no user-supplied name -- recover identity after a
       // lost state write by searching for our ownership tags.
       const findByAlchemyTags = Effect.fn(function* (id: string) {
         const subscriptions = yield* listAll;
@@ -151,7 +151,7 @@ export const AddonSubscriptionProvider = () =>
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
-        // The Add On product is create-only — changing it replaces the
+        // The Add On product is create-only -- changing it replaces the
         // subscription.
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
@@ -164,11 +164,11 @@ export const AddonSubscriptionProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — by cached id, falling back to an ownership-tag
+          // 1. OBSERVE -- by cached id, falling back to an ownership-tag
           //    search.
           let subscription = yield* observe(id, output);
 
-          // 2. ENSURE — create if missing; a Conflict (already subscribed)
+          // 2. ENSURE -- create if missing; a Conflict (already subscribed)
           //    re-observes via the tag search.
           if (subscription === undefined) {
             yield* session.note(`subscribing to Add On ${news.addonName}`);
@@ -196,7 +196,7 @@ export const AddonSubscriptionProvider = () =>
             });
           }
 
-          // 3. SYNC — only tags are mutable.
+          // 3. SYNC -- only tags are mutable.
           yield* syncMailManagerTags(attrs.addonSubscriptionArn, desiredTags);
 
           yield* session.note(attrs.addonSubscriptionId);
@@ -204,7 +204,7 @@ export const AddonSubscriptionProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          // DeleteAddonSubscription is natively idempotent — deleting a
+          // DeleteAddonSubscription is natively idempotent -- deleting a
           // nonexistent subscription succeeds (verified live).
           yield* mm
             .deleteAddonSubscription({

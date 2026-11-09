@@ -5,7 +5,7 @@ import type { ResourceLike } from "alchemy/Resource";
 /**
  * Shared HTTP-binding scaffolding for AppConfig capabilities.
  *
- * INTERNAL — deliberately NOT exported from `index.ts`. Each `{Op}Http.ts`
+ * INTERNAL -- deliberately NOT exported from `index.ts`. Each `{Op}Http.ts`
  * is a thin call to {@link makeAppConfigHttpBinding}; everything except the
  * operation, the identifier resolvers, and the IAM grant is boilerplate:
  * resolve the bound resources' identifiers (which also registers them on the
@@ -69,7 +69,7 @@ export const makeAppConfigHttpBinding = <
         const { identifiers, iam } = options.spec(...args);
         const label = (args as ResourceLike[]).map((arg) => arg.LogicalId).join(", ");
 
-        // Outputs yield DEFERRED effects — resolving them here registers the
+        // Outputs yield DEFERRED effects -- resolving them here registers the
         // attributes on the host environment; re-yield per invocation below.
         const resolved: [string, Effect.Effect<string>][] = [];
         for (const [key, output] of Object.entries(identifiers)) {

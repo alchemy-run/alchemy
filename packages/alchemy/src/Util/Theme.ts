@@ -40,38 +40,38 @@ export const theme = {
     error: color.danger,
   },
   glyph: {
-    section: "●",
+    section: "\u25cf",
     /**
-     * Marks the step currently being answered — the same "active one" glyph
+     * Marks the step currently being answered -- the same "active one" glyph
      * the profile tabs use. Deliberately not a chevron so the list cursor
      * (`pointer`) is the only chevron on screen.
      */
-    active: "◆",
+    active: "\u25c6",
     /** List cursor: the one focus glyph shared by every prompt and dashboard row. */
-    pointer: "❯",
-    success: "✓",
+    pointer: "\u276f",
+    success: "\u2713",
     warning: "!",
     error: "×",
-    info: "•",
-    selected: "◆",
+    info: "\u2022",
+    selected: "\u25c6",
     unselected: "·",
-    checked: "✓",
+    checked: "\u2713",
     unchecked: "·",
     add: "+",
     adopt: "(+)",
     edit: "~",
-    refresh: "↻",
+    refresh: "\u21bb",
     delete: "-",
     orphan: "(-)",
-    replace: "↔",
-    run: "▶",
-    bar: "┊",
-    mask: "•",
+    replace: "\u2194",
+    run: "\u25b6",
+    bar: "\u250a",
+    mask: "\u2022",
     bullet: "·",
-    overflowUp: "↑",
-    overflowDown: "↓",
-    overflowLeft: "‹",
-    overflowRight: "›",
+    overflowUp: "\u2191",
+    overflowDown: "\u2193",
+    overflowLeft: "\u2039",
+    overflowRight: "\u203a",
   },
   /**
    * Key-hint labels for KeyBar footers. Resolve through `useKeyGlyphs()`
@@ -79,9 +79,9 @@ export const theme = {
    * instead of mojibake.
    */
   keyHint: {
-    enter: "↩",
-    upDown: "↑/↓",
-    leftRight: "←/→",
+    enter: "\u21a9",
+    upDown: "\u2191/\u2193",
+    leftRight: "\u2190/\u2192",
     escape: "esc",
     space: "space",
     tab: "tab",
@@ -123,7 +123,18 @@ export const asciiGlyphs: { readonly [Key in GlyphName]: string } = {
 
 export const glyphsFor = (unicode: boolean) => (unicode ? theme.glyph : asciiGlyphs);
 
-const spinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"] as const;
+const spinnerFrames = [
+  "\u280b",
+  "\u2819",
+  "\u2839",
+  "\u2838",
+  "\u283c",
+  "\u2834",
+  "\u2826",
+  "\u2827",
+  "\u2807",
+  "\u280f",
+] as const;
 const asciiSpinnerFrames = ["-", "\\", "|", "/"] as const;
 
 export const spinnerFramesFor = (unicode: boolean): readonly string[] =>

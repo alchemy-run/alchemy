@@ -5,14 +5,14 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `organizations:DescribeHandshake`.
  *
- * Returns the details and current state of a handshake — accepted, declined, or canceled handshakes stay readable for 30 days.
- * Account-level operation — Organizations is a management-account-scoped
+ * Returns the details and current state of a handshake -- accepted, declined, or canceled handshakes stay readable for 30 days.
+ * Account-level operation -- Organizations is a management-account-scoped
  * global service, so the binding takes no resource argument. Provide the
  * implementation with `Effect.provide(AWS.Organizations.DescribeHandshakeHttp)`.
  * ### Handshakes & Invitations
  * **Example:** Read a Handshake
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const describeHandshake = yield* AWS.Organizations.DescribeHandshake();
  *
  * // runtime

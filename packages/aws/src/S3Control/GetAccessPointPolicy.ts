@@ -13,7 +13,7 @@ import type { AccessPoint } from "./AccessPoint.ts";
  * ### Observing an Access Point
  * **Example:** Read the Access Point's Policy
  * ```typescript
- * // init — bind the operation to the access point
+ * // init -- bind the operation to the access point
  * const getPolicy = yield* AWS.S3Control.GetAccessPointPolicy(accessPoint);
  *
  * // runtime

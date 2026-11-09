@@ -8,10 +8,10 @@ import * as Schedule from "effect/Schedule";
 /**
  * Scope of a WAFv2 resource.
  *
- * - `REGIONAL` — protects regional resources (ALB, API Gateway, AppSync,
+ * - `REGIONAL` -- protects regional resources (ALB, API Gateway, AppSync,
  *   Cognito user pool, App Runner, Verified Access) and follows the ambient
  *   AWS region.
- * - `CLOUDFRONT` — protects CloudFront distributions and must live in
+ * - `CLOUDFRONT` -- protects CloudFront distributions and must live in
  *   `us-east-1`; the providers pin the region automatically.
  */
 export type WafScope = "REGIONAL" | "CLOUDFRONT";
@@ -58,9 +58,9 @@ export const retryOptimisticLock = <A, E extends { _tag: string }, R>(
 
 /**
  * WAF changes take "a few seconds to a number of minutes" to propagate.
- * A freshly created web ACL (or rule group) referenced by another call —
+ * A freshly created web ACL (or rule group) referenced by another call --
  * or a freshly created protected resource (e.g. a Cognito user pool) that
- * WAF cannot "retrieve" yet — surfaces `WAFUnavailableEntityException`
+ * WAF cannot "retrieve" yet -- surfaces `WAFUnavailableEntityException`
  * until propagation completes. Retry it on a bounded schedule (~90s
  * total); fresh Cognito user pools routinely need more than 40s.
  *
@@ -77,8 +77,8 @@ export const retryUnavailableEntity = <A, E extends { _tag: string }, R>(
 /**
  * Like {@link retryUnavailableEntity} but with a ~150s budget. Associating
  * a web ACL with a freshly created protected resource (Cognito user pool,
- * ALB, …) surfaces `WAFUnavailableEntityException` until the resource
- * propagates to WAF — observed to routinely exceed 90s for new Cognito
+ * ALB, ...) surfaces `WAFUnavailableEntityException` until the resource
+ * propagates to WAF -- observed to routinely exceed 90s for new Cognito
  * user pools (Terraform retries this for 5 minutes).
  *
  * @internal
@@ -202,7 +202,7 @@ const toSearchString = (value: unknown): Uint8Array => {
     return Uint8Array.from(value as number[]);
   }
   if (value !== null && typeof value === "object") {
-    // Index-keyed object — integer keys iterate in ascending order.
+    // Index-keyed object -- integer keys iterate in ascending order.
     return Uint8Array.from(Object.values(value as Record<string, number>));
   }
   return new Uint8Array();

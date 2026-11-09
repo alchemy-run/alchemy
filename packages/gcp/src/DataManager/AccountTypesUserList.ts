@@ -36,24 +36,24 @@ import {
 export type AccountTypesUserListProps = {
   /**
    * Parent account. Full name
-   * `accountTypes/{accountType}/accounts/{account}`. Immutable —
+   * `accountTypes/{accountType}/accounts/{account}`. Immutable --
    * changing it replaces the user list. If omitted, constructed from
    * `accountType` and `account`.
    */
   parent?: string;
   /**
-   * Product account type (`GOOGLE_ADS`, `DISPLAY_VIDEO_ADVERTISER`, …).
+   * Product account type (`GOOGLE_ADS`, `DISPLAY_VIDEO_ADVERTISER`, ...).
    * Used with `account` when `parent` is omitted. Immutable.
    * @default "GOOGLE_ADS"
    */
   accountType?: AccountType;
   /**
    * Destination account id (Google Ads customer id, DV360 advertiser
-   * id, …). Used with `accountType` when `parent` is omitted. Immutable.
+   * id, ...). Used with `accountType` when `parent` is omitted. Immutable.
    */
   account?: string;
   /**
-   * Server-assigned user list id (last path segment). Immutable —
+   * Server-assigned user list id (last path segment). Immutable --
    * changing it replaces the user list.
    */
   userListId?: string;
@@ -91,7 +91,7 @@ export type AccountTypesUserListProps = {
   targetNetworkInfo?: TargetNetworkInfoProps;
   /**
    * Ingested (Customer Match) list configuration. `uploadKeyTypes` is
-   * immutable — changing it replaces the list.
+   * immutable -- changing it replaces the list.
    * @default { uploadKeyTypes: ["CONTACT_ID"] }
    */
   ingestedUserListInfo?: IngestedUserListInfoProps;
@@ -149,7 +149,7 @@ export type AccountTypesUserList = Resource<
  * User lists have no labels field and their text is shown in the ads
  * product, so Alchemy writes no ownership marker: it tracks the list by
  * name, or by the generated display name. Parent account and user list id are
- * identity — changing either replaces the list. `uploadKeyTypes` on
+ * identity -- changing either replaces the list. `uploadKeyTypes` on
  * `ingestedUserListInfo` is immutable. Display name, description,
  * membership, and targeting update in place. Creating a list requires a
  * Google Ads, DV360, or data-partner account the credentials can write.

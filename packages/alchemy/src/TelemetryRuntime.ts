@@ -20,7 +20,7 @@ import { unpackEnvValue } from "./RuntimeContext.ts";
  * The shape of the {@link Telemetry} reference: a Layer of telemetry
  * exporters (tracer, loggers, metrics) built once per event into the
  * event's request scope. Requirements are satisfied from the runtime's
- * isolate context (`HttpClient`, `ConfigProvider`, …).
+ * isolate context (`HttpClient`, `ConfigProvider`, ...).
  */
 export type TelemetryLayer = Layer.Layer<never, any, any>;
 
@@ -28,7 +28,7 @@ export type TelemetryLayer = Layer.Layer<never, any, any>;
  * Read one bound value back at runtime. `rc.set` packs values for the env
  * var wire (plain values JSON-stringified, `Redacted` as a marker routed
  * through the secret channel), so the raw env string must be unpacked with
- * {@link unpackEnvValue} — it handles all three shapes (packed JSON,
+ * {@link unpackEnvValue} -- it handles all three shapes (packed JSON,
  * Redacted marker, and a raw string set directly in the environment).
  */
 const readBoundValue = (key: string): Effect.Effect<unknown> =>
@@ -123,7 +123,7 @@ export interface ResolvedSignal {
 }
 
 /**
- * One export destination in the bound list — the resolved form of one
+ * One export destination in the bound list -- the resolved form of one
  * {@link layerOtlp} layer.
  */
 export interface ResolvedDestination {
@@ -135,7 +135,7 @@ export interface ResolvedDestination {
 /**
  * The single env binding carrying every configured destination as a JSON
  * array of {@link ResolvedDestination}. One key (instead of per-signal
- * keys) is what lets multiple `layerOtlp` layers compose — each layer
+ * keys) is what lets multiple `layerOtlp` layers compose -- each layer
  * build appends its destination and rebinds the full list.
  */
 export const EXPORTERS_KEY = "ALCHEMY_OTEL_EXPORTERS";
@@ -143,7 +143,7 @@ export const EXPORTERS_KEY = "ALCHEMY_OTEL_EXPORTERS";
 /**
  * Resolve one signal's endpoint + headers from the standard OpenTelemetry
  * env vars (`OTEL_EXPORTER_OTLP_{SIGNAL}_ENDPOINT` as-is, or the base
- * endpoint with `/v1/{signal}` appended; headers per-signal → base). This
+ * endpoint with `/v1/{signal}` appended; headers per-signal -> base). This
  * forms an *implicit extra destination*, so platform-injected OTLP config
  * exports without any layer.
  */
@@ -169,7 +169,7 @@ const signalConfig = (signal: "TRACES" | "LOGS" | "METRICS", base: string | unde
  * Sentinel URLs the single exporter set posts to; the fanout client
  * rewrites each POST to every configured destination for that signal.
  * Serializing once through one exporter per signal is what keeps span ids
- * consistent across destinations — Effect has a single `Tracer` service,
+ * consistent across destinations -- Effect has a single `Tracer` service,
  * so per-destination tracers would generate divergent trace ids.
  */
 const SENTINEL = {
@@ -349,7 +349,7 @@ const makeExporterLayer = (options?: {
  *
  * The periodic export intervals are effectively disabled: the exporter is
  * built per event and the request-scope flush delivers everything. An
- * interval export firing mid-event would race the scope close — the close
+ * interval export firing mid-event would race the scope close -- the close
  * interrupts the exporter's in-flight batch (already spliced out of the
  * buffer), silently dropping it. Lambda invocations regularly outlive the
  * 1-second logger interval, which is exactly how this was discovered.
@@ -374,7 +374,7 @@ const fromBoundConfigProcess: TelemetryLayer = makeExporterLayer();
 /**
  * The per-event telemetry exporters, as a `Context.Reference` holding the
  * Layer the runtime bridges build into every event's request scope.
- * Provide it via {@link layerOtlp} / {@link layer} rather than directly —
+ * Provide it via {@link layerOtlp} / {@link layer} rather than directly --
  * see the module documentation.
  */
 export const Telemetry = Context.Reference<TelemetryLayer>("alchemy/Telemetry", {
@@ -389,8 +389,8 @@ const reference = Telemetry;
  * event's handler effect.
  *
  * Called by the runtime bridges (Worker, Durable Object, Workflow, Lambda)
- * once per event. Building into the *request* scope — not the
- * never-finalized isolate scope — is what makes export work on workerd:
+ * once per event. Building into the *request* scope -- not the
+ * never-finalized isolate scope -- is what makes export work on workerd:
  * the batching fiber lives inside the event's I/O context and the final
  * flush runs from the scope's finalizer, which the bridges register with
  * `ctx.waitUntil`.
@@ -400,12 +400,12 @@ const reference = Telemetry;
  *
  * `override` is the (possibly merged) custom Layer registered on the
  * runtime context by {@link layer} during init. It composes with
- * — rather than replaces — the bound OTLP destinations: loggers and metric
+ * -- rather than replaces -- the bound OTLP destinations: loggers and metric
  * exporters merge, and a custom `Tracer` (a single Effect service) wins
  * over the built-in one.
  *
  * Declared `R = never`: the Layer's actual requirements (`HttpClient`,
- * `ConfigProvider`, …) are satisfied at runtime by the bridge's surrounding
+ * `ConfigProvider`, ...) are satisfied at runtime by the bridge's surrounding
  * `Effect.provide` of the built runtime context.
  */
 export const buildEventTelemetry = (

@@ -5,14 +5,14 @@ import type * as Effect from "effect/Effect";
 /**
  * Runtime binding for `fis:ListExperimentResolvedTargets`.
  *
- * Lists the concrete resources an experiment's targets resolved to — the
- * exact instances, tasks, or functions the faults were injected into — so a
+ * Lists the concrete resources an experiment's targets resolved to -- the
+ * exact instances, tasks, or functions the faults were injected into -- so a
  * post-run report can name the blast radius. Provide the implementation with
  * `Effect.provide(AWS.FIS.ListExperimentResolvedTargetsHttp)`.
  * ### Running Experiments
  * **Example:** Report an Experiment's Blast Radius
  * ```typescript
- * // init — account-level binding, no resource argument
+ * // init -- account-level binding, no resource argument
  * const listResolvedTargets = yield* AWS.FIS.ListExperimentResolvedTargets();
  *
  * // runtime

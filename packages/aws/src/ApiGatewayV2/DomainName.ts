@@ -170,7 +170,7 @@ export const DomainNameProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
 
-          // 1. OBSERVE — the domain name is the natural key.
+          // 1. OBSERVE -- the domain name is the natural key.
           let observed = yield* getDomainSafe(name);
 
           // 2. ENSURE
@@ -188,7 +188,7 @@ export const DomainNameProvider = () =>
           }
           const snapshot = snapshotFromDomain(observed);
 
-          // 3. SYNC — updateDomainName converges certificate/mTLS config.
+          // 3. SYNC -- updateDomainName converges certificate/mTLS config.
           const desiredCerts = (news.domainNameConfigurations ?? []).map((config) => ({
             CertificateArn: config.CertificateArn,
             EndpointType: config.EndpointType,
@@ -215,7 +215,7 @@ export const DomainNameProvider = () =>
             yield* session.note(`Updated domain name ${name}`);
           }
 
-          // 3b. SYNC TAGS — diff against OBSERVED cloud tags.
+          // 3b. SYNC TAGS -- diff against OBSERVED cloud tags.
           if (!deepEqual(snapshot.tags, desiredTags)) {
             yield* syncTags({
               resourceArn: snapshot.domainNameArn ?? domainNameArn(region, name),

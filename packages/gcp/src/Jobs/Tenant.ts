@@ -30,13 +30,13 @@ export type TenantProps = {
   /**
    * Server-assigned tenant id (the `{tenant}` segment of
    * `projects/{project}/tenants/{tenant}`). Leave blank on create.
-   * Immutable — changing it replaces the tenant.
+   * Immutable -- changing it replaces the tenant.
    */
   tenantId?: string;
   /**
    * Client-side tenant identifier (max 255 characters). Cloud Talent
    * tenants have no labels field, so Alchemy ownership is stored in a
-   * `[alchemy …]` prefix and stripped from attributes.
+   * `[alchemy ...]` prefix and stripped from attributes.
    */
   externalId?: string;
 };
@@ -64,7 +64,7 @@ export type Tenant = Resource<
  *
  * Tenants have no labels field, so Alchemy stamps ownership into
  * `externalId` for `list` / nuke. The server-assigned tenant id is
- * identity — changing `tenantId` replaces the tenant. `externalId`
+ * identity -- changing `tenantId` replaces the tenant. `externalId`
  * updates in place.
  *
  * ### Creating a Tenant

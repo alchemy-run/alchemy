@@ -172,8 +172,8 @@ export const projectNumberOf = (project: string) =>
   );
 
 /**
- * The Cloud Asset service agent (`service-{number}@gcp-sa-cloudasset…`) is
- * created lazily by Google — on a fresh project it does not exist until
+ * The Cloud Asset service agent (`service-{number}@gcp-sa-cloudasset...`) is
+ * created lazily by Google -- on a fresh project it does not exist until
  * something asks for it, and granting it a role fails with
  * `IamMemberNotFound`. Generating the identity is idempotent.
  */

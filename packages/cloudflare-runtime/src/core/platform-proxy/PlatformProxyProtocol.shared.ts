@@ -6,15 +6,15 @@
  * The protocol is a deliberately small "magic proxy" (in the spirit of
  * Miniflare's proxy client, reimplemented on our runtime):
  *
- * - `GET  /cdn-cgi/platform-proxy/env` — describe the worker's `env`:
+ * - `GET  /cdn-cgi/platform-proxy/env` -- describe the worker's `env`:
  *   plain values are serialised inline, everything else is a stub.
- * - `POST /cdn-cgi/platform-proxy/call` — evaluate a method chain against a
+ * - `POST /cdn-cgi/platform-proxy/call` -- evaluate a method chain against a
  *   binding (e.g. `KV.get("key")`, `DO.get(DO.idFromName("a")).increment()`)
  *   and serialise the final result back.
- * - `*    /cdn-cgi/platform-proxy/fetch` — raw HTTP passthrough to a
+ * - `*    /cdn-cgi/platform-proxy/fetch` -- raw HTTP passthrough to a
  *   `fetch`-capable target (service bindings, Durable Object stubs) so
  *   request/response bodies stream natively.
- * - `POST /cdn-cgi/platform-proxy/cache/{match|put|delete}` — a small
+ * - `POST /cdn-cgi/platform-proxy/cache/{match|put|delete}` -- a small
  *   in-memory Cache API emulation hosted by the proxy worker.
  *
  * Values crossing the boundary use the fully-tagged {@link EncodedValue}
@@ -77,7 +77,7 @@ export type EncodedValue =
   /**
    * An `R2Object` / `R2ObjectBody` (rich class instances the generic object
    * rules reject). Fields are the plain data properties (key, etag, size,
-   * uploaded, httpMetadata, …); `body` carries a `get` result's content so
+   * uploaded, httpMetadata, ...); `body` carries a `get` result's content so
    * the Node side can rehydrate the body stream and its buffering
    * accessors.
    */

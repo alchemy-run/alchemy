@@ -26,7 +26,7 @@ export interface StreamProps {
   /**
    * ARN of the Amazon Kinesis data stream that receives the change records.
    * Must be in the same account and region as the cluster. Configure the
-   * Kinesis stream with `maxRecordSizeInKiB: 10240` — CDC records can
+   * Kinesis stream with `maxRecordSizeInKiB: 10240` -- CDC records can
    * approach 10 MiB and an undersized stream becomes `IMPAIRED` with
    * `KINESIS_OVERSIZE_RECORD`. Changing the target replaces the stream.
    */
@@ -41,7 +41,7 @@ export interface StreamProps {
    */
   roleArn: string;
   /**
-   * Record ordering guarantee. Only `UNORDERED` is currently supported —
+   * Record ordering guarantee. Only `UNORDERED` is currently supported --
    * consumers deduplicate and order by `source.ts_ns`.
    * @default "UNORDERED"
    */
@@ -83,13 +83,13 @@ export interface Stream extends Resource<
 > {}
 
 /**
- * A change data capture (CDC) stream on an Aurora DSQL cluster — delivers
+ * A change data capture (CDC) stream on an Aurora DSQL cluster -- delivers
  * committed row-level changes (Debezium-shaped JSON envelopes) to an Amazon
  * Kinesis data stream.
  *
  * Creation is asynchronous (`CREATING` -> `ACTIVE`, typically one to three
  * minutes); the provider waits for `ACTIVE` (bounded) before returning. A
- * stream has no update operation — every property except tags replaces it.
+ * stream has no update operation -- every property except tags replaces it.
  *
  * Functions consume the change records through the existing Kinesis event
  * source on the **target** stream; DSQL itself never invokes compute
@@ -165,7 +165,7 @@ export const StreamProvider = () =>
           .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
-      // Bounded readiness wait — stream creation typically completes in one
+      // Bounded readiness wait -- stream creation typically completes in one
       // to three minutes; budget 5 min (60 x 5s). FAILED is terminal.
       const waitForActive = Effect.fn(function* (
         clusterIdentifier: string,
@@ -214,7 +214,7 @@ export const StreamProvider = () =>
 
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
-          // There is no UpdateStream — everything except tags replaces.
+          // There is no UpdateStream -- everything except tags replaces.
           if (
             news.clusterId !== olds?.clusterId ||
             news.kinesisStreamArn !== olds?.kinesisStreamArn ||
@@ -246,13 +246,13 @@ export const StreamProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...props.tags };
 
-          // 1. Observe — cloud state is authoritative; output caches the id.
+          // 1. Observe -- cloud state is authoritative; output caches the id.
           let observed =
             output?.streamId === undefined
               ? undefined
               : yield* readStream(output.clusterId, output.streamId);
 
-          // 2. Ensure — create if missing. DSQL assigns the identifier.
+          // 2. Ensure -- create if missing. DSQL assigns the identifier.
           let streamId = observed?.streamIdentifier ?? output?.streamId;
           if (observed === undefined) {
             const created = yield* dsql
@@ -288,7 +288,7 @@ export const StreamProvider = () =>
           // Wait for ACTIVE so consumers observe a delivering stream.
           observed = yield* waitForActive(props.clusterId, streamId!);
 
-          // 3. Sync tags — diff against OBSERVED cloud tags.
+          // 3. Sync tags -- diff against OBSERVED cloud tags.
           const observedTags = Object.fromEntries(
             Object.entries(observed.tags ?? {}).filter(
               (entry): entry is [string, string] => typeof entry[1] === "string",
@@ -343,7 +343,7 @@ export const StreamProvider = () =>
               while: (e): boolean => e instanceof Error,
               schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(36)]),
             }),
-            // Best-effort — deletion continues server-side either way.
+            // Best-effort -- deletion continues server-side either way.
             Effect.ignore,
           );
         }),

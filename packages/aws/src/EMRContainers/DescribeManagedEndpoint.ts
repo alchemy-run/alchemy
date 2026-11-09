@@ -7,7 +7,7 @@ import type { VirtualCluster } from "./VirtualCluster.ts";
  * Runtime binding for `emr-containers:DescribeManagedEndpoint`.
  *
  * Reads a managed endpoint (the EMR Studio gateway) on the bound
- * {@link VirtualCluster} — its state, server URL, and security group. The
+ * {@link VirtualCluster} -- its state, server URL, and security group. The
  * virtual cluster ID is injected from the binding; pass the endpoint `id`.
  * Provide the implementation with
  * `Effect.provide(AWS.EMRContainers.DescribeManagedEndpointHttp)`.

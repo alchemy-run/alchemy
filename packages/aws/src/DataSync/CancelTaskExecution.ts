@@ -6,7 +6,7 @@ import type { Task } from "./Task.ts";
 /**
  * Runtime binding for `datasync:CancelTaskExecution`.
  *
- * Stops a queued or in-flight execution of the bound {@link Task} — e.g. a
+ * Stops a queued or in-flight execution of the bound {@link Task} -- e.g. a
  * kill switch when a transfer was started by mistake or is saturating a
  * link. Address the execution with the ARN returned by
  * `StartTaskExecution`; access is granted on the bound task's executions.
@@ -15,7 +15,7 @@ import type { Task } from "./Task.ts";
  * ### Running Transfers
  * **Example:** Cancel A Transfer
  * ```typescript
- * // init — bind the operation to the task
+ * // init -- bind the operation to the task
  * const cancelTaskExecution = yield* AWS.DataSync.CancelTaskExecution(task);
  *
  * // runtime

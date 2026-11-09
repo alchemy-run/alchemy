@@ -176,7 +176,7 @@ export const SubscriptionProvider = () =>
       const endpoint = news.endpoint as string | undefined;
       const desiredAttributes = toAttributeMap(news.attributes);
 
-      // Observe — derive the live SubscriptionArn. We can't trust a
+      // Observe -- derive the live SubscriptionArn. We can't trust a
       // pending-confirmation ARN from `output`, since the user may have
       // confirmed it out of band. Cached ARN is preferred when concrete;
       // otherwise we list-and-match by (topicArn, protocol, endpoint).
@@ -203,7 +203,7 @@ export const SubscriptionProvider = () =>
         });
       }
 
-      // Ensure — subscribe if no live subscription matches.
+      // Ensure -- subscribe if no live subscription matches.
       if (!subscriptionArn) {
         const response = yield* sns.subscribe({
           TopicArn: topicArn,
@@ -228,7 +228,7 @@ export const SubscriptionProvider = () =>
         };
       }
 
-      // Sync attributes — fetch observed cloud attributes (FilterPolicy,
+      // Sync attributes -- fetch observed cloud attributes (FilterPolicy,
       // RawMessageDelivery, etc.) and apply only the delta. We can only
       // do this once the subscription is confirmed (pending confirmation
       // returns no real ARN to mutate against).
@@ -285,7 +285,7 @@ export const SubscriptionProvider = () =>
             protocol: output.protocol ?? olds.protocol,
             endpoint: (output.endpoint ?? olds.endpoint) as string | undefined,
           }).pipe(
-            // The topic is already gone — SNS drops its subscriptions with
+            // The topic is already gone -- SNS drops its subscriptions with
             // it, so there is nothing left to unsubscribe.
             Effect.catchTag("NotFoundException", () => Effect.undefined),
           )
@@ -362,7 +362,7 @@ const readSubscription = Effect.fn(function* ({
   if (subscriptionArn && !isPendingConfirmation(subscriptionArn)) {
     resolvedSubscriptionArn = subscriptionArn;
   } else {
-    // No concrete ARN to hydrate — list the topic's subscriptions and match
+    // No concrete ARN to hydrate -- list the topic's subscriptions and match
     // by (protocol, endpoint). If the topic itself no longer exists (deleted
     // out of band, or by an interrupted destroy that committed the topic's
     // state row late) then the subscription is gone too: report "missing"

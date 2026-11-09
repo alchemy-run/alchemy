@@ -12,7 +12,7 @@ import type { SearchNamespace } from "./SearchNamespace.ts";
  * whose `.get(name)` selects an instance within the namespace at runtime.
  *
  * `QuerySearchNamespace` is a single identifier that is simultaneously the binding's
- * Context tag, its type, and the callable —
+ * Context tag, its type, and the callable --
  * `yield* Cloudflare.AI.QuerySearchNamespace(namespace)`.
  *
  * Provide {@link QuerySearchNamespaceBinding} in the Worker's runtime layer.

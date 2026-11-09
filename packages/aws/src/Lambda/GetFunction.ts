@@ -8,7 +8,7 @@ export interface GetFunctionRequest extends Omit<Lambda.GetFunctionRequest, "Fun
 /**
  * Runtime binding for `lambda:GetFunction`.
  *
- * Reads the bound {@link Function}'s configuration, code location, and tags —
+ * Reads the bound {@link Function}'s configuration, code location, and tags --
  * useful for introspection and operational tooling at runtime. Provide the
  * `GetFunctionHttp` layer on the Function to satisfy the binding.
  * ### Function Metadata

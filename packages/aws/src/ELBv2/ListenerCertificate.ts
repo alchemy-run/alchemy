@@ -64,7 +64,7 @@ export const ListenerCertificateProvider = () =>
     stables: ["listenerArn", "certificateArn"],
     diff: Effect.fn(function* ({ olds, news }) {
       if (!isResolved(news)) return;
-      // Existence-only resource — both identity props force replacement.
+      // Existence-only resource -- both identity props force replacement.
       if (olds.listenerArn !== news.listenerArn || olds.certificateArn !== news.certificateArn) {
         return { action: "replace" } as const;
       }
@@ -137,7 +137,7 @@ export const ListenerCertificateProvider = () =>
     reconcile: Effect.fn(function* ({ news, session }) {
       const listenerArn = news.listenerArn as ListenerArn;
 
-      // Observe — is the certificate already attached?
+      // Observe -- is the certificate already attached?
       const attached = yield* elbv2.describeListenerCertificates
         .items({ ListenerArn: listenerArn })
         .pipe(
@@ -146,7 +146,7 @@ export const ListenerCertificateProvider = () =>
           Effect.map(Option.isSome),
         );
 
-      // Ensure — the API is an idempotent add, but skip the call on no-op.
+      // Ensure -- the API is an idempotent add, but skip the call on no-op.
       if (!attached) {
         yield* elbv2.addListenerCertificates({
           ListenerArn: listenerArn,

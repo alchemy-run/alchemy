@@ -6,8 +6,8 @@ import type { Adapter } from "./Adapter.ts";
 /**
  * Shared HTTP scaffolding for the Textract runtime bindings.
  *
- * NOT exported from `index.ts` — every `{Op}Http.ts` in this service is a
- * thin `Layer.effect(Cap, make…HttpBinding({ … }))` over one of the two
+ * NOT exported from `index.ts` -- every `{Op}Http.ts` in this service is a
+ * thin `Layer.effect(Cap, make...HttpBinding({ ... }))` over one of the two
  * builders below. Everything except the operation and the IAM action is
  * boilerplate.
  *

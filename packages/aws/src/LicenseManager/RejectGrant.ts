@@ -8,7 +8,7 @@ import type * as Effect from "effect/Effect";
 export interface RejectGrantRequest extends licensemanager.RejectGrantRequest {}
 
 /**
- * Runtime binding for `license-manager:RejectGrant` — reject a license
+ * Runtime binding for `license-manager:RejectGrant` -- reject a license
  * grant that another account distributed to this account.
  *
  * Provide the implementation with

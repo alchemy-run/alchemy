@@ -36,7 +36,7 @@ import * as Schema from "effect/Schema";
 export const BOAT_AUTH_PROVIDER_NAME = "Boat";
 
 /**
- * A Boat profile entry. Both methods store a Boat API key (`boat_…`):
+ * A Boat profile entry. Both methods store a Boat API key (`boat_...`):
  *
  * - `browser`: Boat's agent sign-in (https://boat.dev/auth.md). You sign in
  *   to boat.dev with GitHub, Google or an email code, type the code Alchemy
@@ -80,7 +80,8 @@ const keyFields: ReadonlyArray<ConfigureField> = [
     label: "Boat API key",
     description: "Create one with `boat api-keys create` or at https://boat.dev/dashboard.",
     secret: true,
-    validate: (value) => (value.trim().startsWith("boat_") ? undefined : "Expected a boat_… key"),
+    validate: (value) =>
+      value.trim().startsWith("boat_") ? undefined : "Expected a boat_\u2026 key",
   },
 ];
 
@@ -269,12 +270,12 @@ export const BoatAuth = AuthProviderLayer<BoatAuthConfig, BoatResolvedCredential
           {
             value: "browser" as const,
             label: "Browser sign-in",
-            description: "recommended — sign in on boat.dev with GitHub, Google or email",
+            description: "recommended \u2014 sign in on boat.dev with GitHub, Google or email",
           },
           {
             value: "stored" as const,
             label: "API key",
-            description: "paste a boat_… key",
+            description: "paste a boat_\u2026 key",
           },
         ],
       }).pipe(
@@ -364,7 +365,7 @@ export const BoatAuth = AuthProviderLayer<BoatAuthConfig, BoatResolvedCredential
           name: "BOAT_API_KEY",
           required: true,
           secret: true,
-          description: "Boat API key (`boat_…`).",
+          description: "Boat API key (`boat_\u2026`).",
         },
         {
           name: "BOAT_API_BASE_URL",

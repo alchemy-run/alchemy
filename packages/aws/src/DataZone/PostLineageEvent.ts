@@ -17,7 +17,7 @@ export interface PostLineageEventRequest extends Omit<
  * ### Data Lineage
  * **Example:** Emit a Lineage Event
  * ```typescript
- * // init — bind the operation to the domain
+ * // init -- bind the operation to the domain
  * const postLineageEvent = yield* AWS.DataZone.PostLineageEvent(domain);
  *
  * // runtime

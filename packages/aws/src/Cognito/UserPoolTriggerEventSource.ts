@@ -26,7 +26,7 @@ export type UserPoolTriggerEvent<T extends UserPoolTriggerName> = UserPoolTrigge
 /**
  * The `triggerSource` prefix Cognito stamps on invocations of each trigger
  * slot (e.g. `PreSignUp` fires with `PreSignUp_SignUp`,
- * `PreSignUp_AdminCreateUser`, …; `PreTokenGeneration` fires with
+ * `PreSignUp_AdminCreateUser`, ...; `PreTokenGeneration` fires with
  * `TokenGeneration_*`). Used by the runtime dispatcher to route events to
  * the registered handler.
  */
@@ -138,7 +138,7 @@ export function onUserPoolTrigger<T extends UserPoolTriggerName, Req = never>(
 }
 
 /**
- * Handle the `PreSignUp` trigger — runs before Cognito registers a new
+ * Handle the `PreSignUp` trigger -- runs before Cognito registers a new
  * user; the handler can auto-confirm the user (see
  * {@link autoConfirmUser}) or reject the sign-up.
  */
@@ -148,7 +148,7 @@ export const onPreSignUp = <Req = never>(
 ) => onUserPoolTrigger(userPool, { trigger: "PreSignUp" }, handler);
 
 /**
- * Handle the `PostConfirmation` trigger — runs after a user confirms their
+ * Handle the `PostConfirmation` trigger -- runs after a user confirms their
  * account (welcome emails, provisioning rows, analytics).
  */
 export const onPostConfirmation = <Req = never>(
@@ -157,7 +157,7 @@ export const onPostConfirmation = <Req = never>(
 ) => onUserPoolTrigger(userPool, { trigger: "PostConfirmation" }, handler);
 
 /**
- * Handle the `PreTokenGeneration` trigger — runs before Cognito issues
+ * Handle the `PreTokenGeneration` trigger -- runs before Cognito issues
  * tokens; the handler can add, override, or suppress claims via
  * `event.response.claimsOverrideDetails`.
  */
@@ -167,7 +167,7 @@ export const onPreTokenGeneration = <Req = never>(
 ) => onUserPoolTrigger(userPool, { trigger: "PreTokenGeneration" }, handler);
 
 /**
- * Handle the `CustomMessage` trigger — customizes the verification /
+ * Handle the `CustomMessage` trigger -- customizes the verification /
  * invitation messages Cognito sends by mutating
  * `event.response.emailSubject` / `emailMessage` / `smsMessage`.
  */

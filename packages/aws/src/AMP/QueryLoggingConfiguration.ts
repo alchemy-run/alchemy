@@ -10,7 +10,7 @@ import { normalizeAmpLogGroupArn } from "./internal.ts";
 export interface QueryLoggingDestination {
   /**
    * ARN of the CloudWatch Logs log group that receives query logs. AMP
-   * expects the ARN with a trailing `:*` — one is appended automatically
+   * expects the ARN with a trailing `:*` -- one is appended automatically
    * when missing.
    */
   logGroupArn: string;
@@ -50,7 +50,7 @@ export interface QueryLoggingConfiguration extends Resource<
 
 /**
  * The query logging configuration of an Amazon Managed Service for
- * Prometheus workspace — ships PromQL query logs (query text, QSP cost,
+ * Prometheus workspace -- ships PromQL query logs (query text, QSP cost,
  * response code) to CloudWatch Logs. A workspace has at most one.
  *
  * ### Creating a Query Logging Configuration
@@ -76,7 +76,7 @@ export const QueryLoggingConfigurationProvider = () =>
   Provider.effect(
     QueryLoggingConfiguration,
     Effect.gen(function* () {
-      /** Describe the configuration; typed not-found → undefined. */
+      /** Describe the configuration; typed not-found -> undefined. */
       const describe = Effect.fn(function* (workspaceId: string) {
         const response = yield* amp
           .describeQueryLoggingConfiguration({ workspaceId })
@@ -85,7 +85,7 @@ export const QueryLoggingConfigurationProvider = () =>
       });
 
       /**
-       * Bounded wait toward ACTIVE. Returns the last observed metadata —
+       * Bounded wait toward ACTIVE. Returns the last observed metadata --
        * a still-transitioning configuration converges on a later reconcile.
        */
       const waitActive = Effect.fn(function* (workspaceId: string) {
@@ -98,7 +98,7 @@ export const QueryLoggingConfigurationProvider = () =>
         );
       });
 
-      /** Desired props → wire destinations (normalized + defaulted). */
+      /** Desired props -> wire destinations (normalized + defaulted). */
       const toWireDestinations = (destinations: QueryLoggingDestination[]) =>
         destinations.map((destination) => ({
           cloudWatchLogs: {
@@ -147,7 +147,7 @@ export const QueryLoggingConfigurationProvider = () =>
           if (!workspaceId) return undefined;
           const meta = yield* describe(workspaceId);
           if (meta === undefined) return undefined;
-          // Query logging configurations are not taggable — ownership is
+          // Query logging configurations are not taggable -- ownership is
           // implied by the owned parent workspace.
           return toAttrs(meta);
         }),
@@ -156,10 +156,10 @@ export const QueryLoggingConfigurationProvider = () =>
           const workspaceId = news!.workspaceId;
           const desired = toWireDestinations(news!.destinations);
 
-          // 1. Observe — the live configuration is authoritative.
+          // 1. Observe -- the live configuration is authoritative.
           const existing = yield* describe(workspaceId);
 
-          // 2/3. Ensure + sync — create when absent (tolerating a create
+          // 2/3. Ensure + sync -- create when absent (tolerating a create
           // race), update when the destinations drift.
           if (existing === undefined) {
             yield* amp

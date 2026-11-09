@@ -8,7 +8,7 @@ import type * as Effect from "effect/Effect";
 export interface ListLicenseVersionsRequest extends licensemanager.ListLicenseVersionsRequest {}
 
 /**
- * Runtime binding for `license-manager:ListLicenseVersions` — list all
+ * Runtime binding for `license-manager:ListLicenseVersions` -- list all
  * versions of a seller-issued license.
  *
  * Provide the implementation with

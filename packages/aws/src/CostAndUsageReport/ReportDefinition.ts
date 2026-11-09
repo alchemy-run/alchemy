@@ -13,7 +13,7 @@ import type { Providers } from "../Providers.ts";
 import { Region } from "../Region.ts";
 
 // The Cost and Usage Report API (`cur`) is a global service hosted only in
-// us-east-1 (the report's delivery bucket may live in any region — that is
+// us-east-1 (the report's delivery bucket may live in any region -- that is
 // what `s3Region` describes). Every control-plane call is pinned there
 // regardless of the ambient stack region. The distilled Region service value
 // is `Effect<RegionName>`, not a raw string, hence Effect.succeed.
@@ -23,10 +23,10 @@ const pin = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 
 // PutReportDefinition validates that the delivery bucket's policy grants
 // billingreports.amazonaws.com access. A policy applied moments earlier (the
-// usual case — the bucket is deployed in the same stack) can still be
+// usual case -- the bucket is deployed in the same stack) can still be
 // propagating, surfacing as a bucket-mentioning ValidationException (patched
 // in distilled into the typed ReportBucketNotVerified tag). Bounded retry:
-// 8 recurrences x 3s ≈ 24s. Explicit return annotation so the Retry.Return
+// 8 recurrences x 3s ~ 24s. Explicit return annotation so the Retry.Return
 // conditional type never leaks into declaration emit.
 const retryBucketVerification = <A, E extends { readonly _tag: string }, R>(
   self: Effect.Effect<A, E, R>,
@@ -152,14 +152,14 @@ export interface ReportDefinitionLookup {
 }
 
 /**
- * An AWS Cost and Usage Report (CUR) definition — the most granular billing
+ * An AWS Cost and Usage Report (CUR) definition -- the most granular billing
  * data AWS offers, delivered as CSV or Parquet files to an S3 bucket you own.
  *
  * The CUR API is a global service hosted only in `us-east-1`; this resource
  * pins every control-plane call there regardless of the stack region. The
  * delivery bucket may live in any region (declared via `s3Region`) but its
  * bucket policy must grant `billingreports.amazonaws.com` the
- * `s3:GetBucketAcl`, `s3:GetBucketPolicy`, and `s3:PutObject` permissions —
+ * `s3:GetBucketAcl`, `s3:GetBucketPolicy`, and `s3:PutObject` permissions --
  * report creation fails validation otherwise.
  *
  * Report definitions are free; you pay only for the S3 storage of delivered
@@ -255,7 +255,7 @@ export const ReportDefinitionProvider = () =>
       const reportArn = (accountId: string, name: string) =>
         `arn:aws:cur:${CUR_REGION}:${accountId}:definition/${name}`;
 
-      // There is no Get operation — observe by scanning the (small,
+      // There is no Get operation -- observe by scanning the (small,
       // account-max ~10 entries) paginated list.
       const findReport = Effect.fn(function* (name: string) {
         const pages = yield* pin(cur.describeReportDefinitions.pages({}).pipe(Stream.runCollect));
@@ -319,7 +319,7 @@ export const ReportDefinitionProvider = () =>
       });
 
       const syncTags = Effect.fn(function* (name: string, desiredTags: Record<string, string>) {
-        // Diff against OBSERVED cloud tags — adoption may bring foreign tags.
+        // Diff against OBSERVED cloud tags -- adoption may bring foreign tags.
         const observedTags = yield* readTags(name);
         const { upsert, removed } = diffTags(observedTags, desiredTags);
         if (upsert.length > 0) {
@@ -374,11 +374,11 @@ export const ReportDefinitionProvider = () =>
           const desiredTags = { ...news.tags, ...internalTags };
           const desired = buildDefinition(name, news);
 
-          // OBSERVE — cloud state is authoritative; output is only a name cache.
+          // OBSERVE -- cloud state is authoritative; output is only a name cache.
           const observed = yield* findReport(name);
 
           if (!observed) {
-            // ENSURE — create; tolerate the duplicate-name race by converging
+            // ENSURE -- create; tolerate the duplicate-name race by converging
             // through modify instead.
             yield* cur
               .putReportDefinition({
@@ -401,7 +401,7 @@ export const ReportDefinitionProvider = () =>
                 ),
               );
           } else if (needsModify(observed, desired)) {
-            // SYNC — apply the delta only; skip the API entirely on no-op.
+            // SYNC -- apply the delta only; skip the API entirely on no-op.
             yield* cur
               .modifyReportDefinition({
                 ReportName: name,
@@ -410,7 +410,7 @@ export const ReportDefinitionProvider = () =>
               .pipe(pin, retryBucketVerification);
           }
 
-          // SYNC TAGS — against observed cloud tags.
+          // SYNC TAGS -- against observed cloud tags.
           yield* syncTags(name, desiredTags);
 
           yield* session.note(name);

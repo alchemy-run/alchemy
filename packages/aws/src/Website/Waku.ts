@@ -15,7 +15,7 @@ export type WakuProps = FrameworkSiteProps<{
   /**
    * Waku config overrides merged over the project's `waku.config.*`
    * (per-key; deploy-time values win). For values that vary by stage or
-   * come from other resources — static config belongs in `waku.config.*`.
+   * come from other resources -- static config belongs in `waku.config.*`.
    */
   waku?: {
     /**
@@ -54,7 +54,7 @@ export type WakuProps = FrameworkSiteProps<{
  *
  * The build runs through `@alchemy.run/frontend-frameworks/waku` with the
  * `@alchemy.run/frontend-frameworks/waku/aws` deploy target (this package's fork
- * of waku's aws-lambda adapter, streaming enabled) — both must be installed
+ * of waku's aws-lambda adapter, streaming enabled) -- both must be installed
  * in your project.
  *
  * ### Creating Waku Sites
@@ -90,7 +90,7 @@ export type WakuProps = FrameworkSiteProps<{
  *
  * ### Waku Config Overrides
  * Waku configuration lives in your `waku.config.*`. The `waku` prop
- * overrides it per key at deploy time — for values that vary by stage
+ * overrides it per key at deploy time -- for values that vary by stage
  * or come from other resources.
  *
  * **Example:** Stage-dependent base path
