@@ -63,10 +63,17 @@ export const tracedFetch = Effect.gen(function* () {
   return HttpServerResponse.text("traced ok");
 });
 
-/** Call `/work?tag=<tag>` on a traced program, retrying while its URL comes up. */
-export const doWork = Effect.fn(function* (url: string, tag: string) {
+/**
+ * Call `/work?tag=<tag>` on a traced program, retrying while its URL comes up.
+ * `headers` carries a platform's access token (a cookie, a traffic token).
+ */
+export const doWork = Effect.fn(function* (
+  url: string,
+  tag: string,
+  headers: Record<string, string> = {},
+) {
   const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
-  return yield* client.get(`${url.replace(/\/$/, "")}/work?tag=${tag}`).pipe(
+  return yield* client.get(`${url.replace(/\/$/, "")}/work?tag=${tag}`, { headers }).pipe(
     Effect.flatMap((response) => response.text),
     Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 30 }),
   );
