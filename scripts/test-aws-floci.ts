@@ -165,6 +165,13 @@ const flociFixedValues: Record<string, string> = {
   AWS_TEST_AGENTCORE: "1",
   AWS_TEST_AGENTCORE_IMAGE:
     "000000000000.dkr.ecr.us-east-1.amazonaws.com/alchemy-floci-agentcore:latest",
+  // Every Floci account starts with one Slack workspace and one Microsoft Teams team onboarded.
+  AWS_TEST_CHATBOT: "1",
+  AWS_CHATBOT_SLACK_TEAM_ID: "TFLOCI00001",
+  AWS_CHATBOT_SLACK_CHANNEL_ID: "C0FLOCI0001",
+  AWS_CHATBOT_TEAMS_TEAM_ID: "f10c1000-0000-4000-8000-000000000001",
+  AWS_CHATBOT_TEAMS_TENANT_ID: "f10c1000-0000-4000-8000-0000000000aa",
+  AWS_CHATBOT_TEAMS_CHANNEL_ID: "19%3afloci%40thread.tacv2",
   // Floci stores authorizer URIs without resolving the function.
   ALCHEMY_TEST_AUTHORIZER_URI:
     "arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-1:000000000000:function:alchemy-floci-standing-authorizer/invocations",
