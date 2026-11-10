@@ -615,6 +615,9 @@ layer(services, { excludeTestServices: true })("Unix sockets", (it) => {
           [
             "#!/bin/sh",
             `if [ ! -e ${JSON.stringify(attempted)} ]; then`,
+            // Reads the config first, as workerd does: exiting with it
+            // unread would fail `serve`'s write to stdin with EPIPE.
+            "  cat > /dev/null",
             `  : > ${JSON.stringify(attempted)}`,
             `  : > ${JSON.stringify(socketPath)}`,
             "  echo 'simulated startup crash' >&2",
