@@ -96,6 +96,13 @@ export default class BoatWorker extends Cloudflare.Worker<BoatWorker>()(
 
     const routes: Record<string, (query: URLSearchParams) => Effect.Effect<unknown, unknown, any>> =
       {
+        // What the bindings bound next to their keys: the deployer's org
+        // and API URL, which every Boat call from here sends.
+        "/boat/account": () =>
+          Effect.gen(function* () {
+            const env = (yield* Cloudflare.WorkerEnvironment) as Record<string, unknown>;
+            return { org: env.BOAT_ORG, apiBaseUrl: env.BOAT_API_BASE_URL };
+          }),
         // getTcpPort: a client request to the echo server. The sandbox is
         // kept for the proxy test, which deletes it.
         "/ports/open": () =>
@@ -210,8 +217,15 @@ export default class BoatWorker extends Cloudflare.Worker<BoatWorker>()(
               Effect.flip,
               Effect.map((e) => e._tag),
             );
+            // `archived` can show before the stop's snapshot completes.
             const fork = yield* Effect.acquireRelease(
-              sandbox.fork({ type: "small", autoStop: "5 minutes" }),
+              sandbox.fork({ type: "small", autoStop: "5 minutes" }).pipe(
+                Effect.retry({
+                  while: (e) => e._tag === "ForkNeedsSnapshot",
+                  schedule: Schedule.spaced("2 seconds"),
+                  times: 15,
+                }),
+              ),
               (forked) => Effect.ignore(forked.delete()),
             );
             const forkNote = yield* fork.files

@@ -1,3 +1,15 @@
+import * as Data from "effect/Data";
+
+/**
+ * A reconcile failed and the follow-up cleanup of the resource it created
+ * also failed. `errors` holds the reconcile failure, then the cleanup failure.
+ */
+export class PrismaCleanupFailed extends Data.TaggedError("PrismaCleanupFailed")<{
+  readonly message: string;
+  readonly errors: readonly [originalError: unknown, cleanupError: unknown];
+  readonly cause?: unknown;
+}> {}
+
 /**
  * Preserve both the reconcile failure and a subsequent cleanup failure.
  *
@@ -11,7 +23,8 @@ export const aggregateCleanupFailure = (
   originalError: unknown,
   cleanupError: unknown,
 ) =>
-  new AggregateError(
-    [originalError, cleanupError],
-    `Failed to clean up Prisma ${resource} '${resourceId}' after reconcile failed. The resource may be orphaned. Manual cleanup: DELETE ${route}.`,
-  );
+  new PrismaCleanupFailed({
+    message: `Failed to clean up Prisma ${resource} '${resourceId}' after reconcile failed. The resource may be orphaned. Manual cleanup: DELETE ${route}.`,
+    errors: [originalError, cleanupError],
+    cause: originalError,
+  });
