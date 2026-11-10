@@ -21,8 +21,8 @@ and hybrid rendering. Asset routing follows the build's output.
 
 The build integration is not bundled with alchemy. Install
 `@alchemy.run/frontend-frameworks`; the resource loads its `/foldkit`
-source from your project at deploy and dev time. It is only used to build
-and serve the app, so a dev dependency is enough:
+export from your project at deploy time. It is only used at build time,
+so a dev dependency is enough:
 
 <PackageManagers dev={devDeps} />
 
