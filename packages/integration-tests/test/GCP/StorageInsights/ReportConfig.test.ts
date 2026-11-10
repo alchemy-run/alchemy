@@ -56,37 +56,47 @@ test.provider(
           .map((binding) => binding.role);
       });
 
-      const deploy = (parquet: boolean, secondary = false, alternate = false, moved = false) =>
-        stack.deploy(
-          Effect.gen(function* () {
-            const names = yield* buckets;
-            return yield* GCP.StorageInsights.ReportConfig("Inventory", {
-              location: secondary ? "us-east1" : "us-central1",
-              displayName: parquet ? "Updated inventory" : "Initial inventory",
-              labels: parquet ? { phase: "updated" } : { phase: "initial", removed: "yes" },
-              frequencyOptions: { ...frequencyOptions, frequency: parquet ? "WEEKLY" : "DAILY" },
-              ...(parquet
-                ? { parquetOptions: {} }
-                : { csvOptions: { delimiter: "|", headerRequired: true } }),
-              objectMetadataReportOptions: {
-                metadataFields: parquet
-                  ? ["project", "bucket", "name", "size", "generation", "storageClass"]
-                  : ["project", "bucket", "name", "size", "generation"],
-                storageFilters: {
-                  bucket: secondary ? names.secondary : alternate ? names.alternate : names.primary,
-                },
-                storageDestinationOptions: {
-                  bucket: secondary
-                    ? names.secondary
-                    : alternate || moved
-                      ? names.alternate
-                      : names.primary,
-                  destinationPath: parquet ? "updated-inventory/" : "inventory/",
-                },
-              },
-            });
-          }),
+      const isGone = (name: string) =>
+        insights.getProjectsLocationsReportConfigs({ name }).pipe(
+          Effect.as(false),
+          Effect.catchTag("NotFound", () => Effect.succeed(true)),
         );
+
+      const inventory = Effect.fn(function* (
+        parquet: boolean,
+        secondary = false,
+        alternate = false,
+        moved = false,
+      ) {
+        const names = yield* buckets;
+        return yield* GCP.StorageInsights.ReportConfig("Inventory", {
+          location: secondary ? "us-east1" : "us-central1",
+          displayName: parquet ? "Updated inventory" : "Initial inventory",
+          labels: parquet ? { phase: "updated" } : { phase: "initial", removed: "yes" },
+          frequencyOptions: { ...frequencyOptions, frequency: parquet ? "WEEKLY" : "DAILY" },
+          ...(parquet
+            ? { parquetOptions: {} }
+            : { csvOptions: { delimiter: "|", headerRequired: true } }),
+          objectMetadataReportOptions: {
+            metadataFields: parquet
+              ? ["project", "bucket", "name", "size", "generation", "storageClass"]
+              : ["project", "bucket", "name", "size", "generation"],
+            storageFilters: {
+              bucket: secondary ? names.secondary : alternate ? names.alternate : names.primary,
+            },
+            storageDestinationOptions: {
+              bucket: secondary
+                ? names.secondary
+                : alternate || moved
+                  ? names.alternate
+                  : names.primary,
+              destinationPath: parquet ? "updated-inventory/" : "inventory/",
+            },
+          },
+        });
+      });
+      const deploy = (parquet: boolean, secondary = false, alternate = false, moved = false) =>
+        stack.deploy(inventory(parquet, secondary, alternate, moved));
 
       const created = yield* deploy(false);
       const initial = yield* insights.getProjectsLocationsReportConfigs({ name: created.name });
@@ -141,6 +151,7 @@ test.provider(
       const newSource = yield* deploy(true, false, true);
       expect(newSource.name).not.toEqual(created.name);
       expect(newSource.location).toEqual(created.location);
+      expect(yield* isGone(created.name)).toEqual(true);
       const sourceFetched = yield* insights.getProjectsLocationsReportConfigs({
         name: newSource.name,
       });
@@ -159,22 +170,40 @@ test.provider(
       const replaced = yield* deploy(true, true);
       expect(replaced.name).not.toEqual(created.name);
       expect(replaced.location).toEqual("us-east1");
-      const oldGone = yield* insights
-        .getProjectsLocationsReportConfigs({ name: created.name })
-        .pipe(
-          Effect.as(false),
-          Effect.catchTag("NotFound", () => Effect.succeed(true)),
-        );
-      expect(oldGone).toEqual(true);
+      expect(yield* isGone(newSource.name)).toEqual(true);
       expect(yield* rolesOf(fixtures.alternate)).toEqual([]);
       expect(yield* rolesOf(fixtures.secondary)).toHaveLength(2);
 
-      yield* stack.destroy();
-      const gone = yield* insights.getProjectsLocationsReportConfigs({ name: replaced.name }).pipe(
-        Effect.as(false),
-        Effect.catchTag("NotFound", () => Effect.succeed(true)),
+      // A second configuration on the same bucket keeps the agent's roles
+      // when the first one is deleted.
+      const neighbor = Effect.fn(function* () {
+        const names = yield* buckets;
+        return yield* GCP.StorageInsights.ReportConfig("Neighbor", {
+          location: "us-east1",
+          frequencyOptions,
+          parquetOptions: {},
+          objectMetadataReportOptions: {
+            metadataFields: ["project", "bucket", "name"],
+            storageFilters: { bucket: names.secondary },
+            storageDestinationOptions: {
+              bucket: names.secondary,
+              destinationPath: "neighbor/",
+            },
+          },
+        });
+      });
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          yield* inventory(true, true);
+          return yield* neighbor();
+        }),
       );
-      expect(gone).toEqual(true);
+      const remaining = yield* stack.deploy(neighbor());
+      expect(yield* isGone(replaced.name)).toEqual(true);
+      expect(yield* rolesOf(fixtures.secondary)).toHaveLength(2);
+
+      yield* stack.destroy();
+      expect(yield* isGone(remaining.name)).toEqual(true);
     }),
   { tags: ["provider:gcp", "provider:gcp:storageinsights", "live"], timeout: 120_000 },
 );
