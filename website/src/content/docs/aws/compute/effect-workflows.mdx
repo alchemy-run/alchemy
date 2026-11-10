@@ -241,9 +241,109 @@ yield* Activity.make({ name: "reserve", execute: reserve(order) }).pipe(
 ```
 
 `run.interrupt` wakes a run that's waiting on a signal, which then
-fails where it waits and runs its compensations. A run that's busy in a step
-can only be stopped, with `StopDurableExecution`, and its compensations don't
-run.
+fails where it waits and runs its compensations. A run on its way to a wait
+gets about 40 seconds to reach it. A sleeping run, or one still busy in a step
+after that, can only be stopped, with `StopDurableExecution`, and its
+compensations don't run.
+
+## Hand work to a queue
+
+A `DurableQueue` hands an item to a worker and waits for its result. The run
+waits on a Lambda callback while the worker runs, and nothing is billed
+meanwhile.
+
+```typescript
+export const Charge = DurableQueue.make({
+  name: "Charge",
+  payload: { orderId: Schema.String, amount: Schema.Number },
+  success: Schema.String,
+  idempotencyKey: ({ orderId }) => orderId,
+});
+
+const receipt = yield* DurableQueue.process(Charge, { orderId, amount: 42 });
+```
+
+Declare the queue next to the workflow:
+
+```typescript
+// src/Checkout.ts
+export const Charges = AWS.SQS.Queue("Charges", { visibilityTimeout: "2 minutes" });
+```
+
+Provide `DurableQueueProducer` to the workflow function, so `process` sends
+the run's items to the queue:
+
+```typescript
+// src/CheckoutWorkflows.ts
+import * as AWS from "@alchemy.run/aws";
+import * as Layer from "effect/Layer";
+import { Charges, Checkout, CheckoutLive } from "./Checkout.ts";
+
+/** The durable function the Checkout runs execute in. */
+export class CheckoutWorkflows extends AWS.Lambda.WorkflowFunction<CheckoutWorkflows>()(
+  "CheckoutWorkflows",
+  { workflows: [Checkout] },
+) {}
+
+export default CheckoutWorkflows.make(
+  { main: import.meta.url, executionTimeout: "1 day" },
+  // DurableQueue.process sends its items to Charges.
+  CheckoutLive.pipe(Layer.provide(AWS.Lambda.DurableQueueProducer(Charges))),
+);
+```
+
+`DurableQueueWorker` consumes the queue on another function, which reaches the
+runs through `DurableFunctionEngine`. Here it's the function that starts them:
+
+```typescript
+// src/Api.ts
+import * as AWS from "@alchemy.run/aws";
+import * as Workflows from "alchemy/Workflows";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import { ChargeHandler, Charges, Checkout } from "./Checkout.ts";
+import { CheckoutWorkflows } from "./CheckoutWorkflows.ts";
+
+/** Starts and reads Checkout runs over HTTP, and works the charge queue. */
+export default class Api extends AWS.Lambda.Function<Api>()(
+  "Api",
+  { main: import.meta.url, functionUrl: true, timeout: Duration.minutes(1) },
+  Effect.gen(function* () {
+    const checkout = yield* Workflows.RunWorkflow(Checkout);
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const orderId = new URL(request.originalUrl, "http://api").searchParams.get("order") ?? "o-1";
+        const run = yield* checkout.start({ orderId });
+        return yield* HttpServerResponse.json(yield* run.status);
+      }),
+    };
+  }).pipe(
+    Effect.provide(
+      // Consumes Charges: runs ChargeHandler and resumes the workflow.
+      AWS.Lambda.DurableQueueWorker(Charges, [ChargeHandler]).pipe(
+        Layer.provideMerge(AWS.Lambda.DurableFunctionEngine(CheckoutWorkflows)),
+      ),
+    ),
+  ),
+) {}
+```
+
+The handler's success, typed failure or defect is the run's result for the
+item. A ledger table sends each item once, however often the run replays,
+and an item the worker already finished doesn't run again when SQS
+redelivers it. A message that fails for any other reason is retried by SQS
+and moves to the queue's dead-letter queue once its `maxReceiveCount` is
+spent; that run keeps waiting. The queue's visibility timeout has to be at
+least the worker function's timeout.
+
+Effect's own `DurableQueue.worker` polls a `PersistedQueue` store from a
+process that stays up, which a Lambda function isn't. It suits Effect's
+cluster engine on servers, with `PersistedQueue.layerStoreSql`; on Lambda,
+use these Layers.
 
 ## See what a run did
 

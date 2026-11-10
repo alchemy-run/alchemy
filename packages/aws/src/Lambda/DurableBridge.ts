@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { isScopeEjected } from "alchemy/Http";
 import type { FunctionListener } from "alchemy/Runtime/Function";
 import { toSeconds } from "alchemy/Util/Duration";
@@ -29,6 +30,7 @@ import { toSeconds } from "alchemy/Util/Duration";
  */
 import type * as lambda from "aws-lambda";
 import * as Cause from "effect/Cause";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
@@ -226,21 +228,72 @@ const toNativeStepConfig = (options: DurableStepOptions<any>): NativeStepConfig 
   };
 };
 
-const wrapDurableContext = (dctx: NativeDurableContext): DurableStep["Service"] => ({
+/**
+ * Start each root operation in the order the execution recorded it.
+ *
+ * Lambda numbers a durable execution's root operations in the order they
+ * start, and fails a replay that starts them in another order. Operations
+ * that run concurrently, like a workflow's parallel branches, start in
+ * whatever order their earlier work happens to finish. So on replay an
+ * operation waits until every operation recorded before it has started, and
+ * an operation the execution hasn't recorded yet waits for all of them.
+ */
+type Ordered = <T>(name: string, start: () => Promise<T>) => Effect.Effect<T>;
+
+const makeReplayOrder = (dctx: NativeDurableContext) =>
+  Effect.gen(function* () {
+    // The SDK keys each recorded operation by a hash of its position: "1",
+    // "2", … at the root.
+    const recordedOperations =
+      (dctx as unknown as { _executionContext?: { _stepData?: Record<string, { Name?: string }> } })
+        ._executionContext?._stepData ?? {};
+    const recorded: Array<string> = [];
+    for (let position = 1; ; position++) {
+      const id = yield* Effect.sync(() =>
+        createHash("md5").update(String(position)).digest("hex").substring(0, 16),
+      );
+      const operation = recordedOperations[id];
+      if (operation === undefined) break;
+      recorded.push(operation.Name ?? "");
+    }
+    const positions = new Map<string, Array<number>>();
+    recorded.forEach((name, position) =>
+      positions.set(name, [...(positions.get(name) ?? []), position]),
+    );
+    // `started[n]` completes once n operations have started.
+    const started = yield* Effect.forEach(Array.from({ length: recorded.length + 1 }), () =>
+      Deferred.make<void>(),
+    );
+    yield* Deferred.succeed(started[0]!, undefined);
+    let count = 0;
+    const ordered: Ordered = (name, start) =>
+      Effect.gen(function* () {
+        const position = positions.get(name)?.shift() ?? recorded.length;
+        yield* Deferred.await(started[Math.min(position, recorded.length)]!);
+        const promise = start();
+        count++;
+        if (count <= recorded.length) yield* Deferred.succeed(started[count]!, undefined);
+        return yield* Effect.tryPromise(() => promise).pipe(Effect.orDie);
+      });
+    return ordered;
+  });
+
+const wrapDurableContext = (
+  dctx: NativeDurableContext,
+  ordered: Ordered,
+): DurableStep["Service"] => ({
   step: <T>(options: DurableStepOptions<T>) =>
-    Effect.tryPromise(() =>
+    ordered(options.name, () =>
       dctx.step<T>(
         options.name,
         () => Effect.runPromise(options.effect),
         toNativeStepConfig(options),
       ),
-    ).pipe(Effect.orDie),
+    ),
   wait: (name, duration) =>
-    Effect.tryPromise(() =>
-      dctx.wait(name, { seconds: Math.max(1, toSeconds(duration) ?? 1) }),
-    ).pipe(Effect.orDie),
+    ordered(name, () => dctx.wait(name, { seconds: Math.max(1, toSeconds(duration) ?? 1) })),
   waitForCallback: <T>(options: DurableCallbackOptions) =>
-    Effect.tryPromise(() =>
+    ordered(options.name, () =>
       dctx.waitForCallback<T>(
         options.name,
         (callbackId) => Effect.runPromise(options.submitter(callbackId)),
@@ -257,7 +310,7 @@ const wrapDurableContext = (dctx: NativeDurableContext): DurableStep["Service"] 
             : {}),
         },
       ),
-    ).pipe(Effect.orDie),
+    ),
 });
 
 // ---------------------------------------------------------------------------
@@ -308,7 +361,12 @@ export const makeDurableListener = (options: {
                   options.run(params).pipe(
                     Effect.provide(
                       Layer.mergeAll(
-                        Layer.succeed(DurableStep, wrapDurableContext(dctx)),
+                        Layer.effect(
+                          DurableStep,
+                          Effect.map(makeReplayOrder(dctx), (ordered) =>
+                            wrapDurableContext(dctx, ordered),
+                          ),
+                        ),
                         Layer.succeed(DurableExecutionContext, {
                           executionArn: dctx.executionContext.durableExecutionArn,
                         }),

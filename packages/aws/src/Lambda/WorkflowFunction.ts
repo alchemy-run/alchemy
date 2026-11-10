@@ -118,6 +118,9 @@ export interface WorkflowFunctionClass<
  * The Layer must implement every workflow the function lists: leaving one out
  * is a type error.
  *
+ * Each invocation replays the run from its start, so `timeout` defaults to
+ * one minute rather than Lambda's three seconds.
+ *
  * @resource
  */
 export const WorkflowFunction =
@@ -137,8 +140,10 @@ export const WorkflowFunction =
       durable,
       {
         workflows: options.workflows,
-        make: (props: unknown, workflows: Layer.Layer<any, any, any>) =>
-          make(props, makeWorkflowRunner(workflows)),
+        // Every invocation replays the run from its start, which Lambda's
+        // three-second default timeout is too short for.
+        make: (props: Record<string, unknown>, workflows: Layer.Layer<any, any, any>) =>
+          make({ timeout: Duration.minutes(1), ...props }, makeWorkflowRunner(workflows)),
       },
       Effectable.Prototype({
         label: `AWS.Lambda.WorkflowFunction<${id}>`,
@@ -352,6 +357,7 @@ const makeWorkflowRunner = <ROut, E, RIn>(
                 clocks: new Map(),
                 instance,
                 waited: new Map(),
+                offers: new Map(),
               }),
             ),
           ),
@@ -384,8 +390,12 @@ interface Registration {
   readonly execute: Execute;
 }
 
-/** The run in progress: its durable context, and the clocks it has scheduled. */
-class CurrentRun extends Context.Service<
+/**
+ * The run in progress: its durable context, and the clocks it has scheduled.
+ *
+ * @internal
+ */
+export class CurrentRun extends Context.Service<
   CurrentRun,
   {
     readonly durable: DurableStep["Service"];
@@ -394,6 +404,13 @@ class CurrentRun extends Context.Service<
     readonly instance: WorkflowEngine.WorkflowInstance["Service"];
     /** Waits run outside the activity that reached them, by deferred name. */
     readonly waited: Map<string, string>;
+    /**
+     * Work to send when the run starts waiting on a deferred, by its name: a
+     * `DurableQueue` item. Lambda numbers a run's operations in the order it
+     * starts them, so sending from the wait's submitter, not before it, keeps
+     * concurrent waits in the same order on every replay.
+     */
+    readonly offers: Map<string, Effect.Effect<void>>;
     /** Inside an activity's step, which can't wait: the wait it reached. */
     readonly step?: { pending?: Pending };
   }
@@ -430,7 +447,10 @@ const waitFor = (run: CurrentRun["Service"], pending: Pending) =>
     }
     const text = yield* interruptible(
       run,
-      run.durable.waitForCallback<string>({ name: pending.name, submitter: () => Effect.void }),
+      run.durable.waitForCallback<string>({
+        name: pending.name,
+        submitter: () => run.offers.get(pending.name) ?? Effect.void,
+      }),
     );
     return typeof text === "string" ? text : JSON.stringify(text);
   });
