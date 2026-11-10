@@ -35,6 +35,7 @@ import { RuntimeContext } from "alchemy/RuntimeContext";
 import { InstanceSetup } from "alchemy/Workers/InstanceSetup";
 import { LanguageModel } from "effect/ai";
 import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -418,15 +419,10 @@ export const Harness = <
           Context.omit(Scope.Scope),
         ) as Context.Context<RuntimeContext>;
         const runModel = <A, E>(effect: Effect.Effect<A, E>, signal: AbortSignal | undefined) =>
-          Effect.runPromiseExit(
-            Effect.provideContext(effect, base),
-            signal ? { signal } : undefined,
-          );
+          Effect.runPromiseExitWith(base)(effect, signal ? { signal } : undefined);
         const runTool: RunTool = (effect, services, signal) =>
-          Effect.runPromiseExit(
-            Effect.scoped(
-              Effect.provideContext(effect, Context.merge(base, services) as Context.Context<any>),
-            ),
+          Effect.runPromiseExitWith(Context.merge(base, services) as Context.Context<any>)(
+            Effect.scoped(effect),
             signal ? { signal } : undefined,
           ) as never;
 
@@ -459,7 +455,7 @@ export const Harness = <
             ? (tool as { registration: ToolRegistration }).registration
             : toRegistration(tool.toolName, (tool as { spec: any }).spec, handler, runTool);
         const runHook = <A>(effect: Effect.Effect<A, never, any>) =>
-          Effect.runPromise(Effect.provideContext(effect, base as Context.Context<any>));
+          Effect.runPromiseWith(base as Context.Context<any>)(effect);
 
         const baseExtension: PiExtension = {
           name: BASE_EXTENSION,
@@ -526,7 +522,7 @@ export const Harness = <
           ...piExtensions.filter((_, index) => !isSkill(extensions[index]!.extension)),
         ];
 
-        opened = Effect.runPromise(
+        opened = Effect.runPromiseWith(base)(
           Effect.all([buildModels, storage.open(prefix), buildCodemode]).pipe(
             Effect.tap(([, , codemode]) =>
               Effect.sync(() => {
@@ -545,11 +541,10 @@ export const Harness = <
                       extensions: defaultExtensions,
                     },
                     env: (target) =>
-                      Effect.runPromise(
-                        Effect.provideContext(
-                          envHost.make({ ...target, instanceId: storage.id }),
-                          base,
-                        ).pipe(Effect.catch((error) => Effect.die(new Error(error.message)))),
+                      Effect.runPromiseWith(base)(
+                        envHost
+                          .make({ ...target, instanceId: storage.id })
+                          .pipe(Effect.catch((error) => Effect.die(new Error(error.message)))),
                       ),
                     // With `onWake`, Pi arms no timers of its own: the
                     // instance's alarm wakes it (see `arm`).
@@ -576,10 +571,11 @@ export const Harness = <
         ? Effect.void
         : Effect.gen(function* () {
             const next: Wake = harness.wake();
+            const now = yield* Clock.currentTimeMillis;
             if (next.active) {
-              yield* wake!.schedule("wake", { after: 0, payload: {}, progress: Date.now() });
+              yield* wake!.schedule("wake", { after: 0, payload: {}, progress: now });
             } else if (next.at !== undefined) {
-              yield* wake!.schedule("wake", { at: next.at, payload: {}, progress: Date.now() });
+              yield* wake!.schedule("wake", { at: next.at, payload: {}, progress: now });
             }
           }).pipe(Effect.ignore);
 
@@ -617,7 +613,7 @@ export const Harness = <
         const registration = (ref: ToolRef) => {
           const tool = toolByName.get(ref.toolName);
           return tool === undefined
-            ? Effect.fail(new NotOnHarness({ kind: "tool", name: ref.toolName }))
+            ? Effect.fail(new NotOnHarness({ kind: "tool", missing: ref.toolName }))
             : Effect.succeed({ name: ref.toolName } as ToolRegistration);
         };
         // Selecting an extension enables the tools it brings.
@@ -674,7 +670,7 @@ export const Harness = <
           };
         }
         if (agent.model != null && !models.some(({ model }) => model === agent.model)) {
-          return yield* new NotOnHarness({ kind: "model", name: agent.model.modelName });
+          return yield* new NotOnHarness({ kind: "model", missing: agent.model.modelName });
         }
         return {
           ...(agent.model !== undefined
@@ -846,7 +842,7 @@ export const Harness = <
             const change = yield* changeOf(withDefaults(agent)).pipe(
               Effect.mapError(
                 (error) =>
-                  new PiError({ message: `${error.kind} ${error.name} is not on this harness` }),
+                  new PiError({ message: `${error.kind} ${error.missing} is not on this harness` }),
               ),
             );
             const conversation = yield* fromPi((context) =>
@@ -866,7 +862,7 @@ export const Harness = <
         Effect.flatMap(open, (harness) =>
           Effect.flatMap(namedId(harness, name), (id) =>
             id === undefined
-              ? Effect.fail(new ConversationNotFound({ name }))
+              ? Effect.fail(new ConversationNotFound({ conversationName: name }))
               : Effect.succeed(conversationOf(id)),
           ),
         ),
@@ -884,7 +880,7 @@ export const Harness = <
             const change = yield* changeOf(withDefaults(rootOptions)).pipe(
               Effect.mapError(
                 (error) =>
-                  new PiError({ message: `${error.kind} ${error.name} is not on this harness` }),
+                  new PiError({ message: `${error.kind} ${error.missing} is not on this harness` }),
               ),
             );
             const root = yield* fromPi((context) => harness.root(context, { agent: change }));
@@ -893,7 +889,7 @@ export const Harness = <
         ),
       listConversations: Effect.flatMap(open, (harness) =>
         fromPi((context) => harness.snapshot(ConversationNames, context)).pipe(
-          Effect.map((doc) => ({ ...(doc?.names ?? {}) }) as Record<string, ConversationId>),
+          Effect.map((doc) => ({ ...doc?.names }) as Record<string, ConversationId>),
         ),
       ),
       usage: Effect.flatMap(open, (harness) => fromPi((context) => harness.usage(context))),

@@ -339,7 +339,7 @@ export const toRegistration = (
         };
       }
       // A defect or interruption: Pi turns a throw into the model's error result.
-      throw new Error(messageOf(Cause.squash(exit.cause)));
+      throw new Error(messageOf(exit.cause.pipe(Cause.squash)));
     },
   } as ToolRegistration;
 };

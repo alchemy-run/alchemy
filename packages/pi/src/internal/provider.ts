@@ -300,6 +300,7 @@ const streamWith =
       });
 
     const { tools } = systemOf(context.messages);
+    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- tool calls are not resolved here, so the toolkit's handlers are never needed
     const request = languageModel
       .streamText({
         prompt: promptOf(context.messages),

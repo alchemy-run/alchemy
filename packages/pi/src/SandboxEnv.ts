@@ -93,7 +93,11 @@ export const SandboxEnv = <R>(
             if (!installed.has(sandbox)) {
               const result = yield* sandbox.exec(["sh", "-c", INSTALL]);
               if (result.exitCode !== 0) {
-                return yield* Effect.fail(new Error(`pi-env install exited ${result.exitCode}`));
+                return yield* new EnvError({
+                  operation: "open",
+                  code: "unknown",
+                  message: `pi-env install exited ${result.exitCode}`,
+                });
               }
               installed.add(sandbox);
             }
@@ -120,11 +124,11 @@ export const SandboxEnv = <R>(
               let last: Promise<unknown> = Promise.resolve();
               return {
                 write: (bytes) => {
-                  last = last.then(() => run(Effect.ignore(process.write(bytes))));
+                  last = last.then(() => run(process.write(bytes).pipe(Effect.ignore)));
                 },
                 close: () => {
                   void last
-                    .then(() => run(Effect.ignore(process.kill("SIGTERM"))))
+                    .then(() => run(process.kill("SIGTERM").pipe(Effect.ignore)))
                     .finally(() => run(Scope.close(scope, Exit.void)));
                 },
               };

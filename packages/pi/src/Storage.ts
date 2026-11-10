@@ -39,6 +39,9 @@ export class Storage extends Context.Service<
   }
 >()("Pi.Storage") {}
 
+/** Memory instances opened by this process: each is its own instance. */
+let memoryInstances = 0;
+
 /**
  * Keep conversations in memory: gone when the process ends. For tests.
  *
@@ -47,7 +50,7 @@ export class Storage extends Context.Service<
  */
 export const MemoryStorage: Layer.Layer<Storage> = Layer.succeed(Storage, {
   instance: Effect.sync(() => ({
-    id: `memory:${crypto.randomUUID()}`,
+    id: `memory:${++memoryInstances}`,
     evictable: false,
     open: () =>
       fromPi(async () => {

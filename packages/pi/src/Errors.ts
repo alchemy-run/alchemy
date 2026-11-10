@@ -12,10 +12,11 @@ export class PiError extends Data.TaggedError("PiError")<{
 /** A tool, model or extension named in a call is not on this harness. */
 export class NotOnHarness extends Data.TaggedError("NotOnHarness")<{
   readonly kind: "tool" | "model" | "extension";
-  readonly name: string;
+  /** The name the call used. */
+  readonly missing: string;
 }> {}
 
 /** No conversation has this name on this harness instance. */
 export class ConversationNotFound extends Data.TaggedError("ConversationNotFound")<{
-  readonly name: string;
+  readonly conversationName: string;
 }> {}

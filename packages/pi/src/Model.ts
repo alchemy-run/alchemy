@@ -71,6 +71,7 @@ export const Model =
         return Layer.effect(
           this as never,
           Effect.map(Effect.context<never>(), (context) => ({
+            // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the captured context holds everything but the runtime context
             languageModel: Layer.provide(
               languageModel,
               Layer.succeedContext(context),
