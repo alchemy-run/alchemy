@@ -4,7 +4,7 @@ import * as Pi from "@alchemy.run/pi";
 import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { Base, Gateway } from "./infra.ts";
+import { Gateway } from "./infra.ts";
 import { Fast } from "./models.ts";
 
 const ModelsLive = Layer.unwrap(
@@ -27,11 +27,17 @@ const markOf = (instanceId: string, conversationId: number) => ({
   "pi-conversation": String(conversationId),
 });
 
+/** The sandbox client, bound to the image every conversation's sandbox boots from. */
+const Sandboxes = Effect.gen(function* () {
+  const base = yield* E2B.Template("PiBase", { image: "node:22-bookworm" });
+  return yield* E2B.CreateSandbox(base);
+});
+
 /** One E2B sandbox per conversation, found again by its mark. */
 const SandboxLive = Layer.effect(
   Pi.Sandbox,
   Effect.gen(function* () {
-    const sandboxes = yield* E2B.CreateSandbox(Base);
+    const sandboxes = yield* Sandboxes;
     return Effect.fn(function* ({ instanceId, conversationId }) {
       const metadata = markOf(instanceId, conversationId);
       const [existing] = yield* sandboxes.list({ metadata, state: ["running", "paused"] });
@@ -54,7 +60,7 @@ const HarnessLive = Layer.mergeAll(
 export default class PiSandboxSession extends Cloudflare.DurableObject<PiSandboxSession>()(
   "PiSandboxSession",
   Effect.gen(function* () {
-    const sandboxes = yield* E2B.CreateSandbox(Base);
+    const sandboxes = yield* Sandboxes;
     const harness = yield* Pi.Harness({ models: [Fast], tools: [Pi.CodingTools] });
 
     return Effect.gen(function* () {

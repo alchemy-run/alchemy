@@ -129,21 +129,14 @@ const harness = yield* Pi.Harness({ models: [Fast], tools: [SaveNote] });
 
 ## Tools in a sandbox
 
-A Durable Object can't run processes, so Pi's coding tools run in a sandbox. Declare the image every sandbox boots from:
-
-```typescript title="src/Sandbox.ts"
-import * as E2B from "@alchemy.run/e2b";
-
-export const Base = E2B.Template("Base", { image: "node:22-bookworm" });
-```
-
-`Pi.Sandbox` is the function that finds or creates a conversation's sandbox:
+A Durable Object can't run processes, so Pi's coding tools run in a sandbox. `Pi.Sandbox` is the function that finds or creates a conversation's sandbox:
 
 ```typescript
 const SandboxLive = Layer.effect(
   Pi.Sandbox,
   Effect.gen(function* () {
-    const sandboxes = yield* E2B.CreateSandbox(Base);
+    const base = yield* E2B.Template("Base", { image: "node:22-bookworm" });
+    const sandboxes = yield* E2B.CreateSandbox(base);
     return Effect.fn(function* ({ instanceId, conversationId }) {
       const metadata = { instance: instanceId, conversation: String(conversationId) };
       const [existing] = yield* sandboxes.list({ metadata, state: ["running", "paused"] });
@@ -155,7 +148,7 @@ const SandboxLive = Layer.effect(
 );
 ```
 
-Finding the sandbox by metadata keeps one sandbox per conversation, also after the Durable Object is evicted. Conversation ids repeat from one Durable Object to the next, so the metadata also carries `instanceId`, the Durable Object's id.
+The template is the image every sandbox boots from; the deploy builds it. Finding the sandbox by metadata keeps one sandbox per conversation, also after the Durable Object is evicted. Conversation ids repeat from one Durable Object to the next, so the metadata also carries `instanceId`, the Durable Object's id.
 
 `Pi.SandboxEnv` starts Pi's own `pi-env` daemon in that sandbox, so `read`, `write`, `edit` and `bash` behave exactly as they do locally:
 

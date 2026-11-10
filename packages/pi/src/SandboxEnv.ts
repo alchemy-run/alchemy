@@ -53,7 +53,8 @@ export type SandboxLike = SandboxApi.SandboxExec<any, { readonly exitCode: numbe
  * const SandboxLive = Layer.effect(
  *   Pi.Sandbox,
  *   Effect.gen(function* () {
- *     const sandboxes = yield* E2B.CreateSandbox(Base);
+ *     const base = yield* E2B.Template("Base", { image: "node:22-bookworm" });
+ *     const sandboxes = yield* E2B.CreateSandbox(base);
  *     return Effect.fn(function* ({ instanceId, conversationId }) {
  *       const metadata = { instance: instanceId, conversation: String(conversationId) };
  *       const [existing] = yield* sandboxes.list({ metadata, state: ["running", "paused"] });
