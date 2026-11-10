@@ -614,10 +614,6 @@ const SECTIONS: Section[] = [
     pages: { directory: "archil/compute" },
   },
   {
-    heading: "Archil — Frontend",
-    pages: { directory: "archil/frontend" },
-  },
-  {
     heading: "Archil — Storage",
     pages: { directory: "archil/storage" },
   },

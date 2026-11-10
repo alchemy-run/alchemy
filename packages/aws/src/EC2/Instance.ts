@@ -27,6 +27,7 @@ import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import {
   type Ec2HostedProps,
+  type InstanceEnclaveOptions,
   type InstanceMetadataOptions,
   createEc2HostRuntimeContext,
   createEc2HostedSupport,
@@ -36,7 +37,7 @@ import type { SecurityGroupId } from "./SecurityGroup.ts";
 import type { SubnetId } from "./Subnet.ts";
 import type { VpcId } from "./Vpc.ts";
 
-export type { InstanceMetadataOptions };
+export type { InstanceEnclaveOptions, InstanceMetadataOptions };
 
 export type InstanceId<ID extends string = string> = `i-${ID}`;
 export const InstanceId = <ID extends string>(id: ID): ID & InstanceId<ID> =>
@@ -110,6 +111,16 @@ export interface InstanceProps extends PlatformProps {
    * fields keep the AMI / account defaults.
    */
   metadataOptions?: InstanceMetadataOptions;
+  /**
+   * Enable AWS Nitro Enclaves, which also lets the instance run
+   * [Nitro Sandboxes](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/amazon-ec2-nitro-sandboxes.html):
+   * lightweight VMs, isolated by the Nitro hypervisor, that a VMM such as
+   * Firecracker launches on the instance. Needs an instance type that
+   * supports Nitro Enclaves.
+   *
+   * Set at launch only; changing it replaces the instance.
+   */
+  enclaveOptions?: InstanceEnclaveOptions;
   /**
    * User-defined tags to apply to the instance.
    */
@@ -255,6 +266,10 @@ export interface Instance extends Resource<
      */
     metadataOptions?: InstanceMetadataOptions;
     /**
+     * Whether Nitro Enclaves (and so Nitro Sandboxes) are enabled.
+     */
+    enclaveOptions?: InstanceEnclaveOptions;
+    /**
      * When the instance was launched.
      */
     launchTime?: string;
@@ -347,6 +362,18 @@ export type InstanceRuntimeContext = Ec2HostRuntimeContext;
  *     httpTokens: "required",
  *     httpPutResponseHopLimit: 1,
  *   },
+ * });
+ * ```
+ *
+ * ### Nitro Sandboxes
+ * **Example:** Instance that runs Nitro Sandboxes
+ * Enable Nitro Enclaves on a supported instance type, then launch each
+ * sandbox on the instance with Firecracker.
+ * ```typescript
+ * const host = yield* AWS.EC2.Instance("SandboxHost", {
+ *   imageId: AWS.EC2.amazonLinux2023(),
+ *   instanceType: "m6i.xlarge",
+ *   enclaveOptions: { enabled: true },
  * });
  * ```
  *
@@ -553,6 +580,9 @@ export const InstanceProvider = () =>
                   | undefined,
               }
             : undefined,
+          enclaveOptions: instance.EnclaveOptions
+            ? { enabled: instance.EnclaveOptions.Enabled ?? false }
+            : undefined,
           launchTime:
             instance.LaunchTime instanceof Date
               ? instance.LaunchTime.toISOString()
@@ -711,6 +741,7 @@ export const InstanceProvider = () =>
             privateIpAddress: news.privateIpAddress,
             availabilityZone: news.availabilityZone,
             metadataOptions: news.metadataOptions,
+            enclaveOptions: news.enclaveOptions,
             tags,
           },
           runtime,
@@ -767,7 +798,10 @@ export const InstanceProvider = () =>
             userDataChanged ||
             launchConfigChanged(raw.associatePublicIpAddress, olds.associatePublicIpAddress) ||
             launchConfigChanged(raw.privateIpAddress, olds.privateIpAddress) ||
-            launchConfigChanged(raw.availabilityZone, olds.availabilityZone)
+            launchConfigChanged(raw.availabilityZone, olds.availabilityZone) ||
+            !isResolved(raw.enclaveOptions) ||
+            (olds.enclaveOptions?.enabled ?? false) !==
+              ((raw.enclaveOptions as InstanceEnclaveOptions | undefined)?.enabled ?? false)
           ) {
             // A primary private IP cannot belong to two instances in the
             // same subnet. An omitted subnet may still resolve to that subnet.

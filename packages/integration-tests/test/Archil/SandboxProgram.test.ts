@@ -1,15 +1,21 @@
 import * as Archil from "@alchemy.run/archil";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as archil from "@distilled.cloud/archil";
 import * as Objects from "@distilled.cloud/archil/Objects";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
+import { doWork, OtelCollector, waitForWorkSpan, withCollectorUrl } from "../Utils/Telemetry.ts";
 import EffectApi from "./fixtures/program/effect.ts";
 import { asyncHello, ProgramData, ProgramMount } from "./fixtures/program/resources.ts";
+import TracedApi from "./fixtures/program/traced.ts";
 
-const { test } = Test.make({ providers: Archil.providers() });
+const { test } = Test.make({
+  providers: Layer.mergeAll(Archil.providers(), Cloudflare.providers()),
+});
 
 const getText = (url: string) =>
   Effect.gen(function* () {
@@ -95,4 +101,41 @@ test.provider(
       expect(yield* gone(api.sandboxId)).toBe(true);
     }),
   { tags: ["provider:archil", "provider:archil:sandbox", "live"], timeout: 600_000 },
+);
+
+test.provider(
+  "program sandboxes export spans to the bound OTLP destination",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      // The traced program binds the collector url at deploy, so it deploys first.
+      const collector = yield* stack.deploy(OtelCollector());
+      const api = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            yield* OtelCollector();
+            return yield* TracedApi;
+          }),
+        )
+        .pipe(withCollectorUrl(collector.url!));
+
+      expect(yield* doWork(api.url!, "archil")).toBe("did work archil");
+      const traces = yield* waitForWorkSpan(collector.url!, "archil");
+      expect(traces).toContain("work:archil");
+      expect(traces).toContain("archil-sandbox-e2e");
+
+      yield* stack.destroy();
+      expect(yield* gone(api.sandboxId)).toBe(true);
+    }),
+  {
+    tags: [
+      "provider:archil",
+      "provider:archil:sandbox",
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 600_000,
+  },
 );

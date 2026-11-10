@@ -3,32 +3,32 @@ title: What is Stripe?
 description: The concepts behind Stripe — accounts and test mode, API keys, products and prices, customers, Checkout, subscriptions, the Billing Portal, webhooks and Connect — and how @alchemy.run/stripe models each of them.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import Tree from "../../../components/diagrams/Tree.astro";
+
 
 Stripe takes payments for you. It holds what you sell, the **products** and their **prices**, who buys it, the **customers**, and the record of every payment and **subscription**. Its hosted pages collect card details so you never touch them, and it tells your app what happened through **webhooks**.
 
 Take one small SaaS: a Pro plan at $20 a month, sold through Stripe Checkout, with a webhook that records who's subscribed. Live mode and each sandbox in your account hold their own catalog, keys and webhooks. Your Worker starts a Checkout session for the Pro price with a restricted key, and Stripe sends the subscription back to its webhook endpoint as an event.
 
-<DAG
+<Tree
   nodes={[
-    { id: "product", label: "Pro", type: "Product", col: 1, row: 0 },
-    { id: "price", label: "$20/mo", type: "Price", col: 1, row: 1 },
-    { id: "key", label: "worker", type: "Restricted key", col: 2, row: 0 },
-    { id: "hook", label: "/stripe/events", type: "Webhook endpoint", col: 2, row: 1 },
-    { id: "worker", label: "Worker", type: "your app", tone: "accent", col: 3, row: 0 },
-    { id: "sbProduct", label: "Pro", type: "Product", col: 1, row: 2 },
-    { id: "sbPrice", label: "$20/mo", type: "Price", col: 2, row: 2 },
+    { id: "account", label: "acme", type: "account", icon: "brand:stripe", areas: ["sandbox", "live"] },
+    { id: "sandbox", label: "dev", type: "sandbox", parent: "account", dashed: true, icon: "flask-conical", areas: ["sbProduct sbPrice"], phoneAreas: ["sbProduct sbPrice"], colGap: 3 },
+    { id: "sbProduct", label: "Pro", type: "product", parent: "sandbox", icon: "tag" },
+    { id: "sbPrice", label: "$20/mo", type: "price", parent: "sandbox", icon: "receipt" },
+    { id: "live", label: "Live mode", type: "real money", parent: "account", dashed: true, icon: "radio", areas: ["product price", "key hook"], phoneAreas: ["product price", "key hook"], colGap: 3 },
+    { id: "product", label: "Pro", type: "product", parent: "live", icon: "tag" },
+    { id: "price", label: "$20/mo", type: "price", parent: "live", icon: "receipt" },
+    { id: "key", label: "worker", type: "restricted key", parent: "live", icon: "key-round" },
+    { id: "hook", label: "/stripe/events", type: "webhook endpoint", parent: "live", icon: "webhook" },
+    { id: "worker", label: "your Worker", type: "outside Stripe", icon: "square-function" },
   ]}
-  groups={[
-    { id: "account", label: "Account acme", nodes: [] },
-    { id: "live", label: "Live mode", parent: "account", nodes: ["product", "price", "key", "hook"], dashed: true },
-    { id: "sandbox", label: "Sandbox dev", parent: "account", nodes: ["sbProduct", "sbPrice"], dashed: true },
-  ]}
-  edges={[
-    { from: "product", to: "price", label: "priced by" },
-    { from: "key", to: "worker" },
-    { from: "hook", to: "worker", label: "events", dashed: true, exit: "side" },
-    { from: "sbProduct", to: "sbPrice" },
+  areas={["account", "worker"]}
+  links={[
+    { from: "sbProduct", to: "sbPrice", label: "price" },
+    { from: "product", to: "price", label: "price" },
+    { from: "worker", to: "key", label: "uses" },
+    { from: "hook", to: "worker", label: "events", dashed: true },
   ]}
   caption="An account's live mode and each sandbox hold their own products, prices, keys and webhooks. Your app calls Stripe with a restricted key, and Stripe sends events to its webhook endpoint."
 />

@@ -20,11 +20,15 @@ registered — see [Setup](/docker/setup) and the
 
 <Tree
   nodes={[
-    { id: "engine", label: "local Docker", type: "engine" },
-    { id: "net", label: "app-network", type: "Network · DNS by name", parent: "engine" },
-    { id: "pg", label: "postgres", type: "Container", parent: "net", tone: "accent", specs: [["image", "postgres@sha256:…"], ["volume", "postgres-data"]] },
-    { id: "worker", label: "worker", type: "Container", parent: "net", specs: [["reaches", "postgres:5432"]] },
-    { id: "vol", label: "postgres-data", type: "Volume · outlives the container", parent: "engine", side: true },
+    { id: "engine", label: "local Docker", type: "engine", areas: ["net vol"], colGap: 3 },
+    { id: "net", label: "app-network", type: "Network · DNS by name", parent: "engine", areas: ["worker pg"], colGap: 3 },
+    { id: "worker", label: "worker", type: "Container", parent: "net" },
+    { id: "pg", label: "postgres", type: "Container", parent: "net", tone: "accent", specs: [["image", "postgres@sha256:…"]] },
+    { id: "vol", label: "postgres-data", type: "Volume", parent: "engine" },
+  ]}
+  links={[
+    { from: "worker", to: "pg", label: ":5432" },
+    { from: "pg", to: "vol", label: "mounts" },
   ]}
   caption="The containers find each other by name on their network. The data lives in a Volume, so replacing the postgres container keeps it."
 />

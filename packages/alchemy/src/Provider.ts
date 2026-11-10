@@ -84,6 +84,19 @@ type Props<Res extends ResourceLike> = keyof Res["Props"] extends never
   ? Res["Props"] | undefined
   : Res["Props"];
 
+/**
+ * What a lifecycle operation may fail with. Providers fail with tagged
+ * errors (distilled's typed errors, `Data.TaggedError`s), so `_tag` and
+ * `message` are always readable.
+ *
+ * The union is open: `_tag` is `string`, not the provider's own tags. The
+ * compiler does not know which tags a provider can fail with, so
+ * `Effect.catchTag` accepts any tag, does not narrow the handler's error, and
+ * leaves `ProviderError` in the error channel. Match on `_tag`, or on the
+ * error class with `instanceof`, at runtime.
+ */
+export type ProviderError = { readonly _tag: string; readonly message?: string };
+
 export interface LogLine {
   timestamp: Date;
   message: string;
@@ -225,7 +238,7 @@ export interface ProviderService<
    * existence-only resources, sub-resources keyed entirely by a parent)
    * should return an empty array rather than throwing.
    */
-  list(): Effect.Effect<Res["Attributes"][], any, ListReq>;
+  list(): Effect.Effect<Res["Attributes"][], ProviderError, ListReq>;
   /**
    * Returns a stream of log lines for a deployed resource.
    * Used by `alchemy logs --tail` to stream real-time logs.
@@ -240,7 +253,7 @@ export interface ProviderService<
     instanceId: string;
     props: Props<Res>;
     output: Res["Attributes"];
-  }): Stream.Stream<LogLine, any, TailReq>;
+  }): Stream.Stream<LogLine, ProviderError, TailReq>;
   /**
    * Queries historical logs for a deployed resource.
    * Used by `alchemy logs` to fetch past log entries.
@@ -256,7 +269,7 @@ export interface ProviderService<
     props: Props<Res>;
     output: Res["Attributes"];
     options: LogsInput;
-  }): Effect.Effect<LogLine[], any, LogsReq>;
+  }): Effect.Effect<LogLine[], ProviderError, LogsReq>;
   // watch();
   // replace(): Effect.Effect<void, never, never>;
   // different interface that is persistent, watching, reloads
@@ -281,7 +294,7 @@ export interface ProviderService<
      * this previous generation as owned, not `Unowned`.
      */
     previous?: Res["Attributes"];
-  }): Effect.Effect<Res["Attributes"] | undefined, any, ReadReq>;
+  }): Effect.Effect<Res["Attributes"] | undefined, ProviderError, ReadReq>;
   /**
    * Find a resource this stack does not manage by the key the resource
    * declares as its `Lookup` type (e.g. a Worker's `name`), and return its
@@ -292,7 +305,9 @@ export interface ProviderService<
    * engine never writes a state row for it, so `destroy` cannot touch it.
    * It is always called on the live provider.
    */
-  lookup?(props: Res["Lookup"]): Effect.Effect<Res["Attributes"] | undefined, any, LookupReq>;
+  lookup?(
+    props: Res["Lookup"],
+  ): Effect.Effect<Res["Attributes"] | undefined, ProviderError, LookupReq>;
   /**
    * Properties that are always stable across any update.
    */
@@ -312,7 +327,7 @@ export interface ProviderService<
     oldBindings: BindingData<Res>;
     newBindings: Input<BindingData<Res>>;
     output: Res["Attributes"] | undefined;
-  }): Effect.Effect<Diff | void, any, DiffReq>;
+  }): Effect.Effect<Diff | void, ProviderError, DiffReq>;
   // dev?:() => Effect.Effect<void, any, DevReq>;
   /**
    * Reports what exists at the physical resource {@link precreate} would
@@ -349,7 +364,11 @@ export interface ProviderService<
     instanceId: string;
     /** During a replacement, the attributes of the generation being replaced. */
     previous?: Res["Attributes"];
-  }): Effect.Effect<Partial<Res["Attributes"]> | Unresolved | undefined, any, PrecreateReq>;
+  }): Effect.Effect<
+    Partial<Res["Attributes"]> | Unresolved | undefined,
+    ProviderError,
+    PrecreateReq
+  >;
   precreate?(input: {
     id: string;
     /**
@@ -361,7 +380,7 @@ export interface ProviderService<
     instanceId: string;
     session: ScopedPlanStatusSession;
     bindings: BindingData<Res>;
-  }): Effect.Effect<Res["Attributes"], any, PrecreateReq>;
+  }): Effect.Effect<Res["Attributes"], ProviderError, PrecreateReq>;
   /**
    * Reconciles the desired state of a Resource with the live cloud state.
    *
@@ -397,7 +416,7 @@ export interface ProviderService<
     output: Res["Attributes"] | undefined;
     session: ScopedPlanStatusSession;
     bindings: BindingData<Res>;
-  }): Effect.Effect<Res["Attributes"], any, ReconcileReq>;
+  }): Effect.Effect<Res["Attributes"], ProviderError, ReconcileReq>;
   /** Idempotent; fail with {@link DeleteInProgress} when the cloud cannot finish the delete yet. */
   delete(input: {
     id: string;
@@ -421,7 +440,7 @@ export interface ProviderService<
      * Normal engine destroys never set it.
      */
     force?: boolean;
-  }): Effect.Effect<void, any, DeleteReq>;
+  }): Effect.Effect<void, ProviderError, DeleteReq>;
 }
 
 /**

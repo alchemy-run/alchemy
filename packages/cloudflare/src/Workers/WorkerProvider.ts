@@ -4789,7 +4789,12 @@ export const LiveWorkerProvider = () =>
             (yield* hasChanged(
               id,
               fqn,
-              news,
+              // `stripEffects` keeps plain data only, so it drops the hook
+              // functions and RegExp filters of `build` plugins. Hashing
+              // builds the bundle, which needs them as written.
+              (desired as WorkerProps).build === undefined
+                ? news
+                : { ...news, build: (desired as WorkerProps).build },
               output,
               Array.isArray(newBindings)
                 ? (newBindings as ResourceBinding<Worker["Binding"]>[])

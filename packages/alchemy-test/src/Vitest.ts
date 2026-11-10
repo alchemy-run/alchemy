@@ -1,4 +1,3 @@
-/** @effect-diagnostics anyUnknownInErrorContext:off */
 import { it } from "@effect/vitest";
 import type { AlchemyContext } from "alchemy/AlchemyContext";
 import type { CompiledStack, StackDefinition } from "alchemy/Stack";

@@ -482,12 +482,6 @@ export type SandboxShape = Main<ServerHost>;
  * });
  * ```
  *
- * ### Websites
- * **Example:** A framework site runs in its own sandbox
- * ```typescript
- * const site = yield* Archil.Website.Astro("Site", { sandbox: { vcpuCount: 2 } });
- * ```
- *
  * ### Using a Sandbox at Run Time
  * **Example:** Run a command and fork a preview from a Worker
  * ```typescript

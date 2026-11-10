@@ -1,15 +1,21 @@
 import * as Boat from "@alchemy.run/boat";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as boat from "@distilled.cloud/boat-dev/boat";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import { doWork, OtelCollector, waitForWorkSpan, withCollectorUrl } from "../Utils/Telemetry.ts";
 import Agent from "./fixtures/program.ts";
+import TracedAgent from "./fixtures/traced.ts";
 
-const { test } = Test.make({ providers: Boat.providers() });
+const { test } = Test.make({
+  providers: Layer.mergeAll(Boat.providers(), Cloudflare.providers()),
+});
 
 const tags = ["provider:boat", "provider:boat:sandbox", "live"];
 
@@ -99,4 +105,35 @@ test.provider(
       expect(yield* sandboxState(id)).toBe("gone");
     }),
   { tags, timeout: 600_000 },
+);
+
+test.provider(
+  "a sandbox program exports spans to the bound OTLP destination",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      // The traced program binds the collector url at deploy, so it deploys first.
+      const collector = yield* stack.deploy(OtelCollector());
+      const agent = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            yield* OtelCollector();
+            return yield* TracedAgent;
+          }),
+        )
+        .pipe(withCollectorUrl(collector.url!));
+
+      const cookie = agent.urlToken
+        ? { cookie: `_port_auth=${Redacted.value(agent.urlToken)}` }
+        : undefined;
+      expect(yield* doWork(agent.url!, "boat", cookie)).toBe("did work boat");
+      const traces = yield* waitForWorkSpan(collector.url!, "boat");
+      expect(traces).toContain("work:boat");
+      expect(traces).toContain("boat-sandbox-e2e");
+
+      yield* stack.destroy();
+      expect(yield* sandboxState(agent.sandboxId)).toBe("gone");
+    }),
+  { tags: [...tags, "provider:cloudflare", "provider:cloudflare:worker"], timeout: 600_000 },
 );

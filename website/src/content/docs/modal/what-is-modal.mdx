@@ -9,21 +9,37 @@ import Tree from "../../../components/diagrams/Tree.astro";
 
 Modal runs your code in containers, with GPUs when you ask for them. A **workspace** holds everything you create and pays for it. It's divided into **environments**, and in each environment, **apps** group the code that runs: **Functions** and **Servers** that Modal scales with traffic, and **Sandboxes** your code creates while it runs. Each of them starts from an **image**. Volumes, Dicts, Queues and Secrets sit beside the apps in the same environment. You pay per second for the containers that run, and nothing while they're scaled to zero.
 
-Take one small app: a Cloudflare Worker gives each user a Sandbox from the `Warm` image, with a Volume of their own as `/home/user`. An `Embed` Function on an L4 GPU turns their text into vectors. The `Coder` and `Inference` apps hold the code, and the `Agents` environment holds both apps with their Volume and Secret.
+Take one small app: a Cloudflare Worker gives each user a Sandbox from the `Warm` image, with a Volume of their own as `/home/user`. An `Embed` Function on an L4 GPU turns their text into vectors. The `Coder` and `Inference` apps hold the code, and the `MyEnv` environment holds both apps with their Volume and Secret.
 
 <Tree
   nodes={[
+    { id: "worker", label: "Api", type: "your Cloudflare Worker", icon: "square-function" },
     { id: "ws", label: "acme", type: "workspace", icon: "brand:modal" },
-    { id: "env", label: "Agents", type: "environment", parent: "ws", dashed: true, icon: "folder" },
-    { id: "coder", label: "Coder", type: "app", parent: "env", icon: "app-window" },
+    {
+      id: "env", label: "MyEnv", type: "environment", parent: "ws", dashed: true, icon: "folder", colGap: 3.5,
+      areas: ["coder coder", "hsam hana", "hf inference"],
+      phoneAreas: ["coder coder", "hsam hana", "hf hf", "inference inference"],
+    },
+    { id: "coder", label: "Coder", type: "app", parent: "env", icon: "app-window", areas: ["warm warm", "sam ana"], phoneAreas: ["warm warm", "sam ana"] },
     { id: "warm", label: "Warm", type: "image", parent: "coder", icon: "package" },
-    { id: "sbx", label: "session-sam", type: "Sandbox", parent: "coder", tone: "accent", icon: "box", specs: [["image", "Warm"], ["mount", "/home/user"]] },
+    { id: "sam", label: "session-sam", type: "Sandbox", parent: "coder", tone: "accent", icon: "box" },
+    { id: "ana", label: "session-ana", type: "Sandbox", parent: "coder", tone: "accent", icon: "box" },
+    { id: "hsam", label: "home-sam", type: "Volume", parent: "env", icon: "hard-drive" },
+    { id: "hana", label: "home-ana", type: "Volume", parent: "env", icon: "hard-drive" },
+    { id: "hf", label: "HuggingFace", type: "Secret", parent: "env", icon: "key-round" },
     { id: "inference", label: "Inference", type: "app", parent: "env", icon: "app-window" },
     { id: "embed", label: "Embed", type: "Function", parent: "inference", icon: "square-function", specs: [["gpu", "L4"]] },
-    { id: "home", label: "home-sam", type: "Volume", parent: "env", side: true, icon: "hard-drive" },
-    { id: "openai", label: "OpenAI", type: "Secret", parent: "env", side: true, icon: "key-round" },
   ]}
-  caption="Everything lives in one environment of the workspace. Apps hold the code that runs, and each Sandbox and Function container starts from an image. The Volume and the Secret belong to the environment, so any app in it can use them."
+  areas={["worker", "ws"]}
+  links={[
+    { from: "worker", to: "coder", label: "creates one per person" },
+    { from: "warm", to: "sam", label: "boots" },
+    { from: "warm", to: "ana", label: "boots" },
+    { from: "hsam", to: "sam", label: "/home/user" },
+    { from: "hana", to: "ana", label: "/home/user" },
+    { from: "hf", to: "embed", label: "HF_TOKEN" },
+  ]}
+  caption="Your Worker creates a Sandbox and a Volume for each person using your app, here sam and ana, and there can be as many as you need. Every Sandbox boots from the one Warm image and mounts its own Volume. The apps, the image, the Embed Function and its HuggingFace Secret are deployed once, in one environment of the workspace."
 />
 
 ## Workspaces: who owns and pays
@@ -41,10 +57,10 @@ See [Workspaces & tokens](/modal/workspaces-and-tokens).
 An **environment** divides a workspace. Two objects with the same name in two environments are different objects, so `dev` and `prod` never share a Volume by accident. Every workspace starts with one called `main`.
 
 ```typescript title="src/environments.ts"
-export const Agents = Modal.Environment("Agents", {});
+export const MyEnv = Modal.Environment("MyEnv", {});
 ```
 
-Alchemy names the environment from your app, stage and id, so each stage gets its own. Everything else you declare names its environment with `environment: Agents`, or lands in the workspace's default one.
+Alchemy names the environment from your app, stage and id, so each stage gets its own. Everything else you declare names its environment with `environment: MyEnv`, or lands in the workspace's default one.
 
 See [Workspaces & tokens](/modal/workspaces-and-tokens#environments-keep-stages-apart).
 
@@ -53,7 +69,7 @@ See [Workspaces & tokens](/modal/workspaces-and-tokens#environments-keep-stages-
 An **app** groups the code you deploy together and acts as its namespace. A deployed app runs until you stop it, and stopping it stops every Function, Server and Sandbox in it.
 
 ```typescript title="src/apps.ts"
-export const Coder = Modal.App("Coder", { environment: Agents });
+export const Coder = Modal.App("Coder", { environment: MyEnv });
 ```
 
 ## Images: the filesystem a container starts from
@@ -153,15 +169,15 @@ See [Sandboxes](/modal/sandboxes/sandboxes) and [Snapshots](/modal/sandboxes/sna
 A **Volume** is a filesystem that Functions, Servers and Sandboxes mount at a path, and that outlives every container that mounts it. A **Dict** is a key-value store and a **Queue** hands work between processes; both hold JSON and expire their entries.
 
 ```typescript title="src/storage.ts"
-export const Weights = Modal.Volume("Weights", { environment: Agents });
-export const Results = Modal.Dict("Results", { environment: Agents });
-export const Jobs = Modal.Queue("Jobs", { environment: Agents });
+export const Weights = Modal.Volume("Weights", { environment: MyEnv });
+export const Results = Modal.Dict("Results", { environment: MyEnv });
+export const Jobs = Modal.Queue("Jobs", { environment: MyEnv });
 ```
 
 A Volume per user is created by name while your app runs:
 
 ```typescript
-const volumes = yield* Modal.CreateVolume(Agents);
+const volumes = yield* Modal.CreateVolume(MyEnv);
 const home = yield* volumes.getOrCreate(`home-${user}`);
 ```
 
@@ -172,9 +188,9 @@ See [Volumes](/modal/storage/volumes), [Dicts](/modal/storage/dicts) and [Queues
 A **Secret** is a named set of environment variables, stored in an environment and attached to the containers that need them. A Sandbox can also keep a Secret out of its environment entirely: Modal adds it to outgoing requests for the hosts you name, so code inside never sees it.
 
 ```typescript title="src/secrets.ts"
-export const OpenAI = Modal.Secret("OpenAI", {
-  environment: Agents,
-  env: { OPENAI_API_KEY: Config.Redacted("OPENAI_API_KEY") },
+export const HuggingFace = Modal.Secret("HuggingFace", {
+  environment: MyEnv,
+  env: { HF_TOKEN: Config.Redacted("HF_TOKEN") },
 });
 ```
 
