@@ -1902,6 +1902,12 @@ describe("repair progress", { tags: ["unit", "local"] }, () => {
       );
 
       expect(statusesOf(events, "A")).toEqual(["updating", "fail"]);
+      // The failed row names its error, like a failed deploy does.
+      expect(
+        events.flatMap((e) =>
+          e.type === "apply.resource.status" && e.status === "fail" ? [e.message] : [],
+        ),
+      ).toEqual(["ResourceFailure: Failed to create"]);
     }).pipe(withCloud(cloud));
   });
 });
