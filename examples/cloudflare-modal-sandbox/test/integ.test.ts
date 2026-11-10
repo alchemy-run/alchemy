@@ -14,7 +14,8 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   state: Alchemy.localState(),
 });
 
-const stack = beforeAll(deploy(Stack));
+// The deploy builds the Node and Warm images; a cold Modal build takes minutes.
+const stack = beforeAll(deploy(Stack), { timeout: 600_000 });
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
 // The binding prefixes the volume's name with this stack and stage's owner
