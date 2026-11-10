@@ -15,12 +15,16 @@ written in Effect. One resource applies three Kubernetes objects:
 
 <Tree
   nodes={[
-    { id: "ns", label: "default", type: "namespace" },
-    { id: "sa", label: "api", type: "ServiceAccount", parent: "ns", side: true },
-    { id: "svc", label: "api", type: "Service · selects app=api", parent: "ns", side: true },
+    { id: "ns", label: "default", type: "namespace", areas: ["svc dep sa"], phoneAreas: ["svc sa", "dep dep"], colGap: 3.5 },
+    { id: "svc", label: "api", type: "Service", parent: "ns" },
     { id: "dep", label: "api", type: "Deployment · replicas: 2", parent: "ns" },
-    { id: "p1", label: "api-6f9d-x2", type: "Pod · runs as api", parent: "dep", tone: "accent" },
-    { id: "p2", label: "api-6f9d-k8", type: "Pod · runs as api", parent: "dep", tone: "accent" },
+    { id: "p1", label: "api-6f9d-x2", type: "Pod", parent: "dep", tone: "accent" },
+    { id: "p2", label: "api-6f9d-k8", type: "Pod", parent: "dep", tone: "accent" },
+    { id: "sa", label: "api", type: "ServiceAccount", parent: "ns" },
+  ]}
+  links={[
+    { from: "svc", to: "dep", label: "app=api" },
+    { from: "dep", to: "sa", label: "runs as" },
   ]}
   caption="One Kubernetes.Deployment applies three objects. The Deployment keeps two Pods running as the ServiceAccount, and the Service sends traffic to them."
 />

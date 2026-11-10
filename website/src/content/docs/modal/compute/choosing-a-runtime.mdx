@@ -3,7 +3,7 @@ title: Choosing a runtime
 description: Functions, Servers, program sandboxes and sandboxes created at run time on Modal, and when to use each.
 ---
 
-import DAG from "../../../../components/DAG.astro";
+import Tree from "../../../../components/diagrams/Tree.astro";
 import Responsibility from "../../../../components/Responsibility.astro";
 import Timeline from "../../../../components/diagrams/Timeline.astro";
 
@@ -105,9 +105,9 @@ Choose it for APIs, streaming responses and WebSockets. See [Servers](/modal/ser
 A `Modal.Sandbox` with a `main` bundles your program into an image. Your code starts one with `create`, reaches the program's port through a tunnel, and terminates it, or lets its timeout stop it.
 
 ```typescript
-const agents = yield* Modal.CreateSandbox(Agent);
-const agent = yield* agents.create({ timeout: "10 minutes" });
-const port = yield* agent.getTcpPort();
+const sandboxes = yield* Modal.CreateSandbox(MySandbox);
+const sandbox = yield* sandboxes.create({ timeout: "10 minutes" });
+const port = yield* sandbox.getTcpPort();
 ```
 
 Choose it when each user or session needs a copy of your own server. See [Programs](/modal/sandboxes/programs).
@@ -155,19 +155,21 @@ A [persistent sandbox](/modal/sandboxes/persistent) keeps its files between sess
 
 A Worker creates a sandbox per user and calls a GPU Function, and both read model weights from one Volume:
 
-<DAG
+<Tree
   nodes={[
-    { id: "worker", label: "Api", type: "Cloudflare Worker", col: 0, row: 1 },
-    { id: "sbx", label: "session-sam", type: "Sandbox", col: 1, row: 0 },
-    { id: "embed", label: "Embed", type: "Function · L4", col: 1, row: 2 },
-    { id: "weights", label: "Weights", type: "Volume", tone: "accent", col: 2, row: 1 },
+    { id: "api", label: "Api", type: "Worker", icon: "square-function" },
+    { id: "env", label: "MyEnv", type: "environment", icon: "brand:modal", areas: ["sbx weights", "embed weights"], phoneAreas: ["sbx embed", "weights weights"], colGap: 3.5 },
+    { id: "sbx", label: "session-sam", type: "Sandbox", parent: "env", icon: "box" },
+    { id: "embed", label: "Embed", type: "Function · L4", parent: "env", icon: "square-function" },
+    { id: "weights", label: "Weights", type: "Volume", parent: "env", tone: "accent", icon: "hard-drive" },
   ]}
-  groups={[{ id: "env", label: "Agents environment", nodes: ["sbx", "embed", "weights"] }]}
-  edges={[
-    { from: "worker", to: "sbx", label: "create" },
-    { from: "worker", to: "embed", label: "embed()" },
+  areas={["api env"]}
+  colGap={3.5}
+  links={[
+    { from: "api", to: "sbx", label: "creates" },
+    { from: "api", to: "embed", label: "calls" },
     { from: "sbx", to: "weights", label: "mounts" },
     { from: "embed", to: "weights", label: "mounts" },
   ]}
-  caption="The Worker runs outside Modal and reaches both runtimes through Modal's API. The sandbox and the Function mount the same Volume in their environment."
+  caption="The Worker, Api, runs outside Modal and reaches both runtimes through Modal's API. The sandbox and the Function mount the same Volume in their environment."
 />

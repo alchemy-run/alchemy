@@ -11,13 +11,14 @@ A **region** is where sandboxes run, such as `us` or `eu`. Inside a region, **ru
 
 <Tree
   nodes={[
-    { id: "home", label: "Home", type: "custom region", specs: [["proxy", "proxy.daytona.example.com"], ["ssh", "ssh.daytona.example.com:2222"]] },
+    { id: "home", label: "Home", type: "custom region", areas: ["box1 box2"], colGap: 3.5, specs: [["proxy", "proxy.daytona.example.com"], ["ssh", "ssh.daytona.example.com:2222"]] },
     { id: "box1", label: "Box1", type: "runner", parent: "home", tone: "accent" },
     { id: "a", label: "user-sam", type: "sandbox", parent: "box1" },
     { id: "b", label: "user-ana", type: "sandbox", parent: "box1" },
     { id: "box2", label: "Box2", type: "runner · draining", parent: "home", tone: "muted" },
     { id: "c", label: "ci-417", type: "sandbox · moving off", parent: "box2" },
   ]}
+  links={[{ from: "c", to: "box1", label: "moves", dashed: true }]}
   caption="A custom region has its own proxy and SSH gateway, and runners you operate. The scheduler places sandboxes on runners; a draining runner takes no new ones and its sandboxes move off."
 />
 

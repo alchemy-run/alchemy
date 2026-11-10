@@ -8,12 +8,13 @@ A **registry image reference** is the artifact that cloud container
 platforms consume.
 <Tree
   nodes={[
-    { id: "stack", label: "your Stack", type: "one deploy" },
-    { id: "repo", label: "ghcr.io/acme/app", type: "repository", parent: "stack" },
-    { id: "old", label: "sha256:4f1a…", type: "image · last deploy", parent: "repo", tone: "muted" },
+    { id: "stack", label: "your Stack", type: "one deploy", areas: ["task repo"], phoneAreas: ["repo", "task"], colGap: 3 },
+    { id: "repo", label: "ghcr.io/acme/app", type: "repository", parent: "stack", areas: ["new old"], phoneAreas: ["new old"] },
     { id: "new", label: "sha256:9c2e…", type: "image · tag latest", parent: "repo", tone: "accent" },
-    { id: "task", label: "ECS task", type: "or Cloudflare Container", side: true, parent: "stack", specs: [["runs", "app@sha256:9c2e…"]] },
+    { id: "old", label: "sha256:4f1a…", type: "image · last deploy", parent: "repo", tone: "muted" },
+    { id: "task", label: "ECS task", type: "or Cloudflare Container", parent: "stack" },
   ]}
+  links={[{ from: "task", to: "new", label: "runs" }]}
   caption="A tag can move, a digest can't. The platform gets the image by digest, so a new build redeploys exactly the image you pushed."
 />
 

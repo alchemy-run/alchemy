@@ -13,10 +13,11 @@ Give a template a `main`, and every sandbox from it boots with your program alre
   shell={{
     label: "user-42",
     type: "sandbox · microVM",
+    icon: "brand:e2b",
     children: [
-      { label: "Program", type: "Bun · /app · :3000", tone: "accent" },
-      { label: "env", type: "config · binding values" },
-      { label: "agent code", type: "exec · files", tone: "muted" },
+      { label: "Program", type: "Bun · /app · :3000", tone: "accent", icon: "file-code" },
+      { label: "env", type: "config · binding values", icon: "key-round" },
+      { label: "agent code", type: "exec · files", tone: "muted", icon: "terminal" },
     ],
   }}
   caption="The program, its config and binding values, and any code you run in the sandbox all sit in the same microVM."
