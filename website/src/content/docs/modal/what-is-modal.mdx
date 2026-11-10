@@ -13,26 +13,33 @@ Take one small app: a Cloudflare Worker gives each user a Sandbox from the `Warm
 
 <Tree
   nodes={[
+    { id: "worker", label: "Api", type: "your Cloudflare Worker", icon: "square-function" },
     { id: "ws", label: "acme", type: "workspace", icon: "brand:modal" },
     {
-      id: "env", label: "MyEnv", type: "environment", parent: "ws", dashed: true, icon: "folder", colGap: 4.5,
-      areas: ["home coder", "hf inference"],
-      phoneAreas: ["home", "coder", "hf", "inference"],
+      id: "env", label: "MyEnv", type: "environment", parent: "ws", dashed: true, icon: "folder", colGap: 3.5,
+      areas: ["coder coder", "hsam hana", "hf inference"],
+      phoneAreas: ["coder coder", "hsam hana", "hf hf", "inference inference"],
     },
-    { id: "home", label: "home-sam", type: "Volume · one per user", parent: "env", icon: "hard-drive" },
-    { id: "coder", label: "Coder", type: "app", parent: "env", icon: "app-window", areas: ["sbx warm"], phoneAreas: ["sbx warm"], colGap: 3 },
-    { id: "sbx", label: "session-sam", type: "Sandbox · one per user", parent: "coder", tone: "accent", icon: "box" },
+    { id: "coder", label: "Coder", type: "app", parent: "env", icon: "app-window", areas: ["warm warm", "sam ana"], phoneAreas: ["warm warm", "sam ana"] },
     { id: "warm", label: "Warm", type: "image", parent: "coder", icon: "package" },
+    { id: "sam", label: "session-sam", type: "Sandbox", parent: "coder", tone: "accent", icon: "box" },
+    { id: "ana", label: "session-ana", type: "Sandbox", parent: "coder", tone: "accent", icon: "box" },
+    { id: "hsam", label: "home-sam", type: "Volume", parent: "env", icon: "hard-drive" },
+    { id: "hana", label: "home-ana", type: "Volume", parent: "env", icon: "hard-drive" },
     { id: "hf", label: "HuggingFace", type: "Secret", parent: "env", icon: "key-round" },
     { id: "inference", label: "Inference", type: "app", parent: "env", icon: "app-window" },
     { id: "embed", label: "Embed", type: "Function", parent: "inference", icon: "square-function", specs: [["gpu", "L4"]] },
   ]}
+  areas={["worker", "ws"]}
   links={[
-    { from: "warm", to: "sbx", label: "boots" },
-    { from: "home", to: "sbx", label: "/home/user" },
+    { from: "worker", to: "coder", label: "creates one per person" },
+    { from: "warm", to: "sam", label: "boots" },
+    { from: "warm", to: "ana", label: "boots" },
+    { from: "hsam", to: "sam", label: "/home/user" },
+    { from: "hana", to: "ana", label: "/home/user" },
     { from: "hf", to: "embed", label: "HF_TOKEN" },
   ]}
-  caption="Everything lives in one environment of the workspace. Apps hold the code that runs, and each Sandbox and Function container starts from an image. Each user's Sandbox mounts a Volume of their own, and the Embed Function gets the HuggingFace Secret as HF_TOKEN to download its model."
+  caption="Your Worker creates a Sandbox and a Volume for each person using your app, here sam and ana, and there can be as many as you need. Every Sandbox boots from the one Warm image and mounts its own Volume. The apps, the image, the Embed Function and its HuggingFace Secret are deployed once, in one environment of the workspace."
 />
 
 ## Workspaces: who owns and pays
