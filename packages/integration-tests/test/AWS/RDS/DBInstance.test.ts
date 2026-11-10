@@ -33,6 +33,7 @@ import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { driftOf } from "../drift.ts";
+import { stageIdentifier } from "./names.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -110,7 +111,6 @@ test.provider(
           Effect.gen(function* () {
             const subnetGroup = yield* network;
             return yield* DBInstance("AuditProbeInstance", {
-              dbInstanceIdentifier: "alchemy-audit-probe-instance",
               dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
               engine: "postgres",
               dbInstanceClass: "db.t3.micro",
@@ -133,7 +133,6 @@ test.provider(
           Effect.gen(function* () {
             const subnetGroup = yield* network;
             return yield* DBInstance("AuditProbeInstance", {
-              dbInstanceIdentifier: "alchemy-audit-probe-instance",
               dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
               engine: "postgres",
               dbInstanceClass: "db.t3.micro",
@@ -167,7 +166,6 @@ test.provider(
           Effect.gen(function* () {
             const subnetGroup = yield* network;
             return yield* DBInstance("AuditProbeInstance", {
-              dbInstanceIdentifier: "alchemy-audit-probe-instance",
               engine: "postgres",
               dbInstanceClass: "db.t3.micro",
               dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
@@ -548,7 +546,7 @@ lifecycle(1, process.env.RDS_TEST_LIFECYCLE)(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      const identifier = `alchemy-pitr-${stack.stage.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+      const identifier = stageIdentifier(stack.stage, "alchemy-pitr");
       const restoredId = `${identifier}-restored`;
       const displacedId = `${identifier}-old`;
 
@@ -1048,7 +1046,7 @@ lifecycle(4, process.env.RDS_TEST_LIFECYCLE)(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      const identifier = "alchemy-rds-port-adoption";
+      const identifier = stageIdentifier(stack.stage, "rds-port-adoption");
       const program = (port?: number) => portProgram(port, "adoption", identifier);
       const created = yield* stack.deploy(program(5433));
       yield* assertPort(identifier, 5433);
@@ -1240,7 +1238,7 @@ lifecycle(2, process.env.RDS_TEST_LIFECYCLE)(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      const identifier = "alchemy-rds-security-defaults";
+      const identifier = stageIdentifier(stack.stage, "rds-security");
       const { client, requests } = yield* observeInstanceRequests;
       const program = (security: SecurityProps = {}, round = "security") =>
         securityProgram(security, round, identifier);
@@ -1520,7 +1518,7 @@ lifecycle(3, process.env.AWS_TEST_RDS_DBINSTANCE)(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      const identifier = "alchemy-rds-security-aurora";
+      const identifier = stageIdentifier(stack.stage, "rds-security-aurora");
       const { client, requests } = yield* observeInstanceRequests;
       const program = (membership = true, explicit = true, round = "created") =>
         Effect.gen(function* () {
@@ -1843,7 +1841,7 @@ lifecycle(5, process.env.RDS_TEST_LIFECYCLE)(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      const identifier = "alchemy-rds-association-defaults";
+      const identifier = stageIdentifier(stack.stage, "rds-associations");
       const program = (extra: Parameters<typeof associationProgram>[0] = {}) =>
         associationProgram({ identifier, ...extra });
       const created = yield* stack.deploy(program({ version: "16.13", explicit: true }));
@@ -1948,7 +1946,7 @@ lifecycle(6, process.env.RDS_TEST_LIFECYCLE)(
           }),
         ),
       );
-      const identifier = "alchemy-rds-secret-policy";
+      const identifier = stageIdentifier(stack.stage, "rds-secret-policy");
       const program = (
         masterUserSecretResourcePolicy: PolicyDocument | undefined,
         round = "default",
@@ -2396,7 +2394,7 @@ lifecycle(2, process.env.RDS_TEST_LIFECYCLE)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const identifier = "alchemy-rds-fingerprint";
+      const identifier = stageIdentifier(stack.stage, "rds-fingerprint");
       const startedAt = yield* Effect.sync(() => new Date());
 
       // The testing account has no default VPC/subnets — provision a network

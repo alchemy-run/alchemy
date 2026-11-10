@@ -129,7 +129,6 @@ test.provider(
         stack.deploy(
           Effect.gen(function* () {
             return yield* DBCluster("AuditProbeCluster", {
-              dbClusterIdentifier: "alchemy-audit-probe",
               engine: "aurora-postgresql",
               masterUsername: "alchemy",
               // '@' and ' ' are forbidden password characters — AWS rejects
@@ -150,7 +149,6 @@ test.provider(
         stack.deploy(
           Effect.gen(function* () {
             return yield* DBCluster("AuditProbeCluster", {
-              dbClusterIdentifier: "alchemy-audit-probe",
               engine: "aurora-postgresql",
               masterUsername: "alchemy",
               masterUserPassword: Redacted.make("ValidPassw0rd"),
@@ -259,7 +257,6 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
         Effect.gen(function* () {
           const { dbSubnetGroupName } = yield* network;
           return yield* DBCluster("LifecycleCluster", {
-            dbClusterIdentifier: "alchemy-rds-lifecycle",
             engine: "aurora-postgresql",
             engineMode: "provisioned",
             dbSubnetGroupName,
@@ -281,7 +278,6 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
         Effect.gen(function* () {
           const { dbSubnetGroupName } = yield* network;
           return yield* DBCluster("LifecycleCluster", {
-            dbClusterIdentifier: "alchemy-rds-lifecycle",
             engine: "aurora-postgresql",
             engineMode: "provisioned",
             dbSubnetGroupName,
@@ -304,7 +300,6 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
         Effect.gen(function* () {
           const { dbSubnetGroupName } = yield* network;
           return yield* DBCluster("LifecycleCluster", {
-            dbClusterIdentifier: "alchemy-rds-lifecycle",
             engine: "aurora-postgresql",
             engineMode: "provisioned",
             dbSubnetGroupName,
