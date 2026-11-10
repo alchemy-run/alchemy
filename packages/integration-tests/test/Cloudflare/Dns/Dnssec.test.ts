@@ -4,7 +4,9 @@ import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as dns from "@distilled.cloud/cloudflare/dns";
+import * as Drift from "alchemy/Drift";
 import * as Provider from "alchemy/Provider";
+import { State, type ResourceState } from "alchemy/State";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -171,6 +173,51 @@ describe.sequential(
           yield* stack.destroy();
           const after = yield* getDnssec(zoneId);
           expect(family(after.status)).toEqual("disabled");
+        }).pipe(logLevel),
+      { timeout: 300_000 },
+    );
+
+    // #3182: a newer `modified_on` with nothing else changed is not drift.
+    test.provider(
+      "drift ignores a bumped modifiedOn",
+      (stack) =>
+        Effect.gen(function* () {
+          const zoneId = yield* resolveZoneId;
+
+          yield* stack.destroy();
+          yield* normalizeDisabled(zoneId);
+
+          yield* stack.deploy(
+            Effect.gen(function* () {
+              return yield* Cloudflare.DNS.Dnssec("ZoneDnssec", { zoneId });
+            }),
+          );
+
+          // Cloudflare moves `modified_on` on its own (e.g. pending → active
+          // once the registrar has the DS record), which a test zone never
+          // does. Age the recorded timestamp instead: the live config is
+          // unchanged, only `modifiedOn` differs.
+          const state = yield* yield* State;
+          const key = { stack: stack.name, stage: stack.stage, fqn: "ZoneDnssec" };
+          const row = (yield* state.get(key)) as ResourceState | undefined;
+          expect(row?.status).toBe("created");
+          if (row?.status !== "created") return;
+          yield* state.set({
+            ...key,
+            value: { ...row, attr: { ...row.attr, modifiedOn: "2000-01-01T00:00:00Z" } },
+          });
+
+          const drift = yield* Drift.detect({ name: stack.name, stage: stack.stage });
+          expect(drift.resources.ZoneDnssec?.action).toBe("unchanged");
+
+          yield* stack.destroy();
+          yield* getDnssec(zoneId).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (o) => family(o.status) === "disabled",
+              times: 15,
+            }),
+          );
         }).pipe(logLevel),
       { timeout: 300_000 },
     );
