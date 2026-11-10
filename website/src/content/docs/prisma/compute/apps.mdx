@@ -185,6 +185,10 @@ Prisma makes the RoutingUrl `active` once both records are published. It also cr
 
 A RoutingUrl is identified on its Branch by `logicalId`, which defaults to the resource's name. A RoutingUrl Prisma already made for the same app and hostname, with no `logicalId`, is taken over. Changing the hostname of an `active` RoutingUrl fails before anything changes, until the new hostname has a verified domain ownership and its `CNAME`.
 
+Changing the hostname to an apex domain such as `example.com` is refused, because Prisma needs a direct `CNAME`, which an apex cannot have. The check does not see a RoutingUrl in another workspace that holds the new hostname; then the change goes through, and the new hostname stays `pending` with `heldBy` set.
+
+To replace a `Prisma.CustomDomain` with a `Prisma.RoutingUrl` for the same hostname, keep the CustomDomain with `RemovalPolicy.retain()`, or remove it in an earlier deploy. The RoutingUrl takes over the row the CustomDomain made, and the CustomDomain's delete would remove that row.
+
 Don't declare a `Prisma.DomainOwnership` for the same exact hostname as a `Prisma.RoutingUrl`. The `Prisma.DomainOwnership` takes over the domain ownership Prisma created for the RoutingUrl, and deletes it on destroy.
 
 ## Local dev

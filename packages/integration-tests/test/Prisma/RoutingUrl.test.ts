@@ -109,13 +109,20 @@ interface CloudState {
   cname: RecordVisibility;
   /** Status of the workspace's domain ownership for the new hostname, if any. */
   ownership: "verified" | "unverified" | undefined;
+  /** Whether that domain ownership is for the exact hostname or its wildcard. */
+  ownershipOn: "exact" | "wildcard";
   /** A Prisma refusal the next create or update answers with. */
   refusal: Response | undefined;
 }
 
 const makeUrlCloud = () => {
   const rows = new Map<string, WireRoutingUrl>();
-  const state: CloudState = { cname: "absent", ownership: undefined, refusal: undefined };
+  const state: CloudState = {
+    cname: "absent",
+    ownership: undefined,
+    ownershipOn: "exact",
+    refusal: undefined,
+  };
   let next = 0;
   const fake: FakeManagementApi = makeFakeManagementApi((request) => {
     const path = request.pathname;
@@ -149,7 +156,7 @@ const makeUrlCloud = () => {
     if (path === "/v1/workspaces/ws-1/domain-ownerships") {
       const domain = new URLSearchParams(request.search).get("domain") ?? "";
       return page(
-        state.ownership && !domain.startsWith("*.")
+        state.ownership && domain.startsWith("*.") === (state.ownershipOn === "wildcard")
           ? [
               {
                 id: "do-1",
@@ -199,7 +206,11 @@ const makeUrlCloud = () => {
     rows.clear();
     next = 0;
     for (const row of initial) rows.set(row.id, row);
-    Object.assign(state, { cname: "absent", ownership: undefined, refusal: undefined }, options);
+    Object.assign(
+      state,
+      { cname: "absent", ownership: undefined, ownershipOn: "exact", refusal: undefined },
+      options,
+    );
     fake.captured.length = 0;
   };
   const routes = () => routesOf(fake.captured);
@@ -371,6 +382,78 @@ testFor(allowedChange).test.provider(
 
       expect(url.hostname).toBe("new.example.com");
       expect(PATCHES(allowedChange)).toEqual(["PATCH /v1/urls/url-1"]);
+
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+const unchecked = makeUrlCloud();
+testFor(unchecked).test.provider(
+  "refuses a hostname change it could not check, without asking to publish the CNAME",
+  (stack) =>
+    Effect.gen(function* () {
+      unchecked.reset({}, routingUrl("url-1", { status: "active" }));
+      yield* stack.destroy();
+      yield* stack.deploy(urlStack());
+
+      unchecked.fake.captured.length = 0;
+      unchecked.state.ownership = "verified";
+      unchecked.state.cname = "unknown";
+      const failure = yield* failureOf(stack.deploy(urlStack("new.example.com")));
+
+      expect(failure).toContain("RoutingUrlHostnameChangeRefused");
+      expect(failure).toContain("could not be checked from this machine");
+      expect(failure).not.toContain("Publish");
+      expect(PATCHES(unchecked)).toEqual([]);
+
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+const wildcard = makeUrlCloud();
+testFor(wildcard).test.provider(
+  "accepts a verified wildcard domain ownership as covering the new hostname",
+  (stack) =>
+    Effect.gen(function* () {
+      wildcard.reset({}, routingUrl("url-1", { status: "active" }));
+      yield* stack.destroy();
+      yield* stack.deploy(urlStack());
+
+      Object.assign(wildcard.state, {
+        ownership: "verified",
+        ownershipOn: "wildcard",
+        cname: "seen",
+      });
+      const url = yield* stack.deploy(urlStack("new.example.com"));
+
+      expect(url.hostname).toBe("new.example.com");
+      expect(wildcard.routes()).toContain("GET /v1/workspaces/ws-1/domain-ownerships");
+      expect(PATCHES(wildcard)).toEqual(["PATCH /v1/urls/url-1"]);
+
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+const pendingChange = makeUrlCloud();
+testFor(pendingChange).test.provider(
+  "changes a pending row's hostname without checking it",
+  (stack) =>
+    Effect.gen(function* () {
+      pendingChange.reset({}, routingUrl("url-1"));
+      yield* stack.destroy();
+      yield* stack.deploy(urlStack());
+
+      pendingChange.fake.captured.length = 0;
+      const url = yield* stack.deploy(urlStack("new.example.com"));
+
+      expect(url.hostname).toBe("new.example.com");
+      expect(PATCHES(pendingChange)).toEqual(["PATCH /v1/urls/url-1"]);
+      expect(pendingChange.routes().some((route) => route.includes("domain-ownerships"))).toBe(
+        false,
+      );
 
       yield* stack.destroy();
     }),

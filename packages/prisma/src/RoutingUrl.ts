@@ -148,7 +148,16 @@ export interface RoutingUrl extends Resource<
  *
  * Changing the hostname of an `active` RoutingUrl is refused, before anything
  * changes, until the new hostname has a verified domain ownership and its
- * `CNAME` at every authoritative nameserver.
+ * `CNAME` at every authoritative nameserver. Prisma needs a direct `CNAME`,
+ * which an apex domain such as `example.com` cannot have, so a change to an
+ * apex hostname is refused. The check does not see a RoutingUrl in another
+ * workspace that holds the new hostname; the change then goes through and
+ * the new hostname stays `pending` behind `heldBy`.
+ *
+ * To replace a `Prisma.CustomDomain` with a `Prisma.RoutingUrl` for the same
+ * hostname, keep the CustomDomain with `RemovalPolicy.retain()`, or remove it
+ * in an earlier deploy. The RoutingUrl takes over the row the CustomDomain
+ * made, and the CustomDomain's delete would remove that row.
  *
  * Don't also declare a `Prisma.DomainOwnership` for the same exact hostname:
  * it takes over the domain ownership Prisma created for the RoutingUrl and
@@ -290,11 +299,11 @@ const ProviderLive = () =>
           );
           const owned = ownerships.flat().some((ownership) => ownership.status === "verified");
           const target = switchboardTarget(service.appEndpointDomain);
-          const routed =
-            (yield* checkRecord(
-              { type: "CNAME", name: to, value: target },
-              { margin: "if-unseen" },
-            )) === "seen";
+          const cname = yield* checkRecord(
+            { type: "CNAME", name: to, value: target },
+            { margin: "if-unseen" },
+          );
+          const routed = cname === "seen";
           if (owned && routed) return;
           const verification = owned
             ? undefined
@@ -303,13 +312,21 @@ const ProviderLive = () =>
             ...(verification
               ? [{ type: "TXT" as const, name: verification.name, value: verification.value }]
               : []),
-            ...(routed ? [] : [{ type: "CNAME" as const, name: to, value: target }]),
+            ...(cname === "absent" ? [{ type: "CNAME" as const, name: to, value: target }] : []),
           ];
+          const publish =
+            records.length === 0
+              ? ""
+              : ` Publish ${records.map((record) => `${record.type} ${record.name} = ${record.value}`).join(" and ")}, then redeploy.`;
+          const unchecked =
+            cname === "unknown"
+              ? ` The CNAME of '${to}' to ${target} could not be checked from this machine: no authoritative nameserver for it could be found or reached. Redeploy from a machine that can reach them.`
+              : "";
           return yield* new RoutingUrlHostnameChangeRefused({
             from,
             to,
             records,
-            message: `Prisma RoutingUrl '${from}' is serving, and '${to}' cannot serve yet. Publish ${records.map((record) => `${record.type} ${record.name} = ${record.value}`).join(" and ")}, then redeploy.`,
+            message: `Prisma RoutingUrl '${from}' is serving, and '${to}' cannot be shown to serve yet.${publish}${unchecked}`,
           });
         });
 
