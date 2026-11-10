@@ -28,8 +28,8 @@ const kubectl = Effect.fn(function* (clusterName: string, args: ReadonlyArray<st
 
 // In `alchemy dev`, an EKS Auto Mode cluster has the Nitro Sandbox
 // RuntimeClasses AWS provides, so a Deployment that names one schedules and
-// runs. The emulator maps both to k3s's runc handler: the pod runs as an
-// ordinary container, without isolation.
+// runs. The emulator backs both with gVisor: the pod runs on its own kernel,
+// not the node's, as a Nitro Sandbox does.
 test.provider(
   "an Auto Mode cluster runs a pod that names a Nitro Sandbox runtime class",
   (stack) =>
@@ -67,28 +67,39 @@ test.provider(
         "-o",
         "jsonpath={range .items[*]}{.metadata.name}={.handler}{'\\n'}{end}",
       ]);
-      expect(runtimeClasses).toContain("isolated-sandbox=runc");
-      expect(runtimeClasses).toContain("confidential-sandbox=runc");
+      expect(runtimeClasses).toContain("isolated-sandbox=runsc");
+      expect(runtimeClasses).toContain("confidential-sandbox=runsc");
 
       const pod = yield* kubectl(deployed.clusterName, [
         "get",
         "pods",
         "--all-namespaces",
         "-o",
-        "jsonpath={range .items[?(@.spec.runtimeClassName=='isolated-sandbox')]}{.status.phase}{'\\n'}{end}",
+        "jsonpath={range .items[?(@.spec.runtimeClassName=='isolated-sandbox')]}{.metadata.namespace}/{.metadata.name}={.status.phase}{'\\n'}{end}",
       ]).pipe(
-        Effect.flatMap((pods) =>
-          pods.split("\n").includes("Running")
-            ? Effect.succeed(pods)
-            : Effect.fail(new PodNotRunning({ pods })),
-        ),
+        Effect.flatMap((pods) => {
+          const running = pods.split("\n").find((line) => line.endsWith("=Running"));
+          return running
+            ? Effect.succeed(running.slice(0, -"=Running".length))
+            : Effect.fail(new PodNotRunning({ pods }));
+        }),
         Effect.retry({
           while: (e) => e._tag === "PodNotRunning",
           schedule: Schedule.spaced("5 seconds"),
           times: 24,
         }),
       );
-      expect(pod).toContain("Running");
+      const [namespace, name] = pod.split("/") as [string, string];
+      const kernel = yield* kubectl(deployed.clusterName, [
+        "exec",
+        "-n",
+        namespace,
+        name,
+        "--",
+        "uname",
+        "-r",
+      ]);
+      expect(kernel).toContain("gvisor");
 
       yield* stack.destroy();
 
