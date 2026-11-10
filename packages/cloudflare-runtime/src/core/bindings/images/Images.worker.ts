@@ -23,6 +23,7 @@ import {
   BINDING_IMAGES_LOOPBACK,
   BINDING_IMAGES_STORE,
   PATH_IMAGE_DELIVERY,
+  PATH_IMAGE_DELIVERY_LEGACY,
   PATH_IMAGES_PUBLIC_URL,
 } from "./ImagesOptions.shared.ts";
 
@@ -258,9 +259,13 @@ export default class ImagesService extends WorkerEntrypoint<Env> {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
 
-    // Serve image bytes at /cdn-cgi/mf/imagedelivery/<id>/<variant>
-    if (url.pathname.startsWith(`${PATH_IMAGE_DELIVERY}/`)) {
-      const parts = url.pathname.slice(PATH_IMAGE_DELIVERY.length + 1).split("/");
+    // Serve image bytes at /__cf_local/imagedelivery/<id>/<variant> (and
+    // Miniflare's former /cdn-cgi/mf/imagedelivery prefix).
+    const deliveryPrefix = [PATH_IMAGE_DELIVERY, PATH_IMAGE_DELIVERY_LEGACY].find((prefix) =>
+      url.pathname.startsWith(`${prefix}/`),
+    );
+    if (deliveryPrefix !== undefined) {
+      const parts = url.pathname.slice(deliveryPrefix.length + 1).split("/");
       const imageId = parts[0];
       if (!imageId) {
         return new Response("Missing image ID", { status: 400 });

@@ -1,6 +1,7 @@
+/** @jsxRuntime automatic */
 /** @jsxImportSource @alchemy.run/sigil */
 import type { JSX } from "react";
-import { theme } from "../../CliKit/index.ts";
+import { theme } from "../../../Util/Theme.ts";
 import {
   Box,
   Gutter,
@@ -411,7 +412,7 @@ function CurrentProfile({
 }
 
 /**
- * View builders consumed by `CliKit.print` and the interactive profile app.
+ * View builders consumed by `Interaction.output.print` and the interactive profile app.
  */
 export const profileListNode = (profiles: ReadonlyArray<ProfileListDisplay>): JSX.Element => (
   <ProfileList profiles={profiles} />

@@ -1,5 +1,4 @@
 import { pathToFileURL } from "node:url";
-import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -91,15 +90,14 @@ export const runVinextPrerenderIfConfigured = Effect.fn(function* (
   const { resolveVinextPrerenderDecision, formatVinextPrerenderLabel } = yield* importVinextDist(
     "dist/config/prerender.js",
   );
-  const config =
-    buildConfig ??
-    (yield* Effect.gen(function* () {
-      const vite = yield* loadProjectModule<typeof import("vite")>(root, "vite");
-      const loaded = yield* Effect.tryPromise(() =>
-        vite.loadConfigFromFile({ command: "build", mode: "production" }, undefined, root),
-      );
-      return yield* loadVinextBuildConfig(root, loaded?.config.plugins);
-    }));
+  const loadBuildConfig = Effect.gen(function* () {
+    const vite = yield* loadProjectModule<typeof import("vite")>(root, "vite");
+    const loaded = yield* Effect.tryPromise(() =>
+      vite.loadConfigFromFile({ command: "build", mode: "production" }, undefined, root),
+    );
+    return yield* loadVinextBuildConfig(root, loaded?.config.plugins);
+  });
+  const config = buildConfig ?? (yield* loadBuildConfig);
   const decision = resolveVinextPrerenderDecision({
     vinextPrerenderConfig: config.prerenderConfig,
     nextOutput: config.nextConfig.output,
@@ -108,9 +106,9 @@ export const runVinextPrerenderIfConfigured = Effect.fn(function* (
     return { ran: false } satisfies VinextPrerenderResult;
   }
 
-  yield* Console.log(`  ${formatVinextPrerenderLabel(decision)}`);
+  yield* Effect.logInfo(`  ${formatVinextPrerenderLabel(decision)}`);
   if (cache === "kv") {
-    yield* Console.log(
+    yield* Effect.logInfo(
       "  Local prerender has no Worker bindings. VINEXT_KV_CACHE is provisioned and seeded on deploy; do not add wrangler.jsonc.",
     );
   }

@@ -1,5 +1,7 @@
 import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -10,7 +12,9 @@ import * as Semaphore from "effect/Semaphore";
 import { Interaction } from "../Interaction.ts";
 import { UserFacingError } from "../UserFacingError.ts";
 import { cachedFunction } from "../Util/cached-function.ts";
+import { globalLogs } from "../Util/LogRecord.ts";
 import { withProfileCredentialsLock } from "./Lock.ts";
+import { AuthProviders } from "./Registry.ts";
 
 /**
  * Canonical web host for OAuth provider-agnostic landing pages
@@ -75,12 +79,7 @@ export const refreshHint = (provider: string, profileName: string): string =>
 export const reconfigureHint = (provider: string, profileName: string): string =>
   `Run \`alchemy profile edit --profile ${profileName} --reconfigure ${provider}\` to reconfigure.`;
 
-export class AuthProviders extends Context.Service<
-  AuthProviders,
-  {
-    [providerName: string]: AuthProvider;
-  }
->()("AuthProviders") {}
+export { AuthProviders, AuthProvidersLive } from "./Registry.ts";
 
 /**
  * Declares one environment variable a provider's {@link AuthProviderImpl.readEnvironment}
@@ -107,7 +106,7 @@ export const EnvironmentVariable = Schema.Struct({
    * precedence order after {@link name} (e.g. `AWS_DEFAULT_REGION` for
    * `AWS_REGION`).
    */
-  alternatives: Schema.optional(Schema.Array(Schema.String)),
+  alternatives: Schema.String.pipe(Schema.Array, Schema.optional),
 });
 
 export type EnvironmentVariable = typeof EnvironmentVariable.Type;
@@ -246,10 +245,19 @@ export interface AuthProviderImpl<
    */
   readonly configureMethods?: ReadonlyArray<ConfigureMethod>;
 
+  /**
+   * Re-authenticate, silently refreshing when the stored credentials allow.
+   * Returns the new config for the caller to save, or nothing when the
+   * provider already saved it through `updateConfig` (a silent refresh saves
+   * under the credentials lock, so the caller must not write it again).
+   * `reload` reads the stored config; run it under the lock before
+   * refreshing, since refresh tokens can be single-use.
+   */
   login(
     profileName: string,
     config: Config,
     updateConfig?: (config: Config) => Effect.Effect<void, AuthError>,
+    reload?: Effect.Effect<Config, AuthError>,
   ): Effect.Effect<Config | void, AuthError, R | Interaction>;
 
   logout(profileName: string, config: Config): Effect.Effect<void, AuthError, R | Interaction>;
@@ -294,12 +302,47 @@ export interface AuthProviderImpl<
   readonly environment?: ReadonlyArray<EnvironmentVariable>;
 }
 
+// TODO(typescript>7.1.0): microsoft/TypeScript#64757 infers `R` through
+// `Effect<AuthProviderImpl<..., R>>` as just `Interaction`, dropping the impl's
+// own requirements (e.g. `ChildProcessSpawner`). `AuthProvider` and
+// `AuthProviderLayer` therefore infer the whole `Impl` and read `R` back with
+// this type. To revert, restore `<R = never, ImplReq = never>(name, impl:
+// AuthProviderImpl<Config, Credentials, R> | Effect.Effect<AuthProviderImpl<
+// Config, Credentials, R>, never, ImplReq>)` on both, drop this type and the
+// `service` cast below, and check that `pnpm exec tsrs -b` passes the
+// Cloudflare, GCP, PlanetScale and Railway `AuthProvider.ts` files.
+/**
+ * The services an {@link AuthProviderImpl}'s methods require.
+ */
+export type AuthProviderImplRequirements<Impl> =
+  Impl extends AuthProviderImpl<any, any, infer R> ? R : never;
+
 export interface AuthProvider<
   Config extends { method: string } = { method: string },
   Credentials = unknown,
-> extends AuthProviderImpl<Config, Credentials> {
+> extends Omit<AuthProviderImpl<Config, Credentials>, "read" | "details"> {
   readonly kind: "AuthProvider";
   readonly name: string;
+  /**
+   * {@link AuthProviderImpl.read} under the profile's credentials lock, with
+   * `loadConfig` run inside the lock. A silent refresh spends a single-use
+   * refresh token, so config loaded before the lock can hold a token that
+   * another process, or an earlier resolve in this one, already rotated.
+   */
+  read<E>(
+    profileName: string,
+    loadConfig: Effect.Effect<Config, E>,
+    updateConfig?: (config: Config) => Effect.Effect<void, AuthError>,
+  ): Effect.Effect<Credentials, E | AuthError | NeedsReauth>;
+  /**
+   * {@link AuthProviderImpl.details} under the profile's credentials lock,
+   * with `loadConfig` run inside the lock, since details may refresh.
+   */
+  details<E>(
+    profileName: string,
+    loadConfig: Effect.Effect<Config, E>,
+    updateConfig?: (config: Config) => Effect.Effect<void, AuthError>,
+  ): Effect.Effect<ProviderDetails, E | AuthError | NeedsReauth, Interaction>;
   /** Log each environment contract once per built provider layer. */
   readonly logEnvironmentCredentials: (used: ReadonlyArray<string>) => Effect.Effect<void>;
   /**
@@ -317,15 +360,18 @@ export interface AuthProvider<
 
 export const AuthProvider =
   <Config extends { method: string }, Credentials>() =>
-  <R = never, ImplReq = never>(
+  <
+    // TODO(typescript>7.1.0): see AuthProviderImplRequirements.
+    Impl extends AuthProviderImpl<Config, Credentials, any>,
+    ImplReq = never,
+    R = AuthProviderImplRequirements<Impl>,
+  >(
     name: string,
-    impl:
-      | AuthProviderImpl<Config, Credentials, R>
-      | Effect.Effect<AuthProviderImpl<Config, Credentials, R>, never, ImplReq>,
+    impl: Impl | Effect.Effect<Impl, never, ImplReq>,
   ) =>
     Effect.gen(function* () {
-      // FileSystem/Path back the cross-process credentials lock that wraps
-      // `logout`/`read` below, so capture them with the impl's own services.
+      // FileSystem/Path/SecureRandom back the cross-process credentials lock that wraps
+      // `logout`/`read`/`details` below, so capture them with the impl's own services.
       //
       // `Effect.context()` snapshots the ENTIRE fiber context (the type
       // parameter only narrows the type), and `Effect.provideContext` makes
@@ -342,17 +388,37 @@ export const AuthProvider =
       // re-declares as a requirement anyway, so no call site can rely on the
       // capture satisfying it.
       const ctx = Context.omit(Interaction)(
-        yield* Effect.context<FileSystem.FileSystem | Path.Path | R | ImplReq>(),
-      ) as Context.Context<FileSystem.FileSystem | Path.Path | R | ImplReq>;
+        yield* Effect.context<
+          FileSystem.FileSystem | Path.Path | SecureRandom.SecureRandom | R | ImplReq
+        >(),
+      ) as Context.Context<
+        FileSystem.FileSystem | Path.Path | SecureRandom.SecureRandom | R | ImplReq
+      >;
+      // `read` and `readEnvironment` resolve credentials for a caller that
+      // has already chosen its ConfigProvider (`resolveProviderConfig`
+      // checks `presentEnvironment` under it), so they read through that
+      // one, not the one ambient at REGISTRATION. The profile-command
+      // methods keep the snapshot: they run under the process environment,
+      // and `--env-file` reaches them only through it.
+      // SAFETY: as above, the assertion only restores the pre-omit type.
+      const resolveCtx = Context.omit(ConfigProvider.ConfigProvider)(ctx) as typeof ctx;
       const providers = yield* AuthProviders;
-      const service = yield* Effect.isEffect(impl) ? impl : Effect.succeed(impl);
+      // TODO(typescript>7.1.0): see AuthProviderImplRequirements; the cast
+      // goes with the `Impl` signature.
+      // SAFETY: `R` is read back from `Impl` (see AuthProviderImplRequirements),
+      // so this only restores the requirement the constraint's `any` erased.
+      const service = (yield* Effect.isEffect(impl)
+        ? impl
+        : Effect.succeed(impl)) as AuthProviderImpl<Config, Credentials, R>;
       // Validate the declared environment contract at registration so a
       // malformed declaration fails at layer build (programmer error), not
       // when a CI run tries to render it.
       const environment =
         service.environment === undefined
           ? []
-          : Schema.decodeUnknownSync(EnvironmentVariables)(service.environment);
+          : yield* Schema.decodeEffect(EnvironmentVariables)(service.environment).pipe(
+              Effect.orDie,
+            );
       if (service.readEnvironment !== undefined && environment.length === 0) {
         return yield* Effect.die(
           `AuthProvider '${name}' implements readEnvironment but does not ` +
@@ -371,12 +437,12 @@ export const AuthProvider =
         );
       }
 
+      // Auth and credentials are account-level: every method's logs go to
+      // the global run log, not the project's.
       const provider: AuthProvider<Config, Credentials> = {
         logEnvironmentCredentials: yield* cachedFunction(
           (used: ReadonlyArray<string>) =>
-            Effect.logInfo(
-              `${name}: using environment variables (${used.join(", ")}) instead of the profile.`,
-            ),
+            Effect.logInfo(`${name}: using environment variables (${used.join(", ")}).`),
           { key: ([used]) => JSON.stringify(used.toSorted()) },
         ),
         kind: "AuthProvider",
@@ -393,21 +459,32 @@ export const AuthProvider =
           Semaphore.withPermits(
             interactiveMutex,
             1,
-          )(service.configure(profileName, currentConfig).pipe(Effect.provideContext(ctx))),
-        login: (profileName, config, updateConfig) =>
+          )(
+            service
+              .configure(profileName, currentConfig)
+              .pipe(Effect.provideContext(ctx), globalLogs),
+          ),
+        login: (profileName, config, updateConfig, reload) =>
           Semaphore.withPermits(
             interactiveMutex,
             1,
-          )(service.login(profileName, config, updateConfig).pipe(Effect.provideContext(ctx))),
+          )(
+            service
+              .login(profileName, config, updateConfig, reload)
+              .pipe(Effect.provideContext(ctx), globalLogs),
+          ),
         logout: (profileName, config) =>
           withProfileCredentialsLock(profileName, service.logout(profileName, config)).pipe(
             Effect.provideContext(ctx),
+            globalLogs,
           ),
-        details: (profileName, config, updateConfig) =>
+        details: (profileName, loadConfig, updateConfig) =>
           withProfileCredentialsLock(
             profileName,
-            service.details(profileName, config, updateConfig),
-          ).pipe(Effect.provideContext(ctx)),
+            Effect.flatMap(loadConfig, (config) =>
+              service.details(profileName, config, updateConfig),
+            ),
+          ).pipe(Effect.provideContext(ctx), globalLogs),
         ...(service.configureWith === undefined
           ? {}
           : {
@@ -417,32 +494,36 @@ export const AuthProvider =
                   readonly method: string;
                   readonly values: Record<string, string>;
                 },
-              ) => service.configureWith!(profileName, input).pipe(Effect.provideContext(ctx)),
+              ) =>
+                service.configureWith!(profileName, input).pipe(
+                  Effect.provideContext(ctx),
+                  globalLogs,
+                ),
               configureMethods: service.configureMethods,
             }),
-        read: (profileName, config, updateConfig) =>
+        read: (profileName, loadConfig, updateConfig) =>
           withProfileCredentialsLock(
             profileName,
-            service.read(profileName, config, updateConfig),
-          ).pipe(Effect.provideContext(ctx)),
-        readEnvironment: service.readEnvironment?.pipe(Effect.provideContext(ctx)),
+            Effect.flatMap(loadConfig, (config) => service.read(profileName, config, updateConfig)),
+          ).pipe(Effect.provideContext(resolveCtx), globalLogs),
+        readEnvironment: service.readEnvironment?.pipe(
+          Effect.provideContext(resolveCtx),
+          globalLogs,
+        ),
         environment,
         configSchema: service.configSchema,
         decodeConfig: (profileName, config) =>
-          Effect.gen(function* () {
-            return yield* Schema.decodeUnknownEffect(service.configSchema)(config).pipe(
-              Effect.mapError(
-                (cause) =>
-                  new AuthError({
-                    message:
-                      `Stored ${name} configuration in profile '${profileName}' is not valid ` +
-                      `for this version of alchemy. ` +
-                      `${reconfigureHint(name, profileName)}`,
-                    cause,
-                  }),
-              ),
-            );
-          }),
+          Schema.decodeUnknownEffect(service.configSchema)(config).pipe(
+            Effect.mapError((cause) =>
+              AuthError.make({
+                message:
+                  `Stored ${name} configuration in profile '${profileName}' is not valid ` +
+                  `for this version of alchemy. ` +
+                  `${reconfigureHint(name, profileName)}`,
+                cause,
+              }),
+            ),
+          ),
       };
 
       providers[name] = provider;
@@ -456,13 +537,16 @@ export const AuthProvider =
  */
 export const AuthProviderLayer =
   <Config extends { method: string }, Credentials>() =>
-  <R = never, ImplReq = never>(
+  <
+    // TODO(typescript>7.1.0): see AuthProviderImplRequirements.
+    Impl extends AuthProviderImpl<Config, Credentials, any>,
+    ImplReq = never,
+    R = AuthProviderImplRequirements<Impl>,
+  >(
     name: string,
-    impl:
-      | AuthProviderImpl<Config, Credentials, R>
-      | Effect.Effect<AuthProviderImpl<Config, Credentials, R>, never, ImplReq>,
+    impl: Impl | Effect.Effect<Impl, never, ImplReq>,
   ) =>
-    Layer.effectDiscard(AuthProvider<Config, Credentials>()<R, ImplReq>(name, impl));
+    Layer.effectDiscard(AuthProvider<Config, Credentials>()<Impl, ImplReq, R>(name, impl));
 
 /**
  * Look up a registered {@link AuthProvider} by name. Fails with
@@ -478,8 +562,8 @@ export const getAuthProvider = <
   AuthProviders.use((registry) =>
     registry[name] == null
       ? Effect.fail(
-          new AuthError({
-            message: `AuthProvider '${name}' is not registered. Make sure its layer has been provided.`,
+          AuthError.make({
+            message: `AuthProvider '${name}' is not registered. Install the package that provides it.`,
           }),
         )
       : Effect.succeed(

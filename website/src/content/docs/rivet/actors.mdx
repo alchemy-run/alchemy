@@ -1,0 +1,139 @@
+---
+title: Four ways to build Actors
+description: Build Rivet Actors as Alchemy Durable Objects, with RivetKit, with RivetKit's Effect SDK, or in Rust — what each one is for, and how all four deploy to the same control planes and pools.
+---
+
+An Actor is Rivet's unit of state: one named program, with its own data, that Rivet runs on demand. There are four ways to write one, and Alchemy deploys all four to the same control planes and pools.
+
+## Durable Objects: Alchemy's design
+
+A `Rivet.DurableObject` is an Actor written as an Effect, with the same shape as a [Cloudflare Durable Object](/cloudflare/compute/durable-objects):
+
+```typescript title="src/room.ts"
+export default class Room extends Rivet.DurableObject<Room>()(
+  "Room",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    return Effect.gen(function* () {
+      const state = yield* Rivet.DurableObjectState;
+      return {
+        join: () =>
+          Effect.gen(function* () {
+            const visitors = ((yield* state.storage.get<number>("visitors")) ?? 0) + 1;
+            yield* state.storage.put("visitors", visitors);
+            return visitors;
+          }),
+      };
+    });
+  }).pipe(Effect.provide(Default)),
+) {}
+```
+
+It's the default, because it's part of your Stack the way every other resource is. It has **bindings**: in its Construction phase a room can `yield*` another Durable Object, a bucket or a database, and Alchemy wires the access up when it deploys. And any runtime calls it by `yield* Room`, with typed methods, without knowing where it runs.
+
+The [tutorial](/rivet/tutorial/part-1) and the [Durable Object](/rivet/durable-objects), [Storage](/rivet/storage) and [Calling a Durable Object](/rivet/calling) chapters all use this form.
+
+## RivetKit Actors: Rivet's own API
+
+RivetKit is Rivet's own library. Its Actors are plain TypeScript, with state, actions, and features of their own like realtime connections and broadcast events:
+
+```typescript title="src/actors.ts"
+import { actor, setup } from "rivetkit";
+
+export const counter = actor({
+  state: { count: 0 },
+  actions: {
+    increment: (c, x: number) => {
+      c.state.count += x;
+      c.broadcast("newCount", c.state.count);
+      return c.state.count;
+    },
+  },
+});
+
+export const registry = setup({ use: { counter } });
+
+registry.start();
+```
+
+Alchemy deploys that file as it is. Point a `Rivet.DurableObject` at it, and give it a pool of its own:
+
+```typescript title="src/counter.ts"
+import * as Rivet from "@alchemy.run/rivet";
+import * as RivetDocker from "@alchemy.run/rivet/Docker";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Cluster } from "./cluster.ts";
+
+export const Counters = RivetDocker.SwarmPool("Counters").pipe(Layer.provide(Cluster));
+
+export const Counter = Rivet.DurableObject("Counter", { main: "./src/actors.ts" }).pipe(
+  Effect.provide(Counters),
+);
+```
+
+Use it when you already have RivetKit Actors, or need a RivetKit feature Durable Objects don't offer. See [RivetKit Actors](/rivet/rivetkit).
+
+## RivetKit Effect Actors: Rivet's Effect SDK
+
+`@rivetkit/effect` is Rivet's Effect SDK, in beta. Actors declare their actions as schemas and implement them as Layers:
+
+```typescript title="src/actors/counter/api.ts"
+export const Add = Action.make("Add", {
+  payload: { amount: Schema.Number },
+  success: Schema.Number,
+});
+
+export const Counter = Actor.make("Counter", { actions: [Add] });
+```
+
+A program, `src/main.ts`, implements them and serves them with `Registry.serve`. Alchemy deploys that program as it is, the same way:
+
+```typescript title="src/counter.ts"
+import * as Rivet from "@alchemy.run/rivet";
+import * as RivetDocker from "@alchemy.run/rivet/Docker";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Cluster } from "./cluster.ts";
+
+export const Counters = RivetDocker.SwarmPool("Counters").pipe(Layer.provide(Cluster));
+
+export const Counter = Rivet.DurableObject("Counter", { main: "./src/main.ts" }).pipe(
+  Effect.provide(Counters),
+);
+```
+
+Use it when you've built on Rivet's Effect SDK. See [RivetKit Effect Actors](/rivet/rivetkit-effect).
+
+## Rust Actors: Rivet's Rust SDK
+
+`rivetkit` is also a Rust crate. Its Actors are native binaries, with no JavaScript runtime between your code and Rivet's storage and network:
+
+```rust title="counter/src/main.rs"
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+	counter::registry().start().await
+}
+```
+
+Give a `Rivet.DurableObject` the crate, and Alchemy compiles it into the pool's node image:
+
+```typescript title="src/counter.ts"
+export const Counter = Rivet.DurableObject("Counter", { crate: "./counter" }).pipe(
+  Effect.provide(Counters),
+);
+```
+
+Use it when an Actor's hot path should run native code. See [Rust Actors](/rivet/rivetkit-rust).
+
+## What the other three give up
+
+A RivetKit program is code Alchemy doesn't look inside. It deploys the program, but it can't wire up what the program uses, so there are no bindings: the program reaches other resources with its own configuration. And there's no `yield*` from your other runtimes; callers use RivetKit's own client, as Rivet's docs describe.
+
+A RivetKit program also runs its own process on every node of its pool, so it needs a pool to itself. A pool given a RivetKit program and anything else fails to deploy with `Rivet.PoolProgramConflict`.
+
+## The same control planes and pools
+
+All four are a `Rivet.DurableObject` given a pool: a Durable Object passes its implementation, and a RivetKit program passes only its entry file, and a Rust one its crate. So all four run on any [control plane](/rivet/control-planes) and any [pool](/rivet/pools), on any cloud, and move between them the same way.
+
+Next, [Durable Object](/rivet/durable-objects): how Alchemy's form is written.

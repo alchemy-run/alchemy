@@ -1,0 +1,87 @@
+---
+title: Team & API keys
+description: How an E2B team holds your templates and sandboxes, how your profile picks the team Alchemy deploys to, and what key each host gets instead of yours.
+---
+
+import PackageManagers from "../../../components/PackageManagers.astro";
+import Tree from "../../../components/diagrams/Tree.astro";
+
+Everything you create on E2B belongs to a **team**: its templates, sandboxes, volumes, secrets and API keys, and the bill for them. Your account can belong to several teams, and one of them is your default.
+
+## A key reaches its whole team
+
+An **API key** reaches everything in its team. A sandbox has its own **access token** too, which its envd daemon checks for commands and files in that one sandbox.
+
+<Tree
+  nodes={[
+    { id: "team", label: "acme", type: "team · one bill" },
+    { id: "template", label: "MyTemplate", type: "template", parent: "team" },
+    { id: "s42", label: "user-42", type: "sandbox", parent: "team" },
+    { id: "cmd", label: "commands", type: "envd", parent: "s42" },
+    { id: "files", label: "files", type: "envd", parent: "s42" },
+    { id: "home", label: "home-42", type: "volume", parent: "team" },
+    { id: "gh", label: "github-42", type: "secret", parent: "team" },
+  ]}
+  scopes={[
+    { on: "team", label: "API key e2b_…" },
+    { on: "s42", label: "access token" },
+  ]}
+  caption="An API key reaches every template, sandbox, volume and secret in its team. A sandbox's access token reaches only that sandbox's commands and files."
+/>
+
+## Sign in with a profile, pick a team
+
+Alchemy deploys with the credentials in a [profile](/environments/profiles):
+
+<PackageManagers run="alchemy profile edit --add E2B" />
+
+Pick **Browser login** for most setups: you sign in to E2B in your browser, and Alchemy deploys to your account's default team. The login refreshes itself.
+
+Pick **Access token or API key** to paste one instead. An access token acts for you, so give the team id too when you deploy to a team other than your default. An API key already belongs to one team.
+
+## Give production its own team
+
+A [stage](/environments/stages) decides what you deploy. The profile decides where. Give production its own team, and its own profile:
+
+<PackageManagers
+  script={`{run} alchemy profile create prod
+{run} alchemy profile edit --profile prod --add E2B
+{run} alchemy deploy --stage prod --profile prod`}
+/>
+
+Each stage's templates get names generated from the app, stage and id, so stages in one team don't collide.
+
+## Each host gets a key of its own
+
+E2B can't narrow an API key, so Alchemy gives each host that uses a binding a key of its own, created at deploy and deleted when the host is destroyed. Your access token never reaches the host. The host's key still reaches the whole team, so put production in a team of its own.
+
+Creating a key takes your access token: an API key can't create other keys. Declare a key for CI or another app the same way:
+
+```typescript title="src/Keys.ts"
+import * as E2B from "@alchemy.run/e2b";
+
+export const Ci = E2B.ApiKey("Ci", {});
+```
+
+`Ci.key` is the key, as a `Redacted` value. E2B shows a key only once, so Alchemy keeps it in state. Renaming it updates it in place, and destroying it deletes it.
+
+A host can also read the team's own records: its lifecycle event log and usage metrics.
+
+```typescript
+const team = yield* E2B.ReadTeam();
+const events = yield* team.events({ limit: 50 });
+```
+
+Provide `E2B.ReadTeamHttp`.
+
+## Deploy from CI with a token
+
+When `E2B_ACCESS_TOKEN` is set, Alchemy uses it instead of the profile. Set `E2B_TEAM_ID` to deploy to a team other than your default:
+
+<PackageManagers
+  script={`E2B_ACCESS_TOKEN=sk_e2b_... E2B_TEAM_ID=... {run} alchemy deploy --stage prod`}
+/>
+
+`E2B_API_KEY` is enough to deploy templates, snapshots and other resources, but not bindings or `E2B.ApiKey`: those create keys, which takes the access token. Set `E2B_DOMAIN` if you run E2B on your own domain. See [CI](/environments/ci).
+
+What a sandbox can reach, and how secrets reach it without entering it, is in [Network & secrets](/e2b/network-and-secrets).

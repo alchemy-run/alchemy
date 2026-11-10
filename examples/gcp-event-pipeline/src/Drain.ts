@@ -1,4 +1,4 @@
-import * as GCP from "alchemy/GCP";
+import * as GCP from "@alchemy.run/gcp";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { EventsTable, Inbox, type EventRow } from "./resources.ts";

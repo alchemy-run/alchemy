@@ -1,12 +1,12 @@
-import type { RuntimeContext } from "alchemy";
 import {
   connectionSourceDigest,
   resolveConnectionSource,
   staticConnectionSource,
   type ConnectionSource,
   type StaticConnectionSource,
-} from "alchemy/SQL/ConnectionSource";
-import { openPostgresPool } from "alchemy/SQL/PostgresDriver";
+} from "@alchemy.run/sql/ConnectionSource";
+import { openPostgresPool } from "@alchemy.run/sql/PostgresDriver";
+import type { RuntimeContext } from "alchemy";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Redacted from "effect/Redacted";

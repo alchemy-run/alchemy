@@ -42,7 +42,7 @@ Deployment settings belong on `Cloudflare.Website.Vinext`.
 
 ```typescript
 // alchemy.run.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 
 export const Website = Cloudflare.Website.Vinext("Website", {
   rootDir: ".",
@@ -109,9 +109,7 @@ the adapter falls back to memory. Redis and S3 adapters are for other platforms.
 
 ## Local development
 
-```sh
-bun alchemy dev
-```
+<PackageManagers run="alchemy dev" />
 
 The Website runs the native Vite development server with HMR and local Worker
 bindings. Other resources declared in the Stack retain their own provider

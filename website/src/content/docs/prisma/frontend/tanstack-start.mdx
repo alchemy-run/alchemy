@@ -63,7 +63,7 @@ export default defineConfig({
 
 ```typescript
 // alchemy.run.ts
-import * as Prisma from "alchemy/Prisma";
+import * as Prisma from "@alchemy.run/prisma";
 
 export const Website = Prisma.Website.TanStackStart("Website", {
   rootDir: "./app",
@@ -146,7 +146,7 @@ independent CDN site.
 
 ## Local dev
 
-`bun alchemy dev` starts TanStack Start's native Vite server with HMR
+`alchemy dev` starts TanStack Start's native Vite server with HMR
 and creates no Prisma resources for the Website. Opt into live deployment
 during dev explicitly:
 

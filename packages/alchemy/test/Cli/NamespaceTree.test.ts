@@ -1,4 +1,4 @@
-import { describe, expect, test } from "alchemy-test";
+import { describe, expect, test } from "@alchemy.run/test";
 import { buildNamespaceTree, flattenTree } from "@/Cli/NamespaceTree.ts";
 import { createNode, replaceNode, updateNode } from "./PlanTestNodes.ts";
 

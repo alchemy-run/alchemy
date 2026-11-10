@@ -7,6 +7,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type * as Scope from "effect/Scope";
 import type { Plugin, PluginOption } from "vite";
+import { makeChildOutput } from "../core/ChildOutput.ts";
 import { findEphemeralPort } from "../core/DevPort.ts";
 /**
  * Shared programmatic Vinext builds and native development CLI helpers.
@@ -49,11 +50,12 @@ export const runVinextBuild = (options: {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     yield* Effect.sync(() => {
+      // oxlint-disable-next-line effecttsgo/process-env-in-effect -- sets NODE_ENV for vite/vinext, not config reading
       process.env.NODE_ENV = "production";
     });
     const vite = yield* loadProjectModule<typeof import("vite")>(root, "vite");
     const { default: vinext } = yield* loadVinextModule<{
-      default(
+      default: (
         options?: VinextRouteRootConfig & {
           nextConfig?: unknown;
           cache?: unknown;
@@ -62,11 +64,11 @@ export const runVinextBuild = (options: {
           __skipBuildLifecycle?: boolean;
           __pagesClientAssetsModule?: string | null;
         },
-      ): PluginOption;
+      ) => PluginOption;
     }>(root, "index.js");
     const cache = yield* makeVinextCachePlugin(root, options.cache);
     const { loadDotenv } = yield* loadVinextModule<{
-      loadDotenv(options: { root: string; mode: string }): void;
+      loadDotenv: (options: { root: string; mode: string }) => void;
     }>(root, "config/dotenv.js");
     yield* Effect.sync(() => loadDotenv({ root, mode: "production" }));
     const loaded = yield* Effect.tryPromise(() =>
@@ -75,7 +77,7 @@ export const runVinextBuild = (options: {
     const plugins = loaded?.config.plugins ?? [vinext()];
     const config = yield* loadVinextBuildConfig(root, plugins);
     const { runWithPreviewBuildCredentials } = yield* loadVinextModule<{
-      runWithPreviewBuildCredentials<T>(callback: () => T): T;
+      runWithPreviewBuildCredentials: <T>(callback: () => T) => T;
     }>(root, "build/preview-credentials.js");
     const { PAGES_CLIENT_ASSETS_MODULE } = yield* loadVinextModule<{
       PAGES_CLIENT_ASSETS_MODULE: string;
@@ -111,6 +113,7 @@ export const runVinextBuild = (options: {
       }),
       () =>
         Effect.gen(function* () {
+          const context = yield* Effect.context<never>();
           yield* Effect.tryPromise(() =>
             runWithPreviewBuildCredentials(async () => {
               const buildConfig = await vite.loadConfigFromFile(
@@ -149,7 +152,7 @@ export const runVinextBuild = (options: {
               );
               const pagesClientAssetsModule = await fs.readFileString(pagesClientAssetsPath).pipe(
                 Effect.orElseSucceed(() => null),
-                Effect.runPromise,
+                Effect.runPromiseWith(context),
               );
               // Mirrors vinext's own hybrid Pages build (build/lifecycle.js): keep the
               // user's config and transforms, drop App Router internals.
@@ -225,7 +228,9 @@ export const runVinextBuild = (options: {
       (previous) =>
         Effect.sync(() => {
           for (const [key, value] of Object.entries(previous)) {
+            // oxlint-disable-next-line effecttsgo/process-env-in-effect -- restores process.env mutated for the build, not config reading
             if (value === undefined) delete process.env[key];
+            // oxlint-disable-next-line effecttsgo/process-env-in-effect -- restores process.env mutated for the build, not config reading
             else process.env[key] = value;
           }
         }),
@@ -243,18 +248,14 @@ export const collectVinextDist = (root: string) =>
     const pagesEntry = path.join(distDir, VINEXT_PAGES_ENTRY);
     const hasDist = yield* fs.exists(distDir).pipe(Effect.orElseSucceed(() => false));
     if (!hasDist) {
-      return yield* Effect.fail(
-        failFramework(`The vinext build produced no ${distDir}`)(undefined),
-      );
+      return yield* failFramework(`The vinext build produced no ${distDir}`)(undefined);
     }
     const hasRsc = yield* fs.exists(rscEntry).pipe(Effect.orElseSucceed(() => false));
     const hasPages = yield* fs.exists(pagesEntry).pipe(Effect.orElseSucceed(() => false));
     if (!hasRsc && !hasPages) {
-      return yield* Effect.fail(
-        failFramework(`The vinext build produced no server entry at ${rscEntry} or ${pagesEntry}`)(
-          undefined,
-        ),
-      );
+      return yield* failFramework(
+        `The vinext build produced no server entry at ${rscEntry} or ${pagesEntry}`,
+      )(undefined);
     }
     const hasClient = yield* fs.exists(clientDir).pipe(Effect.orElseSucceed(() => false));
     yield* fs
@@ -307,60 +308,77 @@ export const spawnVinextDev = (options: {
   readonly host?: string | undefined;
 }): Effect.Effect<VinextDevChild, FrameworkCore.FrameworkError, Scope.Scope> =>
   Effect.acquireRelease(
-    Effect.try({
-      try: () => {
-        const cp = createRequire(import.meta.url)("child_process") as typeof NodeChildProcessModule;
-        const child = cp.spawn(
-          "node",
-          [
-            options.cli,
-            "dev",
-            "--port",
-            String(options.port),
-            "--strictPort",
-            ...(options.host !== undefined ? ["--host", options.host] : []),
-          ],
-          {
-            cwd: options.root,
-            stdio: ["ignore", "pipe", "pipe"],
-            detached: false,
-          },
-        );
-        let exited = false;
-        let output = "";
-        const capture = (chunk: unknown) => {
-          output += String(chunk);
-          if (output.length > 65536) output = output.slice(-32768);
-          process.stderr.write(String(chunk));
-        };
-        child.stdout?.on("data", capture);
-        child.stderr?.on("data", capture);
-        child.once("exit", () => {
-          exited = true;
-        });
-        return {
-          child,
-          handle: {
-            exited: () => exited,
-            output: () => output,
-          } satisfies VinextDevChild,
-        };
-      },
-      catch: failFramework("Failed to spawn the vinext dev CLI (is `node` on PATH?)"),
-    }),
-    ({ child }) =>
-      Effect.callback<void>((resume) => {
-        if (child.exitCode !== null) {
-          resume(Effect.void);
-          return;
-        }
-        const killTimer = setTimeout(() => child.kill("SIGKILL"), 3000);
-        child.once("exit", () => {
-          clearTimeout(killTimer);
-          resume(Effect.void);
-        });
-        child.kill("SIGTERM");
+    Effect.flatMap(makeChildOutput, (childOutput) =>
+      Effect.try({
+        try: () => {
+          const cp = createRequire(import.meta.url)(
+            "child_process",
+          ) as typeof NodeChildProcessModule;
+          const child = cp.spawn(
+            "node",
+            [
+              options.cli,
+              "dev",
+              "--port",
+              String(options.port),
+              "--strictPort",
+              ...(options.host !== undefined ? ["--host", options.host] : []),
+            ],
+            {
+              cwd: options.root,
+              stdio: ["ignore", "pipe", "pipe"],
+              detached: false,
+            },
+          );
+          let exited = false;
+          let output = "";
+          const capture = (chunk: unknown) => {
+            output += String(chunk);
+            if (output.length > 65536) output = output.slice(-32768);
+          };
+          child.stdout?.on("data", (chunk: unknown) => {
+            capture(chunk);
+            childOutput.stdout.push(String(chunk));
+          });
+          child.stderr?.on("data", (chunk: unknown) => {
+            capture(chunk);
+            childOutput.stderr.push(String(chunk));
+          });
+          // Output without a trailing newline is still a line once the
+          // streams close.
+          child.once("close", () => {
+            childOutput.stdout.flush();
+            childOutput.stderr.flush();
+          });
+          child.once("exit", () => {
+            exited = true;
+          });
+          return {
+            child,
+            handle: {
+              exited: () => exited,
+              output: () => output,
+            } satisfies VinextDevChild,
+          };
+        },
+        catch: failFramework("Failed to spawn the vinext dev CLI (is `node` on PATH?)"),
       }),
+    ),
+    ({ child }) => {
+      const stop = (signal: NodeJS.Signals) =>
+        Effect.callback<void>((resume) => {
+          if (child.exitCode !== null || child.signalCode !== null) {
+            resume(Effect.void);
+            return;
+          }
+          child.once("exit", () => resume(Effect.void));
+          child.kill(signal);
+        });
+      return stop("SIGTERM").pipe(
+        Effect.interruptible,
+        Effect.timeoutOrElse({ duration: "3 seconds", orElse: () => stop("SIGKILL") }),
+      );
+    },
   ).pipe(Effect.map(({ handle }) => handle));
 
 /**
@@ -381,11 +399,9 @@ export const awaitVinextDevReady = (options: {
     const hostname = parsed.hostname;
     for (let attempt = 0; attempt < 240; attempt++) {
       if (options.child.exited()) {
-        return yield* Effect.fail(
-          failFramework(
-            `The vinext dev CLI exited before becoming ready:\n${options.child.output().slice(-4000)}`,
-          )(undefined),
-        );
+        return yield* failFramework(
+          `The vinext dev CLI exited before becoming ready:\n${options.child.output().slice(-4000)}`,
+        )(undefined);
       }
       const ready = yield* Effect.callback<boolean>((resume) => {
         const net = createRequire(import.meta.url)("net") as typeof NodeNet;
@@ -415,8 +431,8 @@ export const awaitVinextDevReady = (options: {
       if (ready) return;
       yield* Effect.sleep(500);
     }
-    return yield* Effect.fail(
-      failFramework(`Timed out waiting for the vinext dev server at ${options.url}`)(undefined),
+    return yield* failFramework(`Timed out waiting for the vinext dev server at ${options.url}`)(
+      undefined,
     );
   });
 

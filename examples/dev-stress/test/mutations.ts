@@ -45,8 +45,8 @@ export const portSquatterDeclaration =
 // ─── An entire extra AWS Lambda, with its own S3 bucket ────────────────
 
 export const reportFunctionSource = (marker: string) =>
-  `import * as Lambda from "alchemy/AWS/Lambda";\n` +
-  `import * as S3 from "alchemy/AWS/S3";\n` +
+  `import * as Lambda from "@alchemy.run/aws/Lambda";\n` +
+  `import * as S3 from "@alchemy.run/aws/S3";\n` +
   `import * as Effect from "effect/Effect";\n` +
   `import * as Layer from "effect/Layer";\n` +
   `import * as Stream from "effect/Stream";\n` +
@@ -160,7 +160,7 @@ export const lambdaArchiveRoutes =
 // ─── A second MicroVM image, and the binding set to drive it ───────────
 
 export const secondImageSource = (marker: string) =>
-  `import * as AWS from "alchemy/AWS";\n` +
+  `import * as AWS from "@alchemy.run/aws";\n` +
   `import * as Effect from "effect/Effect";\n` +
   `import { HttpServerRequest } from "effect/http/HttpServerRequest";\n` +
   `import * as HttpServerResponse from "effect/http/HttpServerResponse";\n` +

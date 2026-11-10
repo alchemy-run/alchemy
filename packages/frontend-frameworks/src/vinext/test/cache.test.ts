@@ -65,7 +65,7 @@ describe("vinext cache adapters", () => {
     },
   );
 
-  it("redisAdapter points at alchemy/Redis connect runtime", () => {
+  it("redisAdapter points at @alchemy.run/redis connect runtime", () => {
     const descriptor = redisAdapter({
       urlEnv: "REDIS_URL",
       appPrefix: "app",

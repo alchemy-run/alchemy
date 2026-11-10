@@ -5,6 +5,7 @@ import type { Input } from "./Input.ts";
 import * as Output from "./Output.ts";
 import type { BindingNode } from "./Plan.ts";
 import type { ResourceBinding } from "./Resource.ts";
+import { bytesToBase64 } from "./Util/base64.ts";
 import { isPlainData, isPrimitive, mapPlainData } from "./Util/data.ts";
 
 export type Diff = NoopDiff | UpdateDiff | ReplaceDiff;
@@ -92,9 +93,14 @@ const _stripUnresolved = (
   if (value == null || isPrimitive(value)) return value;
   if (Output.isExpr(value) || Effect.isEffect(value)) return undefined;
   // Serializable leaves — the only class instances persisted state may
-  // carry (StateEncoding knows Redacted/Duration; Date JSON-encodes).
-  // Rebuilding them structurally would strip their prototype.
-  if (Redacted.isRedacted(value) || Duration.isDuration(value) || value instanceof Date) {
+  // carry (StateEncoding knows Redacted/Duration/Date/bytes). Rebuilding
+  // them structurally would strip their prototype.
+  if (
+    Redacted.isRedacted(value) ||
+    Duration.isDuration(value) ||
+    value instanceof Date ||
+    value instanceof Uint8Array
+  ) {
     return value;
   }
   if (isPlainData(value)) {
@@ -131,7 +137,12 @@ const _stripEffects = (
   // yieldable and would otherwise be misclassified as plain Effects.
   if (Output.isExpr(value)) return value;
   if (Effect.isEffect(value)) return undefined;
-  if (Redacted.isRedacted(value) || Duration.isDuration(value) || value instanceof Date) {
+  if (
+    Redacted.isRedacted(value) ||
+    Duration.isDuration(value) ||
+    value instanceof Date ||
+    value instanceof Uint8Array
+  ) {
     return value;
   }
   if (isPlainData(value)) {
@@ -229,6 +240,8 @@ const canonicalize = (
   // JSON-safe leaves compare by their serialized form (Duration/Date have
   // toJSON).
   if (Duration.isDuration(value) || value instanceof Date) return value;
+  // Bytes compare by content.
+  if (value instanceof Uint8Array) return { __bytes__: bytesToBase64(value) };
   if (isPlainData(value)) {
     const rebuilt = mapPlainData(value, ancestors, (child) =>
       canonicalize(child, stripNullish, ancestors),

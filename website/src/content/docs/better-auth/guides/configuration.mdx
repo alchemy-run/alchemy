@@ -2,6 +2,7 @@
 title: Config and secrets
 description: Bind Effect Config into an Alchemy host, compose database layers, and preserve generated signing secrets.
 ---
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 ## Keep configuration in a typed service
 
@@ -40,7 +41,7 @@ export class Auth extends Context.Service<
 ```typescript
 // worker.ts
 import { CloudflareD1 } from "@alchemy.run/better-auth/CloudflareD1";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -77,7 +78,7 @@ This host creates its own D1 database, registers migrations, and forwards Better
 ```typescript
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import AuthApi from "./worker.ts";
 
@@ -93,19 +94,15 @@ export default Alchemy.Stack(
 
 These three files use Bun, matching releases of `alchemy` and `@alchemy.run/better-auth`, Better Auth 1.7.5, Effect 4, and `kysely`. Configure Cloudflare credentials for deployment; preserve the local Alchemy state directory across runs.
 
-```sh
-bunx alchemy dev
-```
+<PackageManagers run="alchemy dev" />
 
 Alchemy selects an available port and prints the origin. With `AUTH_BASE_URL` unset, Better Auth derives its origin from the incoming request, so no fixed port is needed.
 
 ## Override the origin deliberately
 
-```sh
-read -r AUTH_BASE_URL
+<PackageManagers script={`read -r AUTH_BASE_URL
 export AUTH_BASE_URL
-bunx alchemy deploy --stage prod
-```
+{run} alchemy deploy --stage prod`} />
 
 Enter the actual origin serving this Worker, without a path or trailing slash. `baseURL` does not provision DNS or attach a custom domain; configure that routing separately before sending traffic there.
 

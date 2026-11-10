@@ -19,7 +19,7 @@ Create `src/branch-policy.ts`:
 
 ```typescript
 // src/branch-policy.ts
-import * as Git from "alchemy/Git";
+import * as Git from "@alchemy.run/git";
 import * as Effect from "effect/Effect";
 import { Session } from "./session.ts";
 
@@ -48,8 +48,8 @@ Create `src/protocol.ts`:
 
 ```typescript
 // src/protocol.ts
-import * as Git from "alchemy/Git";
-import * as GitHttp from "alchemy/Git/Http";
+import * as Git from "@alchemy.run/git";
+import * as GitHttp from "@alchemy.run/git/Http";
 import * as Effect from "effect/Effect";
 import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 import { checkRefChanges } from "./branch-policy.ts";
@@ -95,7 +95,7 @@ same function so it cannot bypass the push policy. Create `src/ref-writes.ts`:
 
 ```typescript
 // src/ref-writes.ts
-import * as Git from "alchemy/Git";
+import * as Git from "@alchemy.run/git";
 import * as Effect from "effect/Effect";
 import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 import { checkRefChanges } from "./branch-policy.ts";

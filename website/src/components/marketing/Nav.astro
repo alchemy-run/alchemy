@@ -1,5 +1,6 @@
 ---
 import Search from "@astrojs/starlight/components/Search.astro";
+import { activeTab } from "../../docs-tabs";
 import Logo from "./Logo.astro";
 
 interface Props {
@@ -15,6 +16,11 @@ interface Props {
 }
 
 const { marketing = false } = Astro.props;
+const current = marketing ? undefined : activeTab(Astro.url.pathname).label;
+const metaLink = (label: string) => [
+  "alc-nav__link",
+  { "alc-nav__link--active": current === label },
+];
 ---
 
 <nav class:list={["alc-nav", { "alc-nav--docs": !marketing }]}>
@@ -27,8 +33,15 @@ const { marketing = false } = Astro.props;
     <Search />
   </div>
   <a href="/getting-started" class="alc-nav__link alc-nav__link--docs">Docs</a>
-  <a href="/blog" class="alc-nav__link">Blog</a>
-  <a href="/compare" class="alc-nav__link">Compare</a>
+  {
+    !marketing && (
+      <a href="/providers" class:list={metaLink("Reference")}>
+        Reference
+      </a>
+    )
+  }
+  <a href="/blog" class:list={metaLink("Blog")}>Blog</a>
+  <a href="/compare" class:list={metaLink("Compare")}>Compare</a>
   <a
     href="https://github.com/alchemy-run/alchemy"
     class="alc-nav__link alc-nav__link--icon"
@@ -136,6 +149,9 @@ const { marketing = false } = Astro.props;
     font-size: 14px;
   }
   .alc-nav__link:hover {
+    color: var(--alc-accent-deep);
+  }
+  .alc-nav__link--active {
     color: var(--alc-accent-deep);
   }
   .alc-nav__link--icon {

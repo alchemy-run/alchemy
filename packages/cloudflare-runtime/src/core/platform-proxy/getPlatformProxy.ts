@@ -10,6 +10,7 @@
  * `RuntimeServices.layerRuntime` instead.
  */
 import type * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -121,11 +122,14 @@ export const getPlatformProxy = async <
     // `open` consumes.
     const context: Context.Context<RuntimeServices.RuntimeServices> =
       options.services ??
-      ((await Effect.runPromise(
-        Layer.build(makeLayer(options.persist)).pipe(Scope.provide(scope)),
+      ((await Layer.build(makeLayer(options.persist)).pipe(
+        Scope.provide(scope),
+        Effect.runPromise,
       )) as Context.Context<RuntimeServices.RuntimeServices>);
+    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- services context is built from the layer above
     const effect = open<B, Env>(options).pipe(
       Effect.provideContext(context),
+      Effect.provide(SecureRandom.layerWebCrypto),
       Scope.provide(scope),
     ) as Effect.Effect<PlatformProxyInstance<Env>>;
     const instance = await Effect.runPromise(effect);

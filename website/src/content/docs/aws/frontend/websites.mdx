@@ -6,58 +6,70 @@ sidebar:
   order: 1
 ---
 
-Alchemy deploys frontends to AWS with a family of `AWS.Website`
-resources. Each one builds your project programmatically and deploys
-it as a serverless site — the SSR server on a streaming Lambda
-Function URL, static assets in a private S3 bucket, and a CloudFront
-distribution whose edge router serves uploaded files from S3 and
-forwards everything else to the server — with no AWS-specific
-configuration: no CDK, no CloudFormation, no adapter setup. Your
-framework's own config file (`astro.config.*`, `nuxt.config.ts`,
-`vite.config.ts`, ...) loads natively; Alchemy layers its AWS
-integration on top.
+import DAG from "../../../../components/DAG.astro";
 
-- [`Vite`](/aws/frontend/vite) — any client-only Vite project (React,
-  Vue, Solid, or a plain SPA): assets-only, no Lambda; your
-  `vite.config.*` loads natively.
-- [`Foldkit`](/aws/frontend/foldkit) — Foldkit apps; `Vite` with SPA
-  deep links on by default.
-- [`Astro`](/aws/frontend/astro) — Astro sites, server-rendered or
-  fully static; your `astro.config.*` loads natively.
-- [`Nextjs`](/aws/frontend/nextjs) — Next.js apps built through the
-  OpenNext (`@opennextjs/aws`) pipeline, with streaming SSR, image
-  optimization, and ISR wiring; your `next.config.*` is honored
-  as-is.
-- [`Vinext`](/aws/frontend/vinext) — vinext (Next.js API on Vite)
-  apps on a streaming Lambda; your `vite.config.ts` loads natively.
-- [`Nuxt`](/aws/frontend/nuxt) — Nuxt apps built through nitro's
-  `aws-lambda` preset; your `nuxt.config.ts` loads natively.
-- [`ReactRouter`](/aws/frontend/react-router) — React Router v7 in
-  framework mode, built through your own `vite build`.
-- [`SvelteKit`](/aws/frontend/sveltekit) — SvelteKit apps with a
-  wrangler-free in-memory AWS adapter; your `vite.config.ts` loads
-  natively.
-- [`TanStackStart`](/aws/frontend/tanstack-start) — TanStack Start
-  (React or Solid), built through your own `vite build`.
-- [`Waku`](/aws/frontend/waku) — Waku (React Server Components)
-  apps.
-- [`Octane`](/aws/frontend/octane) — OctaneJS fullstack apps built
-  through your own `vite build` with the AWS marker adapter.
-- [`StaticSite`](/aws/frontend/static-site) — any directory of files,
-  optionally produced by a build command, for static generators like
-  Zola and Hugo or pre-built SPAs.
-- [`Router`](/aws/frontend/static-site#compose-sites-with-a-router) —
-  a shared CloudFront front door: one distribution serving several
-  sites (or a site plus an API), routed at the edge.
+A website on AWS is three pieces working together. Its static files, the scripts, styles and images, sit in a private S3 Bucket. Its server, if it has one, runs on a [Lambda Web Function](/aws/compute/web-functions). And a CloudFront distribution in front of both serves every request from a location near the visitor: files straight from the Bucket, everything else from the server.
 
-Every resource shares the same surface: `domain` (ACM certificate +
-Route 53 records), server configuration (`memorySize`, `timeout`,
-`env`), `assets`, `edge` customizations, and `invalidation`.
-All builds are memoized by content-hashing the input files — an
-unchanged project skips the build and deploy entirely. Under
-`alchemy dev`, every resource runs the framework's own dev server
-(native HMR) instead of deploying; `Alchemy.remote()` opts back into
-the full live deployment.
+<DAG
+  nodes={[
+    { id: "visitor", label: "visitor", type: "app.example.com", layer: 0 },
+    { id: "cdn", label: "CloudFront", type: "edge router", tone: "accent", layer: 1 },
+    { id: "bucket", label: "Assets", type: "S3 Bucket", layer: 2 },
+    { id: "server", label: "Server", type: "Lambda Web Function", layer: 2 },
+  ]}
+  edges={[
+    { from: "visitor", to: "cdn" },
+    { from: "cdn", to: "bucket", label: "/assets/*" },
+    { from: "cdn", to: "server", label: "everything else" },
+  ]}
+  caption="CloudFront serves files from the Bucket and sends the rest to the server."
+/>
+
+Each framework has a Website resource that builds your project and creates all three. Your framework's own config file loads as it is, with nothing AWS-specific in it:
+
+```typescript title="alchemy.run.ts"
+const site = yield* AWS.Website.Astro("Website", { domain: "app.example.com" });
+```
+
+Every Website resource takes the same props: a `domain`, with its certificate and DNS records (see [Custom domains](/aws/networking/custom-domains)), the server's `timeout`, `env` and scaling, and how assets are uploaded and cached. A build is skipped when no input file has changed. Under `alchemy dev`, each one runs the framework's own dev server instead of deploying.
+
+A site with no server, a single-page app or a static generator's output, creates no Function at all: just the Bucket and the distribution.
+
+## Serve from several Regions
+
+List extra Regions to run the server in each of them behind one global
+domain. CloudFront forwards to it, and each request reaches the nearest
+Region:
+
+```typescript
+const site = yield* AWS.Website.Nuxt("Website", {
+  regions: ["us-east-1", "eu-west-1"],
+});
+```
+
+The site's URL doesn't change when you add or remove Regions. `Nextjs`
+and `Vinext` keep their data caches in the home Region, so a server in
+another Region reaches back to it for cached pages; `regions` helps most
+for sites without a server-side cache.
+
+## Choose the server
+
+The SSR server runs on a Lambda Web Function: your framework's own Node
+server, serving many requests per environment and streaming each
+response. Web Functions run in a subset of Regions. Elsewhere, set
+`server: "function"` to run the server on a Lambda Function behind a
+streaming Function URL:
+
+```typescript
+const site = yield* AWS.Website.Nuxt("Website", {
+  server: "function",
+  memorySize: 2048,
+});
+```
+
+`memorySize`, `architecture`, and `runtime` apply only to
+`server: "function"`; a Web Function has a fixed 2 GB, Arm64 and
+Node.js 24.
 
 ## What's supported
 

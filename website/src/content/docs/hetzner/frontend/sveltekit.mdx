@@ -49,7 +49,7 @@ Stack):
 
 ```typescript
 // alchemy.run.ts
-import * as Hetzner from "alchemy/Hetzner";
+import * as Hetzner from "@alchemy.run/hetzner";
 
 export const Website = Hetzner.Website.SvelteKit("Website");
 ```
@@ -153,9 +153,7 @@ warning).
 
 ## Local dev
 
-```sh
-bun alchemy dev
-```
+<PackageManagers run="alchemy dev" />
 
 `alchemy dev` runs SvelteKit's own Vite dev server — Node SSR with
 full HMR — instead of deploying; `site.url` is the local address and

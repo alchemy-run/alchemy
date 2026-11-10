@@ -3,6 +3,8 @@ title: K2 streams
 description: Cloudflare K2 is a durable, replayable log. Produce records from Workers with the WriteStream binding, then consume them from a long-running host with consumeStreamRecords.
 ---
 
+import Log from "../../../../components/diagrams/Log.astro";
+
 A K2 **stream** is a durable, ordered log of records stored on R2. Producers
 append records; readers consume them through **subscriptions**. Each
 subscription tracks its own position, so many readers can read the same
@@ -13,6 +15,25 @@ Reach for K2 when several consumers need the same events, when you need to
 replay history, or when you want a log you can read at your own pace. Reach
 for [Queues](/cloudflare/messaging/queues) when each message is a unit of work
 that one consumer handles once, with retries and a dead-letter queue.
+
+<Log
+  lanes={[
+    {
+      id: "orders",
+      label: "Orders",
+      type: "K2 stream",
+      records: ["placed", "paid", "placed", "shipped", "paid", "placed", "shipped", "paid"],
+      first: 36,
+    },
+  ]}
+  expired={2}
+  cursors={[
+    { lane: "orders", at: 4, label: "analytics" },
+    { lane: "orders", at: 8, label: "billing · caught up", below: true },
+  ]}
+  writer="Api · send"
+  caption="Records stay for the retention period whether or not anyone has read them. Each subscription reads every record, at its own position."
+/>
 
 | | Queues | K2 |
 | --- | --- | --- |
@@ -33,7 +54,7 @@ Worker consumer once Cloudflare supports one.
 
 ```typescript
 // src/Orders.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 
 export const Orders = Cloudflare.K2.Stream("Orders", {
   retention: "7 days",
@@ -63,7 +84,7 @@ In the Worker's init phase, ask `Cloudflare.K2.WriteStream` for a client. Its
 
 ```typescript
 // src/Api.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -101,7 +122,7 @@ that schema:
 
 ```diff lang="typescript"
 // src/Orders.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 +import * as Schema from "effect/Schema";
 +
 +export const Order = Schema.Struct({
@@ -158,16 +179,7 @@ Provide `Cloudflare.K2.StreamSinkBinding` alongside `WriteStreamBinding`.
 
 ## Produce from outside a Worker
 
-The producer code stays the same on every host. Only the layer changes:
-
-- `WriteStreamBinding` and `StreamSinkBinding` run in Cloudflare Workers and
-  send through the native `k2` binding.
-- `WriteStreamHttp` and `StreamSinkHttp` run on any host, such as Lambda or a
-  container. They send through the stream's HTTP input with a scoped "K2
-  Produce" token that Alchemy mints at deploy.
-- `WriteStreamLocal` and `StreamSinkLocal` run in scripts and Actions. They
-  send through the stream's HTTP input with your current Cloudflare
-  credentials.
+The producer code stays the same on every host. Only the Layer changes. In a Worker, `WriteStreamBinding` and `StreamSinkBinding` send through the native `k2` binding. On any other host, like Lambda or a container, `WriteStreamHttp` and `StreamSinkHttp` send through the stream's HTTP input, with a "K2 Produce" token Alchemy creates for that stream at deploy. In scripts and Actions, `WriteStreamLocal` and `StreamSinkLocal` use your own Cloudflare credentials.
 
 The HTTP and local layers need the stream's HTTP input turned on
 (`http: true`).
@@ -179,8 +191,8 @@ stream. The handler receives each batch as an Effect `Stream`:
 
 ```typescript
 // src/Fraud.ts
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Fly from "alchemy/Fly";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Fly from "@alchemy.run/fly";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
@@ -216,15 +228,7 @@ export default class Fraud extends Fly.Service<Fraud>()(
 At deploy time, `consumeStreamRecords` creates a subscription owned by the
 host. At runtime, `StreamEventSourcePolling` runs `concurrency` pollers. Each
 poller leases a batch of up to `maxRecords` (default 100) and runs the
-handler:
-
-- When the handler succeeds, the batch is acknowledged.
-- When it fails, the failure is logged and the batch is released for
-  redelivery.
-- While the handler runs, the five-minute lease is extended every two
-  minutes.
-- When a batch comes back empty, the poller waits `idleBackoff` (default one
-  second) before it polls again.
+handler. When the handler succeeds, the batch is acknowledged. When it fails, the failure is logged and the batch is released, to be delivered again. While the handler runs, its five-minute lease is extended every two minutes, so long batches aren't handed to another poller. When a batch comes back empty, the poller waits `idleBackoff`, one second by default, before polling again.
 
 `ReadSubscriptionHttp` reads with a scoped "K2 Consume" token that Alchemy
 mints at deploy. `StreamEventSourcePolling` needs a host with a long-lived
@@ -283,17 +287,4 @@ is gone.
 
 ## Where next
 
-Related:
-
-- [Queues](/cloudflare/messaging/queues): a work queue with push delivery to
-  Workers, retries, and dead-letter queues.
-- [Pipelines](/cloudflare/data/pipelines): land events as files or Iceberg
-  tables instead of consuming them yourself.
-- [Workers](/cloudflare/compute/workers): the runtime that produces records.
-- [Sinks](/infrastructure-as-effects/sinks): the Effect `Sink` model behind
-  `StreamSink`.
-
-Reference:
-
-- [K2 API reference](/providers/cloudflare/k2): `Stream`, `Subscription`,
-  `WriteStream`, `StreamSink`, `ReadSubscription`, and the polling layer.
+For work that one consumer handles once, with retries and push delivery to a Worker, use [Queues](/cloudflare/messaging/queues). To land events as files or Iceberg tables without consuming them yourself, use [Pipelines](/cloudflare/data/pipelines). Every resource and Layer is in the [K2 reference](/providers/cloudflare/k2).

@@ -16,6 +16,7 @@
     "build": "vocs build"
   },
   "dependencies": {
+    "@alchemy.run/neon": "workspace:*",
     "alchemy": "workspace:*",
     "effect": "catalog:",
     "react": "catalog:react-rsc",
@@ -26,6 +27,7 @@
   },
   "devDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@alchemy.run/test": "workspace:*",
     "@effect/platform-node": "catalog:",
     "@types/node": "catalog:node24",
     "@types/react": "catalog:",

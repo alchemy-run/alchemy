@@ -1,29 +1,40 @@
+/**
+ * Runs every example's test suite, then drives each example through the CLI
+ * lifecycle (`scripts/test-example-cli.ts`), then checks formatting.
+ *
+ * Usage: node scripts/test-examples.ts [examples...] [-t <pattern>] [--skip-cli] [--profile <name>]
+ *
+ * With no examples, runs the default list below and the repo-wide format
+ * check. Each argument selects examples: an example directory name (or path)
+ * runs that example even when it is commented out of the default list;
+ * anything else is a case-insensitive substring over the default list, so
+ * `fly` runs every default Fly example. `-t` is passed to `bun test`.
+ */
+import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { Argument, Command, Flag } from "effect/cli";
+import * as Console from "effect/Console";
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import { ChildProcess } from "effect/process";
+import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
+import * as Runtime from "effect/Runtime";
+import * as Schedule from "effect/Schedule";
+import * as Semaphore from "effect/Semaphore";
+import * as Stream from "effect/Stream";
 import { preferLocalFlociImage } from "./floci-image.ts";
+import { defaultTestStage } from "./test-stage.ts";
 
-// `bun test:examples --profile testing` — the example suites read the
-// profile from `ALCHEMY_PROFILE` (`Test.make({ profile: process.env.ALCHEMY_PROFILE })`),
-// so translate the flag into the env every spawned `bun test` inherits.
-// Without this the flag was silently ignored and every suite ran against
-// the `default` profile, which only works when the shell already exports
-// `ALCHEMY_PROFILE`.
-{
-  const argv = process.argv.slice(2);
-  const index = argv.findIndex((arg) => arg === "--profile" || arg.startsWith("--profile="));
-  if (index !== -1) {
-    const arg = argv[index]!;
-    const profile = arg.includes("=") ? arg.slice("--profile=".length) : argv[index + 1];
-    if (profile === undefined || profile.startsWith("-")) {
-      console.error("--profile requires a value, e.g. --profile testing");
-      process.exit(2);
-    }
-    process.env.ALCHEMY_PROFILE = profile;
+/** Ends the run with `code` after the reason has already been printed. */
+class ExitWith extends Data.TaggedError("ExitWith")<{ readonly code: number }> {
+  readonly [Runtime.errorReported] = false;
+  get [Runtime.errorExitCode]() {
+    return this.code;
   }
 }
-
-// The AWS examples run against the floci emulator: use the locally built
-// image when there is one so an emulator fix is testable before its
-// release image lands on GHCR.
-preferLocalFlociImage("test:examples");
 
 const examples = [
   "./examples/cloudflare-dev",
@@ -32,13 +43,16 @@ const examples = [
   "./examples/cloudflare-website-tanstack-start",
   "./examples/cloudflare-tanstack-start-solid",
   "./examples/cloudflare-neon-drizzle",
+  "./examples/cloudflare-archil-workspaces",
+  "./examples/archil-sandbox",
   "./examples/cloudflare-vue",
   "./examples/cloudflare-website-solidstart",
-  "./examples/cloudflare-foldkit",
+  "./examples/cloudflare-foldkit-spa",
   "./examples/cloudflare-foldkit-ssr",
+  "./examples/cloudflare-foldkit-ssg",
+  "./examples/cloudflare-foldkit-hybrid",
   "./examples/cloudflare-octane",
   "./examples/cloudflare-website-astro",
-  "./examples/cloudflare-website-foldkit",
   "./examples/cloudflare-website-nextjs",
   "./examples/cloudflare-website-nuxt",
   "./examples/cloudflare-website-react-router",
@@ -48,6 +62,15 @@ const examples = [
   "./examples/cloudflare-website-vinext",
   "./examples/cloudflare-website-waku",
   "./examples/cloudflare-website-vocs",
+  "./examples/cloudflare-agents",
+  "./examples/cloudflare-flue",
+  "./examples/e2b-agent-sandbox",
+  "./examples/e2b-program",
+  "./examples/e2b-program-async",
+  "./examples/boat-agent-sandbox",
+  "./examples/boat-program",
+  "./examples/cloudflare-modal-sandbox",
+  "./examples/modal-functions",
   "./examples/aws-dev",
   // "./examples/aws-ecs",
   "./examples/aws-lambda",
@@ -63,6 +86,7 @@ const examples = [
   // "./examples/aws-website-vite",
   // "./examples/aws-website-vinext",
   // "./examples/aws-website-waku",
+  "./examples/daytona-sandboxes",
   "./examples/fly-app",
   "./examples/fly-service",
   "./examples/fly-website-vite",
@@ -125,6 +149,32 @@ const examples = [
 const serialGroup = (example: string): string | undefined =>
   example.startsWith("./examples/aws-") ? "floci" : undefined;
 
+/** Resolves the positional selection against `examples` and `./examples/*`. */
+const selectExamples = Effect.fn(function* (filters: readonly string[]) {
+  if (filters.length === 0) return [...examples];
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const repoRoot = path.resolve(import.meta.dirname, "..");
+  const selected = new Set<string>();
+  for (const filter of filters) {
+    const name = path.basename(filter.replace(/\/+$/, ""));
+    const directory = path.join(repoRoot, "examples", name);
+    if (name !== "" && (yield* fs.exists(path.join(directory, "package.json")))) {
+      selected.add(`./examples/${name}`);
+      continue;
+    }
+    const matches = examples.filter((example) =>
+      example.toLowerCase().includes(filter.toLowerCase()),
+    );
+    if (matches.length === 0) {
+      yield* Console.error(`No example matches "${filter}".`);
+      return yield* new ExitWith({ code: 1 });
+    }
+    for (const example of matches) selected.add(example);
+  }
+  return [...selected];
+});
+
 type CommandResult = {
   label: string;
   command: readonly string[];
@@ -136,6 +186,7 @@ type CommandResult = {
 type Task = {
   label: string;
   command: readonly string[];
+  /** Relative to the repository root; defaults to it. */
   cwd?: string;
   /** Tasks sharing a key run one at a time, in list order. */
   serial?: string;
@@ -147,9 +198,6 @@ type TaskState = Task & {
   endedAt?: number;
   exitCode?: number | null;
 };
-
-const readStream = async (stream: ReadableStream<Uint8Array>): Promise<string> =>
-  new Response(stream).text();
 
 const elapsedSeconds = (state: TaskState): string => {
   if (state.startedAt === undefined) {
@@ -253,31 +301,61 @@ const makeStatusRenderer = (title: string, states: readonly TaskState[]) => {
   };
 };
 
-const run = async (state: TaskState, render: () => void): Promise<CommandResult> => {
-  state.status = "running";
-  state.startedAt = performance.now();
-  render();
+const runTask = Effect.fn(function* (
+  state: TaskState,
+  env: Record<string, string>,
+  render: Effect.Effect<void>,
+) {
+  const spawner = yield* ChildProcessSpawner;
+  const path = yield* Path.Path;
+  const repoRoot = path.resolve(import.meta.dirname, "..");
 
-  const child = Bun.spawn([...state.command], {
-    cwd: state.cwd,
-    // Snapshot env at spawn time — `Bun.spawn` does not pick up later
-    // `process.env` mutations, and we want `ALCHEMY_PROFILE` (and friends)
-    // from the parent invocation.
-    env: { ...process.env },
-    stdout: "pipe",
-    stderr: "pipe",
-    stdin: "inherit",
+  yield* Effect.sync(() => {
+    state.status = "running";
+    state.startedAt = performance.now();
   });
-  const [exitCode, stdout, stderr] = await Promise.all([
-    child.exited,
-    readStream(child.stdout),
-    readStream(child.stderr),
-  ]);
+  yield* render;
 
-  state.status = exitCode === 0 ? "ok" : "failed";
-  state.exitCode = exitCode;
-  state.endedAt = performance.now();
-  render();
+  const { exitCode, stdout, stderr } = yield* Effect.scoped(
+    Effect.gen(function* () {
+      const child = yield* spawner.spawn(
+        ChildProcess.make(state.command[0]!, state.command.slice(1), {
+          cwd: path.resolve(repoRoot, state.cwd ?? "."),
+          env,
+          extendEnv: true,
+          // Not detached: terminal Ctrl-C reaches every task directly.
+          detached: false,
+          stdin: "inherit",
+          stdout: "pipe",
+          stderr: "pipe",
+        }),
+      );
+      return yield* Effect.all(
+        {
+          exitCode: child.exitCode.pipe(
+            Effect.map((code): number | null => code),
+            // Terminated by a signal.
+            Effect.orElseSucceed(() => null),
+          ),
+          stdout: child.stdout.pipe(Stream.decodeText, Stream.mkString),
+          stderr: child.stderr.pipe(Stream.decodeText, Stream.mkString),
+        },
+        { concurrency: "unbounded" },
+      );
+    }),
+  ).pipe(
+    // A command that cannot start (e.g. missing binary) fails the task.
+    Effect.catch((error) =>
+      Effect.succeed({ exitCode: null, stdout: "", stderr: String(error.message ?? error) }),
+    ),
+  );
+
+  yield* Effect.sync(() => {
+    state.status = exitCode === 0 ? "ok" : "failed";
+    state.exitCode = exitCode;
+    state.endedAt = performance.now();
+  });
+  yield* render;
 
   return {
     label: state.label,
@@ -285,127 +363,171 @@ const run = async (state: TaskState, render: () => void): Promise<CommandResult>
     exitCode,
     stdout,
     stderr,
-  };
-};
+  } satisfies CommandResult;
+});
 
-const runParallel = async (
+const runParallel = Effect.fn(function* (
   title: string,
   tasks: readonly Task[],
+  env: Record<string, string>,
   options?: { readonly concurrency?: number },
-): Promise<readonly CommandResult[]> => {
+) {
   const states = tasks.map((task): TaskState => ({
     ...task,
     status: "pending",
   }));
-  const renderer = makeStatusRenderer(title, states);
-  renderer.render();
-  const interval = setInterval(() => renderer.render(), 1000);
-  const chains = new Map<string, Promise<unknown>>();
+  const renderer = yield* Effect.sync(() => makeStatusRenderer(title, states));
+  const render = Effect.sync(() => renderer.render());
 
   // At most `concurrency` tasks run at once; the rest wait for a slot.
-  const limit = options?.concurrency ?? Infinity;
-  let active = 0;
-  const waiting: Array<() => void> = [];
-  const acquire = () =>
-    new Promise<void>((resolve) => {
-      if (active < limit) {
-        active++;
-        resolve();
-      } else {
-        waiting.push(() => {
-          active++;
-          resolve();
-        });
-      }
-    });
-  const release = () => {
-    active--;
-    waiting.shift()?.();
-  };
+  // Serial tasks queue on their group before taking a slot, in list order.
+  const slots = yield* Semaphore.make(options?.concurrency ?? Number.MAX_SAFE_INTEGER);
+  const serial = new Map<string, Semaphore.Semaphore>();
+  for (const task of tasks) {
+    if (task.serial !== undefined && !serial.has(task.serial)) {
+      serial.set(task.serial, yield* Semaphore.make(1));
+    }
+  }
 
-  try {
-    return await Promise.all(
-      states.map((state) => {
-        const start = async () => {
-          await acquire();
-          try {
-            const result = await run(state, () => renderer.render());
-            if (result.exitCode !== 0) renderer.failure(result);
-            return result;
-          } finally {
-            release();
-          }
-        };
-        if (state.serial === undefined) return start();
-        const next = (chains.get(state.serial) ?? Promise.resolve()).then(start, start);
-        chains.set(state.serial, next);
-        return next;
-      }),
+  const run = Effect.forEach(
+    states,
+    (state) => {
+      const start = runTask(state, env, render).pipe(
+        Effect.tap((result) =>
+          result.exitCode === 0 ? Effect.void : Effect.sync(() => renderer.failure(result)),
+        ),
+        Semaphore.withPermits(slots, 1),
+      );
+      return state.serial === undefined
+        ? start
+        : start.pipe(Semaphore.withPermits(serial.get(state.serial)!, 1));
+    },
+    { concurrency: "unbounded" },
+  );
+
+  yield* render;
+  return yield* run.pipe(
+    Effect.raceFirst(
+      render.pipe(Effect.repeat(Schedule.spaced("1 second")), Effect.andThen(Effect.never)),
+    ),
+    Effect.ensuring(Effect.sync(() => renderer.finish())),
+  );
+});
+
+const command = Command.make(
+  "test-examples",
+  {
+    selection: Argument.String("examples").pipe(
+      Argument.withDescription(
+        "Examples to run: a directory name under ./examples (even one not in the default list) or a substring of the default list (e.g. `fly`). Defaults to the whole list.",
+      ),
+      Argument.variadic(),
+    ),
+    testNamePattern: Flag.String("test-name-pattern").pipe(
+      Flag.withAlias("t"),
+      Flag.withDescription("Only run example tests whose name matches this regex (`bun test -t`)"),
+      Flag.optional,
+    ),
+    skipCli: Flag.Boolean("skip-cli").pipe(
+      Flag.withDefault(false),
+      Flag.withDescription("Skip the `alchemy dev`/`deploy`/`destroy` CLI lifecycle"),
+    ),
+    profile: Flag.String("profile").pipe(
+      Flag.withDescription(
+        "Alchemy profile the example suites and CLI runs use (sets ALCHEMY_PROFILE)",
+      ),
+      Flag.optional,
+    ),
+  },
+  Effect.fn(function* ({ selection, testNamePattern, skipCli, profile }) {
+    const selected = yield* selectExamples(selection);
+    // The example suites read the profile from `ALCHEMY_PROFILE`
+    // (`Test.make({ profile: process.env.ALCHEMY_PROFILE })`), so translate
+    // the flag into the env every spawned `bun test` inherits. They read
+    // their stage from ALCHEMY_TEST_STAGE, which the CLI lifecycle reuses.
+    const env: Record<string, string> = {
+      ALCHEMY_TEST_STAGE: yield* defaultTestStage(),
+      ...(Option.isSome(profile) ? { ALCHEMY_PROFILE: profile.value } : {}),
+    };
+
+    // The AWS examples run against the floci emulator: use the locally built
+    // image when there is one so an emulator fix is testable before its
+    // release image lands on GHCR.
+    yield* preferLocalFlociImage("test:examples");
+
+    const testResults = yield* runParallel(
+      "Example tests",
+      selected.map((example) => ({
+        label: example,
+        // Run `bun test` IN the example directory. Concurrent
+        // `bun run --filter <workspace> test` all contend on bun's workspace
+        // graph (each sits in `openat` walking the monorepo) and none of them
+        // ever spawn the actual test process.
+        command: [
+          "bun",
+          "test",
+          ...(Option.isSome(testNamePattern) ? ["-t", testNamePattern.value] : []),
+        ],
+        cwd: example,
+        serial: serialGroup(example),
+      })),
+      env,
     );
-  } finally {
-    clearInterval(interval);
-    renderer.finish();
-  }
-};
+    const failedTests = testResults.filter((result) => result.exitCode !== 0);
 
-const testResults = await runParallel(
-  "Example tests",
-  examples.map((example) => ({
-    label: example,
-    // Run `bun test` IN the example directory. Concurrent
-    // `bun run --filter <workspace> test` all contend on bun's workspace
-    // graph (each sits in `openat` walking the monorepo) and none of them
-    // ever spawn the actual test process.
-    command: ["bun", "test"] as const,
-    cwd: example,
-    serial: serialGroup(example),
-  })),
+    if (failedTests.length > 0) {
+      yield* Console.error("\nFailed example tests:");
+      for (const failure of failedTests) {
+        const exit = failure.exitCode === null ? "signal" : failure.exitCode;
+        yield* Console.error(`- ${failure.label} (exit ${exit}): ${failure.command.join(" ")}`);
+      }
+      return yield* new ExitWith({ code: 1 });
+    }
+
+    if (skipCli) return;
+
+    const cliResults = yield* runParallel(
+      "Example CLI lifecycle",
+      selected.map((example) => ({
+        label: `${example} CLI lifecycle`,
+        command: ["node", "scripts/test-example-cli.ts", example],
+        serial: serialGroup(example),
+      })),
+      env,
+      // Each `alchemy dev` session is a CLI, an exec child, sidecars, workerd
+      // and a bundler watch loop; 30 at once starve each other past the
+      // readiness timeout.
+      { concurrency: 8 },
+    );
+    const failedCliTests = cliResults.filter((result) => result.exitCode !== 0);
+
+    if (failedCliTests.length > 0) {
+      yield* Console.error("\nFailed example CLI lifecycle tests:");
+      for (const failure of failedCliTests) {
+        const exit = failure.exitCode === null ? "signal" : failure.exitCode;
+        yield* Console.error(`- ${failure.label} (exit ${exit})`);
+      }
+      return yield* new ExitWith({ code: 1 });
+    }
+
+    // A selection is a focused run; the format check covers the whole repo.
+    if (selection.length > 0) return;
+
+    const [formatFailure] = yield* runParallel(
+      "Format",
+      [{ label: "format", command: ["bun", "run", "format"] }],
+      env,
+    );
+    if (formatFailure!.exitCode !== 0) {
+      yield* Console.error("\nFormat failed:");
+      if (formatFailure!.stdout.length > 0) yield* Console.error(formatFailure!.stdout.trimEnd());
+      if (formatFailure!.stderr.length > 0) yield* Console.error(formatFailure!.stderr.trimEnd());
+      return yield* new ExitWith({ code: formatFailure!.exitCode ?? 1 });
+    }
+  }),
+).pipe(Command.withDescription("Run the example suites, CLI lifecycles and format check"));
+
+Command.run(command, { version: "0.0.0" }).pipe(
+  Effect.provide(NodeServices.layer),
+  NodeRuntime.runMain,
 );
-const failedTests = testResults.filter((result) => result.exitCode !== 0);
-
-if (failedTests.length > 0) {
-  console.error("\nFailed example tests:");
-  for (const failure of failedTests) {
-    const exit = failure.exitCode === null ? "signal" : failure.exitCode;
-    console.error(`- ${failure.label} (exit ${exit}): ${failure.command.join(" ")}`);
-  }
-
-  process.exit(1);
-}
-
-const cliResults = await runParallel(
-  "Example CLI lifecycle",
-  examples.map((example) => ({
-    label: `${example} CLI lifecycle`,
-    command: ["bun", "scripts/test-example-cli.ts", example],
-    serial: serialGroup(example),
-  })),
-  // Each `alchemy dev` session is a CLI, an exec child, sidecars, workerd
-  // and a bundler watch loop; 30 at once starve each other past the
-  // 4-minute readiness timeout.
-  { concurrency: 8 },
-);
-const failedCliTests = cliResults.filter((result) => result.exitCode !== 0);
-
-if (failedCliTests.length > 0) {
-  console.error("\nFailed example CLI lifecycle tests:");
-  for (const failure of failedCliTests) {
-    const exit = failure.exitCode === null ? "signal" : failure.exitCode;
-    console.error(`- ${failure.label} (exit ${exit})`);
-  }
-  process.exit(1);
-}
-
-const [formatFailure] = await runParallel("Format", [
-  { label: "format", command: ["bun", "run", "format"] },
-]);
-if (formatFailure.exitCode !== 0) {
-  console.error("\nFormat failed:");
-  if (formatFailure.stdout.length > 0) {
-    console.error(formatFailure.stdout.trimEnd());
-  }
-  if (formatFailure.stderr.length > 0) {
-    console.error(formatFailure.stderr.trimEnd());
-  }
-  process.exit(formatFailure.exitCode ?? 1);
-}

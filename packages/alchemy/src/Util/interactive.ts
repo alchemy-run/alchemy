@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
  * coding agent, CI runner, test runner, or anything else that won't render an
  * interactive TUI / prompt well.
  *
- * This is the process-level source of truth used by CliKit capability
+ * This is the process-level source of truth used by terminal capability
  * detection, auth configuration guards, and spawned-command stdin policy.
  *
  * Kept in `Util` (rather than `Cli`) so `Auth` can depend on it without

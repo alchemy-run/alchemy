@@ -144,7 +144,7 @@ export const detectOidcToken = Effect.fn("detectOidcToken")(function* (env: Oidc
   for (const platform of PLATFORMS) {
     const token = yield* platform.probe(audience).pipe(
       Effect.timeout(PROBE_TIMEOUT),
-      Effect.catch(() => Effect.succeed(undefined)),
+      Effect.orElseSucceed(() => undefined),
     );
     if (token !== undefined) {
       const found: OidcToken = { platform: platform.name, token };

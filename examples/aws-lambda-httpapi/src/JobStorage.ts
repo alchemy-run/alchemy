@@ -1,7 +1,7 @@
-import * as DynamoDB from "alchemy/AWS/DynamoDB";
-import * as Lambda from "alchemy/AWS/Lambda";
-import * as S3 from "alchemy/AWS/S3";
-import * as SQS from "alchemy/AWS/SQS";
+import * as DynamoDB from "@alchemy.run/aws/DynamoDB";
+import * as Lambda from "@alchemy.run/aws/Lambda";
+import * as S3 from "@alchemy.run/aws/S3";
+import * as SQS from "@alchemy.run/aws/SQS";
 import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import { Stack } from "alchemy/Stack";
 import * as Console from "effect/Console";
@@ -56,8 +56,8 @@ export const JobStorageDynamoDB = Layer.provideMerge(
           startingPosition: "LATEST",
           batchSize: 10,
         },
-        (stream) =>
-          stream.pipe(
+        Effect.fn(function* (event) {
+          yield* Stream.fromIterable(event.Records).pipe(
             Stream.map((record) => ({
               MessageBody: JSON.stringify({
                 eventName: record.eventName,
@@ -67,8 +67,8 @@ export const JobStorageDynamoDB = Layer.provideMerge(
               }),
             })),
             Stream.run(sink),
-            Effect.orDie,
-          ),
+          );
+        }),
       );
 
       const putJob = (job: Job) =>

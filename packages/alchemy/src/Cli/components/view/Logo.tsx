@@ -1,3 +1,4 @@
+/** @jsxRuntime automatic */
 /** @jsxImportSource @alchemy.run/sigil */
 /**
  * The yantra logo, rasterized at runtime. Geometry mirrors
@@ -9,7 +10,7 @@
  */
 import { useMemo } from "@alchemy.run/sigil/react";
 import type { JSX } from "react";
-import { theme } from "../../CliKit/index.ts";
+import { theme } from "../../../Util/Theme.ts";
 import { Box, Text } from "../ui/index.ts";
 
 const VIEWBOX = 24;

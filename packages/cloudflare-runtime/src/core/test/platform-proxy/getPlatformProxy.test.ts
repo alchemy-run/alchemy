@@ -1,4 +1,8 @@
+import * as fs from "node:fs/promises";
+import * as os from "node:os";
+import * as path from "node:path";
 import { expect, it } from "@effect/vitest";
+import * as Assets from "../../bindings/assets/Assets.ts";
 import * as KvNamespace from "../../bindings/kv-namespace/index.ts";
 import * as Text from "../../bindings/Text.ts";
 import { getPlatformProxy } from "../../platform-proxy/getPlatformProxy.ts";
@@ -40,4 +44,38 @@ it("dispose is idempotent and shuts the instance down", async () => {
   await Promise.all([proxy.dispose(), proxy.dispose()]);
   // the workerd instance is gone: further binding calls fail
   await expect(proxy.env.KV.get("key")).rejects.toThrow();
+}, 60_000);
+
+it("serves a static directory to an ASSETS binding", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "platform-proxy-assets-"));
+  try {
+    await fs.writeFile(path.join(directory, "robots.txt"), "User-agent: *\n");
+    const proxy = await getPlatformProxy<{ ASSETS: { fetch: (url: string) => Promise<Response> } }>(
+      { bindings: [Assets.local("ASSETS")], assets: { directory } },
+    );
+    try {
+      const response = await proxy.env.ASSETS.fetch("https://example.com/robots.txt");
+      expect(response.status).toBe(200);
+      expect(await response.text()).toBe("User-agent: *\n");
+    } finally {
+      await proxy.dispose();
+    }
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+}, 60_000);
+
+it("starts with an ASSETS binding whose static directory doesn't exist yet", async () => {
+  const directory = path.join(os.tmpdir(), "platform-proxy-assets-missing");
+  await fs.rm(directory, { recursive: true, force: true });
+  const proxy = await getPlatformProxy<{ ASSETS: { fetch: (url: string) => Promise<Response> } }>({
+    bindings: [Assets.local("ASSETS")],
+    assets: { directory },
+  });
+  try {
+    const response = await proxy.env.ASSETS.fetch("https://example.com/robots.txt");
+    expect(response.status).toBe(404);
+  } finally {
+    await proxy.dispose();
+  }
 }, 60_000);

@@ -78,7 +78,7 @@ Stack). `rootDir` points at the project directory — the one holding
 
 ```typescript
 // alchemy.run.ts
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 
 export const Website = AWS.Website.Vite("Website", {
   rootDir: "./web",
@@ -110,9 +110,7 @@ export default Alchemy.Stack(
 );
 ```
 
-```sh
-bun alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 Alchemy runs `vite build` in `rootDir`, uploads `dist/` to a private
 S3 bucket, and serves it through CloudFront. `site.url` is the
@@ -257,9 +255,7 @@ pass `lockfile: true` to keep rebuilding when dependencies change.
 
 ## Local dev
 
-```sh
-bun alchemy dev
-```
+<PackageManagers run="alchemy dev" />
 
 `alchemy dev` runs Vite's own dev server — native HMR, instant module
 updates — instead of deploying. `site.url` is the local address and

@@ -3,29 +3,33 @@ title: Email receiving
 description: Receive inbound email with SES — rule sets and rules that store mail in S3, fan out to SNS, invoke a Lambda, or bounce it, plus IP filters and the active rule set pointer.
 ---
 
-**SES email receiving** turns a domain you've verified into an
-inbound mail endpoint. Mail arriving at any address on the domain
-is matched against an ordered list of **receipt rules**, and each
-rule runs a list of **actions**: store the raw message in S3,
-publish a notification to SNS, invoke a Lambda, bounce it back to
-the sender, add a header, or stop processing.
+import Sequence from "../../../../components/diagrams/Sequence.astro";
 
-The receiving primitives:
+SES can receive mail as well as send it. Point your domain's MX record at SES, and every message sent to an address on the domain arrives at AWS, where your **receipt rules** decide what happens to it: store it in S3, notify an SNS Topic, invoke a Function, or bounce it.
 
-- A **[`ReceiptRuleSet`](/providers/aws/ses/receiptruleset)** is
-  the ordered container for rules. An account can hold many, but
-  only one is active at a time.
-- A **[`ReceiptRule`](/providers/aws/ses/receiptrule)** matches
-  inbound mail by recipient and applies an ordered list of
-  actions.
-- The
-  **[`ActiveReceiptRuleSet`](/providers/aws/ses/activereceiptruleset)**
-  is the single rule set SES actually evaluates — an account
-  singleton pointer.
-- A **[`ReceiptFilter`](/providers/aws/ses/receiptfilter)**
-  allows or blocks inbound mail by source IP, before rules run.
-- **[`SendBounce`](/providers/aws/ses/sendbounce)** is a runtime
-  binding for bouncing a received message from inside a Lambda.
+## Rule sets, rules and actions
+
+Rules live in a **rule set**. An account can hold many rule sets, but SES evaluates only the **active** one. Within it, rules run in order. Each rule matches messages by recipient and runs its **actions** in order: store the raw message in a Bucket, publish to a Topic, invoke a Function, bounce, add a header, or stop.
+
+<Sequence
+  actors={[
+    { id: "sender", label: "mail server", type: "the sender's" },
+    { id: "ses", label: "SES", type: "active rule set", tone: "accent" },
+    { id: "s3", label: "Inbox", type: "S3 Bucket" },
+    { id: "fn", label: "Triage", type: "Lambda Function" },
+  ]}
+  steps={[
+    { from: "sender", to: "ses", label: "mail for support@example.com" },
+    { note: "receipt filters: allow or block by IP", over: "ses" },
+    { note: "rule 1 matches support@", over: "ses" },
+    { from: "ses", to: "s3", label: "action 1: store" },
+    { from: "ses", to: "fn", label: "action 2: invoke" },
+    { note: "then rule 2, unless an action stopped", over: "ses" },
+  ]}
+  caption="Filters run first. Then the active rule set runs its rules in order, and each matching rule runs its actions in order."
+/>
+
+**Receipt filters** run before any rule, allowing or blocking mail by the sending server's IP address.
 
 :::note
 Email receiving is only available in a subset of AWS regions —
@@ -42,8 +46,8 @@ The snippets below run inside a Stack's `Effect.gen` body:
 ```typescript
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as AWS from "alchemy/AWS";
-import * as SES from "alchemy/AWS/SES";
+import * as AWS from "@alchemy.run/aws";
+import * as SES from "@alchemy.run/aws/SES";
 import * as Effect from "effect/Effect";
 
 export default Alchemy.Stack(

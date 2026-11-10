@@ -98,7 +98,7 @@ export const makeCloudflareTarget = (config: Options.CloudflareTargetOptions): C
           // miniflare's Response type differs nominally from the DOM's; the
           // harness has always cast across this boundary.
           fetch: cast<Miniflare.MiniflareInstance["fetch"], DeployTargetServer["fetch"]>(
-            instance.fetch,
+            instance.fetch.bind(instance),
           ),
         };
       }),

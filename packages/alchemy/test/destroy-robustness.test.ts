@@ -1,4 +1,5 @@
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -20,7 +21,6 @@ import * as Layer from "effect/Layer";
 import { MissingProviderError } from "@/Provider";
 import { Stack } from "@/Stack";
 import { State, type ResourceState } from "@/State";
-import * as Test from "@/Test/Alchemy";
 import { TestLayers, TestResource, TestResourceHooks } from "./test.resources.ts";
 
 const { test } = Test.make({ providers: TestLayers() });

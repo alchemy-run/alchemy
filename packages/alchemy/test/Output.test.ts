@@ -1,4 +1,4 @@
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -14,6 +14,7 @@ import { Stack } from "@/Stack";
 import { Stage } from "@/Stage";
 import { inMemoryState } from "@/State/InMemoryState";
 import type { ResourceState } from "@/State/ResourceState";
+import { LookupTarget } from "./test.resources.ts";
 
 const provideState = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(Effect.provide(inMemoryState()));
@@ -223,6 +224,27 @@ describe("Output.evaluate", { tags: ["unit", "local"] }, () => {
 
       expect((expr as any).kind).toBe("postgresql");
       expect(Output.isResourceExpr(expr)).toBe(true);
+    });
+  });
+
+  // A lookup stands in for the resource it finds, so every attribute read,
+  // `kind` included, is a property of that resource. The expression's own
+  // tag stays reachable through `ExprSymbol`.
+  describe("LookupExpr", () => {
+    it("reads `kind` as the found resource's attribute, not the expression tag", () => {
+      const found = LookupTarget.lookup({ name: "output-kind" });
+
+      expect(Output.isLookupExpr(found)).toBe(true);
+      expect(Output.isPropExpr(found.kind)).toBe(true);
+      expect((found.kind as any).identifier).toBe("kind");
+      expect(Output.isPropExpr(found.value)).toBe(true);
+    });
+
+    it("leaves `kind` as the tag on other expressions", () => {
+      const expr = Output.of(fakeResource("Test.Bucket", "KindTag")) as any;
+
+      expect(expr.kind).toBe("ResourceExpr");
+      expect(Output.isPropExpr(expr.name)).toBe(true);
     });
   });
 

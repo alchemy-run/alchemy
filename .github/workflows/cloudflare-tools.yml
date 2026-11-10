@@ -67,6 +67,18 @@ jobs:
           install: true
           require-lockfile: true
 
+      # The Browser Rendering suite launches the pinned Chrome build
+      # (BROWSER_VERSION), which it otherwise downloads (~145 MB) at test time
+      # into wrangler's cache. A stalled download times out every session test.
+      - name: Cache Chrome for the Browser Rendering binding
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/.wrangler/chrome
+            ~/Library/Caches/.wrangler/chrome
+            ~/AppData/Local/xdg.cache/.wrangler/chrome
+          key: browser-rendering-chrome-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/cloudflare-runtime/src/core/bindings/browser/BrowserOptions.shared.ts') }}
+
       # Type checking is OS-independent and runs once in check.yml
       # (`pnpm typecheck`). Test builds what it needs via ensure:built.
       - name: Test
@@ -74,3 +86,6 @@ jobs:
         env:
           # Limit concurrent package test runs on the smaller runners.
           pnpm_config_workspace_concurrency: ${{ runner.os == 'Windows' && '3' || runner.os == 'macOS' && '2' || '' }}
+          # No Docker daemon for Linux images on these runners; the Linux job
+          # runs the container suites (see packages/cloudflare-runtime/vitest.config.ts).
+          ALCHEMY_TEST_EXCLUDE_LINUX_CONTAINERS: ${{ runner.os != 'Linux' && '1' || '' }}

@@ -1,0 +1,4 @@
+{
+  "ok": false,
+  "error": "secret mount should not define sharing"
+}

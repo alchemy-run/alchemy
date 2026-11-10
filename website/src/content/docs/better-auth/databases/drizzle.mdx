@@ -2,15 +2,13 @@
 title: Drizzle
 description: Generate a Relations v2 auth schema and deploy a Better Auth Lambda with a request-scoped raw Drizzle database.
 ---
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 This example uses an existing Postgres database and serves Better Auth through a Lambda Function URL. Drizzle owns the schema and migration history; the Better Auth layer takes a raw `drizzle(...)` database, not an Alchemy Drizzle proxy that returns Effects.
 
 ## Install compatible packages
 
-```sh
-bun add @alchemy.run/better-auth better-auth@^1.7.5 @better-auth/drizzle-adapter@^1.7.5 pg drizzle-orm@1.0.0-rc.5-ab785fc
-bun add -d drizzle-kit@1.0.0-rc.5-ab785fc @types/pg
-```
+<PackageManagers add="@alchemy.run/better-auth better-auth@^1.7.5 @better-auth/drizzle-adapter@^1.7.5 pg drizzle-orm@1.0.0-rc.5" dev="drizzle-kit@1.0.0-rc.5 @types/pg" />
 
 Keep ORM and Kit versions compatible when upgrading. Configure an [AWS profile](/environments/profiles) and set `DATABASE_URL` to a Postgres database reachable by both your deployer and Lambda.
 
@@ -44,9 +42,7 @@ Keep plugins, additional fields, and model names aligned between this call and t
 
 Run the CLI with Node.js 22.12 or newer:
 
-```sh
-npx auth@1.7.5 generate --config ./auth.cli.ts --output ./src/auth-schema.ts
-```
+<PackageManagers script={`{dlx} auth@1.7.5 generate --config ./auth.cli.ts --output ./src/auth-schema.ts`} />
 
 This command creates the `src/auth-schema.ts` imported below, including auth tables and `authRelations`. Do not pass `--adapter drizzle`: it selects the legacy Relations v1 generator rather than the configured Relations v2 adapter.
 
@@ -68,15 +64,11 @@ export default defineConfig({
 
 If your application already owns a Drizzle migration history, include the generated auth schema there rather than starting a second history.
 
-```sh
-bunx drizzle-kit generate
-```
+<PackageManagers run="drizzle-kit generate" />
 
 Review the generated SQL, especially for an existing database, before applying it:
 
-```sh
-bunx drizzle-kit migrate
-```
+<PackageManagers run="drizzle-kit migrate" />
 
 Apply migrations before deploying new auth code. This layer never runs Drizzle migrations for you.
 
@@ -119,7 +111,7 @@ The URL resolves during host construction, while the inner Effect opens and rele
 
 ```typescript title="src/function.ts"
 import { BetterAuth } from "@alchemy.run/better-auth";
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { AuthDatabase } from "./auth-database.ts";
@@ -150,7 +142,7 @@ The function exposes `/api/auth` through a public Function URL and packages `pg`
 
 ```typescript title="alchemy.run.ts"
 import * as Alchemy from "alchemy";
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import * as Effect from "effect/Effect";
 import AuthApi from "./src/function.ts";
 
@@ -171,9 +163,7 @@ Preserve and protect local `.alchemy` state across deployments. This example ass
 
 ## Deploy and verify
 
-```sh
-bunx alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 Set `AUTH_ORIGIN` to the printed Function URL and check the endpoint:
 

@@ -1,4 +1,4 @@
-import * as GCP from "alchemy/GCP";
+import * as GCP from "@alchemy.run/gcp";
 
 /** Only objects under this prefix trigger the indexer. */
 export const UPLOADS_PREFIX = "uploads/";

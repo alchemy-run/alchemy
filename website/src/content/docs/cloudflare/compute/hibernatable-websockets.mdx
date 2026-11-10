@@ -4,6 +4,8 @@ description: Accept WebSocket connections in a Durable Object, broadcast between
 sidebar:
   order: 8
 ---
+import Timeline from "../../../../components/diagrams/Timeline.astro";
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 The `Counter` Durable Object you added in the previous part holds
 state per key but only over plain HTTP. Now you'll build `Room` — a
@@ -16,6 +18,25 @@ DO is reconstructed from scratch, your constructor Effect runs again, and
 your `webSocketMessage` handler is invoked. Any per-instance state
 you held in JavaScript variables is gone — you have to put it back.
 
+<Timeline
+  end={10}
+  lanes={[
+    { id: "ws", label: "WebSocket", type: "to the browser" },
+    { id: "do", label: "Room", type: "in memory" },
+  ]}
+  bars={[
+    { lane: "ws", start: 0.4, end: 10, label: "open the whole time" },
+    { lane: "do", start: 0.4, end: 1.8, label: "running" },
+    { lane: "do", start: 1.8, end: 5.4, label: "hibernated · not billed", tone: "muted" },
+    { lane: "do", start: 5.4, end: 6.1, tone: "warn" },
+    { lane: "do", start: 6.1, end: 8.3, label: "webSocketMessage" },
+    { lane: "do", start: 8.3, end: 10, label: "hibernated", tone: "muted" },
+  ]}
+  marks={[{ at: 5.4, label: "a message arrives" }]}
+  legend={[{ tone: "warn", label: "constructor runs again" }, { tone: "muted", label: "evicted from memory" }]}
+  caption="The connection stays open while the Room is evicted. A message brings the Room back: its constructor runs again, then webSocketMessage handles it."
+/>
+
 ## Accept a connection
 
 Start with the smallest possible Room — just enough to complete
@@ -23,7 +44,7 @@ the WebSocket handshake. Create `src/room.ts`:
 
 ```typescript
 // src/room.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 
 export default class Room extends Cloudflare.DurableObject<Room>()(
@@ -58,7 +79,7 @@ what later:
 
 ```diff lang="typescript"
 // src/room.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 
 export default class Room extends Cloudflare.DurableObject<Room>()(
@@ -293,6 +314,23 @@ Omit `catchTag` to propagate the typed failure, or handle it at your normal
 Effect boundary. These helpers are for application-owned attachments, not
 the internal serializer metadata of WebSocket RPC connections.
 
+## Address groups of sockets with tags
+
+To message a subset of the room, tag sockets when you accept them
+instead of tracking group membership yourself:
+
+```typescript
+const [response, socket] = yield* Cloudflare.upgrade({
+  tags: [`user:${userId}`, "role:admin"],
+});
+```
+
+`state.getWebSockets("role:admin")` then returns only the sockets
+with that tag, and `state.getTags(socket.ws)` reads a socket's tags.
+The runtime stores tags with the socket, so both work after
+hibernation without rebuilding any in-memory state. Cloudflare allows
+at most 10 tags per socket, each at most 256 characters.
+
 ## Extract a broadcast helper
 
 Before wiring this up, pull the broadcast loop into a reusable
@@ -348,7 +386,7 @@ to the matching DO instance:
 
 ```diff lang="typescript"
 // src/worker.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 +import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -390,9 +428,7 @@ handshake.
 
 ## Deploy
 
-```sh
-bun alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 ## Connect from a test
 
@@ -408,8 +444,8 @@ per run:
 
 ```typescript
 // test/integ.test.ts
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Test from "alchemy/Test/Bun";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Test from "@alchemy.run/test/Bun";
 import { expect } from "bun:test";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";

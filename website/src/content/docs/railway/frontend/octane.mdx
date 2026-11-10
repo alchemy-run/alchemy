@@ -69,7 +69,7 @@ Stack):
 
 ```typescript
 // alchemy.run.ts
-import * as Railway from "alchemy/Railway";
+import * as Railway from "@alchemy.run/railway";
 
 export const Website = Railway.Website.Octane("Website");
 ```
@@ -157,9 +157,7 @@ default — there is nothing to configure. The Service healthcheck is
 
 ## Local dev
 
-```sh
-bun alchemy dev
-```
+<PackageManagers run="alchemy dev" />
 
 `alchemy dev` runs Octane's own Vite dev server — the plugin's
 in-process SSR middleware serves rendering, server routes, and RPC

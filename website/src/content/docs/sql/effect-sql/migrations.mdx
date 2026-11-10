@@ -49,6 +49,8 @@ The same prop exists on `Neon.Project`, `Neon.Branch`,
   deploy only runs what's new — an unchanged directory is a noop.
 - Application is ordered and stops on the first failure; the failed
   file is retried on the next deploy.
+- Applied history only moves forward; see
+  [Change migration history safely](#change-migration-history-safely).
 
 ## The tracking table
 
@@ -65,8 +67,8 @@ CREATE TABLE IF NOT EXISTS "__alchemy_migrations" (
 );
 ```
 
-Detection is by `name`, so renaming an applied file is a schema
-change, not a cosmetic one.
+Detection is by `name`, and `hash` checks that an applied file hasn't
+changed since it ran.
 
 To put the bookkeeping in a differently-named table, use the object
 form of the prop:
@@ -79,6 +81,67 @@ const db = yield* Cloudflare.D1.Database("app-db", {
   },
 });
 ```
+
+## Change migration history safely
+
+Every database, old or fresh, must end up running the same files in
+the same order. Alchemy enforces that with two rules, checked before
+any SQL runs.
+
+### Fix a mistake with a new file
+
+An applied file can't be edited or deleted. A deploy that finds one
+fails with `RewrittenMigrationHistoryError`. Add a new file that makes
+the change instead:
+
+```sql
+-- migrations/0007_posts_user_index.sql
+CREATE INDEX posts_user_id ON posts (user_id);
+```
+
+### Keep new files last
+
+A new file must sort after every file the database has already
+applied. Otherwise this database runs it last while a fresh database
+runs it in its sorted place, and the two schemas can drift. Such a
+deploy fails with `NonLinearMigrationHistoryError`:
+
+```text
+Pending migration 0004_tags.sql in "__alchemy_migrations" sorts before
+the already-applied 0005_users.sql, so it would run in a different order
+here than on a fresh database.
+```
+
+This happens when two branches each add a migration and the
+older-numbered one merges second. Rename the file so it sorts last:
+
+```sh
+git mv migrations/0004_tags.sql migrations/0006_tags.sql
+```
+
+### Rename a file that is already applied
+
+Renaming is safe even on databases that already ran the file. When an
+applied file's name is gone and another file has byte-identical
+contents, Alchemy treats it as moved: the row in `__alchemy_migrations`
+takes the new name and the file doesn't run again.
+
+```text
+0004_tags.sql applied, file gone  ┐
+0006_tags.sql, same sha256        ┘→ row renamed to 0006_tags.sql, nothing runs
+```
+
+So after the `git mv` above, a database that never ran the file runs
+`0006_tags.sql` as its newest migration, and a database that did run it
+only updates its row. Each applied row pairs with at most one file. If
+the contents changed too, it's an edit and the deploy fails with
+`RewrittenMigrationHistoryError`.
+
+A database that ran the file under its old name but not the files that
+now sort before it, such as a preview database that ran `0004_tags.sql`
+but never `0005_users.sql`, then fails with
+`NonLinearMigrationHistoryError`. It really did run them in a different
+order than a fresh database would. Recreate it.
 
 ## Adopting an existing database
 
@@ -99,11 +162,8 @@ Two guard rails:
 
 - Every recorded row must match a local migration file by name and
   content hash. An orphaned row fails conversion with
-  `MigrationHistoryConflictError`; an already-applied file that was
-  edited or removed fails with `RewrittenMigrationHistoryError`.
-  Add a forward migration rather than rewriting history. PlanetScale
-  development branches replace (re-fork from parent) instead of
-  failing; production branches always fail.
+  `MigrationHistoryConflictError`. After conversion, the
+  [history rules](#change-migration-history-safely) apply.
 - A **failed** Prisma migration (`finished_at` NULL) blocks adoption
   until repaired with `prisma migrate resolve`; rolled-back rows are
   skipped.
@@ -154,7 +214,7 @@ working directory, **not** the source module.
 Load the directory in the outer Effect:
 
 ```typescript
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 
 export class Users extends Cloudflare.DurableObject<Users>()(

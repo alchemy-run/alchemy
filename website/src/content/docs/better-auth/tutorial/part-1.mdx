@@ -4,16 +4,15 @@ description: Install Better Auth, provide a D1 database layer, and create an Eff
 sidebar:
   order: 1
 ---
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 Build one application with email/password authentication, an Effect HTTP API, and GitHub sign-in. This tutorial uses Bun and Cloudflare D1; [other databases](/better-auth/databases) use the same Auth service.
 
-Use your existing Alchemy project with [Bun](https://bun.sh) and a [configured Cloudflare profile](/cloudflare/setup). The examples use Effect 4 and Better Auth 1.7.5.
+Use your existing Alchemy project on [Node.js](https://nodejs.org) or [Bun](https://bun.sh) and a [configured Cloudflare profile](/cloudflare/setup). The examples use Effect 4 and Better Auth 1.7.5.
 
 ## Install the module
 
-```sh
-bun add @alchemy.run/better-auth better-auth@1.7.5 kysely
-```
+<PackageManagers add="@alchemy.run/better-auth better-auth@1.7.5 kysely" />
 
 Use matching Alchemy and Better Auth integration releases. D1 uses Kysely internally; application code does not need to construct a Kysely client.
 
@@ -21,7 +20,7 @@ Use matching Alchemy and Better Auth integration releases. D1 uses Kysely intern
 
 ```typescript
 // src/database.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 
 export const AuthDb = Cloudflare.D1.Database("AuthDb");
 ```
@@ -70,7 +69,7 @@ Handlers and middleware can now request the same typed service with `yield* Auth
 
 ```typescript
 // src/worker.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
@@ -113,7 +112,7 @@ The host supplies the database; the Auth service stays independent of Cloudflare
 ```typescript
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import AuthApi from "./src/worker.ts";
 
@@ -131,9 +130,7 @@ Local state keeps this walkthrough self-contained. Preserve its state directory 
 
 ## Start development
 
-```sh
-bunx alchemy dev --stage tutorial
-```
+<PackageManagers run="alchemy dev --stage tutorial" />
 
 In another terminal, paste the printed URL after running `read`, then press Enter:
 

@@ -41,7 +41,7 @@ Stack) and derive the typed shape of its bindings from it:
 
 ```typescript
 // alchemy.run.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 
 export const Website = Cloudflare.Website.Nextjs("Website");
 
@@ -232,9 +232,7 @@ export const Website = Cloudflare.Website.Nextjs("Website", {
 
 ## Local dev
 
-```sh
-bun alchemy dev
-```
+<PackageManagers run="alchemy dev" />
 
 `alchemy dev` defaults to **preview parity**: the OpenNext worker is
 built and served under workerd locally, with the Worker's bindings

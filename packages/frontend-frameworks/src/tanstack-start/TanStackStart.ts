@@ -1,5 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
@@ -289,7 +291,7 @@ export const make: (
 
       const resolved = server.resolvedUrls?.local[0];
       if (resolved === undefined) {
-        return yield* Effect.fail(fail("Could not determine the dev server URL"));
+        return yield* fail("Could not determine the dev server URL");
       }
       // Vite reports its local URL with a trailing slash; hand back an origin
       // that concatenates correctly (`${url}/about`, not `//about`).
@@ -297,13 +299,13 @@ export const make: (
 
       // Bounded readiness probe: any HTTP response counts (vite serves
       // lazily; we only need the listener to answer).
-      yield* Effect.tryPromise({
-        try: async () => {
-          const response = await fetch(url, { redirect: "manual" });
-          await response.arrayBuffer().catch(() => {});
-        },
-        catch: (error) => fail("The dev server did not become reachable", error),
-      }).pipe(Effect.retry({ schedule: Schedule.spaced("250 millis"), times: 40 }));
+      yield* HttpClient.get(url).pipe(
+        Effect.flatMap((response) => Effect.ignore(response.arrayBuffer)),
+        Effect.provide(FetchHttpClient.layer),
+        Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }),
+        Effect.mapError((error) => fail("The dev server did not become reachable", error)),
+        Effect.retry({ schedule: Schedule.spaced("250 millis"), times: 40 }),
+      );
 
       return { url };
     });
@@ -365,8 +367,8 @@ export const readTanStackStartOutput = (
       prefix: "server",
     }).pipe(Effect.mapError((error) => fail(error.message, error.cause)));
     if (modules.length === 0) {
-      return yield* Effect.fail(
-        fail(`The TanStack Start build produced no server modules in ${dirs.serverDir}`),
+      return yield* fail(
+        `The TanStack Start build produced no server modules in ${dirs.serverDir}`,
       );
     }
     const entryName = selectServerEntryName(
@@ -374,11 +376,9 @@ export const readTanStackStartOutput = (
       expected,
     );
     if (entryName === undefined) {
-      return yield* Effect.fail(
-        fail(
-          `The TanStack Start build produced no "${expected}" entry in ${dirs.serverDir} — ` +
-            "is the SSR environment's rollup input the project's server entry?",
-        ),
+      return yield* fail(
+        `The TanStack Start build produced no "${expected}" entry in ${dirs.serverDir} — ` +
+          "is the SSR environment's rollup input the project's server entry?",
       );
     }
     return {

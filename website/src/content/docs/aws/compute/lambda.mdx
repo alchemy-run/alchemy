@@ -1,84 +1,50 @@
 ---
 title: Lambda
-description: Stand up an AWS Lambda Function from a single Effect, expose it over a Function URL, and call it from a test.
+description: How a Lambda Function runs your code per invocation, how it's invoked over a Function URL, by events or by other code, and how construction, timeouts and configuration work.
 ---
 
-**Lambda** is Alchemy's default AWS runtime: a class that bundles
-an Effect program into a zip, deploys it as a Lambda Function,
-and generates its IAM execution role from the bindings you
-actually use. Serve HTTP over a public **Function URL**, or
-consume events — every building block in this section plugs in
-through the same pattern: S3 notifications
-(`Lambda.BucketEventSource`), SQS queues
-(`Lambda.QueueEventSource`), Kinesis streams
-(`Lambda.StreamEventSource`), and DynamoDB Streams
-(`Lambda.TableEventSource`).
+import Timeline from "../../../../components/diagrams/Timeline.astro";
 
-This page stands up the smallest possible function — a public
-HTTP endpoint — which the [S3](/aws/data/s3),
-[DynamoDB](/aws/data/dynamodb), [SQS](/aws/messaging/sqs), and
-[Kinesis](/aws/messaging/kinesis) pages then grow into a small
-event-driven system.
+A Lambda Function is code that AWS runs when something invokes it: an HTTP request, a message on a queue, a new object in a Bucket, a schedule. You don't run a server. AWS starts environments for your code as invocations arrive, and you pay only for the time they spend running.
 
-## Prerequisites
+## How Lambda runs your code
 
-Install Alchemy and connect your AWS account — see
-[Setup](/aws/setup).
+Lambda runs your code in **execution environments**: small, isolated sandboxes, each holding one copy of your Function. An environment handles one invocation at a time. When invocations arrive faster than the existing environments can finish them, Lambda starts more, and when traffic drops, it stops them.
 
-## Create the Stack
+<Timeline
+  end={10}
+  lanes={[
+    { id: "e1", label: "environment 1" },
+    { id: "e2", label: "environment 2" },
+    { id: "e3", label: "environment 3" },
+  ]}
+  bars={[
+    { lane: "e1", start: 0, end: 0.7, tone: "warn" },
+    { lane: "e1", start: 0.7, end: 2.6, label: "invocation" },
+    { lane: "e1", start: 2.8, end: 4.6, label: "invocation" },
+    { lane: "e1", start: 5, end: 6.8, label: "invocation" },
+    { lane: "e1", start: 7.4, end: 9.2, label: "invocation" },
+    { lane: "e2", start: 1.4, end: 2.1, tone: "warn" },
+    { lane: "e2", start: 2.1, end: 4, label: "invocation" },
+    { lane: "e2", start: 4.4, end: 6.2, label: "invocation" },
+    { lane: "e3", start: 1.6, end: 2.3, tone: "warn" },
+    { lane: "e3", start: 2.3, end: 4.2, label: "invocation" },
+  ]}
+  marks={[{ at: 1.4, label: "traffic spikes" }]}
+  legend={[{ tone: "accent", label: "invocation" }, { tone: "warn", label: "cold start" }]}
+  caption="Each environment runs one invocation at a time. When more arrive than the warm ones can take, Lambda starts more, each with a cold start first."
+/>
 
-Every Alchemy app has an `alchemy.run.ts` at the root that
-declares the resources to deploy. Create one with the AWS
-providers wired in:
+Starting a new environment is a **cold start**: Lambda loads your code and runs its setup before the first invocation, which adds tens to hundreds of milliseconds. After that the environment is **warm**, and later invocations skip the setup.
 
-```typescript
-// alchemy.run.ts
-import * as Alchemy from "alchemy";
-import * as AWS from "alchemy/AWS";
-import * as Effect from "effect/Effect";
+So a Function scales with no capacity planning, and costs nothing while nothing calls it. In exchange, an invocation can run for at most 15 minutes, and memory, and the CPU that comes with it, is fixed per Function.
 
-export default Alchemy.Stack(
-  "MyApp",
-  {
-    providers: AWS.providers(),
-    state: AWS.state(),
-  },
-  Effect.gen(function* () {
-    return {};
-  }),
-);
-```
+## Declare a Function
 
-`Alchemy.Stack` is the root of every app. The first argument
-(`"MyApp"`) doubles as a logical id and as the prefix Alchemy
-uses when AWS asks for physical resource names.
+A Function is a class. Its first argument is the id, its second the configuration, and its third the program it runs:
 
-`providers: AWS.providers()` registers every AWS resource and
-IAM policy binding that ships with Alchemy, and resolves
-credentials from your Alchemy profile — SSO, console login,
-or stored keys, whichever you picked in
-[Setup](/aws/setup).
-
-`state: AWS.state()` stores deploy state in an account-regional
-S3 bucket (`alchemy-state-{accountId}-{region}-an`), created
-lazily on the first deploy. Because the state lives in your AWS
-account rather than on disk, the same configuration works
-locally and in CI. (For purely local iteration you can use
-`Alchemy.localState()` instead, which writes state under
-`.alchemy/` next to your code.)
-
-The trailing `Effect.gen` block is where you'll declare the
-resources to deploy. It's empty for now.
-
-## Declare a Lambda Function
-
-A Lambda Function in Alchemy is a class. Create `src/api.ts`
-with the smallest possible declaration — just the class
-ceremony, an entrypoint, and an empty runtime:
-
-```typescript
-// src/api.ts
-import * as AWS from "alchemy/AWS";
+```typescript title="src/api.ts"
+import * as AWS from "@alchemy.run/aws";
 import * as Effect from "effect/Effect";
 
 export default class Api extends AWS.Lambda.Function<Api>()(
@@ -90,297 +56,136 @@ export default class Api extends AWS.Lambda.Function<Api>()(
 ) {}
 ```
 
-The `<Api>` type argument plus the empty `()` is a one-time bit
-of ceremony — it lets TypeScript reason about `Api` as a typed
-handle that other resources can later bind against. The rest of
-your code looks completely normal.
+`main: import.meta.url` makes this file the entry point. Deploy bundles it into a zip, uploads it, and creates the Function with its execution role and log group. The role starts with permission to write logs, and each [binding](/aws/iam) adds to it.
 
-`main: import.meta.url` tells Alchemy this same file is the
-bundle entrypoint. At deploy time it'll be bundled with Rolldown
-into a zip and uploaded as the function's code.
+Yield the class in your Stack to deploy it:
+
+```typescript title="alchemy.run.ts"
+const api = yield* Api;
+```
+
+## Construction runs once per environment
+
+The program has two parts. The outer `Effect.gen` is the **Construction phase**. It runs once when an environment starts, and again at deploy time, where its bindings become IAM statements. What it returns are the handlers, which run once per invocation:
+
+```typescript title="src/api.ts"
+Effect.gen(function* () {
+  const putObject = yield* AWS.S3.PutObject(Files); // once per environment
+  return {
+    fetch: putObject({ Key: "hit", Body: "1" }).pipe(/* once per invocation */),
+  };
+});
+```
+
+Put clients and bindings in Construction, so every invocation in the environment reuses them. Put per-request work in the handlers.
 
 ## Serve HTTP from a Function URL
 
-The empty function compiles, but it doesn't do anything yet.
-Add a `fetch` field — Alchemy treats anything returned from the
-`Effect.gen` block as the runtime API, and `fetch` specifically
-is wired up to handle incoming HTTP requests:
+A `fetch` handler answers HTTP requests. It's an Effect that reads the request and returns a response, with the `effect/http` APIs:
 
-```diff lang="typescript"
-// src/api.ts
-import * as AWS from "alchemy/AWS";
-import * as Effect from "effect/Effect";
-+import * as HttpServerResponse from "effect/http/HttpServerResponse";
-
-export default class Api extends AWS.Lambda.Function<Api>()(
-  "Api",
-  { main: import.meta.url },
-  Effect.gen(function* () {
--    return {};
-+    return {
-+      fetch: Effect.succeed(HttpServerResponse.text("Hello from Lambda!")),
-+    };
-  }),
-) {}
+```typescript title="src/api.ts"
+return {
+  fetch: Effect.succeed(HttpServerResponse.text("Hello from Lambda!")),
+};
 ```
 
-`HttpServerResponse.text(...)` is the same `effect/http`
-API used everywhere else — Alchemy adapts it to the Lambda event
-envelope under the hood, so your handler never sees the raw
-`APIGatewayProxyEvent` shape.
+Requests reach it through a **Function URL**, an HTTPS endpoint AWS gives the Function. Choose who may call it with `functionUrl`:
 
-## Expose a public URL
-
-`fetch` exists, but no one can call it yet. Set `functionUrl: true` on
-the props to ask AWS for a public **Function URL** — no API
-Gateway, no auth, just a public HTTPS endpoint:
-
-```diff lang="typescript"
-export default class Api extends AWS.Lambda.Function<Api>()(
-  "Api",
--  { main: import.meta.url },
-+  { main: import.meta.url, functionUrl: true },
-  Effect.gen(function* () {
-    return {
-      fetch: Effect.succeed(HttpServerResponse.text("Hello from Lambda!")),
-    };
-  }),
-) {}
+```typescript title="src/api.ts"
+{ main: import.meta.url, functionUrl: true }
 ```
 
-The resolved `Api` resource will now expose a `functionUrl`
-field carrying that endpoint — we'll surface it from the Stack
-in a moment.
+`true` creates a public URL, `{ authType: "AWS_IAM" }` creates one that only accepts requests signed with AWS credentials, and `false` creates none. Leaving it out creates a public URL, so set `functionUrl: false` on a Function that only handles events.
 
-## Customize per stage
+Return the URL from your Stack to see it after a deploy:
 
-Lambda has knobs you'll want to tune per stage — memory,
-timeout, log retention. Swap the static props object for
-`Stack.useSync`, which gives you a synchronous accessor for any
-value in the surrounding Effect context:
-
-```diff lang="typescript"
-// src/api.ts
-import * as AWS from "alchemy/AWS";
-+import { Stack } from "alchemy/Stack";
-import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/http/HttpServerResponse";
-
-export default class Api extends AWS.Lambda.Function<Api>()(
-  "Api",
--  { main: import.meta.url, functionUrl: true },
-+  Stack.useSync((stack) => ({
-+    main: import.meta.url,
-+    functionUrl: true,
-+    memory: stack.stage === "prod" ? 1024 : 512,
-+  })),
-  Effect.gen(function* () {
-    return {
-      fetch: Effect.succeed(HttpServerResponse.text("Hello from Lambda!")),
-    };
-  }),
-) {}
+```typescript title="alchemy.run.ts"
+const api = yield* Api;
+return { url: api.functionUrl };
 ```
 
-`Stack.useSync` is the synchronous accessor for any value in the
-surrounding Effect context — handy for stack-level config like
-`stage`, `appName`, or anything else you'd want to vary per
-environment.
+A Lambda Function buffers its whole response, up to 6 MB, before the caller sees any of it. For an API or a website that streams, or that serves many requests at once per environment, use a [Lambda Web Function](/aws/compute/web-functions).
 
-Lambda creates the function's log group on its first invocation
-and keeps events forever. Set `logging: { retention: "2 weeks" }`
-to have Alchemy create the group up front with that retention (the
-duration is rounded up to the nearest value CloudWatch Logs
-supports; `"forever"` clears an existing policy). The group is
-deleted with the function.
+## Be invoked by events
 
-## Wire the function into the Stack
+Services invoke a Function too. A Queue delivers batches of messages, a Bucket reports new objects, a Table streams its changes, and EventBridge delivers events and schedules. Subscribe to one from Construction:
 
-The `Api` class is just a typed identifier — yielding it inside
-the Stack's Effect is what registers the resource and starts the
-deploy:
-
-```diff lang="typescript"
-// alchemy.run.ts
-import * as Alchemy from "alchemy";
-import * as AWS from "alchemy/AWS";
-import * as Effect from "effect/Effect";
-+import Api from "./src/api.ts";
-
-export default Alchemy.Stack(
-  "MyApp",
-  {
-    providers: AWS.providers(),
-    state: AWS.state(),
-  },
-  Effect.gen(function* () {
-+    const api = yield* Api;
-+    return { url: api.functionUrl };
--    return {};
-  }),
+```typescript title="src/worker.ts"
+yield* SQS.consumeQueueMessages(Jobs, { batchSize: 10 }, (event) =>
+  Effect.forEach(event.Records, (record) => Console.log(record.body), { discard: true }),
 );
 ```
 
-Yielding `Api` returns the resolved Lambda outputs — the function
-ARN, role ARN, log group, and the public Function URL we asked
-for with `functionUrl: true`. We surface `functionUrl` as the Stack's
-`url` so the test harness can find it.
+Deploy creates the subscription and the permissions it needs, and provides the event source's layer, here `AWS.Lambda.QueueEventSource`, to the Function. See [SQS](/aws/messaging/sqs), [S3 events](/aws/messaging/s3-events), [DynamoDB Streams](/aws/messaging/dynamodb-streams), [Kinesis](/aws/messaging/kinesis) and [EventBridge](/aws/messaging/eventbridge).
 
-## Deploy
+## Be invoked by other code
 
-```sh
-bun alchemy deploy
+Another runtime can call a Function directly. Bind `Lambda.InvokeFunction` to it, and the caller's role gets `lambda:InvokeFunction` on that Function only:
+
+```typescript title="src/api.ts"
+const invoke = yield* AWS.Lambda.InvokeFunction(Worker);
+yield* invoke({ InvocationType: "Event", Payload: JSON.stringify({ id }) });
 ```
 
-Alchemy bundles `src/api.ts` with Rolldown, packages it into a
-zip, creates the IAM execution role, uploads the function, and
-provisions the Function URL. The first deploy takes a moment
-because of role propagation; subsequent deploys are seconds.
+`"Event"` hands the payload over and returns at once. `"RequestResponse"` waits for the result. For typed calls between Functions, see [Effect RPC](/aws/apis/effect-rpc).
 
-## Verify
+## Configure per stage
 
-Drop a quick integration test that hits the Function URL and
-checks the body:
+Memory, timeout and log retention are props. Memory also sets the CPU: a Function with 1,769 MB gets one full vCPU.
 
-```typescript
-// test/integ.test.ts
-import * as AWS from "alchemy/AWS";
-import * as Test from "alchemy/Test/Bun";
-import { expect } from "bun:test";
-import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/http/HttpClient";
-import Stack from "../alchemy.run.ts";
-
-const { test, beforeAll, deploy } = Test.make({
-  providers: AWS.providers(),
-  state: AWS.state(),
-});
-
-const stack = beforeAll(deploy(Stack));
-
-test(
-  "Api responds over Function URL",
-  Effect.gen(function* () {
-    const { url } = yield* stack;
-    const response = yield* HttpClient.get(url);
-    expect(yield* response.text).toBe("Hello from Lambda!");
-  }),
-);
+```typescript title="src/api.ts"
+{
+  main: import.meta.url,
+  memorySize: 1024,
+  timeout: Duration.seconds(30),
+  logging: { retention: "2 weeks" },
+}
 ```
 
-```sh
-bun test test/integ.test.ts
+To vary them by stage, compute the props from the Stack:
+
+```typescript title="src/api.ts"
+Stack.useSync((stack) => ({
+  main: import.meta.url,
+  memorySize: stack.stage === "prod" ? 1024 : 512,
+}))
 ```
 
-You now have a deployable Lambda with a public URL.
+Without `logging`, Lambda creates the log group on the first invocation and keeps its events forever. With it, Alchemy creates the group up front with that retention, and deletes it with the Function.
 
-## Sandbox scope vs invocation scope
+## Clean up inside the invocation
 
-The constructor runs **once per sandbox**, at cold start —
-everything it builds (bindings, SDK clients) is reused by every
-invocation. Each invocation then runs with a **fresh `Scope`** that
-is settled *inline* before the handler returns — so
-`Effect.addFinalizer` in a handler runs before the response leaves,
-and request finalizers should be fast (closing a pool is
-milliseconds).
+Each invocation runs in a fresh `Scope`, closed before the response is sent. A finalizer you add in a handler runs then:
 
-:::caution[There is no `waitUntil` on Lambda — request finalizers block the response]
-No mechanism delivers post-response work reliably on Lambda. A
-buffered invocation's response is not released to the caller until
-the entire Invoke phase completes, so deferring cleanup past the
-handler (we measured an extension-held post-response window) still
-shows up as response latency — and environments whose invoke phase
-is held open this way get recycled. Dangling promises resume on a
-later thaw at best: TCP connections rarely survive the freeze, and a
-crash or timeout reset drops the work entirely — silent data loss
-for anything that mattered.
-
-The contract is blocking and honest: request finalizers run before
-the response, keep them cheap, and anything that must not be lost
-gets written durably (a queue, a table) inside the handler itself.
-:::
-
-### Timeouts still export their trace
-
-A Lambda that hits its timeout is killed mid-flight, and its buffered
-telemetry is lost with it, on exactly the invocation you most want a
-trace for. So the runtime watches the deadline. If the handler is
-still running 500 ms before the timeout, the runtime ends the
-invocation's root span with an `AWS.Lambda.InvocationTimeoutError`,
-logs a warning, and drains the exporters. The handler is not
-interrupted and the response is not changed: if it does finish in
-that last half second, it returns as normal, and its root span stays
-the timeout error, marked `aws.lambda.timeout.imminent`.
-
-Size the margin for one export round-trip to your telemetry backend,
-or set it to zero to turn the flush off:
-
-```typescript
-// src/api.ts
-import * as AWS from "alchemy/AWS";
-import * as Duration from "effect/Duration";
-import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/http/HttpServerResponse";
-
-export default class Api extends AWS.Lambda.Function<Api>()(
-  "Api",
-  {
-    main: import.meta.url,
-    functionUrl: true,
-    timeout: Duration.seconds(30),
-    // flush 1 s before the deadline instead of the default 500 ms
-    timeoutMargin: Duration.seconds(1),
-  },
-  Effect.gen(function* () {
-    return {
-      fetch: Effect.succeed(HttpServerResponse.text("Hello from Lambda!")),
-    };
-  }),
-) {}
+```typescript title="src/api.ts"
+fetch: Effect.gen(function* () {
+  yield* Effect.addFinalizer(() => Console.log("request done"));
+  return HttpServerResponse.text("ok");
+}),
 ```
 
-Construction-level finalizers run at **sandbox shutdown**. A Lambda sandbox
-with no registered extensions is killed with no signal at all, so
-the generated entry registers an internal extension with the
-Extensions API — that makes Lambda send `SIGTERM` and allow 500 ms
-before `SIGKILL`, and the entry uses the window to close the
-instance scope:
+There's no reliable way to do work after the response on Lambda. AWS freezes the environment once the invocation returns, and a frozen environment may never run again. So keep finalizers short, and write anything that must not be lost, to a queue or a table, before you return.
 
-```typescript
-Effect.gen(function* () {
-  // Construction: runs once per sandbox
-  yield* Effect.addFinalizer(() =>
-    // runs in the 500 ms SIGTERM window at sandbox spin-down
-    flushTelemetry().pipe(Effect.ignore),
-  );
-  return { fetch: /* per-invocation */ };
-});
+Finalizers added in Construction run when the environment shuts down, with about half a second to finish, and not at all if the environment crashes. Treat them as best effort. See [Instance scope vs request scope](/infrastructure-as-effects/runtime#instance-scope-vs-request-scope).
+
+## When an invocation times out
+
+When a handler runs past its `timeout`, it's interrupted. Its finalizers run and its open spans end, so the trace shows the call that hung, ending with an `AWS.Lambda.InvocationTimeoutError`.
+
+Lambda itself is given `timeout` plus `timeoutMargin`, one second by default, so cleanup and telemetry finish before Lambda stops the environment. Size the margin for your finalizers and one export to your telemetry backend:
+
+```typescript title="src/api.ts"
+{
+  main: import.meta.url,
+  timeout: Duration.seconds(30),
+  timeoutMargin: Duration.seconds(2),
+}
 ```
 
-Treat instance-level cleanup as best-effort: half a second, and not
-delivered on hard failures (a timeout reset kills the runtime
-without the signal). Flush caches and close connections there;
-anything that *must* happen belongs in the handler, scoped to the
-invocation. See
-[Instance scope vs request scope](/infrastructure-as-effects/runtime#instance-scope-vs-request-scope)
-for the model across all runtimes.
+The two together must fit within Lambda's 15 minutes. Lambda still records the invocation as timed out, retries it like any other failure, and starts a fresh environment, so nothing the interrupted handler left running can resume later.
 
-## Where next
+## When to choose another runtime
 
-- [Drizzle + Aurora PostgreSQL](/aws/data/drizzle-aurora) — private database access,
-  IAM authentication, verified TLS, and deployment-time schema setup.
-- [Drizzle + Aurora DSQL](/aws/data/drizzle-dsql) — the separate serverless database,
-  with an IAM-authenticated endpoint and non-admin application role.
+Lambda is a good place to start: there's nothing to run while idle, and it scales without setup. It fits work that finishes within 15 minutes and arrives as requests or events.
 
-- [S3](/aws/data/s3) — add a bucket and bind read/write operations
-  into this function; IAM policies generated from the call
-  sites, no policy JSON to hand-write.
-- [Secrets & env](/aws/security/secrets-env) — API keys from .env and
-  Secrets Manager credentials for this function.
-- [REST API (API Gateway v1)](/aws/apis/api-gateway) — put an
-  API Gateway REST API with stages and custom domains in front
-  instead of a Function URL.
-- [Choosing a runtime](/aws/compute/choosing-a-runtime) — when ECS,
-  EKS, or EC2 fits better than Lambda.
-- [`Function` reference](/providers/aws/lambda/function) — every
-  prop and attribute.
+Reach for something else when the work doesn't fit that shape. An API that streams responses or holds many requests per environment fits a [Lambda Web Function](/aws/compute/web-functions). A process that runs continuously, holds connections open or already ships as a container fits [ECS](/aws/compute/ecs). Kubernetes workloads fit [EKS](/aws/compute/eks), and software that needs the whole machine fits [EC2](/aws/compute/ec2). See [Choosing a runtime](/aws/compute/choosing-a-runtime).

@@ -29,15 +29,36 @@ export type TestBody = () => Effect.Effect<unknown, unknown, never>;
 /** A hook body. Same contract as {@link TestBody}. */
 export type HookBody = () => Effect.Effect<unknown, unknown, never>;
 
+/**
+ * A counted lock: at most `permits` tests and hooks holding `label` run at
+ * once, across every file in the run. Use it for a shared cloud API budget
+ * (e.g. a rate-limited control plane) rather than serializing on a label.
+ * Waiting for a permit doesn't count against a test's timeout.
+ */
+export interface Limit {
+  readonly label: string;
+  readonly permits: number;
+}
+
+/**
+ * `true` for the whole-process lock, a label naming a narrower lock (one
+ * holder at a time), or a {@link Limit}. A list holds several at once.
+ */
+export type Exclusive =
+  | boolean
+  | string
+  | Limit
+  | ReadonlyArray<boolean | string | Limit | undefined>;
+
 export interface Hook {
   readonly body: HookBody;
   readonly timeout?: number | undefined;
   /**
-   * Take the whole-process write lock for this hook. Use for beforeAll
-   * deploys / afterAll destroys that consume a scarce cloud quota so they
-   * never overlap exclusive tests.
+   * `true` takes the whole-process write lock for this hook. A label (e.g.
+   * `"hetzner"`) only serializes the hook with tests and hooks holding the
+   * same label — use it for deploys that consume a scarce cloud quota.
    */
-  readonly exclusive?: boolean;
+  readonly exclusive?: Exclusive;
 }
 
 export interface TestCase {
@@ -51,12 +72,15 @@ export interface TestCase {
   /** Invert the result: the test passes only if the body fails. */
   readonly fails?: boolean;
   /**
-   * Run this test with the whole-process write lock: no other test in the
-   * run executes concurrently with it. Required for tests that mutate
+   * `true` runs this test with the whole-process write lock: no other test
+   * in the run executes concurrently with it. Required for tests that mutate
    * process-global state (e.g. `process.env.PATH`) — the runner executes
    * everything in ONE bun process, so such mutations are visible everywhere.
+   *
+   * A label (e.g. `"hetzner"`) only serializes the test with others holding
+   * the same label — use it for a shared cloud quota, not global state.
    */
-  readonly exclusive?: boolean;
+  readonly exclusive?: Exclusive;
   /** Override the run-wide retry budget for this test. */
   readonly retry?: number | undefined;
   readonly timeout?: number | undefined;
@@ -86,6 +110,8 @@ export interface Suite {
 export interface FileSuite extends Suite {
   /** Path relative to the run root, e.g. `test/Cloudflare/R2/Bucket.test.ts`. */
   readonly file: string;
+  /** Framework resources, disposed even when user hooks are skipped. */
+  readonly cleanups: Array<Hook>;
 }
 
 export const makeSuite = (
@@ -109,7 +135,11 @@ export const makeSuite = (
   parent,
 });
 
-export const makeFileSuite = (file: string): FileSuite => ({ ...makeSuite(file, undefined), file });
+export const makeFileSuite = (file: string): FileSuite => ({
+  ...makeSuite(file, undefined),
+  file,
+  cleanups: [],
+});
 
 /** Full title path from the file root down to (and including) this node. */
 export const titlePath = (node: Suite | TestCase): ReadonlyArray<string> => {

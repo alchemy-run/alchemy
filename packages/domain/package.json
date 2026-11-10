@@ -1,0 +1,116 @@
+{
+  "name": "@alchemy.run/domain",
+  "version": "2.0.0-beta.85",
+  "description": "Domain-driven backends for Alchemy: aggregates, commands, events, projections, sagas and stories over Effect.",
+  "keywords": [
+    "alchemy",
+    "domain-driven-design",
+    "effect",
+    "event-sourcing"
+  ],
+  "homepage": "https://alchemy.run",
+  "bugs": {
+    "url": "https://github.com/alchemy-run/alchemy/issues"
+  },
+  "license": "Apache-2.0",
+  "author": "Sam Goodwin <sam@alchemy.run>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "packages/domain"
+  },
+  "files": [
+    "lib",
+    "src",
+    "skills"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./Cloudflare": "./src/Cloudflare/index.ts",
+    "./EffectCluster": "./src/EffectCluster/index.ts",
+    "./Rivet": "./src/Rivet/index.ts",
+    "./*": "./src/*.ts",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./lib/index.d.ts",
+        "bun": "./src/index.ts",
+        "default": "./lib/index.js"
+      },
+      "./Cloudflare": {
+        "types": "./lib/Cloudflare/index.d.ts",
+        "bun": "./src/Cloudflare/index.ts",
+        "default": "./lib/Cloudflare/index.js"
+      },
+      "./EffectCluster": {
+        "types": "./lib/EffectCluster/index.d.ts",
+        "bun": "./src/EffectCluster/index.ts",
+        "default": "./lib/EffectCluster/index.js"
+      },
+      "./Rivet": {
+        "types": "./lib/Rivet/index.d.ts",
+        "bun": "./src/Rivet/index.ts",
+        "default": "./lib/Rivet/index.js"
+      },
+      "./internal": null,
+      "./*": {
+        "types": "./lib/*.d.ts",
+        "bun": "./src/*.ts",
+        "default": "./lib/*.js"
+      },
+      "./package.json": "./package.json"
+    },
+    "access": "public"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter \"{.}...\" run build:package",
+    "build:package": "node scripts/build.ts"
+  },
+  "devDependencies": {
+    "@alchemy.run/cloudflare": "workspace:*",
+    "@alchemy.run/effect-cluster": "workspace:*",
+    "@alchemy.run/rivet": "workspace:*",
+    "@distilled.cloud/cloudflare": "workspace:*",
+    "@effect/sql-pg": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "alchemy": "workspace:*",
+    "effect": "catalog:",
+    "foldkit": "catalog:",
+    "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "@alchemy.run/cloudflare": "workspace:*",
+    "@alchemy.run/effect-cluster": "workspace:*",
+    "@alchemy.run/rivet": "workspace:*",
+    "@distilled.cloud/cloudflare": "workspace:*",
+    "@effect/sql-pg": "catalog:",
+    "alchemy": "workspace:*",
+    "effect": "catalog:",
+    "foldkit": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "@alchemy.run/cloudflare": {
+      "optional": true
+    },
+    "@alchemy.run/effect-cluster": {
+      "optional": true
+    },
+    "@alchemy.run/rivet": {
+      "optional": true
+    },
+    "@distilled.cloud/cloudflare": {
+      "optional": true
+    },
+    "@effect/sql-pg": {
+      "optional": true
+    },
+    "foldkit": {
+      "optional": true
+    }
+  }
+}

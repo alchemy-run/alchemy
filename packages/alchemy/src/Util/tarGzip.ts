@@ -6,14 +6,18 @@ import * as zlib from "node:zlib";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import type { PlatformError } from "effect/PlatformError";
 
 const encoder = new TextEncoder();
 
 const pad512 = (size: number) => (512 - (size % 512)) % 512;
 
+const byteLength = (value: string) => encoder.encode(value).byteLength;
+
+// `encodeInto` stops before a character that does not fit, so a field is
+// never cut in the middle of a multi-byte UTF-8 sequence.
 const writeBytes = (buf: Uint8Array, offset: number, value: string, length: number) => {
-  const bytes = encoder.encode(value);
-  buf.set(bytes.subarray(0, length), offset);
+  encoder.encodeInto(value, buf.subarray(offset, offset + length));
 };
 
 const writeOctal = (buf: Uint8Array, offset: number, value: number, length: number) => {
@@ -48,13 +52,15 @@ const headerBlock = (input: {
   return buf;
 };
 
+// ustar field limits are in bytes, so measure the UTF-8 encoding, not
+// `string.length` (UTF-16 code units).
 const splitUstarName = (rel: string): { name: string; prefix?: string } | undefined => {
-  if (rel.length <= 100) return { name: rel };
-  for (let i = rel.length - 101; i >= 1; i--) {
-    if (rel[i] !== "/") continue;
+  if (byteLength(rel) <= 100) return { name: rel };
+  for (let i = rel.indexOf("/"); i >= 1; i = rel.indexOf("/", i + 1)) {
     const prefix = rel.slice(0, i);
     const name = rel.slice(i + 1);
-    if (prefix.length <= 155 && name.length > 0 && name.length <= 100) {
+    if (byteLength(prefix) > 155) return undefined;
+    if (name.length > 0 && byteLength(name) <= 100) {
       return { prefix, name };
     }
   }
@@ -93,12 +99,12 @@ type WalkEntry = {
 
 const walkDirectory = (
   root: string,
-): Effect.Effect<WalkEntry[], unknown, FileSystem.FileSystem | Path.Path> =>
+): Effect.Effect<WalkEntry[], PlatformError, FileSystem.FileSystem | Path.Path> =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const files: WalkEntry[] = [];
-    const walk = (dir: string, rel: string): Effect.Effect<void, unknown> =>
+    const walk = (dir: string, rel: string): Effect.Effect<void, PlatformError> =>
       Effect.gen(function* () {
         const entries = [...(yield* fs.readDirectory(dir))].sort();
         for (const entry of entries) {
@@ -134,7 +140,7 @@ const fileBlocks = (rel: string, size: number, type: "0" | "5", mode: number): U
     return [
       ...gnuLongLink(rel),
       headerBlock({
-        name: rel.slice(0, 100),
+        name: rel,
         size,
         type,
         mode,

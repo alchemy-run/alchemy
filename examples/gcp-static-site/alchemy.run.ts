@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
+import * as GCP from "@alchemy.run/gcp";
 import * as Alchemy from "alchemy";
-import * as GCP from "alchemy/GCP";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 

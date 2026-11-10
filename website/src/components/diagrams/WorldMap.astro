@@ -1,0 +1,185 @@
+---
+/**
+ * `<WorldMap />` — where things run. A dotted world map with labelled places
+ * and arcs between them. Use it when the point is geography: a Worker running
+ * in the city nearest each request, a Durable Object living in one city, a
+ * database primary in one region and its replica in another.
+ *
+ *   <WorldMap
+ *     places={[
+ *       { id: "tokyo", label: "Worker", type: "Tokyo", lat: 35.7, lon: 139.7 },
+ *       { id: "fra", label: "lobby", type: "Frankfurt", lat: 50.1, lon: 8.7, tone: "accent" },
+ *     ]}
+ *     links={[{ from: "tokyo", to: "fra", label: "getByName" }]}
+ *     caption="…"
+ *   />
+ *
+ * `place` puts a label above (default), below, left or right of its point.
+ * `center` is the longitude in the middle of the map (default 0); set it to
+ * 180 to draw a route across the Pacific. `crop` narrows the map to a window of
+ * longitude and latitude, in the same centred coordinates.
+ */
+import "./diagram.css";
+import { LAND, LEFT_LON, STEP, TOP_LAT } from "./world-land";
+
+interface Place {
+  id: string;
+  label: string;
+  type?: string;
+  lat: number;
+  lon: number;
+  tone?: "default" | "accent" | "muted";
+  place?: "above" | "below" | "left" | "right";
+}
+interface Link {
+  from: string;
+  to: string;
+  label?: string;
+  dashed?: boolean;
+  /** Bend of the arc; negative bends the other way. Default 0.25. */
+  bend?: number;
+}
+interface Props {
+  places: Place[];
+  links?: Link[];
+  center?: number;
+  crop?: { west: number; east: number; north: number; south: number };
+  caption?: string;
+}
+
+const { places, links = [], center = 0, crop, caption } = Astro.props as Props;
+// Marker ids are per figure: a page can hold several, and a hidden layout's markers don't render.
+const uid = Math.random().toString(36).slice(2, 8);
+
+// Two layouts: the map at full scale (desktop), and on phones a smaller map,
+// cropped to the places, under labels that keep their size. CSS shows one.
+const layout = (narrow: boolean) => {
+let CELL = 6; // px per 2.5° on screen
+// Longitudes are moved into [center - 180, center + 180).
+const wrap = (lon: number) => ((((lon - center + 180) % 360) + 360) % 360) + center - 180;
+const lons = places.map((p) => wrap(p.lon));
+const lats = places.map((p) => p.lat);
+const west = narrow ? Math.max(crop?.west ?? center - 180, Math.min(...lons) - 30) : (crop?.west ?? center - 180);
+const east = narrow ? Math.min(crop?.east ?? center + 180, Math.max(...lons) + 30) : (crop?.east ?? center + 180);
+const north = narrow ? Math.min(crop?.north ?? TOP_LAT, Math.max(...lats) + 22) : (crop?.north ?? TOP_LAT);
+const south = narrow ? Math.max(crop?.south ?? -56, Math.min(...lats) - 22) : (crop?.south ?? -56);
+// On a phone the map shrinks to fit the column; the labels keep their size.
+if (narrow) CELL = Math.min(3.4, (280 * STEP) / (east - west));
+const px = (lon: number) => ((lon - west) / STEP) * CELL;
+const py = (lat: number) => ((north - lat) / STEP) * CELL;
+const W = px(east);
+const H = py(south);
+
+const dots: { x: number; y: number }[] = [];
+LAND.forEach((row, r) => {
+  const lat = TOP_LAT - r * STEP;
+  if (lat > north || lat < south) return;
+  for (let c = 0; c < row.length; c++) {
+    if (row[c] !== "#") continue;
+    const lon = wrap(LEFT_LON + (c + 0.5) * STEP);
+    if (lon < west || lon > east) continue;
+    dots.push({ x: px(lon), y: py(lat) });
+  }
+});
+
+const at = new Map(places.map((p) => [p.id, { x: px(wrap(p.lon)), y: py(p.lat) }]));
+
+const arcs = links.map((l) => {
+  const a = at.get(l.from)!;
+  const b = at.get(l.to)!;
+  const mx = (a.x + b.x) / 2;
+  const my = (a.y + b.y) / 2;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const k = l.bend ?? 0.25;
+  // Bend perpendicular to the chord, upwards for a west-to-east arc.
+  const cx = mx + dy * k;
+  const cy = my - Math.abs(dx) * k - (dx === 0 ? Math.abs(dy) * k : 0);
+  // Stop short of the target so the arrowhead sits outside its halo.
+  const len = Math.hypot(b.x - cx, b.y - cy) || 1;
+  const ex = b.x - ((b.x - cx) / len) * 9;
+  const ey = b.y - ((b.y - cy) / len) * 9;
+  return {
+    d: `M ${a.x} ${a.y} Q ${cx} ${cy} ${ex} ${ey}`,
+    lx: 0.25 * a.x + 0.5 * cx + 0.25 * b.x,
+    ly: 0.25 * a.y + 0.5 * cy + 0.25 * b.y - 6,
+    ...l,
+  };
+});
+
+const labelBox = (p: Place) => {
+  const { x, y } = at.get(p.id)!;
+  const w = Math.max(p.label.length * 7.6, (p.type ?? "").length * 6.4) + 16;
+  const h = p.type ? 34 : 22;
+  const where = p.place ?? "above";
+  const bx =
+    where === "left" ? x - w - 12 : where === "right" ? x + 12 : x - w / 2;
+  const by =
+    where === "above" ? y - h - 12 : where === "below" ? y + 12 : y - h / 2;
+  return { bx, by, w, h };
+};
+const boxes = places.map((p) => ({ p, ...labelBox(p) }));
+const minX = Math.min(0, ...boxes.map((b) => b.bx)) - 4;
+const minY = Math.min(0, ...boxes.map((b) => b.by)) - 4;
+const maxX = Math.max(W, ...boxes.map((b) => b.bx + b.w)) + 4;
+const maxY = Math.max(H, ...boxes.map((b) => b.by + b.h)) + 4;
+return { narrow, dots, arcs, boxes, at, minX, minY, maxX, maxY };
+};
+const layouts = [layout(false), layout(true)];
+---
+
+<figure class="alc-fig not-content" data-nosnippet>
+  <div class="alc-fig__panel">
+  {layouts.map(({ narrow, dots, arcs, boxes, at, minX, minY, maxX, maxY }) => (
+  <svg
+    class:list={["alc-fig__svg", narrow ? "alc-fig__svg--narrow" : "alc-fig__svg--wide"]}
+    viewBox={`${minX} ${minY} ${maxX - minX} ${maxY - minY}`}
+    style={`max-width: ${Math.round((maxX - minX) * 1.1)}px`}
+    role="img"
+    aria-label={caption ?? "Map"}
+  >
+    <defs>
+      <marker id={`alc-map-arrow${narrow ? "-n" : ""}-${uid}`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--alc-accent)" />
+      </marker>
+    </defs>
+    <g>{dots.map((d) => <circle cx={d.x} cy={d.y} r={narrow ? 1.1 : 1.7} class="alc-fig__land" />)}</g>
+    {
+      arcs.map((a) => (
+        <g>
+          <path d={a.d} class:list={["alc-fig__line", a.dashed && "alc-fig__line--dashed"]} marker-end={`url(#alc-map-arrow${narrow ? "-n" : ""}-${uid})`} />
+          {a.label && (
+            <>
+              <rect x={a.lx - a.label.length * 3.3 - 4} y={a.ly - 11} width={a.label.length * 6.6 + 8} height="15" rx="3" class="alc-fig__label-bg" />
+              <text x={a.lx} y={a.ly} text-anchor="middle" class="alc-fig__small">{a.label}</text>
+            </>
+          )}
+        </g>
+      ))
+    }
+    {
+      boxes.map(({ p, bx, by, w, h }) => {
+        const { x, y } = at.get(p.id)!;
+        return (
+          <g>
+            <circle cx={x} cy={y} r="7" class="alc-fig__halo" />
+            <circle cx={x} cy={y} r="3.5" class="alc-fig__dot" />
+            <rect
+              x={bx}
+              y={by}
+              width={w}
+              height={h}
+              rx="6"
+              class:list={["alc-fig__box", p.tone === "accent" && "alc-fig__box--accent", p.tone === "muted" && "alc-fig__box--muted"]}
+            />
+            <text x={bx + w / 2} y={by + (p.type ? 15 : 15)} text-anchor="middle" class="alc-fig__label">{p.label}</text>
+            {p.type && <text x={bx + w / 2} y={by + 28} text-anchor="middle" class="alc-fig__type">{p.type}</text>}
+          </g>
+        );
+      })
+    }
+  </svg>
+  ))}
+  </div>
+  {caption && <figcaption class="alc-fig__caption">{caption}</figcaption>}
+</figure>

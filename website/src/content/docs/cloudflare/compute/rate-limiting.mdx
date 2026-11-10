@@ -4,6 +4,7 @@ description: Throttle requests inside a Worker with Cloudflare's Rate Limiting b
 sidebar:
   order: 12
 ---
+import Timeline from "../../../../components/diagrams/Timeline.astro";
 
 The Rate Limiting binding gives a Worker a counter it can consult on
 every request. Pass a key, such as an IP, a user id, or an API token,
@@ -18,7 +19,7 @@ phase and provide `RateLimitBinding` as a layer:
 
 ```typescript
 // src/worker.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -68,6 +69,23 @@ const a2 = yield* throttle.limit({ key: "alice" }); // { success: true }
 const a3 = yield* throttle.limit({ key: "alice" }); // { success: false }
 const b1 = yield* throttle.limit({ key: "bob" });   // { success: true }
 ```
+
+<Timeline
+  end={10}
+  lanes={[
+    { id: "a", label: 'key: "alice"' },
+    { id: "b", label: 'key: "bob"' },
+  ]}
+  bars={[
+    { lane: "a", start: 0.2, end: 1.3, label: "ok" },
+    { lane: "a", start: 1.5, end: 2.6, label: "ok" },
+    { lane: "a", start: 2.9, end: 4.3, label: "denied", tone: "danger" },
+    { lane: "a", start: 6.3, end: 7.4, label: "ok" },
+    { lane: "b", start: 3.1, end: 4.2, label: "ok" },
+  ]}
+  marks={[{ at: 6, label: "next 10s period" }]}
+  caption="With limit 2 per 10 seconds, alice's third call is denied until the next period. bob has a budget of his own."
+/>
 
 Counting is approximate and local to the Cloudflare location serving
 the request. The binding is built for cheap, fast abuse protection,

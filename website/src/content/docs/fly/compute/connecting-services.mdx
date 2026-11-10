@@ -2,23 +2,31 @@
 title: Connect Services
 description: Build several Fly Services that call each other's methods over a private network, behind one public entry point.
 ---
+import Tree from "../../../../components/diagrams/Tree.astro";
 
 Each [Service](/fly/compute/services) is its own Fly App. One Service
 calls another by **binding** it: `Fly.bindService(Users)` returns a
 typed client for the methods `Users` returns, and the calls travel over
 Fly's private network to `Users`'s `privateUrl`.
 
-Two things decide who can call a Service:
+Two things decide who can call a Service. The first is the **network**. Every App in the organization joins Fly's default private network unless told otherwise. Set `network: yield* Fly.stackNetwork` on each Service to put a stack's Services on a network of their own, unique to the stack and stage, which Apps on any other network can't resolve. The second is the **binding**. Fly signs every private request with the calling App's name, and a Service answers method calls only from the Apps that bind it.
 
-- **The network.** Every App in the organization joins Fly's default
-  private network unless told otherwise. Set
-  `network: yield* Fly.stackNetwork` on each Service to put a stack's
-  Services on a network unique to its stack and stage. Apps on any
-  other network cannot resolve them.
-- **The binding.** Each Service has a caller token. Only Services that
-  bind it receive the token, so only they can call its methods.
+<Tree
+  nodes={[
+    { id: "net", label: "my-app-prod", type: "stack network · private", areas: ["gw orders", "gw users"], phoneAreas: ["gw gw", "orders users"], colGap: 3 },
+    { id: "gw", label: "Gateway", type: "public · gateway.fly.dev", parent: "net", tone: "accent" },
+    { id: "orders", label: "Orders", type: "private · Flycast", parent: "net" },
+    { id: "users", label: "Users", type: "private · Flycast", parent: "net" },
+  ]}
+  links={[
+    { from: "gw", to: "orders", label: "binds" },
+    { from: "gw", to: "users", label: "binds" },
+    { from: "orders", to: "users", label: "binds" },
+  ]}
+  caption="All three Services sit on the stack's own network. Only the Gateway has a public address, and a Service can call another's methods only if it binds it."
+/>
 
-This guide builds the
+Take the
 [fly-microservices example](https://github.com/alchemy-run/alchemy/tree/main/examples/fly-microservices):
 a private `Users` Service, a private `Orders` Service that calls
 `Users`, and a public `Gateway` that calls both.
@@ -30,7 +38,7 @@ bound callers call the methods directly.
 
 ```typescript
 // src/users.ts
-import * as Fly from "alchemy/Fly";
+import * as Fly from "@alchemy.run/fly";
 import * as Effect from "effect/Effect";
 
 export interface User {
@@ -95,7 +103,7 @@ when the Service owns its App; combining it with `app` fails with
 
 ```typescript
 // src/orders.ts
-import * as Fly from "alchemy/Fly";
+import * as Fly from "@alchemy.run/fly";
 import * as Effect from "effect/Effect";
 
 const ORDERS = [
@@ -133,8 +141,8 @@ Effect.gen(function* () {
 ```
 
 `users` is a typed client with `list` and `get`. Binding also makes
-`Orders` deploy after `Users` and hands `Orders` the address and caller
-token of `Users`.
+`Orders` deploy after `Users`, hands `Orders` the address of `Users`,
+and adds `Orders` to the Apps `Users` answers.
 
 ## Call Users from Orders
 
@@ -166,7 +174,7 @@ is public:
 
 ```typescript
 // src/gateway.ts
-import * as Fly from "alchemy/Fly";
+import * as Fly from "@alchemy.run/fly";
 import * as Effect from "effect/Effect";
 
 export default class Gateway extends Fly.Service<Gateway>()(
@@ -238,7 +246,7 @@ Yield the three Services and return their URLs:
 ```typescript
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as Fly from "alchemy/Fly";
+import * as Fly from "@alchemy.run/fly";
 import * as Effect from "effect/Effect";
 import Gateway from "./src/gateway.ts";
 import Orders from "./src/orders.ts";
@@ -296,8 +304,8 @@ Users.
 `Fly.bindService(Users)` makes the caller depend on `Users`. `Orders`
 binds `Users`, and `Gateway` binds both, so Alchemy deploys `Users`,
 then `Orders`, then `Gateway`. The caller's deploy writes the bound
-Service's private address and caller token onto the caller's Machines;
-the client reads them at runtime.
+Service's private address onto the caller's Machines, and the bound
+Service's deploy records the caller's App as allowed to call it.
 
 The order of `yield*` in the Stack does not matter. The bindings
 decide it.
@@ -322,31 +330,20 @@ for you.
 
 ## Security model
 
-A method call from `Orders` to `Users` is accepted only when all of
-these hold:
+A method call from `Orders` to `Users` is accepted only when two checks pass. Neither uses a secret.
 
-- **Same network.** `Users` is on the stack's network, so only Apps on
-  that network can resolve `{users-app}.flycast`. Binding a Service on
-  another network fails the caller's deploy with
-  `Fly.ServiceUnreachable`, before the caller's App is created.
-- **Caller token.** Each Service has its own caller token, generated
-  by Alchemy. A Service receives the token only for the Services it
-  binds, and sends it with every method call. A Service on the same
-  network that did not bind `Users` gets `401` from its methods.
-- **Fly-Src signature.** Fly's proxy signs every request that arrives
-  over Flycast with an ed25519 `Fly-Src` header naming the calling App
-  and organization. `Users` verifies the signature with Fly's public
-  key and checks the caller is in the same organization. A request
-  from the internet carries no valid signature, so a public Service's
-  methods answer `401` to it, and the extra `bindingPort` answers only
-  private-network requests.
+The caller must be on the **same network**. `Users` is on the stack's network, so only Apps on that network can resolve `{users-app}.flycast`. Binding a Service on another network fails the caller's deploy with `Fly.ServiceUnreachable`, before the caller's App is created.
+
+The caller must be an **App that binds the Service**, named by a valid **Fly-Src signature**. Fly's proxy signs every request that arrives over Flycast with an ed25519 `Fly-Src` header naming the calling App and organization, and the time it was sent. `Users` checks the signature with Fly's public key, that the caller is in the same organization, that the header is under 30 seconds old, and that the App is one that binds `Users`. A Service on the same network that didn't bind `Users` gets `401` from its methods. A request from the internet carries no valid signature, so a public Service's methods answer `401` to it, and the extra `bindingPort` answers only private-network requests.
+
+The same signed identity lets a Service reach AWS and GCP without a key. See [Federated identity](/fly/federated-identity).
 
 Fly issues no certificate for `.flycast`, so calls are plain HTTP.
 They travel inside Fly's private network, which Fly encrypts with
 WireGuard.
 
-:::caution[`fetch` routes are not token-protected]
-The caller token guards methods. A Service's `fetch` routes answer any
+:::caution[`fetch` routes are not caller-checked]
+The binding check guards methods. A Service's `fetch` routes answer any
 request that reaches them: anything on the Service's network for a
 private Service, and the internet for a public one. Put operations
 that only bound Services should call in methods.
@@ -382,7 +379,7 @@ const text = yield* response.text;
 ```
 
 Use it for a Service that serves HTTP routes, such as a framework
-server. These requests carry no caller token; see the
+server. Its `fetch` routes don't check the caller; see the
 [caution above](#security-model).
 
 ## Stream results from a method
@@ -424,7 +421,7 @@ const stats = yield* admin.client.get("/stats");
 connection to `yield* admin.host` (`{users-app}.flycast`) and
 `admin.port`. `yield* admin.url` is the full plain-HTTP URL.
 
-`bindEndpoint` sends no caller token. It relies on the network and
+`bindEndpoint` adds no caller check. It relies on the network and
 whatever the port itself checks.
 
 ## Two Services that bind each other

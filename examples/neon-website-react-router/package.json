@@ -16,6 +16,7 @@
     "build": "react-router build"
   },
   "dependencies": {
+    "@alchemy.run/neon": "workspace:*",
     "@react-router/node": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",
@@ -26,6 +27,7 @@
   },
   "devDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@alchemy.run/test": "workspace:*",
     "@effect/platform-node": "catalog:",
     "@react-router/dev": "catalog:",
     "@tailwindcss/vite": "catalog:",

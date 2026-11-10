@@ -12,6 +12,8 @@ import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { runBuildChild } from "../core/BuildChild.ts";
+import { makeChildOutput } from "../core/ChildOutput.ts";
+import { logChildOutput } from "../core/ChildOutput.ts";
 /**
  * `@alchemy.run/frontend-frameworks/nextjs/node` — Next.js on a Node
  * container (`next build` + a custom `next({ dev: false })` server).
@@ -114,22 +116,27 @@ const runNextBuild = (options: { readonly root: string; readonly cli: string }) 
       }).pipe(
         Effect.mapError(failFramework("Failed to spawn the next build CLI (is `node` on PATH?)")),
       );
+      // Build output becomes log records, so the process that renders logs
+      // shows it and in-process capture (a test runner's log file) sees it.
       const forward = (
         stream: Stream.Stream<Uint8Array, PlatformError>,
-        dest: NodeJS.WriteStream,
-      ) => Stream.runForEach(stream, (chunk) => Effect.sync(() => dest.write(chunk)));
+        name: "stdout" | "stderr",
+      ) =>
+        stream.pipe(
+          Stream.decodeText,
+          Stream.splitLines,
+          Stream.runForEach((line) => logChildOutput(line, name)),
+        );
       const { exitCode } = yield* Effect.all(
         {
           exitCode: child.exitCode,
-          stdout: forward(child.stdout, process.stdout),
-          stderr: forward(child.stderr, process.stderr),
+          stdout: forward(child.stdout, "stdout"),
+          stderr: forward(child.stderr, "stderr"),
         },
         { concurrency: "unbounded" },
       ).pipe(Effect.mapError(failFramework("Failed reading next build output")));
       if (exitCode !== 0) {
-        return yield* Effect.fail(
-          failFramework(`The next build exited with code ${exitCode}`)(undefined),
-        );
+        return yield* failFramework(`The next build exited with code ${exitCode}`)(undefined);
       }
     }),
   );
@@ -146,7 +153,7 @@ const collectNextOutput = (root: string) =>
     const nextDir = path.join(root, ".next");
     const hasNext = yield* fs.exists(nextDir).pipe(Effect.orElseSucceed(() => false));
     if (!hasNext) {
-      return yield* Effect.fail(failFramework(`The next build produced no ${nextDir}`)(undefined));
+      return yield* failFramework(`The next build produced no ${nextDir}`)(undefined);
     }
     const serverFilesPath = path.join(nextDir, "required-server-files.json");
     const { config } = yield* fs
@@ -156,13 +163,11 @@ const collectNextOutput = (root: string) =>
         Effect.mapError(failFramework(`Failed to read the built Next config ${serverFilesPath}`)),
       );
     if (config.output === "export") {
-      return yield* Effect.fail(
-        failFramework(
-          '`output: "export"` builds a static site with no Next server, so it ' +
-            'cannot run on the Node target. Remove `output: "export"` from ' +
-            "next.config, or deploy the exported `out/` directory as a static site.",
-        )(undefined),
-      );
+      return yield* failFramework(
+        '`output: "export"` builds a static site with no Next server, so it ' +
+          'cannot run on the Node target. Remove `output: "export"` from ' +
+          "next.config, or deploy the exported `out/` directory as a static site.",
+      )(undefined);
     }
     const publicDir = path.join(root, "public");
     const hasPublic = yield* fs.exists(publicDir).pipe(Effect.orElseSucceed(() => false));
@@ -264,52 +269,69 @@ const spawnNextDev = (options: {
   readonly host?: string | undefined;
 }): Effect.Effect<NextDevChild, FrameworkCore.FrameworkError, Scope.Scope> =>
   Effect.acquireRelease(
-    Effect.try({
-      try: () => {
-        const cp = createRequire(import.meta.url)("child_process") as typeof NodeChildProcessModule;
-        const child = cp.spawn(
-          "node",
-          [
-            options.cli,
-            "dev",
-            "-p",
-            String(options.port),
-            ...(options.host !== undefined ? ["-H", options.host] : []),
-          ],
-          { cwd: options.root, stdio: ["ignore", "pipe", "pipe"], detached: false },
-        );
-        let exited = false;
-        let output = "";
-        const capture = (chunk: unknown) => {
-          output += String(chunk);
-          if (output.length > 65536) output = output.slice(-32768);
-          process.stderr.write(String(chunk));
-        };
-        child.stdout?.on("data", capture);
-        child.stderr?.on("data", capture);
-        child.once("exit", () => {
-          exited = true;
-        });
-        return {
-          child,
-          handle: { exited: () => exited, output: () => output } satisfies NextDevChild,
-        };
-      },
-      catch: failFramework("Failed to spawn the next dev CLI (is `node` on PATH?)"),
-    }),
-    ({ child }) =>
-      Effect.callback<void>((resume) => {
-        if (child.exitCode !== null) {
-          resume(Effect.void);
-          return;
-        }
-        const killTimer = setTimeout(() => child.kill("SIGKILL"), 3000);
-        child.once("exit", () => {
-          clearTimeout(killTimer);
-          resume(Effect.void);
-        });
-        child.kill("SIGTERM");
+    Effect.flatMap(makeChildOutput, (childOutput) =>
+      Effect.try({
+        try: () => {
+          const cp = createRequire(import.meta.url)(
+            "child_process",
+          ) as typeof NodeChildProcessModule;
+          const child = cp.spawn(
+            "node",
+            [
+              options.cli,
+              "dev",
+              "-p",
+              String(options.port),
+              ...(options.host !== undefined ? ["-H", options.host] : []),
+            ],
+            { cwd: options.root, stdio: ["ignore", "pipe", "pipe"], detached: false },
+          );
+          let exited = false;
+          let output = "";
+          const capture = (chunk: unknown) => {
+            output += String(chunk);
+            if (output.length > 65536) output = output.slice(-32768);
+          };
+          child.stdout?.on("data", (chunk: unknown) => {
+            capture(chunk);
+            childOutput.stdout.push(String(chunk));
+          });
+          child.stderr?.on("data", (chunk: unknown) => {
+            capture(chunk);
+            childOutput.stderr.push(String(chunk));
+          });
+          // Output without a trailing newline is still a line once the
+          // streams close.
+          child.once("close", () => {
+            childOutput.stdout.flush();
+            childOutput.stderr.flush();
+          });
+          child.once("exit", () => {
+            exited = true;
+          });
+          return {
+            child,
+            handle: { exited: () => exited, output: () => output } satisfies NextDevChild,
+          };
+        },
+        catch: failFramework("Failed to spawn the next dev CLI (is `node` on PATH?)"),
       }),
+    ),
+    ({ child }) => {
+      const stop = (signal: NodeJS.Signals) =>
+        Effect.callback<void>((resume) => {
+          if (child.exitCode !== null || child.signalCode !== null) {
+            resume(Effect.void);
+            return;
+          }
+          child.once("exit", () => resume(Effect.void));
+          child.kill(signal);
+        });
+      return stop("SIGTERM").pipe(
+        Effect.interruptible,
+        Effect.timeoutOrElse({ duration: "3 seconds", orElse: () => stop("SIGKILL") }),
+      );
+    },
   ).pipe(Effect.map(({ handle }) => handle));
 
 /**
@@ -331,11 +353,9 @@ const awaitNextDevReady = (options: {
     const hostname = parsed.hostname;
     for (let attempt = 0; attempt < 240; attempt++) {
       if (options.child.exited()) {
-        return yield* Effect.fail(
-          failFramework(
-            `The next dev CLI exited before becoming ready:\n${options.child.output().slice(-4000)}`,
-          )(undefined),
-        );
+        return yield* failFramework(
+          `The next dev CLI exited before becoming ready:\n${options.child.output().slice(-4000)}`,
+        )(undefined);
       }
       const ready = yield* Effect.callback<boolean>((resume) => {
         const net = createRequire(import.meta.url)("net") as typeof NodeNet;
@@ -365,8 +385,8 @@ const awaitNextDevReady = (options: {
       if (ready) return;
       yield* Effect.sleep(500);
     }
-    return yield* Effect.fail(
-      failFramework(`Timed out waiting for the next dev server at ${options.url}`)(undefined),
+    return yield* failFramework(`Timed out waiting for the next dev server at ${options.url}`)(
+      undefined,
     );
   });
 

@@ -341,12 +341,10 @@ export const ServerProviderLive = () =>
         const root = path.resolve(initialCwd, props.root ?? ".");
         const distDir = built.distDirectory ?? path.join(root, "dist");
         if (!(yield* fs.exists(distDir))) {
-          return yield* Effect.fail(
-            new FrameworkServerError({
-              framework: props.framework,
-              message: `The build produced no output directory at ${distDir}`,
-            }),
-          );
+          return yield* new FrameworkServerError({
+            framework: props.framework,
+            message: `The build produced no output directory at ${distDir}`,
+          });
         }
         const entryName = built.serverModules?.[0]?.name;
         return {
@@ -449,22 +447,18 @@ const resolveDevPort = Effect.fn(function* (options: {
   const { framework, port, host, strictPort } = options;
   if (yield* isPortFree(port, host)) return port;
   if (strictPort) {
-    return yield* Effect.fail(
-      new FrameworkServerError({
-        framework,
-        message: `Port ${port} is already in use and \`dev.strictPort\` is set`,
-      }),
-    );
+    return yield* new FrameworkServerError({
+      framework,
+      message: `Port ${port} is already in use and \`dev.strictPort\` is set`,
+    });
   }
   for (let candidate = port + 1; candidate <= port + 100; candidate++) {
     if (yield* isPortFree(candidate, host)) return candidate;
   }
-  return yield* Effect.fail(
-    new FrameworkServerError({
-      framework,
-      message: `No free port found between ${port} and ${port + 100}`,
-    }),
-  );
+  return yield* new FrameworkServerError({
+    framework,
+    message: `No free port found between ${port} and ${port + 100}`,
+  });
 });
 
 /**
@@ -519,6 +513,7 @@ export const ServerProviderLocal = () =>
             yield* Effect.sync(() => {
               for (const [key, value] of Object.entries(props.env!)) {
                 if (value === undefined) continue;
+                // oxlint-disable-next-line effecttsgo/process-env-in-effect -- exports props.env into the sidecar's process env for the dev server, not config reading
                 process.env[key] = String(value);
               }
             });

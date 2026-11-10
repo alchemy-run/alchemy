@@ -1,0 +1,84 @@
+---
+title: "Part 2: Fork It for Each Request"
+description: A program in its own Archil sandbox that forks the set-up sandbox for each request, runs a command, and deletes the fork.
+sidebar:
+  order: 2
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+## Bind CreateSandbox to the sandbox
+
+```typescript title="src/Api.ts"
+import * as Archil from "@alchemy.run/archil";
+import * as Effect from "effect/Effect";
+import { Golden } from "./Golden.ts";
+
+export default class Api extends Archil.Sandbox<Api>()(
+  "Api",
+  { main: import.meta.url, port: 3000 },
+  Effect.gen(function* () {
+    const sandboxes = yield* Archil.CreateSandbox(Golden);
+    return {};
+  }).pipe(Effect.provide(Archil.CreateSandboxHttp)),
+) {}
+```
+
+`Api` is a program Alchemy runs in an Archil sandbox of its own, at a public URL. Bound to `Golden`, every sandbox this client creates is a fork of it: its memory and disk, with the repository already cloned.
+
+## Run a command in a fresh fork
+
+```diff lang="typescript"
+// src/Api.ts
+    const sandboxes = yield* Archil.CreateSandbox(Golden);
++
++    const run = Effect.fn("run")(function* (command: string) {
++      const id = (yield* Random.nextIntBetween(0, 2 ** 31)).toString(36);
++      const sandbox = yield* Effect.acquireRelease(sandboxes.create({ name: `run-${id}` }), (sandbox) =>
++        Effect.ignore(sandbox.delete()),
++      );
++      return yield* sandbox.exec(command, { cwd: "/work/is" });
++    });
+```
+
+A fork takes a fraction of a second whatever the disk's size, and writes to it never reach `Golden`. `acquireRelease` deletes the fork when the request's scope closes.
+
+## Serve it
+
+```diff lang="typescript"
+// src/Api.ts
+-    return {};
++    return {
++      fetch: Effect.gen(function* () {
++        const request = yield* HttpServerRequest;
++        const url = new URL(request.url, "http://api");
++        if (request.method === "POST" && url.pathname === "/run") {
++          return yield* HttpServerResponse.json(yield* run(yield* request.text).pipe(Effect.scoped));
++        }
++        return HttpServerResponse.text("not found", { status: 404 });
++      }).pipe(Effect.orDie),
++    };
+```
+
+## Deploy it
+
+```diff lang="typescript"
+// alchemy.run.ts
+  Effect.gen(function* () {
+    const golden = yield* Golden;
+-    return { sandbox: golden.name };
++    const api = yield* Api;
++    return { sandbox: golden.name, url: api.url };
+  }),
+```
+
+<PackageManagers
+  script={`{run} alchemy deploy
+curl -X POST "$URL/run" -d 'git log -1 --format=%s'`}
+/>
+
+`Golden` is unchanged, so this deploy only adds the program.
+
+## Next
+
+[Part 3](/archil/tutorial/part-3) gives each user a fork of their own.

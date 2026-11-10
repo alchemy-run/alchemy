@@ -36,12 +36,15 @@ const state: RegistryState = ((globalThis as any)[key] ??= {
 
 /**
  * Collect one file: once every earlier collection has finished, run `f` (the
- * file's dynamic import + microtask flush) with a fresh root as the active
- * collector, and return the root.
+ * file's dynamic import + microtask flush) with `root` (a fresh one by
+ * default) as the active collector, and return it.
  */
-export const collect = (file: string, f: () => Promise<void>): Promise<FileSuite> => {
+export const collect = (
+  file: string,
+  f: () => Promise<void>,
+  root: FileSuite = makeFileSuite(file),
+): Promise<FileSuite> => {
   const run = state.tail.then(async () => {
-    const root = makeFileSuite(file);
     state.active = { current: root };
     try {
       await f();
@@ -66,6 +69,12 @@ const currentContext = (): FileContext => {
 };
 
 export const currentSuite = (): Suite => currentContext().current;
+
+export const currentFileSuite = (): FileSuite => {
+  let suite = currentSuite();
+  while (suite.parent !== undefined) suite = suite.parent;
+  return suite as FileSuite;
+};
 
 /**
  * The file currently being collected (path relative to the run root, e.g.

@@ -2,7 +2,7 @@ import {
   resolveConnectionSource,
   staticConnectionSource,
   type ConnectionSource,
-} from "alchemy/SQL/ConnectionSource";
+} from "@alchemy.run/sql/ConnectionSource";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -66,7 +66,7 @@ const openPool = (
  * ```typescript
  * import { BetterAuth } from "@alchemy.run/better-auth";
  * import { Neon as NeonDatabase } from "@alchemy.run/better-auth/Neon";
- * import * as Neon from "alchemy/Neon";
+ * import * as Neon from "@alchemy.run/neon";
  *
  * export const AuthDb = Neon.Project("AuthDb");
  *

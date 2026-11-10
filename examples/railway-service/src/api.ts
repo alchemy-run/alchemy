@@ -1,5 +1,5 @@
-import * as Drizzle from "alchemy/Drizzle/Postgres";
-import * as Railway from "alchemy/Railway";
+import * as Drizzle from "@alchemy.run/drizzle/Postgres";
+import * as Railway from "@alchemy.run/railway";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -38,7 +38,6 @@ export default class Api extends Railway.Service<Api>()(
     project: Site,
     main: import.meta.url,
     port: API_PORT,
-    build: { install: ["pg"] },
     healthcheck: "/health",
     env: {
       [SECRET_NAME]: Railway.ref("shared", SECRET_NAME),

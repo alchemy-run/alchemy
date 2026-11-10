@@ -4,6 +4,7 @@ description: Put Cloudflare Access in front of a Worker with the access prop —
 sidebar:
   order: 20
 ---
+import Boundaries from "../../../../components/diagrams/Boundaries.astro";
 
 Cloudflare Access puts a login wall in front of your Worker — covering
 its custom domains, routes, `workers.dev` URL, and version preview
@@ -15,6 +16,20 @@ Worker (`access: { policies }`) for per-Worker rules, and a **shared
 application** (`access: App`) when several Workers sit behind one
 policy set. Each has its own section below.
 
+<Boundaries
+  nodes={[
+    { id: "stranger", label: "anyone else", type: "not in the policy", col: 0, row: 0 },
+    { id: "ana", label: "ana@example.com", type: "signed in", col: 0, row: 1 },
+    { id: "admin", label: "Admin", type: "Worker · reads ctx.access", col: 1, row: 1, tone: "accent" },
+  ]}
+  zones={[{ id: "access", label: "Access", type: "allow emailDomain example.com", nodes: ["admin"], tone: "warn" }]}
+  links={[
+    { from: "ana", to: "admin", label: "identity" },
+    { from: "stranger", to: "access", kind: "blocked", label: "login wall" },
+  ]}
+  caption="Access stands in front of the Worker on every hostname it serves. Only callers its policies allow get through, and the Worker reads who they are from ctx.access."
+/>
+
 ## Dedicated application (per-Worker policies)
 
 The simplest form declares the policies right on the Worker. Alchemy
@@ -24,7 +39,7 @@ application — created, updated, and deleted with the Worker, and
 namespaced under it as `Api/Access`):
 
 ```typescript
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
@@ -151,7 +166,7 @@ When several Workers should sit behind the same policy set, declare
 the application once and pass it to each Worker directly:
 
 ```typescript
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 
 export const TeamOnly = Cloudflare.Access.Application("TeamOnly", {
   type: "self_hosted",

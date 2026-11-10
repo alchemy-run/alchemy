@@ -15,12 +15,14 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@alchemy.run/kubernetes": "workspace:*",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {
+    "@alchemy.run/test": "workspace:*",
     "@types/bun": "catalog:",
     "typescript": "catalog:"
   }

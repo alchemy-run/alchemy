@@ -1,197 +1,120 @@
 ---
 title: R2
-description: Cloudflare R2 is object storage — create a bucket, bind it into a Worker with read/write-scoped bindings, and stream objects in and out.
+description: How R2 Buckets store objects under keys with no egress fees, how Workers read and write them through access-scoped bindings, and how to share, serve, expire and delete what you store.
 ---
 
-R2 is Cloudflare's object storage: buckets of arbitrarily large
-objects addressed by key, with an S3-compatible API. In alchemy an
-R2 bucket is a one-line resource, and Workers reach it through
-typed, access-scoped bindings.
+import Records from "../../../../components/diagrams/Records.astro";
 
-Reach for R2 whenever you need to store files: uploads, build
-artifacts, media, backups, or document corpora for
-[AI Search](/cloudflare/ai/ai-search).
+R2 stores files, called **objects**, in **Buckets**. An object is any sequence of bytes, up to five terabytes, stored under a key you choose. R2 speaks the same API as Amazon S3, so existing S3 tools and libraries work with it, and it charges nothing for data read out of it.
 
-## Create a bucket
+## A Bucket holds objects under keys
 
-```typescript
-// src/bucket.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+A Bucket is a flat map from keys to objects. Keys can contain slashes, like `avatars/sam.png`, and listing by a prefix like `avatars/` makes them behave like folders, but there are no real directories.
 
-export const Bucket = Cloudflare.R2.Bucket("Bucket");
+<Records
+  title="Uploads · R2 Bucket"
+  columns={["key", "size"]}
+  rows={[
+    ["avatars/ana.png", "48 KB"],
+    ["avatars/sam.png", "51 KB"],
+    ["reports/q1.pdf", "2 MB"],
+    ["reports/q2.pdf", "2 MB"],
+  ]}
+  query={{ label: 'list({ prefix: "avatars/" })', rows: [0, 1], prefix: "avatars/" }}
+  caption="Objects sit directly in the Bucket, stored flat by key. A prefix only looks like a folder when you list by it."
+/>
+
+A Bucket's data lives in one region, chosen when it's created, near the first requests or where you hint. R2 caches reads at the edge, and moving data out is free, so serving large files from it costs only the requests.
+
+## Declare a Bucket
+
+```typescript title="src/uploads.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
+
+export const Uploads = Cloudflare.R2.Bucket("Uploads");
 ```
 
-Yield it inside your Stack:
+Alchemy names it from your app, stage and id. To place it, set `locationHint`, like `"weur"` for Western Europe. To keep its data inside a legal boundary, set `jurisdiction`, like `"eu"`.
 
-```typescript
-// alchemy.run.ts
-import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Effect from "effect/Effect";
-import { Bucket } from "./src/bucket.ts";
+## Write and read objects
 
-export default Alchemy.Stack(
-  "MyApp",
-  {
-    providers: Cloudflare.providers(),
-    state: Cloudflare.state(),
-  },
-  Effect.gen(function* () {
-    const bucket = yield* Bucket;
+Bind the Bucket in a Worker. `ReadWriteBucket` gives the Worker a client that can do both:
 
-    return { bucketName: bucket.bucketName };
-  }),
-);
-```
-
-No name required — alchemy generates a unique one from the app,
-stage, and logical ID.
-
-## Bind it to a Worker
-
-Bind the bucket in the Worker's Construction phase and use the typed client
-in the runtime handlers. This Worker stores objects on `PUT /:key`
-and serves them back on `GET /:key`:
-
-```typescript
-// src/worker.ts
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import { Bucket } from "./bucket.ts";
-
+```typescript title="src/worker.ts"
 export default Cloudflare.Worker(
   "Worker",
   { main: import.meta.url },
   Effect.gen(function* () {
-    const bucket = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
-
+    const uploads = yield* Cloudflare.R2.ReadWriteBucket(Uploads);
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
-        const key = request.url.split("/").pop()!;
-
+        const key = new URL(request.url).pathname.slice(1);
         if (request.method === "PUT") {
-          yield* bucket.put(key, request.stream, {
+          yield* uploads.put(key, request.stream, {
             contentLength: Number(request.headers["content-length"] ?? 0),
           });
           return HttpServerResponse.empty({ status: 201 });
         }
-
-        const object = yield* bucket.get(key);
-        if (object === null) {
-          return HttpServerResponse.text("Not found", { status: 404 });
-        }
-        return HttpServerResponse.text(yield* object.text());
-      }).pipe(
-        Effect.catchTag("R2Error", (error) =>
-          Effect.succeed(
-            HttpServerResponse.text(error.message, { status: 500 }),
-          ),
-        ),
-      ),
+        const object = yield* uploads.get(key);
+        return object
+          ? HttpServerResponse.text(yield* object.text())
+          : HttpServerResponse.text("Not found", { status: 404 });
+      }).pipe(Effect.orDie),
     };
   }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketBinding)),
 );
 ```
 
-R2 operations can fail with a typed `R2Error` — Effect keeps it in
-the type system until you handle it, here with `Effect.catchTag`.
-[Tutorial part 2](/cloudflare/tutorial/part-2) builds this Worker
-step by step.
+`put` takes a stream, so an upload flows straight into the Bucket without being held in memory. `get` returns `null` for a missing key. Every operation can fail with an `R2Error`.
 
-## Read, Write, ReadWrite
+## Ask for only the access you need
 
-The bucket capability is split by access level so each Worker gets
-least privilege:
+The client comes in three access levels. `ReadBucket` can `head`, `get` and `list`. `WriteBucket` can `put`, `delete` and upload in parts. `ReadWriteBucket` can do all of them. A Worker that only serves files should bind `ReadBucket`.
 
-- `Cloudflare.R2.ReadBucket` — `head`, `get`, `list`.
-- `Cloudflare.R2.WriteBucket` — `put`, `delete`, multipart uploads.
-- `Cloudflare.R2.ReadWriteBucket` — both.
+Each level has two implementations, picked by the Layer you provide. `*BucketBinding` uses a native R2 binding on the Worker. `*BucketHttp` uses Cloudflare's API, with a token Alchemy creates for just this Bucket's access, for code that doesn't run in a Worker. The handlers are the same either way.
 
-Each level has two interchangeable implementations you provide as a
-layer on the Worker:
+## Hand out links
 
-- **`*BucketBinding`** (`ReadBucketBinding`, `WriteBucketBinding`,
-  `ReadWriteBucketBinding`) — a native R2 binding on the Worker,
-  the default choice.
-- **`*BucketHttp`** (`ReadBucketHttp`, `WriteBucketHttp`,
-  `ReadWriteBucketHttp`) — the same client over Cloudflare's HTTP
-  API with a scoped API token, for when a native binding isn't
-  available.
+Uploads and downloads don't need to pass through your Worker. A **presigned URL** lets a browser `PUT` or `GET` one object directly, for a limited time, with no credentials of its own:
 
-Your runtime code depends only on the capability
-(`ReadBucket(Bucket)` etc.) — swapping the implementation layer
-doesn't touch the handlers.
-
-## Presigned URLs
-
-To let browsers upload or download objects directly, mint presigned
-URLs with `Cloudflare.R2.PresignPutObject` / `PresignGetObject`, or
-declare `Cloudflare.R2.S3Credentials` on an async Worker. The same
-code works under `alchemy dev`, where the local bucket is served on
-an S3-compatible endpoint. See
-[R2 presigned URLs](/cloudflare/data/r2-presigned-urls).
-
-## Public development URL
-
-Buckets are private by default. Set `publicAccess: true` to serve
-objects from Cloudflare's managed `r2.dev` domain — useful for
-preview stacks and anywhere a signed S3 URL or a custom domain
-isn't an option. The hostname lands on `publicDomain`:
-
-```typescript
-const bucket = yield* Cloudflare.R2.Bucket("Assets", {
-  publicAccess: true,
-});
-// https://pub-….r2.dev/photo.jpg
+```typescript title="src/worker.ts"
+const presignPut = yield* Cloudflare.R2.PresignPutObject(Uploads);
+const url = yield* presignPut({ key: `avatars/${userId}.png`, expiresIn: 600 });
 ```
 
-This endpoint is rate-limited and intended for non-production use.
-For production traffic, attach a hostname you control with
-`domains`.
+See [R2 presigned URLs](/cloudflare/data/r2-presigned-urls).
 
-## Destroying a bucket
+## Serve objects publicly
 
-R2 refuses to delete a bucket that still has objects in it, and
-alchemy does not bypass that refusal: destroying a non-empty bucket
-fails with `BucketNotEmpty`, leaving the bucket and its objects
-intact. For buckets whose contents are disposable, opt into emptying
-them first:
+A Bucket is private. To serve its objects to anyone, attach a hostname on one of your zones with `domains`. Requests are served and cached at the edge:
 
-```typescript
-const cache = yield* Cloudflare.R2.Bucket("Cache", {
-  forceDestroy: true,
+```typescript title="src/assets.ts"
+export const Assets = Cloudflare.R2.Bucket("Assets", {
+  domains: [{ name: "assets.example.com" }],
 });
 ```
 
-To keep a bucket even when its declaration goes away, mark it
-`retain` — alchemy drops it from state and never calls delete:
+For previews, `publicAccess: true` serves the Bucket from a Cloudflare-managed `r2.dev` hostname instead, found on `publicDomain`. That hostname is rate limited, so don't use it in production.
 
-```typescript
-import * as RemovalPolicy from "alchemy/RemovalPolicy";
+## Expire objects
 
-const uploads = yield* Cloudflare.R2.Bucket("Uploads").pipe(
-  RemovalPolicy.retain(),
-);
+**Lifecycle rules** delete objects, or move them to cheaper storage, once they reach an age:
+
+```typescript title="src/uploads.ts"
+export const Uploads = Cloudflare.R2.Bucket("Uploads", {
+  lifecycleRules: [
+    { id: "expire-tmp", prefix: "tmp/", deleteObjectsTransition: { condition: { type: "Age", maxAge: 86400 } } },
+  ],
+});
 ```
 
-See [Resource lifecycle › Removal policy](/infrastructure-as-code/resource-lifecycle#removal-policy).
+## Delete a Bucket
 
-## Where next
+R2 won't delete a Bucket that has objects in it, so destroying a full Bucket fails and its data stays safe. For a Bucket whose contents you can lose, set `forceDestroy`, and destroy empties it first:
 
-- [Tutorial part 1](/cloudflare/tutorial/part-1) — deploy your first
-  bucket.
-- [R2 presigned URLs](/cloudflare/data/r2-presigned-urls) — direct
-  browser uploads and downloads, locally and deployed.
-- [Add AI Search (AutoRAG)](/cloudflare/ai/ai-search) — RAG over
-  documents stored in R2.
+```typescript title="src/cache.ts"
+export const Cache = Cloudflare.R2.Bucket("Cache", { forceDestroy: true });
+```
 
-Related:
-
-- [Workers](/cloudflare/compute/workers) — how buckets get read and written.
-
-Reference:
-
-- [Bucket API reference](/providers/cloudflare/r2/bucket)
+To keep a Bucket even after you remove its declaration, pipe it through `RemovalPolicy.retain()`. Alchemy then forgets it instead of deleting it. See [Removal policy](/infrastructure-as-code/resource-lifecycle#removal-policy).

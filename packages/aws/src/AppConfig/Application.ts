@@ -1,0 +1,241 @@
+import * as appconfig from "@distilled.cloud/aws/appconfig";
+import { Unowned } from "alchemy/AdoptPolicy";
+import { isResolved } from "alchemy/Diff";
+import { createPhysicalName } from "alchemy/PhysicalName";
+import * as Provider from "alchemy/Provider";
+import { Resource } from "alchemy/Resource";
+import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
+import { AWSEnvironment } from "../Environment.ts";
+import type { Providers } from "../Providers.ts";
+import { applicationArn, readAppConfigTags, syncAppConfigTags } from "./internal.ts";
+
+export interface ApplicationProps {
+  /**
+   * Name of the application. Must be 1-64 characters. If omitted, a
+   * deterministic physical name is generated. Changing the name replaces the
+   * application.
+   */
+  applicationName?: string;
+  /**
+   * Description of the application.
+   */
+  description?: string;
+  /**
+   * User-defined tags for the application.
+   */
+  tags?: Record<string, string>;
+}
+
+export interface Application extends Resource<
+  "AWS.AppConfig.Application",
+  ApplicationProps,
+  {
+    applicationId: string;
+    applicationName: string;
+    applicationArn: string;
+  },
+  never,
+  Providers,
+  ApplicationLookup
+> {}
+
+/**
+ * Props for {@link Application.lookup}: find an application this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type ApplicationLookup =
+  | {
+      /** The id of the existing application. */
+      applicationId: string;
+    }
+  | {
+      /** The name of the existing application. */
+      applicationName: string;
+    };
+
+/**
+ * An AWS AppConfig application — the top-level container that groups the
+ * environments and configuration profiles for one application's configuration.
+ *
+ * ### Creating an Application
+ * **Example:** Basic Application
+ * ```typescript
+ * const app = yield* AppConfig.Application("MyApp", {
+ *   description: "Configuration for my service",
+ * });
+ * ```
+ *
+ * **Example:** Named Application with Tags
+ * ```typescript
+ * const app = yield* AppConfig.Application("MyApp", {
+ *   applicationName: "my-service",
+ *   tags: { team: "platform" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing application
+ * `Application.lookup` references an application Alchemy doesn't manage (created in the
+ * console or by another stack), found by `applicationId` or `applicationName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Add an environment to an existing application
+ * ```typescript
+ * const app = AWS.AppConfig.Application.lookup({ applicationName: "checkout" });
+ *
+ * yield* AWS.AppConfig.Environment("Prod", {
+ *   applicationId: app.applicationId,
+ * });
+ * ```
+ *
+ * @resource
+ */
+export const Application = Resource<Application>("AWS.AppConfig.Application");
+
+export const ApplicationProvider = () =>
+  Provider.effect(
+    Application,
+    Effect.gen(function* () {
+      const toName = (id: string, props: Partial<ApplicationProps>) =>
+        props.applicationName
+          ? Effect.succeed(props.applicationName)
+          : createPhysicalName({ id, maxLength: 64 });
+
+      /** Find an application by name (get requires the generated id). */
+      const findByName = Effect.fn(function* (name: string) {
+        const apps = yield* appconfig.listApplications.pages({}).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Items ?? [])),
+        );
+        return apps.find((a) => a.Name === name);
+      });
+
+      const readApplication = Effect.fn(function* (applicationId: string) {
+        return yield* appconfig
+          .getApplication({ ApplicationId: applicationId })
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
+      });
+
+      return {
+        stables: ["applicationId", "applicationName", "applicationArn"],
+
+        diff: Effect.fn(function* ({ id, olds, news }) {
+          if (!isResolved(news)) return undefined;
+          if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
+            return { action: "replace" } as const;
+          }
+        }),
+
+        lookup: Effect.fn(function* (props) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const app =
+            "applicationId" in props
+              ? yield* readApplication(props.applicationId)
+              : yield* findByName(props.applicationName);
+          if (app?.Id === undefined) return undefined;
+          return {
+            applicationId: app.Id,
+            applicationName: app.Name!,
+            applicationArn: applicationArn(region, accountId, app.Id),
+          };
+        }),
+
+        read: Effect.fn(function* ({ id, olds, output }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const app = output?.applicationId
+            ? yield* readApplication(output.applicationId)
+            : yield* findByName(yield* toName(id, olds ?? {}));
+          if (app?.Id === undefined) return undefined;
+          const arn = applicationArn(region, accountId, app.Id);
+          const attrs = {
+            applicationId: app.Id,
+            applicationName: app.Name!,
+            applicationArn: arn,
+          };
+          const tags = yield* readAppConfigTags(arn);
+          return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
+        }),
+
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const name = output?.applicationName ?? (yield* toName(id, news));
+          const internalTags = yield* createInternalTags(id);
+          const desiredTags = { ...internalTags, ...news.tags };
+
+          // 1. Observe — cloud state is authoritative; output is only a cache.
+          let observed = output?.applicationId
+            ? yield* readApplication(output.applicationId)
+            : undefined;
+          if (observed === undefined) {
+            observed = yield* findByName(name);
+          }
+
+          // 2. Ensure — create if missing.
+          if (observed?.Id === undefined) {
+            observed = yield* appconfig.createApplication({
+              Name: name,
+              Description: news.description,
+              Tags: desiredTags,
+            });
+          } else if (news.description !== undefined && observed.Description !== news.description) {
+            // 3. Sync — description is mutable in place.
+            observed = yield* appconfig.updateApplication({
+              ApplicationId: observed.Id,
+              Description: news.description,
+            });
+          }
+
+          const arn = applicationArn(region, accountId, observed.Id!);
+
+          // 3b. Sync tags — diff against OBSERVED cloud tags.
+          yield* syncAppConfigTags(arn, desiredTags);
+
+          yield* session.note(name);
+          return {
+            applicationId: observed.Id!,
+            applicationName: observed.Name ?? name,
+            applicationArn: arn,
+          };
+        }),
+
+        delete: Effect.fn(function* ({ output }) {
+          // An application cannot be deleted while environments or
+          // configuration profiles still exist under it ("Cannot delete
+          // application ..., because there are still environments existing
+          // under it" — surfaced as BadRequestException). Children are
+          // deleted first by the engine/nuke, but their deletion is
+          // eventually consistent, so absorb the window with a bounded retry.
+          yield* appconfig.deleteApplication({ ApplicationId: output.applicationId }).pipe(
+            Effect.retry({
+              while: (e): boolean => e._tag === "BadRequestException",
+              schedule: Schedule.fixed("3 seconds"),
+              times: 5,
+            }),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
+        }),
+
+        list: () =>
+          Effect.gen(function* () {
+            const { accountId, region } = yield* AWSEnvironment.current;
+            const apps = yield* appconfig.listApplications.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Items ?? [])),
+            );
+            return apps.flatMap((a) =>
+              a.Id !== undefined && a.Name !== undefined
+                ? [
+                    {
+                      applicationId: a.Id,
+                      applicationName: a.Name,
+                      applicationArn: applicationArn(region, accountId, a.Id),
+                    },
+                  ]
+                : [],
+            );
+          }),
+      };
+    }),
+  );

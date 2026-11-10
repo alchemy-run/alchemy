@@ -57,6 +57,7 @@ describe("dev plugin", () => {
     vite.createServer({
       ...config,
       configFile: false,
+      cacheDir: path.resolve(import.meta.dirname, "../.cache/dev-plugin-vite"),
       root,
       logLevel: "silent",
       plugins: [plugins],
@@ -104,6 +105,21 @@ describe("dev plugin", () => {
       plugin.configureServer = undefined;
     }
     const server = await createDevServer(plugins);
+    try {
+      const environment = server.environments["ssr"];
+      expect(environment).toBeDefined();
+      expect(environment).not.toBeInstanceOf(DistilledDevEnvironment);
+      expect(vite.isRunnableDevEnvironment(environment!)).toBe(true);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("leaves the environment runnable when there is no Worker entry", async () => {
+    // An assets-only dev run boots workerd for the asset layer but evaluates
+    // no modules, so the `ssr` environment stays Vite's own: a framework
+    // plugin that renders through `ssrLoadModule` in dev keeps working.
+    const server = await createDevServer(cloudflareVitePlugin({}));
     try {
       const environment = server.environments["ssr"];
       expect(environment).toBeDefined();
@@ -202,6 +218,27 @@ describe("dev plugin", () => {
       expect(viteClient.status).toBe(200);
       expect(viteClient.text).not.toBe("worker");
       expect(viteClient.text).not.toBe("framework");
+    } finally {
+      await server.close();
+    }
+  });
+
+  // `@cloudflare/vite-plugin` warns in dev, once imports go quiet, when a
+  // Worker without `nodejs_compat` imports Node.js built-ins.
+  it("warns about Node.js imports without nodejs_compat in dev", async () => {
+    const warnings: Array<string> = [];
+    const logger = vite.createLogger("silent");
+    logger.warn = (message) => void warnings.push(message);
+    const server = await createDevServer(
+      cloudflareVitePlugin({ main: "./node-import-entry.ts", compatibilityDate: "2024-01-01" }),
+      { customLogger: logger },
+    );
+    try {
+      await server.environments.ssr!.transformRequest("/node-import-entry.ts");
+      await vi.waitFor(() => expect(warnings.join("\n")).toContain("Unexpected Node.js imports"), {
+        timeout: 5_000,
+      });
+      expect(warnings.join("\n")).toContain(`"node:fs" imported from "node-import-entry.ts"`);
     } finally {
       await server.close();
     }

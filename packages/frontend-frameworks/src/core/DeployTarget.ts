@@ -109,6 +109,8 @@ export interface DeployTargetBuildContext extends DeployTargetContext {
 }
 
 export interface DeployTargetFinishContext extends DeployTargetContext {
+  /** Resolved URL pathname mounting the client-assets directory. @default "/" */
+  readonly assetBasePath?: string | undefined;
   /**
    * Absolute path of the on-disk server entry the framework's adapt step
    * produced, for finishing passes that re-bundle from disk (e.g. SvelteKit's
@@ -275,7 +277,7 @@ export const resolveDeployTarget: <T extends DeployTarget, Config>(
     candidate = (candidate as (config: Config) => T)(config);
   }
   if (!isDeployTarget(candidate)) {
-    return yield* Effect.fail(invalidTarget(specifier));
+    return yield* invalidTarget(specifier);
   }
   return candidate as T;
 });

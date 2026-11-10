@@ -1,5 +1,14 @@
 import * as NodeNet from "node:net";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
+import * as SemVer from "effect/SemVer";
+import * as SemVerRange from "effect/SemVerRange";
+
+export class NodeOperationFailed extends Data.TaggedError("NodeOperationFailed")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * The process's working directory, captured ONCE at module load.
@@ -76,8 +85,14 @@ export const nodeLoaderArgs = (entry: string): string[] => [
 
 /**
  * Whether this Node supports the synchronous in-thread loader hooks
- * (`module.registerHooks`, v22.15 / v23.5) that `bin/register-dev-mode.js`
- * needs. This is THE capability gate for running the CLI from source under
+ * (`module.registerHooks`) the way `bin/register-dev-mode.js` needs them.
+ * Before 24.5 (nodejs/node#59011) a resolve hook's `conditions` were
+ * ignored, so the `bun` condition never reached Node's resolver; before
+ * 24.11.1 and 25.1 (nodejs/node#59929) an imported CommonJS module could
+ * not `require()` TypeScript (see `importedCommonJsNeedsNodeLoader` in
+ * node-utils' loader/hooks.ts).
+ *
+ * This is THE capability gate for running the CLI from source under
  * node: with the hooks installed, the Oxc loader handles every `.ts`/`.tsx`
  * file regardless of Node's own TypeScript support.
  *
@@ -85,9 +100,15 @@ export const nodeLoaderArgs = (entry: string): string[] => [
  * before any `.ts` can load. Keep the two in sync.
  */
 export const isRegisterHooksSupported = (version = process.versions.node): boolean => {
-  const [major = 0, minor = 0] = version.split(".").map(Number);
-  return (major === 22 && minor >= 15) || (major === 23 && minor >= 5) || major >= 24;
+  const parsed = Result.getOrUndefined(SemVer.parse(version));
+  return (
+    parsed !== undefined && SemVerRange.matches(REGISTER_HOOKS, parsed, { includePrerelease: true })
+  );
 };
+
+const REGISTER_HOOKS = SemVerRange.parseUnsafe(
+  ">=22.22.3 <23.0.0-0 || >=24.11.1 <25.0.0-0 || >=25.1.0",
+);
 
 /**
  * Ask the OS for an unused TCP port, release it, and return its number.
@@ -110,7 +131,11 @@ export const findAvailablePort = (host = "127.0.0.1") =>
         } else if (port !== undefined) {
           resume(Effect.succeed(port));
         } else {
-          resume(Effect.fail(new Error("Failed to allocate an available port")));
+          resume(
+            Effect.fail(
+              new NodeOperationFailed({ message: "Failed to allocate an available port" }),
+            ),
+          );
         }
       });
     });

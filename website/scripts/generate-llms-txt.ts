@@ -59,10 +59,11 @@ const SECTIONS: Section[] = [
   {
     heading: "CLI",
     intro:
-      "Every command runs through your package manager: bun alchemy <command>. Command pages by role, plus the Adopting Resources and Inspecting State guides.",
+      "Every command runs through your package manager: bun alchemy <command>. Command pages by role, the Programmatic API for running them from scripts, plus the Adopting Resources and Inspecting State guides.",
     pages: {
       slugs: [
         "cli/index",
+        "cli/api",
         "cli/deploy",
         "cli/plan",
         "cli/destroy",
@@ -91,8 +92,12 @@ const SECTIONS: Section[] = [
         "infrastructure-as-code/outputs",
         "infrastructure-as-code/references",
         "infrastructure-as-code/resource-lifecycle",
+        "infrastructure-as-code/renaming",
         "infrastructure-as-code/provider",
         "infrastructure-as-code/custom-provider",
+        "infrastructure-as-code/local-provider",
+        "infrastructure-as-code/dns-adapters",
+        "infrastructure-as-code/contributions",
       ],
     },
   },
@@ -104,12 +109,14 @@ const SECTIONS: Section[] = [
       slugs: [
         "infrastructure-as-effects/runtime",
         "infrastructure-as-effects/binding",
+        "infrastructure-as-effects/identity-federation",
         "infrastructure-as-effects/layers",
         "infrastructure-as-effects/event-sources",
         "infrastructure-as-effects/sinks",
         "infrastructure-as-effects/phases",
         "infrastructure-as-effects/circular-bindings",
         "infrastructure-as-effects/custom-runtime",
+        "infrastructure-as-effects/telemetry",
       ],
     },
   },
@@ -132,7 +139,11 @@ const SECTIONS: Section[] = [
         "environments/auth-providers",
         "environments/custom-auth-provider",
         "environments/secrets",
+        "environments/secret-providers",
+        "environments/doppler",
+        "environments/infisical",
         "environments/local-development",
+        "environments/worktrees",
         "environments/ci",
       ],
     },
@@ -146,7 +157,12 @@ const SECTIONS: Section[] = [
     intro:
       "Scaling the codebase: file conventions for one stack, monorepos for many — single Stack or one per package.",
     pages: {
-      slugs: ["project-structure/file-layout", "project-structure/monorepo"],
+      slugs: [
+        "project-structure/file-layout",
+        "project-structure/monorepo",
+        "project-structure/monorepo-single-stack",
+        "project-structure/monorepo-multi-stack",
+      ],
     },
   },
   {
@@ -166,22 +182,22 @@ const SECTIONS: Section[] = [
   {
     heading: "Cloudflare — start here",
     intro:
-      "The Cloudflare hub: overview (resources + recipes) and setup (install, account, OAuth vs API token, profiles).",
-    pages: { slugs: ["cloudflare/index", "cloudflare/setup"] },
+      "The Cloudflare hub: overview, What is Cloudflare? (accounts, zones, Workers, bindings, Durable Objects, storage, queues, workflows, containers, API tokens and how Alchemy models each), setup (install, account, OAuth vs API token, profiles), and local development.",
+    pages: {
+      slugs: [
+        "cloudflare/index",
+        "cloudflare/what-is-cloudflare",
+        "cloudflare/accounts-and-tokens",
+        "cloudflare/setup",
+        "cloudflare/local-development",
+      ],
+    },
   },
   {
     heading: "Cloudflare — tutorial",
     intro:
-      "A linear five-part walkthrough from zero to a tested, locally-developed, CI-deployed Cloudflare project. Each part builds on the previous one.",
-    pages: {
-      slugs: [
-        "cloudflare/tutorial/part-1",
-        "cloudflare/tutorial/part-2",
-        "cloudflare/tutorial/part-3",
-        "cloudflare/tutorial/part-4",
-        "cloudflare/tutorial/part-5",
-      ],
-    },
+      "A linear six-part walkthrough from zero to a tested, locally-developed, CI-deployed, observable Cloudflare project. Each part builds on the previous one.",
+    pages: { directory: "cloudflare/tutorial" },
   },
   {
     heading: "Cloudflare — Compute",
@@ -225,7 +241,14 @@ const SECTIONS: Section[] = [
   },
   {
     heading: "Prisma — start here",
-    pages: { slugs: ["prisma/index", "prisma/setup"] },
+    pages: {
+      slugs: [
+        "prisma/index",
+        "prisma/what-is-prisma",
+        "prisma/workspaces-and-tokens",
+        "prisma/setup",
+      ],
+    },
   },
   {
     heading: "Prisma — tutorial",
@@ -252,9 +275,17 @@ const SECTIONS: Section[] = [
   {
     heading: "AWS — start here",
     intro:
-      "The AWS hub: overview (runtimes + resources + recipes), setup (credentials, profiles, region), and the Lambda vs ECS vs EKS vs EC2 decision page.",
+      "The AWS hub: overview, What is AWS? (accounts, regions, IAM, resources and ARNs, runtimes, bindings, event sources, VPCs, the edge and how Alchemy models each), the accounts-and-regions and IAM-and-bindings chapters, setup (credentials, profiles, region), local development, and the Lambda vs ECS vs EKS vs EC2 decision page.",
     pages: {
-      slugs: ["aws/index", "aws/setup", "aws/compute/choosing-a-runtime"],
+      slugs: [
+        "aws/index",
+        "aws/what-is-aws",
+        "aws/accounts-and-regions",
+        "aws/iam",
+        "aws/setup",
+        "aws/local-development",
+        "aws/compute/choosing-a-runtime",
+      ],
     },
   },
   {
@@ -273,7 +304,7 @@ const SECTIONS: Section[] = [
   },
   {
     heading: "AWS — Compute",
-    pages: { directory: "aws/compute" },
+    pages: { directory: "aws/compute", exclude: ["aws/compute/choosing-a-runtime"] },
   },
   {
     heading: "AWS — Frontend",
@@ -286,6 +317,10 @@ const SECTIONS: Section[] = [
   {
     heading: "AWS — Data",
     pages: { directory: "aws/data" },
+  },
+  {
+    heading: "AWS — AI",
+    pages: { directory: "aws/ai" },
   },
   {
     heading: "AWS — Messaging & events",
@@ -312,27 +347,75 @@ const SECTIONS: Section[] = [
     intro:
       "Google Cloud as Stack resources — Cloud Run services and jobs, Firestore, Pub/Sub, BigQuery, Secret Manager, Memorystore. Bindings grant IAM onto a per-host service account.",
     pages: {
-      slugs: [
-        "gcp/index",
-        "gcp/setup",
-        "gcp/guides/cloud-run-api",
-        "gcp/guides/event-pipeline",
-        "gcp/guides/memorystore",
-        "gcp/guides/bindings",
-      ],
+      slugs: ["gcp/index", "gcp/what-is-gcp", "gcp/projects-and-regions", "gcp/setup"],
     },
+  },
+  {
+    heading: "GCP — Tutorial",
+    pages: { directory: "gcp/tutorial" },
+  },
+  {
+    heading: "GCP — Compute",
+    pages: { directory: "gcp/compute" },
+  },
+  {
+    heading: "GCP — Frontend",
+    pages: { directory: "gcp/frontend" },
+  },
+  {
+    heading: "GCP — APIs",
+    pages: { directory: "gcp/apis" },
+  },
+  {
+    heading: "GCP — Data",
+    pages: { directory: "gcp/data" },
+  },
+  {
+    heading: "GCP — AI",
+    pages: { directory: "gcp/ai" },
+  },
+  {
+    heading: "GCP — Messaging & events",
+    pages: { directory: "gcp/messaging" },
+  },
+  {
+    heading: "GCP — Security & secrets",
+    pages: { directory: "gcp/security" },
+  },
+  {
+    heading: "GCP — Observability",
+    pages: { directory: "gcp/observability" },
+  },
+  {
+    heading: "GCP — Networking",
+    pages: { directory: "gcp/networking" },
   },
   {
     heading: "Fly — start here",
     intro:
-      "The Fly hub: overview (Apps, Machines, Services, Sprites) and setup (org, API token, profile).",
+      "The Fly hub: overview, What is Fly? (organizations, Apps, Machines, regions, the proxy, private networking, Volumes, managed data and how Alchemy models each), setup (org, API token, profile), and networking.",
     pages: {
-      slugs: ["fly/index", "fly/setup"],
+      slugs: [
+        "fly/index",
+        "fly/what-is-fly",
+        "fly/organizations-and-tokens",
+        "fly/federated-identity",
+        "fly/setup",
+        "fly/networking",
+      ],
     },
   },
   {
-    heading: "Fly — SQL",
-    pages: { slugs: ["fly/data/postgres", "fly/data/drizzle-postgres"] },
+    heading: "Fly — Tutorial",
+    pages: { directory: "fly/tutorial" },
+  },
+  {
+    heading: "Fly — Compute",
+    pages: { directory: "fly/compute" },
+  },
+  {
+    heading: "Fly — Data",
+    pages: { directory: "fly/data" },
   },
   {
     heading: "Fly — Frontend",
@@ -341,14 +424,31 @@ const SECTIONS: Section[] = [
   {
     heading: "Hetzner — start here",
     intro:
-      "The Hetzner hub: overview (Servers and Services) and setup (project, API token, profile).",
+      "The Hetzner hub: overview, What is Hetzner? (projects, locations, Servers, Services, Volumes, networks, firewalls, load balancers, DNS and how Alchemy models each), and setup (project, API token, profile).",
     pages: {
-      slugs: ["hetzner/index", "hetzner/setup"],
+      slugs: [
+        "hetzner/index",
+        "hetzner/what-is-hetzner",
+        "hetzner/projects-and-tokens",
+        "hetzner/setup",
+      ],
     },
   },
   {
-    heading: "Hetzner — SQL",
-    pages: { slugs: ["hetzner/data/drizzle-postgres"] },
+    heading: "Hetzner — Tutorial",
+    pages: { directory: "hetzner/tutorial" },
+  },
+  {
+    heading: "Hetzner — Compute",
+    pages: { directory: "hetzner/compute" },
+  },
+  {
+    heading: "Hetzner — Data",
+    pages: { directory: "hetzner/data" },
+  },
+  {
+    heading: "Hetzner — Networking",
+    pages: { directory: "hetzner/networking" },
   },
   {
     heading: "Hetzner — Frontend",
@@ -357,32 +457,28 @@ const SECTIONS: Section[] = [
   {
     heading: "Railway — start here",
     intro:
-      "The Railway hub: overview (Projects, Services, databases) and setup (workspace, API token, profile).",
-    pages: {
-      slugs: ["railway/index", "railway/setup"],
-    },
-  },
-  {
-    heading: "Railway — SQL",
+      "The Railway hub: overview, What is Railway? (workspaces, projects, environments, services, databases, volumes, variables, networking and how Alchemy models each), setup (workspace, API token, profile), and networking.",
     pages: {
       slugs: [
-        "railway/data/postgres",
-        "railway/data/mysql",
-        "railway/data/drizzle-postgres",
-        "railway/data/drizzle-mysql",
+        "railway/index",
+        "railway/what-is-railway",
+        "railway/workspaces-and-tokens",
+        "railway/setup",
+        "railway/networking",
       ],
     },
   },
   {
-    heading: "Prisma — SQL",
-    pages: {
-      slugs: [
-        "prisma/data/postgres",
-        "prisma/data/branches",
-        "prisma/data/connections",
-        "prisma/data/drizzle-postgres",
-      ],
-    },
+    heading: "Railway — Tutorial",
+    pages: { directory: "railway/tutorial" },
+  },
+  {
+    heading: "Railway — Compute",
+    pages: { directory: "railway/compute" },
+  },
+  {
+    heading: "Railway — Data",
+    pages: { directory: "railway/data" },
   },
   {
     heading: "Railway — Frontend",
@@ -395,6 +491,8 @@ const SECTIONS: Section[] = [
     pages: {
       slugs: [
         "planetscale/index",
+        "planetscale/what-is-planetscale",
+        "planetscale/organizations-and-tokens",
         "planetscale/setup",
         "planetscale/data/postgres",
         "planetscale/data/mysql",
@@ -413,7 +511,11 @@ const SECTIONS: Section[] = [
     pages: {
       slugs: [
         "neon/index",
+        "neon/what-is-neon",
         "neon/setup",
+        "neon/organizations-and-keys",
+        "neon/functions",
+        "neon/storage",
         "neon/governance",
         "neon/guides/ai-gateway",
         "neon/guides/production-auth",
@@ -427,9 +529,276 @@ const SECTIONS: Section[] = [
         "neon/tutorial/previews",
         "neon/data/branching",
         "neon/data/connections",
+        "neon/data/roles",
         "neon/data/migrations",
         "neon/guides/preview-branches",
         "neon/guides/drizzle",
+      ],
+    },
+  },
+  {
+    heading: "Neon — Frontend",
+    pages: { directory: "neon/frontend" },
+  },
+  {
+    heading: "Turso",
+    intro:
+      "Turso SQLite databases as Stack resources: groups, databases, migrations, connections, a database per tenant, preview databases, and scoped tokens.",
+    pages: {
+      slugs: [
+        "turso/index",
+        "turso/what-is-turso",
+        "turso/setup",
+        "turso/tutorial/part-1",
+        "turso/tutorial/part-2",
+        "turso/tutorial/part-3",
+        "turso/groups",
+        "turso/databases",
+        "turso/migrations",
+        "turso/connections",
+        "turso/database-per-tenant",
+        "turso/preview-databases",
+        "turso/tokens",
+        "turso/organization",
+      ],
+    },
+  },
+  {
+    heading: "E2B",
+    intro:
+      "E2B sandboxes for agents: what E2B is, team and API keys, network rules and egress secrets, templates, sandboxes from any Worker, warm snapshots and forks, programs baked into templates, volumes, and lifecycle events.",
+    pages: {
+      slugs: [
+        "e2b/index",
+        "e2b/what-is-e2b",
+        "e2b/setup",
+        "e2b/tutorial/part-1",
+        "e2b/tutorial/part-2",
+        "e2b/tutorial/part-3",
+        "e2b/tutorial/part-4",
+        "e2b/tutorial/part-5",
+        "e2b/tutorial/part-6",
+        "e2b/api-keys",
+        "e2b/network-and-secrets",
+        "e2b/templates",
+        "e2b/sandboxes",
+        "e2b/snapshots",
+        "e2b/programs",
+        "e2b/volumes",
+        "e2b/lifecycle-events",
+      ],
+    },
+  },
+  {
+    heading: "Archil — start here",
+    intro:
+      "Archil runs commands, processes and programs against durable disks in Firecracker microVMs: serverless exec, sandboxes, programs and websites, branches, and mounts in your own Containers and ECS tasks.",
+    pages: { slugs: ["archil/index", "archil/what-is-archil", "archil/setup"] },
+  },
+  {
+    heading: "Archil — Tutorial",
+    pages: { directory: "archil/tutorial" },
+  },
+  {
+    heading: "Archil — Accounts & access",
+    pages: {
+      slugs: [
+        "archil/organization-and-keys",
+        "archil/security/credentials",
+        "archil/security/network",
+      ],
+    },
+  },
+  {
+    heading: "Archil — Compute",
+    pages: { directory: "archil/compute" },
+  },
+  {
+    heading: "Archil — Storage",
+    pages: { directory: "archil/storage" },
+  },
+  {
+    heading: "Boat",
+    intro:
+      "Boat sandboxes: what Boat is, accounts and scoped API keys, sandboxes from any Worker and their lifecycle, programs served from a sandbox, snapshots and forks, environments, ports, and webhooks.",
+    pages: {
+      slugs: [
+        "boat/index",
+        "boat/what-is-boat",
+        "boat/setup",
+        "boat/tutorial/part-1",
+        "boat/tutorial/part-2",
+        "boat/tutorial/part-3",
+        "boat/tutorial/part-4",
+        "boat/tutorial/part-5",
+        "boat/tutorial/part-6",
+        "boat/account-and-keys",
+        "boat/security/credentials",
+        "boat/security/environments",
+        "boat/sandboxes/choosing-a-runtime",
+        "boat/sandboxes/sandboxes",
+        "boat/sandboxes/programs",
+        "boat/sandboxes/snapshots",
+        "boat/sandboxes/ports",
+        "boat/sandboxes/lifecycle-events",
+      ],
+    },
+  },
+  {
+    heading: "Rivet",
+    intro:
+      "Durable Objects on Rivet: a control plane and pools of nodes you run on Docker, AWS, GCP, Kubernetes, Fly, Hetzner or Railway (or Rivet Cloud), with key-value storage, SQL and alarms, called by name from any runtime.",
+    pages: {
+      slugs: [
+        "rivet/index",
+        "rivet/what-is-rivet",
+        "rivet/setup",
+        "rivet/namespaces",
+        "rivet/tokens-and-networks",
+        "rivet/secrets",
+        "rivet/tutorial/part-1",
+        "rivet/tutorial/part-2",
+        "rivet/tutorial/part-3",
+        "rivet/tutorial/part-4",
+        "rivet/actors",
+        "rivet/durable-objects",
+        "rivet/storage",
+        "rivet/concurrency",
+        "rivet/calling",
+        "rivet/rivetkit",
+        "rivet/rivetkit-effect",
+        "rivet/rivetkit-rust",
+        "rivet/durable-streams",
+        "rivet/control-planes",
+        "rivet/pools",
+        "rivet/docker",
+        "rivet/aws",
+        "rivet/gcp",
+        "rivet/kubernetes",
+        "rivet/fly",
+        "rivet/hetzner",
+        "rivet/railway",
+        "rivet/rivet-cloud",
+      ],
+    },
+  },
+  {
+    heading: "Effect Cluster",
+    intro:
+      "Effect Cluster entities, workflows, singletons and crons, on a Postgres database and a pool of runners you run on Docker, AWS, GCP, Kubernetes, Fly or Hetzner, or on Cloudflare Durable Objects, called by id from any runtime.",
+    pages: {
+      slugs: [
+        "cluster/index",
+        "cluster/what-is-effect-cluster",
+        "cluster/setup",
+        "cluster/tutorial/part-1",
+        "cluster/tutorial/part-2",
+        "cluster/tutorial/part-3",
+        "cluster/tutorial/part-4",
+        "cluster/entities",
+        "cluster/calling",
+        "cluster/middleware",
+        "cluster/workflows",
+        "cluster/singletons",
+        "cluster/crons",
+        "cluster/existing-programs",
+        "cluster/databases",
+        "cluster/pools",
+        "cluster/docker",
+        "cluster/aws",
+        "cluster/gcp",
+        "cluster/kubernetes",
+        "cluster/fly",
+        "cluster/hetzner",
+        "cluster/cloudflare",
+      ],
+    },
+  },
+  {
+    heading: "Daytona",
+    intro:
+      "Daytona sandboxes from Workers and Lambda: what Daytona is, organizations and scoped API keys, snapshots (images, Dockerfile builds, warm bases), sandboxes and their lifecycle, programs in a sandbox, volumes, the toolbox, network limits and previews, secrets the sandbox can't read, regions and runners, and telemetry.",
+    pages: {
+      slugs: ["daytona/index", "daytona/what-is-daytona", "daytona/setup"],
+    },
+  },
+  {
+    heading: "Daytona — Tutorial",
+    pages: { directory: "daytona/tutorial" },
+  },
+  {
+    heading: "Daytona — Accounts & access",
+    pages: {
+      slugs: [
+        "daytona/organizations-and-keys",
+        "daytona/organization/organization",
+        "daytona/security/secrets",
+      ],
+    },
+  },
+  {
+    heading: "Daytona — Sandboxes",
+    pages: { directory: "daytona/sandboxes" },
+  },
+  {
+    heading: "Daytona — Networking",
+    pages: { directory: "daytona/networking" },
+  },
+  {
+    heading: "Daytona — Observability",
+    pages: { directory: "daytona/observability" },
+  },
+  {
+    heading: "Modal",
+    intro:
+      "Modal runs code in containers, with GPUs on demand: Functions and Servers that scale from zero, Sandboxes created while your code runs, and Volumes, Dicts, Queues and Secrets beside them.",
+    pages: {
+      slugs: ["modal/index", "modal/what-is-modal", "modal/setup"],
+    },
+  },
+  { heading: "Modal — Tutorial", pages: { directory: "modal/tutorial" } },
+  {
+    heading: "Modal — Accounts & access",
+    pages: {
+      slugs: [
+        "modal/workspaces-and-tokens",
+        "modal/security/access-control",
+        "modal/security/secrets",
+      ],
+    },
+  },
+  { heading: "Modal — Compute", pages: { directory: "modal/compute" } },
+  { heading: "Modal — Services", pages: { directory: "modal/services" } },
+  { heading: "Modal — Sandboxes", pages: { directory: "modal/sandboxes" } },
+  { heading: "Modal — Storage", pages: { directory: "modal/storage" } },
+  { heading: "Modal — Networking", pages: { directory: "modal/networking" } },
+  {
+    heading: "Better Auth",
+    intro:
+      "Better Auth as an Effect service on Workers and Lambda: a tutorial, sign-in providers, database layers, and guides for config, middleware, secondary storage, migrations, and upgrades.",
+    pages: { slugs: ["better-auth/index", "better-auth/what-is-better-auth"] },
+  },
+  {
+    heading: "Better Auth — Tutorial",
+    pages: { directory: "better-auth/tutorial" },
+  },
+  {
+    heading: "Better Auth — Sign-in providers",
+    pages: { directory: "better-auth/sign-in-providers" },
+  },
+  {
+    heading: "Better Auth — Databases",
+    pages: { directory: "better-auth/databases" },
+  },
+  {
+    heading: "Better Auth — Guides",
+    pages: {
+      slugs: [
+        "better-auth/guides/configuration",
+        "better-auth/guides/http-api-middleware",
+        "better-auth/guides/secondary-storage",
+        "better-auth/guides/migrations",
+        "better-auth/upgrades/from-1-6-to-1-7",
       ],
     },
   },
@@ -440,6 +809,8 @@ const SECTIONS: Section[] = [
     pages: {
       slugs: [
         "axiom/index",
+        "axiom/what-is-axiom",
+        "axiom/organizations-and-tokens",
         "axiom/setup",
         "axiom/data/ingest",
         "axiom/guides/alerting",
@@ -455,6 +826,8 @@ const SECTIONS: Section[] = [
     pages: {
       slugs: [
         "github/index",
+        "github/what-is-github",
+        "github/accounts-and-tokens",
         "github/setup",
         "github/repository",
         "github/actions-config",
@@ -465,21 +838,25 @@ const SECTIONS: Section[] = [
   {
     heading: "Git",
     intro:
-      "A git server you build in one file, use like any remote, and reshape one block at a time: setup, a four-part tutorial (build it, repositories and tokens, your own rules, your app on the same domain), the REST and GitHub-compatible planes, the building blocks with their implementations, and recipes with the scaling model and measurements.",
+      "A git server you build in one file, use like any remote, and reshape one block at a time: setup, a six-part tutorial (push, access control, publishing, per-user credentials, your app's API, branch protection), the REST and GitHub-compatible planes, the building blocks with their implementations, and recipes with the scaling model and measurements.",
     pages: {
       slugs: [
         "git/index",
+        "git/what-is-git",
         "git/getting-started",
         "git/tutorial/part-1",
         "git/tutorial/part-2",
         "git/tutorial/part-3",
         "git/tutorial/part-4",
+        "git/tutorial/part-5",
+        "git/tutorial/part-6",
         "git/clone-and-push",
         "git/repositories",
         "git/pull-requests",
         "git/github-api",
         "git/blocks/index",
         "git/blocks/server",
+        "git/blocks/engine",
         "git/blocks/repositories",
         "git/blocks/registry",
         "git/blocks/blob-store",
@@ -500,6 +877,8 @@ const SECTIONS: Section[] = [
     pages: {
       slugs: [
         "stripe/index",
+        "stripe/what-is-stripe",
+        "stripe/accounts-and-keys",
         "stripe/setup",
         "stripe/guides/subscriptions",
         "stripe/guides/connect",
@@ -512,7 +891,14 @@ const SECTIONS: Section[] = [
     intro:
       "Local and CI Docker as Stack resources — images, containers, networks, and volumes driven through the active Docker CLI context; cloud container runtimes (Cloudflare Containers, ECS) consume the pushed image refs from their own hubs.",
     pages: {
-      slugs: ["docker/index", "docker/setup", "docker/local-services", "docker/build-and-push"],
+      slugs: [
+        "docker/index",
+        "docker/what-is-docker",
+        "docker/setup",
+        "docker/local-services",
+        "docker/build-and-push",
+        "docker/swarm",
+      ],
     },
   },
   {
@@ -522,6 +908,7 @@ const SECTIONS: Section[] = [
     pages: {
       slugs: [
         "kubernetes/index",
+        "kubernetes/what-is-kubernetes",
         "kubernetes/setup",
         "kubernetes/tutorial/part-1",
         "kubernetes/tutorial/part-2",
@@ -550,15 +937,18 @@ const SECTIONS: Section[] = [
     pages: {
       slugs: [
         "sql/index",
+        "sql/what-is-sql",
         "sql/databases",
         "sql/effect-sql/postgres",
         "sql/effect-sql/mysql",
         "sql/effect-sql/d1",
+        "sql/effect-sql/libsql",
         "sql/effect-sql/migrations",
         "sql/effect-sql/lifecycle",
         "sql/drizzle/postgres",
         "sql/drizzle/mysql",
         "sql/drizzle/d1",
+        "sql/drizzle/libsql",
         "sql/drizzle/migrations",
         "sql/prisma/postgres",
         "sql/prisma/contracts",
@@ -571,7 +961,83 @@ const SECTIONS: Section[] = [
     intro:
       "Cloud-agnostic local process primitives — memoized builds, one-off commands, and dev servers; the static-site guides in each cloud hub consume them under the hood.",
     pages: {
-      slugs: ["command/index", "command/memoization", "command/dev-servers"],
+      slugs: [
+        "command/index",
+        "command/what-is-command",
+        "command/memoization",
+        "command/dev-servers",
+      ],
+    },
+  },
+  {
+    heading: "ACME",
+    intro:
+      "TLS certificates from any ACME certificate authority as Stack resources, validated over DNS, renewed on deploy, or issued at runtime.",
+    pages: {
+      slugs: [
+        "acme/index",
+        "acme/what-is-acme",
+        "acme/getting-started",
+        "acme/certificate-authorities",
+        "acme/dns-validation",
+        "acme/renewal",
+        "acme/runtime",
+        "acme/using-certificates",
+        "acme/troubleshooting",
+      ],
+    },
+  },
+  {
+    heading: "Domain",
+    intro:
+      "A domain-driven design framework: model commands, events, aggregates, views, projections, policies, and sagas once, then host them on Cloudflare, Rivet, Effect Cluster or in memory.",
+    pages: {
+      slugs: [
+        "domain/index",
+        "domain/what-is-ddd",
+        "domain/project-layout",
+        "domain/tutorial/part-1",
+        "domain/tutorial/part-2",
+        "domain/tutorial/part-3",
+        "domain/tutorial/part-4",
+        "domain/tutorial/part-5",
+        "domain/tutorial/part-6",
+        "domain/tutorial/part-7",
+        "domain/tutorial/part-8",
+        "domain/model",
+        "domain/command",
+        "domain/event",
+        "domain/aggregate",
+        "domain/view",
+        "domain/projection",
+        "domain/stream",
+        "domain/query",
+        "domain/policy",
+        "domain/saga",
+        "domain/external-system",
+        "domain/api",
+        "domain/annotations",
+        "domain/cloudflare",
+        "domain/rivet",
+        "domain/effect-cluster",
+        "domain/in-memory",
+        "domain/story",
+        "domain/testing-models",
+        "domain/testing-apis",
+        "domain/http-api",
+        "domain/cli",
+        "domain/mcp",
+        "domain/foldkit",
+        "domain/optimistic-updates",
+        "domain/local-first",
+        "domain/sessions",
+        "domain/better-auth",
+        "domain/view-security",
+        "domain/unique-values",
+        "domain/deadlines",
+        "domain/backfill",
+        "domain/observability",
+      ],
     },
   },
 ];
@@ -738,8 +1204,46 @@ function renderPage(page: Page): string {
   return `- [${page.title}](${url})${desc}`;
 }
 
+/**
+ * Fails when a published page is missing from SECTIONS or listed twice, so
+ * a new docs page can never silently drop out of llms.txt. The generated
+ * API reference (`providers/`) and the blog are indexed separately.
+ */
+async function assertCoverage(listed: string[]) {
+  const counts = new Map<string, number>();
+  for (const slug of listed) counts.set(slug, (counts.get(slug) ?? 0) + 1);
+  const duplicates = [...counts].filter(([, n]) => n > 1).map(([slug]) => slug);
+
+  const entries = await readdir(docsDir, { withFileTypes: true });
+  const published: string[] = [];
+  for (const entry of entries) {
+    if (entry.name === "providers" || entry.name === "blog") continue;
+    const slugs = entry.isDirectory()
+      ? await listSlugs(entry.name)
+      : [".md", ".mdx"].includes(path.extname(entry.name))
+        ? [entry.name.slice(0, -path.extname(entry.name).length)]
+        : [];
+    for (const page of await Promise.all(slugs.map(loadPage))) {
+      if (!page.draft) published.push(page.slug);
+    }
+  }
+  const missing = published.filter((slug) => !counts.has(slug));
+
+  const problems = [
+    ...missing.map((slug) => `not listed in any SECTIONS entry: ${slug}`),
+    ...duplicates.map((slug) => `listed in more than one SECTIONS entry: ${slug}`),
+  ];
+  if (problems.length > 0) {
+    throw new Error(
+      `llms.txt does not match the docs:\n  ${problems.join("\n  ")}\n` +
+        `Add each page to a section in scripts/generate-llms-txt.ts.`,
+    );
+  }
+}
+
 async function main() {
   const sections: string[] = [];
+  const listed: string[] = [];
 
   for (const section of SECTIONS) {
     const isDirectory = !("slugs" in section.pages);
@@ -747,6 +1251,7 @@ async function main() {
       "slugs" in section.pages
         ? section.pages.slugs
         : await listSlugs(section.pages.directory, section.pages.exclude);
+    listed.push(...slugs);
     const pages = (await Promise.all(slugs.map(loadPage))).filter((p) => !p.draft);
     // Directory sections mirror the sidebar's `sidebar.order` ordering; slug
     // sections keep the curated order they were declared in.
@@ -756,6 +1261,8 @@ async function main() {
     if (section.intro) sections.push(section.intro);
     sections.push(pages.map(renderPage).join("\n"));
   }
+
+  await assertCoverage(listed);
 
   const fullBody = [FULL_HEADER, ...sections, await renderProvidersSection()].join("\n\n") + "\n";
   await writeFile(outFullFile, fullBody, "utf8");

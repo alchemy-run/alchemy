@@ -107,6 +107,19 @@ layer(ScheduledTestWorkerLive.pipe(Layer.provideMerge(localRuntimeLayer)), {
     }),
   );
 
+  // Miniflare's current path (`CorePaths.SCHEDULED`).
+  it.effect("supports Miniflare's /cdn-cgi/local/scheduled path", () =>
+    Effect.gen(function* () {
+      const worker = yield* ScheduledTestWorker;
+      const response = yield* worker.fetch("/cdn-cgi/local/scheduled?cron=local-case&time=9", {
+        method: "POST",
+      });
+      expect(response.status).toBe(200);
+      const fires = yield* worker.fetchJson<Array<Fire>>("/fires");
+      expect(fires).toContainEqual({ cron: "local-case", scheduledTime: 9 });
+    }),
+  );
+
   it.effect("supports the legacy /cdn-cgi/mf/scheduled path", () =>
     Effect.gen(function* () {
       const worker = yield* ScheduledTestWorker;

@@ -1,169 +1,129 @@
 ---
 title: EC2
-description: Launch virtual machines with the Instance resource — as a raw compute primitive, or hosting a bundled long-lived Effect program served straight off the box.
+description: How EC2 instances give you a whole virtual machine, how to launch one from an image into a subnet, how to run your Effect program on it as a service, and how to reach it.
 ---
 
-**EC2** is for when you need the machine itself: an OS you
-control, GPUs, custom daemons, software that expects a host, or
-predictable dedicated capacity. The
-[`Instance`](/providers/aws/ec2/instance) resource plays two
-roles — a **low-level compute primitive** (launch an AMI, attach
-networking, done), or a **host for a bundled Effect program**
-that Alchemy deploys onto the machine and keeps running.
+import Tree from "../../../../components/diagrams/Tree.astro";
 
-This is the lowest-level of Alchemy's four runtimes: unlike
-[Lambda](/aws/compute/lambda), [ECS](/aws/compute/ecs), and
-[EKS](/aws/compute/eks), you own patching,
-scaling, and availability. Reach for it deliberately — see
-[Choosing a runtime](/aws/compute/choosing-a-runtime).
+EC2 gives you a virtual machine, called an **instance**. You choose its size, its operating system and its disk, and it runs until you stop it. Everything on it is yours to control: the kernel, the daemons, the GPUs, the software that expects a host. So is everything that keeps it healthy: patching, restarts, and replacing it when it fails.
+
+## An instance is an image, a type and a subnet
+
+An **image** (AMI) is the disk an instance boots from: an operating system and whatever is installed on it. An **instance type** is its size: `t3.micro` has 2 vCPUs and 1 GB of memory, `g5.xlarge` has a GPU. A **subnet** is where it sits on your [network](/aws/networking), and **security groups** decide what can reach it.
+
+<Tree
+  nodes={[
+    { id: "vpc", label: "VPC", type: "your network" },
+    { id: "subnet", label: "public subnet", type: "us-east-1a", parent: "vpc", dashed: true },
+    { id: "sg", label: "security group", type: "allows :3000 in", parent: "subnet", dashed: true },
+    {
+      id: "server",
+      label: "Server",
+      type: "instance",
+      parent: "sg",
+      tone: "accent",
+      specs: [
+        ["type", "t3.small · 2 vCPU · 2 GB"],
+        ["image", "Amazon Linux (AMI)"],
+      ],
+    },
+  ]}
+  caption="An instance boots from its image at the size its type sets. It sits in a subnet of your VPC, behind security groups that decide what can reach it."
+/>
+
+You pay for an instance by the second while it runs, busy or idle.
 
 ## Launch an instance
 
-The minimal instance is an AMI plus an instance type. AMI IDs
-are per-region, so resolve one with Alchemy's image helpers
-instead of hard-coding — `amazonLinux()` finds the latest Amazon
-Linux AMI (there are also `amazonLinux2023`, `amazonLinux2`,
-`ubuntu2404`, `ubuntu2204`, an id-only `image()` finder, and the
-underlying `getAmi()` data source returning the full image
-description). Each returns an `Output` resolved at deploy time:
+Image ids differ by region, so look one up instead of writing it down. `amazonLinux()` finds the latest Amazon Linux image at deploy time. `ubuntu2404()` and the others work the same way:
 
-```typescript
-const instance = yield* AWS.EC2.Instance("AppInstance", {
+```typescript title="alchemy.run.ts"
+const instance = yield* AWS.EC2.Instance("Box", {
   imageId: AWS.EC2.amazonLinux(),
   instanceType: "t3.micro",
-  subnetId: subnet.subnetId,
+  subnetId: network.publicSubnetIds[0],
 });
 ```
 
-The resolved instance exposes `instanceId`, `publicIpAddress`,
-`privateIpAddress`, DNS names, and the rest of the observed
-state — see the [`Instance` reference](/providers/aws/ec2/instance)
-for every prop and attribute.
+The instance's `instanceId`, `publicIpAddress` and `privateIpAddress` are on the result.
 
-## Host an Effect program
+## Run your program on it
 
-Give the instance a `main` entrypoint and it becomes a runtime,
-same class pattern as Lambda and ECS. Because instance props
-(the network, the AMI) are resolved by the stack, the props slot
-takes an `Effect.gen` block. The composition is also re-executed
-inside the deployed instance's bundle — that's safe as-is:
-resource yields resolve to references at runtime, and the AMI
-helper returns an `Output` that only resolves at deploy time:
+Give an instance `main`, and it runs your Effect program as a service. The program serves `fetch` on `port`, and binds what it uses exactly as a Lambda Function or an ECS task does:
 
-```typescript
-// src/server.ts
-import * as AWS from "alchemy/AWS";
-import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/http/HttpServerResponse";
-
+```typescript title="src/server.ts"
 export default class Server extends AWS.EC2.Instance<Server>()(
   "Server",
   Effect.gen(function* () {
-    const network = yield* AWS.EC2.Network("AppNetwork", {
-      cidrBlock: "10.81.0.0/16",
-      availabilityZones: 1,
-    });
-    const securityGroup = yield* AWS.EC2.SecurityGroup("AppSg", {
+    const network = yield* AWS.EC2.Network("AppNetwork", { cidrBlock: "10.81.0.0/16", availabilityZones: 1 });
+    const web = yield* AWS.EC2.SecurityGroup("Web", {
       vpcId: network.vpcId,
-      description: "app ingress",
-      ingress: [
-        {
-          ipProtocol: "tcp",
-          fromPort: 3000,
-          toPort: 3000,
-          cidrIpv4: "0.0.0.0/0",
-          description: "app",
-        },
-      ],
-      egress: [
-        {
-          ipProtocol: "-1",
-          cidrIpv4: "0.0.0.0/0",
-          description: "all outbound",
-        },
-      ],
+      ingress: [{ ipProtocol: "tcp", fromPort: 3000, toPort: 3000, cidrIpv4: "0.0.0.0/0" }],
+      egress: [{ ipProtocol: "-1", cidrIpv4: "0.0.0.0/0" }],
     });
-
     return {
       main: import.meta.url,
       imageId: AWS.EC2.amazonLinux(),
       instanceType: "t3.small",
       subnetId: network.publicSubnetIds[0],
-      securityGroupIds: [securityGroup.groupId],
+      securityGroupIds: [web.groupId],
       associatePublicIpAddress: true,
       port: 3000,
     };
   }),
   Effect.gen(function* () {
     return {
-      fetch: Effect.gen(function* () {
-        const request = yield* HttpServerRequest;
-        const url = new URL(request.url, "http://instance");
-        if (url.pathname === "/health") {
-          return yield* HttpServerResponse.json({ ok: true });
-        }
-        return HttpServerResponse.text("hello from EC2");
-      }),
+      fetch: Effect.succeed(HttpServerResponse.text("hello from EC2")),
     };
   }),
 ) {}
 ```
 
-At deploy time Alchemy bundles the program, uploads it to S3,
-and boots the instance with a user-data script that installs
-Bun and writes a **systemd unit**. The unit syncs the bundle and
-environment from S3 on every start and runs with
-`Restart=always`, so a flaky network install self-heals and the
-service survives reboots. The `{ fetch }` handler is served by
-the instance's HTTP server on `port`; `ServerHost` + `host.run`
-background loops work exactly as they do on [ECS](/aws/compute/ecs).
+The props are an Effect here because they depend on the network and security group declared inside it.
 
-Hosted instances also get an Alchemy-managed IAM role and
-instance profile. Bindings use the same contract as Lambda —
-environment variables plus IAM policy statements attached to
-that role — and you can widen it with managed policies:
+Deploy bundles the program, uploads it, and boots the instance with a script that installs Bun and a systemd service. The service fetches the latest bundle and runs it on every start, and restarts it if it exits, so the program survives reboots and crashes. Background loops with `ServerHost` work as they do on [ECS](/aws/compute/ecs#do-work-in-the-background).
 
-```typescript
-// e.g. make the instance manageable via SSM Session Manager
-roleManagedPolicyArns: [
-  "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore",
-],
+## Give it permissions
+
+An instance that runs your program gets its own IAM role, attached through an **instance profile**. Each binding adds its statement to that role, and the program's AWS calls use the role's credentials.
+
+Add AWS managed policies for tools that run on the box, like Session Manager:
+
+```typescript title="src/server.ts"
+roleManagedPolicyArns: ["arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"],
 ```
 
-## SSH access
+## Connect to it
 
-For direct access, create an Alchemy-managed
-[`KeyPair`](/providers/aws/ec2/keypair) and pass its name to the
-instance. The generated private key comes back as a `Redacted`
-output on the resource:
+With the Session Manager policy above, open a shell from the AWS console or CLI, with no open port and no key. For SSH, declare a key pair and give its name to the instance:
 
-```typescript
-const key = yield* AWS.EC2.KeyPair("AppKeyPair", {
-  keyType: "ed25519",
+```typescript title="alchemy.run.ts"
+const key = yield* AWS.EC2.KeyPair("BoxKey", { keyType: "ed25519" });
+```
+
+Pass `keyName: key.keyName` in the instance's props. The private key comes back `Redacted` on the key pair, and port 22 must be open in its security group.
+
+## Place it on the network
+
+An instance is as reachable as its subnet and security groups make it. In a public subnet with `associatePublicIpAddress`, it has an internet address. In a private subnet, only things inside the VPC can reach it, and it reaches out through a NAT gateway.
+
+Open only the ports you serve, to only the sources that need them. See [VPC & networking](/aws/networking).
+
+## Host Nitro Sandboxes
+
+An instance can run [Nitro Sandboxes](/aws/compute/nitro-sandboxes): lightweight VMs that the Nitro hypervisor isolates from the instance and from each other, so one machine can host many workloads you don't trust. Sandboxes use the same switch as Nitro Enclaves, set at launch:
+
+```typescript title="alchemy.run.ts"
+const host = yield* AWS.EC2.Instance("SandboxHost", {
+  imageId: AWS.EC2.amazonLinux2023(),
+  instanceType: "m6i.xlarge",
+  subnetId: network.privateSubnetIds[0],
+  enclaveOptions: { enabled: true },
 });
-
-// then on the instance props:
-//   keyName: key.keyName
 ```
 
-## Networking
+The instance type must support Nitro Enclaves: most current families do, except their smallest size. The setting can't change on a running instance, so changing it replaces the instance.
 
-An instance is only as reachable as the network you launch it
-into. The example above leans on the
-[`Network`](/providers/aws/ec2/network) helper for a
-public-subnet VPC; when you need explicit control — private
-subnets, NAT, VPC endpoints, custom route tables — compose the
-primitives directly. [VPC & networking](/aws/networking) walks
-through the whole set.
+Alchemy launches the host. Starting sandboxes on it is up to you: run a virtual machine monitor on the instance, Firecracker being the one AWS supports, and launch each sandbox from a guest image with its vCPUs, memory and devices. See [Launch a Nitro Sandbox](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/amazon-ec2-nitro-sandboxes.html#nitro-sandboxes-launch).
 
-## Where next
-
-- [Choosing a runtime](/aws/compute/choosing-a-runtime) — Lambda first,
-  ECS for containers, EKS for Kubernetes, EC2 when you need the
-  machine.
-- [VPC & networking](/aws/networking) — the `Network` helper and
-  the VPC primitives an instance lives in.
-- [`Instance` reference](/providers/aws/ec2/instance),
-  [`KeyPair` reference](/providers/aws/ec2/keypair) — every prop
-  and attribute.
+To have sandboxes started for you, one per container, run them on [ECS](/aws/compute/ecs#isolate-each-task-in-its-own-vm) or [EKS](/aws/compute/eks#run-each-pod-in-its-own-vm) instead.

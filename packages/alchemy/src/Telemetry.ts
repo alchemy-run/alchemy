@@ -10,7 +10,7 @@
  *
  * ```ts
  * import * as Alchemy from "alchemy";
- * import * as Axiom from "alchemy/Axiom";
+ * import * as Axiom from "@alchemy.run/axiom";
  *
  * Effect.gen(function* () {
  *   // ...
@@ -67,6 +67,12 @@ export {
   Telemetry,
   type TelemetryLayer,
 } from "./TelemetryRuntime.ts";
+export {
+  type Destination as RelayDestination,
+  type RelayOptions,
+  relay,
+  type Signal as RelaySignal,
+} from "./TelemetryRelay.ts";
 
 const reference = Telemetry;
 

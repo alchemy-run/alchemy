@@ -170,7 +170,7 @@ const TERMINATION_SIGNAL_DISPATCH_TIMEOUT = Duration.millis(25);
 const parseExecutionTimeout = (
   props: CommandRunProps,
 ): Effect.Effect<Duration.Duration | undefined, CommandError> => {
-  if (props.timeout === undefined) return Effect.succeed(undefined);
+  if (props.timeout === undefined) return Effect.undefined;
   const decoded = Duration.fromInput(props.timeout);
   if (
     Option.isNone(decoded) ||
@@ -344,33 +344,29 @@ export const CommandExecutorLive = () =>
               { concurrency: "unbounded" },
             ).pipe(mapError(props));
 
-            const result =
-              timeout === undefined
-                ? yield* execution
-                : yield* Effect.gen(function* () {
-                    const fiber = yield* Effect.forkScoped(execution);
-                    const completed = yield* Fiber.join(fiber).pipe(Effect.timeoutOption(timeout));
-                    if (Option.isSome(completed)) return completed.value;
+            const runExecution = Effect.gen(function* () {
+              if (timeout === undefined) {
+                return yield* execution;
+              }
+              const fiber = yield* Effect.forkScoped(execution);
+              const completed = yield* Fiber.join(fiber).pipe(Effect.timeoutOption(timeout));
+              if (Option.isSome(completed)) return completed.value;
 
-                    yield* terminateProcessGroup(child);
-                    yield* Fiber.interrupt(fiber).pipe(
-                      Effect.timeoutOption(TERMINATION_GRACE_PERIOD),
-                      Effect.ignore,
-                    );
-                    return yield* Effect.fail(
-                      makeCommandError(
-                        props,
-                        new CommandTimedOut({ timeout: Duration.format(timeout) }),
-                      ),
-                    );
-                  });
-
+              yield* terminateProcessGroup(child);
+              yield* Fiber.interrupt(fiber).pipe(
+                Effect.timeoutOption(TERMINATION_GRACE_PERIOD),
+                Effect.ignore,
+              );
+              return yield* makeCommandError(
+                props,
+                new CommandTimedOut({ timeout: Duration.format(timeout) }),
+              );
+            });
+            const result = yield* runExecution;
             if (result.exitCode !== 0) {
-              return yield* Effect.fail(
-                makeCommandError(
-                  props,
-                  new UnexpectedExit({ exitCode: result.exitCode, stderr: result.stderr }),
-                ),
+              return yield* makeCommandError(
+                props,
+                new UnexpectedExit({ exitCode: result.exitCode, stderr: result.stderr }),
               );
             }
             return result;

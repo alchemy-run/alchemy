@@ -69,7 +69,6 @@ import type {
 interface Env {
   ENGINE: DurableObjectNamespace<Engine>;
   USER_WORKFLOW: WorkflowEntrypoint;
-  MINIFLARE_LOOPBACK?: Fetcher;
   WORKFLOW_NAME?: string;
   STEP_LIMIT?: string; // JSON-encoded number from miniflare binding
   STEP_LIMITS?: Record<string, number>;
@@ -862,10 +861,10 @@ export class Engine extends DurableObject<Env, EngineProps> {
         }
         try {
           for (const row of this.ctx.storage.sql.exec(query)) {
-            if (row.ts) {
+            if (typeof row.ts === "string" && row.ts) {
               // SQLite DATETIME('now','subsec') returns "YYYY-MM-DD HH:MM:SS.sss"
               // which is not valid ISO 8601 (needs T separator and Z timezone).
-              const raw = String(row.ts).replace(" ", "T") + "Z";
+              const raw = row.ts.replace(" ", "T") + "Z";
               createdOn = raw;
             }
           }
@@ -1355,22 +1354,6 @@ export class Engine extends DurableObject<Env, EngineProps> {
     }
 
     await this.ctx.storage.deleteAll();
-
-    const workflowName = this.ctx.props.workflowName ?? this.env.WORKFLOW_NAME;
-    if (this.env.MINIFLARE_LOOPBACK !== undefined && workflowName !== undefined) {
-      try {
-        const response = await this.env.MINIFLARE_LOOPBACK.fetch(
-          `http://localhost/core/workflow-storage/${encodeURIComponent(workflowName)}/${this.ctx.id.toString()}?defer=1`,
-          { method: "DELETE" },
-        );
-        if (!response.ok && response.status !== 404) {
-          console.error("Failed to delete persisted workflow instance");
-        }
-      } catch (error) {
-        console.error("Failed to delete persisted workflow instance", error);
-      }
-    }
-
     await this.abort(ABORT_REASONS.USER_DELETE);
   }
 

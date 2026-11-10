@@ -4,8 +4,8 @@ import * as Console from "effect/Console";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as Nuke from "../../Alchemist/routes/nuke.ts";
-import * as CliKit from "../../Cli/CliKit/index.ts";
+import * as Alchemist from "../../Alchemist/index.ts";
+import * as Interaction from "../../Interaction.ts";
 import { renderNukeScan, renderNukeDelete, reviewNuke } from "../components/view/Nuke.tsx";
 import { formatElapsed } from "../Format.ts";
 import { exitDeclined, UserInputError } from "./errors.ts";
@@ -32,8 +32,13 @@ const concurrencyFlag = Flag.Int("concurrency").pipe(
   Flag.map((value): number | "unbounded" => (value <= 0 ? "unbounded" : value)),
 );
 const timeoutFlag = Flag.Int("timeout").pipe(
-  Flag.withDescription("Per-provider timeout in seconds"),
+  Flag.withDescription("Per-provider delete timeout in seconds"),
   Flag.withDefault(120),
+  Flag.map(Duration.seconds),
+);
+const scanTimeoutFlag = Flag.Int("scan-timeout").pipe(
+  Flag.withDescription("Per-provider scan (list) timeout in seconds"),
+  Flag.withDefault(60),
   Flag.map(Duration.seconds),
 );
 const independentFlag = Flag.Boolean("independent").pipe(
@@ -58,12 +63,13 @@ const dryRunFlag = Flag.Boolean("dry-run").pipe(
 const compileFilter = (expression: string) =>
   Effect.try({
     try: () =>
+      // oxlint-disable-next-line typescript/no-implied-eval -- --filter is a user-supplied JS expression by design
       new Function("scope", `with (scope) { return (${expression}); }`) as (scope: {
         resource: Record<string, unknown>;
       }) => unknown,
     catch: (cause) =>
       new UserInputError({
-        message: `--filter expression ${JSON.stringify(expression)} failed to compile: ${cause}`,
+        message: `--filter expression ${JSON.stringify(expression)} failed to compile: ${cause instanceof Error ? cause.message : String(cause)}`,
       }),
   }).pipe(
     Effect.map(
@@ -72,7 +78,7 @@ const compileFilter = (expression: string) =>
           try: () => Boolean(predicate({ resource })),
           catch: (cause) =>
             new UserInputError({
-              message: `--filter expression ${JSON.stringify(expression)} threw while evaluating a resource: ${cause}`,
+              message: `--filter expression ${JSON.stringify(expression)} threw while evaluating a resource: ${cause instanceof Error ? cause.message : String(cause)}`,
             }),
         }),
     ),
@@ -89,6 +95,7 @@ const nukeCommand = Command.make(
     dryRun: dryRunFlag,
     concurrency: concurrencyFlag,
     timeout: timeoutFlag,
+    scanTimeout: scanTimeoutFlag,
     independent: independentFlag,
     retries: retriesFlag,
     include: includeFlag,
@@ -104,16 +111,18 @@ const nukeCommand = Command.make(
           "alchemy.main": args.main,
         }))(
           Effect.fn(function* (args) {
-            const scan = yield* Nuke.scan({
-              entrypoint: args.main,
-              profile: args.profile,
-              envFile: Option.getOrUndefined(args.envFile),
-              mode: args.local ? "local" : "live",
-              include: args.include,
-              exclude: args.exclude,
-              concurrency: args.concurrency,
-              providerTimeoutSeconds: Duration.toSeconds(args.timeout),
-            }).pipe(renderNukeScan());
+            const scan = yield* Effect.flatMap(Alchemist.importStack(args.main), (stack) =>
+              Alchemist.Nuke.scan({
+                stack,
+                profile: args.profile,
+                envFile: Option.getOrUndefined(args.envFile),
+                dev: args.local,
+                include: args.include,
+                exclude: args.exclude,
+                concurrency: args.concurrency,
+                providerTimeoutSeconds: Duration.toSeconds(args.scanTimeout),
+              }),
+            ).pipe(renderNukeScan());
             const predicates = yield* Effect.forEach(args.filter, compileFilter);
             const targets: Array<(typeof scan.resources)[number]> = [];
             for (const resource of scan.resources) {
@@ -127,7 +136,7 @@ const nukeCommand = Command.make(
               if (!matches.some(Boolean)) targets.push(resource);
             }
             if (targets.length === 0) {
-              yield* CliKit.accessors.output.info("Nothing to delete.");
+              yield* Interaction.info("Nothing to delete.");
               return;
             }
             const approved = yield* reviewNuke(targets, {
@@ -136,7 +145,7 @@ const nukeCommand = Command.make(
               dryRun: args.dryRun,
             });
             if (!approved) {
-              yield* CliKit.accessors.output.info("Aborted.");
+              yield* Interaction.info("Aborted.");
               return yield* exitDeclined;
             }
             if (args.dryRun) {
@@ -144,28 +153,24 @@ const nukeCommand = Command.make(
               return;
             }
             const deleteStartedAt = yield* Clock.currentTimeMillis;
-            const result = yield* Nuke.execute({
+            const result = yield* Alchemist.Nuke.execute({
               scan,
               resources: targets,
               strategy: args.independent
-                ? { _tag: "independent", retries: args.retries }
-                : { _tag: "coordinated" },
+                ? { type: "independent", retries: args.retries }
+                : { type: "coordinated" },
               concurrency: args.concurrency,
               providerTimeoutSeconds: Duration.toSeconds(args.timeout),
             }).pipe(renderNukeDelete(targets, scan.mode));
             const deleteElapsed = (yield* Clock.currentTimeMillis) - deleteStartedAt;
-            yield* CliKit.accessors.output.success(
+            yield* Interaction.success(
               `Deleted ${result.deleted.length} resource(s) over ${result.passes} pass(es) (${formatElapsed(deleteElapsed)}).`,
             );
             if (result.held.length > 0) {
-              yield* CliKit.accessors.output.warning(
-                `${result.held.length} resource(s) were held back.`,
-              );
+              yield* Interaction.warning(`${result.held.length} resource(s) were held back.`);
             }
             if (result.failed.length > 0) {
-              yield* CliKit.accessors.output.error(
-                `${result.failed.length} resource(s) could not be deleted.`,
-              );
+              yield* Interaction.error(`${result.failed.length} resource(s) could not be deleted.`);
             }
           }),
         ),

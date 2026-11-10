@@ -3,37 +3,13 @@ title: Sending & managing email
 description: Send email with SES — verify identities, send from a Lambda with the SendEmail binding, manage contact lists, tenants, dedicated IP pools, account settings, and deliverability insights.
 ---
 
-**SES sending** starts with a verified **identity** — a domain or
-an email address you own — and a runtime **binding** that lets a
-Lambda send through it. Around that core, SES v2 adds the pieces
-you need to run email at scale: authorization policies, contact
-lists, dedicated IP pools, per-tenant isolation, multi-region
-endpoints, account-wide settings, and deliverability insights.
+SES sends email for you. Before it sends from an address, you prove you own it: the address, or the whole domain, becomes a verified **identity**. A runtime then sends through that identity with a binding, and SES handles delivery, bounces and complaints.
 
-The sending surface:
+## Identities and reputation
 
-- An **[`EmailIdentity`](/providers/aws/ses/emailidentity)** is a
-  verified domain or address, and
-  **[`SendEmail`](/providers/aws/ses/sendemail)** is the runtime
-  binding that sends through it.
-- An
-  **[`EmailIdentityPolicy`](/providers/aws/ses/emailidentitypolicy)**
-  authorizes other accounts to send as your identity.
-- A **[`ContactList`](/providers/aws/ses/contactlist)** and its
-  **[`Contact`](/providers/aws/ses/contact)** entries model a
-  managed audience with subscription topics.
-- A
-  **[`DedicatedIpPool`](/providers/aws/ses/dedicatedippool)**
-  isolates sending reputation onto dedicated IPs.
-- A **[`Tenant`](/providers/aws/ses/tenant)** groups identities,
-  configuration sets, and templates for a customer or business
-  unit.
-- A
-  **[`MultiRegionEndpoint`](/providers/aws/ses/multiregionendpoint)**
-  splits sending across regions.
-- **[`AccountSettings`](/providers/aws/ses/accountsettings)**
-  manages account-wide sending status, the suppression list, and
-  Virtual Deliverability Manager.
+An identity is a domain like `mail.example.com` or a single address. A domain identity is verified with **DKIM**: SES gives you three keys to publish as DNS records, and signs every message with them, so receiving servers can check the mail really came from your domain.
+
+Every message you send builds or spends your **reputation**: how often your mail bounces, is marked as spam, or is opened. Receiving servers use it to decide whether your mail reaches the inbox. Everything after the first send, from contact lists to dedicated IPs, exists to protect it.
 
 :::note
 New SES accounts start in the **sandbox**: you can only send to
@@ -50,8 +26,8 @@ body:
 ```typescript
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as AWS from "alchemy/AWS";
-import * as SES from "alchemy/AWS/SES";
+import * as AWS from "@alchemy.run/aws";
+import * as SES from "@alchemy.run/aws/SES";
 import * as Effect from "effect/Effect";
 
 export default Alchemy.Stack(
@@ -92,8 +68,8 @@ returns a callable. Provide its implementation with
 
 ```typescript
 // src/mailer.ts
-import * as AWS from "alchemy/AWS";
-import * as SES from "alchemy/AWS/SES";
+import * as AWS from "@alchemy.run/aws";
+import * as SES from "@alchemy.run/aws/SES";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 

@@ -327,12 +327,10 @@ export const make = (
             catch: fail(`Failed to parse ${manifestPath}`),
           });
           if (edgeRoutes.length > 0) {
-            return yield* Effect.fail(
-              fail(
-                `Edge-runtime routes/pages are not supported by @opennextjs/cloudflare: ${edgeRoutes.join(", ")}. ` +
-                  `Remove \`export const runtime = "edge"\` from these modules — the node runtime runs on Workers.`,
-              )(undefined),
-            );
+            return yield* fail(
+              `Edge-runtime routes/pages are not supported by @opennextjs/cloudflare: ${edgeRoutes.join(", ")}. ` +
+                `Remove \`export const runtime = "edge"\` from these modules — the node runtime runs on Workers.`,
+            )(undefined);
           }
         }
 
@@ -404,6 +402,7 @@ export const make = (
               ...new Set(["nodejs_compat", ...(options?.vite?.compatibilityFlags ?? [])]),
             ],
             ...(worker?.name !== undefined ? { proxyName: `${worker.name}-dev-proxy` } : {}),
+            ...(worker?.workerd !== undefined ? { workerd: worker.workerd } : {}),
             logging: options?.nextjs?.debug ? { verbose: true } : worker?.logging,
           }).pipe(Effect.provideContext(context));
           return { url: server.url.href };
@@ -413,7 +412,7 @@ export const make = (
         // it can). Watch + rebuild is a later phase.
         const output = yield* build({ root });
         if (output.serverModules === undefined || output.serverModules.length === 0) {
-          return yield* Effect.fail(fail("The build produced no server modules")(undefined));
+          return yield* fail("The build produced no server modules")(undefined);
         }
         const modules = toRuntimeModules(output.serverModules);
         const worker = options?.vite?.worker;
@@ -460,6 +459,7 @@ export const make = (
               ? { queueConsumers: worker.queueConsumers }
               : {}),
             ...(worker?.unsafe !== undefined ? { unsafe: worker.unsafe } : {}),
+            ...(worker?.workerd !== undefined ? { workerd: worker.workerd } : {}),
             logging: options?.nextjs?.debug ? { verbose: true } : worker?.logging,
           }),
         ).pipe(

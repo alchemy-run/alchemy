@@ -73,7 +73,8 @@ import { Image } from "astro:assets";
       });
       expect(response.status).toBe(200);
       const html = await response.text();
-      expect(html).toContain("<h1>Hello</h1>");
+      // Astro's dev server annotates elements with `data-astro-source-*`.
+      expect(html).toMatch(/<h1[^>]*>Hello<\/h1>/);
       expect(html).toContain("<img");
     }
     // A 200 alone is insufficient: entry export detection can fail while

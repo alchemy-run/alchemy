@@ -1,8 +1,7 @@
 import { describe, expect } from "bun:test";
-import { spawnSync } from "node:child_process";
+import * as GCP from "@alchemy.run/gcp";
+import * as Test from "@alchemy.run/test/Bun";
 import * as Alchemy from "alchemy";
-import * as GCP from "alchemy/GCP";
-import * as Test from "alchemy/Test/Bun";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
@@ -16,12 +15,8 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 
 const { getWhenReady } = Test;
 
-// Both hosts are built from `main`, which needs a local image build.
-const dockerAvailable =
-  spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
-
 // Deploy, tests and destroy all sit behind the same Docker guard.
-describe.skipIf(!dockerAvailable)("gcp-event-pipeline", () => {
+describe("gcp-event-pipeline", () => {
   const stack = beforeAll(deploy(Stack), { timeout: 900_000 });
 
   afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {

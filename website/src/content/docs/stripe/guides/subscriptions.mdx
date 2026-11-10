@@ -2,6 +2,8 @@
 title: Sell a subscription
 description: The full SaaS billing loop on one Cloudflare Worker — hosted Checkout, the Billing Portal, and webhooks that keep an entitlement record your app gates on.
 ---
+import StateMachine from "../../../../components/diagrams/StateMachine.astro";
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 You have a product with a monthly price and you want people to pay for
 it. The shape every SaaS lands on is:
@@ -17,10 +19,26 @@ it. The shape every SaaS lands on is:
    cancel gets sent to Stripe's hosted portal. You don't build those
    screens.
 
-This guide walks through `examples/stripe-billing`, which does exactly
-that on one Worker. Every snippet below is a piece of
+Take `examples/stripe-billing`, which does exactly that on one
+Worker. Every snippet below is a piece of
 [`src/Api.ts`](https://github.com/alchemy-run/alchemy/blob/main/examples/stripe-billing/src/Api.ts);
 the whole file is at the end.
+
+<StateMachine
+  states={[
+    { id: "none", label: "none", col: 0, row: 0, start: true },
+    { id: "active", label: "active", type: "or trialing", col: 1, row: 0, tone: "accent" },
+    { id: "pastdue", label: "past_due", type: "payment failed", col: 1, row: 1, tone: "warn" },
+    { id: "canceled", label: "canceled", col: 2, row: 0, end: true },
+  ]}
+  transitions={[
+    { from: "none", to: "active", label: "checkout" },
+    { from: "active", to: "pastdue", label: "payment fails", bend: 0.6 },
+    { from: "pastdue", to: "active", label: "paid", bend: 0.6 },
+    { from: "active", to: "canceled", label: "deleted" },
+  ]}
+  caption="Your app never decides these states. Stripe moves the subscription and tells you with a webhook: checkout.session.completed, invoice.payment_failed, customer.subscription.updated or .deleted. You write the new status to your own store, which the rest of the app reads."
+/>
 
 ## The catalog lives on the Worker
 
@@ -280,10 +298,8 @@ one `Effect.provide([...])`:
 
 ## Try it
 
-```sh
-cd examples/stripe-billing
-bun alchemy deploy
-```
+<PackageManagers script={`cd examples/stripe-billing
+{run} alchemy deploy`} />
 
 ```sh
 curl -X POST "$URL/checkout" -H 'content-type: application/json' \
@@ -313,9 +329,10 @@ reaches `active` and then `canceled`.
 <summary><code>examples/stripe-billing/src/Api.ts</code></summary>
 
 ```typescript
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Stripe from "alchemy/Stripe";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Stripe from "@alchemy.run/stripe";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 

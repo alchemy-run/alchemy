@@ -42,10 +42,11 @@ const runBuildApp = async (
   assert(typeof buildApp === "function", "buildApp is not a function");
   const built: Array<string> = [];
   await buildApp({
+    config: { root: NO_HTML_ROOT, publicDir: false },
     environments: Object.fromEntries(
       environments.map(({ name, isBuilt = false, root = NO_HTML_ROOT, build = {} }) => [
         name,
-        { name, isBuilt, config: { root, build } },
+        { name, isBuilt, config: { root, build: { outDir: `dist/${name}`, ...build } } },
       ]),
     ),
     build: async (environment: { name: string }) => {
@@ -67,12 +68,12 @@ describe("options plugin", () => {
     expect(result.environments?.rsc?.optimizeDeps?.noDiscovery).toBe(true);
     expect(result.environments?.ssr?.optimizeDeps?.noDiscovery).toBe(false);
 
-    const explicit = await callViteConfig(optionsPlugin.vite({}), {
+    const explicit = await callViteConfig(optionsPlugin.vite({ main: "./worker.ts" }), {
       environments: { ssr: { optimizeDeps: { noDiscovery: true } } },
     });
     expect(explicit.environments?.ssr?.optimizeDeps?.noDiscovery).toBe(true);
 
-    const defaults = await callViteConfig(optionsPlugin.vite({}), {});
+    const defaults = await callViteConfig(optionsPlugin.vite({ main: "./worker.ts" }), {});
     expect(defaults.environments?.ssr?.optimizeDeps?.noDiscovery).toBe(false);
   });
 
@@ -111,7 +112,7 @@ describe("options plugin", () => {
       ".cts",
       ".ctx",
     ]);
-    expect(output.transform?.target).toBe("es2024");
+    expect(output.transform?.target).toBe("es2026");
   });
 
   it("defines production node env values and stubs process.env without nodejs_compat", () => {
@@ -213,11 +214,45 @@ describe("options plugin", () => {
     expect(result.builder).toBeUndefined();
   });
 
-  it("does not provide a builder in SPA mode", async () => {
+  it("builds only the client in SPA mode", async () => {
     const plugin = optionsPlugin.vite({});
-    const result = await callViteConfig(plugin, {});
-    expect(result.appType).toBe("spa");
-    expect(result.builder).toBeUndefined();
+    const result = await callViteConfig(plugin, { root: HTML_ROOT });
+    // `custom`, as `@cloudflare/vite-plugin` sets it: HTML is served through
+    // the Worker's router, never Vite's SPA middleware.
+    expect(result.appType).toBe("custom");
+    // An assets-only site declares no Worker environments.
+    expect(result.environments).toBeUndefined();
+    const built = await runBuildApp(result, [
+      { name: "client", root: HTML_ROOT },
+      { name: "ssr", root: HTML_ROOT },
+    ]);
+    expect(built).toEqual(["client"]);
+  });
+
+  it("builds an assets-only site with only public/ through a fallback client entry", async () => {
+    // As `@cloudflare/vite-plugin` does: the client still builds, from an
+    // empty entry, so its output holds the `public/` files.
+    const plugin = optionsPlugin.vite({});
+    const result = await callViteConfig(plugin, { root: NO_HTML_ROOT });
+    const environments = {
+      client: {
+        name: "client",
+        isBuilt: false,
+        config: { root: NO_HTML_ROOT, build: { outDir: "dist" } as Record<string, unknown> },
+      },
+    };
+    const built: Array<string> = [];
+    await result.builder?.buildApp?.({
+      config: { root: NO_HTML_ROOT, publicDir: path.join(NO_HTML_ROOT, "client-html") },
+      environments,
+      build: async (environment: { name: string }) => {
+        built.push(environment.name);
+      },
+    } as never);
+    expect(built).toEqual(["client"]);
+    expect(environments.client.config.build.rollupOptions).toMatchObject({
+      input: "virtual:cloudflare/client-fallback-entry",
+    });
   });
 
   it("skips skipEnvironments in the default buildApp", async () => {

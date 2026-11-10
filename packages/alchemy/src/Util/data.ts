@@ -2,7 +2,7 @@ import * as Predicate from "effect/Predicate";
 import * as EffectRecord from "effect/Record";
 import * as Redacted from "effect/Redacted";
 
-export type Primitive = never | undefined | null | boolean | number | string | bigint | symbol;
+export type Primitive = undefined | null | boolean | number | string | bigint | symbol;
 
 export const isPrimitive = (value: any): value is Primitive =>
   value === undefined ||
@@ -83,7 +83,7 @@ export const stripUndefinedFields = <T>(value: T): T => stripFields(value, undef
 
 type UnwrapRedacted<T> =
   T extends Redacted.Redacted<infer U>
-    ? U
+    ? UnwrapRedacted<U>
     : T extends Record<string, any>
       ? { [K in keyof T]: UnwrapRedacted<T[K]> }
       : T extends Array<infer U>
@@ -92,7 +92,7 @@ type UnwrapRedacted<T> =
 
 export const unwrapRedacted = <T>(value: T): UnwrapRedacted<T> => {
   if (Redacted.isRedacted(value)) {
-    return Redacted.value(value) as UnwrapRedacted<T>;
+    return value.pipe(Redacted.value, unwrapRedacted) as UnwrapRedacted<T>;
   }
   if (Array.isArray(value)) {
     return value.map(unwrapRedacted) as UnwrapRedacted<T>;

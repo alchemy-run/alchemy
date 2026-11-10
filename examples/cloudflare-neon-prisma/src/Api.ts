@@ -1,6 +1,6 @@
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as PrismaPostgres from "alchemy/Prisma/ORM/Postgres";
-import { makeSchemas } from "alchemy/Prisma/ORM/Schema";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as PrismaPostgres from "@alchemy.run/prisma/ORM/Postgres";
+import { makeSchemas } from "@alchemy.run/prisma/ORM/Schema";
 import * as Effect from "effect/Effect";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";

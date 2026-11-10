@@ -1,5 +1,5 @@
 /** Application policy, shared by push, REST ref writes, and pull merges. */
-import * as Git from "alchemy/Git";
+import * as Git from "@alchemy.run/git";
 import * as Effect from "effect/Effect";
 import { Session, Unauthorized } from "./auth.ts";
 

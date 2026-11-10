@@ -54,7 +54,7 @@ Stack):
 
 ```typescript
 // alchemy.run.ts
-import * as Fly from "alchemy/Fly";
+import * as Fly from "@alchemy.run/fly";
 
 export const Website = Fly.Website.Nextjs("Website");
 ```
@@ -124,9 +124,7 @@ export function GET() {
 
 ## Local dev
 
-```sh
-bun alchemy dev
-```
+<PackageManagers run="alchemy dev" />
 
 `alchemy dev` runs `next dev` (native HMR, Turbopack) instead of
 deploying; `site.url` is the local address and no Fly resources are

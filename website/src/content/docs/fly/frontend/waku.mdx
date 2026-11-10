@@ -65,7 +65,7 @@ Stack):
 
 ```typescript
 // alchemy.run.ts
-import * as Fly from "alchemy/Fly";
+import * as Fly from "@alchemy.run/fly";
 
 export const Website = Fly.Website.Waku("Website");
 ```
@@ -143,9 +143,7 @@ export const getConfig = async () => ({ render: "dynamic" }) as const;
 
 ## Local dev
 
-```sh
-bun alchemy dev
-```
+<PackageManagers run="alchemy dev" />
 
 `alchemy dev` runs Waku's own dev server (native HMR) instead of
 deploying; `site.url` is the local address and no Fly resources are

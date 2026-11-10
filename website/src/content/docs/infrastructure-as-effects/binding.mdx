@@ -9,7 +9,7 @@ to a Worker, Lambda Function, Container, or Server — any
 constructor, you yield the resource and get back a typed client:
 
 ```typescript
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
@@ -86,6 +86,12 @@ Bind several tables at once and the statement lists each of their ARNs:
 const batchGet = yield* AWS.DynamoDB.BatchGetItem(Jobs, Audit);
 ```
 
+A Runtime on another cloud binds the same way. A Cloud Run service
+binding the table has no IAM role of its own, so the binding creates
+one that trusts the service's Google identity, and puts the statement
+there. No access key is created. See
+[Identity Federation](/infrastructure-as-effects/identity-federation).
+
 ## Configuration
 
 The client needs the table's physical name. The binding serializes the
@@ -121,7 +127,7 @@ satisfied. Cloudflare shows why that split matters. A Worker binds an
 R2 bucket with the same shape:
 
 ```typescript
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 
 export const Uploads = Cloudflare.R2.Bucket("Uploads");
 
@@ -207,8 +213,13 @@ Binding that runs an Effect or `Stream` in the background, whenever
 something happens on the resource:
 
 ```typescript
-yield* AWS.SQS.consumeQueueMessages(Inbound, (records) =>
-  Stream.runForEach(records, (record) => Effect.log(record.body)),
+yield* AWS.SQS.consumeQueueMessages(
+  Inbound,
+  Effect.fn(function* (event) {
+    for (const record of event.Records) {
+      yield* Effect.log(record.body);
+    }
+  }),
 );
 ```
 
@@ -292,6 +303,8 @@ environment minimal.
 
 - [Layers](/infrastructure-as-effects/layers) — hide bindings behind a
   service interface. Next page.
+- [Identity Federation](/infrastructure-as-effects/identity-federation)
+  — bindings that cross clouds without long-lived keys.
 - [Event Sources](/infrastructure-as-effects/event-sources) — bindings
   that trigger your Function.
 - [Sinks](/infrastructure-as-effects/sinks) — bindings you write

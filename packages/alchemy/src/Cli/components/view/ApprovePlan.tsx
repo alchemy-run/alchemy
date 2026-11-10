@@ -1,13 +1,16 @@
+/** @jsxRuntime automatic */
 /** @jsxImportSource @alchemy.run/sigil */
 import { useMemo, useState } from "@alchemy.run/sigil/react";
 import type { JSX } from "react";
+import { Screen, type ScreenController } from "../../../Interaction.ts";
 import type { Plan as AlchemyPlan } from "../../../Plan.ts";
-import { Screen, theme, type ScreenController } from "../../CliKit/index.ts";
+import { theme } from "../../../Util/Theme.ts";
 import {
   ChoiceGroup,
   Box,
   KeyBar,
   Text,
+  useAlchemyStatus,
   useGlyphs,
   useKeyGlyphs,
   useTerminalInput,
@@ -33,6 +36,7 @@ export function ApprovePlan(props: ApprovePlanProps): JSX.Element {
   const action = plan.destroy ? "Destroy" : "Deploy";
   const glyphs = useGlyphs();
   const keys = useKeyGlyphs();
+  useAlchemyStatus({ state: "blocked", kind: "permission", msg: `${action}?` });
   const tree = useMemo(
     () =>
       new PlanTree(plan, {

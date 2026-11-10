@@ -1,5 +1,5 @@
-import * as Drizzle from "alchemy/Drizzle/Postgres";
-import * as Hetzner from "alchemy/Hetzner";
+import * as Drizzle from "@alchemy.run/drizzle/Postgres";
+import * as Hetzner from "@alchemy.run/hetzner";
 import { desc, sql } from "drizzle-orm";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";

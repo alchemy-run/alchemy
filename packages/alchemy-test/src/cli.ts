@@ -4,7 +4,7 @@
  * ```sh
  * alchemy-test [paths...] [-t pattern] [--exclude path]... [--timeout ms]
  *              [--retry n] [--concurrency n] [--sequential] [--tui]
- *              [--profile name] [--fast]
+ *              [--profile name] [--stage name] [--fast]
  *              [--tags 'unit || (e2e && !live)']
  * ```
  *
@@ -25,19 +25,21 @@ import * as BunServices from "@effect/platform-bun/BunServices";
 import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Runtime from "effect/Runtime";
+import * as Schema from "effect/Schema";
 import packageJson from "../package.json" with { type: "json" };
 import { PlainReporterLive, printSummary } from "./PlainReporter.ts";
 import { parsePlan } from "./Plan.ts";
 import { Reporter } from "./Reporter.ts";
 import { run, type RunOptions } from "./Runner.ts";
 import { captureStrayOutput } from "./StrayOutput.ts";
-import { TuiReporter } from "./Tui.ts";
+import { worktreeStage } from "./WorktreeStage.ts";
 
 const paths = Argument.String("paths").pipe(
   Argument.withDescription("Test files or directories (default: ./test)"),
@@ -103,6 +105,26 @@ const toConcurrency = (value: string): number | "unbounded" => {
   return parsed;
 };
 
+/** `--tui` was requested but the optional `@opentui/core` peer isn't installed. */
+class TuiUnavailable extends Data.TaggedError("TuiUnavailable")<{
+  readonly message: string;
+  readonly cause: unknown;
+}> {}
+
+// The TUI's renderer (`@opentui/core`) is an optional peer, so it loads only
+// when `--tui` asks for it.
+const tuiReporter = (logFile: string) =>
+  Layer.unwrap(
+    Effect.tryPromise({
+      try: () => import("./Tui.ts"),
+      catch: (cause) =>
+        new TuiUnavailable({
+          message: "--tui needs @opentui/core. Install it with `bun add -d @opentui/core`.",
+          cause,
+        }),
+    }).pipe(Effect.map(({ TuiReporter }) => TuiReporter(logFile))),
+  );
+
 const sequential = Flag.Boolean("sequential").pipe(
   Flag.withDescription("Run tests within each file sequentially"),
   Flag.withDefault(false),
@@ -116,6 +138,14 @@ const tui = Flag.Boolean("tui").pipe(
 const profile = Flag.String("profile").pipe(
   Flag.withDescription(
     'Set ALCHEMY_PROFILE for the run (e.g. "testing") before any test module is imported',
+  ),
+  Flag.optional,
+);
+
+const stage = Flag.String("stage").pipe(
+  Flag.withSchema(Schema.String.check(Schema.isPattern(/^[a-z0-9]+([-_a-z0-9]+)*$/i))),
+  Flag.withDescription(
+    'Set ALCHEMY_TEST_STAGE for the run (e.g. "test_sam_feat-x") before any test module is imported',
   ),
   Flag.optional,
 );
@@ -163,6 +193,7 @@ const rootCommand = Command.make(
     sequential,
     tui,
     profile,
+    stage,
     fast,
   },
   Effect.fn(function* (args) {
@@ -174,6 +205,9 @@ const rootCommand = Command.make(
     yield* Effect.sync(() => {
       if (Option.isSome(args.profile)) {
         process.env.ALCHEMY_PROFILE = args.profile.value;
+      }
+      if (Option.isSome(args.stage)) {
+        process.env.ALCHEMY_TEST_STAGE = args.stage.value;
       }
       if (args.fast) {
         process.env.FAST = "1";
@@ -189,6 +223,17 @@ const rootCommand = Command.make(
       process.env.NO_COLOR = "1";
       process.env.FORCE_COLOR = "0";
     });
+    // A linked git worktree defaults to its own stage, so two worktrees of
+    // one developer running the same suite never share deployments. An
+    // explicit `--stage` or ALCHEMY_TEST_STAGE wins.
+    if (Option.isNone(args.stage) && !process.env.ALCHEMY_TEST_STAGE) {
+      const stage = yield* worktreeStage(yield* Effect.sync(() => process.cwd()));
+      if (stage !== undefined) {
+        yield* Effect.sync(() => {
+          process.env.ALCHEMY_TEST_STAGE = stage;
+        });
+      }
+    }
 
     // Plain line output by default; the TUI is opt-in (`--tui`) and requires
     // an interactive terminal.
@@ -233,7 +278,7 @@ const rootCommand = Command.make(
       yield* reporter.waitForExit(summary);
       return summary;
     }).pipe(
-      Effect.provide(interactive ? TuiReporter(logFile) : PlainReporterLive),
+      Effect.provide(interactive ? tuiReporter(logFile) : PlainReporterLive),
       Effect.scoped,
       Effect.onExit(() => Effect.sync(() => restoreStrayCapture?.())),
     );
@@ -248,11 +293,9 @@ const rootCommand = Command.make(
     yield* Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const stats = yield* fs.stat(logFile).pipe(Effect.orElseSucceed(() => undefined));
-      const contents = yield* fs.readFileString(logFile).pipe(Effect.orElseSucceed(() => ""));
-      const lines = contents === "" ? 0 : contents.split("\n").length;
       const kb = stats === undefined ? 0 : Number(stats.size) / 1024;
       yield* Effect.sync(() => {
-        process.stdout.write(`\nFull log: ${logFile} (${lines} lines, ${kb.toFixed(1)} KB)\n`);
+        process.stdout.write(`\nFull log: ${logFile} (${kb.toFixed(1)} KB)\n`);
       });
     });
 

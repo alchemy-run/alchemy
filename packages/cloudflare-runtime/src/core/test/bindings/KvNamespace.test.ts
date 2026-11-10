@@ -25,6 +25,7 @@ import { Blob } from "node:buffer";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it, layer } from "@effect/vitest";
 import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -1030,7 +1031,9 @@ describe("KvNamespace binding persistence", () => {
           Layer.provide(Paths.PathsLive),
           Layer.provide(Docker.DockerLive),
           Layer.provide(Workerd.WorkerdLive),
-          Layer.provideMerge(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer)),
+          Layer.provideMerge(
+            Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer, SecureRandom.layerWebCrypto),
+          ),
         );
 
         const runAgainstStorage = Effect.fn(
@@ -1066,3 +1069,37 @@ describe("KvNamespace binding persistence", () => {
     { timeout: 30_000 },
   );
 });
+
+it.effect(
+  "KV Instant accepts 300-byte keys and rejects oversized UTF-8 keys across operations",
+  () =>
+    Effect.gen(function* () {
+      const worker = yield* startTestWorker({
+        name: "kv-instant-key-test",
+        compatibilityDate: "2026-03-10",
+        modules: [{ name: "main.js", type: "ESModule", content: TEST_SCRIPT }],
+        bindings: [KvNamespace.local({ binding: "NAMESPACE", id: "instant", mode: "instant" })],
+      });
+      const kv = new NamespacedKv(worker.baseUrl, "");
+      yield* Effect.promise(async () => {
+        for (const key of ["a".repeat(300), "é".repeat(150), "😀".repeat(75)]) {
+          await kv.put(key, "boundary");
+          expect(await kv.get(key)).toBe("boundary");
+          expect(await kv.get([key])).toEqual(new Map([[key, "boundary"]]));
+          await kv.delete(key);
+          expect(await kv.get(key)).toBeNull();
+        }
+        for (const key of ["a".repeat(301), "é".repeat(150) + "a", "😀".repeat(76)]) {
+          await expect(kv.put(key, "invalid")).rejects.toThrow("at most 300 bytes");
+          await expect(kv.get(key)).rejects.toThrow("at most 300 bytes");
+          await expect(kv.get([key])).rejects.toThrow("at most 300 bytes");
+          await expect(kv.delete(key)).rejects.toThrow("at most 300 bytes");
+        }
+      });
+    }).pipe(
+      // Stop the worker before the runtime layer removes its storage directory.
+      Effect.scoped,
+      Effect.provide(localRuntimeLayer),
+    ),
+  { timeout: 60_000 },
+);

@@ -3,8 +3,8 @@
  * and their API keys (`git` clients, `gh`); the engine holds none of it.
  */
 import { BetterAuth } from "@alchemy.run/better-auth";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import { apiKey } from "@better-auth/api-key";
-import * as Cloudflare from "alchemy/Cloudflare";
 import * as Context from "effect/Context";
 import * as Schema from "effect/Schema";
 

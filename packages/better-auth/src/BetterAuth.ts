@@ -158,6 +158,7 @@ export const BetterAuth = <const O extends BetterAuthProps>(
     } else if (typeof secret === "string") {
       secretAccessor = Effect.succeed(Redacted.make(secret));
     } else if (Effect.isEffect(secret)) {
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- RuntimeContext is satisfied by the host at runtime
       secretAccessor = secret as Effect.Effect<Redacted.Redacted<string>>;
     } else {
       secretAccessor = Effect.succeed(secret);
@@ -189,7 +190,7 @@ export const BetterAuth = <const O extends BetterAuthProps>(
 
         const context = yield* Effect.context<RuntimeContext>();
         const runPromise = <A, E>(effect: Effect.Effect<A, E, RuntimeContext>): Promise<A> =>
-          Effect.runPromise(effect.pipe(Effect.provideContext(context)) as Effect.Effect<A, E>);
+          Effect.runPromiseWith(context)(effect);
 
         return betterAuth({
           ...authOptions,
