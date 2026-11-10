@@ -150,20 +150,26 @@ const emitDistilled = Effect.fn(function* (root: string) {
   );
   if (missing.length === 0) return;
   yield* Effect.logInfo(`Emitting distilled packages: ${missing.join(", ")}`);
-  const exitCode = yield* spawner.exitCode(
-    yield* platformCommand(
-      "pnpm",
-      [
-        "exec",
-        "tsrs",
-        "-b",
-        ...missing.map((name) => path.join(packagesDir, name, "tsconfig.json")),
-      ],
-      { cwd: root, stdin: "inherit", stdout: "inherit", stderr: "inherit" },
-    ),
-  );
-  if (exitCode !== 0) {
-    return yield* Effect.fail(new Error(`Distilled emit failed with exit code ${exitCode}`));
+  // Windows caps a command line at 8191 characters: emit in batches. Each
+  // `tsrs -b` reuses what an earlier batch built (core and other references).
+  for (let start = 0; start < missing.length; start += 20) {
+    const exitCode = yield* spawner.exitCode(
+      yield* platformCommand(
+        "pnpm",
+        [
+          "exec",
+          "tsrs",
+          "-b",
+          ...missing
+            .slice(start, start + 20)
+            .map((name) => path.join(packagesDir, name, "tsconfig.json")),
+        ],
+        { cwd: root, stdin: "inherit", stdout: "inherit", stderr: "inherit" },
+      ),
+    );
+    if (exitCode !== 0) {
+      return yield* Effect.fail(new Error(`Distilled emit failed with exit code ${exitCode}`));
+    }
   }
 });
 
