@@ -55,3 +55,27 @@ test.provider(
     timeout: 180_000,
   },
 );
+
+test.provider(
+  "local worker starts with undefined env entries, which are no bindings",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const worker = yield* stack.deploy(EnvEffectWorker);
+
+      // workerd refuses a binding without a value, so the Worker only serves
+      // when the entry is left out.
+      const body = yield* expectUrlContains(`${worker.url}/unset`, '"UNSET"', {
+        timeout: "60 seconds",
+        label: "local effect env-worker /unset",
+      });
+      expect(JSON.parse(body)).toEqual({ UNSET: false, UNSET_OUTPUT: false });
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "local"],
+    timeout: 180_000,
+  },
+);

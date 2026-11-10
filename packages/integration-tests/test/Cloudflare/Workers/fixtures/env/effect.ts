@@ -1,5 +1,6 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Output from "alchemy/Output";
+import { CurrentRuntimeContext } from "alchemy/RuntimeContext";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -43,6 +44,8 @@ export default class EnvEffectWorker extends Cloudflare.Worker<EnvEffectWorker>(
       JSON_NULL: "null",
       JSON_OBJ: '{"a":1}',
       PLAIN: "my-queue",
+      // An `undefined` entry is no binding.
+      UNSET: undefined,
     },
   },
   Effect.gen(function* () {
@@ -74,6 +77,13 @@ export default class EnvEffectWorker extends Cloudflare.Worker<EnvEffectWorker>(
       JSON_OBJ: Config.String("JSON_OBJ").pipe(Config.option),
       PLAIN: Config.String("PLAIN").pipe(Config.option),
     });
+
+    // What a binding does with an optional value: an Output that resolves to
+    // `undefined` is no binding either.
+    const runtime = yield* CurrentRuntimeContext;
+    if (!globalThis.__ALCHEMY_RUNTIME__ && runtime !== undefined) {
+      yield* runtime.set("UNSET_OUTPUT", Output.literal(undefined));
+    }
 
     // Yieldable binding form — attaches the `version_metadata` binding to
     // this Worker and returns a deferred accessor resolved at runtime.
@@ -124,6 +134,13 @@ export default class EnvEffectWorker extends Cloudflare.Worker<EnvEffectWorker>(
               JSON_OBJ: env.JSON_OBJ,
               PLAIN: env.PLAIN,
             },
+          });
+        }
+
+        if (pathname === "/unset") {
+          return yield* HttpServerResponse.json({
+            UNSET: "UNSET" in env,
+            UNSET_OUTPUT: "UNSET_OUTPUT" in env,
           });
         }
 
