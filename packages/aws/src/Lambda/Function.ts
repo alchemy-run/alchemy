@@ -40,6 +40,7 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
+import * as Tracer from "effect/Tracer";
 import type * as rolldown from "rolldown";
 import { Assets } from "../Assets.ts";
 import { AWSEnvironment } from "../Environment.ts";
@@ -814,6 +815,30 @@ export class EventSourceRequiresFunction extends Data.TaggedError("EventSourceRe
  * the problem there instead of failing with a missing-service error (the
  * typed API already rejects it; this covers untyped JavaScript).
  */
+const TRACEPARENT = /^[\da-f]{2}-([\da-f]{32})-([\da-f]{16})-([\da-f]{2})$/;
+
+/**
+ * The caller's span a synchronous Invoke names in its client context:
+ * `custom.traceparent`, where `Lambda.InvokeFunction` (and OpenTelemetry's AWS
+ * SDK instrumentation) writes it. The Node runtime exposes the field as
+ * `Custom`. Lambda drops the client context of asynchronous (`Event`)
+ * invocations, so those start their own trace.
+ */
+const clientContextParent = (context: lambda.Context): Tracer.ExternalSpan | undefined => {
+  const clientContext = context.clientContext as
+    | { readonly Custom?: { traceparent?: unknown }; readonly custom?: { traceparent?: unknown } }
+    | undefined;
+  const value = clientContext?.Custom?.traceparent ?? clientContext?.custom?.traceparent;
+  const match = typeof value === "string" ? TRACEPARENT.exec(value.trim()) : null;
+  return match === null
+    ? undefined
+    : Tracer.externalSpan({
+        traceId: match[1]!,
+        spanId: match[2]!,
+        sampled: (Number.parseInt(match[3]!, 16) & 1) === 1,
+      });
+};
+
 export const eventSourceHost = (eventSource: string) =>
   Effect.flatMap(Binding.Host, (host) =>
     host?.Type === "AWS.Lambda.WebFunction"
@@ -1479,8 +1504,15 @@ export const Function: Platform<
           // user `Effect.provide`s inside a handler builds per invocation.
           const services = Context.omit(Layer.CurrentMemoMap)(yield* Effect.context<never>());
           const dispatch = async (event: any, context: lambda.Context): Promise<any> => {
+            // A synchronous Invoke carries the caller's span in its client
+            // context; the invocation's spans are its children.
+            const parent = clientContextParent(context);
             for (const handler of handlers) {
-              const eff = handler(event);
+              const raw = handler(event);
+              const eff =
+                Effect.isEffect(raw) && parent !== undefined
+                  ? Effect.withParentSpan(raw, parent)
+                  : raw;
               if (Effect.isEffect(eff)) {
                 // Each invocation gets a fresh request scope, matching the
                 // Worker / Durable Object / Workflow bridges. The scope is
