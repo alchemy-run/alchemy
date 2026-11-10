@@ -20,9 +20,9 @@ import * as Semaphore from "effect/Semaphore";
 import { resolveBuildEnv, runBuildChild } from "./BuildChild.ts";
 import type { BuildOutput } from "./BuildOutput.ts";
 import {
-  compileIgnoreRules,
+  gitignoreRulesToGlobs,
   hashInput,
-  matchesAny,
+  listFiles,
   sha256,
   sha256Object,
   type MemoOptions,
@@ -186,33 +186,32 @@ export const readClientAssets = Effect.fn(function* (
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const [entries, ignoreFile, _headers, _redirects] = yield* Effect.all([
-    fs.readDirectory(directory, { recursive: true }),
+  const [ignoreFile, _headers, _redirects] = yield* Effect.all([
     maybeReadString(path.join(directory, ".assetsignore")),
     maybeReadString(path.join(directory, "_headers")),
     maybeReadString(path.join(directory, "_redirects")),
   ]);
-  const ignores = compileIgnoreRules([...SPECIAL_ASSET_FILES, ...(ignoreFile?.split("\n") ?? [])]);
-  if (entries.length > MAX_ASSET_COUNT) {
+  // `.assetsignore` uses gitignore semantics, as in wrangler.
+  const files = yield* listFiles(directory, {
+    ignore: gitignoreRulesToGlobs([...SPECIAL_ASSET_FILES, ...(ignoreFile?.split("\n") ?? [])]),
+  });
+  if (files.length > MAX_ASSET_COUNT) {
     return yield* new AssetLimitError({
-      message: `Too many assets in ${directory} (maximum is ${MAX_ASSET_COUNT}, found ${entries.length})`,
+      message: `Too many assets in ${directory} (maximum is ${MAX_ASSET_COUNT}, found ${files.length})`,
     });
   }
   const manifest = new Map<string, { hash: string; size: number }>();
   yield* Effect.forEach(
-    entries,
-    Effect.fn(function* (name) {
-      const relPath = name.replaceAll("\\", "/");
-      if (matchesAny(ignores, relPath)) return;
-      const file = path.join(directory, name);
+    files,
+    Effect.fn(function* (relPath) {
+      const file = path.join(directory, relPath);
       const stat = yield* fs.stat(file);
-      if (stat.type !== "File") return;
       if (Number(stat.size) > MAX_ASSET_SIZE) {
         return yield* new AssetLimitError({
           message: `Asset ${relPath} is too large (the maximum size is 25 MB)`,
         });
       }
-      manifest.set(relPath.startsWith("/") ? relPath : `/${relPath}`, {
+      manifest.set(`/${relPath}`, {
         hash: sha256(yield* fs.readFile(file)).slice(0, 32),
         size: Number(stat.size),
       });
