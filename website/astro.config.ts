@@ -833,6 +833,7 @@ export default defineConfig({
                 { label: "EC2", link: "/aws/compute/ec2" },
                 { label: "HyperPod", link: "/aws/compute/hyperpod" },
                 { label: "Lambda MicroVMs", link: "/aws/compute/microvms" },
+                { label: "Nitro Sandboxes", link: "/aws/compute/nitro-sandboxes" },
               ],
             },
             {

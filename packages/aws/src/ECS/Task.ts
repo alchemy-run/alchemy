@@ -195,6 +195,17 @@ export interface TaskDefinitionConfig {
    */
   enableFaultInjection?: boolean;
   /**
+   * Run each task in its own Nitro Sandbox, a lightweight VM isolated by the
+   * AWS Nitro hypervisor. `ISOLATED_SANDBOX` isolates tasks from each other;
+   * `CONFIDENTIAL_SANDBOX` also hides the task's memory from the instance and
+   * needs an `attestationPolicy`.
+   *
+   * Requires `requiresCompatibilities: ["MANAGED_INSTANCES"]` and a Managed
+   * Instances capacity provider with `nitroEnclavesEnabled`.
+   * @default { isolationMode: "SHARED" }
+   */
+  trustedExecutionConfiguration?: ecs.TrustedExecutionConfiguration;
+  /**
    * Additional task definition overrides applied last (escape hatch for
    * fields not yet surfaced as first-class props).
    */
@@ -887,6 +898,7 @@ export const registerTaskDefinitionRevision = Effect.fn(function* ({
     proxyConfiguration: props.proxyConfiguration,
     inferenceAccelerators: props.inferenceAccelerators,
     enableFaultInjection: props.enableFaultInjection,
+    trustedExecutionConfiguration: props.trustedExecutionConfiguration,
     ...props.taskDefinition,
     containerDefinitions: [primaryContainer, ...(props.sidecars ?? [])],
     tags: Object.entries(tags).map(([key, value]) => ({ key, value })),

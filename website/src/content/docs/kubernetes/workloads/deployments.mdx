@@ -194,6 +194,26 @@ in `podTemplate` replaces the generated one wholesale, including the
 image. When a workload needs full control of its containers, write
 it as a [Manifest](/kubernetes/objects/manifests).
 
+## Choose a container runtime
+
+`runtimeClassName` picks the RuntimeClass the pods run under, the
+cluster's name for a container runtime. Use it to run pods in a
+VM-backed runtime such as gVisor or Kata Containers when the cluster
+has one installed:
+
+```typescript
+const agent = yield* Kubernetes.Deployment("Agent", {
+  cluster,
+  image: "ghcr.io/acme/agent:1",
+  port: 8080,
+  runtimeClassName: "isolated-sandbox",
+});
+```
+
+On EKS Auto Mode, `isolated-sandbox` and `confidential-sandbox` run
+each pod in its own Nitro Sandbox, a lightweight VM, with nothing to
+install. See [EKS: Run each pod in its own VM](/aws/compute/eks#run-each-pod-in-its-own-vm).
+
 ## Effect servers
 
 With `main`, the Deployment runs an Effect program instead of an
