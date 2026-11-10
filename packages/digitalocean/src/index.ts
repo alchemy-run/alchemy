@@ -5,3 +5,5 @@ export * from "./Firewall.ts";
 export * from "./Providers.ts";
 export * from "./Slugs.ts";
 export * from "./SshKey.ts";
+export * from "./Volume.ts";
+export * from "./VolumeAttachment.ts";

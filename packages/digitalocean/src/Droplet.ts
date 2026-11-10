@@ -32,6 +32,13 @@ import {
   withoutAlchemyTags,
 } from "./internal/ownership.ts";
 import { pollUntil, type PollBudget } from "./internal/poll.ts";
+import {
+  alchemyTagsFor,
+  deleteTagsIfUnused,
+  desiredTagsFor,
+  rejectReservedTags,
+  syncTags,
+} from "./internal/tags.ts";
 import type { Providers } from "./Providers.ts";
 import type { ImageSlug, RegionSlug, SizeSlug } from "./Slugs.ts";
 
@@ -420,21 +427,6 @@ const physicalName = (id: string) =>
     maxLength: NAME_MAX_LENGTH,
   });
 
-const rejectReservedTags = (tags: ReadonlyArray<string> | undefined) =>
-  Option.match(Arr.findFirst(tags ?? [], isAlchemyTag), {
-    onNone: () => Effect.void,
-    onSome: (tag) => Effect.fail(new DropletTagReserved({ tag })),
-  });
-
-const alchemyTagsFor = Effect.fn(function* (fqn: string, instanceId: string) {
-  return [yield* ownershipTagFor(fqn), generationTagFor(instanceId)];
-});
-
-const desiredTags = Effect.fn(function* (news: DropletProps, fqn: string, instanceId: string) {
-  yield* rejectReservedTags(news.tags);
-  return Arr.dedupe([...(news.tags ?? []), ...(yield* alchemyTagsFor(fqn, instanceId))]);
-});
-
 const listAllDroplets = (filter: Pick<ListDropletsRequest, "name" | "tag_name" | "type">) =>
   DO.listDroplets.items({ ...filter, per_page: PAGE_SIZE }).pipe(Stream.runCollect);
 
@@ -561,49 +553,6 @@ const runAction = Effect.fn(function* (dropletId: number, body: PostDropletActio
   yield* waitForAction(dropletId, posted.action.id);
 });
 
-const dropletResource = (dropletId: number) => ({
-  resource_id: String(dropletId),
-  resource_type: "droplet",
-});
-
-// The assign endpoint answers 404 for a tag that does not exist yet.
-const assignTag = (tag: string, dropletId: number) => {
-  const assignment = DO.assignTagResources({
-    tag_id: tag,
-    resources: [dropletResource(dropletId)],
-  });
-  return assignment.pipe(
-    Effect.catchTag("NotFound", () => DO.createTag({ name: tag }).pipe(Effect.andThen(assignment))),
-  );
-};
-
-// Deleting a tag removes it from every droplet that carries it.
-const deleteTagIfUnused = Effect.fn(function* (tag: string) {
-  const tagged = yield* listAllDroplets({ tag_name: tag });
-  if (tagged.length > 0) return;
-  yield* ignoreNotFound(DO.deleteTag({ tag_id: tag }));
-});
-
-const deleteTagsIfUnused = (tags: ReadonlyArray<string>) =>
-  Effect.forEach(tags, deleteTagIfUnused, { concurrency: "unbounded", discard: true });
-
-const unassignTag = Effect.fn(function* (tag: string, dropletId: number) {
-  yield* ignoreNotFound(
-    DO.unassignTagResources({ tag_id: tag, resources: [dropletResource(dropletId)] }),
-  );
-  if (isAlchemyTag(tag)) yield* deleteTagIfUnused(tag);
-});
-
-// Observed tags are the baseline, so adoption drops foreign tags.
-const syncTags = (droplet: ApiDroplet, desired: ReadonlyArray<string>) =>
-  Effect.all(
-    [
-      ...Arr.difference(desired, droplet.tags).map((tag) => assignTag(tag, droplet.id)),
-      ...Arr.difference(droplet.tags, desired).map((tag) => unassignTag(tag, droplet.id)),
-    ],
-    { concurrency: "unbounded", discard: true },
-  );
-
 const syncIpv6 = Effect.fn(function* (droplet: ApiDroplet, news: DropletProps) {
   if (!needsIpv6(droplet, news)) return;
   yield* runAction(droplet.id, { type: "enable_ipv6" });
@@ -714,13 +663,14 @@ export const DropletProvider = () =>
       return (yield* needsReplacement(olds, news, output)) ? replacement(olds) : undefined;
     }),
     reconcile: Effect.fn(function* ({ id, fqn, instanceId, news, output }) {
-      const tags = yield* desiredTags(news, fqn, instanceId);
+      yield* rejectReservedTags(news.tags, (tag) => new DropletTagReserved({ tag }));
+      const tags = yield* desiredTagsFor(news.tags, fqn, instanceId);
       const name = news.name ?? (yield* physicalName(id));
 
       const observed = yield* observeGeneration(output, instanceId);
       const droplet = yield* ensureDroplet(observed, name, news, tags);
 
-      yield* syncTags(droplet, tags);
+      yield* syncTags("droplet", droplet.id, droplet.tags, tags);
       yield* syncIpv6(droplet, news);
       yield* syncName(droplet, name);
       return toAttrs(yield* waitUntilConverged(droplet.id, name, tags, news));

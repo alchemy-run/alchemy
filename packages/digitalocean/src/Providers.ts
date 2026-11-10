@@ -9,6 +9,8 @@ import * as Credentials from "./Credentials.ts";
 import { Droplet, DropletProvider } from "./Droplet.ts";
 import { Firewall, FirewallProvider } from "./Firewall.ts";
 import { SshKey, SshKeyProvider } from "./SshKey.ts";
+import { Volume, VolumeProvider } from "./Volume.ts";
+import { VolumeAttachment, VolumeAttachmentProvider } from "./VolumeAttachment.ts";
 
 export class Providers extends Provider.ProviderCollection<Providers>()("DigitalOcean") {}
 
@@ -44,9 +46,19 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
  * ```
  */
 export const providers = () =>
-  Layer.effect(Providers, Provider.collection([Droplet, Firewall, SshKey, KeyPair])).pipe(
+  Layer.effect(
+    Providers,
+    Provider.collection([Droplet, Firewall, SshKey, Volume, VolumeAttachment, KeyPair]),
+  ).pipe(
     Layer.provide(
-      Layer.mergeAll(DropletProvider(), FirewallProvider(), SshKeyProvider(), KeyPairProvider()),
+      Layer.mergeAll(
+        DropletProvider(),
+        FirewallProvider(),
+        SshKeyProvider(),
+        VolumeProvider(),
+        VolumeAttachmentProvider(),
+        KeyPairProvider(),
+      ),
     ),
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(DigitalOceanAuth),
