@@ -1,25 +1,17 @@
-import { resolvePoolConfig } from "@alchemy.run/sql/PostgresTls";
 // `@effect/sql-pg` (and pg underneath) are optional peers — value imports
-// are deferred to first use so `@alchemy.run/drizzle` resolves without them
+// are deferred to the call so `@alchemy.run/drizzle` resolves without them
 // installed.
 import type * as PgClient from "@effect/sql-pg/PgClient";
-import { makeExecutionMemo } from "alchemy/Runtime/ExecutionMemo";
-import { proxyChain } from "alchemy/Util/proxy-chain";
 import type { AnyRelations, EmptyRelations } from "drizzle-orm";
-import type { EffectPgDatabase } from "drizzle-orm/effect-postgres";
 import type { EffectDrizzlePgConfig } from "drizzle-orm/pg-core/effect/utils";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import type * as Redacted from "effect/Redacted";
 
 /**
  * Open a Drizzle/Postgres database from a connection URL using the
  * `drizzle-orm/effect-postgres` integration.
  *
- * Returns a chainable Proxy over `EffectPgDatabase` (via `proxyChain`) —
- * every property read records a step, every call records args, and the
- * chain is replayed against the resolved drizzle db when it's finally
- * yielded as an Effect. Callers don't need a separate `yield* conn` step:
+ * Resolve it once at Construction phase and use it from any handler:
  *
  * ```typescript
  * const db = yield* Drizzle.Postgres(hd.connectionString);
@@ -29,21 +21,18 @@ import type * as Redacted from "effect/Redacted";
  * });
  * ```
  *
- * The connect work is deferred until the first query and memoized on the
- * current execution's `Scope` (via {@link makeExecutionMemo}), so the pool
- * is built at most once per execution — a Worker `fetch`/`queue`/`scheduled`
- * event, a Durable Object call, a Workflow run, or a Lambda invocation — and
- * reused across every query and `task` step in that execution. Yielding the
- * connection string is likewise deferred, so deploy / plan-time invocations
- * (where `WorkerEnvironment` isn't provided) never trigger a real connection
- * attempt.
+ * The database is a real `EffectPgDatabase`. Queries, subqueries, CTEs and
+ * `sql` fragments are built by drizzle's own code, with no connection.
+ * Running a query opens the pool. The pool is opened at most once per
+ * execution — a Worker `fetch`/`queue`/`scheduled` event, a Durable Object
+ * call, a Workflow run, or a Lambda invocation — and reused by every query
+ * and `task` step in it. The connection string resolves then too, so deploy
+ * / plan-time invocations (where `WorkerEnvironment` isn't provided) never
+ * connect.
  *
- * The pool is built against that same execution scope, so its `end`
- * finalizer fires when the scope closes — when the request / run settles,
- * not when the Worker's isolate-lifetime init completes. Wrapping queries in
- * a nested `Effect.scoped` narrows both the memo and the pool's lifetime to
- * that block: memo key and finalizer target are always the same scope
- * object, so they cannot disagree.
+ * The pool belongs to the execution's `Scope` and closes when the request /
+ * run settles. Wrapping queries in a nested `Effect.scoped` gives that block
+ * its own pool, closed when the block ends.
  *
  * `@effect/sql-pg` client options are passed via `config.client`. Behind a
  * transaction-mode pooler such as Hyperdrive, turn off named prepared
@@ -58,8 +47,11 @@ import type * as Redacted from "effect/Redacted";
  *
  * @binding
  */
-
-export const Postgres = <TRelations extends AnyRelations = EmptyRelations, E = never, R = never>(
+export const Postgres = Effect.fn(function* <
+  TRelations extends AnyRelations = EmptyRelations,
+  E = never,
+  R = never,
+>(
   connectionString: Effect.Effect<Redacted.Redacted<string>, E, R>,
   config?: EffectDrizzlePgConfig<TRelations> & {
     /**
@@ -68,33 +60,16 @@ export const Postgres = <TRelations extends AnyRelations = EmptyRelations, E = n
      */
     readonly client?: Omit<PgClient.PgPoolConfig, "url">;
   },
-) =>
-  Effect.map(
-    makeExecutionMemo(
-      Effect.gen(function* () {
-        const [PgClient, PgDrizzle] = yield* Effect.promise(() =>
-          Promise.all([import("@effect/sql-pg/PgClient"), import("drizzle-orm/effect-postgres")]),
-        );
-        const url = yield* connectionString;
-        const { client, ...drizzleConfig } = config ?? {};
-        const pgCtx = yield* Layer.build(PgClient.layer(resolvePoolConfig(url, client)));
-        return yield* PgDrizzle.makeWithDefaults(
-          drizzleConfig as EffectDrizzlePgConfig<TRelations>,
-        ).pipe(Effect.provideContext(pgCtx));
-      }),
-    ),
-    (db) =>
-      proxyChain<
-        EffectPgDatabase<TRelations> & {
-          $client: PgClient.PgClient;
-        }
-      >(
-        db as Effect.Effect<
-          EffectPgDatabase<TRelations> & {
-            $client: PgClient.PgClient;
-          },
-          any,
-          any
-        >,
-      ),
+) {
+  const [{ PgClient }, PgDrizzle, SQL] = yield* Effect.promise(() =>
+    Promise.all([
+      import("@effect/sql-pg/PgClient"),
+      import("drizzle-orm/effect-postgres"),
+      import("@alchemy.run/sql/Postgres"),
+    ]),
   );
+  const { client, ...drizzleConfig } = config ?? {};
+  return yield* PgDrizzle.makeWithDefaults(drizzleConfig as EffectDrizzlePgConfig<TRelations>).pipe(
+    Effect.provideServiceEffect(PgClient, SQL.Postgres({ ...client, url: connectionString })),
+  );
+});

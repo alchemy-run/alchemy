@@ -10739,6 +10739,9 @@ importers:
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.1.0(effect@4.1.0)(redis@6.2.1(@opentelemetry/api@1.10.0))
+      '@effect/sql-libsql':
+        specifier: 'catalog:'
+        version: 4.1.0(effect@4.1.0)
       '@effect/sql-mysql2':
         specifier: 'catalog:'
         version: 4.1.0(@types/node@26.6.5)(effect@4.1.0)
