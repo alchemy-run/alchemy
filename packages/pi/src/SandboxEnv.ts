@@ -1,13 +1,10 @@
 import type { Connection } from "@earendil-works/pi-env";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
-import type * as SandboxApi from "alchemy/Sandbox";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
-import * as Scope from "effect/Scope";
-import * as Stream from "effect/Stream";
 import { EnvError, EnvHost, type EnvTarget } from "./Env.ts";
+import { openDaemon, type DaemonSandbox } from "./internal/daemon.ts";
 import { StreamConnection } from "./internal/pienv.ts";
 import { messageOf } from "./internal/promise.ts";
 
@@ -35,12 +32,11 @@ if [ ! -x ${DAEMON} ]; then
 fi`;
 
 /**
- * What a sandbox must offer to host a conversation's tools: commands to
- * completion, and a long-running process with stdin. Every Alchemy sandbox
- * handle (E2B, Daytona, Modal, Boat) has both.
+ * What a sandbox must offer to host a conversation's tools: commands run to
+ * completion, and a background command whose output can be followed. Every
+ * Alchemy sandbox handle (E2B, Daytona, Modal, Boat, Archil) has both.
  */
-export type SandboxLike = SandboxApi.SandboxExec<any, { readonly exitCode: number }, any> &
-  SandboxApi.SandboxProcesses<any, any>;
+export type SandboxLike = DaemonSandbox;
 
 /**
  * Finds or creates the sandbox a conversation's tools run in. Make it
@@ -77,6 +73,10 @@ export class Sandbox extends Context.Service<
  * exactly as they do locally. Tools start in the conversation's `cwd`, or
  * in the sandbox user's home directory.
  *
+ * The sandbox's image needs `sh`, `curl`, `tar`, `sha512sum`, `base64`, `dd`
+ * and `mkfifo`, and the sandbox needs to reach `registry.npmjs.org` once, to
+ * install the daemon.
+ *
  * **Example:** A harness whose tools run in a sandbox
  * ```typescript
  * const HarnessLive = Layer.mergeAll(
@@ -110,37 +110,9 @@ export const SandboxEnv: Layer.Layer<EnvHost, never, Sandbox> = Layer.effect(
             installed.add(sandbox);
           }
           const run = Effect.runPromiseWith(yield* Effect.context<RuntimeContext>());
-          const connection = new StreamConnection(async (token, handlers) => {
-            const scope = Scope.makeUnsafe();
-            const process = await run(
-              sandbox
-                .start([DAEMON, "serve", "--token", token], { stdin: true })
-                .pipe(Scope.provide(scope)),
-            );
-            void run(
-              process.output.pipe(
-                Stream.runForEach((chunk) =>
-                  Effect.sync(() => {
-                    if (chunk.fd === "stdout") handlers.onData(chunk.data);
-                  }),
-                ),
-                Effect.ensuring(Effect.sync(handlers.onClose)),
-                Effect.ignore,
-              ),
-            );
-            // Writes go out in order: each waits for the one before.
-            let last: Promise<unknown> = Promise.resolve();
-            return {
-              write: (bytes) => {
-                last = last.then(() => run(process.write(bytes).pipe(Effect.ignore)));
-              },
-              close: () => {
-                void last
-                  .then(() => run(process.kill("SIGTERM").pipe(Effect.ignore)))
-                  .finally(() => run(Scope.close(scope, Exit.void)));
-              },
-            };
-          });
+          const connection = new StreamConnection(
+            openDaemon(sandbox, { daemon: DAEMON, dir: PI_ENV.dir }, run),
+          );
           // The daemon reports its user's home, which differs between sandbox platforms.
           const cwd =
             target.cwd ?? (yield* Effect.tryPromise(async () => (await connection.info()).home));
