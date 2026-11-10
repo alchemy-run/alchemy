@@ -1,6 +1,7 @@
 import { describe, expect, it } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import { makeExecutionMemo } from "@/Runtime/ExecutionMemo.ts";
 import { proxyChain } from "@/Util/proxy-chain.ts";
 
 const TIMEOUT = 5_000;
@@ -26,6 +27,68 @@ const makeDb = () => ({
 type Db = ReturnType<typeof makeDb>;
 
 describe("proxyChain", { tags: ["unit", "local"], timeout: 5000 }, () => {
+  it.effect("yields a chain over an execution memo without an ambient Scope", () =>
+    Effect.gen(function* () {
+      const memo = yield* makeExecutionMemo(Effect.succeed({ value: Effect.succeed(1) }));
+      const proxied = proxyChain(memo);
+      const value = yield* Effect.promise(() => Effect.runPromise(proxied.value));
+      expect(value).toBe(1);
+    }),
+  );
+
+  it.effect("reuses one build across two chains in an ambient Scope", () =>
+    Effect.gen(function* () {
+      let built = 0;
+      let released = false;
+      const memo = yield* makeExecutionMemo(
+        Effect.acquireRelease(
+          Effect.sync(() => {
+            built++;
+            return { value: Effect.succeed({}) };
+          }),
+          () => Effect.sync(() => (released = true)),
+        ),
+      );
+      const proxied = proxyChain(memo);
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const first = yield* proxied.value;
+          const second = yield* proxied.value;
+          expect(second).toBe(first);
+          expect(built).toBe(1);
+          expect(released).toBe(false);
+        }),
+      );
+      expect(released).toBe(true);
+    }),
+  );
+
+  it.effect("releases the memo's resource after a query without an ambient Scope", () =>
+    Effect.gen(function* () {
+      let acquired = false;
+      let released = false;
+      const memo = yield* makeExecutionMemo(
+        Effect.acquireRelease(
+          Effect.sync(() => {
+            acquired = true;
+            return {
+              value: Effect.sync(() => {
+                expect(acquired).toBe(true);
+                expect(released).toBe(false);
+                return 1;
+              }),
+            };
+          }),
+          () => Effect.sync(() => (released = true)),
+        ),
+      );
+      const proxied = proxyChain(memo);
+      const value = yield* Effect.promise(() => Effect.runPromise(proxied.value));
+      expect(value).toBe(1);
+      expect(released).toBe(true);
+    }),
+  );
+
   it.effect("replays a property-read + call chain when yielded", () =>
     Effect.gen(function* () {
       const db = proxyChain<Db>(Effect.succeed(makeDb()));
