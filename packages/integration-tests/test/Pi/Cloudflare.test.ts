@@ -1,20 +1,22 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as E2B from "@alchemy.run/e2b";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import PiApi from "./fixtures/Api.ts";
 
-const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
-  providers: Cloudflare.providers(),
-});
+const providers = Layer.mergeAll(Cloudflare.providers(), E2B.providers());
+
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({ providers });
 
 const Stack = Alchemy.Stack(
   "PiCloudflareStack",
-  { providers: Cloudflare.providers(), state: Cloudflare.state() },
+  { providers, state: Cloudflare.state() },
   Effect.gen(function* () {
     const api = yield* PiApi;
     return { url: api.url.as<string>() };
@@ -117,4 +119,50 @@ test(
     expect([...(yield* call(`/${user}/both/tools`))].sort()).toEqual(["add", "save_note"]);
   }),
   { tags, timeout: 180_000 },
+);
+
+test(
+  "a run cut off by a crashed instance resumes from the wake alarm",
+  Effect.gen(function* () {
+    const user = `user-${Date.now()}`;
+    yield* call(`/${user}/crash/create`, { tools: ["add"] });
+    yield* call(`/${user}/crash/start`, {
+      text: "What is 40 + 2? Call the add tool, then reply with its sum.",
+      requestId: "crash-1",
+    });
+    // The crash call itself fails when the instance dies under it.
+    yield* call(`/${user}/crash/crash`, {}).pipe(Effect.ignore);
+    const { answered } = yield* call(`/${user}/crash/answered`).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("3 seconds"),
+        until: (result: { answered: boolean }) => result.answered,
+        times: 30,
+      }),
+    );
+    expect(answered).toBe(true);
+  }),
+  { tags, timeout: 180_000 },
+);
+
+test(
+  "coding tools run in an E2B sandbox through Pi's own daemon",
+  Effect.gen(function* () {
+    const name = `sbx-${Date.now()}`;
+    yield* call(`/sandbox/${name}/create`, {});
+    const status = yield* call(`/sandbox/${name}/prompt`, {
+      text: 'Use the write tool to create /home/user/hello.txt containing exactly the text "pi was here". Then use bash to run: wc -c /home/user/hello.txt',
+      requestId: "sbx-1",
+    }).pipe(Effect.ensuring(Effect.void));
+    const tools = (yield* call(`/sandbox/${name}/tools`)) as ReadonlyArray<{
+      tool: string;
+      isError: boolean;
+    }>;
+    const file = yield* call(`/sandbox/${name}/file`, { path: "/home/user/hello.txt" });
+    yield* call(`/sandbox/${name}/kill`, {});
+    expect(status.status).toBe("done");
+    expect(tools.some((used) => used.tool === "write" && !used.isError)).toBe(true);
+    expect(tools.some((used) => used.tool === "bash" && !used.isError)).toBe(true);
+    expect(file.text).toContain("pi was here");
+  }),
+  { tags: [...tags, "provider:e2b"], timeout: 300_000 },
 );

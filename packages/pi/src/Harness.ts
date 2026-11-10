@@ -26,9 +26,11 @@ import {
 import * as Alchemy from "alchemy";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { InstanceSetup } from "alchemy/Workers/InstanceSetup";
+import { LanguageModel } from "effect/ai";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Scope from "effect/Scope";
@@ -37,7 +39,7 @@ import { EnvHost } from "./Env.ts";
 import { ConversationNotFound, NotOnHarness, PiError } from "./Errors.ts";
 import { fromPi, messageOf } from "./internal/promise.ts";
 import { makeProvider } from "./internal/provider.ts";
-import type { AnyModel } from "./Model.ts";
+import type { AnyModel, ModelService } from "./Model.ts";
 import { Storage } from "./Storage.ts";
 import {
   flattenTools,
@@ -245,7 +247,7 @@ export const Harness = <
     // Resolve every model and tool implementation here, where their Layers
     // (and the bindings those declare) are provided.
     const models = yield* Effect.forEach(options.models, (model) =>
-      Effect.map(Effect.service(model as Context.Key<unknown, any>), (languageModel) => ({
+      Effect.map(Effect.service(model as Context.Key<unknown, ModelService>), (languageModel) => ({
         model,
         languageModel,
       })),
@@ -266,6 +268,21 @@ export const Harness = <
 
     let opened: Promise<PiHarness> | undefined;
     let wake: Alchemy.Callback<{}> | undefined;
+    // Waiters for Pi to report that nothing can run now (idle, or asleep
+    // until `at`): an alarm works until then and re-arms for `at`.
+    const settled = new Set<() => void>();
+    const onWake = (next: Wake) => {
+      if (next.active) return;
+      for (const resolve of settled) resolve();
+      settled.clear();
+    };
+    const untilSettled = (harness: PiHarness) =>
+      Effect.callback<void>((resume) => {
+        if (!harness.wake().active) return resume(Effect.void);
+        const done = () => resume(Effect.void);
+        settled.add(done);
+        return Effect.sync(() => void settled.delete(done));
+      });
 
     const toolByName = new Map(tools.map(({ tool }) => [tool.toolName, tool]));
     const modelName = (model: AnyModel) => model.modelName;
@@ -277,7 +294,7 @@ export const Harness = <
         const call = yield* Effect.context<RuntimeContext>();
         const base = Context.merge(captured, call).pipe(
           Context.omit(Scope.Scope),
-        ) as Context.Context<never>;
+        ) as Context.Context<RuntimeContext>;
         const runModel = <A, E>(effect: Effect.Effect<A, E>, signal: AbortSignal | undefined) =>
           Effect.runPromiseExit(
             Effect.provideContext(effect, base),
@@ -291,12 +308,30 @@ export const Harness = <
             signal ? { signal } : undefined,
           ) as never;
 
-        const piModels = createModels();
-        for (const { model, languageModel } of models) {
-          piModels.setProvider(
-            makeProvider(model.modelName, languageModel, runModel, model.options),
-          );
-        }
+        // Each model's Layer is built once per instance, with the instance's
+        // runtime context. Its scope is never closed: workerd has no
+        // instance teardown, and a model client holds nothing to release.
+        const buildModels = Effect.gen(function* () {
+          const scope = yield* Scope.make();
+          const piModels = createModels();
+          for (const { model, languageModel } of models) {
+            const built = yield* Layer.buildWithScope(languageModel.languageModel, scope).pipe(
+              Effect.mapError(
+                (cause) =>
+                  new PiError({ message: `Model ${model.modelName}: ${messageOf(cause)}`, cause }),
+              ),
+            );
+            piModels.setProvider(
+              makeProvider(
+                model.modelName,
+                Context.get(built, LanguageModel.LanguageModel),
+                runModel,
+                model.options,
+              ),
+            );
+          }
+          return piModels;
+        }).pipe(Effect.provideContext(base));
         const registrations: ToolRegistration[] = tools.map(({ tool, handler }) =>
           handler === undefined
             ? (tool as { registration: ToolRegistration }).registration
@@ -306,8 +341,8 @@ export const Harness = <
         registry.install({ name: "alchemy", tools: registrations });
 
         opened = Effect.runPromise(
-          storage.open(prefix).pipe(
-            Effect.flatMap((piStorage) =>
+          Effect.all([buildModels, storage.open(prefix)]).pipe(
+            Effect.flatMap(([piModels, piStorage]) =>
               fromPi((context) =>
                 PiHarness.open(
                   piStorage,
@@ -324,7 +359,9 @@ export const Harness = <
                           Effect.catch((error) => Effect.die(new Error(error.message))),
                         ),
                       ),
-                    ...(storage.evictable ? { onWake: () => {} } : {}),
+                    // With `onWake`, Pi arms no timers of its own: the
+                    // instance's alarm wakes it (see `arm`).
+                    ...(storage.evictable ? { onWake } : {}),
                   },
                   context,
                 ),
@@ -364,11 +401,9 @@ export const Harness = <
               Effect.fn(function* () {
                 const harness = yield* open;
                 harness.resume();
-                // Work for one slice of the alarm, then hand off to the next.
-                yield* fromPi((context) => harness.waitForIdle(context)).pipe(
-                  Effect.timeoutOption(ALARM_SLICE),
-                  Effect.ignore,
-                );
+                // Work until Pi has nothing to run now (idle, or asleep until
+                // a time), or for one slice; then arm the next alarm.
+                yield* untilSettled(harness).pipe(Effect.timeoutOption(ALARM_SLICE));
                 yield* arm(harness);
               }),
               { retry: { delay: HEARTBEAT } },

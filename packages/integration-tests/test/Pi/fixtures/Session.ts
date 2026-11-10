@@ -48,7 +48,30 @@ export default class PiSession extends Cloudflare.DurableObject<PiSession>()(
     const harness = yield* Pi.Harness({ models: [Fast], tools: [Add, SaveNote] });
 
     return Effect.gen(function* () {
+      const state = yield* Cloudflare.DurableObjectState;
       return {
+        // Admit an input without waiting for its answer.
+        start: Effect.fn(function* (name: string, text: string, requestId: string) {
+          const conversation = yield* harness.conversationByName(name);
+          const submission = yield* conversation.submit({
+            type: "input",
+            content: text,
+            requestId,
+          });
+          return submission.id;
+        }),
+        // Kill this instance; the next call or the alarm builds a fresh one.
+        crash: () => state.abort("crash"),
+        // Whether the newest message is an answer (an assistant message with text).
+        answered: Effect.fn(function* (name: string) {
+          const conversation = yield* harness.conversationByName(name);
+          const { messages } = yield* conversation.context;
+          const last = messages.at(-1);
+          return (
+            last?.role === "assistant" &&
+            last.content.some((part) => part.type === "text" && part.text.length > 0)
+          );
+        }),
         create: Effect.fn(function* (name: string, tools: ReadonlyArray<"add" | "save_note">) {
           const conversation = yield* harness.createConversation({
             name,
@@ -86,6 +109,29 @@ export default class PiSession extends Cloudflare.DurableObject<PiSession>()(
           return JSON.parse(JSON.stringify(messages)) as unknown;
         }),
         list: () => harness.listConversations,
+        resume: Effect.fn(function* () {
+          const raw = yield* harness.raw;
+          raw.resume();
+          yield* harness.waitForIdle.pipe(Effect.timeoutOption("20 seconds"));
+        }),
+        inspect: Effect.fn(function* (name: string) {
+          const inspection = yield* harness.inspect;
+          const raw = yield* harness.raw;
+          const conversation = yield* harness.conversationByName(name);
+          const { messages } = yield* conversation.context;
+          return JSON.parse(
+            JSON.stringify({
+              scheduling: inspection.scheduling,
+              wake: raw.wake(),
+              tasks: inspection.tasks.map((task) => ({
+                kind: task.record.kind,
+                state: task.state,
+              })),
+              submissions: inspection.submissions.map((submission) => submission.status),
+              messages: messages.map((message) => message.role),
+            }),
+          ) as unknown;
+        }),
       };
     });
   }).pipe(Effect.provide(HarnessLive)),

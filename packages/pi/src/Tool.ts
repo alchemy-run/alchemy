@@ -127,7 +127,14 @@ export interface ToolGroup<Tools extends ReadonlyArray<AnyTool> = ReadonlyArray<
   readonly tools: Tools;
 }
 
-export type AnyToolClass = ToolClass<any, string, ToolSpec, any>;
+/** Any tool class, structurally: what a harness reads off it. */
+export interface AnyToolClass {
+  readonly [ToolTypeId]: "class";
+  readonly key: string;
+  readonly toolName: string;
+  readonly spec: ToolSpec;
+  readonly impl: Effect.Effect<any, never, any> | undefined;
+}
 export type AnyTool = AnyToolClass | InlineTool<string, any> | BuiltinTool | ToolGroup;
 
 /** What listing `T` on a harness requires to be provided. */

@@ -17,6 +17,7 @@ export {
   type Submission,
   type SubmissionDraft,
 } from "./Harness.ts";
+export { SandboxEnv, type SandboxEnvOptions, type SandboxLike } from "./SandboxEnv.ts";
 export { Model, type AnyModel, type ModelClass, type ModelOptions } from "./Model.ts";
 export { MemoryStorage, SqliteFile, Storage, type InstanceStorage } from "./Storage.ts";
 export {
@@ -29,3 +30,12 @@ export {
   type ToolRef,
   type ToolSpec,
 } from "./Tool.ts";
+export type {
+  Agent,
+  ConversationId,
+  ConversationView,
+  EntryId,
+  SettledSubmissionRecord,
+  SubmissionId,
+  SubmissionRecord,
+} from "@earendil-works/pi-durable";

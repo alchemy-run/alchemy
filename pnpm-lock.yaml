@@ -11757,6 +11757,9 @@ importers:
       '@earendil-works/pi-durable':
         specifier: 1.5.0
         version: 1.5.0(@aws-sdk/credential-provider-node@3.972.83)(@modelcontextprotocol/sdk@1.32.1(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.5.4))(@smithy/hash-node@4.5.0)(@smithy/signature-v4@5.7.4)(esbuild@0.28.2)(supports-color@10.2.2)(undici@8.12.3)(ws@8.21.0)(zod@4.5.4)
+      '@earendil-works/pi-env':
+        specifier: 1.5.0
+        version: 1.5.0(@aws-sdk/credential-provider-node@3.972.83)(@modelcontextprotocol/sdk@1.32.1(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.5.4))(@smithy/hash-node@4.5.0)(@smithy/signature-v4@5.7.4)(esbuild@0.28.2)(supports-color@10.2.2)(undici@8.12.3)(ws@8.21.0)(zod@4.5.4)
       '@earendil-works/pi-schema':
         specifier: 1.5.0
         version: 1.5.0
@@ -15487,6 +15490,10 @@ packages:
 
   '@earendil-works/pi-durable@1.5.0':
     resolution: {integrity: sha512-xeBP2vIo5NvsCMQ4Y/V+Z164xQEi9JWiBWHdjn4Z15EnFqV3c0FxJAX26FqyyyintrYyk+Enre94GNcvRlBA5g==}
+    engines: {node: '>=22.19.0'}
+
+  '@earendil-works/pi-env@1.5.0':
+    resolution: {integrity: sha512-i8OcpTYbby55drYJYnFInN6OEiswUPCASSjsaT0KaLOeaRUJd3hYqyfmjPMuYdl8d1O7czD1mR/cC/c4nPv4Vg==}
     engines: {node: '>=22.19.0'}
 
   '@earendil-works/pi-schema@1.5.0':
@@ -32323,6 +32330,24 @@ snapshots:
       '@earendil-works/pi-telemetry': 1.5.0
       '@silvia-odwyer/photon': 0.3.3
       diff: 8.0.4
+    transitivePeerDependencies:
+      - '@aws-sdk/credential-provider-node'
+      - '@modelcontextprotocol/sdk'
+      - '@smithy/hash-node'
+      - '@smithy/signature-v4'
+      - bufferutil
+      - esbuild
+      - kerberos
+      - supports-color
+      - undici
+      - utf-8-validate
+      - ws
+      - zod
+
+  '@earendil-works/pi-env@1.5.0(@aws-sdk/credential-provider-node@3.972.83)(@modelcontextprotocol/sdk@1.32.1(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.5.4))(@smithy/hash-node@4.5.0)(@smithy/signature-v4@5.7.4)(esbuild@0.28.2)(supports-color@10.2.2)(undici@8.12.3)(ws@8.21.0)(zod@4.5.4)':
+    dependencies:
+      '@earendil-works/chord': 1.5.0(esbuild@0.28.2)(ws@8.21.0)
+      '@earendil-works/pi-durable': 1.5.0(@aws-sdk/credential-provider-node@3.972.83)(@modelcontextprotocol/sdk@1.32.1(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.5.4))(@smithy/hash-node@4.5.0)(@smithy/signature-v4@5.7.4)(esbuild@0.28.2)(supports-color@10.2.2)(undici@8.12.3)(ws@8.21.0)(zod@4.5.4)
     transitivePeerDependencies:
       - '@aws-sdk/credential-provider-node'
       - '@modelcontextprotocol/sdk'

@@ -1,6 +1,7 @@
 import type { Context as ChordContext } from "@earendil-works/chord/context";
 import type { EnvTarget } from "@earendil-works/pi-durable";
 import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
+import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -112,7 +113,9 @@ export const makeEnv = (raw: ExecutionEnv): Env["Service"] => ({
 export class EnvHost extends Context.Service<
   EnvHost,
   {
-    readonly make: (target: EnvTarget) => Effect.Effect<ExecutionEnv | undefined, EnvError>;
+    readonly make: (
+      target: EnvTarget,
+    ) => Effect.Effect<ExecutionEnv | undefined, EnvError, RuntimeContext>;
   }
 >()("Pi.EnvHost") {}
 

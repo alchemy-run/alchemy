@@ -1,4 +1,5 @@
-import { LanguageModel } from "effect/ai";
+import type { RuntimeContext } from "alchemy/RuntimeContext";
+import type { LanguageModel } from "effect/ai";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -16,15 +17,29 @@ const ModelTypeId = "~alchemy/Pi/Model" as const;
 export interface ModelClass<Self, Name extends string> extends Context.ServiceClass<
   Self,
   `Pi.Model/${Name}`,
-  LanguageModel.LanguageModel
+  ModelService
 > {
   readonly [ModelTypeId]: true;
   readonly modelName: Name;
   readonly options: ModelOptions;
-  /** Back this model with an Effect AI `LanguageModel` Layer. */
+  /**
+   * Back this model with an Effect AI `LanguageModel` Layer. It is built
+   * when an instance first opens its harness, so it may need the runtime
+   * context (a Worker's AI binding); everything else it needs is taken
+   * from where this Layer is provided.
+   */
   layer<E, R>(
     languageModel: Layer.Layer<LanguageModel.LanguageModel, E, R>,
-  ): Layer.Layer<Self, E, R>;
+  ): Layer.Layer<Self, never, Exclude<R, RuntimeContext>>;
+}
+
+/**
+ * What a model tag holds: its `LanguageModel` Layer, with the services it
+ * needed where it was provided already applied. The harness builds it when
+ * an instance opens, where the runtime context exists.
+ */
+export interface ModelService {
+  readonly languageModel: Layer.Layer<LanguageModel.LanguageModel, unknown, RuntimeContext>;
 }
 
 export type AnyModel = ModelClass<any, string>;
@@ -47,14 +62,20 @@ export const isModel = (u: unknown): u is AnyModel =>
 export const Model =
   <Self>() =>
   <const Name extends string>(name: Name, options: ModelOptions = {}): ModelClass<Self, Name> => {
-    const Tag = Context.Service<Self, LanguageModel.LanguageModel>()(`Pi.Model/${name}`);
+    const Tag = Context.Service<Self, ModelService>()(`Pi.Model/${name}`);
     return class extends Tag {
       static readonly [ModelTypeId] = true;
       static readonly modelName = name;
       static readonly options = options;
       static layer<E, R>(languageModel: Layer.Layer<LanguageModel.LanguageModel, E, R>) {
-        return Layer.effect(this as never, Effect.service(LanguageModel.LanguageModel)).pipe(
-          Layer.provide(languageModel),
+        return Layer.effect(
+          this as never,
+          Effect.map(Effect.context<never>(), (context) => ({
+            languageModel: Layer.provide(
+              languageModel,
+              Layer.succeedContext(context),
+            ) as Layer.Layer<LanguageModel.LanguageModel, unknown, RuntimeContext>,
+          })),
         );
       }
     } as unknown as ModelClass<Self, Name>;
