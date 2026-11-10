@@ -4,6 +4,7 @@ import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
+import { Guard, Greeting } from "./extensions.ts";
 import { Gateway, Notes } from "./infra.ts";
 import { Fast } from "./models.ts";
 import { Add, AddLive } from "./tools.ts";
@@ -45,7 +46,11 @@ export default class PiSession extends Cloudflare.DurableObject<PiSession>()(
       }),
     );
 
-    const harness = yield* Pi.Harness({ models: [Fast], tools: [Add, SaveNote] });
+    const harness = yield* Pi.Harness({
+      models: [Fast],
+      tools: [Add, SaveNote],
+      extensions: [Guard, Greeting],
+    });
 
     return Effect.gen(function* () {
       const state = yield* Cloudflare.DurableObjectState;
@@ -97,6 +102,27 @@ export default class PiSession extends Cloudflare.DurableObject<PiSession>()(
         enable: Effect.fn(function* (name: string, tool: "add" | "save_note") {
           const conversation = yield* harness.conversationByName(name);
           yield* conversation.configure({ tools: { add: [tool === "add" ? Add : SaveNote] } });
+        }),
+        addSkill: Effect.fn(function* (name: string) {
+          const conversation = yield* harness.conversationByName(name);
+          yield* conversation.configure({ extensions: { add: [Greeting] } });
+        }),
+        toolResults: Effect.fn(function* (name: string) {
+          const conversation = yield* harness.conversationByName(name);
+          const { messages } = yield* conversation.context;
+          return messages.flatMap((message) =>
+            message.role === "toolResult"
+              ? [
+                  {
+                    tool: message.toolName,
+                    isError: message.isError,
+                    text: message.content
+                      .map((part) => (part.type === "text" ? part.text : ""))
+                      .join(""),
+                  },
+                ]
+              : [],
+          );
         }),
         tools: Effect.fn(function* (name: string) {
           const conversation = yield* harness.conversationByName(name);

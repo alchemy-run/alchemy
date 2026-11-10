@@ -18,6 +18,15 @@ export {
   type SubmissionDraft,
 } from "./Harness.ts";
 export { SandboxEnv, type SandboxEnvOptions, type SandboxLike } from "./SandboxEnv.ts";
+export {
+  block,
+  Extension,
+  type AnyExtension,
+  type ExtensionClass,
+  type ExtensionImpl,
+  type ExtensionSpec,
+} from "./Extension.ts";
+export { Skill, type AnySkill, type SkillSpec } from "./Skill.ts";
 export { Model, type AnyModel, type ModelClass, type ModelOptions } from "./Model.ts";
 export { MemoryStorage, SqliteFile, Storage, type InstanceStorage } from "./Storage.ts";
 export {

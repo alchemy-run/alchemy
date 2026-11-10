@@ -3,6 +3,13 @@ import { createModels } from "@earendil-works/pi-ai/models";
 import {
   createRegistry,
   defineDoc,
+  GenerationTask,
+  hook,
+  section,
+  ToolTask,
+  type Extension as PiExtension,
+  type HookRegistration,
+  type PromptSection,
   Harness as PiHarness,
   type Agent,
   type AgentChange,
@@ -37,9 +44,11 @@ import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { EnvHost } from "./Env.ts";
 import { ConversationNotFound, NotOnHarness, PiError } from "./Errors.ts";
+import type { AnyExtension, ExtensionImpl, ExtensionRequirements } from "./Extension.ts";
 import { fromPi, messageOf } from "./internal/promise.ts";
 import { makeProvider } from "./internal/provider.ts";
 import type { AnyModel, ModelService } from "./Model.ts";
+import { isSkill, type AnySkill } from "./Skill.ts";
 import { Storage } from "./Storage.ts";
 import {
   flattenTools,
@@ -63,6 +72,7 @@ const ConversationNames = defineDoc<{ names: Record<string, number> }>({
 export interface HarnessOptions<
   Models extends ReadonlyArray<AnyModel>,
   Tools extends ReadonlyArray<AnyTool>,
+  Extensions extends ReadonlyArray<AnyExtension> = readonly [],
 > {
   /**
    * Distinguishes several harnesses in one Durable Object: each keeps its
@@ -74,6 +84,11 @@ export interface HarnessOptions<
   readonly models: Models;
   /** Every tool a conversation may be given. */
   readonly tools?: Tools;
+  /**
+   * Every extension and skill a conversation may select. Extensions are
+   * selected by default; skills only where a conversation adds them.
+   */
+  readonly extensions?: Extensions;
   /** Pi's run policy: retries, compaction, tool execution, queue modes. */
   readonly settings?: Omit<HarnessSettings, "extensions">;
 }
@@ -89,6 +104,15 @@ export interface AgentOptions {
   readonly tools?:
     | ReadonlyArray<ToolRef>
     | { readonly add?: ReadonlyArray<ToolRef>; readonly remove?: ReadonlyArray<ToolRef> }
+    | null;
+  /**
+   * The extensions and skills the conversation selects: exactly these, or
+   * `add`/`remove` relative to the harness default. Adding one enables the
+   * tools it brings.
+   */
+  readonly extensions?:
+    | ReadonlyArray<AnyExtension>
+    | { readonly add?: ReadonlyArray<AnyExtension>; readonly remove?: ReadonlyArray<AnyExtension> }
     | null;
   /** Rendered after every other system prompt section. */
   readonly instructions?: string | null;
@@ -198,6 +222,49 @@ type ModelServices<Models extends ReadonlyArray<AnyModel>> = Models[number] exte
     : never
   : never;
 
+/** The extension the harness's own tools are installed in; always selected. */
+const BASE_EXTENSION = "alchemy";
+
+/**
+ * `load_skill`: gives the model a selected skill's instructions and writes
+ * its files into the conversation's environment.
+ */
+const loadSkill = (skills: ReadonlyMap<string, AnySkill>): ToolRegistration =>
+  ({
+    name: "load_skill",
+    description:
+      "Load a skill listed in <skill> sections: returns its instructions and writes its files under .skills/<name>/.",
+    parameters: {
+      type: "object",
+      properties: { name: { type: "string", description: "The skill's name." } },
+      required: ["name"],
+    },
+    replay: "safe",
+    execute: async (args: { name: string }, api, context) => {
+      const skill = skills.get(args.name);
+      const agent = await api.agent(context);
+      if (
+        skill === undefined ||
+        !agent.extensions.some((extension) => extension.name === skill.extensionName)
+      ) {
+        return {
+          isError: true,
+          output: [{ type: "text", text: `No skill "${args.name}" is available here.` }],
+        };
+      }
+      const written: string[] = [];
+      for (const [file, content] of Object.entries(skill.skill.files ?? {})) {
+        if (api.env === undefined) break;
+        const path = `.skills/${skill.skillName}/${file}`;
+        const result = await api.env.writeFile(path, content, context);
+        if (result.ok) written.push(path);
+      }
+      const files =
+        written.length > 0 ? `\n\nFiles:\n${written.map((path) => `- ${path}`).join("\n")}` : "";
+      return { output: [{ type: "text", text: `${skill.skill.instructions}${files}` }] };
+    },
+  }) as ToolRegistration;
+
 /** How long one alarm keeps working before it hands off to the next. */
 const ALARM_SLICE = "10 minutes";
 /** How soon a pending wake is due while work is active. */
@@ -232,12 +299,17 @@ const HEARTBEAT = "30 seconds";
 export const Harness = <
   const Models extends ReadonlyArray<AnyModel>,
   const Tools extends ReadonlyArray<AnyTool> = readonly [],
+  const Extensions extends ReadonlyArray<AnyExtension> = readonly [],
 >(
-  options: HarnessOptions<Models, Tools>,
+  options: HarnessOptions<Models, Tools, Extensions>,
 ): Effect.Effect<
   Harness,
   never,
-  Storage | EnvHost | ModelServices<Models> | ToolRequirements<Tools[number]>
+  | Storage
+  | EnvHost
+  | ModelServices<Models>
+  | ToolRequirements<Tools[number]>
+  | ExtensionRequirements<Extensions[number]>
 > =>
   Effect.gen(function* () {
     const prefix = `${options.name ?? "pi"}_`;
@@ -252,18 +324,42 @@ export const Harness = <
         languageModel,
       })),
     );
-    const tools = yield* Effect.forEach(flattenTools(options.tools ?? []), (tool) => {
-      switch (tool["~alchemy/Pi/Tool" as keyof typeof tool] as string) {
-        case "builtin":
-          return Effect.succeed({ tool, handler: undefined });
-        case "inline":
-          return Effect.succeed({ tool, handler: (tool as { handler: any }).handler });
-        default: {
-          const cls = tool as unknown as { impl?: Effect.Effect<any> } & Context.Key<unknown, any>;
-          return Effect.map(cls.impl ?? Effect.service(cls), (handler) => ({ tool, handler }));
+    const resolveTools = (list: ReadonlyArray<AnyTool>) =>
+      Effect.forEach(flattenTools(list), (tool) => {
+        switch (tool["~alchemy/Pi/Tool" as keyof typeof tool] as string) {
+          case "builtin":
+            return Effect.succeed({ tool, handler: undefined as any });
+          case "inline":
+            return Effect.succeed({ tool, handler: (tool as { handler: any }).handler });
+          default: {
+            const cls = tool as unknown as { impl?: Effect.Effect<any> } & Context.Key<
+              unknown,
+              any
+            >;
+            return Effect.map(cls.impl ?? Effect.service(cls), (handler) => ({ tool, handler }));
+          }
         }
-      }
-    });
+      });
+    const tools = yield* resolveTools(options.tools ?? []);
+    const extensions = yield* Effect.forEach(options.extensions ?? [], (extension) =>
+      Effect.gen(function* () {
+        const impl: ExtensionImpl | undefined = extension.impl
+          ? yield* extension.impl
+          : isSkill(extension)
+            ? undefined
+            : Option.getOrUndefined(
+                yield* Effect.serviceOption(
+                  extension as unknown as Context.Key<unknown, ExtensionImpl>,
+                ),
+              );
+        return { extension, impl, tools: yield* resolveTools(extension.spec.tools ?? []) };
+      }),
+    );
+    const skills = new Map(
+      extensions.flatMap(({ extension }) =>
+        isSkill(extension) ? [[extension.skillName, extension as AnySkill] as const] : [],
+      ),
+    );
     const captured = yield* Effect.context<never>();
 
     let opened: Promise<PiHarness> | undefined;
@@ -284,7 +380,12 @@ export const Harness = <
         return Effect.sync(() => void settled.delete(done));
       });
 
-    const toolByName = new Map(tools.map(({ tool }) => [tool.toolName, tool]));
+    const toolByName = new Map(
+      [...tools, ...extensions.flatMap((extension) => extension.tools)].map(({ tool }) => [
+        tool.toolName,
+        tool,
+      ]),
+    );
     const modelName = (model: AnyModel) => model.modelName;
 
     const open = Effect.gen(function* () {
@@ -332,13 +433,68 @@ export const Harness = <
           }
           return piModels;
         }).pipe(Effect.provideContext(base));
-        const registrations: ToolRegistration[] = tools.map(({ tool, handler }) =>
+        const compile = ({ tool, handler }: { tool: ToolRef; handler: any }): ToolRegistration =>
           handler === undefined
             ? (tool as { registration: ToolRegistration }).registration
-            : toRegistration(tool.toolName, (tool as { spec: any }).spec, handler, runTool),
-        );
+            : toRegistration(tool.toolName, (tool as { spec: any }).spec, handler, runTool);
+        const runHook = <A>(effect: Effect.Effect<A, never, any>) =>
+          Effect.runPromise(Effect.provideContext(effect, base as Context.Context<any>));
+
+        const baseExtension: PiExtension = {
+          name: BASE_EXTENSION,
+          tools: [...tools.map(compile), ...(skills.size > 0 ? [loadSkill(skills)] : [])],
+        };
+        const piExtensions: PiExtension[] = extensions.map(({ extension, impl, tools }) => {
+          const sections: PromptSection[] = [
+            ...Object.entries(extension.spec.sections ?? {}).map(([key, text]) =>
+              section(key, () => text),
+            ),
+            ...Object.entries(impl?.sections ?? {}).map(([key, render]) =>
+              section(key, (input) => runHook(render({ conversationId: input.conversationId }))),
+            ),
+          ];
+          const hooks: HookRegistration[] = [];
+          const toolHooks = impl?.hooks;
+          if (toolHooks?.beforeTool || toolHooks?.afterTool) {
+            hooks.push(
+              hook(ToolTask, {
+                ...(toolHooks.beforeTool
+                  ? { beforeTool: (call) => runHook(toolHooks.beforeTool!(call)) }
+                  : {}),
+                ...(toolHooks.afterTool
+                  ? { afterTool: (call, result) => runHook(toolHooks.afterTool!(call, result)) }
+                  : {}),
+              }),
+            );
+          }
+          if (toolHooks?.beforeRequest || toolHooks?.afterResponse || toolHooks?.onYield) {
+            hooks.push(
+              hook(GenerationTask, {
+                ...(toolHooks.beforeRequest
+                  ? {
+                      beforeRequest: (request) =>
+                        runHook(toolHooks.beforeRequest!(request)) as never,
+                    }
+                  : {}),
+                ...(toolHooks.afterResponse
+                  ? { afterResponse: (message) => runHook(toolHooks.afterResponse!(message)) }
+                  : {}),
+                ...(toolHooks.onYield
+                  ? { onYield: (answer) => runHook(toolHooks.onYield!(answer)) }
+                  : {}),
+              }),
+            );
+          }
+          return { name: extension.extensionName, tools: tools.map(compile), sections, hooks };
+        });
         const registry = createRegistry();
-        registry.install({ name: "alchemy", tools: registrations });
+        registry.install(baseExtension);
+        for (const extension of piExtensions) registry.install(extension);
+        // Selected by default: the base and every extension; skills only where added.
+        const defaultExtensions = [
+          baseExtension,
+          ...piExtensions.filter((_, index) => !isSkill(extensions[index]!.extension)),
+        ];
 
         opened = Effect.runPromise(
           Effect.all([buildModels, storage.open(prefix)]).pipe(
@@ -351,7 +507,7 @@ export const Harness = <
                     registry,
                     settings: {
                       ...options.settings,
-                      extensions: undefined,
+                      extensions: defaultExtensions,
                     },
                     env: (target) =>
                       Effect.runPromise(
@@ -449,6 +605,23 @@ export const Harness = <
             registration,
           );
         }
+        const named = (extension: AnyExtension) =>
+          ({ name: extension.extensionName }) as PiExtension;
+        let selected: AgentChange["extensions"];
+        if (agent.extensions === null) selected = null;
+        else if (agent.extensions === undefined) selected = undefined;
+        else if (Array.isArray(agent.extensions))
+          selected = [{ name: BASE_EXTENSION } as PiExtension, ...agent.extensions.map(named)];
+        else {
+          const edit = agent.extensions as {
+            add?: ReadonlyArray<AnyExtension>;
+            remove?: ReadonlyArray<AnyExtension>;
+          };
+          selected = {
+            ...(edit.add ? { add: edit.add.map(named) } : {}),
+            ...(edit.remove ? { remove: edit.remove.map(named) } : {}),
+          };
+        }
         if (agent.model != null && !models.some(({ model }) => model === agent.model)) {
           return yield* new NotOnHarness({ kind: "model", name: agent.model.modelName });
         }
@@ -463,6 +636,7 @@ export const Harness = <
             : {}),
           ...(agent.thinkingLevel !== undefined ? { thinkingLevel: agent.thinkingLevel } : {}),
           ...(tools !== undefined ? { tools } : {}),
+          ...(selected !== undefined ? { extensions: selected } : {}),
           ...(agent.instructions !== undefined ? { instructions: agent.instructions } : {}),
           ...(agent.cwd !== undefined ? { cwd: agent.cwd } : {}),
           ...(agent.maxTurns !== undefined ? { maxTurns: agent.maxTurns } : {}),
@@ -512,9 +686,21 @@ export const Harness = <
         id,
         raw: Effect.map(raw, ({ conversation }) => conversation),
         agent: on((conversation) => fromPi((context) => conversation.agent(context))),
-        configure: (agent) =>
+        configure: (requested) =>
           on((conversation) =>
             Effect.gen(function* () {
+              // Adding an extension enables the tools it brings.
+              const added =
+                requested.extensions && !Array.isArray(requested.extensions)
+                  ? ((requested.extensions as { add?: ReadonlyArray<AnyExtension> }).add ?? [])
+                  : [];
+              const broughtTools = added.flatMap((extension) =>
+                flattenTools(extension.spec.tools ?? []),
+              );
+              const agent: AgentOptions =
+                broughtTools.length > 0 && requested.tools === undefined
+                  ? { ...requested, tools: { add: broughtTools } }
+                  : requested;
               const current =
                 agent.tools && !Array.isArray(agent.tools)
                   ? yield* enabledTools(conversation)

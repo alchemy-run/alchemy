@@ -166,3 +166,56 @@ test(
   }),
   { tags: [...tags, "provider:e2b"], timeout: 300_000 },
 );
+
+test(
+  "an extension's hook blocks a tool call and its section reaches the model",
+  Effect.gen(function* () {
+    const user = `user-${Date.now()}`;
+    const { id } = yield* call(`/${user}/guarded/create`, { tools: ["save_note"] });
+    yield* call(`/${user}/guarded/prompt`, {
+      text: 'Save the note "hunter2" under the key "secret".',
+      requestId: "guard-1",
+    });
+    const results = (yield* call(`/${user}/guarded/results`)) as ReadonlyArray<{
+      tool: string;
+      isError: boolean;
+      text: string;
+    }>;
+    const blocked = results.find((result) => result.tool === "save_note");
+    expect(blocked?.isError).toBe(true);
+    expect(blocked?.text).toContain("not allowed");
+    expect((yield* call(`/notes/secret/note`)).text).toBeNull();
+
+    yield* call(`/${user}/guarded/prompt`, {
+      text: "What is the magic word for this conversation? Reply with only the word.",
+      requestId: "guard-2",
+    });
+    const messages = (yield* call(`/${user}/guarded/transcript`)) as ReadonlyArray<Message>;
+    expect(textOf(messages.filter((message) => message.role === "assistant").at(-1)!)).toContain(
+      `XYZZY-${id}`,
+    );
+  }),
+  { tags, timeout: 180_000 },
+);
+
+test(
+  "a skill added at runtime is loaded on demand",
+  Effect.gen(function* () {
+    const user = `user-${Date.now()}`;
+    yield* call(`/${user}/skilled/create`, { tools: [] });
+    yield* call(`/${user}/skilled/skill`, {});
+    yield* call(`/${user}/skilled/prompt`, {
+      text: "Please greet me. Load the greeting skill first.",
+      requestId: "skill-1",
+    });
+    const results = (yield* call(`/${user}/skilled/results`)) as ReadonlyArray<{
+      tool: string;
+      isError: boolean;
+      text: string;
+    }>;
+    const loaded = results.find((result) => result.tool === "load_skill");
+    expect(loaded?.isError).toBe(false);
+    expect(loaded?.text).toContain("HELLO-FROM-SKILL");
+  }),
+  { tags, timeout: 180_000 },
+);
