@@ -1,9 +1,8 @@
 import * as Effect from "effect/Effect";
 import * as FrameworkCore from "../core/index.ts";
+import { makeSourceModule, type SourceProvider } from "../core/WorkerSource.ts";
 import {
   makeWakuSourceProvider,
-  SourceProviderError,
-  type SourceProvider,
   type WakuBuildChildConfig,
   type WakuSourceOptions,
 } from "../waku/source.ts";
@@ -44,7 +43,6 @@ export const makeVocsSourceProvider = (options: VocsSourceOptions): SourceProvid
       provider: PROVIDER,
       framework: "vocs",
       displayName: "Vocs",
-      buildModule: import.meta.url,
       layer: ({ root, target }) =>
         vocsFrameworkLayer({
           root,
@@ -53,18 +51,4 @@ export const makeVocsSourceProvider = (options: VocsSourceOptions): SourceProvid
     },
   );
 
-const sourceModule = {
-  make: (options: unknown): Effect.Effect<SourceProvider, SourceProviderError> => {
-    if (options !== undefined && (typeof options !== "object" || options === null)) {
-      return Effect.fail(
-        new SourceProviderError({
-          provider: PROVIDER,
-          message: `Invalid options for ${PROVIDER}: expected an object, got ${typeof options}`,
-        }),
-      );
-    }
-    return Effect.succeed(makeVocsSourceProvider((options ?? {}) as VocsSourceOptions));
-  },
-};
-
-export default sourceModule;
+export default makeSourceModule(PROVIDER, makeVocsSourceProvider);
