@@ -332,8 +332,7 @@ export default SFNTestFunction.make(
         }
 
         if (request.method === "POST" && pathname === "/start-activity") {
-          const body = (yield* request.json) as unknown as { input?: string };
-          const result = yield* startActivityExecution({ input: body.input });
+          const result = yield* startActivityExecution();
           return yield* HttpServerResponse.json({
             executionArn: result.executionArn,
           });
@@ -344,7 +343,8 @@ export default SFNTestFunction.make(
             workerName: "sfn-bindings-test",
           });
           return yield* HttpServerResponse.json({
-            taskToken: task.taskToken ?? null,
+            // The SDK returns the token as Redacted; JSON would print a placeholder.
+            taskToken: plain(task.taskToken) ?? null,
             input: plain(task.input) ?? null,
           });
         }
