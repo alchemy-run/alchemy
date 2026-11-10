@@ -13,16 +13,9 @@ import {
 } from "@distilled.cloud/digitalocean";
 import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import * as Effect from "effect/Effect";
-import { forgetAttributes, isGone, logLevel, skipLive } from "./support.ts";
+import { forgetAttributes, isGone, logLevel, testName } from "./support.ts";
 
 const { test } = Test.make({ providers: DigitalOcean.providers() });
-
-const FIREWALL_NAME = "alchemy-test-firewall";
-const RENAMED_FIREWALL_NAME = "alchemy-test-firewall-renamed";
-const TAGGED_FIREWALL_NAME = "alchemy-test-firewall-tagged";
-const FOREIGN_FIREWALL_NAME = "alchemy-test-firewall-foreign";
-const NO_OUTBOUND_FIREWALL_NAME = "alchemy-test-firewall-no-outbound";
-const DROPLET_TAG = "alchemy-test-firewall-droplets";
 
 const EVERYWHERE = ["0.0.0.0/0", "::/0"];
 
@@ -174,11 +167,13 @@ const readFirewall = (firewallId: string) =>
 
 const isFirewallGone = (firewallId: string) => isGone(readFirewall(firewallId));
 
-test.provider.skipIf(skipLive)(
+test.provider(
   "firewall lifecycle: create, rename and widen rules in place, destroy",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+      const FIREWALL_NAME = testName(stack.stage, "firewall");
+      const RENAMED_FIREWALL_NAME = testName(stack.stage, "firewall-renamed");
 
       const created = yield* stack.deploy(
         Firewall("TestFirewall", { name: FIREWALL_NAME, inboundRules: SSH_ONLY }),
@@ -210,11 +205,13 @@ test.provider.skipIf(skipLive)(
   { tags: LIVE_TAGS, timeout: LIVE_TIMEOUT },
 );
 
-test.provider.skipIf(skipLive)(
+test.provider(
   "a firewall's droplet tags update in place",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+      const TAGGED_FIREWALL_NAME = testName(stack.stage, "firewall-tagged");
+      const DROPLET_TAG = testName(stack.stage, "firewall-droplets");
       yield* ignoreNotFound(deleteTag({ tag_id: DROPLET_TAG }));
 
       yield* Effect.acquireUseRelease(
@@ -248,11 +245,12 @@ test.provider.skipIf(skipLive)(
   { tags: LIVE_TAGS, timeout: LIVE_TIMEOUT },
 );
 
-test.provider.skipIf(skipLive)(
+test.provider(
   "outboundRules: [] drops all outbound traffic",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+      const NO_OUTBOUND_FIREWALL_NAME = testName(stack.stage, "firewall-no-outbound");
 
       const created = yield* stack.deploy(
         Firewall("NoOutbound", {
@@ -271,11 +269,12 @@ test.provider.skipIf(skipLive)(
   { tags: LIVE_TAGS, timeout: LIVE_TIMEOUT },
 );
 
-test.provider.skipIf(skipLive)(
+test.provider(
   "a firewall created outside alchemy with the chosen name needs adopt(true)",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+      const FOREIGN_FIREWALL_NAME = testName(stack.stage, "firewall-foreign");
 
       yield* Effect.acquireUseRelease(
         createFirewall({
@@ -307,7 +306,7 @@ test.provider.skipIf(skipLive)(
   { tags: LIVE_TAGS, timeout: LIVE_TIMEOUT },
 );
 
-test.provider.skipIf(skipLive)(
+test.provider(
   "destroy recovers a generated-name firewall without recorded attributes",
   (stack) =>
     Effect.gen(function* () {

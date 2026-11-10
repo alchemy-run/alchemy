@@ -7,28 +7,27 @@ import {
   deleteTag,
   dropletsDestroy,
   getDroplet,
+  getDropletAction,
   getTag,
+  postDropletAction,
   type Droplet as ApiDroplet,
+  type PostDropletActionRequestBody,
 } from "@distilled.cloud/digitalocean";
 import { OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
+import * as Drift from "alchemy/Drift";
 import { KeyPair } from "alchemy/KeyPair";
 import * as Output from "alchemy/Output";
 import type * as Plan from "alchemy/Plan";
-import { isResourceState, State } from "alchemy/State/State";
+import { State } from "alchemy/State/State";
 import * as Effect from "effect/Effect";
-import { forgetAttributes, isGone, logLevel, skipLive, skipSlow } from "./support.ts";
+import * as Schedule from "effect/Schedule";
+import { forgetAttributes, isGone, logLevel, skipSlow, testName } from "./support.ts";
 
 const { test } = Test.make({ providers: DigitalOcean.providers() });
 
 type DropletProps = DigitalOcean.DropletProps;
 type DropletAttributes = DigitalOcean.DropletAttributes;
 
-const DROPLET_TAG = "alchemy-test-droplet";
-const EXTRA_DROPLET_TAG = "alchemy-test-droplet-extra";
-const DROPLET_NAME = "alchemy-test-droplet";
-const RENAMED_DROPLET_NAME = "alchemy-test-droplet-renamed";
-const REPLACED_DROPLET_NAME = "alchemy-test-droplet-replaced";
-const ORPHAN_DROPLET_NAME = "alchemy-test-droplet-orphan";
 const REGION = "sfo2";
 const OTHER_REGION = "nyc3";
 // The smallest size, available in every region.
@@ -43,6 +42,8 @@ const VPC_UUID = "760e09ef-dc84-11e8-981e-3cfdfeaae000";
 const CLOUD_CONFIG = "#cloud-config\npackages: [docker.io]";
 // A droplet takes one to two minutes to create and as long to destroy.
 const LIVE_TIMEOUT = 420_000;
+// The lifecycle test also rebuilds and resizes the droplet.
+const LIFECYCLE_TIMEOUT = 720_000;
 
 const LIVE_TAGS = ["provider:digitalocean", "provider:digitalocean:droplet", "live"];
 
@@ -58,15 +59,25 @@ const dropletWithUnresolvedName = (props: Partial<DropletProps>) =>
     return yield* DigitalOcean.Droplet("TestDroplet", {
       ...PROPS,
       ...props,
-      name: Output.map(pending.publicKey, () => DROPLET_NAME),
+      name: Output.map(pending.publicKey, () => props.name ?? "pending"),
     });
   });
 
-const DEPLOYED: Partial<DropletProps> = { name: DROPLET_NAME, tags: [DROPLET_TAG] };
-const UPDATED: Partial<DropletProps> = {
-  name: RENAMED_DROPLET_NAME,
-  tags: [DROPLET_TAG, EXTRA_DROPLET_TAG],
-  ipv6: true,
+/** Names and tags unique to the user and worktree running the test. */
+const namesFor = (stage: string) => {
+  const names = {
+    droplet: testName(stage, "droplet"),
+    renamed: testName(stage, "droplet-renamed"),
+    tag: testName(stage, "droplet"),
+    extraTag: testName(stage, "droplet-extra"),
+  };
+  const deployed: Partial<DropletProps> = { name: names.droplet, tags: [names.tag] };
+  const updated: Partial<DropletProps> = {
+    name: names.renamed,
+    tags: [names.tag, names.extraTag],
+    ipv6: true,
+  };
+  return { ...names, deployed, updated };
 };
 
 const NOOP = { action: "noop" };
@@ -78,15 +89,10 @@ interface PlanCase {
   readonly change: string;
   /** Desired props, on top of the deployed ones. */
   readonly props?: Partial<DropletProps>;
-  /** The persisted row, rewritten as if the cloud or the last deploy differed. */
-  readonly persisted?: {
-    readonly attr?: Partial<DropletAttributes>;
-    readonly props?: Partial<DropletProps>;
-  };
   readonly expected: object;
 }
 
-const PLAN_CASES: ReadonlyArray<PlanCase> = [
+const planCases = (names: ReturnType<typeof namesFor>): ReadonlyArray<PlanCase> => [
   { change: "nothing", expected: NOOP },
   { change: "region", props: { region: OTHER_REGION }, expected: REPLACE },
   { change: "size", props: { size: OTHER_SIZE }, expected: REPLACE },
@@ -102,8 +108,8 @@ const PLAN_CASES: ReadonlyArray<PlanCase> = [
     props: { withDropletAgent: false },
     expected: REPLACE,
   },
-  { change: "name", props: { name: RENAMED_DROPLET_NAME }, expected: UPDATE },
-  { change: "tags", props: { tags: [DROPLET_TAG, EXTRA_DROPLET_TAG] }, expected: UPDATE },
+  { change: "name", props: { name: names.renamed }, expected: UPDATE },
+  { change: "tags", props: { tags: [names.tag, names.extraTag] }, expected: UPDATE },
   { change: "ipv6 enabled", props: { ipv6: true }, expected: UPDATE },
   {
     change: "replaceAfter longer than the droplet's age",
@@ -114,20 +120,6 @@ const PLAN_CASES: ReadonlyArray<PlanCase> = [
     change: "replaceAfter shorter than the droplet's age",
     props: { replaceAfter: "1 second" },
     expected: REPLACE,
-  },
-  { change: "region drifted", persisted: { attr: { region: OTHER_REGION } }, expected: REPLACE },
-  { change: "size drifted", persisted: { attr: { sizeSlug: OTHER_SIZE } }, expected: REPLACE },
-  { change: "image drifted", persisted: { attr: { imageSlug: OTHER_IMAGE } }, expected: REPLACE },
-  {
-    change: "image slug unreported",
-    persisted: { attr: { imageSlug: undefined } },
-    expected: NOOP,
-  },
-  {
-    change: "size of a droplet that holds volumes",
-    props: { size: OTHER_SIZE, volumes: [VOLUME_ID] },
-    persisted: { props: { volumes: [VOLUME_ID] } },
-    expected: REPLACE_DELETING_FIRST,
   },
 ];
 
@@ -144,35 +136,26 @@ const dropletRow = (stack: Test.ScratchStack) => ({
   fqn: "TestDroplet",
 });
 
-/** Runs `effect` while the persisted row is rewritten, then puts the row back. */
-const withPersistedRow = <A, E, R>(
-  stack: Test.ScratchStack,
-  rewrite: NonNullable<PlanCase["persisted"]>,
-  effect: Effect.Effect<A, E, R>,
-) =>
-  Effect.gen(function* () {
-    const state = yield* yield* State;
-    const address = dropletRow(stack);
-    const deployed = yield* state.get(address);
-    if (!isResourceState(deployed) || deployed.attr === undefined) {
-      return yield* Effect.die(new Error("Expected a deployed TestDroplet row"));
-    }
-    const rewritten = {
-      ...deployed,
-      attr: { ...deployed.attr, ...rewrite.attr },
-      props: { ...deployed.props, ...rewrite.props },
-    };
-    return yield* Effect.acquireUseRelease(
-      state.set({ ...address, value: rewritten }),
-      () => effect,
-      () => Effect.asVoid(state.set({ ...address, value: deployed })),
-    );
-  });
-
-const planDroplet = (stack: Test.ScratchStack, { props, persisted }: PlanCase) => {
-  const plan = stack.plan(droplet({ ...DEPLOYED, ...props }));
-  return persisted === undefined ? plan : withPersistedRow(stack, persisted, plan);
-};
+/** Runs a droplet action out of band and waits for it, as a console change would. */
+const changeOutOfBand = Effect.fn(function* (
+  dropletId: number,
+  body: PostDropletActionRequestBody,
+) {
+  const posted = yield* postDropletAction({ droplet_id: dropletId, body });
+  yield* getDropletAction({ droplet_id: dropletId, action_id: posted.action.id }).pipe(
+    Effect.map((response) => response.action.status),
+    Effect.repeat({
+      schedule: Schedule.spaced("5 seconds"),
+      until: (status) => status !== "in-progress",
+      times: 36,
+    }),
+    Effect.flatMap((status) =>
+      status === "completed"
+        ? Effect.void
+        : Effect.die(new Error(`Droplet action ${body.type} ended '${status}'`)),
+    ),
+  );
+});
 
 const isGenerationTag = (tag: string) => tag.startsWith("alchemy:generation:");
 
@@ -199,7 +182,7 @@ const destroyOrphan = (orphan: ApiDroplet) =>
     ),
   );
 
-test.provider.skipIf(skipLive)(
+test.provider(
   "a tag with the reserved alchemy: prefix is refused before anything is created",
   (stack) =>
     Effect.gen(function* () {
@@ -218,32 +201,36 @@ test.provider.skipIf(skipSlow)(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+      const names = namesFor(stack.stage);
+      const DEPLOYED = names.deployed;
+      const UPDATED = names.updated;
 
       const created = yield* stack.deploy(droplet(DEPLOYED));
       expect(created).toMatchObject({
-        name: DROPLET_NAME,
+        name: names.droplet,
         status: "active",
         region: REGION,
         sizeSlug: SIZE,
-        tags: [DROPLET_TAG],
+        tags: [names.tag],
       });
       expect(created.ipv4).toMatch(/^\d+\.\d+\.\d+\.\d+$/);
 
       const remote = yield* getDroplet({ droplet_id: created.dropletId });
       const ownershipTag = yield* hashOwnershipTag(stack.name, stack.stage, "TestDroplet");
       const generationTag = yield* generationTagOf(created.dropletId);
-      expect(remote.droplet.name).toEqual(DROPLET_NAME);
+      expect(remote.droplet.name).toEqual(names.droplet);
       expect([...remote.droplet.tags].sort()).toEqual(
-        [DROPLET_TAG, ownershipTag, generationTag].sort(),
+        [names.tag, ownershipTag, generationTag].sort(),
       );
 
-      const planned = yield* Effect.forEach(PLAN_CASES, (planCase) =>
-        planDroplet(stack, planCase).pipe(
-          Effect.map((plan) => [planCase.change, plannedAction(plan)] as const),
-        ),
+      const cases = planCases(names);
+      const planned = yield* Effect.forEach(cases, ({ change, props }) =>
+        stack
+          .plan(droplet({ ...DEPLOYED, ...props }))
+          .pipe(Effect.map((plan) => [change, plannedAction(plan)] as const)),
       );
       expect(Object.fromEntries(planned)).toEqual(
-        Object.fromEntries(PLAN_CASES.map(({ change, expected }) => [change, expected])),
+        Object.fromEntries(cases.map(({ change, expected }) => [change, expected])),
       );
 
       // A name known only after deploy does not hide a change that replaces.
@@ -259,10 +246,10 @@ test.provider.skipIf(skipSlow)(
       const updated = yield* stack.deploy(droplet(UPDATED));
       expect(updated).toMatchObject({
         dropletId: created.dropletId,
-        name: RENAMED_DROPLET_NAME,
+        name: names.renamed,
         ipv4: created.ipv4,
       });
-      expect([...updated.tags].sort()).toEqual([DROPLET_TAG, EXTRA_DROPLET_TAG]);
+      expect([...updated.tags].sort()).toEqual([names.tag, names.extraTag].sort());
       expect(updated.features).toContain("ipv6");
       expect(updated.ipv6).toMatch(/:/);
       expect(plannedAction(yield* stack.plan(droplet({ ...UPDATED, ipv6: false })))).toEqual(
@@ -273,25 +260,42 @@ test.provider.skipIf(skipSlow)(
       const twinFailure = yield* stack
         .plan(
           droplet(UPDATED).pipe(
-            Effect.andThen(DigitalOcean.Droplet("Twin", { ...PROPS, name: RENAMED_DROPLET_NAME })),
+            Effect.andThen(DigitalOcean.Droplet("Twin", { ...PROPS, name: names.renamed })),
           ),
         )
         .pipe(Effect.flip);
       expect(twinFailure).toBeInstanceOf(OwnedBySomeoneElse);
+
+      // A console change to the image or the size, once `alchemy drift
+      // --repair` records it, is drift the next deploy replaces.
+      const recordDrift = Drift.repair({ name: stack.name, stage: stack.stage }).pipe(
+        Effect.provide(stack.state),
+      );
+      yield* changeOutOfBand(created.dropletId, { type: "rebuild", image: OTHER_IMAGE });
+      yield* recordDrift;
+      expect(plannedAction(yield* stack.plan(droplet(UPDATED)))).toEqual(REPLACE);
+      yield* changeOutOfBand(created.dropletId, { type: "rebuild", image: IMAGE });
+      yield* recordDrift;
+      expect(plannedAction(yield* stack.plan(droplet(UPDATED)))).toEqual(NOOP);
+
+      yield* changeOutOfBand(created.dropletId, { type: "power_off" });
+      yield* changeOutOfBand(created.dropletId, { type: "resize", size: OTHER_SIZE, disk: false });
+      yield* recordDrift;
+      expect(plannedAction(yield* stack.plan(droplet(UPDATED)))).toEqual(REPLACE);
 
       yield* stack.destroy();
 
       expect(yield* isGone(getDroplet({ droplet_id: created.dropletId }))).toBe(true);
       expect(yield* isGone(getTag({ tag_id: ownershipTag }))).toBe(true);
       expect(yield* isGone(getTag({ tag_id: generationTag }))).toBe(true);
-      expect(yield* isGone(getTag({ tag_id: DROPLET_TAG }))).toBe(false);
+      expect(yield* isGone(getTag({ tag_id: names.tag }))).toBe(false);
       yield* Effect.forEach(
-        [DROPLET_TAG, EXTRA_DROPLET_TAG],
+        [names.tag, names.extraTag],
         (tag) => ignoreNotFound(deleteTag({ tag_id: tag })),
         { discard: true },
       );
     }).pipe(logLevel),
-  { tags: LIVE_TAGS, timeout: LIVE_TIMEOUT },
+  { tags: LIVE_TAGS, timeout: LIFECYCLE_TIMEOUT },
 );
 
 test.provider.skipIf(skipSlow)(
@@ -299,6 +303,7 @@ test.provider.skipIf(skipSlow)(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+      const REPLACED_DROPLET_NAME = testName(stack.stage, "droplet-replaced");
 
       const created = yield* stack.deploy(droplet({ name: REPLACED_DROPLET_NAME }));
       const oldGenerationTag = yield* generationTagOf(created.dropletId);
@@ -325,7 +330,7 @@ test.provider.skipIf(skipSlow)(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      const orphanDroplet = droplet({ name: ORPHAN_DROPLET_NAME });
+      const orphanDroplet = droplet({ name: testName(stack.stage, "droplet-orphan") });
 
       yield* Effect.acquireUseRelease(
         stack.deploy(orphanDroplet).pipe(

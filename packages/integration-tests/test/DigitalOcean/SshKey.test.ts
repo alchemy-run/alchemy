@@ -9,31 +9,21 @@ import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import { KeyPair } from "alchemy/KeyPair";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import { forgetAttributes, isGone, logLevel, skipLive } from "./support.ts";
+import { forgetAttributes, isGone, logLevel, testName, testPublicKey } from "./support.ts";
 
 const { test } = Test.make({ providers: DigitalOcean.providers() });
 
-// Test-only keys. None of them is a secret. Constant values let a re-run
-// find the same keys.
+// Test-only keys for the parser cases. None of them is a secret. Live
+// tests derive their own keys from the stage (`testPublicKey`), because
+// DigitalOcean registers a key's material once per team.
 const PUBLIC_KEY =
   "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEM4cCPMnwhTuD9GA2uL3sgFjD6DqMnJW+iKNkPEPfHJ alchemy-test-fixture";
 const PUBLIC_KEY_FINGERPRINT = "51:a8:37:e1:49:1f:46:1e:f6:4a:ae:fb:50:ee:4d:ec";
 const RECOMMENTED_PUBLIC_KEY = PUBLIC_KEY.replace("alchemy-test-fixture", "laptop");
 const PUBLIC_KEY_2 =
   "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICWTCIoRFf5BedQK+A/oGtObZyAPlYSbZLMmeRiwZ2ev alchemy-test-fixture-2";
-const PUBLIC_KEY_3 =
-  "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILuAqbbgp5Yz/caY7cwcj0lbGODK+PAq47mq3nJC6VK2 alchemy-test-fixture-3";
-const PUBLIC_KEY_4 =
-  "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAV67tVaQb+YwtSBJhokmT/Z5Vs0B1RT+mqfJxLjOaav alchemy-test-fixture-4";
 const PRIVATE_KEY_PEM =
   "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIGsBJaqkj3S2BLLVdjz63qz9QMJVQTrIiKNJZgC9eL7A\n-----END PRIVATE KEY-----\n";
-
-const KEY_NAME = "alchemy-test-ssh-key";
-const RENAMED_KEY_NAME = "alchemy-test-ssh-key-renamed";
-const OTHER_KEY_NAME = "alchemy-test-ssh-key-other";
-const FOREIGN_KEY_NAME = "alchemy-test-ssh-key-foreign";
-const PAIR_KEY_NAME = "alchemy-test-ssh-key-pair";
-const ROTATED_KEY_NAME = "alchemy-test-ssh-key-rotated";
 
 const RSA_LINE =
   "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDBMjcyOR7Gx9x6biAirxMZf2E6XqNUqyKHyBu9pI4J2PIfLShd2GK+fgR1frvbGT3f2X6Cec8PjaFRnSZpZ+ARn+L0AD/NYt0XZO2kBL77gpOSx01uWfpJVhUYeiCwMnmIH3Aa5lezseN/fwP/fPfdSKUa7HrTo31IA8ZBpfitMKeeD/v7ysS+0f7hadHogf5l5imKByKyno/tFRWMCX+vipim6xAD1aqB8B9KwJxqJF/eSrbWnDYKKZhZad/GiALiY5/ErTNr78HutjpBuskCYkDDI5sM4rWhQ50UooTqRkHn4NB+bGibI9d2rLlyAZfNs+20ZDiTKrQAbUaXZDWj";
@@ -141,23 +131,26 @@ const keyFromPair = (pairId: string, keyId: string, name: string) =>
     return { key, pairPublicKey: pair.publicKey };
   });
 
-test.provider.skipIf(skipLive)(
+test.provider(
   "ssh key lifecycle: create, rename and re-comment in place, refuse a foreign duplicate, replace on new material, destroy",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+      const KEY_NAME = testName(stack.stage, "ssh-key");
+      const RENAMED_KEY_NAME = testName(stack.stage, "ssh-key-renamed");
+      const OTHER_KEY_NAME = testName(stack.stage, "ssh-key-other");
+      const publicKey = yield* testPublicKey(stack.stage, "lifecycle");
+      const rotatedPublicKey = yield* testPublicKey(stack.stage, "lifecycle-rotated");
 
-      const created = yield* stack.deploy(
-        SshKey("TestKey", { name: KEY_NAME, publicKey: PUBLIC_KEY }),
-      );
+      const created = yield* stack.deploy(SshKey("TestKey", { name: KEY_NAME, publicKey }));
       expect(created.name).toEqual(KEY_NAME);
-      expect(created.publicKey).toEqual(PUBLIC_KEY);
-      expect(created.fingerprint).toEqual(PUBLIC_KEY_FINGERPRINT);
+      expect(created.publicKey).toEqual(publicKey);
+      expect(Option.some(created.fingerprint)).toEqual(fingerprintOf(publicKey));
       expect((yield* readSshKey(created.sshKeyId)).name).toEqual(KEY_NAME);
 
       const renamedKey = SshKey("TestKey", {
         name: RENAMED_KEY_NAME,
-        publicKey: RECOMMENTED_PUBLIC_KEY,
+        publicKey: publicKey.replace(/ lifecycle$/, " laptop"),
       });
       const renamed = yield* stack.deploy(renamedKey);
       expect(renamed.sshKeyId).toEqual(created.sshKeyId);
@@ -167,19 +160,17 @@ test.provider.skipIf(skipLive)(
       // The same key under another name belongs to someone else.
       const refused = yield* stack
         .deploy(
-          renamedKey.pipe(
-            Effect.andThen(SshKey("OtherKey", { name: OTHER_KEY_NAME, publicKey: PUBLIC_KEY })),
-          ),
+          renamedKey.pipe(Effect.andThen(SshKey("OtherKey", { name: OTHER_KEY_NAME, publicKey }))),
         )
         .pipe(Effect.flip);
       expect(refused).toBeInstanceOf(OwnedBySomeoneElse);
       expect((yield* readSshKey(created.sshKeyId)).name).toEqual(RENAMED_KEY_NAME);
 
       const replaced = yield* stack.deploy(
-        SshKey("TestKey", { name: RENAMED_KEY_NAME, publicKey: PUBLIC_KEY_2 }),
+        SshKey("TestKey", { name: RENAMED_KEY_NAME, publicKey: rotatedPublicKey }),
       );
       expect(replaced.sshKeyId).not.toEqual(created.sshKeyId);
-      expect((yield* readSshKey(replaced.sshKeyId)).public_key).toEqual(PUBLIC_KEY_2);
+      expect((yield* readSshKey(replaced.sshKeyId)).public_key).toEqual(rotatedPublicKey);
       expect(yield* isSshKeyGone(created.sshKeyId)).toBe(true);
 
       yield* stack.destroy();
@@ -189,26 +180,29 @@ test.provider.skipIf(skipLive)(
   { tags: LIVE_TAGS, timeout: LIVE_TIMEOUT },
 );
 
-test.provider.skipIf(skipLive)(
+test.provider(
   "a key registered outside alchemy needs adopt(true), then takes the chosen name",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+      const KEY_NAME = testName(stack.stage, "ssh-key-adopted");
+      const FOREIGN_KEY_NAME = testName(stack.stage, "ssh-key-foreign");
+      const publicKey = yield* testPublicKey(stack.stage, "foreign");
 
       yield* Effect.acquireUseRelease(
-        createSshKey({ name: FOREIGN_KEY_NAME, public_key: PUBLIC_KEY_3 }).pipe(
+        createSshKey({ name: FOREIGN_KEY_NAME, public_key: publicKey }).pipe(
           Effect.map((response) => response.ssh_key),
         ),
         (foreignKey) =>
           Effect.gen(function* () {
             const refused = yield* stack
-              .deploy(SshKey("Adopted", { name: KEY_NAME, publicKey: PUBLIC_KEY_3 }))
+              .deploy(SshKey("Adopted", { name: KEY_NAME, publicKey }))
               .pipe(Effect.flip);
             expect(refused).toBeInstanceOf(OwnedBySomeoneElse);
             expect((yield* readSshKey(foreignKey.id)).name).toEqual(FOREIGN_KEY_NAME);
 
             const adopted = yield* stack.deploy(
-              SshKey("Adopted", { name: KEY_NAME, publicKey: PUBLIC_KEY_3 }).pipe(adopt(true)),
+              SshKey("Adopted", { name: KEY_NAME, publicKey }).pipe(adopt(true)),
             );
             expect(adopted.sshKeyId).toEqual(foreignKey.id);
             expect(adopted.name).toEqual(KEY_NAME);
@@ -224,13 +218,13 @@ test.provider.skipIf(skipLive)(
   { tags: LIVE_TAGS, timeout: LIVE_TIMEOUT },
 );
 
-test.provider.skipIf(skipLive)(
+test.provider(
   "a KeyPair generated in the stack registers through PEM conversion",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const fromPair = keyFromPair("DeployPair", "PairKey", PAIR_KEY_NAME);
+      const fromPair = keyFromPair("DeployPair", "PairKey", testName(stack.stage, "ssh-key-pair"));
 
       const { key, pairPublicKey } = yield* stack.deploy(fromPair);
       expect(parseAuthorizedKey(pairPublicKey)).toEqual(
@@ -245,11 +239,12 @@ test.provider.skipIf(skipLive)(
   { tags: LIVE_TAGS, timeout: LIVE_TIMEOUT },
 );
 
-test.provider.skipIf(skipLive)(
+test.provider(
   "new material from an unresolved KeyPair fails the first deploy and replaces the key on the next",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+      const ROTATED_KEY_NAME = testName(stack.stage, "ssh-key-rotated");
 
       const first = yield* stack.deploy(keyFromPair("FirstPair", "RotatedKey", ROTATED_KEY_NAME));
 
@@ -275,13 +270,14 @@ test.provider.skipIf(skipLive)(
   { tags: LIVE_TAGS, timeout: LIVE_TIMEOUT },
 );
 
-test.provider.skipIf(skipLive)(
+test.provider(
   "destroy recovers a generated-name key without recorded attributes",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const created = yield* stack.deploy(SshKey("Box", { publicKey: PUBLIC_KEY_4 }));
+      const publicKey = yield* testPublicKey(stack.stage, "generated-name");
+      const created = yield* stack.deploy(SshKey("Box", { publicKey }));
       yield* forgetAttributes({ stack: stack.name, stage: stack.stage, fqn: "Box" });
 
       yield* stack.destroy();
