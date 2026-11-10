@@ -146,8 +146,6 @@ export type Unit = Resource<
     ongoingOperations: ReadonlyArray<string>;
     /** Pending unit operations. */
     pendingOperations: ReadonlyArray<string>;
-    /** Flag revisions in use. */
-    flagRevisions: ReadonlyArray<string>;
     /** User labels (Alchemy ownership labels stripped). */
     labels: Record<string, string>;
     /** User annotations. */
@@ -264,7 +262,6 @@ const toAttrs = (item: saasservicemgmt.Unit, project: string) => {
     })),
     ongoingOperations: item.ongoingOperations ?? [],
     pendingOperations: item.pendingOperations ?? [],
-    flagRevisions: item.flagRevisions ?? [],
     labels: userLabels(item.labels),
     annotations: userAnnotations(item.annotations),
     uid: item.uid,

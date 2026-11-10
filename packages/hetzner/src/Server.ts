@@ -819,7 +819,7 @@ const syncVolumes = Effect.fn(function* (input: {
     if (observed.has(volumeId)) continue;
     const { action } = yield* Hetzner.volumeActions.attachVolume({
       id: volumeId,
-      server: input.serverId,
+      assignee: { id: input.serverId, type: "server" },
     });
     yield* waitForAction(action);
   }
