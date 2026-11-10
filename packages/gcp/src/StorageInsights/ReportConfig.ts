@@ -9,9 +9,10 @@ import { tagRecord } from "alchemy/Tags";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
-import { updateIamMembership } from "../IamPolicy.ts";
+import { revokeIamMembership, updateIamMembership } from "../IamPolicy.ts";
 import {
   createInternalLabels,
   hasAlchemyLabels,
@@ -97,9 +98,11 @@ export type ReportConfig = Resource<
  * Enable storageinsights.googleapis.com before deployment. Both buckets
  * must be in the same project and location. Alchemy grants the Storage
  * Insights service agent `roles/storage.insightsCollectorService` on the
- * source bucket and `roles/storage.objectCreator` on the destination. The
- * grants stay when the configuration is deleted, since every inventory
- * configuration in the project shares the agent.
+ * source bucket and `roles/storage.objectCreator` on the destination, and
+ * revokes each role when the configuration is deleted or its destination
+ * moves. A role stays while another inventory configuration in the location
+ * still uses that bucket, since every configuration in the project shares
+ * the agent.
  *
  * ### Creating an Inventory Report
  * **Example:** Daily Parquet inventory
@@ -207,14 +210,39 @@ const observe = Effect.fn(function* (
   return Option.getOrUndefined(found);
 });
 
+const COLLECTOR_ROLE = "roles/storage.insightsCollectorService";
+const CREATOR_ROLE = "roles/storage.objectCreator";
+
+/**
+ * Storage Insights checks the service agent's bucket permissions on create
+ * and on a destination change. A role granted moments earlier can take a
+ * few seconds to reach it, surfaced as `Forbidden`.
+ */
+const retryGrantPropagation = <A, E extends { _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
+  effect.pipe(
+    Effect.retry({
+      while: (error) => error._tag === "Forbidden",
+      times: 10,
+      schedule: Schedule.spaced("3 seconds"),
+    }),
+  );
+
+const serviceAgentOf = Effect.fn(function* (project: string) {
+  const resource = yield* resourcemanager.getProjects({ name: `projects/${project}` });
+  const projectNumber = resource.name!.split("/")[1];
+  return {
+    projectNumber,
+    member: `serviceAccount:service-${projectNumber}@gcp-sa-storageinsights.iam.gserviceaccount.com`,
+  };
+});
+
 /**
  * Google creates the Storage Insights service agent
  * (`service-{number}@gcp-sa-storageinsights…`) lazily; granting it a role
  * before it exists fails. Generating the identity is idempotent.
  */
 const ensureServiceAgent = Effect.fn(function* (project: string) {
-  const resource = yield* resourcemanager.getProjects({ name: `projects/${project}` });
-  const projectNumber = resource.name!.split("/")[1];
+  const { projectNumber, member } = yield* serviceAgentOf(project);
   const operation = yield* serviceusage
     .generateServiceIdentityServices({
       parent: `projects/${projectNumber}/services/storageinsights.googleapis.com`,
@@ -226,14 +254,12 @@ const ensureServiceAgent = Effect.fn(function* (project: string) {
       interval: "2 seconds",
     });
   }
-  return `serviceAccount:service-${projectNumber}@gcp-sa-storageinsights.iam.gserviceaccount.com`;
+  return member;
 });
 
 /**
  * The service agent reads the source bucket and writes reports to the
- * destination. The grants are add-only: the agent is shared by every
- * inventory configuration in the project, so revoking on delete could break
- * another configuration reading the same bucket.
+ * destination.
  */
 const grantServiceAgent = Effect.fn(function* (
   project: string,
@@ -247,7 +273,7 @@ const grantServiceAgent = Effect.fn(function* (
       kind: "storage.bucket",
       name: source,
       member,
-      add: ["roles/storage.insightsCollectorService"],
+      add: [COLLECTOR_ROLE],
     });
   }
   if (destination !== undefined) {
@@ -255,7 +281,50 @@ const grantServiceAgent = Effect.fn(function* (
       kind: "storage.bucket",
       name: destination,
       member,
-      add: ["roles/storage.objectCreator"],
+      add: [CREATOR_ROLE],
+    });
+  }
+});
+
+/**
+ * Revoke the service agent's role on a bucket this configuration no longer
+ * uses. The agent is shared by every inventory configuration in the project
+ * (Alchemy's or not), so a role stays while any other configuration in the
+ * location still reads from, or writes to, that bucket. Both buckets must
+ * share the configuration's location, so one location's list is complete.
+ */
+const releaseServiceAgent = Effect.fn(function* (
+  project: string,
+  parent: string,
+  self: string,
+  buckets: { source?: string; destination?: string },
+) {
+  const others = (yield* listConfigs(parent)).filter((config) => config.name !== self);
+  const { member } = yield* serviceAgentOf(project);
+  const { source, destination } = buckets;
+  if (
+    source !== undefined &&
+    !others.some((config) => config.objectMetadataReportOptions?.storageFilters?.bucket === source)
+  ) {
+    yield* revokeIamMembership({
+      kind: "storage.bucket",
+      name: source,
+      member,
+      roles: [COLLECTOR_ROLE],
+    });
+  }
+  if (
+    destination !== undefined &&
+    !others.some(
+      (config) =>
+        config.objectMetadataReportOptions?.storageDestinationOptions?.bucket === destination,
+    )
+  ) {
+    yield* revokeIamMembership({
+      kind: "storage.bucket",
+      name: destination,
+      member,
+      roles: [CREATOR_ROLE],
     });
   }
 });
@@ -350,11 +419,10 @@ export const ReportConfigProvider = () =>
       );
       if (current === undefined) {
         const random = yield* SecureRandom.SecureRandom;
-        current = yield* insights.createProjectsLocationsReportConfigs({
-          parent,
-          requestId: yield* random.uuidV4(),
-          body: desired,
-        });
+        const requestId = yield* random.uuidV4();
+        current = yield* retryGrantPropagation(
+          insights.createProjectsLocationsReportConfigs({ parent, requestId, body: desired }),
+        );
       }
 
       // Patch only changed fields; include the previous format in the mask
@@ -390,10 +458,22 @@ export const ReportConfigProvider = () =>
       }
       const updateMask = changed.join(",");
       if (updateMask.length > 0) {
-        current = yield* insights.patchProjectsLocationsReportConfigs({
-          name: current.name!,
-          updateMask,
-          body: desired,
+        current = yield* retryGrantPropagation(
+          insights.patchProjectsLocationsReportConfigs({
+            name: current.name!,
+            updateMask,
+            body: desired,
+          }),
+        );
+      }
+      // The destination bucket updates in place; release the one it left.
+      const previousDestination = observedMetadata?.storageDestinationOptions?.bucket;
+      if (
+        previousDestination !== undefined &&
+        previousDestination !== desiredMetadata?.storageDestinationOptions?.bucket
+      ) {
+        yield* releaseServiceAgent(env.project, parent, current.name!, {
+          destination: previousDestination,
         });
       }
       return toAttrs(current);
@@ -403,5 +483,14 @@ export const ReportConfigProvider = () =>
       yield* insights
         .deleteProjectsLocationsReportConfigs({ name: output.name, force: true })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
+      yield* releaseServiceAgent(
+        output.project,
+        parentOf(output.project, output.location),
+        output.name,
+        {
+          source: output.objectMetadataReportOptions?.storageFilters?.bucket,
+          destination: output.objectMetadataReportOptions?.storageDestinationOptions?.bucket,
+        },
+      );
     }),
   });

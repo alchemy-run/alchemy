@@ -56,7 +56,7 @@ test.provider(
           .map((binding) => binding.role);
       });
 
-      const deploy = (parquet: boolean, secondary = false, alternate = false) =>
+      const deploy = (parquet: boolean, secondary = false, alternate = false, moved = false) =>
         stack.deploy(
           Effect.gen(function* () {
             const names = yield* buckets;
@@ -76,7 +76,11 @@ test.provider(
                   bucket: secondary ? names.secondary : alternate ? names.alternate : names.primary,
                 },
                 storageDestinationOptions: {
-                  bucket: secondary ? names.secondary : alternate ? names.alternate : names.primary,
+                  bucket: secondary
+                    ? names.secondary
+                    : alternate || moved
+                      ? names.alternate
+                      : names.primary,
                   destinationPath: parquet ? "updated-inventory/" : "inventory/",
                 },
               },
@@ -125,6 +129,15 @@ test.provider(
       const unchanged = yield* insights.getProjectsLocationsReportConfigs({ name: updated.name });
       expect(unchanged.updateTime).toEqual(fetched.updateTime);
 
+      // Moving the destination updates in place and moves the write grant.
+      const moved = yield* deploy(true, false, false, true);
+      expect(moved.name).toEqual(created.name);
+      expect(moved.objectMetadataReportOptions?.storageDestinationOptions?.bucket).toEqual(
+        fixtures.alternate,
+      );
+      expect(yield* rolesOf(fixtures.primary)).toEqual(["roles/storage.insightsCollectorService"]);
+      expect(yield* rolesOf(fixtures.alternate)).toEqual(["roles/storage.objectCreator"]);
+
       const newSource = yield* deploy(true, false, true);
       expect(newSource.name).not.toEqual(created.name);
       expect(newSource.location).toEqual(created.location);
@@ -133,6 +146,14 @@ test.provider(
       });
       expect(sourceFetched.objectMetadataReportOptions?.storageFilters?.bucket).toEqual(
         fixtures.alternate,
+      );
+      // Replacing the configuration released the agent from the bucket it left.
+      expect(yield* rolesOf(fixtures.primary)).toEqual([]);
+      expect(yield* rolesOf(fixtures.alternate)).toEqual(
+        expect.arrayContaining([
+          "roles/storage.insightsCollectorService",
+          "roles/storage.objectCreator",
+        ]),
       );
 
       const replaced = yield* deploy(true, true);
@@ -145,6 +166,8 @@ test.provider(
           Effect.catchTag("NotFound", () => Effect.succeed(true)),
         );
       expect(oldGone).toEqual(true);
+      expect(yield* rolesOf(fixtures.alternate)).toEqual([]);
+      expect(yield* rolesOf(fixtures.secondary)).toHaveLength(2);
 
       yield* stack.destroy();
       const gone = yield* insights.getProjectsLocationsReportConfigs({ name: replaced.name }).pipe(
