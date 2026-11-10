@@ -1,6 +1,6 @@
 ---
 title: EventBridge & Scheduler
-description: How EventBridge buses route events to targets by matching their content, how runtimes publish and consume events, and how EventBridge Scheduler runs Functions, Queues and tasks on a schedule.
+description: How EventBridge buses route events to targets by matching their content, how runtimes publish and consume events, and how EventBridge Scheduler runs Functions, Queues and tasks on a schedule, including schedules created at runtime.
 ---
 
 import Fanout from "../../../../components/diagrams/Fanout.astro";
@@ -125,6 +125,36 @@ For a single moment, use `at`. Schedules can target Queues too:
 ```typescript title="alchemy.run.ts"
 yield* AWS.Scheduler.at(new Date("2026-08-01T09:00:00Z")).toQueue(reminders, { type: "launch" });
 ```
+
+## Create schedules while running
+
+Some schedules only exist once a user asks for them, like a reminder in 15 minutes. Bind `Scheduler.CreateSchedule` to the Queue or Function the schedules deliver to:
+
+```typescript title="src/api.ts"
+const queue = yield* Reminders;
+const schedule = yield* AWS.Scheduler.CreateSchedule(queue);
+
+yield* schedule.at(new Date(Date.now() + 15 * 60_000), {
+  name: `reminder-${userId}`,
+  payload: { userId },
+});
+```
+
+The binding creates the role Scheduler assumes, which may send to that Queue only, and lets the runtime pass it. `schedule.every` and `schedule.cron` create recurring schedules the same way. A one-time `at` schedule deletes itself after it runs.
+
+A Function can schedule a call back to itself:
+
+```typescript title="src/orders.ts"
+const self = yield* AWS.Lambda.Function;
+const callback = yield* AWS.Scheduler.CreateSchedule(self);
+
+yield* callback.at(new Date(Date.now() + 60 * 60_000), {
+  name: `expire-${orderId}`,
+  payload: { orderId },
+});
+```
+
+The payload arrives as the invocation's event. Provide `AWS.Scheduler.CreateScheduleHttp` to the runtime. `UpdateSchedule`, `GetSchedule`, `DeleteSchedule` and `ListSchedules` change, read and cancel the schedules it created.
 
 ## Schedule containers
 
