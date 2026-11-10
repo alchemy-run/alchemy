@@ -12,9 +12,10 @@ import path from "pathe";
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
 // Shared Lambda fixture for the EventBridge Scheduler runtime surface:
-// - CreateSchedule / GetSchedule / DeleteSchedule bindings, one HTTP route
-//   per operation. Runtime-minted one-shot schedules target the sink queue,
-//   so the test can observe the fire out-of-band.
+// - CreateSchedule / UpdateSchedule / GetSchedule / DeleteSchedule /
+//   ListSchedules bindings, one HTTP route per operation. Runtime-minted
+//   schedules target the sink queue, so the test can observe the fire
+//   out-of-band.
 // - consumeSchedule (the cron-handler DX): a rate(1 minute) schedule invokes
 //   this same Lambda; the handler forwards the typed event into the cron
 //   queue for out-of-band observation.
@@ -36,9 +37,9 @@ export default SchedulerTestFunction.make(
     // Queue the consumeSchedule cron handler forwards its typed events into.
     const cronQueue = yield* SQS.Queue("SchedulerCronQueue");
 
-    // Execution role for runtime-minted schedules: assumable by EventBridge
-    // Scheduler, allowed to send into the sink queue. The CreateSchedule
-    // binding contributes iam:PassRole on this role to the host's policy.
+    // An existing execution role, passed via `{ role }` to cover the
+    // bring-your-own-role path. The bindings bound without it declare their
+    // own role for the sink queue.
     const executionRole = yield* IAM.Role("SchedulerExecutionRole", {
       assumeRolePolicyDocument: {
         Version: "2012-10-17",
@@ -64,8 +65,15 @@ export default SchedulerTestFunction.make(
       },
     });
 
-    const createSchedule = yield* Scheduler.CreateSchedule(executionRole);
-    const updateSchedule = yield* Scheduler.UpdateSchedule(executionRole);
+    const schedule = yield* Scheduler.CreateSchedule(sinkQueue);
+    const reschedule = yield* Scheduler.UpdateSchedule(sinkQueue);
+    const scheduleWithRole = yield* Scheduler.CreateSchedule(sinkQueue, { role: executionRole });
+    // A delayed callback to this same Lambda: the Function target path.
+    const self = yield* Lambda.Function;
+    const callback = yield* Scheduler.CreateSchedule(self);
+    // The route id the consumeSchedule registration below listens on, so a
+    // callback carrying its envelope is forwarded into the cron queue.
+    const cronRouteId = Scheduler.createScheduleRouteId({ expression: "rate(1 minute)" }, self);
     const getSchedule = yield* Scheduler.GetSchedule();
     const deleteSchedule = yield* Scheduler.DeleteSchedule();
     const listSchedules = yield* Scheduler.ListSchedules();
@@ -86,6 +94,7 @@ export default SchedulerTestFunction.make(
     );
 
     const sinkQueueArn = yield* sinkQueue.queueArn;
+    const executionRoleArn = yield* executionRole.roleArn;
     const sinkQueueUrl = yield* sinkQueue.queueUrl;
     const cronQueueUrl = yield* cronQueue.queueUrl;
 
@@ -99,7 +108,9 @@ export default SchedulerTestFunction.make(
           return yield* HttpServerResponse.json({
             ok: true,
             sinkQueueUrl: yield* sinkQueueUrl,
+            sinkQueueArn: yield* sinkQueueArn,
             cronQueueUrl: yield* cronQueueUrl,
+            executionRoleArn: yield* executionRoleArn,
           });
         }
 
@@ -119,25 +130,73 @@ export default SchedulerTestFunction.make(
           );
         }
 
+        // Raw CreateSchedule request through the `{ role }` binding: Target.Arn
+        // and Target.RoleArn are left to the binding's defaults.
+        if (request.method === "POST" && pathname.startsWith("/raw-schedules/")) {
+          const name = pathname.slice("/raw-schedules/".length);
+          const delaySeconds = Number(url.searchParams.get("delaySeconds") ?? "30");
+          const fireAt = yield* Effect.sync(() => new Date(Date.now() + delaySeconds * 1000));
+          const expression = `at(${fireAt.toISOString().slice(0, 19)})`;
+          const created = yield* scheduleWithRole({
+            Name: name,
+            ScheduleExpression: expression,
+            ActionAfterCompletion: "DELETE",
+            Target: { Input: JSON.stringify({ marker: name }) },
+          });
+          return yield* HttpServerResponse.json({ scheduleArn: created.ScheduleArn, expression });
+        }
+
+        // One-shot callback into this Lambda. The payload is the cron route's
+        // envelope with the schedule name as executionId, so the handler
+        // forwards it into the cron queue where the test can see it.
+        if (request.method === "POST" && pathname.startsWith("/callbacks/")) {
+          const name = pathname.slice("/callbacks/".length);
+          const fireAt = yield* Effect.sync(() => new Date(Date.now() + 15_000));
+          return yield* callback
+            .at(fireAt, {
+              name,
+              payload: {
+                source: "alchemy.scheduler",
+                scheduleId: cronRouteId,
+                scheduleArn: "callback",
+                scheduledTime: fireAt.toISOString(),
+                executionId: name,
+                attemptNumber: "1",
+              },
+            })
+            .pipe(
+              Effect.flatMap((created) =>
+                HttpServerResponse.json({ scheduleArn: created.ScheduleArn }),
+              ),
+              // Surface the typed failure (424 so the 5xx retry doesn't mask it).
+              Effect.catch((e) =>
+                HttpServerResponse.json({ error: e._tag, message: String(e) }, { status: 424 }),
+              ),
+            );
+        }
+
+        // Recurring schedule through the `every` shortcut.
+        if (request.method === "POST" && pathname.startsWith("/recurring-schedules/")) {
+          const name = pathname.slice("/recurring-schedules/".length);
+          const created = yield* schedule.every("1 day", {
+            name,
+            payload: { marker: name },
+          });
+          return yield* HttpServerResponse.json({ scheduleArn: created.ScheduleArn });
+        }
+
         if (pathname.startsWith("/schedules/")) {
           const name = pathname.slice("/schedules/".length);
 
           if (request.method === "POST") {
             const delaySeconds = Number(url.searchParams.get("delaySeconds") ?? "30");
             const fireAt = yield* Effect.sync(() => new Date(Date.now() + delaySeconds * 1000));
-            // One-shot at() expressions take second granularity, no timezone
-            // suffix (UTC by default): at(yyyy-mm-ddThh:mm:ss)
             const expression = `at(${fireAt.toISOString().slice(0, 19)})`;
 
-            const created = yield* createSchedule({
-              Name: name,
-              ScheduleExpression: expression,
-              ActionAfterCompletion: "DELETE",
-              Target: {
-                Arn: yield* sinkQueueArn,
-                Input: JSON.stringify({ marker: name }),
-              },
-            }).pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+            // The `at` shortcut: one-shot, deletes itself after it fires.
+            const created = yield* schedule
+              .at(fireAt, { name, payload: { marker: name } })
+              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
 
             if (created === undefined) {
               return yield* HttpServerResponse.json(
@@ -157,17 +216,10 @@ export default SchedulerTestFunction.make(
             const fireAt = yield* Effect.sync(() => new Date(Date.now() + delaySeconds * 1000));
             const expression = `at(${fireAt.toISOString().slice(0, 19)})`;
 
-            // UpdateSchedule is a full PUT — resend the complete config.
-            const updated = yield* updateSchedule({
-              Name: name,
-              ScheduleExpression: expression,
-              Description: description,
-              ActionAfterCompletion: "DELETE",
-              Target: {
-                Arn: yield* sinkQueueArn,
-                Input: JSON.stringify({ marker: name }),
-              },
-            }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            // UpdateSchedule is a full PUT; the `at` shortcut sends it all.
+            const updated = yield* reschedule
+              .at(fireAt, { name, description, payload: { marker: name } })
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
             if (updated === undefined) {
               return yield* HttpServerResponse.json({ error: "Not found", name }, { status: 404 });
@@ -191,6 +243,8 @@ export default SchedulerTestFunction.make(
               state: found.State,
               expression: found.ScheduleExpression,
               actionAfterCompletion: found.ActionAfterCompletion,
+              targetArn: found.Target?.Arn,
+              roleArn: found.Target?.RoleArn,
             });
           }
 

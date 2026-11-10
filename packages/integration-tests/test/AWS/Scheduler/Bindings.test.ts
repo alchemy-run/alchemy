@@ -28,7 +28,9 @@ const readinessPolicy = Schedule.max([Schedule.fixed("2 seconds"), Schedule.recu
 
 let baseUrl: string;
 let sinkQueueUrl: string;
+let sinkQueueArn: string;
 let cronQueueUrl: string;
+let executionRoleArn: string;
 
 class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly status: number;
@@ -169,12 +171,24 @@ describe(
         const info = yield* HttpClient.get(readinessUrl).pipe(
           Effect.flatMap((response) =>
             response.status === 200
-              ? (response.json as Effect.Effect<{ sinkQueueUrl?: string; cronQueueUrl?: string }>)
+              ? (response.json as Effect.Effect<{
+                  sinkQueueUrl?: string;
+                  sinkQueueArn?: string;
+                  cronQueueUrl?: string;
+                  executionRoleArn?: string;
+                }>)
               : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
           Effect.flatMap((body) =>
-            body.sinkQueueUrl && body.cronQueueUrl
-              ? Effect.succeed(body as { sinkQueueUrl: string; cronQueueUrl: string })
+            body.sinkQueueUrl && body.sinkQueueArn && body.cronQueueUrl && body.executionRoleArn
+              ? Effect.succeed(
+                  body as {
+                    sinkQueueUrl: string;
+                    sinkQueueArn: string;
+                    cronQueueUrl: string;
+                    executionRoleArn: string;
+                  },
+                )
               : Effect.fail(new Error("Function returned empty queue urls")),
           ),
           Effect.tapError((error) =>
@@ -183,7 +197,9 @@ describe(
           Effect.retry({ schedule: readinessPolicy }),
         );
         sinkQueueUrl = info.sinkQueueUrl;
+        sinkQueueArn = info.sinkQueueArn;
         cronQueueUrl = info.cronQueueUrl;
+        executionRoleArn = info.executionRoleArn;
       }),
       { timeout: 240_000 },
     );
@@ -202,7 +218,7 @@ describe(
 
     describe("CreateSchedule", () => {
       test.provider(
-        "mints a one-shot at() schedule whose target fires (iam:PassRole end-to-end)",
+        "at() targets the bound queue through a role the binding declared",
         (_stack) =>
           Effect.gen(function* () {
             const name = `${SCHEDULE_PREFIX}oneshot`;
@@ -214,12 +230,16 @@ describe(
             expect(created.scheduleArn).toContain(`:schedule/default/${name}`);
             expect(created.expression).toMatch(/^at\(/);
 
-            // Out-of-band: the schedule exists with the one-shot config the
-            // fixture requested.
+            // Out-of-band: `at` defaulted to a self-deleting one-shot that
+            // targets the bound queue, through the role the binding declared
+            // (not the fixture's own role).
             const observed = yield* scheduler.getSchedule({ Name: name });
             expect(observed.Name).toBe(name);
             expect(observed.ActionAfterCompletion).toBe("DELETE");
-            expect(observed.Target?.RoleArn).toBeTruthy();
+            expect(observed.FlexibleTimeWindow?.Mode).toBe("OFF");
+            expect(observed.Target?.Arn).toBe(sinkQueueArn);
+            expect(observed.Target?.RoleArn).toMatch(/^arn:aws:iam::\d+:role\//);
+            expect(observed.Target?.RoleArn).not.toBe(executionRoleArn);
 
             // The schedule fires ~15s after creation; the execution role (which
             // the binding contributed iam:PassRole for) delivers the marker into
@@ -232,6 +252,75 @@ describe(
             yield* waitUntilScheduleGone(name);
           }),
         { timeout: 150_000 },
+      );
+
+      test.provider(
+        "a raw request with { role } defaults the target and uses that role",
+        (_stack) =>
+          Effect.gen(function* () {
+            const name = `${SCHEDULE_PREFIX}raw`;
+
+            yield* send(
+              HttpClientRequest.post(`${baseUrl}/raw-schedules/${name}?delaySeconds=15`),
+            ).pipe(Effect.flatMap((r) => r.json));
+
+            const observed = yield* scheduler.getSchedule({ Name: name });
+            expect(observed.Target?.Arn).toBe(sinkQueueArn);
+            expect(observed.Target?.RoleArn).toBe(executionRoleArn);
+
+            // The passed role delivers too (iam:PassRole on it end-to-end).
+            const message = yield* receiveMatching(sinkQueueUrl, (body) => body.marker === name);
+            expect(message.marker).toBe(name);
+            yield* waitUntilScheduleGone(name);
+          }),
+        { timeout: 150_000 },
+      );
+
+      test.provider(
+        "a Function target invokes the bound Lambda (delayed self-callback)",
+        (_stack) =>
+          Effect.gen(function* () {
+            const name = `${SCHEDULE_PREFIX}callback`;
+
+            const created = (yield* send(
+              HttpClientRequest.post(`${baseUrl}/callbacks/${name}`),
+            ).pipe(Effect.flatMap((r) => r.json))) as {
+              scheduleArn?: string;
+              error?: string;
+              message?: string;
+            };
+            expect(created.message).toBeUndefined();
+
+            const observed = yield* scheduler.getSchedule({ Name: name });
+            expect(observed.Target?.Arn).toMatch(/^arn:aws:lambda:.*:function:/);
+
+            // The schedule invoked this Lambda, whose cron route forwarded the
+            // payload into the cron queue.
+            const event = yield* receiveMatching(
+              cronQueueUrl,
+              (body) => body.marker === "alch-schedtest-cron-fired" && body.executionId === name,
+              { times: 30 },
+            );
+            expect(event.scheduleArn).toBe("callback");
+            yield* waitUntilScheduleGone(name);
+          }),
+        { timeout: 150_000 },
+      );
+
+      test.provider("every() creates a recurring rate schedule", (_stack) =>
+        Effect.gen(function* () {
+          const name = `${SCHEDULE_PREFIX}every`;
+
+          yield* send(HttpClientRequest.post(`${baseUrl}/recurring-schedules/${name}`));
+
+          const observed = yield* scheduler.getSchedule({ Name: name });
+          expect(observed.ScheduleExpression).toBe("rate(1 day)");
+          expect(observed.Target?.Arn).toBe(sinkQueueArn);
+          expect(observed.Target?.Input).toBe(JSON.stringify({ marker: name }));
+
+          const deleted = yield* send(HttpClientRequest.delete(`${baseUrl}/schedules/${name}`));
+          expect(deleted.status).toBe(200);
+        }),
       );
     });
 
@@ -379,7 +468,8 @@ describe(
             // ~90s to ride out one full rate window.
             const event = yield* receiveMatching(
               cronQueueUrl,
-              (body) => body.marker === "alch-schedtest-cron-fired",
+              (body) =>
+                body.marker === "alch-schedtest-cron-fired" && body.scheduleArn !== "callback",
               { times: 15 },
             );
 

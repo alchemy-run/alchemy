@@ -10,5 +10,6 @@ export * from "./ListSchedulesHttp.ts";
 export * from "./Schedule.ts";
 export * from "./ScheduleEventSource.ts";
 export * from "./ScheduleGroup.ts";
+export * from "./ScheduleWriteTypes.ts";
 export * from "./UpdateSchedule.ts";
 export * from "./UpdateScheduleHttp.ts";
