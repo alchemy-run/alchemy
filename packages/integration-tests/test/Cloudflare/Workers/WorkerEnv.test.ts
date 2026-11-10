@@ -152,6 +152,19 @@ describe.concurrent(
     );
 
     test(
+      "effect worker has no binding for an undefined env entry",
+      Effect.gen(function* () {
+        const { effectUrl } = yield* stack;
+
+        const body = yield* expectUrlContains(`${effectUrl}/unset`, '"UNSET"', {
+          timeout: "60 seconds",
+          label: "effect env-worker /unset",
+        });
+        expect(JSON.parse(body)).toEqual({ UNSET: false, UNSET_OUTPUT: false });
+      }).pipe(logLevel),
+    );
+
+    test(
       "effect worker re-resolves Config.xxx at request time inside a nested effect",
       Effect.gen(function* () {
         const { effectUrl } = yield* stack;
