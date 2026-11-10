@@ -156,6 +156,15 @@ export const assetsConfigOf = (assets: unknown): Record<string, unknown> | undef
 
 const SPECIAL_ASSET_FILES = [".assetsignore", "_headers", "_redirects"];
 
+/** Cloudflare's Workers assets limits. */
+const MAX_ASSET_COUNT = 20_000;
+const MAX_ASSET_SIZE = 25 * 1024 * 1024;
+
+/** A client directory over Cloudflare's asset count or size limit. */
+export class AssetLimitError extends Data.TaggedError("AssetLimitError")<{
+  readonly message: string;
+}> {}
+
 const maybeReadString = Effect.fn(function* (file: string) {
   const fs = yield* FileSystem.FileSystem;
   return yield* fs.readFileString(file).pipe(
@@ -184,6 +193,11 @@ export const readClientAssets = Effect.fn(function* (
     maybeReadString(path.join(directory, "_redirects")),
   ]);
   const ignores = compileIgnoreRules([...SPECIAL_ASSET_FILES, ...(ignoreFile?.split("\n") ?? [])]);
+  if (entries.length > MAX_ASSET_COUNT) {
+    return yield* new AssetLimitError({
+      message: `Too many assets in ${directory} (maximum is ${MAX_ASSET_COUNT}, found ${entries.length})`,
+    });
+  }
   const manifest = new Map<string, { hash: string; size: number }>();
   yield* Effect.forEach(
     entries,
@@ -193,6 +207,11 @@ export const readClientAssets = Effect.fn(function* (
       const file = path.join(directory, name);
       const stat = yield* fs.stat(file);
       if (stat.type !== "File") return;
+      if (Number(stat.size) > MAX_ASSET_SIZE) {
+        return yield* new AssetLimitError({
+          message: `Asset ${relPath} is too large (the maximum size is 25 MB)`,
+        });
+      }
       manifest.set(relPath.startsWith("/") ? relPath : `/${relPath}`, {
         hash: sha256(yield* fs.readFile(file)).slice(0, 32),
         size: Number(stat.size),
@@ -277,6 +296,8 @@ export interface WorkerSourceSpec<Config> {
   readonly buildConfig: (ctx: SourceContext, rootDir: string) => Config;
   /** Reject a build without server modules. @default true */
   readonly requireServer?: boolean | undefined;
+  /** Reject a build without a client directory. @default false */
+  readonly requireClient?: boolean | undefined;
   /** Dev runs the Worker in workerd with the Vite plugin's assets service. */
   readonly devAssetsBinding?: boolean | undefined;
   /**
@@ -325,12 +346,13 @@ export const makeWorkerSource = <Config>(spec: WorkerSourceSpec<Config>): Source
         env: resolveBuildEnv(ctx.env),
         config: spec.buildConfig(ctx, rootDir),
         ...(spec.runtime ? { runtime: spec.runtime } : {}),
-      }).pipe(
-        Effect.mapError((error) => fail(`${spec.displayName} build failed`, error.cause ?? error)),
-      );
+      }).pipe(Effect.mapError((error) => fail(error.message, error.cause ?? error)));
       const bundle = bundleOf(output.serverModules);
       if (bundle === undefined && (spec.requireServer ?? true)) {
         return yield* fail(`${spec.displayName} build produced no server modules`);
+      }
+      if (output.clientDirectory === undefined && spec.requireClient) {
+        return yield* fail(`${spec.displayName} build produced no client directory`);
       }
       if (bundle === undefined && output.clientDirectory === undefined) {
         return yield* fail(`${spec.displayName} build produced neither server modules nor assets`);
@@ -341,6 +363,8 @@ export const makeWorkerSource = <Config>(spec: WorkerSourceSpec<Config>): Source
             ? readClientAssets(
                 path.resolve(rootDir, output.clientDirectory),
                 assetsConfigOf(ctx.assets),
+              ).pipe(
+                Effect.catchTag("AssetLimitError", (error) => Effect.fail(fail(error.message))),
               )
             : Effect.undefined,
           input(rootDir, output.externalWorkspaces),
