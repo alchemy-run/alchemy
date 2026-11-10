@@ -27,6 +27,7 @@
  *   to [FlociServiceProvider](./FlociServiceProvider.ts).
  */
 
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { makeImageSource, type ImageSourceLike } from "../ECR/ImageSource.ts";
@@ -70,14 +71,14 @@ export const FlociTaskProvider = () =>
     onReconciled: ({ previous, attrs }) =>
       Effect.gen(function* () {
         if (previous?.taskDefinitionArn === attrs.taskDefinitionArn) return;
-        const startedAt = Date.now();
+        const startedAt = yield* Clock.currentTimeMillis;
         const restarted = yield* restartFamilyTasks({
           family: attrs.taskFamily,
           nextTaskDefinitionArn: attrs.taskDefinitionArn,
           serviceManaged: false,
         });
         yield* Effect.logInfo(
-          `task definition swapped (${restarted} task(s) restarted) in ${Date.now() - startedAt}ms`,
+          `task definition swapped (${restarted} task(s) restarted) in ${(yield* Clock.currentTimeMillis) - startedAt}ms`,
         );
       }).pipe(Effect.catchCause((cause) => Effect.logWarning(`task restart failed`, cause))),
     startWatch: (ctx) =>

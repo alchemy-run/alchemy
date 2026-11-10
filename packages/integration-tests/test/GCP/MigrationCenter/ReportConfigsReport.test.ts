@@ -6,6 +6,7 @@ import * as migrationcenter from "@distilled.cloud/gcp/migrationcenter_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -74,6 +75,14 @@ test.provider.skipIf(!!process.env.FAST)(
           });
           return { group, prefs, config, report };
         }),
+      );
+      yield* expectFound(
+        GCP.MigrationCenter.ReportConfigsReport.lookup({
+          reportId: created.report.reportId,
+          location: created.report.location,
+          reportConfig: created.report.reportConfig,
+        }),
+        created.report,
       );
 
       expect(created.report.reportId).toEqual(expect.any(String));

@@ -6,6 +6,7 @@ import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { UsersSource } from "./fixtures/features.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -86,6 +87,14 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { store, view };
         }),
+      );
+      yield* expectFound(
+        GCP.AIPlatform.FeatureOnlineStoresFeatureView.lookup({
+          featureViewId: created.view.featureViewId,
+          location: created.view.location,
+          featureOnlineStore: created.view.featureOnlineStore,
+        }),
+        created.view,
       );
 
       expect(created.view.name).toContain("/featureViews/");

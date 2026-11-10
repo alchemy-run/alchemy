@@ -26,10 +26,13 @@ const baseline: GovernanceRoleBaseline<OrganizationRole> = {
   managedRole: "viewer",
 };
 
-const refused = <A, R>(effect: Effect.Effect<A, GovernanceRoleSafetyError, R>) =>
+const refused = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.as(false),
-    Effect.catchTag("NeonGovernanceRoleSafetyError", () => Effect.succeed(true)),
+    Effect.catchIf(
+      (error) => error instanceof GovernanceRoleSafetyError,
+      () => Effect.succeed(true),
+    ),
   );
 
 unit.effect(

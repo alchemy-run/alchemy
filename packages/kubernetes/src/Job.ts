@@ -1,3 +1,4 @@
+import type { BuildCacheOptions } from "@alchemy.run/docker/BuildCache";
 import type { DockerfileBuildOptions } from "@alchemy.run/docker/ImageSource";
 import type * as Bundle from "alchemy/Bundle/Bundle";
 import { isResolved } from "alchemy/Diff";
@@ -156,8 +157,8 @@ export interface BundledJobProps extends JobPropsBase {
   image?: string;
   /** Named export to load from `main`. @default "default" */
   handler?: string;
-  /** Bundler configuration for the entrypoint. */
-  build?: Bundle.BundleConfig;
+  /** Bundler configuration for the entrypoint, and the image build's layer `cache`. */
+  build?: Bundle.BundleConfig & BuildCacheOptions;
   /** Environment Dockerfile (path or inline content). */
   dockerfile?: WorkloadImageSource["dockerfile"];
   /** Build context for a path {@link dockerfile} environment. */
@@ -337,6 +338,37 @@ export interface JobRuntimeContext extends HostRuntimeContext {
  * );
  * ```
  *
+ * ### Caching Build Layers
+ * Builds reuse the local BuildKit cache of the machine they run on, and
+ * nothing but the image is pushed. A builder that has never built the image,
+ * such as a fresh CI runner, reruns every step. Set `build.cache: true` to keep
+ * every stage's layers at the image repository's `:buildcache` tag, so fresh
+ * builders skip unchanged steps. For another backend, pass BuildKit's own
+ * `--cache-from` / `--cache-to` values as `from` and `to`.
+ *
+ * **Example:** Cache layers in the image repository
+ * ```typescript
+ * const migrate = yield* Kubernetes.Job("Migrate", {
+ *   cluster,
+ *   context: "./migrate",
+ *   build: { cache: true },
+ * });
+ * ```
+ *
+ * **Example:** Cache layers in GitHub Actions
+ * ```typescript
+ * const migrate = yield* Kubernetes.Job("Migrate", {
+ *   cluster,
+ *   context: "./migrate",
+ *   build: {
+ *     cache: {
+ *       from: ["type=gha,scope=migrate"],
+ *       to: ["type=gha,scope=migrate,mode=max"],
+ *     },
+ *   },
+ * });
+ * ```
+ *
  * ### Bundling & Tree-shaking
  * `main` is bundled with rolldown at deploy time. Unused code is
  * tree-shaken. `effect`, alchemy, and `@distilled.cloud` are marked
@@ -396,6 +428,7 @@ export const Job: Platform<Job, JobServices, JobShape, JobRuntimeContext> = Plat
             env[key] = output.pipe(Output.map(packEnvValue));
             return key;
           }),
+        // oxlint-disable-next-line effecttsgo/process-env-in-effect -- runtime ctx.get must read raw env, never Config (see unpackEnvValue)
         get: <T>(key: string) => Effect.sync(() => unpackEnvValue<T>(process.env[key]) as T),
         run: (effect: Effect.Effect<void, never, any>) =>
           Effect.sync(() => {

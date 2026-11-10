@@ -28,6 +28,7 @@ export CLOUDFLARE_EMAIL=alchemy-local@example.invalid
 export CLOUDFLARE_ACCOUNT_EMAIL="$CLOUDFLARE_EMAIL"
 
 export DOPPLER_TOKEN=alchemy-fake-local-doppler-token
+export E2B_API_KEY=alchemy-fake-local-e2b-api-key
 export FLY_API_TOKEN=alchemy-fake-local-fly-token
 
 export GITHUB_ACCESS_TOKEN=alchemy-fake-local-github-token
@@ -37,8 +38,13 @@ export GH_ENTERPRISE_TOKEN="$GITHUB_ACCESS_TOKEN"
 export GITHUB_ENTERPRISE_TOKEN="$GITHUB_ACCESS_TOKEN"
 
 export HCLOUD_TOKEN=alchemy-fake-local-hetzner-token
+export DAYTONA_API_KEY=alchemy-fake-local-daytona-key
+export MODAL_TOKEN_ID=ak-alchemy-fake-local
+export MODAL_TOKEN_SECRET=as-alchemy-fake-local
 export INFISICAL_TOKEN=alchemy-fake-local-infisical-token
 export NEON_API_KEY=alchemy-fake-local-neon-key
+export ARCHIL_API_KEY=alchemy-fake-local-archil-key
+export BOAT_API_KEY=boat_alchemy-fake-local-key
 
 export PLANETSCALE_API_TOKEN_ID=alchemy-fake-local-planetscale-id
 export PLANETSCALE_API_TOKEN=alchemy-fake-local-planetscale-token

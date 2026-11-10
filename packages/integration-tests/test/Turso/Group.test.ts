@@ -8,6 +8,7 @@ import { Stage } from "alchemy/Stage";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Turso.providers() });
 
@@ -38,6 +39,7 @@ test.provider(
           return yield* Turso.Group("Group", { location: "aws-us-east-1" });
         }),
       );
+      yield* expectFound(Turso.Group.lookup({ name: group.name }), group);
       expect(group.location).toBe("aws-us-east-1");
       expect(group.locations).toEqual(["aws-us-east-1"]);
       expect(group.deleteProtection).toBe(false);

@@ -26,8 +26,13 @@ export class AccountCard extends Domain.Stream("AccountCard", {
   entries: [CardChanged],
   middleware: [Session],
   rejects: [NotOwner],
-  // Judged on the latest card: only its owner (or an agent) may read it.
-  validate: Effect.fn(function* (_request, latest) {
-    yield* mustOwn(latest?.event.customerId ?? null);
-  }),
 }) {}
+
+/** Judged on the latest card: only its owner (or an agent) may read it. */
+export const AccountCardLive = AccountCard.toLayer(
+  Effect.succeed(
+    Effect.fn(function* (_request, latest) {
+      yield* mustOwn(latest?.event.customerId ?? null);
+    }),
+  ),
+);

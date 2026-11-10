@@ -226,9 +226,10 @@ const detach = (volumeId: number) =>
   Hetzner.volumeActions.detachVolume({ id: volumeId }).pipe(
     Effect.tap(({ action }) =>
       waitForAction(action).pipe(
-        // Volume detach can outlive the action poll under load; observe
-        // the Volume's `server` field instead of failing the reconcile.
-        Effect.catchTag("ActionTimeout", () => Effect.void),
+        // Volume detach can outlive the action poll under load, and a
+        // concurrent Server delete can fail the action while it detaches
+        // the Volume itself. Callers observe the Volume's `server` field.
+        Effect.catchTag(["ActionTimeout", "ActionFailed"], () => Effect.void),
       ),
     ),
     Effect.catchTag(["NotFound", "UnprocessableEntity"], () => Effect.void),

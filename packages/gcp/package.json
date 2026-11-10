@@ -1011,6 +1011,7 @@
         "default": "./lib/Workstations/index.js"
       },
       "./Container/internal/*": null,
+      "./internal/*": null,
       "./*/internal": null,
       "./*": {
         "types": "./lib/*.d.ts",

@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -104,8 +105,30 @@ export type Dashboard = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DashboardLookup
 >;
+
+/**
+ * Props for {@link Dashboard.lookup}: find a dashboard this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface DashboardLookup {
+  /**
+   * Dashboard id (the `{dashboard}` segment).
+   */
+  dashboardId: string;
+  /**
+   * Region (`us-central1`, …).
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Contact Center Insights dashboard of conversation charts.
@@ -128,6 +151,18 @@ export type Dashboard = Resource<
  * const dashboard = yield* GCP.ContactCenterInsights.Dashboard("Overview", {
  *   dashboardId: "quality-overview",
  *   displayName: "quality",
+ * });
+ * ```
+ *
+ * ### Looking up an existing dashboard
+ * `Dashboard.lookup` references a dashboard Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared dashboard.
+ *
+ * **Example:** Reference an existing dashboard
+ * ```typescript
+ * const dashboard = GCP.ContactCenterInsights.Dashboard.lookup({
+ *   dashboardId: "my-dashboard",
  * });
  * ```
  *
@@ -227,6 +262,15 @@ export const DashboardProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ dashboardId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = lookupLocation ?? env.region;
+      const name = resourceName(locationParent(env.project, location), dashboardId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;

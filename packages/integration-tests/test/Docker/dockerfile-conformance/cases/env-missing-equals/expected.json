@@ -1,0 +1,4 @@
+{
+  "ok": false,
+  "error": "Syntax error - can't find = in \"B\". Must be of the form: name=value"
+}

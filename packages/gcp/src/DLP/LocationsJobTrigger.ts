@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -106,8 +107,32 @@ export type LocationsJobTrigger = Resource<
     lastRunTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  LocationsJobTriggerLookup
 >;
+
+/**
+ * Props for {@link LocationsJobTrigger.lookup}: find a locations job
+ * trigger this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface LocationsJobTriggerLookup {
+  /**
+   * Trigger id (the `{jobTrigger}` segment of
+   * `projects/{project}/locations/{location}/jobTriggers/{jobTrigger}`).
+   * Must match `[a-zA-Z0-9_-]+` and is at most 100 characters.
+   */
+  triggerId: string;
+  /**
+   * Processing location (`us-central1`, `global`, …).
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A regional Cloud DLP job trigger (`projects.locations.jobTriggers`).
@@ -144,6 +169,19 @@ export type LocationsJobTrigger = Resource<
  *     storageConfig: { hybridOptions: {} },
  *   },
  *   triggers: [{ manual: {} }],
+ * });
+ * ```
+ *
+ * ### Looking up an existing locations job trigger
+ * `LocationsJobTrigger.lookup` references a locations job trigger Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared locations job trigger.
+ *
+ * **Example:** Reference an existing locations job trigger
+ * ```typescript
+ * const locationsJobTrigger = GCP.DLP.LocationsJobTrigger.lookup({
+ *   triggerId: "my-trigger",
  * });
  * ```
  *
@@ -204,6 +242,15 @@ export const LocationsJobTriggerProvider = () =>
           normalizeLocation(previousLocation, env.region);
       return replaceOnIdentity(idChanged || locationChanged);
     }),
+
+    lookup: Effect.fn(function* ({ triggerId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, triggerId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

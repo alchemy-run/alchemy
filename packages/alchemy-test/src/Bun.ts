@@ -1,5 +1,3 @@
-/** @effect-diagnostics anyUnknownInErrorContext:off */
-
 import bun from "bun:test";
 import type { HookOptions } from "node:test";
 import type { AlchemyContext } from "alchemy/AlchemyContext";

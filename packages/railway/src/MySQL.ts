@@ -13,7 +13,7 @@ import {
   type VolumeInstanceUpdateInput,
   type VolumeState,
 } from "@distilled.cloud/railway";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { Unowned, stripUnowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -263,8 +263,22 @@ export type MySQL = Resource<
     deploymentStatus: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  MySQLLookup
 >;
+
+/**
+ * Props for {@link MySQL.lookup}: find a MySQL service this stack
+ * doesn't manage by its project, environment and id.
+ */
+export interface MySQLLookup {
+  /** Railway project id. */
+  projectId: string;
+  /** Railway environment id. */
+  environmentId: string;
+  /** Railway service id of the MySQL container. */
+  serviceId: string;
+}
 
 const resolveMySQLProps = (
   props: MySQLProps | Effect.Effect<MySQLProps, never, Providers>,
@@ -374,6 +388,21 @@ const MySQLResource = Resource<MySQL>("Railway.MySQL");
  *
  * export const Site = Railway.Project("Site");
  * export const Db = Railway.MySQL("Db", { project: Site });
+ * ```
+ *
+ * ### Looking up an existing MySQL service
+ * `MySQL.lookup` references a MySQL service Alchemy doesn't manage (created in
+ * the Railway dashboard or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted.
+ *
+ * **Example:** Connect to an existing MySQL
+ * ```typescript
+ * const db = Railway.MySQL.lookup({
+ *   projectId: "a1b2c3d4-…",
+ *   environmentId: "e5f6a7b8-…",
+ *   serviceId: "c9d0e1f2-…",
+ * });
+ * const url = db.connectionUri;
  * ```
  *
  * @resource
@@ -798,6 +827,72 @@ const passwordFromVars = (vars: Record<string, string>, fallback?: string): stri
   return fallback !== undefined && fallback.length > 0 ? fallback : undefined;
 };
 
+/**
+ * Observe a MySQL from its last known attributes or its props. `lookup`
+ * passes the ids it was given as a partial `output`, as a refresh would.
+ */
+const readMySQLAttributes = Effect.fn(function* ({
+  id,
+  olds,
+  output,
+}: {
+  id: string;
+  olds?: MySQLProps;
+  output?: Partial<MySQL["Attributes"]>;
+}) {
+  const projectId =
+    output?.projectId ?? (olds !== undefined ? projectIdOf(olds.project) : undefined);
+  const environmentId =
+    output?.environmentId ??
+    (olds !== undefined
+      ? (environmentIdOf(olds.environment) ?? environmentIdOf(olds.project))
+      : undefined);
+  const name = yield* resolveName(id, olds?.name, output?.name);
+  const byId =
+    output?.serviceId !== undefined && output.serviceId.length > 0
+      ? yield* getById(output.serviceId)
+      : undefined;
+  const found = byId ?? (projectId !== undefined ? yield* findByName(projectId, name) : undefined);
+  if (found === undefined) return undefined;
+  const resolvedProjectId = projectIdOf(found) ?? projectId ?? "";
+  const resolvedEnvId =
+    environmentId ?? environmentIdOf(olds?.project) ?? output?.environmentId ?? "";
+  const instance =
+    resolvedEnvId.length > 0 ? yield* getInstance(resolvedEnvId, found.id) : undefined;
+  const volume =
+    output?.volumeInstanceId !== undefined && output.volumeInstanceId.length > 0
+      ? yield* getVolumeByInstanceId(output.volumeInstanceId)
+      : resolvedEnvId.length > 0 && resolvedProjectId.length > 0
+        ? yield* findVolume(
+            resolvedEnvId,
+            resolvedProjectId,
+            (row) =>
+              (row.serviceId ?? undefined) === found.id ||
+              (output?.volumeId !== undefined && row.volumeId === output.volumeId),
+          )
+        : undefined;
+  const proxy =
+    resolvedEnvId.length > 0 ? yield* findProxy(resolvedEnvId, found.id, MYSQL_PORT) : undefined;
+  const vars =
+    resolvedProjectId.length > 0 && resolvedEnvId.length > 0
+      ? yield* listVariableMap(resolvedProjectId, resolvedEnvId, found.id)
+      : {};
+  const attrs = toAttrs({
+    service: found,
+    instance,
+    volume,
+    proxy,
+    projectId: resolvedProjectId,
+    environmentId: resolvedEnvId,
+    user: vars.MYSQLUSER ?? vars.MYSQL_USER ?? output?.user ?? DEFAULT_MYSQL_USER,
+    password: passwordFromVars(vars) ?? "",
+    database:
+      vars.MYSQLDATABASE ?? vars.MYSQL_DATABASE ?? output?.database ?? DEFAULT_MYSQL_DATABASE,
+  });
+  if (output !== undefined) return attrs;
+  return matchesAlchemyPhysicalName(found.name) ? attrs : Unowned(attrs);
+});
+
 export const MySQLProvider = () =>
   Provider.succeed(MySQL, {
     stables: ["serviceId", "projectId", "environmentId", "volumeId"],
@@ -817,62 +912,19 @@ export const MySQLProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
-      const projectId =
-        output?.projectId ?? (olds !== undefined ? projectIdOf(olds.project) : undefined);
-      const environmentId =
-        output?.environmentId ??
-        (olds !== undefined
-          ? (environmentIdOf(olds.environment) ?? environmentIdOf(olds.project))
-          : undefined);
-      const name = yield* resolveName(id, olds?.name, output?.name);
-      const byId =
-        output?.serviceId !== undefined && output.serviceId.length > 0
-          ? yield* getById(output.serviceId)
-          : undefined;
-      const found =
-        byId ?? (projectId !== undefined ? yield* findByName(projectId, name) : undefined);
-      if (found === undefined) return undefined;
-      const resolvedProjectId = projectIdOf(found) ?? projectId ?? "";
-      const resolvedEnvId =
-        environmentId ?? environmentIdOf(olds?.project) ?? output?.environmentId ?? "";
-      const instance =
-        resolvedEnvId.length > 0 ? yield* getInstance(resolvedEnvId, found.id) : undefined;
-      const volume =
-        output?.volumeInstanceId !== undefined && output.volumeInstanceId.length > 0
-          ? yield* getVolumeByInstanceId(output.volumeInstanceId)
-          : resolvedEnvId.length > 0 && resolvedProjectId.length > 0
-            ? yield* findVolume(
-                resolvedEnvId,
-                resolvedProjectId,
-                (row) =>
-                  (row.serviceId ?? undefined) === found.id ||
-                  (output?.volumeId !== undefined && row.volumeId === output.volumeId),
-              )
-            : undefined;
-      const proxy =
-        resolvedEnvId.length > 0
-          ? yield* findProxy(resolvedEnvId, found.id, MYSQL_PORT)
-          : undefined;
-      const vars =
-        resolvedProjectId.length > 0 && resolvedEnvId.length > 0
-          ? yield* listVariableMap(resolvedProjectId, resolvedEnvId, found.id)
-          : {};
-      const attrs = toAttrs({
-        service: found,
-        instance,
-        volume,
-        proxy,
-        projectId: resolvedProjectId,
-        environmentId: resolvedEnvId,
-        user: vars.MYSQLUSER ?? vars.MYSQL_USER ?? output?.user ?? DEFAULT_MYSQL_USER,
-        password: passwordFromVars(vars) ?? "",
-        database:
-          vars.MYSQLDATABASE ?? vars.MYSQL_DATABASE ?? output?.database ?? DEFAULT_MYSQL_DATABASE,
-      });
-      if (output !== undefined) return attrs;
-      return matchesAlchemyPhysicalName(found.name) ? attrs : Unowned(attrs);
-    }),
+    lookup: ({ projectId, environmentId, serviceId }) =>
+      // The ids find it; an empty name only stops `read` deriving a physical
+      // name, which needs a deploy's resource context. Railway answers an id
+      // it doesn't know with Not Authorized, so that is a miss too.
+      readMySQLAttributes({
+        id: serviceId,
+        output: { projectId, environmentId, serviceId, name: "" },
+      }).pipe(
+        Effect.map((attrs) => (attrs === undefined ? undefined : stripUnowned(attrs))),
+        Effect.catchTag("RailwayForbidden", () => Effect.undefined),
+      ),
+
+    read: readMySQLAttributes,
 
     list: Effect.fn(function* () {
       const projects = yield* ownedProjects();

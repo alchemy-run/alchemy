@@ -1,4 +1,5 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Alchemy from "alchemy";
@@ -6,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
@@ -32,7 +34,10 @@ const EVENTS = 10;
 const SEED_BATCH = 10;
 
 const state = Cloudflare.state();
-const { test, deploy, destroy } = Test.make({ providers: Cloudflare.providers(), state });
+const { test, deploy, destroy } = Test.make({
+  providers: Layer.mergeAll(Cloudflare.providers(), DomainCloudflare.providers()),
+  state,
+});
 
 class NotYet extends Data.TaggedError("NotYet")<{
   readonly status: number;
@@ -73,7 +78,7 @@ const now = Effect.sync(() => Date.now());
 const stackOf = <W extends typeof BenchV1>(worker: W) =>
   Alchemy.Stack(
     `DomainScale-${accounts}`,
-    { providers: Cloudflare.providers(), state },
+    { providers: Layer.mergeAll(Cloudflare.providers(), DomainCloudflare.providers()), state },
     Effect.gen(function* () {
       const deployed = yield* worker;
       return { url: deployed.url.as<string>(), workerName: deployed.workerName };
@@ -115,79 +120,83 @@ export default class DomainBenchWorker extends Cloudflare.Worker<DomainBenchWork
     return module.default as typeof BenchV1;
   });
 
-describe("domain backfill at scale", () => {
-  test.skipIf(step !== "seed")(
-    `seed ${accounts} accounts`,
-    Effect.gen(function* () {
-      const { url } = yield* deploy(stackOf(BenchV1));
-      const base = url.replace(/\/+$/, "");
-      yield* serving(base, "v1");
-      const batches = Math.ceil(accounts / SEED_BATCH);
-      const done = yield* Ref.make(0);
-      const started = yield* now;
-      yield* Effect.forEach(
-        Array.from({ length: batches }, (_, i) => i * SEED_BATCH),
-        (from) =>
-          call(
-            base,
-            "POST",
-            `/seed/${from}/${Math.min(SEED_BATCH, accounts - from)}/${EVENTS}`,
-          ).pipe(
-            Effect.andThen(Ref.updateAndGet(done, (n) => n + 1)),
-            Effect.tap((n) =>
-              n % 500 === 0
-                ? Effect.flatMap(now, (at) =>
-                    Effect.sync(() =>
-                      console.log(
-                        `SEED ${n * SEED_BATCH}/${accounts} ${((at - started) / 1000).toFixed(0)}s`,
+describe(
+  "domain backfill at scale",
+  { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"] },
+  () => {
+    test.skipIf(step !== "seed")(
+      `seed ${accounts} accounts`,
+      Effect.gen(function* () {
+        const { url } = yield* deploy(stackOf(BenchV1));
+        const base = url.replace(/\/+$/, "");
+        yield* serving(base, "v1");
+        const batches = Math.ceil(accounts / SEED_BATCH);
+        const done = yield* Ref.make(0);
+        const started = yield* now;
+        yield* Effect.forEach(
+          Array.from({ length: batches }, (_, i) => i * SEED_BATCH),
+          (from) =>
+            call(
+              base,
+              "POST",
+              `/seed/${from}/${Math.min(SEED_BATCH, accounts - from)}/${EVENTS}`,
+            ).pipe(
+              Effect.andThen(Ref.updateAndGet(done, (n) => n + 1)),
+              Effect.tap((n) =>
+                n % 500 === 0
+                  ? Effect.flatMap(now, (at) =>
+                      Effect.sync(() =>
+                        console.log(
+                          `SEED ${n * SEED_BATCH}/${accounts} ${((at - started) / 1000).toFixed(0)}s`,
+                        ),
                       ),
-                    ),
-                  )
-                : Effect.void,
+                    )
+                  : Effect.void,
+              ),
             ),
+          { concurrency: 64, discard: true },
+        );
+        const ended = yield* now;
+        yield* Effect.sync(() =>
+          console.log(`SEEDED ${JSON.stringify({ accounts, seconds: (ended - started) / 1000 })}`),
+        );
+      }),
+      { timeout: 7_200_000 },
+    );
+
+    test.skipIf(step !== "rebuild")(
+      `rebuild a view over ${accounts} accounts at version ${version}`,
+      Effect.gen(function* () {
+        const worker = yield* versioned(version);
+        const started = yield* now;
+        const { url } = yield* deploy(stackOf(worker));
+        const ended = yield* now;
+        const base = url.replace(/\/+$/, "");
+        yield* serving(base, "v2");
+        const history = JSON.parse(yield* call(base, "GET", "/history")) as { complete: boolean };
+        const expected = Array.from({ length: EVENTS }, (_, n) => n + 1);
+        for (const i of [0, Math.floor(accounts / 2), accounts - 1]) {
+          const view = JSON.parse(yield* call(base, "GET", `/view/b${i}`)) as {
+            amounts: Array<number>;
+          } | null;
+          expect(view?.amounts).toEqual(expected);
+        }
+        expect(history.complete).toBe(true);
+        yield* Effect.sync(() =>
+          console.log(
+            `SCALE ${JSON.stringify({ accounts, version, deploySeconds: (ended - started) / 1000 })}`,
           ),
-        { concurrency: 64, discard: true },
-      );
-      const ended = yield* now;
-      yield* Effect.sync(() =>
-        console.log(`SEEDED ${JSON.stringify({ accounts, seconds: (ended - started) / 1000 })}`),
-      );
-    }),
-    { timeout: 7_200_000 },
-  );
+        );
+      }),
+      { timeout: 7_200_000 },
+    );
 
-  test.skipIf(step !== "rebuild")(
-    `rebuild a view over ${accounts} accounts at version ${version}`,
-    Effect.gen(function* () {
-      const worker = yield* versioned(version);
-      const started = yield* now;
-      const { url } = yield* deploy(stackOf(worker));
-      const ended = yield* now;
-      const base = url.replace(/\/+$/, "");
-      yield* serving(base, "v2");
-      const history = JSON.parse(yield* call(base, "GET", "/history")) as { complete: boolean };
-      const expected = Array.from({ length: EVENTS }, (_, n) => n + 1);
-      for (const i of [0, Math.floor(accounts / 2), accounts - 1]) {
-        const view = JSON.parse(yield* call(base, "GET", `/view/b${i}`)) as {
-          amounts: Array<number>;
-        } | null;
-        expect(view?.amounts).toEqual(expected);
-      }
-      expect(history.complete).toBe(true);
-      yield* Effect.sync(() =>
-        console.log(
-          `SCALE ${JSON.stringify({ accounts, version, deploySeconds: (ended - started) / 1000 })}`,
-        ),
-      );
-    }),
-    { timeout: 7_200_000 },
-  );
-
-  test.skipIf(step !== "destroy")(
-    "destroy",
-    Effect.gen(function* () {
-      yield* destroy(stackOf(BenchV1));
-    }),
-    { timeout: 1_800_000 },
-  );
-});
+    test.skipIf(step !== "destroy")(
+      "destroy",
+      Effect.gen(function* () {
+        yield* destroy(stackOf(BenchV1));
+      }),
+      { timeout: 1_800_000 },
+    );
+  },
+);

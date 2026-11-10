@@ -142,7 +142,7 @@ const history = [
   send("a-2", new Deposit({ amount: 3 })),
 ];
 
-describe("Domain view versions", () => {
+describe("Domain view versions", { tags: ["unit", "local"] }, () => {
   it.live(
     "a view keyed by its aggregate is rebuilt in place: each key reads its events again",
     () =>
@@ -155,8 +155,8 @@ describe("Domain view versions", () => {
             const view = yield* SummaryV1;
             // Nothing to wait for, before anything is delivered.
             const { complete } = yield* view.history;
-            const a1 = Option.getOrUndefined(yield* view.query(Account.ref("a-1")));
-            const a2 = Option.getOrUndefined(yield* view.query(Account.ref("a-2")));
+            const a1 = Option.getOrUndefined(yield* view.get(Account.ref("a-1")));
+            const a2 = Option.getOrUndefined(yield* view.get(Account.ref("a-2")));
             return [complete, a1, a2] as const;
           }),
         );
@@ -180,7 +180,7 @@ describe("Domain view versions", () => {
           return [
             before,
             (yield* view.history).complete,
-            Option.getOrUndefined(yield* view.query("all")),
+            Option.getOrUndefined(yield* view.get("all")),
           ] as const;
         }),
       );
@@ -200,7 +200,7 @@ describe("Domain view versions", () => {
           bank.settle.pipe(
             Effect.andThen(
               Effect.gen(function* () {
-                return yield* (yield* Latest).query(Account.ref("a-1"));
+                return yield* (yield* Latest).get(Account.ref("a-1"));
               }),
             ),
           ),
@@ -212,7 +212,7 @@ describe("Domain view versions", () => {
         BankV1,
         Effect.gen(function* () {
           yield* bank.settle;
-          return Option.getOrUndefined(yield* (yield* LatestOfV1).query(Account.ref("a-1")));
+          return Option.getOrUndefined(yield* (yield* LatestOfV1).get(Account.ref("a-1")));
         }),
       );
       expect(top).toEqual({ net: 6 });
@@ -228,7 +228,7 @@ describe("Domain view versions", () => {
           yield* send("a-9", new Deposit({ amount: 7 }));
           yield* send("a-9", new Withdraw({ amount: 2 }));
           yield* bank.settle;
-          return Option.getOrUndefined(yield* (yield* SummaryV1).query(Account.ref("a-9")));
+          return Option.getOrUndefined(yield* (yield* SummaryV1).get(Account.ref("a-9")));
         }),
       );
       expect(fresh).toEqual({ net: 5 });

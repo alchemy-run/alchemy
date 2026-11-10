@@ -1,4 +1,5 @@
 import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -18,6 +19,7 @@ import {
   MissingInitial,
   MissingKeyOf,
   NoEmitter,
+  PagedWithoutSuccess,
   type Reason,
   TwoWriters,
   NewerGeneration,
@@ -26,6 +28,7 @@ import {
   UnhandledCommand,
   UnknownEvent,
   UnknownSource,
+  UnknownWait,
   UnknownStream,
   UnmatchedRoute,
   WriterKeyMismatch,
@@ -50,6 +53,7 @@ import type {
 } from "./Platform.ts";
 import type * as Policy from "./Policy.ts";
 import type * as Projection from "./Projection.ts";
+import type * as Query from "./Query.ts";
 import * as RequestContext from "./RequestContext.ts";
 import type * as DomainStream from "./Stream.ts";
 import * as Telemetry from "./Telemetry.ts";
@@ -64,6 +68,7 @@ export interface Definitions {
   readonly policies: ReadonlyArray<Policy.Any>;
   readonly projections: ReadonlyArray<Projection.Any>;
   readonly streams: ReadonlyArray<DomainStream.Any>;
+  readonly queries?: ReadonlyArray<Query.Any>;
 }
 
 /**
@@ -166,6 +171,14 @@ export interface Kernel {
   /** The keys of a projection an aggregate's committed event is routed to (empty if it is not consumed). */
   readonly projectionKeys: (
     projection: Projection.Any,
+    aggregate: string,
+    id: string,
+    event: { readonly _tag: string },
+    seq: number,
+  ) => ReadonlyArray<string>;
+  /** The keys of a view that an aggregate instance's event reaches. */
+  readonly viewKeys: (
+    view: View.Any,
     aggregate: string,
     id: string,
     event: { readonly _tag: string },
@@ -300,9 +313,6 @@ const build = (
     Effect.map(eventCodec(event._tag), (codec) => codec.encode(event));
   const decodeEvent = (json: Json): Effect.Effect<unknown> =>
     Effect.map(eventCodec((json as { _tag: string })._tag), (codec) => codec.decode(json));
-  /** The span attributes an event's declaration adds. */
-  const eventAttributes = (event: { readonly _tag: string }) =>
-    Telemetry.attributesOf(eventCodecs.get(event._tag)?.cls, event);
 
   // ----------------------------------------------------- aggregate codecs
   interface AggregateCodecs {
@@ -659,6 +669,38 @@ const build = (
         continue;
       }
       writers.set(stream.streamName, projection);
+    }
+  }
+
+  // ---------------------------------------------------------------- queries
+  // A query is a method of an Api's client, beside its commands, views,
+  // streams and aggregates, so it shares their names.
+  const callNames = new Set([
+    ...sources.keys(),
+    ...streamNames,
+    ...definitions.aggregates.flatMap((aggregate) =>
+      aggregate.definition.commands.map((command: Command.Any) => command.tag),
+    ),
+  ]);
+  const queryNames = new Set<string>();
+  for (const query of definitions.queries ?? []) {
+    const name = query.queryName;
+    if (queryNames.has(name)) {
+      problem(new DuplicateDefinition({ kind: "query", entity: name }));
+      continue;
+    }
+    queryNames.add(name);
+    if (callNames.has(name)) problem(new DuplicateName({ entity: name }));
+    const def = query.definition;
+    if (def.paged && !def.success) problem(new PagedWithoutSuccess({ query: name }));
+    for (const read of def.waitsFor ?? []) {
+      const [readName, held] =
+        read.kind === "Projection"
+          ? [read.projectionName, projectionByName.get(read.projectionName) === read]
+          : read.kind === "View"
+            ? [read.viewName, definitions.views.includes(read)]
+            : [read.streamName, definitions.streams.includes(read)];
+      if (!held) problem(new UnknownWait({ query: name, read: readName }));
     }
   }
 
@@ -1056,21 +1098,23 @@ const build = (
             );
           }
           const decoded = command.codec.decode(input.command) as { readonly _tag: string };
-          yield* Effect.annotateCurrentSpan(Telemetry.attributesOf(command.cls, decoded));
           const state = codecs.state.decode(input.state ?? codecs.initial);
           const id = decodeId(input.id) as string;
           const now = DateTime.makeUnsafe(input.now);
-          let decision = (def.decide as Record<string, (...args: any[]) => unknown>)[decoded._tag](
-            state,
-            decoded,
-            {
-              id,
-              now,
-              commandId: input.commandId,
-              stream: `${aggregate.aggregateName}/${id}`,
-              version: input.version,
-            },
-          );
+          let decision = Aggregate.decisionOf(aggregate, state, decoded, {
+            id,
+            now,
+            commandId: input.commandId,
+            stream: `${aggregate.aggregateName}/${id}`,
+            version: input.version,
+          });
+          if (decision === undefined) {
+            return yield* Effect.die(
+              new DefinitionError({
+                reason: new UnhandledCommand({ aggregate: aggregate.aggregateName, command: tag }),
+              }),
+            );
+          }
           // An effectful decision runs here, inside the decide span, with the
           // context the command was sent with (its only requirement, enforced
           // by `Aggregate.Decision`).
@@ -1090,11 +1134,7 @@ const build = (
           if (judged._tag === "Rejected") {
             const rejection = judged.rejection;
             const codec = codecs.rejections.get(rejection._tag)!;
-            const declared = command.cls.rejects.find((r) => rejectionTag(r) === rejection._tag)!;
-            yield* Effect.annotateCurrentSpan({
-              "domain.outcome": rejection._tag,
-              ...Telemetry.attributesOf(declared, rejection),
-            });
+            yield* Effect.annotateCurrentSpan({ "domain.outcome": rejection._tag });
             return { _tag: "Rejected", rejection: codec.encode(rejection) } as HandleResult;
           }
           const trace = yield* Telemetry.currentTrace;
@@ -1123,10 +1163,7 @@ const build = (
           const span = yield* Effect.orElseSucceed(Effect.currentSpan, () => undefined);
           const at = BigInt(input.now) * 1_000_000n;
           for (const [index, event] of decided.entries()) {
-            span?.event(event._tag, at, {
-              "domain.seq": input.version + index + 1,
-              ...eventAttributes(event),
-            });
+            span?.event(event._tag, at, { "domain.seq": input.version + index + 1 });
             yield* Telemetry.record(Telemetry.events, {
               "domain.aggregate": aggregate.aggregateName,
               "domain.event": event._tag,
@@ -1142,7 +1179,7 @@ const build = (
           } as HandleResult;
         });
         return Effect.gen(function* () {
-          const started = yield* Effect.sync(() => Date.now());
+          const started = yield* Clock.currentTimeMillis;
           const result = yield* decideAndCommit.pipe(
             Effect.annotateLogs(base),
             Effect.withSpan(`Domain.decide ${aggregate.aggregateName}.${tag}`, {
@@ -1163,7 +1200,7 @@ const build = (
           yield* Telemetry.record(
             Telemetry.commandDuration,
             tags,
-            (yield* Effect.sync(() => Date.now())) - started,
+            (yield* Clock.currentTimeMillis) - started,
           );
           return result;
         });
@@ -1417,15 +1454,11 @@ const build = (
               );
             },
             { discard: true },
-          ).pipe(
-            Effect.tap(() =>
-              Effect.annotateCurrentSpan(eventAttributes(event as { readonly _tag: string })),
-            ),
           ),
         ).pipe(
           Effect.onExit((exit) =>
             Effect.gen(function* () {
-              const now = yield* Effect.sync(() => Date.now());
+              const now = yield* Clock.currentTimeMillis;
               const tags = { "domain.kind": "policy", "domain.consumer": policy.policyName };
               yield* Telemetry.record(Telemetry.lag, tags, now - delivery.envelope.at);
               yield* Telemetry.record(Telemetry.runs, {
@@ -1479,8 +1512,9 @@ const build = (
       return inputs;
     });
 
-  const projectionKeys = (
-    projection: Projection.Any,
+  const consumerKeys = (
+    kind: "view" | "projection",
+    name: string,
     aggregate: string,
     id: string,
     event: { readonly _tag: string },
@@ -1499,8 +1533,7 @@ const build = (
     };
     const keys: Array<string> = [];
     for (const subscriber of subscribers.get(aggregate)?.get(event._tag) ?? []) {
-      if (subscriber.kind !== "projection" || subscriber.name !== projection.projectionName)
-        continue;
+      if (subscriber.kind !== kind || subscriber.name !== name) continue;
       const input = {
         event,
         source: Aggregate.makeRef(entry.aggregate, id),
@@ -1513,12 +1546,28 @@ const build = (
     return keys;
   };
 
+  const projectionKeys = (
+    projection: Projection.Any,
+    aggregate: string,
+    id: string,
+    event: { readonly _tag: string },
+    seq: number,
+  ) => consumerKeys("projection", projection.projectionName, aggregate, id, event, seq);
+  const viewKeys = (
+    view: View.Any,
+    aggregate: string,
+    id: string,
+    event: { readonly _tag: string },
+    seq: number,
+  ) => consumerKeys("view", view.viewName, aggregate, id, event, seq);
+
   return {
     aggregateKit,
     viewKit,
     policyKit,
     projectionInputs,
     projectionKeys,
+    viewKeys,
     get targets() {
       return [
         ...definitions.views.map((view) => targetIdOf("view", view.viewName)),

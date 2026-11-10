@@ -98,8 +98,18 @@ export interface Channel extends Resource<
     authorized: boolean | undefined;
   },
   never,
-  Providers
+  Providers,
+  ChannelLookup
 > {}
+
+/**
+ * Props for {@link Channel.lookup}: find a channel this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ChannelLookup {
+  /** The ARN of the existing channel. */
+  channelArn: string;
+}
 
 /**
  * An Amazon IVS (Interactive Video Service) channel for low-latency live
@@ -140,6 +150,16 @@ export interface Channel extends Resource<
  *   channelArn: channel.channelArn,
  * });
  * // broadcast to rtmps://{channel.ingestEndpoint}:443/app/ with streamKey.value
+ * ```
+ *
+ * ### Looking up an existing channel
+ * `Channel.lookup` references a channel Alchemy doesn't manage (created in the
+ * console or by another stack), found by `channelArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing channel
+ * ```typescript
+ * const existing = AWS.IVS.Channel.lookup({ channelArn: "..." });
  * ```
  *
  * @resource
@@ -210,6 +230,13 @@ export const ChannelProvider = () =>
 
       return {
         stables: ["channelArn"],
+
+        lookup: Effect.fn(function* ({ channelArn }) {
+          const channel = yield* getByArn(channelArn);
+          if (channel === undefined) return undefined;
+          const attrs = yield* toAttrs(channel);
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const channel = output?.channelArn

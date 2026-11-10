@@ -29,7 +29,6 @@ class Wallet extends Domain.Aggregate("Wallet", {
   commands: [Deposit],
   decide: { Deposit: (_, { amount }) => [new Deposited({ amount })] },
   evolve: { Deposited: (s, e) => ({ balance: s.balance + e.amount }) },
-  read: {},
 }) {}
 
 const BookedFields = { wallet: Schema.String, amount: Schema.Number, at: Schema.DateTimeUtc };
@@ -46,7 +45,6 @@ class Ledger extends Domain.Aggregate("Ledger", {
   commands: [Book],
   decide: { Book: (_, { wallet, amount, at }) => [new Booked({ wallet, amount, at })] },
   evolve: { Booked: (s, e) => ({ total: s.total + e.amount }) },
-  read: {},
 }) {}
 
 class BookDeposits extends Domain.Policy("BookDeposits", { from: Wallet, on: [Deposited] }) {}
@@ -83,23 +81,39 @@ class Parcel extends Domain.Aggregate("Parcel", {
   state: Schema.Struct({ to: Schema.String, ref: Schema.String }),
   initial: { to: "", ref: "" },
   commands: [Ship],
-  decide: { Ship: (_, { target, commandId }) => [new Shipped({ to: target, ref: commandId })] },
+  decide: {
+    Ship: (_, { target, commandId }) => [new Shipped({ to: target, ref: commandId })],
+  },
   evolve: { Shipped: (_, e) => ({ to: e.to, ref: e.ref }) },
   reply: { Ship: (s) => s },
-  read: {},
+}) {}
+
+// What clients read of a wallet and a parcel: every event, with its envelope.
+class Deposits extends Domain.View("Deposits", {
+  from: [Wallet],
+  key: Wallet,
+  state: Schema.Struct({ count: Schema.Number }),
+  initial: { count: 0 },
+  evolve: { Deposited: (s) => ({ count: s.count + 1 }) },
+}) {}
+class Shipments extends Domain.View("Shipments", {
+  from: [Parcel],
+  key: Parcel,
+  state: Schema.Struct({ count: Schema.Number }),
+  initial: { count: 0 },
+  evolve: { Shipped: (s) => ({ count: s.count + 1 }) },
 }) {}
 
 class Bank extends Domain.Model("Bank", {
   aggregates: [Wallet, Ledger, Parcel],
-  views: [Bookings],
+  views: [Bookings, Deposits, Shipments],
   policies: [BookDeposits],
 }) {}
 
 class BankApi extends Domain.Api("BankApi", {
   model: Bank,
   commands: ["Deposit", "Ship"],
-  views: ["Bookings"],
-  aggregates: ["Wallet", "Ledger", "Parcel"],
+  views: ["Bookings", "Deposits", "Shipments"],
 }) {}
 
 const Hosted = Bank.layer(BookDepositsLive).pipe(Layer.provide(InMemory));
@@ -128,7 +142,7 @@ describe("Domain Api over the wire", { tags: ["unit", "local"] }, () => {
         stream: "Parcel/p-1",
       });
 
-      const [shipped] = yield* bank.Parcel.events("p-1").pipe(
+      const [shipped] = yield* bank.Shipments.events("p-1").pipe(
         Stream.filter(Domain.Read.isEvent),
         Stream.take(1),
         Stream.runCollect,
@@ -143,7 +157,7 @@ describe("Domain Api over the wire", { tags: ["unit", "local"] }, () => {
       const local = yield* BankApi.clientInProcess;
       yield* bank.Deposit("w-1", { amount: 5 }, { commandId: "deposit-1" });
 
-      const [wallet] = yield* bank.Wallet.events("w-1").pipe(
+      const [wallet] = yield* bank.Deposits.events("w-1").pipe(
         Stream.filter(Domain.Read.isEvent),
         Stream.take(1),
         Stream.runCollect,
@@ -154,25 +168,18 @@ describe("Domain Api over the wire", { tags: ["unit", "local"] }, () => {
       });
 
       // The policy's command has its own id, and carries the deposit's correlation id.
-      const [booked] = yield* bank.Ledger.events("main").pipe(
+      const [booked] = yield* bank.Bookings.events("main").pipe(
         Stream.filter(Domain.Read.isEvent),
         Stream.take(1),
         Stream.runCollect,
       );
       expect(booked!.envelope.commandId).not.toBe("deposit-1");
       expect(booked!.envelope.correlationId).toBe("deposit-1");
-
-      const [entry] = yield* bank.Bookings.events("main").pipe(
-        Stream.filter(Domain.Read.isEvent),
-        Stream.take(1),
-        Stream.runCollect,
-      );
-      expect(entry!.envelope.correlationId).toBe("deposit-1");
       const page = yield* bank.Bookings.list("main");
       expect(page.entries[0]!.envelope.correlationId).toBe("deposit-1");
 
       // The wire gives what the in-process client gives.
-      const [direct] = yield* local.Ledger.events("main").pipe(
+      const [direct] = yield* local.Bookings.events("main").pipe(
         Stream.filter(Domain.Read.isEvent),
         Stream.take(1),
         Stream.runCollect,
@@ -184,7 +191,11 @@ describe("Domain Api over the wire", { tags: ["unit", "local"] }, () => {
     Effect.gen(function* () {
       const bank = yield* BankApi.client;
       yield* bank.Deposit("w-1", { amount: 5 }, { commandId: "deposit-1" });
-      yield* bank.Ledger.events("main").pipe(Stream.take(1), Stream.runCollect);
+      yield* bank.Bookings.events("main").pipe(
+        Stream.filter(Domain.Read.isEvent),
+        Stream.take(1),
+        Stream.runCollect,
+      );
       const now = yield* DateTime.now;
 
       const page = yield* bank.Bookings.list("main", { where: { at: { lte: now } } });
@@ -198,7 +209,11 @@ describe("Domain Api over the wire", { tags: ["unit", "local"] }, () => {
     Effect.gen(function* () {
       const bank = yield* BankApi.client;
       yield* bank.Deposit("w-1", { amount: 5 }, { commandId: "deposit-1" });
-      yield* bank.Ledger.events("main").pipe(Stream.take(1), Stream.runCollect);
+      yield* bank.Bookings.events("main").pipe(
+        Stream.filter(Domain.Read.isEvent),
+        Stream.take(1),
+        Stream.runCollect,
+      );
 
       // `in` takes a list: the filter fails to encode, rather than throwing where it is evaluated.
       const exit = yield* Effect.exit(

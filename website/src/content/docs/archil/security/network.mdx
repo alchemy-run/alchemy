@@ -1,0 +1,72 @@
+---
+title: Network
+sidebar:
+  order: 2
+description: Control what a sandbox can reach, and add credentials to its requests on the way out.
+---
+
+import Boundaries from "../../../../components/diagrams/Boundaries.astro";
+
+Every sandbox has an outbound policy. Archil enforces it outside the microVM, so code inside can't change it, and it can add headers to requests as they leave, so a key the sandbox uses never sits inside it.
+
+## The policy is enforced outside the microVM
+
+<Boundaries
+  nodes={[
+    { id: "agent", label: "agent", type: "your code", col: 0, row: 0, tone: "accent" },
+    { id: "github", label: "api.github.com", type: "allowed · + Authorization", col: 0, row: 1 },
+    { id: "other", label: "example.com", type: "not listed", col: 2, row: 1 },
+  ]}
+  zones={[
+    { id: "sandbox", label: "sandbox", type: "egress: deny", nodes: ["agent"] },
+    { id: "rest", label: "everything else", nodes: ["other"], tone: "warn", labelAt: "right" },
+  ]}
+  links={[
+    { from: "agent", to: "github", label: "GET /user" },
+    { from: "agent", to: "rest", kind: "blocked" },
+  ]}
+  caption="With default: deny, a sandbox reaches only the hosts it allows. The policy adds the Authorization header to requests for api.github.com, so the token never enters the sandbox."
+/>
+
+## Deny everything but a list of hosts
+
+```typescript title="src/agent.ts"
+export const Agent = Archil.Sandbox("Agent", {
+  network: {
+    egress: { default: "deny", allow: ["registry.npmjs.org", "*.github.com"] },
+  },
+});
+```
+
+Deny entries win over allow entries. A wildcard matches subdomains, not the apex domain.
+
+## Add a credential on the way out
+
+An allow entry can set headers on matching HTTPS requests. The sandbox never sees the value:
+
+```typescript title="src/agent.ts"
+export const Agent = Archil.Sandbox("Agent", {
+  network: {
+    egress: {
+      default: "deny",
+      allow: [
+        { target: "api.github.com", headers: { Authorization: Config.Redacted("GITHUB_AUTH") } },
+      ],
+    },
+  },
+});
+```
+
+Archil has no secret store, so the value lives in the sandbox's policy.
+
+## Change the policy while it runs
+
+```typescript
+yield* sandbox.setEgress({ default: "deny", allow: ["api.openai.com"] });
+```
+
+The new policy applies at once. On a declared `Archil.Sandbox`, changing `network` updates it in place.
+
+## Your plan sets the default
+
+On Archil's Free plan, sandboxes reach only a managed allowlist of package registries, Git hosts and model APIs, and adding headers needs the Developer plan or above. A sandbox created on a paid plan with no policy reaches anything.

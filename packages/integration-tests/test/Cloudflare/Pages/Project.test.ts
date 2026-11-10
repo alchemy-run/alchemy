@@ -257,3 +257,16 @@ test.provider(
     }).pipe(logLevel),
   { tags: ["provider:cloudflare", "provider:cloudflare:pages", "live"] },
 );
+
+test.provider(
+  "declared without props, it deploys and destroys",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      // Every prop is optional, so the declaration needs no props object.
+      const deployed = yield* stack.deploy(Cloudflare.Pages.Project("NoProps"));
+      expect(deployed.projectId).toBeTruthy();
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:cloudflare", "provider:cloudflare:pages", "live"] },
+);

@@ -6,6 +6,7 @@ import * as discoveryengine from "@distilled.cloud/gcp/discoveryengine_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { ensureDataStore, quotaTolerant } from "./parent.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -70,6 +71,13 @@ test.provider.skipIf(!runLifecycle)(
             synonymsAction: { synonyms: ["happy", "glad"] },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.DiscoveryEngine.DataStoresControl.lookup({
+          controlId: created.controlId,
+          dataStore: created.dataStore,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/controls/");

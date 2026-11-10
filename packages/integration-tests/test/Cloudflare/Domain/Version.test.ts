@@ -1,6 +1,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { CloudflareApiLive } from "@alchemy.run/cloudflare/Providers";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as durableObjects from "@distilled.cloud/cloudflare/durable-objects";
@@ -9,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { requestWorker } from "../Utils/WorkerRequest.ts";
@@ -108,68 +110,75 @@ const classes = (scriptName: string) =>
   }).pipe(Effect.provide(CloudflareApiLive()), Effect.scoped);
 
 for (const dev of [true, false]) {
-  describe(dev ? "local view versions" : "live view versions", () => {
-    const { test } = Test.make({ providers: Cloudflare.providers(), dev });
+  describe(
+    dev ? "local view versions" : "live view versions",
+    { tags: ["provider:cloudflare", "provider:cloudflare:worker", dev ? "local" : "live"] },
+    () => {
+      const { test } = Test.make({
+        providers: Layer.mergeAll(Cloudflare.providers(), DomainCloudflare.providers()),
+        dev,
+      });
 
-    test.provider(
-      `${dev ? "local" : "live"}: bumping a view's version rebuilds it in place, and what reads it from the history`,
-      (stack) =>
-        Effect.gen(function* () {
-          yield* stack.destroy();
-          const { worker } = yield* stack.deploy(
-            Effect.gen(function* () {
-              return { worker: yield* WorkerV0 };
-            }),
-          );
-          const url = worker.url!.replace(/\/+$/, "");
-          yield* serving(url, "v0");
-          yield* call(url, "POST", "/deposit/a-1/10");
-          yield* call(url, "POST", "/withdraw/a-1/4");
-          yield* call(url, "POST", "/deposit/a-2/3");
-          // Version 0 counts deposits only.
-          expect(yield* row(url, "summary", "a-1", 10)).toEqual({ net: 10 });
-          expect(yield* row(url, "latest", "a-1", 10)).toEqual({ net: 10 });
-          const before = dev ? {} : yield* classes(worker.workerName);
+      test.provider(
+        `${dev ? "local" : "live"}: bumping a view's version rebuilds it in place, and what reads it from the history`,
+        (stack) =>
+          Effect.gen(function* () {
+            yield* stack.destroy();
+            const { worker } = yield* stack.deploy(
+              Effect.gen(function* () {
+                return { worker: yield* WorkerV0 };
+              }),
+            );
+            const url = worker.url!.replace(/\/+$/, "");
+            yield* serving(url, "v0");
+            yield* call(url, "POST", "/deposit/a-1/10");
+            yield* call(url, "POST", "/withdraw/a-1/4");
+            yield* call(url, "POST", "/deposit/a-2/3");
+            // Version 0 counts deposits only.
+            expect(yield* row(url, "summary", "a-1", 10)).toEqual({ net: 10 });
+            expect(yield* row(url, "latest", "a-1", 10)).toEqual({ net: 10 });
+            const before = dev ? {} : yield* classes(worker.workerName);
 
-          // Live, keep a-1's summary busy through the deploy, so its object stays on
-          // the code from before it (it moves once idle): every read must still answer.
-          const answers: Array<{ status: number; body: string }> = [];
-          const watcher = dev
-            ? undefined
-            : yield* Effect.forkChild(watch(url, "/summary/a-1", answers));
-          yield* stack.deploy(
-            Effect.gen(function* () {
-              return { worker: yield* WorkerV1 };
-            }),
-          );
-          yield* serving(url, "v1");
-          // The withdrawal, which the old rows never received, counts: at once, even
-          // while the busy object runs the old code.
-          expect(yield* soon(url, "summary", "a-1", 6)).toEqual({ net: 6 });
-          if (watcher) {
-            yield* Fiber.interrupt(watcher);
-            expect(answers.length).toBeGreaterThan(10);
-            expect(answers.filter((answer) => answer.status !== 200)).toEqual([]);
-          }
-          expect(yield* row(url, "summary", "a-2", 3)).toEqual({ net: 3 });
-          // The view built on it is rebuilt from the summary's new rows.
-          expect(yield* row(url, "latest", "a-1", 6)).toEqual({ net: 6 });
-          // And it keeps up afterwards.
-          yield* call(url, "POST", "/withdraw/a-1/1");
-          expect(yield* row(url, "summary", "a-1", 5)).toEqual({ net: 5 });
-          expect(yield* row(url, "latest", "a-1", 5)).toEqual({ net: 5 });
+            // Live, keep a-1's summary busy through the deploy, so its object stays on
+            // the code from before it (it moves once idle): every read must still answer.
+            const answers: Array<{ status: number; body: string }> = [];
+            const watcher = dev
+              ? undefined
+              : yield* Effect.forkChild(watch(url, "/summary/a-1", answers));
+            yield* stack.deploy(
+              Effect.gen(function* () {
+                return { worker: yield* WorkerV1 };
+              }),
+            );
+            yield* serving(url, "v1");
+            // The withdrawal, which the old rows never received, counts: at once, even
+            // while the busy object runs the old code.
+            expect(yield* soon(url, "summary", "a-1", 6)).toEqual({ net: 6 });
+            if (watcher) {
+              yield* Fiber.interrupt(watcher);
+              expect(answers.length).toBeGreaterThan(10);
+              expect(answers.filter((answer) => answer.status !== 200)).toEqual([]);
+            }
+            expect(yield* row(url, "summary", "a-2", 3)).toEqual({ net: 3 });
+            // The view built on it is rebuilt from the summary's new rows.
+            expect(yield* row(url, "latest", "a-1", 6)).toEqual({ net: 6 });
+            // And it keeps up afterwards.
+            yield* call(url, "POST", "/withdraw/a-1/1");
+            expect(yield* row(url, "summary", "a-1", 5)).toEqual({ net: 5 });
+            expect(yield* row(url, "latest", "a-1", 5)).toEqual({ net: 5 });
 
-          if (!dev) {
-            const after = yield* classes(worker.workerName);
-            // The summary was rebuilt in its own storage; the latest view in a new one.
-            expect(after["Bank.SummaryView"]).toBe(before["Bank.SummaryView"]);
-            expect(after["Bank.SummaryViewV1"]).toBeUndefined();
-            expect(after["Bank.LatestViewV1"]).toBeDefined();
-          }
+            if (!dev) {
+              const after = yield* classes(worker.workerName);
+              // The summary was rebuilt in its own storage; the latest view in a new one.
+              expect(after["Bank.SummaryView"]).toBe(before["Bank.SummaryView"]);
+              expect(after["Bank.SummaryViewV1"]).toBeUndefined();
+              expect(after["Bank.LatestViewV1"]).toBeDefined();
+            }
 
-          yield* stack.destroy();
-        }),
-      { timeout: 900_000 },
-    );
-  });
+            yield* stack.destroy();
+          }),
+        { timeout: 900_000 },
+      );
+    },
+  );
 }

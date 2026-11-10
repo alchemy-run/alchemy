@@ -16,7 +16,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import type { LogLine, LogsInput } from "alchemy/Provider";
 import * as Provider from "alchemy/Provider";
-import { Resource, type ResourceBinding } from "alchemy/Resource";
+import { type LookupMethod, Resource, type ResourceBinding } from "alchemy/Resource";
 import type { FunctionContext, FunctionListener } from "alchemy/Runtime/Function";
 import { packEnvValue, RuntimeContext, unpackEnvValue } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
@@ -27,6 +27,7 @@ import { sha256 } from "alchemy/Util/sha256";
 import { zipCode } from "alchemy/Util/zip";
 import type * as lambda from "aws-lambda";
 import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
@@ -765,8 +766,29 @@ export interface Function extends Resource<
       localMountPath: string;
     }[];
   },
-  Providers
+  Providers,
+  FunctionLookup
 > {}
+
+/**
+ * Props for {@link Function.lookup}: find a function this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface FunctionLookup {
+  /**
+   * The function's name, or its full or partial ARN.
+   */
+  functionName: string;
+}
+
+/** The CloudWatch Logs live-tail stream behind `alchemy logs --tail` broke. */
+export class LambdaLiveTailError extends Data.TaggedError("LambdaLiveTailError")<{
+  cause: Error;
+}> {
+  override get message() {
+    return `Lambda live tail failed: ${this.cause.message}`;
+  }
+}
 
 /**
  * Lambda refused to publish a version or create the alias for a Function
@@ -974,6 +996,18 @@ export const normalizeFunctionUrl = (
  * FROM public.ecr.aws/lambda/java:21
  * COPY target/function.jar ${LAMBDA_TASK_ROOT}/lib/
  * CMD ["com.example.Handler::handleRequest"]
+ * ```
+ *
+ * #### Cache build layers
+ * Image builds reuse the local BuildKit cache of the machine they run on. Set
+ * `cache: true` to keep every stage's layers at the function repository's
+ * `:buildcache` tag, so a fresh builder (a new CI runner) skips unchanged
+ * steps:
+ *
+ * ```typescript
+ * const func = yield* AWS.Lambda.Function("JavaFunction", {
+ *   image: { context: "./lambda", dockerfile: "Dockerfile", cache: true },
+ * });
  * ```
  *
  * ### Effect Functions
@@ -1366,6 +1400,20 @@ export const normalizeFunctionUrl = (
  * );
  * ```
  *
+ * ### Looking up an existing function
+ * `Function.lookup` references a function Alchemy doesn't manage (deployed
+ * by another tool or stack), found by `functionName`. It is read during
+ * plan/deploy and never created, updated or deleted, and binds like a
+ * declared function.
+ *
+ * **Example:** Invoke an existing function
+ * ```typescript
+ * const resize = AWS.Lambda.Function.lookup({ functionName: "image-resize" });
+ *
+ * // init
+ * const invoke = yield* AWS.Lambda.InvokeFunction(resize);
+ * ```
+ *
  * @resource
  */
 export const Function: Platform<
@@ -1375,7 +1423,8 @@ export const Function: Platform<
   FunctionContext,
   {},
   FunctionZipProps
-> = Platform(FunctionTypeId, {
+> &
+  LookupMethod<Function> = Platform(FunctionTypeId, {
   // The custom-domain front door integrates the Function's own ARN, so it
   // composes AFTER the Function resource is declared.
   onCreate: (resource, props) =>
@@ -1401,6 +1450,7 @@ export const Function: Platform<
         // Key is already canonical (see RuntimeContext.sanitizeKey). Read
         // straight from `process.env` — see `unpackEnvValue` for why this
         // must never resolve through `Config.String`.
+        // oxlint-disable-next-line effecttsgo/process-env-in-effect -- must read the raw env, Config would unwrap packed values and recurse (see unpackEnvValue)
         Effect.sync(() => unpackEnvValue<T>(process.env[key])),
       serve: (handler: HttpEffect) =>
         ctx.listen(
@@ -1466,10 +1516,10 @@ export const Function: Platform<
                       Layer.effectContext(
                         buildEventTelemetry(services, scope, (ctx as FunctionContext).telemetry),
                       ),
-                    ).pipe(Layer.provideMerge(Layer.succeedContext(services))),
+                    ),
                   ),
                   Effect.tap(Effect.logDebug),
-                  Effect.runPromiseExit,
+                  Effect.runPromiseExitWith(services),
                 );
                 if (!isScopeEjected(scope)) {
                   // The HttpMiddleware tracer ends the request's root span
@@ -1482,7 +1532,7 @@ export const Function: Platform<
                       log: "Warn",
                       message: "Lambda invocation scope close failed",
                     }),
-                    Effect.runPromise,
+                    Effect.runPromiseWith(services),
                   );
                 }
                 if (deadline.fired) {
@@ -2215,7 +2265,7 @@ export const FunctionProvider = () =>
         session: { note: (note: string) => Effect.Effect<void> };
       }) {
         yield* Effect.logDebug(`creating function ${id}`);
-        const waitStartedAt = Date.now();
+        const waitStartedAt = yield* Clock.currentTimeMillis;
 
         // A just-created role (or its freshly attached policies, KMS grant
         // principal, or security group) isn't visible to Lambda yet.
@@ -2233,8 +2283,12 @@ export const FunctionProvider = () =>
           e._tag === "SecurityGroupNotFound";
 
         const noteCreateDependencyWait = () =>
-          session.note(
-            `Waiting for Lambda creation dependencies to propagate: ${functionName} (${Math.ceil((Date.now() - waitStartedAt) / 1000)}s)`,
+          Clock.currentTimeMillis.pipe(
+            Effect.flatMap((now) =>
+              session.note(
+                `Waiting for Lambda creation dependencies to propagate: ${functionName} (${Math.ceil((now - waitStartedAt) / 1000)}s)`,
+              ),
+            ),
           );
 
         const tags = yield* createInternalTags(id);
@@ -2900,6 +2954,29 @@ export const FunctionProvider = () =>
           } satisfies Function["Attributes"];
           return (yield* hasAlchemyTags(id, tagsResult)) ? attrs : Unowned(attrs);
         }),
+        lookup: Effect.fn(function* ({ functionName }) {
+          const result = yield* Lambda.getFunction({ FunctionName: functionName }).pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
+          );
+          const fn = result?.Configuration;
+          if (!fn?.FunctionArn || !fn.FunctionName || !fn.Role) return undefined;
+          const functionUrl = yield* readFunctionUrlConfig(fn.FunctionName, undefined).pipe(
+            Effect.map((config) => config?.FunctionUrl),
+          );
+          return {
+            functionArn: fn.FunctionArn,
+            functionName: fn.FunctionName,
+            qualifiedArn: fn.FunctionArn,
+            functionUrl,
+            roleArn: fn.Role,
+            roleName: fn.Role.split("/").pop()!,
+            code: { hash: fn.CodeSha256 ?? "" },
+            ...(fn.MemorySize === undefined ? {} : { memorySize: fn.MemorySize }),
+            ...(fn.Timeout === undefined ? {} : { timeoutSeconds: fn.Timeout }),
+            ...(fn.Runtime === undefined ? {} : { runtime: fn.Runtime }),
+            ...(fn.Handler === undefined ? {} : { handler: fn.Handler }),
+          } satisfies Function["Attributes"];
+        }),
         // Account/region collection: exhaustively paginate `listFunctions`
         // (its `Functions` items are `FunctionConfiguration`s, the same shape
         // `read` pulls from `getFunction().Configuration`), then hydrate each
@@ -3403,6 +3480,7 @@ export const FunctionProvider = () =>
                 }
                 return Stream.empty;
               }),
+              Stream.mapError((cause) => new LambdaLiveTailError({ cause })),
             );
           });
 

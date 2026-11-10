@@ -1,4 +1,5 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import { inMemoryState } from "alchemy/State";
@@ -6,6 +7,7 @@ import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import { requestWorker } from "../Utils/WorkerRequest.ts";
 import makeStack from "./fixtures/batches-stack.ts";
@@ -30,10 +32,11 @@ describe.concurrent.each([
   { dev: true, stage: `${Test.defaultStage()}-domain-batches-local` },
   { dev: false, stage: `${Test.defaultStage()}-domain-batches-live` },
 ] as const)("batched projections on Durable Objects (dev: $dev)", ({ dev, stage }) => {
+  const tags = ["provider:cloudflare", "provider:cloudflare:worker", dev ? "local" : "live"];
   const state = dev ? inMemoryState() : Cloudflare.state();
   const Stack = makeStack(state);
   const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
-    providers: Cloudflare.providers(),
+    providers: Layer.mergeAll(Cloudflare.providers(), DomainCloudflare.providers()),
     state,
     dev,
     stage,
@@ -82,7 +85,7 @@ describe.concurrent.each([
       // the backstop, which inherits the callback's 30-second backoff: about 35.
       expect((yield* Clock.currentTimeMillis) - started).toBeLessThan(20_000);
     }),
-    { timeout: 120_000 },
+    { tags, timeout: 120_000 },
   );
 
   test(
@@ -121,6 +124,6 @@ describe.concurrent.each([
       // retry backoff instead: about 47.
       expect((yield* Clock.currentTimeMillis) - started).toBeLessThan(32_000);
     }),
-    { timeout: 150_000 },
+    { tags, timeout: 150_000 },
   );
 });

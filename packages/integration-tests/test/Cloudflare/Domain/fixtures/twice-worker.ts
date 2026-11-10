@@ -1,5 +1,5 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -28,7 +28,7 @@ export default class DomainTwiceWorker extends Cloudflare.Worker<DomainTwiceWork
           yield* writer.send(id!, new Open({ owner: owner! }));
           return yield* HttpServerResponse.json({ ok: true });
         }
-        return yield* HttpServerResponse.json(yield* reader.state(id!));
+        return yield* HttpServerResponse.json(yield* reader.get(id!));
       }).pipe(Effect.orDie),
     };
   }),

@@ -6,6 +6,7 @@ import * as kms from "@distilled.cloud/gcp/cloudkms_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -105,6 +106,14 @@ test.provider.skipIf(!runLifecycle)(
             refreshSingleTenantHsmInstance: true,
           });
         }),
+      );
+      yield* expectFound(
+        GCP.KMS.SingleTenantHsmInstanceProposal.lookup({
+          proposalId: created.proposalId,
+          singleTenantHsmInstance: created.singleTenantHsmInstance,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.proposalId).toEqual(PROPOSAL_ID);

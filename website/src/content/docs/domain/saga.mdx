@@ -30,8 +30,6 @@ In the example bank, a transfer is a saga: it debits one account, credits anothe
   caption="A policy decides when the transfer runs; the saga carries it out, one step at a time."
 />
 
-This chapter starts with why a process across aggregates can't be one transaction, and what to do instead. Then it builds the transfer saga step by step.
-
 ## No transaction spans two aggregates
 
 Moving money between two accounts touches two aggregates, and each is its own consistency boundary. There's no step in which both change together. So a transfer can't be "debit and credit, or neither", the way a database transaction would make it.
@@ -79,6 +77,28 @@ export class ExecuteTransfer extends Domain.Saga("ExecuteTransfer", {
   },
   rejects: [NotOpen, NotOwner, Frozen, InsufficientFunds, DestinationClosed],
 }) {}
+```
+
+## Describe it
+
+A saga's last argument is its [annotations](/domain/annotations). Its `description` is for the people and the tools that read the model, as `ExecuteTransfer.annotations`.
+
+```typescript title="packages/domain/src/Transfer/ExecuteTransfer.saga.ts"
+export class ExecuteTransfer extends Domain.Saga(
+  "ExecuteTransfer",
+  {
+    key: TransferId,
+    input: {
+      from: AccountId,
+      to: AccountId,
+      amount: Cents,
+      requestedBy: Actor,
+      needsApproval: Schema.Boolean,
+    },
+    rejects: [NotOpen, NotOwner, Frozen, InsufficientFunds, DestinationClosed],
+  },
+  { description: "Debits one account, credits another, and refunds the debit if the credit fails." },
+) {}
 ```
 
 ## Run its steps
@@ -271,6 +291,6 @@ Story.signal(ExecuteTransfer, transfer, Decision, "approved"),
 
 A step that calls an external system waits until the story answers the call, as a policy does. A run that dies fails the story, unless a step expects it with `Story.saga(ExecuteTransfer, transfer, { _tag: "Died" })`.
 
-A saga runs wherever its model runs: in memory in a story, and on [Cloudflare Durable Objects](/domain/cloudflare) in production, with each run's steps stored durably.
+A saga runs wherever its model runs: in memory in a story, and on [Cloudflare](/domain/cloudflare), [Rivet](/domain/rivet) or [Effect Cluster](/domain/effect-cluster) in production, with each run's steps stored durably.
 
 Next, [External System](/domain/external-system): how the model talks to the world outside it.

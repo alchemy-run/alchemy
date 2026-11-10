@@ -32,7 +32,6 @@ import { TelemetryLive } from "alchemy/Telemetry/Layer";
 import { loadConfigProvider, StackConfigOverrides } from "alchemy/Util/ConfigProvider";
 import { kindOf, recordOf } from "alchemy/Util/LogRecord";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
-/** @effect-diagnostics anyUnknownInErrorContext:off */
 import * as Config from "effect/Config";
 import { ConfigProvider } from "effect/ConfigProvider";
 import * as Context from "effect/Context";
@@ -44,6 +43,7 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
+import type { Limit } from "./Model.ts";
 
 /**
  * Configuration shared by every test in a file. Pass to `Test.make(...)`.
@@ -55,6 +55,13 @@ export interface MakeOptions<ROut = any> {
   state?: Layer.Layer<State.State, never, StackServices>;
   /** Override the current profile; otherwise resolved from env or the built-in `default`. */
   profile?: string;
+  /**
+   * A counted lock every test and `beforeAll`/`afterAll` hook of this file
+   * holds, on top of its own `exclusive`. Files that pass the same label
+   * share its permits, so a suite caps its load on a rate-limited cloud API
+   * in one place while every test stays independently schedulable.
+   */
+  limit?: Limit;
   /**
    * Default stage for deploy/destroy. Defaults to `test_$USER` (or
    * `test_$USERNAME` on Windows, `test_unknown` if neither is set) so two
@@ -397,6 +404,18 @@ const testServicesLayer =
         .map((services) => services.layer)
         .reduce((merged, layer) => Layer.merge(merged, layer));
 
+/**
+ * The stack's state store under the emulator: a store that reads the cloud
+ * environment (an AWS S3 store) gets the test services too, so its bucket
+ * lives in the emulator alongside the stack's resources instead of needing
+ * live credentials.
+ */
+const testStateLayer = <E, R>(state: Layer.Layer<State.State, E, R>) =>
+  testServicesLayer === undefined
+    ? state
+    : // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the layer overrides services the store would otherwise resolve itself
+      (state.pipe(Layer.provide(testServicesLayer)) as Layer.Layer<State.State, E, R>);
+
 const provideTestServices = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   // Test services override services already present in R.
   testServicesLayer === undefined
@@ -553,7 +572,7 @@ export const toEffect = <A, ROut = any>(
     // `AuthProviders` to read credentials, so AuthProviders must be provided
     // AFTER the state layer or the state layer's requirement is never
     // satisfied — which surfaces as `Service not found: AuthProviders`.
-    Effect.provide(options.state ?? State.localState()),
+    Effect.provide(testStateLayer(options.state ?? State.localState())),
     Effect.provideService(AuthProviders, {}),
     Effect.provide(Layer.provideMerge(alchemyLayer, platformLayer())),
   );

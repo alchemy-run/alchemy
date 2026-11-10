@@ -43,6 +43,15 @@ export class PrismaDevDatabaseError extends Data.TaggedError("PrismaDevDatabaseE
   readonly cause?: unknown;
 }> {}
 
+/** Several local database operations failed together; `errors` holds each failure. */
+export class PrismaDevDatabaseCleanupFailed extends Data.TaggedError(
+  "PrismaDevDatabaseCleanupFailed",
+)<{
+  readonly message: string;
+  readonly errors: readonly unknown[];
+  readonly cause?: unknown;
+}> {}
+
 const toError = (message: string) => (cause: unknown) =>
   new PrismaDevDatabaseError({
     message: cause instanceof Error ? cause.message : `${message}: ${String(cause)}`,
@@ -327,12 +336,11 @@ export const ensurePrismaDevDatabase = Effect.fn(function* (
           server,
           attrs: undefined,
         });
-        return yield* Effect.fail(
-          new AggregateError(
-            [attrsResult.failure, closeResult.failure],
-            `Failed to initialize and stop local Prisma database ${databaseId}`,
-          ),
-        );
+        return yield* new PrismaDevDatabaseCleanupFailed({
+          message: `Failed to initialize and stop local Prisma database ${databaseId}`,
+          errors: [attrsResult.failure, closeResult.failure],
+          cause: attrsResult.failure,
+        });
       }
       return yield* attrsResult.failure;
     }
@@ -377,17 +385,19 @@ export const closePrismaDevDatabase = Effect.fn(function* (databaseId: string) {
 
 export const closePrismaDevDatabases = Effect.fn(function* () {
   const ids = Array.from(servers.keys());
-  const failures: Error[] = [];
+  const failures: Array<Effect.Error<ReturnType<typeof closePrismaDevDatabase>>> = [];
   for (const id of ids) {
     const result = yield* closePrismaDevDatabase(id).pipe(Effect.result);
     if (Result.isFailure(result)) failures.push(result.failure);
   }
   if (failures.length === 1) {
-    return yield* Effect.fail(failures[0]!);
+    return yield* failures[0]!;
   }
   if (failures.length > 1) {
-    return yield* Effect.fail(
-      new AggregateError(failures, `Failed to stop ${failures.length} local Prisma databases`),
-    );
+    return yield* new PrismaDevDatabaseCleanupFailed({
+      message: `Failed to stop ${failures.length} local Prisma databases`,
+      errors: failures,
+      cause: failures[0],
+    });
   }
 });

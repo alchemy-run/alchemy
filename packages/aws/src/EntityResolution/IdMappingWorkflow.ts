@@ -72,8 +72,18 @@ export interface IdMappingWorkflow extends Resource<
     workflowArn: string;
   },
   never,
-  Providers
+  Providers,
+  IdMappingWorkflowLookup
 > {}
+
+/**
+ * Props for {@link IdMappingWorkflow.lookup}: find an id mapping workflow this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface IdMappingWorkflowLookup {
+  /** The workflow name of the existing id mapping workflow. */
+  workflowName: string;
+}
 
 /**
  * An AWS Entity Resolution ID mapping workflow — a data-processing job
@@ -108,6 +118,16 @@ export interface IdMappingWorkflow extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing id mapping workflow
+ * `IdMappingWorkflow.lookup` references an id mapping workflow Alchemy doesn't manage (created in the
+ * console or by another stack), found by `workflowName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing id mapping workflow
+ * ```typescript
+ * const existing = AWS.EntityResolution.IdMappingWorkflow.lookup({ workflowName: "my-id-mapping-workflow" });
+ * ```
+ *
  * @resource
  */
 export const IdMappingWorkflow = Resource<IdMappingWorkflow>(
@@ -134,6 +154,16 @@ export const IdMappingWorkflowProvider = () =>
 
       return {
         stables: ["workflowName", "workflowArn"],
+
+        lookup: Effect.fn(function* ({ workflowName: name }) {
+          const workflow = yield* getByName(name);
+          if (workflow === undefined) return undefined;
+          const attrs = {
+            workflowName: workflow.workflowName,
+            workflowArn: workflow.workflowArn,
+          };
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.workflowName ?? (yield* createName(id, olds ?? {}));

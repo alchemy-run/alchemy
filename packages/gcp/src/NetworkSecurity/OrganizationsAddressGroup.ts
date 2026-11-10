@@ -116,8 +116,30 @@ export type OrganizationsAddressGroup = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  OrganizationsAddressGroupLookup
 >;
+
+/**
+ * Props for {@link OrganizationsAddressGroup.lookup}: find an organizations
+ * address group this stack doesn't manage by its identifiers.
+ */
+export interface OrganizationsAddressGroupLookup {
+  /**
+   * Address group id (the `{addressGroup}` segment of
+   * `organizations/{organi
+   * zation}/locations/{location}/addressGroups/{addressGroup}`).
+   */
+  addressGroupId: string;
+  /**
+   * Organization id or `organizations/{organization}`.
+   */
+  organization?: string;
+  /**
+   * Location (`global`, `us-central1`, …).
+   */
+  location?: string;
+}
 
 /**
  * An organization-scoped Network Security address group.
@@ -147,6 +169,19 @@ export type OrganizationsAddressGroup = Resource<
  *     labels: { env: "prod" },
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing organizations address group
+ * `OrganizationsAddressGroup.lookup` references an organizations address
+ * group Alchemy doesn't manage (created in the console or by another
+ * stack). It is read during plan/deploy, never created, updated or deleted,
+ * and binds like a declared organizations address group.
+ *
+ * **Example:** Reference an existing organizations address group
+ * ```typescript
+ * const organizationsAddressGroup = GCP.NetworkSecurity.OrganizationsAddressGroup.lookup({
+ *   addressGroupId: "my-address-group",
+ * });
  * ```
  *
  * @resource
@@ -247,6 +282,23 @@ export const OrganizationsAddressGroupProvider = () =>
           previousId !== undefined &&
           nextId === previousId,
       };
+    }),
+
+    lookup: Effect.fn(function* ({
+      addressGroupId,
+      organization: lookupOrganization,
+      location: lookupLocation,
+    }) {
+      const organization = yield* resolveOrganization(lookupOrganization, undefined).pipe(
+        Effect.catchTag("GCP.NetworkSecurity.OrganizationRequired", () => Effect.succeed("")),
+      );
+      const location = normalizeLocation(lookupLocation);
+      const name =
+        organization.length > 0 ? resourceName(organization, location, addressGroupId) : "";
+      if (name.length === 0) return undefined;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing);
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
