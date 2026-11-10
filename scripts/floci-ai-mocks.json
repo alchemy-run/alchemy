@@ -7,6 +7,13 @@
         "TargetLanguageCode": "es"
       }
     },
+    "Hello, my friend, how are you today?": {
+      "TranslateText": {
+        "TranslatedText": "Hola, mi amigo, ¿cómo estás hoy?",
+        "SourceLanguageCode": "en",
+        "TargetLanguageCode": "es"
+      }
+    },
     "Good morning, friend.": {
       "TranslateText": {
         "TranslatedText": "Buenos días, amigo.",
@@ -135,6 +142,29 @@
           }
         ],
         "DetectDocumentTextModelVersion": "1.0"
+      }
+    }
+  },
+  "rekognition": {
+    "sha256:2096fd12c84360f0b35e0f26e2ca80f335739f4a5e6a9dbe520ac5f2c5ed3676": {
+      "DetectLabels": {
+        "Labels": [
+          {
+            "Name": "Text",
+            "Confidence": 99.4,
+            "Instances": [],
+            "Parents": [],
+            "Categories": [{ "Name": "Text and Documents" }]
+          },
+          {
+            "Name": "Alphabet",
+            "Confidence": 92.1,
+            "Instances": [],
+            "Parents": [{ "Name": "Text" }],
+            "Categories": [{ "Name": "Text and Documents" }]
+          }
+        ],
+        "LabelModelVersion": "3.0"
       }
     }
   }
