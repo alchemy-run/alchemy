@@ -66,7 +66,7 @@ const getOrCreateUserId: Effect.Effect<string> = Effect.gen(function* () {
       await fs.writeFile(idPath(), id);
     },
     catch: () => null as never,
-  }).pipe(Effect.catch(() => Effect.void));
+  }).pipe(Effect.ignore);
   return id;
 });
 
@@ -157,6 +157,7 @@ const collectAttributesUncached: Effect.Effect<TelemetryAttributes> = Effect.gen
 
   return {
     "alchemy.user.id": userId,
+    // oxlint-disable-next-line effecttsgo/process-env-in-effect -- telemetry reads the real process env, like TELEMETRY_DISABLED_ENV; collectAttributes is typed infallible
     "alchemy.session.id": process.env.ALCHEMY_TELEMETRY_SESSION_ID ?? crypto.randomUUID(),
     "alchemy.version": packageJson.version,
     "alchemy.git.root_commit": rootCommit ?? "",

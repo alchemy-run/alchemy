@@ -6,7 +6,7 @@ import type * as ViteModule from "vite";
 import { afterEach, describe, expect, it } from "vitest";
 import { makeIntegrationPluginOptions, SERVER_ENTRYPOINT } from "../cloudflare.ts";
 import { createWorkerdPrerenderEnvironmentPlugin } from "../prerender-environment.ts";
-import { collectOutputModules } from "../prerenderer.ts";
+import { collectOutputModules, withAsyncLocalStorage } from "../prerenderer.ts";
 
 describe("makeIntegrationPluginOptions (workerd prerendering)", () => {
   it("promotes prerender to a child worker environment during a workerd build", () => {
@@ -137,5 +137,27 @@ describe("collectOutputModules", () => {
     await expect(collectOutputModules("/nonexistent/prerender-output")).rejects.toThrow(
       /prerender build output/,
     );
+  });
+});
+
+describe("withAsyncLocalStorage", () => {
+  it("adds nodejs_als before Node compat is on by default", () => {
+    expect(withAsyncLocalStorage([], "2026-03-10")).toEqual(["nodejs_als"]);
+  });
+
+  it("leaves flags alone when the compatibility date turns Node compat on", () => {
+    expect(withAsyncLocalStorage([], "2026-08-31")).toEqual([]);
+  });
+
+  it("leaves flags alone when a flag already provides AsyncLocalStorage", () => {
+    expect(withAsyncLocalStorage(["nodejs_compat"], "2026-03-10")).toEqual(["nodejs_compat"]);
+    expect(withAsyncLocalStorage(["nodejs_als"], "2026-03-10")).toEqual(["nodejs_als"]);
+  });
+
+  it("adds nodejs_als when Node compat is opted out", () => {
+    expect(withAsyncLocalStorage(["no_nodejs_compat"], "2026-08-31")).toEqual([
+      "no_nodejs_compat",
+      "nodejs_als",
+    ]);
   });
 });

@@ -1,0 +1,38 @@
+---
+title: "Part 4: Update the Sandbox"
+description: Change the commands that set up the Archil sandbox, redeploy, and see new forks start from the new one while existing forks keep theirs.
+sidebar:
+  order: 4
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+## Add a command
+
+Clone a second repository onto `Golden`:
+
+```diff lang="typescript"
+// src/Golden.ts
+export const Golden = Archil.Sandbox("Golden", {
+  run: [
+    "git clone --depth 1 https://github.com/sindresorhus/is /work/is",
++    "git clone --depth 1 https://github.com/sindresorhus/slugify /work/slugify",
+  ],
+});
+```
+
+## Deploy the new sandbox
+
+<PackageManagers run="alchemy deploy" />
+
+The commands changed, so Alchemy replaces `Golden`: it creates a new sandbox, runs every command in it, and deletes the old one. The program forks whatever `Golden` is now, and isn't redeployed.
+
+<PackageManagers script={`curl -X POST "$URL/run" -d 'ls ..'`} />
+
+## Existing forks keep theirs
+
+A fork is a copy taken when it was created. Users who already have one keep it, with their changes and without `slugify`. Users who arrive after the deploy fork the new `Golden`. To move a user onto it, delete their fork; their next request forks it again.
+
+## Next
+
+[Part 5](/archil/tutorial/part-5) tests it.

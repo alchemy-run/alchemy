@@ -70,12 +70,14 @@ export const nodejsUnenvPlugin = createPlugin<"nodejs-unenv", UnenvApi>(
     polyfill.forEach((module) => entries.add(module));
     external.forEach((module) => entries.delete(module));
     const require = createRequire(import.meta.url);
-    const resolve = (id: string) => {
+    // `unresolved` is the polyfill's bare specifier: the key it is
+    // pre-bundled under, shared by every import that aliases to it.
+    const resolveNodejsImport = (id: string) => {
       if (alias[id] && !external.includes(alias[id])) {
-        return require.resolve(alias[id]);
+        return { unresolved: alias[id], resolved: require.resolve(alias[id]) };
       }
       if (entries.has(id)) {
-        return require.resolve(id);
+        return { unresolved: id, resolved: require.resolve(id) };
       }
     };
     const RESOLVE_ID_FILTER = {
@@ -101,9 +103,9 @@ export const nodejsUnenvPlugin = createPlugin<"nodejs-unenv", UnenvApi>(
         resolveId: {
           filter: RESOLVE_ID_FILTER,
           handler(source, importer, options) {
-            const resolved = resolve(source);
-            if (!resolved) return;
-            return this.resolve(resolved, importer, options);
+            const result = resolveNodejsImport(source);
+            if (!result) return;
+            return this.resolve(result.resolved, importer, options);
           },
         },
       },
@@ -130,31 +132,22 @@ export const nodejsUnenvPlugin = createPlugin<"nodejs-unenv", UnenvApi>(
                   },
                 }
               : {}),
-            optimizeDeps: {
-              exclude: [
-                ...nonPrefixedNodeModules,
-                ...nonPrefixedNodeModules.map((module) => `node:${module}`),
-                // New Node.js built-in modules are only published with the `node:` prefix.
-                "node:sea",
-                "node:sqlite",
-                "node:test",
-                "node:test/reporters",
-              ],
-              ...(this.meta.rolldownVersion
-                ? {
-                    rolldownOptions: {
-                      plugins: [
-                        // In Vite 8, `require` calls are not automatically replaced when
-                        // the format is ESM and `platform` is `neutral`.
-                        esmExternalRequirePlugin({
-                          external: [NODE_BUILTIN_MODULES_REGEXP],
-                          skipDuplicateCheck: true,
-                        }),
-                      ],
-                    },
-                  }
-                : {}),
-            },
+            // (Node.js built-ins are excluded from pre-bundling for every
+            // Worker environment by the options plugin.)
+            optimizeDeps: this.meta.rolldownVersion
+              ? {
+                  rolldownOptions: {
+                    plugins: [
+                      // In Vite 8, `require` calls are not automatically replaced when
+                      // the format is ESM and `platform` is `neutral`.
+                      esmExternalRequirePlugin({
+                        external: [NODE_BUILTIN_MODULES_REGEXP],
+                        skipDuplicateCheck: true,
+                      }),
+                    ],
+                  },
+                }
+              : {},
           };
         },
         async configureServer(server) {
@@ -172,9 +165,12 @@ export const nodejsUnenvPlugin = createPlugin<"nodejs-unenv", UnenvApi>(
               if (!supportsMissingImportRegistration(environment)) return;
               await depsOptimizer.init();
               return Array.from(entries).map((entry) => {
-                const resolved = resolve(entry);
-                if (!resolved) return;
-                const registration = depsOptimizer.registerMissingImport(entry, resolved);
+                const result = resolveNodejsImport(entry);
+                if (!result) return;
+                const registration = depsOptimizer.registerMissingImport(
+                  result.unresolved,
+                  result.resolved,
+                );
                 return registration?.processing;
               });
             }),
@@ -183,8 +179,8 @@ export const nodejsUnenvPlugin = createPlugin<"nodejs-unenv", UnenvApi>(
         resolveId: {
           filter: RESOLVE_ID_FILTER,
           handler(source, importer, options) {
-            const resolved = resolve(source);
-            if (!resolved) return;
+            const result = resolveNodejsImport(source);
+            if (!result) return;
             if (
               this.environment.mode === "dev" &&
               this.environment.depsOptimizer &&
@@ -192,12 +188,15 @@ export const nodejsUnenvPlugin = createPlugin<"nodejs-unenv", UnenvApi>(
             ) {
               // We are in dev mode (rather than build).
               // So let's pre-bundle this polyfill entry-point using the dependency optimizer.
-              const { id } = this.environment.depsOptimizer.registerMissingImport(source, resolved);
+              const { id } = this.environment.depsOptimizer.registerMissingImport(
+                result.unresolved,
+                result.resolved,
+              );
               // We use the unresolved path to the polyfill and let the dependency optimizer's
               // resolver find the resolved path to the bundled version.
               return this.resolve(id, importer, options);
             }
-            return this.resolve(resolved, importer, options);
+            return this.resolve(result.resolved, importer, options);
           },
         },
       },
@@ -221,6 +220,28 @@ export const nodejsImportWarningPlugin = createPlugin("nodejs-import-warning", (
   if (hasNodejsCompat(options.compatibilityFlags, options.compatibilityDate)) return;
   const imports = new Map<string, Set<string>>();
   let root = process.cwd();
+  // In dev there is no `buildEnd` until the server closes, so, as
+  // `@cloudflare/vite-plugin` does, warn once imports go quiet.
+  const devImports = new Map<string, Set<string>>();
+  let devTimer: ReturnType<typeof setTimeout> | undefined;
+  const warnInDev = (environment: {
+    name: string;
+    logger: { warn: (message: string, options?: { timestamp?: boolean }) => void };
+  }) => {
+    if (devTimer) clearTimeout(devTimer);
+    devTimer = setTimeout(() => {
+      devTimer = undefined;
+      if (devImports.size === 0) return;
+      let message = `Unexpected Node.js imports for environment "${environment.name}". Do you need to enable the "nodejs_compat" compatibility flag? Refer to https://developers.cloudflare.com/workers/runtime-apis/nodejs/ for more details.\n`;
+      for (const [id, importers] of devImports) {
+        for (const importer of importers) {
+          message += ` - "${id}" imported from "${toPosixPath(path.relative(root, importer))}"\n`;
+        }
+      }
+      devImports.clear();
+      environment.logger.warn(message, { timestamp: true });
+    }, 500);
+  };
   return {
     rolldown: {
       options(options) {
@@ -248,6 +269,20 @@ export const nodejsImportWarningPlugin = createPlugin("nodejs-import-warning", (
               imports.set(id, new Set());
             }
             imports.get(id)?.add(importer);
+            const environment = (
+              this as {
+                environment?: {
+                  name: string;
+                  mode: string;
+                  logger: Parameters<typeof warnInDev>[0]["logger"];
+                };
+              }
+            ).environment;
+            if (environment?.mode === "dev") {
+              if (!devImports.has(id)) devImports.set(id, new Set());
+              devImports.get(id)?.add(importer);
+              warnInDev(environment);
+            }
           }
           return { id, external: true };
         },

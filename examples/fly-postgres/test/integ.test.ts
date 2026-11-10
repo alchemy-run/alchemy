@@ -1,10 +1,10 @@
 import { expect } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import * as Drizzle from "@alchemy.run/drizzle";
+import * as Fly from "@alchemy.run/fly";
+import * as Test from "@alchemy.run/test/Bun";
 import * as Alchemy from "alchemy";
-import * as Drizzle from "alchemy/Drizzle";
-import * as Fly from "alchemy/Fly";
-import * as Test from "alchemy/Test/Bun";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";

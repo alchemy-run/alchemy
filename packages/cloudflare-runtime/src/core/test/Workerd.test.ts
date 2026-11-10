@@ -4,13 +4,16 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
 import * as Random from "effect/Random";
 import * as Schedule from "effect/Schedule";
 import { afterEach, beforeEach, describe, it, vi } from "vitest";
 import type { Config } from "../workerd/Config.ts";
+import { bin as workerdBin } from "../workerd/internal/workerd.ts";
 import * as Workerd from "../workerd/Workerd.ts";
 
 const services = Layer.provide(Workerd.WorkerdLive, NodeServices.layer);
@@ -460,27 +463,34 @@ describe("parseV8Flags", () => {
  * exists when V8 started with the flag, so the response tells whether the
  * flags reached the process.
  */
-const serveGcProbe = (config: Pick<Config, "v8Flags"> = {}) =>
+const serveGcProbe = (
+  config: Pick<Config, "v8Flags"> = {},
+  options?: Pick<Workerd.ServeOptions, "bin" | "env">,
+) =>
   Effect.gen(function* () {
     const workerd = yield* Workerd.Workerd;
-    const ports = yield* workerd.serve({
-      ...config,
-      sockets: [{ name: "http", address: "127.0.0.1:0", service: { name: "test" } }],
-      services: [
-        {
-          name: "test",
-          worker: {
-            compatibilityDate: "2026-03-10",
-            modules: [
-              {
-                name: "main.js",
-                esModule: "export default { fetch: () => new Response(typeof globalThis.gc) };",
-              },
-            ],
+    const ports = yield* workerd.serve(
+      {
+        ...config,
+        sockets: [{ name: "http", address: "127.0.0.1:0", service: { name: "test" } }],
+        services: [
+          {
+            name: "test",
+            worker: {
+              compatibilityDate: "2026-03-10",
+              modules: [
+                {
+                  name: "main.js",
+                  esModule: "export default { fetch: () => new Response(typeof globalThis.gc) };",
+                },
+              ],
+            },
           },
-        },
-      ],
-    });
+        ],
+      },
+      undefined,
+      options,
+    );
     const response = yield* Effect.promise(() =>
       fetch(`http://127.0.0.1:${ports.http}/`, {
         signal: AbortSignal.timeout(10_000),
@@ -534,4 +544,93 @@ layer(services)("v8Flags", (it) => {
       { timeout: 30_000 },
     );
   }
+});
+
+layer(services)("bin and env", (it) => {
+  it.effect.skipIf(process.platform === "win32")(
+    "runs the given binary with the extra environment variables",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const dir = yield* fs.makeTempDirectoryScoped();
+        const marker = path.join(dir, "marker");
+        const bin = path.join(dir, "workerd");
+        yield* fs.writeFileString(
+          bin,
+          `#!/bin/sh\nprintf '%s' "$WORKERD_TEST_MARKER" > ${JSON.stringify(marker)}\nexec ${JSON.stringify(workerdBin)} "$@"\n`,
+        );
+        yield* fs.chmod(bin, 0o755);
+        expect(yield* serveGcProbe({}, { bin, env: { WORKERD_TEST_MARKER: "wrapped" } })).toBe(
+          "undefined",
+        );
+        expect(yield* fs.readFileString(marker)).toBe("wrapped");
+      }).pipe(Effect.provide(NodeServices.layer)),
+    { timeout: 30_000 },
+  );
+
+  it.effect.skipIf(process.platform === "win32")(
+    `runs the binary in ${Workerd.PATH_ENV}`,
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const dir = yield* fs.makeTempDirectoryScoped();
+        const marker = path.join(dir, "marker");
+        const bin = path.join(dir, "workerd");
+        yield* fs.writeFileString(
+          bin,
+          `#!/bin/sh\nprintf env > ${JSON.stringify(marker)}\nexec ${JSON.stringify(workerdBin)} "$@"\n`,
+        );
+        yield* fs.chmod(bin, 0o755);
+        vi.stubEnv(Workerd.PATH_ENV, bin);
+        yield* serveGcProbe();
+        expect(yield* fs.readFileString(marker)).toBe("env");
+      }).pipe(
+        Effect.provide(NodeServices.layer),
+        Effect.ensuring(Effect.sync(() => vi.unstubAllEnvs())),
+      ),
+    { timeout: 30_000 },
+  );
+});
+
+describe("parseAddressInUse", () => {
+  it("finds the socket or address in use", () => {
+    // Rust server on macOS, Linux and Windows.
+    expect(
+      Workerd.parseAddressInUse('Socket "entry": bind(): Address already in use (os error 48)\n'),
+    ).toEqual({ socket: "entry" });
+    expect(
+      Workerd.parseAddressInUse(
+        'Socket "entry:local": bind(): Address already in use (os error 98)\n',
+      ),
+    ).toEqual({ socket: "entry:local" });
+    expect(
+      Workerd.parseAddressInUse(
+        'Socket "entry": bind(): Only one usage of each socket address (protocol/network address/port) is normally permitted. (os error 10048)\n',
+      ),
+    ).toEqual({ socket: "entry" });
+    // C++ server over tokio-backed sockets names neither, including Windows'
+    // `SO_EXCLUSIVEADDRUSE` case.
+    expect(
+      Workerd.parseAddressInUse(
+        "*** Fatal uncaught kj::Exception: rust/cxx/kj-rs-io/ffi.rs:209: failed: bind(): Address already in use (os error 48)\n",
+      ),
+    ).toEqual({});
+    expect(
+      Workerd.parseAddressInUse(
+        "*** Fatal uncaught kj::Exception: rust/cxx/kj-rs-io\\ffi.rs:209: failed: bind(): An attempt was made to access a socket in a way forbidden by its access permissions. (os error 10013)\n",
+      ),
+    ).toEqual({});
+    // C++ server over kj's sockets.
+    expect(
+      Workerd.parseAddressInUse(
+        "kj/async-io-unix.c++:1: failed: Address already in use; toString() = 127.0.0.1:8787; stack: 7ff6a1b2c3d4\n",
+      ),
+    ).toEqual({ address: "127.0.0.1:8787" });
+    // Other bind failures are not address-in-use.
+    expect(
+      Workerd.parseAddressInUse('Socket "entry": bind(): Permission denied (os error 13)\n'),
+    ).toBeUndefined();
+  });
 });

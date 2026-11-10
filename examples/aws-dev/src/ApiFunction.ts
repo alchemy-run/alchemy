@@ -1,8 +1,8 @@
-import * as DynamoDB from "alchemy/AWS/DynamoDB";
-import * as Lambda from "alchemy/AWS/Lambda";
-import * as S3 from "alchemy/AWS/S3";
-import * as SNS from "alchemy/AWS/SNS";
-import * as SQS from "alchemy/AWS/SQS";
+import * as DynamoDB from "@alchemy.run/aws/DynamoDB";
+import * as Lambda from "@alchemy.run/aws/Lambda";
+import * as S3 from "@alchemy.run/aws/S3";
+import * as SNS from "@alchemy.run/aws/SNS";
+import * as SQS from "@alchemy.run/aws/SQS";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -68,20 +68,19 @@ export default class ApiFunction extends Lambda.Function<ApiFunction>()(
 
     // Consume produced messages and record them into the table so the
     // test can observe the produce → deliver → consume roundtrip.
-    yield* SQS.consumeQueueMessages(queue, (records) =>
-      records.pipe(
-        Stream.mapEffect((record) => {
+    yield* SQS.consumeQueueMessages(
+      queue,
+      Effect.fn(function* (event) {
+        for (const record of event.Records) {
           const parsed = JSON.parse(record.body) as { id: string };
-          return putItem({
+          yield* putItem({
             Item: {
               id: { S: `msg:${parsed.id}` },
               body: { S: record.body },
             },
           });
-        }),
-        Stream.runDrain,
-        Effect.orDie,
-      ),
+        }
+      }),
     );
 
     // Consume topic notifications. This is the SNS → Lambda glue: it
@@ -119,23 +118,20 @@ export default class ApiFunction extends Lambda.Function<ApiFunction>()(
         streamViewType: "NEW_AND_OLD_IMAGES",
         startingPosition: "TRIM_HORIZON",
       },
-      (changes) =>
-        changes.pipe(
-          Stream.mapEffect((record) => {
-            const id = record.dynamodb.Keys?.id?.S;
-            if (typeof id !== "string" || id.includes(":")) {
-              return Effect.void;
-            }
-            return putItem({
-              Item: {
-                id: { S: `change:${id}` },
-                body: { S: record.eventName ?? "UNKNOWN" },
-              },
-            });
-          }),
-          Stream.runDrain,
-          Effect.orDie,
-        ),
+      Effect.fn(function* (event) {
+        for (const record of event.Records) {
+          const id = record.dynamodb.Keys?.id?.S;
+          if (typeof id !== "string" || id.includes(":")) {
+            continue;
+          }
+          yield* putItem({
+            Item: {
+              id: { S: `change:${id}` },
+              body: { S: record.eventName ?? "UNKNOWN" },
+            },
+          });
+        }
+      }),
     );
 
     return {

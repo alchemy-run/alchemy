@@ -7,6 +7,7 @@ import * as Layer from "effect/Layer";
 import type * as ViteModule from "vite";
 import { describe, expect, it } from "vitest";
 import { Framework, type BuildOutput } from "../../core/index.ts";
+import { cacheCloudflare } from "../cache.ts";
 import cloudflareTarget, {
   distilledCloudflare,
   IMAGE_PASSTHROUGH_ENDPOINT,
@@ -54,13 +55,14 @@ const noopLogger = {
 const runConfigSetup = (
   integration: AstroIntegration,
   command: "dev" | "build" | "sync",
+  config: Record<string, unknown> = {},
 ): CapturedConfig => {
   let captured: CapturedConfig | undefined;
   const hook = integration.hooks["astro:config:setup"];
   if (!hook) throw new Error("astro:config:setup hook missing");
   void hook({
     command,
-    config: { vite: {}, image: {} },
+    config: { vite: {}, image: {}, ...config },
     updateConfig: (config: unknown) => {
       captured = config as CapturedConfig;
       return {} as never;
@@ -131,7 +133,7 @@ describe("makeIntegrationPluginOptions", () => {
     expect(options.skipEnvironments).toEqual([...NODE_ENVIRONMENTS]);
   });
 
-  it("preserves user cloudflare options but overrides the structural ones", () => {
+  it("preserves user cloudflare options, including a custom worker main, but overrides the structural ones", () => {
     const options = makeIntegrationPluginOptions({
       compatibilityDate: "2026-03-10",
       compatibilityFlags: ["nodejs_compat"],
@@ -143,9 +145,10 @@ describe("makeIntegrationPluginOptions", () => {
     expect(options.compatibilityDate).toBe("2026-03-10");
     expect(options.compatibilityFlags).toEqual(["nodejs_compat"]);
     expect(options.worker?.name).toBe("fixtures-astro");
-    // Astro-structural options always win: the worker entry is the vendored
-    // server entrypoint and Astro pins the worker environment name to "ssr".
-    expect(options.main).toBe(SERVER_ENTRYPOINT);
+    // A user `main` is the custom Worker entry that wraps the vendored
+    // server entrypoint's handler; it is kept. Astro still pins the worker
+    // environment name to "ssr".
+    expect(options.main).toBe("/somewhere/else.ts");
     expect(options.viteEnvironments).toEqual({ entry: "ssr" });
     expect(options.skipEnvironments).toEqual(["astro", "prerender", "custom"]);
   });
@@ -321,6 +324,50 @@ describe("distilledCloudflare astro:config:setup", () => {
       noDiscovery: true,
       include: [],
     });
+  });
+
+  it("enables the cache provider only when the config uses cacheCloudflare()", () => {
+    const configModule = (config: Record<string, unknown>) => {
+      const captured = runConfigSetup(distilledCloudflare(), "dev", config);
+      const plugin = flatten(captured.vite?.plugins).find(
+        (candidate) => candidate.name === "virtual:astro-cloudflare:config",
+      );
+      if (!plugin) throw new Error("config plugin missing");
+      return objectHook<[string], string>(plugin.load).call(
+        { environment: { name: "ssr" } },
+        "\0virtual:astro-cloudflare:config",
+      );
+    };
+    const ssrInclude = (config: Record<string, unknown>) => {
+      const captured = runConfigSetup(distilledCloudflare(), "dev", config);
+      const plugin = flatten(captured.vite?.plugins).find(
+        (candidate) => candidate.name === "@alchemy.run/frontend-frameworks/astro:environment",
+      );
+      if (!plugin) throw new Error("environment plugin missing");
+      return objectHook<
+        [string, ViteModule.EnvironmentOptions],
+        { optimizeDeps?: ViteModule.DepOptimizationOptions } | undefined
+      >(plugin.configEnvironment).call({}, "ssr", {})?.optimizeDeps?.include;
+    };
+
+    const cached = { cache: { provider: cacheCloudflare() } };
+    expect(configModule(cached)).toContain("export const cacheProviderEnabled = true");
+    expect(ssrInclude(cached)).toContain("@alchemy.run/frontend-frameworks/astro/cache/provider");
+
+    // Upstream's `@astrojs/cloudflare/cache` provider is detected by name.
+    const upstream = {
+      cache: {
+        provider: { name: "cloudflare", entrypoint: "@astrojs/cloudflare/cache/provider" },
+      },
+    };
+    expect(configModule(upstream)).toContain("export const cacheProviderEnabled = true");
+
+    for (const config of [{}, { cache: { provider: { name: "memory", entrypoint: "x" } } }]) {
+      expect(configModule(config)).toContain("export const cacheProviderEnabled = false");
+      expect(ssrInclude(config)).not.toContain(
+        "@alchemy.run/frontend-frameworks/astro/cache/provider",
+      );
+    }
   });
 
   it("scopes cf-externals to the worker-resolved server environments", () => {

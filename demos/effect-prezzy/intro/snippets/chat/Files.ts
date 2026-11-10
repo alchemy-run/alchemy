@@ -1,5 +1,5 @@
+import { R2 } from "@alchemy.run/cloudflare";
 import type * as Alchemy from "alchemy";
-import { R2 } from "alchemy/Cloudflare";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

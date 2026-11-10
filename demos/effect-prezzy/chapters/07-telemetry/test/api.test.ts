@@ -1,9 +1,9 @@
 import { expect } from "bun:test";
+import * as Axiom from "@alchemy.run/axiom";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Neon from "@alchemy.run/neon";
+import * as Test from "@alchemy.run/test/Bun";
 import * as Alchemy from "alchemy";
-import * as Axiom from "alchemy/Axiom";
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Neon from "alchemy/Neon";
-import * as Test from "alchemy/Test/Bun";
 import * as Effect from "effect/Effect";
 import * as HttpApiClient from "effect/http-api/HttpApiClient";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";

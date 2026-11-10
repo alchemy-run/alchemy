@@ -1,3 +1,4 @@
+/** @jsxRuntime automatic */
 /** @jsxImportSource @alchemy.run/sigil */
 import { Hyperlink as SigilHyperlink, Text as SigilText } from "@alchemy.run/sigil";
 import type { ComponentProps } from "react";
@@ -20,7 +21,7 @@ export interface TextProps extends Omit<ComponentProps<typeof SigilText>, "color
   readonly color?: ComponentProps<typeof SigilText>["color"];
 }
 
-/** CliKit typography primitive. Consumers never import Sigil directly. */
+/** CLI typography primitive. Consumers never import Sigil directly. */
 export function Text({
   tone = "default",
   color,

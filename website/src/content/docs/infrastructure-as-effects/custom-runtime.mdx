@@ -3,9 +3,9 @@ title: Custom Runtime
 description: Implement your own Runtime resource on the Platform type — a Provider that provisions the compute and bundles the runtime Effect.
 ---
 
-Worker, Lambda, and Container cover the common cases. This guide is
-for bringing the [Runtime](/infrastructure-as-effects/runtime)
-model to a new compute target. A custom runtime is a
+Worker, Lambda, and Container cover the common cases. A new compute
+target can use the [Runtime](/infrastructure-as-effects/runtime)
+model too. A custom runtime is a
 [Provider](/infrastructure-as-code/provider) with two jobs: provision
 the compute infrastructure, and bundle + upload the runtime Effect.
 
@@ -135,7 +135,7 @@ export interface BaseRuntimeContext {
 
 Server-style platforms don't write this from scratch —
 `createHostRuntimeContext` in
-[`Server/Process.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/Server/Process.ts)
+[`Runtime/Process.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/Runtime/Process.ts)
 is the shared implementation used by `AWS.ECS.Task` and
 `AWS.EC2.Instance`. It folds `run` (background loops) and `serve`
 (HTTP handlers) into one list of runners:
@@ -337,8 +337,8 @@ The finished runtime reads like any other Function — infrastructure
 props, a constructor Effect, a `{ fetch }` handler:
 
 ```typescript
-import * as AWS from "alchemy/AWS";
-import { ServerHost } from "alchemy/Server";
+import * as AWS from "@alchemy.run/aws";
+import { ServerHost } from "alchemy/Runtime/Process";
 import * as Effect from "effect/Effect";
 
 export default class ApiTask extends AWS.ECS.Task<ApiTask>()(
@@ -357,7 +357,7 @@ export default class ApiTask extends AWS.ECS.Task<ApiTask>()(
 ) {}
 ```
 
-Everything on this page sits behind that surface: `Platform` runs
+All of this sits behind that surface: `Platform` runs
 the constructor Effect and collects `host.run` + `fetch` into
 `exports.program`, and the provider bundles that program into an
 image and reconciles the task definition around it.
@@ -365,7 +365,7 @@ image and reconciles the task definition around it.
 ## Where next
 
 - [Runtime](/infrastructure-as-effects/runtime) —
-  the model this guide implements a new target for.
+  the model a custom runtime implements.
 - [Custom Provider](/infrastructure-as-code/custom-provider) — the
   lifecycle contract (`reconcile`, `delete`, `diff`, `read`) in depth.
 - [Phases](/infrastructure-as-effects/phases) — the Construction/Runtime split

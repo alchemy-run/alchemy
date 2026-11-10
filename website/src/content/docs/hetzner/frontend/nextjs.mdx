@@ -53,7 +53,7 @@ Stack):
 
 ```typescript
 // alchemy.run.ts
-import * as Hetzner from "alchemy/Hetzner";
+import * as Hetzner from "@alchemy.run/hetzner";
 
 export const Website = Hetzner.Website.Nextjs("Website");
 ```
@@ -126,9 +126,7 @@ export function GET() {
 
 ## Local dev
 
-```sh
-bun alchemy dev
-```
+<PackageManagers run="alchemy dev" />
 
 `alchemy dev` runs `next dev` (native HMR, Turbopack) instead of
 deploying; `site.url` is the local address and no Hetzner resources

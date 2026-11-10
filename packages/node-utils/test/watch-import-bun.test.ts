@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { trackBunImports } from "../src/watch-import-bun.ts";
+import { trackBunImports } from "../src/watch/bun-import-tracker.ts";
 
 const temporaryDirectories: string[] = [];
 

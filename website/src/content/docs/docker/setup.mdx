@@ -3,11 +3,17 @@ title: Setup
 description: Point alchemy at a Docker daemon — the active CLI context and the DOCKER_BIN override.
 ---
 
+import PackageManagers from "../../../components/PackageManagers.astro";
+
+Install `@alchemy.run/docker`:
+
+<PackageManagers add="@alchemy.run/docker" />
+
 Register the provider in your stack:
 
 ```typescript
 // alchemy.run.ts
-import * as Docker from "alchemy/Docker";
+import * as Docker from "@alchemy.run/docker";
 
 providers: Docker.providers(),
 state: Alchemy.localState(),
@@ -28,9 +34,7 @@ stored token: this provider has no credentials of its own.
 
 ## Binary override
 
-```sh
-DOCKER_BIN=/opt/homebrew/bin/docker bun alchemy deploy
-```
+<PackageManagers script={`DOCKER_BIN=/opt/homebrew/bin/docker {run} alchemy deploy`} />
 
 The provider resolves the Docker binary from the `DOCKER_BIN`
 environment variable, falling back to `docker` on the `PATH`.

@@ -32,15 +32,13 @@ export const PathsLive = Layer.effect(
           Effect.map((root) => path.join(root, ...prefix)),
           Effect.tap((path) =>
             fs.makeDirectory(path, { recursive: true }).pipe(
-              Effect.catchTag(
-                "PlatformError",
-                (error) =>
-                  new SystemError({
-                    subtag: "Paths",
-                    message: `Failed to create directory "${path}".`,
-                    cause: error,
-                    detail: { path, env: options.env },
-                  }),
+              Effect.catchTag("PlatformError", (error) =>
+                SystemError.make({
+                  subtag: "Paths",
+                  message: `Failed to create directory "${path}".`,
+                  cause: error,
+                  detail: { path, env: options.env },
+                }),
               ),
             ),
           ),

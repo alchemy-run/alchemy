@@ -2,6 +2,7 @@
 title: Migrations
 description: Apply Better Auth schema changes at deploy, or manage the schema yourself.
 ---
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 ## Deploy an additional field
 
@@ -9,7 +10,7 @@ description: Apply Better Auth schema changes at deploy, or manage the schema yo
 // worker.ts
 import { BetterAuth } from "@alchemy.run/better-auth";
 import { CloudflareD1 } from "@alchemy.run/better-auth/CloudflareD1";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 
 const AuthDb = Cloudflare.D1.Database("AuthDb");
@@ -37,7 +38,7 @@ This auth-only Worker declares an optional `timezone` column on the user model. 
 ```typescript
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import AuthApi from "./worker.ts";
 
@@ -53,23 +54,17 @@ export default Alchemy.Stack(
 
 Use Bun, matching `alchemy` and `@alchemy.run/better-auth` releases, Better Auth 1.7.5, Effect 4, and `kysely`, with Cloudflare credentials configured. This standalone stack creates a new database; applying a change to an existing installation requires retaining its stack, stage, resource identities, and state.
 
-```sh
-bunx alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 The migration action applies missing tables, columns, and indexes before the updated host deploys, while existing instances may still serve traffic. Migration code does not run on incoming requests or during planning.
 
 ## Repeat or force a deployment
 
-```sh
-bunx alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 An unchanged schema, database identity, and dialect skip the migration action. Plugin fields, model names, and indexes participate in the schema fingerprint.
 
-```sh
-bunx alchemy deploy --force
-```
+<PackageManagers run="alchemy deploy --force" />
 
 Force reapplies the deployment, including its migration action; an already-current schema remains a no-op. It does not override migration safety checks, merge users, or rewrite account identities.
 

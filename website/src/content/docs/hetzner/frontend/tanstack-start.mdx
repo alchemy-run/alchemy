@@ -81,7 +81,7 @@ Stack):
 
 ```typescript
 // alchemy.run.ts
-import * as Hetzner from "alchemy/Hetzner";
+import * as Hetzner from "@alchemy.run/hetzner";
 
 export const Website = Hetzner.Website.TanStackStart("Website");
 ```
@@ -212,9 +212,7 @@ server and client output from `dist/server` and `dist/client`.
 
 ## Local dev
 
-```sh
-bun alchemy dev
-```
+<PackageManagers run="alchemy dev" />
 
 `alchemy dev` runs TanStack Start's own Vite dev server (native HMR)
 instead of deploying; `site.url` is the local address and no Hetzner

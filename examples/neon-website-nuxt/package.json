@@ -16,11 +16,13 @@
     "build": "nuxt build"
   },
   "dependencies": {
+    "@alchemy.run/neon": "workspace:*",
     "alchemy": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@alchemy.run/test": "workspace:*",
     "@effect/platform-node": "catalog:",
     "@tailwindcss/vite": "catalog:",
     "@types/node": "catalog:node24",

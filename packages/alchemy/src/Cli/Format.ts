@@ -1,18 +1,24 @@
-import { ansiFg, theme } from "./CliKit/index.ts";
+import * as Duration from "effect/Duration";
+import { theme } from "../Util/Theme.ts";
 
-/** `450ms` under a second, `1.2s` at or above — shared by every renderer. */
-export const formatElapsed = (ms: number): string =>
-  ms < 1000 ? `${Math.max(0, Math.round(ms))}ms` : `${(ms / 1000).toFixed(1)}s`;
+/** `450ms`, `1.2s`, `12m 34s` or `1h 3s`, by size — shared by every renderer. */
+export const formatElapsed = (ms: number): string => {
+  if (ms < 1000) return `${Math.max(0, Math.round(ms))}ms`;
+  // 59.95s and up would round to a misleading `60.0s`.
+  if (ms < 59_950) return `${(ms / 1000).toFixed(1)}s`;
+  return Duration.format(Duration.seconds(Math.round(ms / 1000)));
+};
 
+/** Per-resource colors for `alchemy logs`, assigned in order of appearance. */
 export const TAIL_COLORS = [
-  ansiFg(theme.color.accent),
-  ansiFg(theme.color.info),
-  ansiFg(theme.color.danger),
-  ansiFg(theme.color.warning),
-  ansiFg(theme.color.accentBright),
-  ansiFg(theme.color.muted),
-  ansiFg(theme.color.accentMuted),
-  ansiFg(theme.color.success),
+  theme.color.accent,
+  theme.color.info,
+  theme.color.danger,
+  theme.color.warning,
+  theme.color.accentBright,
+  theme.color.muted,
+  theme.color.accentMuted,
+  theme.color.success,
 ];
 
 export const formatLocalTimestamp = (date: Date): string => {

@@ -1,4 +1,4 @@
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import { eq, sql } from "drizzle-orm";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -15,7 +15,6 @@ export default class Api extends AWS.Lambda.Function<Api>()(
     runtime: "nodejs22.x",
     functionUrl: { authType: "AWS_IAM" },
     timeout: Duration.seconds(30),
-    build: { install: ["pg"] },
   },
   Effect.gen(function* () {
     const db = yield* connectDatabase;

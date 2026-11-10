@@ -48,6 +48,36 @@ Service. Yield Config.
 See [Secrets & Config](/environments/secrets) for combinators and
 stages.
 
+## Values from a secrets manager
+
+`.env` is only the default. A Stack's `secrets` option reads the same `Config` values from a secrets manager instead, like Doppler or Infisical, so production keys never sit in a file on anyone's machine. Pick the source per stage:
+
+```typescript title="alchemy.run.ts"
+import * as Alchemy from "alchemy";
+import * as Railway from "@alchemy.run/railway";
+import * as Doppler from "@alchemy.run/doppler";
+import * as Effect from "effect/Effect";
+import Api from "./src/api.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Railway.providers(),
+    state: Alchemy.localState(),
+    secrets: ({ stage }) =>
+      stage === "prod"
+        ? Doppler.Secrets({ project: "my-app", config: "prd" })
+        : Alchemy.Secrets.DotEnv(),
+  },
+  Effect.gen(function* () {
+    const api = yield* Api;
+    return { url: api.url };
+  }),
+);
+```
+
+Your code doesn't change: `Config.Redacted("API_KEY")` reads from whichever source the stage uses. See [Secret providers](/environments/secret-providers) for Doppler, Infisical, ordering several sources, and writing your own.
+
 ## When Railway should own the variable
 
 `Railway.Variable` is injected as an environment variable into
@@ -56,7 +86,7 @@ managed in one place, not when only this Service reads a deploy-time
 `.env` key.
 
 ```typescript
-import * as Railway from "alchemy/Railway";
+import * as Railway from "@alchemy.run/railway";
 import * as Redacted from "effect/Redacted";
 
 export const ApiToken = Railway.Variable("ApiToken", {

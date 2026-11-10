@@ -20,7 +20,9 @@
     "react-dom": "catalog:"
   },
   "devDependencies": {
+    "@alchemy.run/cloudflare": "workspace:*",
     "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@alchemy.run/test": "workspace:*",
     "@opennextjs/cloudflare": "catalog:",
     "@tailwindcss/postcss": "catalog:",
     "@types/react": "catalog:",

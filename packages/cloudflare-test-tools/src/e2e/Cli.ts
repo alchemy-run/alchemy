@@ -30,7 +30,7 @@ const dev = Command.make(
     const root = yield* Options.load().pipe(Effect.flatMap(Options.resolveRoot));
     const { url } = yield* framework.dev({ port: port.valueOrUndefined, root });
     yield* Effect.log(`Dev server running at ${url}`);
-    yield* Effect.never;
+    return yield* Effect.never;
   }),
 );
 
@@ -41,7 +41,7 @@ const preview = Command.make(
     const server = yield* Server.Server;
     const instance = yield* server.live();
     yield* Effect.log("Previewing on", instance.url.toString());
-    yield* Effect.never;
+    return yield* Effect.never;
   }),
 );
 

@@ -1,4 +1,5 @@
 import * as ConfigProvider from "effect/ConfigProvider";
+import type * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -8,7 +9,8 @@ import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { AlchemyContext } from "../AlchemyContext.ts";
 import type { AuthProviders } from "../Auth/AuthProvider.ts";
 import type { ProfileStore } from "../Auth/Profile.ts";
-import { Stack } from "../Stack.ts";
+import type { Stack } from "../Stack.ts";
+import { StackContext } from "../StackContext.ts";
 import { Stage } from "../Stage.ts";
 
 /** What a secrets provider may depend on. */
@@ -20,6 +22,7 @@ export type SecretsServices =
   | Path.Path
   | HttpClient.HttpClient
   | ChildProcessSpawner.ChildProcessSpawner
+  | SecureRandom.SecureRandom
   | AuthProviders
   | ProfileStore;
 
@@ -45,7 +48,7 @@ export const resolveSecretsOption = <T>(
     : Effect.map(
         Effect.all({
           stage: Stage,
-          stack: Stack,
+          stack: StackContext,
           alchemyContext: AlchemyContext,
         }),
         option as (context: SecretsContext) => T,

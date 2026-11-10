@@ -83,13 +83,11 @@ const makeNodeFinishTarget = (config: ReactRouterNodeTargetConfig = {}): ReactRo
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         if (context.entry === undefined) {
-          return yield* Effect.fail(
-            fail("The React Router build produced no on-disk server entry to finish"),
-          );
+          return yield* fail("The React Router build produced no on-disk server entry to finish");
         }
         if (output.clientDirectory === undefined) {
-          return yield* Effect.fail(
-            fail("The React Router build produced no client directory for the Node serve entry"),
+          return yield* fail(
+            "The React Router build produced no client directory for the Node serve entry",
           );
         }
         const serverDir = path.dirname(context.entry);

@@ -1,3 +1,4 @@
+/** @jsxRuntime automatic */
 /** @jsxImportSource @alchemy.run/sigil */
 import { Box as SigilBox, type DOMElement } from "@alchemy.run/sigil";
 import { forwardRef } from "@alchemy.run/sigil/react";
@@ -18,7 +19,7 @@ export { VirtualList } from "@alchemy.run/sigil";
 
 export type BoxProps = ComponentProps<typeof SigilBox>;
 
-/** Theme-aware Sigil container used by CliKit layouts. */
+/** Theme-aware Sigil container used by CLI layouts. */
 export const Box: ForwardRefExoticComponent<PropsWithoutRef<BoxProps> & RefAttributes<DOMElement>> =
   forwardRef<DOMElement, BoxProps>(function Box(props, ref) {
     const { colors } = useCliEnvironment();

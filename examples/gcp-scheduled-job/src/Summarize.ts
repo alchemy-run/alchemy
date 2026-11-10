@@ -1,4 +1,4 @@
-import * as GCP from "alchemy/GCP";
+import * as GCP from "@alchemy.run/gcp";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import { Orders, Reports, summaryKey, type DailySummary, type RegionTotal } from "./resources.ts";

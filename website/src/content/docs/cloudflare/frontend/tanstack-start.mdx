@@ -73,7 +73,7 @@ Stack) and derive the typed shape of its bindings from it:
 ```typescript
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import Backend, { Bucket } from "./src/backend.ts";
 
@@ -168,15 +168,11 @@ const res = await env.BACKEND.fetch(
 
 ## Deploy and dev
 
-```sh
-bun alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 For local development:
 
-```sh
-bun alchemy dev
-```
+<PackageManagers run="alchemy dev" />
 
 `alchemy dev` boots TanStack Start's Vite dev server with HMR while the
 bindings stay attached to the **real** Alchemy-managed cloud resources —

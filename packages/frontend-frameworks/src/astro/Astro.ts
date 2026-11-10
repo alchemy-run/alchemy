@@ -177,6 +177,7 @@ export const make = <TargetConfig = unknown>(
 
     // Astro's dev()/build() record telemetry events by default.
     yield* Effect.sync(() => {
+      // oxlint-disable-next-line effecttsgo/process-env-in-effect -- writes process.env for astro's own telemetry switch, not config reading
       process.env.ASTRO_TELEMETRY_DISABLED ??= "1";
     });
 
@@ -321,9 +322,7 @@ export const make = <TargetConfig = unknown>(
             ? `http://localhost:${server.address.port}/`
             : undefined);
         if (url === undefined) {
-          return yield* Effect.fail(
-            fail("Could not determine the URL of the astro dev server")(undefined),
-          );
+          return yield* fail("Could not determine the URL of the astro dev server")(undefined);
         }
         return { url };
       }),

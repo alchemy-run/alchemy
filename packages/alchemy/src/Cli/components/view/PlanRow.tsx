@@ -1,10 +1,11 @@
+/** @jsxRuntime automatic */
 /** @jsxImportSource @alchemy.run/sigil */
 /**
  * Shared rows for the Plan tree. Review and apply modes both render
  * namespaces through this component so they look like the same tree.
  */
 import type { JSX } from "react";
-import { theme } from "../../CliKit/index.ts";
+import { theme } from "../../../Util/Theme.ts";
 import { Row, Text, useGlyphs } from "../ui/index.ts";
 import { actionStyle, type PlanAction } from "./statusStyle.ts";
 

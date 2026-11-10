@@ -1,7 +1,7 @@
 // Alchemy modifications are licensed under Apache-2.0.
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 /**
- * Vendored from `@astrojs/cloudflare` v14.1.3 (`src/utils/cf-helpers.ts`).
+ * Vendored from `@astrojs/cloudflare` v14.4.2 (`src/utils/cf-helpers.ts`).
  *
  * Pure Cloudflare helpers with no virtual module dependencies.
  */
@@ -54,9 +54,7 @@ export async function fallbackToAssets(
  * Creates a fetch function for prerendered error pages via the ASSETS binding.
  */
 export function createErrorPageFetch(env: Env): (url: string) => Promise<Response> {
-  return async (url: string) => {
-    return env.ASSETS.fetch(url.replace(/\.html$/, "")) as unknown as Response;
-  };
+  return async (url: string) => env.ASSETS.fetch(url.replace(/\.html$/, "")) as unknown as Response;
 }
 
 /**

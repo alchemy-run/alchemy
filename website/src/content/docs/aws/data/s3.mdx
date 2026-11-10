@@ -1,308 +1,161 @@
 ---
 title: S3
-description: Add an S3 Bucket to your Stack, bind PutObject and GetObject as runtime capabilities, and let Alchemy mint the IAM policy for you.
+description: How S3 Buckets hold objects under keys, how a runtime reads and writes them through bindings, and how to share, react to and serve the objects you store.
 ---
 
-**S3** is AWS's object store — blobs of any size, addressed by
-key. In Alchemy it's the `Bucket` resource plus a binding per S3
-operation: `GetObject`, `PutObject`, `DeleteObject`,
-`HeadObject`, `CopyObject`, `ListObjectsV2`, and the multipart
-upload family. Each binding you call attaches the matching IAM
-statement — scoped to that bucket's ARN — to your function's
-role. Buckets are also an event source: subscribe a Lambda to
-new-object notifications with `S3.consumeBucketEvents` (see the
-[S3 events guide](/aws/messaging/s3-events)).
+import Records from "../../../../components/diagrams/Records.astro";
 
-The walkthrough below builds on the function from
-[Lambda](/aws/compute/lambda): it adds a **Bucket** for blob storage and
-binds **PutObject** + **GetObject** — Alchemy mints a
-least-privilege IAM policy from the bindings you actually use.
+S3 stores files, called **objects**, in containers called **Buckets**. An object is any sequence of bytes, from a few characters to five terabytes, stored under a **key** you choose. Buckets hold as many objects as you put in them, and you pay for what you store and transfer.
 
-## Add the bucket
+## A Bucket holds objects under keys
 
-S3 buckets are canonical Alchemy resources, so you create them
-the same way as the Lambda — yield the resource inside an Effect
-and the Stack captures it. Open `src/api.ts` and add a bucket in
-the constructor:
+A Bucket is a flat map from keys to objects. A key is just a string: `avatars/sam.png`, `reports/2026/q1.pdf`, `hello.txt`.
 
-```diff lang="typescript"
-// src/api.ts
-import * as AWS from "alchemy/AWS";
-+import * as S3 from "alchemy/AWS/S3";
-import { Stack } from "alchemy/Stack";
-import * as Effect from "effect/Effect";
-+import { HttpServerRequest } from "effect/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/http/HttpServerResponse";
+There are no real folders. A key with slashes in it looks like a path, and S3 can list every key that starts with a **prefix** like `reports/2026/`, so slashes work like folders when you list. But `reports/2026/q1.pdf` is one key, not a file inside two directories.
 
+<Records
+  title="Files · S3 Bucket"
+  columns={["key", "size"]}
+  rows={[
+    ["avatars/ana.png", "48 KB"],
+    ["avatars/sam.png", "51 KB"],
+    ["hello.txt", "12 B"],
+    ["reports/2026/q1.pdf", "2 MB"],
+    ["reports/2026/q2.pdf", "2 MB"],
+    ["reports/2027/q1.pdf", "1 MB"],
+  ]}
+  query={{ label: 'List prefix "reports/2026/"', rows: [3, 4], prefix: "reports/2026/" }}
+  caption="Keys are stored flat, in order. Listing a prefix returns every key that starts with it: there's no folder in between."
+/>
+
+Writing a key that already exists replaces its object as a whole. S3 never changes part of an object. To keep the old copy as well, turn on versioning, and each write becomes a new **version** of the key.
+
+## Declare a Bucket
+
+A Bucket is a declaration. Give it an id:
+
+```typescript title="src/files.ts"
+import * as AWS from "@alchemy.run/aws";
+
+export const Files = AWS.S3.Bucket("Files");
+```
+
+Bucket names are global: no two Buckets anywhere in AWS share a name. So you don't pick one. Alchemy names it from your app, stage and id, like `myapp-dev-files-a1b2c3`, and your `dev` and `prod` stages each get their own Bucket.
+
+A new Bucket is private. Nothing outside your account can read it, and nothing inside can either, until a policy allows it.
+
+## Write objects
+
+Bind `S3.PutObject` in a runtime to write to the Bucket. The binding gives the runtime a client, and gives its role `s3:PutObject` on this Bucket's objects and no others:
+
+```typescript title="src/api.ts"
+const putObject = yield* AWS.S3.PutObject(Files);
+```
+
+Call it with a key and a body:
+
+```typescript title="src/api.ts"
+yield* putObject({ Key: "hello.txt", Body: "Hello, world", ContentType: "text/plain" });
+```
+
+The request is the S3 API's own `PutObject` input without `Bucket`, which the binding fills in. Provide its client, `S3.PutObjectHttp`, to the runtime:
+
+```typescript title="src/api.ts"
 export default class Api extends AWS.Lambda.Function<Api>()(
   "Api",
-  Stack.useSync((stack) => ({
-    main: import.meta.url,
-    functionUrl: true,
-    memory: stack.stage === "prod" ? 1024 : 512,
-  })),
+  { main: import.meta.url },
   Effect.gen(function* () {
-+    const bucket = yield* S3.Bucket("Blobs");
-
+    const putObject = yield* AWS.S3.PutObject(Files);
     return {
-      fetch: Effect.succeed(HttpServerResponse.text("Hello from Lambda!")),
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const key = new URL(request.url).pathname.slice(1);
+        yield* putObject({ Key: key, Body: yield* request.text });
+        return HttpServerResponse.empty({ status: 204 });
+      }).pipe(Effect.orDie),
     };
-  }),
+  }).pipe(Effect.provide(AWS.S3.PutObjectHttp)),
 ) {}
 ```
 
-`yield* S3.Bucket("Blobs")` registers the resource with the Stack
-under the logical id `Blobs` and returns a typed `Bucket` handle.
-Other resources — including this Lambda — can use that handle to
-bind operations or grant access.
+## Read objects
 
-## Bind PutObject and GetObject
+Bind `S3.GetObject` to read. Its result carries the object's metadata and its `Body`, a stream of bytes:
 
-S3 operations like `s3:PutObject` and `s3:GetObject` are exposed
-as **bindings**. A binding is two things:
-
-1. A typed runtime function you call from your handler.
-2. An IAM policy statement that gets attached to the function
-   role automatically — scoped to the exact bucket ARN.
-
-Bind them in the constructor, alongside the bucket:
-
-```diff lang="typescript"
-Effect.gen(function* () {
-  const bucket = yield* S3.Bucket("Blobs");
-+  const putObject = yield* S3.PutObject(bucket);
-+  const getObject = yield* S3.GetObject(bucket);
-
-  return {
-    fetch: Effect.succeed(HttpServerResponse.text("Hello from Lambda!")),
-  };
-});
+```typescript title="src/api.ts"
+const getObject = yield* AWS.S3.GetObject(Files);
+const object = yield* getObject({ Key: "hello.txt" });
 ```
 
-Both capability calls return a callable Effect: `putObject`
-takes a `PutObjectRequest` (the AWS SDK shape, minus the `Bucket`
-field Alchemy fills in for you) and `getObject` takes a
-`GetObjectRequest`.
+Pass the stream straight to the response. The bytes flow through as they arrive, so an object larger than the Function's memory still downloads:
 
-### One binding, one IAM statement
-
-Each `S3.PutObject(bucket)`-style capability call is **1:1 with an IAM policy statement**
-attached to your function's execution role. The mapping is
-deterministic:
-
-| Code                              | IAM `Action`     | IAM `Resource`           |
-| --------------------------------- | ---------------- | ------------------------ |
-| `S3.PutObject(bucket)`       | `s3:PutObject`   | `bucket.bucketArn`       |
-| `S3.GetObject(bucket)`       | `s3:GetObject`   | `bucket.bucketArn/*`     |
-| `DynamoDB.PutItem(table)`    | `dynamodb:PutItem` | `table.tableArn`       |
-| `SQS.SendMessage(queue)`     | `sqs:SendMessage` | `queue.queueArn`        |
-
-So the two capability calls above produce exactly two statements on
-the role:
-
-```json
-[
-  {
-    "Sid": "AWSS3PutObjectBlobs",
-    "Effect": "Allow",
-    "Action": ["s3:PutObject"],
-    "Resource": "arn:aws:s3:::myapp-prod-blobs/*"
-  },
-  {
-    "Sid": "AWSS3GetObjectBlobs",
-    "Effect": "Allow",
-    "Action": ["s3:GetObject"],
-    "Resource": "arn:aws:s3:::myapp-prod-blobs/*"
-  }
-]
+```typescript title="src/api.ts"
+return HttpServerResponse.stream(object.Body!);
 ```
 
-The role is generated, never `"*"`-scoped, and regenerated from
-the call sites on every deploy — delete a capability call and the
-matching statement disappears next deploy. **The code is the
-policy.**
+A key with no object fails with `NoSuchKey`. Catch it by name, and every other failure stays in the type:
 
-## Write objects with `PUT /:key`
-
-Replace the static handler with one that takes the URL path as
-the object key and writes the request body to the bucket:
-
-```diff lang="typescript"
-return {
--  fetch: Effect.succeed(HttpServerResponse.text("Hello from Lambda!")),
-+  fetch: Effect.gen(function* () {
-+    const request = yield* HttpServerRequest;
-+    const key = new URL(request.url).pathname.slice(1);
-+
-+    if (request.method === "PUT") {
-+      const body = yield* request.text;
-+      yield* putObject({ Key: key, Body: body });
-+      return HttpServerResponse.empty({ status: 204 });
-+    }
-+
-+    return HttpServerResponse.text("Method not allowed", { status: 405 });
-+  }),
-};
+```typescript title="src/api.ts"
+const object = yield* getObject({ Key: key }).pipe(
+  Effect.catchTag("NoSuchKey", () => Effect.succeed(undefined)),
+);
+if (!object?.Body) return HttpServerResponse.text("Not found", { status: 404 });
 ```
 
-`putObject({ Key, Body })` is the same shape as
-`s3:PutObject` in the AWS SDK, minus the `Bucket` field — Alchemy
-fills that in from the bucket you bound, so the call site stays
-focused on what's actually variable.
+## One binding per operation
 
-## Read objects with `GET /:key`
+Each S3 operation is its own binding, and each binding adds one statement to the role. A runtime that only reads gets `S3.GetObject`. One that also lists gets `S3.ListObjectsV2`:
 
-Add a `GET` branch that fetches the object and pipes it back to
-the client:
-
-```diff lang="typescript"
-if (request.method === "PUT") {
-  const body = yield* request.text;
-  yield* putObject({ Key: key, Body: body });
-  return HttpServerResponse.empty({ status: 204 });
-}
-
-+if (request.method === "GET") {
-+  const result = yield* getObject({ Key: key });
-+  return HttpServerResponse.stream(result.Body!);
-+}
-
-return HttpServerResponse.text("Method not allowed", { status: 405 });
+```typescript title="src/api.ts"
+const listObjects = yield* AWS.S3.ListObjectsV2(Files);
+const page = yield* listObjects({ Prefix: "reports/2026/" });
+const keys = (page.Contents ?? []).map((object) => object.Key);
 ```
 
-`result.Body` is an Effect `Stream<Uint8Array>`, not a buffered
-`Buffer`. `HttpServerResponse.stream` flushes each chunk to the
-HTTP response as it arrives, so even a multi-gigabyte object
-moves through the function without ever being held in memory.
+So the role reads like a summary of what the code does with the Bucket. Deleting, copying, tagging and multipart uploads each have a binding of their own, listed in the [Bucket reference](/providers/aws/s3/bucket).
 
-## Handle missing objects
+## Hand out links with presigned URLs
 
-If the key doesn't exist, the AWS SDK throws `NoSuchKey`. The
-binding surfaces that as a typed error tag on the Effect, so
-`Effect.catchTag` recovers from it without inspecting strings:
+A browser can't call S3 with your role's credentials, and you don't want every upload and download to pass through your Function. A **presigned URL** solves both: it's a link, signed by the Function, that allows one operation on one key for a limited time.
 
-```diff lang="typescript"
-if (request.method === "GET") {
--  const result = yield* getObject({ Key: key });
-+  const result = yield* getObject({ Key: key }).pipe(
-+    Effect.catchTag("NoSuchKey", () => Effect.succeed(undefined)),
-+  );
-+  if (!result?.Body) {
-+    return HttpServerResponse.text("Not found", { status: 404 });
-+  }
-  return HttpServerResponse.stream(result.Body!);
-}
+```typescript title="src/api.ts"
+const presignGetObject = yield* AWS.S3.PresignGetObject(Files);
+const url = yield* presignGetObject({ key: "reports/2026/q1.pdf", expiresIn: 3600 });
 ```
 
-Every binding's failure channel is enumerated this way: the AWS
-SDK error names become Effect tags, so the type-checker tells
-you which failures the call site needs to handle.
+Anyone holding the link can download that object for the next hour, straight from S3. `S3.PresignPutObject` does the same for uploads. Signing makes no network call, but the link can only do what the signer may do, so the binding grants the role the matching permission.
 
-## Convert unhandled errors to 500s
+See [R2 presigned URLs](/cloudflare/data/r2-presigned-urls) for the same pattern on Cloudflare.
 
-Any failure you didn't `catchTag` is a programmer error — a
-missing IAM grant, a transient AWS outage, a bug. Surface those
-as 500s by applying `Effect.orDie` once at the request boundary,
-rather than per call:
+## React to new objects
 
-```diff lang="typescript"
-fetch: Effect.gen(function* () {
-  // ... PUT and GET branches ...
-  return HttpServerResponse.text("Method not allowed", { status: 405 });
--}),
-+}).pipe(Effect.orDie),
-```
+A Bucket can tell a Function every time an object is created or deleted. Subscribe from the Function's Construction phase:
 
-Applying `orDie` once at the outer layer keeps the inner code
-free of repetitive error plumbing — the only errors you handle
-explicitly are the ones you actually have a recovery for
-(`NoSuchKey`, in this case).
-
-## Provide the runtime layers
-
-Bindings declare a capability; **runtime layers** implement it.
-For S3 those are `S3.PutObjectHttp` and `S3.GetObjectHttp` — both
-ship in `alchemy/AWS/S3` and depend only on the AWS SDK and the
-ambient credentials. Provide them at the bottom of the function:
-
-```diff lang="typescript"
-// src/api.ts
-+import * as Layer from "effect/Layer";
-// ...
-export default class Api extends AWS.Lambda.Function<Api>()(
-  "Api",
-  /* ... props ... */,
-  Effect.gen(function* () {
-    /* ... bindings + fetch ... */
--  }),
-+  }).pipe(
-+    Effect.provide(Layer.mergeAll(S3.PutObjectHttp, S3.GetObjectHttp)),
-+  ),
-) {}
-```
-
-`Layer.mergeAll` unions multiple layers into one — no order
-required — and `Effect.provide` satisfies the binding requirements
-declared by `PutObject` and `GetObject`.
-
-## Deploy
-
-```sh
-bun alchemy deploy
-```
-
-Alchemy creates the bucket if it doesn't exist, attaches the
-generated IAM policy to your Lambda's execution role, and
-redeploys the function bundle.
-
-## Verify
-
-```typescript
-// test/integ.test.ts
-import * as AWS from "alchemy/AWS";
-import * as Test from "alchemy/Test/Bun";
-import { expect } from "bun:test";
-import * as Effect from "effect/Effect";
-import * as HttpBody from "effect/http/HttpBody";
-import * as HttpClient from "effect/http/HttpClient";
-import Stack from "../alchemy.run.ts";
-
-const { test, beforeAll, deploy } = Test.make({
-  providers: AWS.providers(),
-  state: AWS.state(),
-});
-
-const stack = beforeAll(deploy(Stack));
-
-test(
-  "S3 round-trip",
-  Effect.gen(function* () {
-    const { url } = yield* stack;
-
-    const put = yield* HttpClient.put(`${url}/hello.txt`, {
-      body: HttpBody.text("world"),
-    });
-    expect(put.status).toBe(204);
-
-    const get = yield* HttpClient.get(`${url}/hello.txt`);
-    expect(yield* get.text).toBe("world");
-  }),
+```typescript title="src/thumbnails.ts"
+const files = yield* Files;
+yield* AWS.S3.consumeBucketEvents(files, { events: ["s3:ObjectCreated:*"] }, (stream) =>
+  stream.pipe(Stream.runForEach((event) => Console.log(`new object: ${event.key}`))),
 );
 ```
 
-```sh
-bun test test/integ.test.ts
+Deploy adds a notification to the Bucket and permission for S3 to invoke the Function. See [S3 events](/aws/messaging/s3-events).
+
+## Serve files to the public
+
+Keep the Bucket private even when its files are public. Put CloudFront in front of it instead: the distribution reads from the Bucket, caches near your users and serves your domain over HTTPS. The Website resources set this up for you:
+
+```typescript title="alchemy.run.ts"
+const site = yield* AWS.Website.StaticSite("Site", { path: "./dist" });
 ```
 
-You now have a Lambda that owns a bucket, with no IAM JSON in
-sight.
+See [Websites](/aws/frontend/websites).
 
-## Where next
+## Delete a Bucket
 
-- [React to S3 events](/aws/messaging/s3-events) — notify the same
-  function whenever a new object lands in the bucket, wired
-  through the same binding pipeline.
-- [DynamoDB](/aws/data/dynamodb) — structured records you can look up
-  by key, alongside the blobs.
-- [`Bucket` reference](/providers/aws/s3/bucket) — every prop
-  and attribute.
+S3 won't delete a Bucket that still has objects in it, so destroying a Stack with a full Bucket fails. That protects your data from an accidental destroy.
+
+For a Bucket whose contents you can lose, like a cache or a preview stage's uploads, set `forceDestroy`, and destroy empties it first:
+
+```typescript title="src/files.ts"
+export const Files = AWS.S3.Bucket("Files", { forceDestroy: true });
+```

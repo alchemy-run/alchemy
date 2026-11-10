@@ -2,14 +2,13 @@
 title: Memory
 description: Run a disposable Better Auth Worker with an isolate-local memory store.
 ---
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 Use `Memory` for throwaway development and tests, not production authentication. This complete Worker example keeps records only for the lifetime of each isolate.
 
 ## Install
 
-```sh
-bun add @alchemy.run/better-auth better-auth@^1.7.5
-```
+<PackageManagers add="@alchemy.run/better-auth better-auth@^1.7.5" />
 
 No optional database driver or `kysely` peer is required by the memory adapter.
 
@@ -27,7 +26,7 @@ Construct the layer once for the host, not inside `fetch`, so requests in the sa
 
 ```typescript title="src/worker.ts"
 import { BetterAuth } from "@alchemy.run/better-auth";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import { AuthDatabase } from "./auth-database.ts";
 
@@ -54,7 +53,7 @@ Better Auth instances remain request-scoped, while the layer retains the backing
 
 ```typescript title="alchemy.run.ts"
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import AuthApi from "./src/worker.ts";
 
@@ -75,9 +74,7 @@ Alchemy generates and binds a stable signing secret, persisted in local stack st
 
 ## Run locally
 
-```sh
-bunx alchemy dev
-```
+<PackageManagers run="alchemy dev" />
 
 Use the printed URL rather than assuming a local port. Set `AUTH_ORIGIN` to that URL to check the auth endpoint:
 

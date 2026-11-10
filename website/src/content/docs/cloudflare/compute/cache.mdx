@@ -4,6 +4,7 @@ description: Serve responses from Cloudflare's edge cache before your Worker eve
 sidebar:
   order: 13
 ---
+import Timeline from "../../../../components/diagrams/Timeline.astro";
 
 Workers Cache sits in front of a Worker: when it's enabled, Cloudflare
 checks the cache before invoking the Worker at all, and a hit is
@@ -11,6 +12,28 @@ served straight from the edge. What gets cached is controlled by
 standard response headers: `Cache-Control` (including
 `stale-while-revalidate`), `Cache-Tag` for tag-based purging, and
 `Vary` for content negotiation.
+
+<Timeline
+  end={10}
+  lanes={[
+    { id: "req", label: "GET /posts", type: "requests" },
+    { id: "worker", label: "Api", type: "Worker" },
+  ]}
+  bars={[
+    { lane: "req", start: 0.2, end: 0.6, tone: "warn" },
+    { lane: "req", start: 1.4, end: 1.7 },
+    { lane: "req", start: 2.6, end: 2.9 },
+    { lane: "req", start: 3.8, end: 4.1 },
+    { lane: "req", start: 5.2, end: 5.5 },
+    { lane: "req", start: 7.4, end: 7.8, tone: "warn" },
+    { lane: "req", start: 8.6, end: 8.9 },
+    { lane: "worker", start: 0.2, end: 1.1, label: "runs" },
+    { lane: "worker", start: 7.4, end: 8.3, label: "runs" },
+  ]}
+  marks={[{ at: 0.2, label: "miss" }, { at: 7.4, label: "5 minutes later: miss" }]}
+  legend={[{ tone: "warn", label: "miss: the Worker answers" }, { tone: "accent", label: "hit: served from the cache" }]}
+  caption="With Cache-Control: max-age=300, the first request runs the Worker and the response is stored. Every request for the next five minutes is a hit, and the Worker doesn't run at all."
+/>
 
 ## Enable the cache on a Worker
 
@@ -20,7 +43,7 @@ is no layer to provide:
 
 ```typescript
 // src/worker.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";

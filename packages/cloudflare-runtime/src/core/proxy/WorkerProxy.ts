@@ -11,7 +11,6 @@ import * as Scope from "effect/Scope";
 import * as Port from "../internal/Port.ts";
 import type { RuntimeError } from "../RuntimeError.shared.ts";
 import { ConfigError, SystemError } from "../RuntimeError.shared.ts";
-import { CONTINUE_RESPONSE, makeExpectContinueObserver } from "./ExpectContinue.ts";
 
 /**
  * A stable local address for a Worker whose runtime comes and goes.
@@ -21,8 +20,8 @@ import { CONTINUE_RESPONSE, makeExpectContinueObserver } from "./ExpectContinue.
  * accepted connection to whatever upstream is currently {@link
  * WorkerProxyInstance.set}: a plain byte pipe over `node:net`. Forwarded
  * bytes are never rewritten; the only HTTP the proxy speaks is a 502 when
- * no upstream comes, and `100 Continue` for requests that expect it (see
- * `ExpectContinue.ts`), which workerd never sends. HTTP/1.1, streaming bodies and WebSocket upgrades all
+ * no upstream comes. HTTP/1.1 (including `Expect: 100-continue`, which workerd
+ * answers itself), streaming bodies and WebSocket upgrades all
  * pass through untouched, and the Worker receives the client's real `Host`
  * header, so `request.url` inside it is the public URL.
  *
@@ -129,9 +128,9 @@ const connect = (to: Upstream) =>
     const failed = (cause: Error) =>
       resume(
         Effect.fail(
-          new SystemError({
+          SystemError.make({
             subtag: "WorkerProxyConnect",
-            message: `Failed to reach the worker (upstream address: ${to.url})`,
+            message: `Failed to reach the worker (upstream address: ${to.url.href})`,
             cause,
           }),
         ),
@@ -163,7 +162,7 @@ interface Relay {
  */
 const makeRelay = (pendingTimeout: Duration.Duration): Relay => {
   let current = Deferred.makeUnsafe<Upstream, SystemError>();
-  const timedOut = new SystemError({
+  const timedOut = SystemError.make({
     subtag: "WorkerProxyUpstream",
     message: `No upstream configured for the worker proxy after ${Duration.format(pendingTimeout)}`,
   });
@@ -262,26 +261,24 @@ const makeRelay = (pendingTimeout: Duration.Duration): Relay => {
       // the rest. Detaching the collector and attaching the pipe happen
       // in one synchronous step, so no chunk can slip between them.
       socket.off("data", collect);
-      // workerd never sends `100 Continue`; answer `Expect: 100-continue`
-      // here. The observer runs before each chunk is forwarded, so the
-      // interim response reaches the client ahead of the final one.
-      const expectContinue = makeExpectContinueObserver(() => {
-        socket.write(CONTINUE_RESPONSE);
-      });
-      for (const chunk of held) expectContinue.observe(chunk);
-      socket.on("data", expectContinue.observe);
       for (const chunk of held) upstream.write(chunk);
       held.length = 0;
       socket.pipe(upstream);
       socket.resume();
       upstream.pipe(socket);
       // The upstream going away ends the client; the finalizers do the rest.
+      // A clean close follows `end`, which `pipe` has already turned into
+      // `socket.end()`, and the response tail may still be buffered for a
+      // slow reader: destroying then would drop it. Only an upstream that
+      // vanished mid-response cuts the client off.
       upstream.on("error", () => socket.destroy());
-      upstream.on("close", () => socket.destroy());
+      upstream.on("close", (hadError) => {
+        if (hadError || !socket.writableEnded) socket.destroy();
+      });
     }
     // From here the socket does the talking; the client closing ends the
     // fiber (see `accept`), and the finalizers destroy both ends.
-    yield* Effect.never;
+    return yield* Effect.never;
   });
 
   return {
@@ -289,8 +286,9 @@ const makeRelay = (pendingTimeout: Duration.Duration): Relay => {
       // The connection lives exactly as long as the client socket: whatever
       // it is doing when the client closes is interrupted, and the scope
       // destroys both sockets.
-      const fiber = Effect.runFork(
-        Effect.race(connection(socket), closed(socket)).pipe(Effect.scoped),
+      const fiber = Effect.race(connection(socket), closed(socket)).pipe(
+        Effect.scoped,
+        Effect.runFork,
       );
       connections.add(fiber);
       fiber.addObserver(() => connections.delete(fiber));
@@ -314,7 +312,7 @@ const makeRelay = (pendingTimeout: Duration.Duration): Relay => {
     }),
     fail: (message) =>
       settle((deferred) =>
-        Deferred.fail(deferred, new SystemError({ subtag: "WorkerProxyUpstream", message })),
+        Deferred.fail(deferred, SystemError.make({ subtag: "WorkerProxyUpstream", message })),
       ),
     close: Fiber.interruptAll(connections),
   };
@@ -328,12 +326,12 @@ const listen = (relay: Relay, host: string, port: number) =>
         resume(
           Effect.fail(
             error.code === "EADDRINUSE" || error.code === "EACCES"
-              ? new ConfigError({
+              ? ConfigError.make({
                   subtag: "AddressInUse",
                   message: `Address ${host}:${port} is already in use.`,
                   cause: error,
                 })
-              : new SystemError({
+              : SystemError.make({
                   subtag: "WorkerProxyListen",
                   message: `Failed to listen on ${host}:${port} for the worker proxy.`,
                   cause: error,
@@ -407,6 +405,9 @@ export const WorkerProxyLive = Layer.effect(
       pendingTimeout,
     }: ResolvedOptions) {
       const relay = makeRelay(pendingTimeout);
+      // Registered first so it runs after the listeners close: the port is
+      // free again once this proxy stops, not when its reservation expires.
+      yield* Effect.addFinalizer(() => ports.release(port));
       yield* listen(relay, host, port);
       if (ipv6) {
         // The IPv6 half of `localhost` (see `ipv6Loopback` above). The port

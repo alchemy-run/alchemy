@@ -1,193 +1,114 @@
 ---
-title: Process DynamoDB Streams
-description: Enable a DynamoDB Stream on your table and consume change records as a typed Effect Stream from the same Lambda.
-sidebar:
-  order: 2
+title: DynamoDB Streams
+description: How a DynamoDB Stream records every change to a table in order, what each change record carries, and how a Function consumes changes and checkpoints at the first failure.
 ---
 
-The DynamoDB table from the previous part stores records, but
-writes happen in the dark — there's no way for downstream systems
-to react. **DynamoDB Streams** fix that: every change to the
-table emits a change record (insert / modify / remove) you can
-stream into a Lambda. In Alchemy this is one helper call.
+import Log from "../../../../components/diagrams/Log.astro";
 
-## Subscribe to the stream
+A DynamoDB Stream is a table's own change log. Every insert, update and delete becomes a **change record**, kept for 24 hours, in the order the changes happened to each item. A Function reading the stream sees every change to the table, including ones made by code that never told anyone.
 
-Start with the smallest possible subscription: log just the
-event name (`INSERT` / `MODIFY` / `REMOVE`) for each change.
-Add it alongside the existing bindings:
+## Every write becomes a change record
 
-```diff lang="typescript"
-// src/api.ts
-import * as AWS from "alchemy/AWS";
-import * as DynamoDB from "alchemy/AWS/DynamoDB";
-+import * as Console from "effect/Console";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-+import * as Stream from "effect/Stream";
-// ...
+The table writes the record as part of the change, so there's no second write to forget or to fail. Records for one item stay in order. Records for different items may be read in parallel.
 
-const table = yield* DynamoDB.Table("Items", { /* ... */ });
-const putItem = yield* DynamoDB.PutItem(table);
-const getItem = yield* DynamoDB.GetItem(table);
+<Log
+  lanes={[
+    {
+      id: "stream",
+      label: "Orders",
+      type: "table stream",
+      records: ["INSERT #1", "MODIFY #1", "INSERT #2", "MODIFY #2", "REMOVE #1"],
+    },
+  ]}
+  cursors={[{ lane: "stream", at: 3, label: "Indexer" }]}
+  writer="every write"
+  caption="Every write to the table appends a change record, as part of the write. Records for one item stay in order, and the consumer reads them shortly after."
+/>
 
-+yield* DynamoDB.consumeTableChanges(table, (stream) =>
-+  stream.pipe(
-+    Stream.runForEach((record) =>
-+      Console.log(`${record.eventName}: ${record.dynamodb.Keys?.id?.S}`),
-+    ),
-+  ),
-+);
+Each record says what happened, `INSERT`, `MODIFY` or `REMOVE`, the item's keys, and, depending on the stream's **view type**, the item as it was before, after, or both.
+
+## Subscribe to a table
+
+Subscribe a Function from Construction. Each invocation receives a batch of change records:
+
+```typescript title="src/indexer.ts"
+export default class Indexer extends AWS.Lambda.Function<Indexer>()(
+  "Indexer",
+  { main: import.meta.url, functionUrl: false },
+  Effect.gen(function* () {
+    const orders = yield* Orders;
+    yield* AWS.DynamoDB.consumeTableChanges(orders, (event) =>
+      Effect.forEach(
+        event.Records,
+        (record) => Console.log(`${record.eventName}: ${record.dynamodb.Keys?.pk?.S}`),
+        { discard: true },
+      ),
+    );
+    return {};
+  }).pipe(Effect.provide(AWS.Lambda.TableEventSource)),
+) {}
 ```
 
-That single `consumeTableChanges(...)` call enables a stream on the table,
-creates a Lambda `EventSourceMapping` that polls it, and adds
-the IAM grants for `dynamodb:GetRecords`, `GetShardIterator`,
-`DescribeStream`, and `ListStreams` — all from the call site.
+There's nothing to turn on first. Deploy enables the stream on the table, creates the event source mapping, and grants the Function read access to the stream.
 
-## Pick the view type
+## Choose what each record carries
 
-By default the stream emits keys only. Most handlers want the
-full row before and after the change — set `streamViewType` to
-`NEW_AND_OLD_IMAGES`:
+By default a record carries the item's keys. Ask for the item itself with `streamViewType`:
 
-```diff lang="typescript"
--yield* DynamoDB.consumeTableChanges(table, (stream) =>
-+yield* DynamoDB.consumeTableChanges(table, {
-+  streamViewType: "NEW_AND_OLD_IMAGES",
-+}, (stream) =>
-  stream.pipe(/* ... */),
+```typescript title="src/indexer.ts"
+yield* AWS.DynamoDB.consumeTableChanges(orders, { streamViewType: "NEW_AND_OLD_IMAGES" }, handle);
+```
+
+`NEW_IMAGE` carries the item after the change, `OLD_IMAGE` before it, and `NEW_AND_OLD_IMAGES` both, which lets a consumer see exactly which attributes changed. Pick the smallest one your consumer needs.
+
+The images are in DynamoDB's attribute format. Type the event with your item's shape to read them:
+
+```typescript title="src/indexer.ts"
+(event: AWS.DynamoDB.StreamEvent<{ pk: { S: string }; total: { N: string } }>) =>
+  Effect.forEach(
+    event.Records,
+    (record) => Console.log(record.dynamodb.NewImage?.total.N ?? "(deleted)"),
+    { discard: true },
+  )
+```
+
+## Start from the right place
+
+A new subscription starts with changes made after it exists, `startingPosition: "LATEST"`. To process what the stream still holds from the last 24 hours, start from `"TRIM_HORIZON"`:
+
+```typescript title="src/indexer.ts"
+yield* AWS.DynamoDB.consumeTableChanges(
+  orders,
+  { streamViewType: "NEW_IMAGE", startingPosition: "TRIM_HORIZON", batchSize: 10 },
+  handle,
 );
 ```
 
-The other options (`KEYS_ONLY`, `NEW_IMAGE`, `OLD_IMAGE`) trade
-payload size for less detail — pick the smallest one your
-handler actually needs.
+`batchSize` caps the records per invocation. Larger batches cost fewer invocations. Smaller ones retry less work when one fails.
 
-## Control where consumption starts
+## Checkpoint at the first failure
 
-`startingPosition: "LATEST"` is the default and ignores history;
-the consumer only sees records that arrive after the
-event-source mapping is enabled. Switch to `"TRIM_HORIZON"` to
-replay everything currently in the stream's 24-hour retention
-window:
+Lambda moves its place in the stream forward after each batch succeeds. When a batch fails, the batch is retried, and changes behind it wait, so they're never applied out of order.
 
-```diff lang="typescript"
-yield* DynamoDB.consumeTableChanges(table, {
-  streamViewType: "NEW_AND_OLD_IMAGES",
-+  startingPosition: "TRIM_HORIZON",
-+  batchSize: 10,
-}, (stream) =>
-  stream.pipe(/* ... */),
-);
+Report the first record that failed instead, and Lambda keeps everything before it:
+
+```typescript title="src/indexer.ts"
+(event) =>
+  Effect.gen(function* () {
+    for (const record of event.Records) {
+      const ok = yield* writeToIndex(record).pipe(
+        Effect.as(true),
+        Effect.catchCause(() => Effect.succeed(false)),
+      );
+      if (!ok) return { batchItemFailures: [{ itemIdentifier: record.dynamodb.SequenceNumber! }] };
+    }
+  })
 ```
 
-`batchSize` caps the number of records the function sees per
-invocation. Larger batches are more efficient; smaller batches
-fail in smaller blast radii.
+A record that can never succeed blocks the stream for its items until it expires. Catch errors that retrying won't fix, and move on.
 
-## Type the row payload
+## What streams are for
 
-DynamoDB stream records use the same attribute-value shape as
-`GetItem`/`PutItem`. Describe the row inline as a generic on
-`consumeTableChanges` and TypeScript will help you destructure
-`NewImage`/`OldImage`:
+Use a stream to keep something else in step with the table: a search index, a cache, a copy in a warehouse, a running total. Use it to react to changes, like sending an email when an order's status becomes `shipped`, without the code that changed it having to know.
 
-```diff lang="typescript"
--yield* DynamoDB.consumeTableChanges(table, {
-+yield* DynamoDB.consumeTableChanges<{ id: { S: string }; content: { S: string } }>(table, {
-  streamViewType: "NEW_AND_OLD_IMAGES",
-  startingPosition: "TRIM_HORIZON",
-  batchSize: 10,
-}, (stream) =>
-  stream.pipe(
-    Stream.runForEach((record) =>
--      Console.log(`${record.eventName}: ${record.dynamodb.Keys?.id?.S}`),
-+      Console.log(
-+        `${record.eventName}: ${record.dynamodb.Keys?.id?.S} -> ` +
-+          `${record.dynamodb.NewImage?.content.S ?? "(deleted)"}`,
-+      ),
-    ),
-  ),
-);
-```
-
-## Provide the runtime layer
-
-The Lambda-specific implementation of `TableEventSource` is in
-`Lambda.TableEventSource`. Add it to the merged layer:
-
-```diff lang="typescript"
-}).pipe(
-  Effect.provide(
-    Layer.mergeAll(
-      AWS.Lambda.BucketEventSource,
-+      AWS.Lambda.TableEventSource,
-      DynamoDB.GetItemHttp,
-      DynamoDB.PutItemHttp,
-      S3.PutObjectHttp,
-      S3.GetObjectHttp,
-    ),
-  ),
-),
-```
-
-`TableEventSource` is the binding that mutates the table's stream
-configuration during deploy and creates the event source mapping.
-You don't have to think about either — they're both side effects
-of `consumeTableChanges(...)`.
-
-## Deploy
-
-```sh
-bun alchemy deploy
-```
-
-Alchemy enables the stream on the table (takes a few seconds for
-the table to settle) then creates the event source mapping. Once
-the mapping is `Enabled`, every `PutItem`/`UpdateItem`/`DeleteItem`
-shows up in your function's CloudWatch logs.
-
-## Verify
-
-Reuse the `PUT /items/:id` route to publish changes, then tail
-the function logs to confirm they arrive:
-
-```sh
-bun alchemy logs Api --tail
-```
-
-In another terminal:
-
-```sh
-curl -X PUT --data 'first' "$URL/items/one"
-curl -X PUT --data 'second' "$URL/items/two"
-curl -X PUT --data 'updated' "$URL/items/one"
-```
-
-You'll see three `MODIFY`/`INSERT` log lines stream past — one
-per write. Stream records typically arrive within 1–2 seconds of
-the originating change.
-
-## Why a Stream instead of a callback?
-
-The `consumeTableChanges(table, handler)` signature mirrors the S3
-events helper for a reason — once your event source is a typed `Stream<Record>`,
-back-pressure, batching, retries, parallel side effects, and
-in-order processing are all just composition:
-
-```typescript
-stream.pipe(
-  Stream.groupedWithin(50, "5 seconds"),
-  Stream.mapEffect((batch) => writeToWarehouse(batch), { concurrency: 4 }),
-  Stream.runDrain,
-);
-```
-
-The same operators work for DynamoDB Streams, S3 events, SQS
-messages, and Kinesis records — the only thing that changes is
-the element type.
-
-Next we'll add an [SQS Queue](/aws/messaging/sqs) so the Lambda
-can fan changes (or anything else) out to a different consumer
-process and pick them up downstream.
+To hand changes to other consumers, forward them to a [Queue](/aws/messaging/sqs#send-many-messages-at-once) or a [Topic](/aws/messaging/sns). For an ordered stream your code writes to directly, use [Kinesis](/aws/messaging/kinesis).

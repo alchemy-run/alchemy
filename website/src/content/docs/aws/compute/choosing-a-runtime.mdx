@@ -1,141 +1,183 @@
 ---
 title: Choosing a runtime
-description: Lambda vs ECS vs EKS vs EC2 for Alchemy apps — cold starts, cost shape, packaging, and how much of each Alchemy currently covers.
+description: How Lambda Functions, Lambda Web Functions, ECS, EKS and EC2 differ in how they run your code, scale and cost, and how to choose one for each part of an app.
 ---
 
-Every Alchemy app on AWS needs somewhere for its code to run.
-Alchemy ships four runtimes, all driven by the same pattern —
-bundle an Effect program, deploy it as a resource, bind building
-blocks to it:
+import DAG from "../../../../components/DAG.astro";
+import Responsibility from "../../../../components/Responsibility.astro";
+import Timeline from "../../../../components/diagrams/Timeline.astro";
+import Tree from "../../../../components/diagrams/Tree.astro";
 
-- **Lambda** — serverless functions. **Use this by default.**
-- **ECS** — long-running containers on Fargate.
-- **EKS** — containers as Kubernetes workloads on a managed
-  Auto Mode cluster.
-- **EC2** — virtual machines you fully control.
+AWS gives you several places to run code. They differ in one main way: how much of the machine AWS manages for you, and so how much you decide yourself. Every one of them runs the same kind of Alchemy program, takes the same bindings, and gets its IAM role from them.
 
-## At a glance
+<Responsibility
+  platform="AWS"
+  columns={[
+    { label: "Lambda", type: "per invocation" },
+    { label: "Web Function", type: "HTTP server" },
+    { label: "ECS", type: "on Fargate" },
+    { label: "EKS", type: "Auto Mode" },
+    { label: "EC2", type: "a machine" },
+  ]}
+  rows={[
+    { label: "your program", you: [true, true, true, true, true] },
+    { label: "scaling", you: [false, false, true, true, true] },
+    { label: "image & runtime", you: [false, false, true, true, true] },
+    { label: "orchestration", you: [false, false, false, true, true] },
+    { label: "OS & patching", you: [false, false, false, false, true] },
+    { label: "hardware", you: [false, false, false, false, false] },
+  ]}
+  caption="From left to right, AWS manages less and you decide more."
+/>
 
-|                  | Lambda                                     | ECS                                        | EKS                                          | EC2                                      |
-| ---------------- | ------------------------------------------ | ------------------------------------------ | -------------------------------------------- | ---------------------------------------- |
-| Execution model  | Per-request, event-driven                  | Always-on containers                       | Kubernetes objects (Deployments, Jobs)       | Always-on machine                        |
-| Cost shape       | Pay per invocation; scales to zero         | Pay per running task                       | Control plane + Auto Mode nodes              | Pay per running instance                 |
-| Startup          | Cold starts (ms–s), then warm              | Task launch (tens of seconds), then steady | Cluster create (~10 min), Pods in seconds    | Instance boot (minutes), then steady     |
-| Packaging        | Bundled zip (Rolldown)                     | Docker image, built + pushed for you       | Docker image, built + pushed for you         | Bundled program on an AMI you choose     |
-| Networking       | None required (Function URL)               | VPC required (awsvpc), optional ALB        | VPC required, `LoadBalancer` Services        | VPC required, you own every primitive    |
-| Alchemy coverage | Fully documented                           | Cluster/Service/Task resources             | Cluster/Deployment/Job/Manifest/Helm         | Instance + full VPC primitives           |
+## The same program on every runtime
 
-## Lambda — the default
+Whichever you pick, you declare it with an id, its configuration and an Effect. Construction binds what it uses, and the handlers it returns do the work. Here it is as an ECS Service:
 
-Serverless, event-driven, and the runtime this documentation is
-written around. You get the [`Function`](/providers/aws/lambda/function)
-resource with a public Function URL, typed bindings that mint
-least-privilege IAM policies from your call sites, and
-`Stream`-shaped event sources for SQS, Kinesis, DynamoDB
-Streams, S3 notifications, SNS, and EventBridge. Cold starts and
-the 15-minute execution cap are the trade; per-request pricing
-and zero idle cost are the payoff.
+```typescript title="alchemy.run.ts"
+const api = yield* AWS.ECS.Service(
+  "Api",
+  { cluster, main: import.meta.url, port: 3000, loadBalancer: true },
+  Effect.gen(function* () {
+    const getObject = yield* AWS.S3.GetObject(Files);
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("Hello from ECS!")),
+    };
+  }).pipe(Effect.provide(AWS.S3.GetObjectHttp)),
+);
+```
 
-Choose Lambda unless you have a specific reason not to.
+The same Effect, with its bindings and its `fetch`, runs as a Lambda Function or on EC2.
 
-→ [Lambda](/aws/compute/lambda)
+So moving part of an app from one runtime to another changes its declaration, not its code. Choose by how the work behaves, and change your mind later if it behaves differently than you expected.
 
-## ECS — long-running containers
+## Lambda Functions: run per invocation
 
-When your workload doesn't fit a request/response window — a
-WebSocket server, a worker that holds connections open, anything
-that should be always-on — run it as a container. Alchemy models
-ECS with three resources:
+A [Lambda Function](/aws/compute/lambda) runs when something invokes it: a request, a queue message, a new object, a schedule. AWS starts environments as invocations arrive and stops them when they don't, so an idle Function costs nothing and a busy one scales with no setup.
 
-- [`Cluster`](/providers/aws/ecs/cluster) — an ECS cluster for
-  running tasks and services.
-- [`Task`](/providers/aws/ecs/task) — bundles an inline Effect
-  program, builds and pushes a Docker image to a generated ECR
-  repository, provisions task + execution IAM roles and a
-  CloudWatch log group, and registers a Fargate task definition.
-  Tasks can serve HTTP directly and accept the same
-  binding contract (env + IAM policy statements) as Lambda.
-- [`Service`](/providers/aws/ecs/service) — keeps a task
-  definition running with awsvpc networking; set `public: true`
-  and Alchemy provisions a public ALB + listener + target group
-  for you.
+That makes it an easy and cheap place to start. Its limits come from the same model: an invocation runs for at most 15 minutes, each environment handles one invocation at a time, and a new environment takes a cold start before its first one.
 
-You pay for running tasks whether or not they're serving
-traffic, and you bring a VPC (subnets + security groups) — the
-[`Network`](/providers/aws/ec2/network) helper builds one in a
-single call.
+Choose it for event handlers, background jobs, scheduled work, and APIs that see uneven traffic.
 
-→ [ECS](/aws/compute/ecs)
+<Timeline
+  end={10}
+  lanes={[{ id: "e1", label: "environment 1" }, { id: "e2", label: "environment 2" }]}
+  bars={[
+    { lane: "e1", start: 0, end: 0.8, tone: "warn" },
+    { lane: "e1", start: 0.8, end: 3.4, label: "invocation" },
+    { lane: "e1", start: 4.2, end: 6.8, label: "invocation" },
+    { lane: "e2", start: 1.6, end: 2.4, tone: "warn" },
+    { lane: "e2", start: 2.4, end: 5, label: "invocation" },
+  ]}
+  legend={[{ tone: "accent", label: "invocation" }, { tone: "warn", label: "cold start" }]}
+  caption="One invocation per environment. An invocation that arrives while the others are busy starts a new environment, with a cold start."
+/>
 
-## EKS — when your platform is Kubernetes
+## Lambda Web Functions: HTTP servers on Lambda
 
-When the workload is container-shaped but you want Kubernetes
-itself — Helm charts, operators, raw manifests, or teams already
-speaking Deployments and Jobs — Alchemy targets **EKS Auto Mode**,
-where AWS manages the control plane, nodes, storage, and
-load-balancer integration. Alchemy models it with:
+A [Lambda Web Function](/aws/compute/web-functions) runs an HTTP server on Lambda. One environment serves many requests at once, up to 128, so a spike starts fewer environments and requests share warm connections. Responses stream as your handler produces them.
 
-- [`Cluster`](/providers/aws/eks/cluster) — the control plane;
-  `compute: "auto"` turns on Auto Mode with sensible defaults.
-- [`Deployment`](/providers/kubernetes/deployment) — a replicated
-  Kubernetes server (the Kubernetes analog of `AWS.ECS.Service`)
-  with the same three image sources as ECS: a registry `image`, a
-  Dockerfile `context`, or an inline Effect program via `main`.
-- [`Job`](/providers/kubernetes/job) — run-to-completion work, or a
-  `CronJob` when you set `schedule`.
-- [`Manifest`](/providers/kubernetes/manifest) and
-  [`HelmChart`](/providers/kubernetes/helmchart) — any raw Kubernetes
-  object or a rendered Helm chart, applied via server-side apply.
+It only receives HTTP, runs Node.js, and has a fixed 2 GB of memory per environment. Choose it for APIs and websites, and pair it with a Lambda Function when the API hands work to a queue.
 
-Bindings work the same as on Lambda and ECS — env vars plus IAM
-policy statements, delivered through an EKS Pod Identity role —
-and there is no YAML and no `kubectl` step. You pay for the
-control plane and the nodes Auto Mode provisions, you bring a VPC
-(the [`Network`](/providers/aws/ec2/network) helper builds one),
-and the control plane takes ~10 minutes to create.
+<Timeline
+  end={10}
+  lanes={[{ id: "e1", label: "environment 1", type: "up to 128 at once" }]}
+  bars={[
+    { lane: "e1", start: 0, end: 0.8, tone: "warn" },
+    { lane: "e1", start: 0.8, end: 3.6, label: "request" },
+    { lane: "e1", start: 1.6, end: 4.4, label: "request" },
+    { lane: "e1", start: 2.2, end: 5.4, label: "request" },
+    { lane: "e1", start: 4, end: 7, label: "request" },
+  ]}
+  caption="The same traffic in one environment. Requests run side by side and share its warm connections."
+/>
 
-→ [EKS](/aws/compute/eks)
+## ECS: containers that keep running
 
-For ML training fleets specifically — persistent, health-checked
-GPU clusters rather than application containers — EKS pairs with
-[SageMaker HyperPod](/aws/compute/hyperpod): the HyperPod nodes
-join your EKS cluster, and `Deployment`/`Job` opt onto them with
-the `hyperpod` prop.
+[ECS](/aws/compute/ecs) runs your program as a container on Fargate, and keeps it running. There's no time limit and no cold start per request, and the program can hold connections, WebSockets or in-memory state for as long as it's up.
 
-## EC2 — when you need the machine
+You pay for running tasks whether or not they're busy. They run inside a VPC: your account's default one to start, or one you build with the `Network` helper. Alchemy builds the image from your program, or from a Dockerfile, and pushes it for you.
 
-Full-control VMs for workloads that need an OS, a GPU, custom
-daemons, or just predictable dedicated capacity. The
-[`Instance`](/providers/aws/ec2/instance) resource can act as a
-low-level compute primitive or run a bundled long-lived Effect
-program directly on the machine (including serving HTTP), and
-Alchemy ships the complete networking toolkit around it:
-[`Vpc`](/providers/aws/ec2/vpc),
-[`Subnet`](/providers/aws/ec2/subnet),
-[`SecurityGroup`](/providers/aws/ec2/securitygroup), NAT and
-internet gateways, route tables, EIPs, and VPC endpoints (see
-[VPC & networking](/aws/networking)).
+Choose it for long-lived servers, workers that hold connections open, and anything that already ships as a container.
 
-You own patching, scaling, and availability.
+<Timeline
+  end={10}
+  lanes={[
+    { id: "req", label: "requests" },
+    { id: "t1", label: "task 1" },
+    { id: "t2", label: "task 2" },
+  ]}
+  bars={[
+    { lane: "req", start: 1, end: 1.6 },
+    { lane: "req", start: 2.2, end: 2.8 },
+    { lane: "req", start: 7.4, end: 8 },
+    { lane: "t1", start: 0, end: 10, label: "running · holds connections and memory" },
+    { lane: "t2", start: 0, end: 10, label: "running" },
+  ]}
+  caption="Tasks run whether or not requests arrive, so there's no cold start, and you pay for every hour they run."
+/>
 
-→ [EC2](/aws/compute/ec2)
+## EKS: Kubernetes
 
-## Rule of thumb
+[EKS](/aws/compute/eks) runs a Kubernetes cluster, with AWS managing the control plane and, in Auto Mode, the nodes. You deploy Deployments, Jobs, Helm charts and raw manifests from the same Stack, with the same bindings.
 
-1. Start with **Lambda**. Per-request cost, no servers, and the
-   whole documented binding/event-source surface.
-2. Move a workload to **ECS** when it's long-running, needs more
-   than 15 minutes, or is already a container.
-3. Pick **EKS** over ECS when you want Kubernetes itself —
-   Helm charts, operators, raw manifests — not just a container
-   runner.
-4. Reach for **EC2** when you need the machine itself — kernel
-   access, GPUs, custom networking, or software that expects a
-   host.
+A cluster takes about ten minutes to create and costs money while it exists. Choose it when you want Kubernetes itself: its tools, its operators, or a team that already runs on it.
 
-## Where next
+<Tree
+  nodes={[
+    { id: "c", label: "EKS cluster", type: "Auto Mode" },
+    { id: "n1", label: "node 1", type: "managed by AWS", parent: "c", dashed: true },
+    { id: "p1", label: "web", type: "Pod", parent: "n1", tone: "accent" },
+    { id: "p2", label: "worker", type: "Pod", parent: "n1" },
+    { id: "n2", label: "node 2", type: "managed by AWS", parent: "c", dashed: true },
+    { id: "p3", label: "web", type: "Pod", parent: "n2", tone: "accent" },
+  ]}
+  caption="You declare Pods through Deployments and Jobs. Kubernetes places them on nodes, and Auto Mode adds and patches the nodes."
+/>
 
-- [Lambda](/aws/compute/lambda) — deploy a function with a public URL.
-- [AWS overview](/aws) — resources and recipes.
-- [Providers reference](/providers) — generated docs for every
-  ECS, EKS, and EC2 resource.
+## EC2: the whole machine
+
+[EC2](/aws/compute/ec2) gives you a virtual machine. You pick the instance type, the operating system and the disk, and you own patching and recovery. Alchemy can run your program on it directly, or leave it as a plain machine.
+
+Choose it for GPUs, custom daemons, software that expects a host, or steady load where a reserved machine is cheapest.
+
+<Tree
+  nodes={[
+    { id: "vpc", label: "VPC", type: "your network" },
+    { id: "subnet", label: "public subnet", type: "us-east-1a", parent: "vpc", dashed: true },
+    { id: "sg", label: "security group", type: "allows :3000 in", parent: "subnet", dashed: true },
+    {
+      id: "i",
+      label: "Server",
+      type: "EC2 instance",
+      parent: "sg",
+      tone: "accent",
+      specs: [
+        ["type", "g5.xlarge · 1 GPU"],
+        ["image", "your OS and disk"],
+        ["you own", "patching, restarts, recovery"],
+      ],
+    },
+  ]}
+  caption="The whole machine is yours: its size, its operating system, everything on it, and keeping it healthy."
+/>
+
+## Mix runtimes in one app
+
+An app rarely needs just one. A common shape is a Web Function for the API, a Lambda Function consuming the queue it writes to, and an ECS service for the one process that must stay connected:
+
+<DAG
+  nodes={[
+    { id: "api", label: "Api", type: "Lambda Web Function", layer: 0 },
+    { id: "jobs", label: "Jobs", type: "SQS Queue", layer: 1 },
+    { id: "worker", label: "Worker", type: "Lambda Function", layer: 2 },
+    { id: "feed", label: "Feed", type: "ECS Service", layer: 1 },
+  ]}
+  edges={[
+    { from: "api", to: "jobs" },
+    { from: "jobs", to: "worker", dashed: true },
+    { from: "api", to: "feed" },
+  ]}
+/>
+
+Each runtime has its own role, written by its own bindings, so each part of the app can reach only what it uses.

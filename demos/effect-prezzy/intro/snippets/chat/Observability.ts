@@ -1,4 +1,4 @@
-import * as Axiom from "alchemy/Axiom";
+import * as Axiom from "@alchemy.run/axiom";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 

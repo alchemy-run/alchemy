@@ -114,6 +114,5 @@ function comparePathHashWithEntry(
  * @param array The content hash
  * @returns padded hex string
  */
-const Uint8ToHexString = (array: Uint8Array) => {
-  return [...array].map((b) => b.toString(16).padStart(2, "0")).join("");
-};
+const Uint8ToHexString = (array: Uint8Array) =>
+  [...array].map((b) => b.toString(16).padStart(2, "0")).join("");

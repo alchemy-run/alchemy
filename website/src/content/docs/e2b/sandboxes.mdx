@@ -1,0 +1,156 @@
+---
+title: Sandboxes
+description: Create sandboxes from a Worker, run commands, read and write files, and manage their lifecycle.
+---
+
+import StateMachine from "../../../components/diagrams/StateMachine.astro";
+
+A sandbox is one microVM, started from a template's snapshot. It runs for its **timeout**, counted from when it starts or resumes. When the timeout runs out, E2B kills it, or with `autoPause` pauses it: its memory, files and running processes are kept, and a resume picks up where it stopped.
+
+## A sandbox lives for its timeout
+
+<StateMachine
+  states={[
+    { id: "running", label: "running", col: 0, row: 0, start: true, tone: "accent" },
+    { id: "paused", label: "paused", type: "memory kept", col: 1, row: 0 },
+    { id: "killed", label: "killed", col: 0.5, row: 1, end: true },
+  ]}
+  transitions={[
+    { from: "running", to: "paused", label: "autoPause", bend: 0.15 },
+    { from: "paused", to: "running", label: "resume", bend: 0.45 },
+    { from: "running", to: "killed", label: "timeout · kill()" },
+    { from: "paused", to: "killed", label: "kill()" },
+  ]}
+  caption="A sandbox starts running. Its timeout kills it, or with autoPause pauses it with its memory until something resumes it. kill() ends it from either state."
+/>
+
+## Bind sandboxes in a Worker
+
+You create sandboxes while your app runs, with `E2B.CreateSandbox`. Pass a template or snapshot to create from it, or nothing and pass `templateID` per call.
+
+```typescript
+// in the Worker's construction
+const sandboxes = yield* E2B.CreateSandbox(MyTemplate);
+```
+
+Provide `E2B.CreateSandboxHttp` on the Worker. The Worker gets its own E2B API key as a secret, deleted when the Worker is destroyed.
+
+## Create a sandbox per request
+
+```typescript
+// in fetch
+const sandbox = yield* Effect.acquireRelease(sandboxes.create({ timeout: 120 }), (sandbox) =>
+  Effect.ignore(sandbox.kill()),
+);
+```
+
+The sandbox is killed when the request's scope closes. `timeout` is in seconds; E2B kills the sandbox when it runs out.
+
+## Keep a sandbox per user
+
+```typescript
+const [existing] = yield* sandboxes.list({ metadata: { user }, state: ["running", "paused"] });
+const sandbox = existing
+  ? yield* sandboxes.connect(existing.sandboxID, { timeout: 600 })
+  : yield* sandboxes.create({ metadata: { user }, autoPause: true, timeout: 600 });
+```
+
+With `autoPause`, E2B pauses the sandbox instead of killing it when the timeout runs out, memory included. `connect` resumes it.
+
+## Declare a sandbox the Stack owns
+
+```typescript title="src/DevBox.ts"
+import * as E2B from "@alchemy.run/e2b";
+import { MyTemplate } from "./MyTemplate.ts";
+
+export const DevBox = E2B.Sandbox("DevBox", { template: MyTemplate, timeout: "10 minutes" });
+```
+
+`E2B.Sandbox` declares one sandbox that lives as long as the stack. It runs for `timeout` after it starts or resumes, then E2B pauses it with its memory and files. The next request to it resumes it. A rebuilt `MyTemplate` replaces it.
+
+```typescript
+// in the Worker's construction
+const devBox = yield* E2B.ConnectSandbox(DevBox);
+// in fetch
+const result = yield* devBox.exec("git pull && npm test", { cwd: "/home/user/repo" });
+```
+
+`ConnectSandbox` returns the same handle as `create`, with `sandboxId` read at runtime. Provide `E2B.ConnectSandboxHttp` on the Worker.
+
+With `autoResume: false`, calls into a paused sandbox fail with `SandboxNotRunning` until you call `devBox.resume()`.
+
+## Run commands
+
+```typescript
+const result = yield* sandbox.exec("npm test", { cwd: "/home/user/app" });
+// { stdout, stderr, exitCode, pid, error }
+```
+
+A non-zero exit code is returned, not failed. `exec(["node", "--version"])` runs an argument vector without a shell. `stdin` feeds the command, and `timeout` kills it and fails with `E2B.ExecTimedOut`.
+
+## Stream a command's output
+
+```typescript
+const build = yield* sandbox.start("npm run build");
+yield* build.output.pipe(Stream.runForEach((chunk) => Effect.log(chunk.fd, chunk.data.length)));
+const { exitCode } = yield* build.wait;
+```
+
+`start` returns a `Process` with its `output`, `write`, `kill` and `wait`. Closing the scope detaches; the process keeps running. Re-attach with `sandbox.processes.attach({ pid })`.
+
+## Read and write files
+
+```typescript
+yield* sandbox.files.write("/home/user/app/config.json", JSON.stringify(config));
+const log = yield* sandbox.files.readText("/home/user/app/out.log");
+const entries = yield* sandbox.files.list("/home/user/app");
+```
+
+`files.watch(path)` streams changes under a directory.
+
+## Open a terminal
+
+```typescript
+const pty = yield* sandbox.pty.open({ cols: 120, rows: 40 });
+yield* pty.write("ls\n");
+yield* pty.resize({ cols: 160, rows: 48 });
+```
+
+`pty.output` streams the terminal's bytes. Closing the scope detaches.
+
+## Call a port
+
+```typescript
+const port = yield* sandbox.getTcpPort(3000);
+const res = yield* port.fetch(HttpClientRequest.get("/health"));
+port.url; // https://3000-<sandboxId>.e2b.app
+```
+
+`port.fetch` also takes the request a Worker received, and proxies it to the port:
+
+```typescript
+const port = yield* sandbox.getTcpPort(3000);
+return yield* port.fetch(yield* HttpServerRequest);
+```
+
+## Extend, pause or kill it
+
+```typescript
+yield* sandbox.setTimeout("30 minutes");
+yield* sandbox.pause();
+yield* sandbox.kill();
+```
+
+## Clean up what your app created
+
+Objects created at run time are tagged with the stack, stage and binding (`alchemy::stack`, `alchemy::stage`, `alchemy::id`) and are not deleted when the stack is destroyed. List them by those tags to clean them up.
+
+```typescript
+const left = yield* sandboxes.list({
+  metadata: { "alchemy::stack": "my-app", "alchemy::stage": "prod" },
+  state: ["running", "paused"],
+});
+yield* Effect.forEach(left, (sandbox) => sandboxes.kill(sandbox.sandboxID));
+```
+
+A template can't be deleted while sandboxes run on it, so kill them before you destroy the stack.

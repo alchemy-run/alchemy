@@ -1,5 +1,5 @@
+import { describe, expect, it, layer } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { describe, expect, it, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -493,24 +493,31 @@ const run = (command: string, args: string[], cwd: string) =>
 
 layer(NodeServices.layer)("Ignore rules match the real tools", (it) => {
   for (const testCase of gitignoreCases) {
-    it.effect(`git: ${testCase.name}`, () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const root = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-ignore-git-" });
-        yield* materialize(root, testCase.tree);
-        yield* fs.writeFileString(path.join(root, ".gitignore"), testCase.ignore);
-        yield* run("git", ["init", "-q"], root);
-        const git = (yield* run("git", ["ls-files", "--others", "--exclude-standard", "-z"], root))
-          .split("\0")
-          .filter((entry) => entry.length > 0)
-          .sort();
-        // Git never lists its own `.git` directory.
-        const kept = (yield* ours(root, testCase.ignore, "gitignore")).filter(
-          (entry) => !entry.startsWith(".git/"),
-        );
-        expect(kept).toEqual(git);
-      }),
+    it.effect(
+      `git: ${testCase.name}`,
+      () =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const root = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-ignore-git-" });
+          yield* materialize(root, testCase.tree);
+          yield* fs.writeFileString(path.join(root, ".gitignore"), testCase.ignore);
+          yield* run("git", ["init", "-q"], root);
+          const git = (yield* run(
+            "git",
+            ["ls-files", "--others", "--exclude-standard", "-z"],
+            root,
+          ))
+            .split("\0")
+            .filter((entry) => entry.length > 0)
+            .sort();
+          // Git never lists its own `.git` directory.
+          const kept = (yield* ours(root, testCase.ignore, "gitignore")).filter(
+            (entry) => !entry.startsWith(".git/"),
+          );
+          expect(kept).toEqual(git);
+        }),
+      { tags: ["local"] },
     );
   }
 
@@ -547,7 +554,7 @@ layer(NodeServices.layer)("Ignore rules match the real tools", (it) => {
             yield* listFiles(out),
           );
         }),
-      { timeout: 60_000 },
+      { tags: ["provider:docker", "local"], timeout: 60_000 },
     );
   }
 });

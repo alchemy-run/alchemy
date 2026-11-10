@@ -1,13 +1,14 @@
 import * as NodePath from "node:path";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
 import type * as ViteModule from "vite";
 import type { Config as WakuConfig } from "waku/config";
-import type * as WakuInternals from "waku/internals";
 import type * as WakuVitePlugins from "waku/vite-plugins";
 import * as FrameworkCore from "../core/index.ts";
 import type {
@@ -19,9 +20,8 @@ import type {
   DeployTargetServices,
 } from "../core/index.ts";
 
-type WakuInternalsModule = typeof WakuInternals;
 type WakuVitePluginsModule = typeof WakuVitePlugins;
-type ResolvedWakuConfig = ReturnType<WakuInternalsModule["unstable_resolveConfig"]>;
+type ResolvedWakuConfig = ReturnType<WakuVitePluginsModule["unstable_resolveConfig"]>;
 
 /**
  * Waku's rsc-environment worker entry, relative to the installed `waku`
@@ -497,7 +497,6 @@ const clearPreviewServerGlobal = (): void => {
 
 interface ProjectModules {
   readonly vite: typeof ViteModule;
-  readonly internals: WakuInternalsModule;
   readonly vitePlugins: WakuVitePluginsModule;
   readonly wakuDirectory: string;
 }
@@ -560,13 +559,11 @@ export const make = (
       FrameworkCore.FrameworkError
     > = Effect.fn(function* (target: WakuTarget, context: WakuTargetContext) {
       if (typeof target.adapter !== "function" || typeof target.vitePlugins !== "function") {
-        return yield* Effect.fail(
-          fail(
-            `Deploy target "${target.platform}" does not implement the waku target hooks ` +
-              "(adapter, vitePlugins) required to drive waku " +
-              context.phase,
-          )(undefined),
-        );
+        return yield* fail(
+          `Deploy target "${target.platform}" does not implement the waku target hooks ` +
+            "(adapter, vitePlugins) required to drive waku " +
+            context.phase,
+        )(undefined);
       }
       const [adapterPath, plugins] = yield* Effect.all(
         [target.adapter(context), target.vitePlugins(context)],
@@ -580,13 +577,10 @@ export const make = (
     ) => Effect.Effect<ProjectModules, FrameworkCore.FrameworkError> = Effect.fn(function* (
       root: string,
     ) {
-      const [vite, internals, vitePlugins, wakuDirectory] = yield* Effect.all(
+      const [vite, vitePlugins, wakuDirectory] = yield* Effect.all(
         [
           FrameworkCore.loadProjectModule<typeof ViteModule>(root, "vite").pipe(
             Effect.mapError(fail("Failed to load the project's vite")),
-          ),
-          FrameworkCore.loadProjectModule<WakuInternalsModule>(root, "waku/internals").pipe(
-            Effect.mapError(fail("Failed to load the project's waku/internals")),
           ),
           FrameworkCore.loadProjectModule<WakuVitePluginsModule>(root, "waku/vite-plugins").pipe(
             Effect.mapError(fail("Failed to load the project's waku/vite-plugins")),
@@ -597,7 +591,7 @@ export const make = (
         ],
         { concurrency: "unbounded" },
       );
-      return { vite, internals, vitePlugins, wakuDirectory };
+      return { vite, vitePlugins, wakuDirectory };
     });
 
     /**
@@ -665,18 +659,16 @@ export const make = (
         mergeViteConfig: project.vite.mergeConfig,
       });
       if (userConfig?.unstable_adapter !== undefined) {
-        return yield* Effect.fail(
-          fail(
-            `The waku config sets unstable_adapter (${JSON.stringify(userConfig.unstable_adapter)}), ` +
-              "but the deploy target owns the server adapter " +
-              `(it injects ${JSON.stringify(inputs.adapterPath)}). ` +
-              "Remove unstable_adapter from waku.config.ts/waku.config.js (and from the " +
-              "integration's waku options); to change the deploy platform, pass a different " +
-              "deploy target to the integration instead.",
-          )(undefined),
-        );
+        return yield* fail(
+          `The waku config sets unstable_adapter (${JSON.stringify(userConfig.unstable_adapter)}), ` +
+            "but the deploy target owns the server adapter " +
+            `(it injects ${JSON.stringify(inputs.adapterPath)}). ` +
+            "Remove unstable_adapter from waku.config.ts/waku.config.js (and from the " +
+            "integration's waku options); to change the deploy platform, pass a different " +
+            "deploy target to the integration instead.",
+        )(undefined);
       }
-      return project.internals.unstable_resolveConfig(
+      return project.vitePlugins.unstable_resolveConfig(
         makeWakuConfigInput({
           adapterPath: inputs.adapterPath,
           // The server-entry resolver goes first so
@@ -719,6 +711,7 @@ export const make = (
         // waku's CLI sets this before loading anything; waku's
         // environmentsPlugin bakes `process.env.NODE_ENV` into `define`.
         yield* Effect.sync(() => {
+          // oxlint-disable-next-line effecttsgo/process-env-in-effect -- sets NODE_ENV for waku, not config reading
           process.env.NODE_ENV = INITIAL_NODE_ENV ?? "production";
         });
         const wakuConfig = yield* makeConfig(project, root, hooks);
@@ -804,6 +797,7 @@ export const make = (
           phase: "dev",
         });
         yield* Effect.sync(() => {
+          // oxlint-disable-next-line effecttsgo/process-env-in-effect -- sets NODE_ENV for waku, not config reading
           process.env.NODE_ENV = INITIAL_NODE_ENV ?? "development";
         });
         const wakuConfig = yield* makeConfig(project, root, hooks);
@@ -841,9 +835,7 @@ export const make = (
         );
         const resolved = server.resolvedUrls?.local[0];
         if (resolved === undefined) {
-          return yield* Effect.fail(
-            fail("Could not determine the URL of the waku dev server")(undefined),
-          );
+          return yield* fail("Could not determine the URL of the waku dev server")(undefined);
         }
         // Vite's `resolvedUrls.local[0]` is `http://host:port/` — strip
         // the trailing slash so callers can concatenate paths (`${url}/`)
@@ -851,13 +843,13 @@ export const make = (
         const url = resolved.replace(/\/+$/, "");
         // Bounded readiness probe: any HTTP response counts (waku's
         // first RSC compile is lazy; we only need the listener to answer).
-        yield* Effect.tryPromise({
-          try: async () => {
-            const response = await fetch(`${url}/`, { redirect: "manual" });
-            await response.arrayBuffer().catch(() => {});
-          },
-          catch: fail("The waku dev server did not become reachable"),
-        }).pipe(Effect.retry({ schedule: Schedule.spaced("250 millis"), times: 40 }));
+        yield* HttpClient.get(`${url}/`).pipe(
+          Effect.flatMap((response) => Effect.ignore(response.arrayBuffer)),
+          Effect.provide(FetchHttpClient.layer),
+          Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }),
+          Effect.mapError(fail("The waku dev server did not become reachable")),
+          Effect.retry({ schedule: Schedule.spaced("250 millis"), times: 40 }),
+        );
         return { url };
       }),
     });

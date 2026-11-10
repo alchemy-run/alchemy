@@ -1,4 +1,4 @@
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import { inMemoryState } from "@/State/InMemoryState.ts";
 import type { ResourceState } from "@/State/ResourceState.ts";

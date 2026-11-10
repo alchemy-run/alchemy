@@ -1,4 +1,4 @@
-import * as Neon from "alchemy/Neon";
+import * as Neon from "@alchemy.run/neon";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as LanguageModel from "effect/ai/LanguageModel";
 import * as Config from "effect/Config";

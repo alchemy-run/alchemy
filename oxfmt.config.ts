@@ -17,7 +17,7 @@ export default defineConfig({
   },
   ignorePatterns: [
     "dist/**",
-    "./submodules/**",
+    "submodules/**",
     "*.min.js",
     "**/lib/**",
     "**/mdx/**",
@@ -30,5 +30,9 @@ export default defineConfig({
     "examples/prisma-tanstack-start/src/prisma/contract.d.ts",
     "examples/prisma-tanstack-start/src/prisma/contract.json",
     "**/fixtures/chart/templates/**",
+    // Written by the BuildKit oracle; regenerated, never edited.
+    "packages/integration-tests/test/Docker/dockerfile-conformance/cases/**",
+    "packages/integration-tests/test/Docker/dockerfile-conformance/cases.json",
+    "packages/integration-tests/test/Docker/dockerfile-conformance/words/**",
   ],
 } satisfies OxfmtConfig);

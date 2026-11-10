@@ -40,7 +40,7 @@ rejects foreign presets. That build target still runs on Bun on Prisma.
 
 ```typescript
 // alchemy.run.ts
-import * as Prisma from "alchemy/Prisma";
+import * as Prisma from "@alchemy.run/prisma";
 
 export const Website = Prisma.Website.Nuxt("Website");
 ```
@@ -114,7 +114,7 @@ ISR behavior from Vercel or Netlify does not carry over to this target.
 
 ## Local dev
 
-`bun alchemy dev` starts Nuxt's native server with HMR and creates no
+`alchemy dev` starts Nuxt's native server with HMR and creates no
 Prisma resources for the Website. Use `.pipe(Alchemy.remote())` to
 opt into the live deployment during dev.
 
@@ -126,8 +126,7 @@ export const Website = Prisma.Website.Nuxt("Website", {
 });
 ```
 
-`Prisma.CustomDomain` requires the project's current default branch.
-Configure its returned DNS records yourself and check provisioning
+Configure the returned DNS records yourself and check provisioning
 status before cutover. See
 [Custom domains](/prisma/frontend/websites#custom-domains).
 

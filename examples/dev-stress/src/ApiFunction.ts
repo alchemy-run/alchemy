@@ -1,7 +1,7 @@
-import * as DynamoDB from "alchemy/AWS/DynamoDB";
-import * as Lambda from "alchemy/AWS/Lambda";
-import * as S3 from "alchemy/AWS/S3";
-import * as SQS from "alchemy/AWS/SQS";
+import * as DynamoDB from "@alchemy.run/aws/DynamoDB";
+import * as Lambda from "@alchemy.run/aws/Lambda";
+import * as S3 from "@alchemy.run/aws/S3";
+import * as SQS from "@alchemy.run/aws/SQS";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -56,17 +56,16 @@ export default class ApiFunction extends Lambda.Function<ApiFunction>()(
 
     // Produce → deliver → consume, so the suite can prove the event-source
     // glue survives every reload it inflicts on the stack.
-    yield* SQS.consumeQueueMessages(queue, (records) =>
-      records.pipe(
-        Stream.mapEffect((record) => {
+    yield* SQS.consumeQueueMessages(
+      queue,
+      Effect.fn(function* (event) {
+        for (const record of event.Records) {
           const parsed = JSON.parse(record.body) as { id: string };
-          return putItem({
+          yield* putItem({
             Item: { id: { S: `msg:${parsed.id}` }, body: { S: record.body } },
           });
-        }),
-        Stream.runDrain,
-        Effect.orDie,
-      ),
+        }
+      }),
     );
 
     return {

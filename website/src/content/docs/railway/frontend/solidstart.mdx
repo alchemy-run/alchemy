@@ -19,7 +19,7 @@ server plus client assets (prerendered pages included) run on one
 adapter.
 
 :::note[Verified version line]
-This page tracks `@solidjs/start` **2.x** with
+Verified with `@solidjs/start` **2.x** and
 `@solidjs/vite-plugin-nitro-2` — the Vite-native line where
 `solidStart()` is a plain Vite plugin and nitro is a second plugin.
 :::
@@ -69,7 +69,7 @@ Stack):
 
 ```typescript
 // alchemy.run.ts
-import * as Railway from "alchemy/Railway";
+import * as Railway from "@alchemy.run/railway";
 
 export const Website = Railway.Website.SolidStart("Website");
 ```
@@ -187,9 +187,7 @@ owned by the Node deploy target, and a foreign preset is a hard error.
 
 ## Local dev
 
-```sh
-bun alchemy dev
-```
+<PackageManagers run="alchemy dev" />
 
 `alchemy dev` runs SolidStart's own Vite dev server (native HMR)
 instead of deploying; `site.url` is the local address and no Railway

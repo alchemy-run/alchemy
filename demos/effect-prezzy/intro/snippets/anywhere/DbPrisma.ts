@@ -1,6 +1,6 @@
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Prisma from "alchemy/Prisma";
-import * as Postgres from "alchemy/SQL/Postgres";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Prisma from "@alchemy.run/prisma";
+import * as Postgres from "@alchemy.run/sql/Postgres";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 

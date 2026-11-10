@@ -15,6 +15,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@alchemy.run/hetzner": "workspace:*",
     "alchemy": "workspace:*",
     "effect": "catalog:",
     "react": "catalog:react-rsc",
@@ -25,6 +26,7 @@
   },
   "devDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@alchemy.run/test": "workspace:*",
     "@distilled.cloud/hetzner": "workspace:*",
     "@effect/platform-node": "catalog:",
     "@types/node": "catalog:node24",

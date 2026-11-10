@@ -1,5 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
@@ -145,6 +147,11 @@ export interface NuxtDevPlatformContext {
    * to the framework half — see `NuxtOptions.dev.services`).
    */
   readonly services?: unknown;
+  /**
+   * Overrides for the dev platform's workerd process (opaque to the
+   * framework half — see `NuxtOptions.dev.workerd`).
+   */
+  readonly workerd?: unknown;
 }
 
 /**
@@ -267,6 +274,12 @@ export interface NuxtOptions {
          * local-only.
          */
         readonly services?: unknown;
+        /**
+         * Overrides for the dev platform's workerd process (opaque to the
+         * framework half; the Cloudflare target takes `cloudflare-runtime`
+         * `WorkerdOptions`).
+         */
+        readonly workerd?: unknown;
       }
     | undefined;
 }
@@ -388,7 +401,7 @@ export const make: (
         // instead of being silently replaced.
         const conflict = findPresetConflict(nuxt.options._layers, target.nitroPreset);
         if (conflict !== undefined) {
-          return yield* Effect.fail(fail(presetConflictMessage(conflict, target.nitroPreset)));
+          return yield* fail(presetConflictMessage(conflict, target.nitroPreset));
         }
 
         // Registered BEFORE nuxt.ready(): nitro:config fires while ready()
@@ -478,6 +491,7 @@ export const make: (
                 env: options?.dev?.env,
                 bindings: options?.dev?.bindings,
                 services: options?.dev?.services,
+                workerd: options?.dev?.workerd,
               })
               .pipe(Effect.mapError((error) => fail(error.message, error.cause)))
           : undefined;
@@ -527,9 +541,7 @@ export const make: (
 
       const server = nuxt.server;
       if (server === undefined || typeof server.listen !== "function") {
-        return yield* Effect.fail(
-          fail("The loaded Nuxt instance exposes no dev server (`nuxt.server.listen`)"),
-        );
+        return yield* fail("The loaded Nuxt instance exposes no dev server (`nuxt.server.listen`)");
       }
       // `nuxt.server.listen` is listhen-backed. listhen hunts upward from
       // 3000 when NO port is given — colliding with (or IPv6-shadowing)
@@ -559,7 +571,7 @@ export const make: (
       );
       const url = listener.url;
       if (url === undefined) {
-        return yield* Effect.fail(fail("Could not determine the dev server URL"));
+        return yield* fail("Could not determine the dev server URL");
       }
 
       // The initial dev build — same flow as `nuxi dev` (which awaits
@@ -572,13 +584,13 @@ export const make: (
 
       // Bounded readiness probe: any HTTP response counts (vite serves
       // lazily; we only need the listener to answer).
-      yield* Effect.tryPromise({
-        try: async () => {
-          const response = await fetch(url, { redirect: "manual" });
-          await response.arrayBuffer().catch(() => {});
-        },
-        catch: (error) => fail("The dev server did not become reachable", error),
-      }).pipe(Effect.retry({ schedule: Schedule.spaced("250 millis"), times: 40 }));
+      yield* HttpClient.get(url).pipe(
+        Effect.flatMap((response) => Effect.ignore(response.arrayBuffer)),
+        Effect.provide(FetchHttpClient.layer),
+        Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }),
+        Effect.mapError((error) => fail("The dev server did not become reachable", error)),
+        Effect.retry({ schedule: Schedule.spaced("250 millis"), times: 40 }),
+      );
 
       return { url };
     });
@@ -639,14 +651,12 @@ export const readNitroOutput = (
       prefix: "server",
     }).pipe(Effect.mapError((error) => fail(error.message, error.cause)));
     if (modules.length === 0) {
-      return yield* Effect.fail(
-        fail(`The Nuxt build produced no server modules in ${dirs.serverDir}`),
-      );
+      return yield* fail(`The Nuxt build produced no server modules in ${dirs.serverDir}`);
     }
     const serverModules = FrameworkCore.sortServerModules(modules, SERVER_ENTRY_NAME);
     if (serverModules[0]?.name !== SERVER_ENTRY_NAME) {
-      return yield* Effect.fail(
-        fail(`The Nuxt build produced no "${SERVER_ENTRY_NAME}" entry in ${dirs.serverDir}`),
+      return yield* fail(
+        `The Nuxt build produced no "${SERVER_ENTRY_NAME}" entry in ${dirs.serverDir}`,
       );
     }
     return {

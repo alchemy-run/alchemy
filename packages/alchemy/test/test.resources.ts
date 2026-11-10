@@ -18,12 +18,12 @@ import { Platform, type Main, type PlatformProps } from "@/Platform.ts";
 import * as Provider from "@/Provider.ts";
 import { LOCAL_ID_PREFIX, type ProviderMode } from "@/ProviderMode.ts";
 import { Resource, type ResourceBinding } from "@/Resource";
-import { unpackEnvValue } from "@/RuntimeContext.ts";
 import {
   createHostRuntimeContext,
   type HostRuntimeContext,
   type ServerHost,
-} from "@/Server/Process.ts";
+} from "@/Runtime/Process.ts";
+import { unpackEnvValue } from "@/RuntimeContext.ts";
 import { Stack } from "@/Stack";
 import * as State from "@/State/index";
 import { isUnknown } from "@/Util/unknown";
@@ -171,6 +171,9 @@ export const bindingTargetProvider = () =>
           if (n.name !== o.name || n.string !== o.string) {
             return {
               action: "update",
+              // Like a Worker's `workerName`: unchanged by an update that
+              // keeps the name.
+              stables: n.name === o.name ? ["name"] : undefined,
             };
           }
           return undefined;
@@ -916,8 +919,19 @@ export interface TestCloudService {
   readonly resources: Map<string, Record<string, any>>;
   /** Ids whose `read` result is branded {@link Unowned} (foreign tags). */
   readonly unowned: Set<string>;
-  /** Lifecycle invocations, in order. Clear between phases to scope asserts. */
-  readonly calls: { op: "read" | "reconcile" | "delete"; id: string }[];
+  /**
+   * Lifecycle invocations, in order. Clear between phases to scope asserts.
+   * `reconcile` calls record the sids of the bindings they received.
+   */
+  readonly calls: {
+    op: "read" | "precreate" | "reconcile" | "delete";
+    id: string;
+    bindings?: string[];
+  }[];
+  /** Creates per id; a recreated resource gets a fresh `arn`. */
+  readonly generations: Map<string, number>;
+  /** Runs inside every `read`, before the cloud is observed. */
+  onRead?: (id: string) => Effect.Effect<void>;
 }
 
 export class TestCloud extends Context.Service<TestCloud, TestCloudService>()("TestCloud") {}
@@ -926,11 +940,20 @@ export const makeTestCloud = (): TestCloudService => ({
   resources: new Map(),
   unowned: new Set(),
   calls: [],
+  generations: new Map(),
 });
 
 export type DriftResourceProps = {
   value?: string;
   tags?: Record<string, string>;
+  /**
+   * Ids of resources that must exist in the TestCloud for reconcile to
+   * succeed — models a prop pointing at another cloud resource (an SNS
+   * subscription's topic).
+   */
+  dependsOn?: string[];
+  /** Echoed into the `ref` attribute — e.g. an upstream's `arn`. */
+  ref?: string;
 };
 
 export interface DriftResource extends Resource<
@@ -941,9 +964,21 @@ export interface DriftResource extends Resource<
     value: string;
     tags: Record<string, string>;
     env: Record<string, string>;
+    /**
+     * `id#generation` — changes when the resource is recreated, like an
+     * AWS-assigned ARN. Only set with a TestCloud in context.
+     */
+    arn?: string;
+    ref?: string;
   },
   {
     env?: Record<string, string>;
+    /**
+     * Ids of resources this binding points at, which must exist in the
+     * TestCloud — models a binding validated by the cloud (an S3
+     * notification targeting a topic).
+     */
+    targets?: string[];
   }
 > {}
 
@@ -964,15 +999,47 @@ export const driftResourceProvider = () =>
           // TestResource: read reflects the persisted output back.
           if (!cloud) return output;
           cloud.calls.push({ op: "read", id });
+          if (cloud.onRead) yield* cloud.onRead(id);
           const live = cloud.resources.get(id);
           if (live === undefined) return undefined;
           const attrs = copy(live);
           return cloud.unowned.has(id) ? Unowned(attrs) : attrs;
         }),
+        // A bare stub so deploys can break binding cycles (like S3 Bucket).
+        precreate: Effect.fn(function* ({ id, news = {} }) {
+          const cloud = yield* cloudOf;
+          cloud?.calls.push({ op: "precreate", id });
+          if (cloud && !cloud.resources.has(id)) {
+            cloud.generations.set(id, (cloud.generations.get(id) ?? 0) + 1);
+          }
+          const attrs = {
+            id,
+            value: news.value ?? id,
+            tags: news.tags ?? {},
+            ...(cloud ? { arn: `${id}#${cloud.generations.get(id)}` } : {}),
+            env: {},
+          };
+          cloud?.resources.set(id, copy(attrs));
+          return attrs;
+        }),
         reconcile: Effect.fn(function* ({ id, news = {}, olds, bindings }) {
           const cloud = yield* cloudOf;
-          cloud?.calls.push({ op: "reconcile", id });
+          cloud?.calls.push({
+            op: "reconcile",
+            id,
+            bindings: bindings.map((binding: any) => binding.sid),
+          });
           const hooks = Option.getOrUndefined(yield* Effect.serviceOption(TestResourceHooks));
+          const required = [
+            ...(news.dependsOn ?? []),
+            ...bindings.flatMap((binding: any) => binding.data?.targets ?? []),
+          ];
+          const absent = cloud ? required.filter((dep) => !cloud.resources.has(dep)) : [];
+          if (absent.length > 0) {
+            return yield* Effect.fail(
+              new ResourceFailure(`${id} depends on missing ${absent.join(", ")}`),
+            );
+          }
           if (olds === undefined) {
             if (hooks?.create) {
               yield* hooks.create(id, { string: news.value });
@@ -980,10 +1047,16 @@ export const driftResourceProvider = () =>
           } else if (hooks?.update) {
             yield* hooks.update(id, { string: news.value });
           }
+          const live = cloud?.resources.get(id);
+          if (cloud && live === undefined) {
+            cloud.generations.set(id, (cloud.generations.get(id) ?? 0) + 1);
+          }
           const attrs = {
             id,
             value: news.value ?? id,
             tags: news.tags ?? {},
+            ...(cloud ? { arn: `${id}#${cloud.generations.get(id)}` } : {}),
+            ...(news.ref !== undefined ? { ref: news.ref } : {}),
             env: Object.assign(
               {},
               ...bindings.map((binding: any) => binding.env ?? binding.data?.env ?? {}),
@@ -1148,7 +1221,14 @@ const modalVariant = (mode: ProviderMode) =>
       modalBuilds.push({ stack: yield* modalStackName, mode });
       return {
         list: () => Effect.succeed([]),
-        read: Effect.fn(function* ({ output }) {
+        read: Effect.fn(function* ({ id, output }) {
+          // With a TestCloud in context (drift tests), observe it so rows
+          // can be deleted out of band.
+          const cloud = Option.getOrUndefined(yield* Effect.serviceOption(TestCloud));
+          if (cloud) {
+            cloud.calls.push({ op: "read", id });
+            return cloud.resources.get(id) as typeof output;
+          }
           // Echo persisted attrs (the TestResource default): no cloud to
           // observe, and a cold-start probe (output undefined) finds nothing.
           return output;
@@ -1189,12 +1269,16 @@ const modalVariant = (mode: ProviderMode) =>
             op: "reconcile",
             id,
           });
-          return {
+          const attrs = {
             value: (news as ModalResourceProps).value ?? id,
             runtime: mode,
             instance: mode === "local" ? `${LOCAL_ID_PREFIX}${id}` : id,
             ...(mode === "local" ? { url: "http://localhost:1337" } : {}),
           };
+          Option.getOrUndefined(yield* Effect.serviceOption(TestCloud))?.resources.set(id, {
+            ...attrs,
+          });
+          return attrs;
         }),
         delete: Effect.fn(function* ({ id }) {
           const hooks = Option.getOrUndefined(yield* Effect.serviceOption(TestResourceHooks));
@@ -1309,6 +1393,115 @@ export const capturedConfigHost = (mode: string) =>
     );
   });
 
+// LookupTarget — a resource found by `name` through `LookupTarget.lookup`.
+// `lookupTargets` stands in for the cloud: tests put the resources no stack
+// manages into it, keyed by a name unique to the test (files run their tests
+// concurrently), and a declared LookupTarget lives there under its id. It is registered via `ProviderLayer.dual` so a dev run can
+// assert lookups always go through the live variant; `lookupCalls` records
+// which variant each lookup reached.
+
+export interface LookupTarget extends Resource<
+  "Test.LookupTarget",
+  { value?: string },
+  // `kind` shares its name with an Output expression's own tag.
+  { name: string; value: string; kind?: string },
+  never,
+  undefined,
+  { name: string }
+> {}
+
+export const LookupTarget = Resource<LookupTarget>("Test.LookupTarget");
+
+/** Existing resources `lookup` can find, keyed by name. */
+export const lookupTargets = new Map<string, LookupTarget["Attributes"]>();
+/** Lookups dispatched to each variant, in order. */
+export const lookupCalls: { mode: ProviderMode; name: string }[] = [];
+/** Ids `delete` was called with — a lookup must never reach it. */
+export const lookupTargetDeletes: string[] = [];
+
+const lookupTargetVariant = (mode: ProviderMode) =>
+  Provider.succeed(LookupTarget, {
+    // `kind` is an optional stable: undefined on a declared LookupTarget,
+    // as `zoneId` is on an account-level Access identity provider.
+    stables: ["name", "kind"],
+    list: () => Effect.succeed([]),
+    reconcile: Effect.fn(function* ({ id, news = {} }) {
+      const attrs = { name: id, value: news.value ?? id };
+      lookupTargets.set(id, attrs);
+      return attrs;
+    }),
+    delete: Effect.fn(function* ({ id }) {
+      lookupTargetDeletes.push(id);
+      lookupTargets.delete(id);
+    }),
+    lookup: Effect.fn(function* ({ name }) {
+      lookupCalls.push({ mode, name });
+      const found = lookupTargets.get(name);
+      return found === undefined ? undefined : { ...found };
+    }),
+  });
+
+export const lookupTargetProvider = () =>
+  ProviderLayer.dual(LookupTarget, {
+    live: () => lookupTargetVariant("live"),
+    local: () => lookupTargetVariant("local"),
+  });
+
+// UnsupportedLookup — declares lookup props, but its provider has no `lookup`.
+export interface UnsupportedLookup extends Resource<
+  "Test.UnsupportedLookup",
+  {},
+  { name: string },
+  never,
+  undefined,
+  { name: string }
+> {}
+
+export const UnsupportedLookup = Resource<UnsupportedLookup>("Test.UnsupportedLookup");
+
+export const unsupportedLookupProvider = () =>
+  Provider.succeed(UnsupportedLookup, {
+    list: () => Effect.succeed([]),
+    reconcile: Effect.fn(function* ({ id }) {
+      return { name: id };
+    }),
+    delete: Effect.fn(function* () {}),
+  });
+
+// OptionalProps — every prop optional, and a provider that reads `news`
+// without a default, as most real providers do. It records the props each
+// lifecycle operation received, keyed by logical id.
+export interface OptionalProps extends Resource<
+  "Test.OptionalProps",
+  { label?: string },
+  { label: string }
+> {}
+
+export const OptionalProps = Resource<OptionalProps>("Test.OptionalProps");
+
+/** Props each `diff` / `reconcile` received, keyed by logical id. */
+export const optionalPropsReceived = new Map<string, { op: string; news: unknown }[]>();
+
+export const optionalPropsProvider = () =>
+  Provider.succeed(OptionalProps, {
+    list: () => Effect.succeed([]),
+    diff: Effect.fn(function* ({ id, news }) {
+      optionalPropsReceived.set(id, [
+        ...(optionalPropsReceived.get(id) ?? []),
+        { op: "diff", news },
+      ]);
+      return undefined;
+    }),
+    reconcile: Effect.fn(function* ({ id, news }) {
+      optionalPropsReceived.set(id, [
+        ...(optionalPropsReceived.get(id) ?? []),
+        { op: "reconcile", news },
+      ]);
+      return { label: news.label ?? id };
+    }),
+    delete: Effect.fn(function* () {}),
+  });
+
 // Layers
 export const TestLayers = () =>
   Layer.mergeAll(
@@ -1330,6 +1523,9 @@ export const TestLayers = () =>
     driftResourceProvider(),
     modalResourceProvider(),
     capturedConfigHostProvider(),
+    lookupTargetProvider(),
+    unsupportedLookupProvider(),
+    optionalPropsProvider(),
     ProbeBindingLive,
   );
 

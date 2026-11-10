@@ -1,7 +1,8 @@
-import { describe, expect, test } from "alchemy-test";
+import { describe, expect, test } from "@alchemy.run/test";
 import * as Duration from "effect/Duration";
 import { deepEqual } from "@/Diff";
 import {
+  BYTES_MARKER,
   DATE_MARKER,
   decodeDuration,
   DURATION_MARKER,
@@ -106,5 +107,34 @@ describe("StateEncoding Date round-trip", { tags: ["unit", "local"] }, () => {
     const viaLocal = JSON.parse(JSON.stringify(suspicious), reviveState) as typeof suspicious;
     expect(viaLocal.n).toBe(1);
     expect(typeof viaLocal[DATE_MARKER]).toBe("string");
+  });
+});
+
+// Byte-valued props (a WAF byte-match string, a zip) must round-trip too:
+// drift repair and recreate run the provider with the persisted props, so a
+// dropped or mangled byte array cannot be rebuilt.
+describe("StateEncoding bytes round-trip", { tags: ["unit", "local"] }, () => {
+  const value = {
+    search: new TextEncoder().encode("/blocked"),
+    nested: [{ zip: new Uint8Array([0, 255]) }],
+  };
+
+  test("encode → JSON → reviveState rebuilds Uint8Array instances (local store path)", () => {
+    const revived = JSON.parse(JSON.stringify(encodeState(value)), reviveState) as typeof value;
+    expect(revived.search).toBeInstanceOf(Uint8Array);
+    expect(new TextDecoder().decode(revived.search)).toBe("/blocked");
+    expect([...revived.nested[0]!.zip]).toEqual([0, 255]);
+  });
+
+  test("encode → transport JSON → reviveStateRecursive rebuilds Uint8Array instances (HTTP store path)", () => {
+    const revived = reviveStateRecursive(
+      JSON.parse(JSON.stringify(encodeState(value))),
+    ) as typeof value;
+    expect(revived.search).toBeInstanceOf(Uint8Array);
+    expect([...revived.nested[0]!.zip]).toEqual([0, 255]);
+  });
+
+  test("the persisted envelope is the base64 marker", () => {
+    expect(encodeState(new Uint8Array([1, 2, 3]))).toEqual({ [BYTES_MARKER]: "AQID" });
   });
 });

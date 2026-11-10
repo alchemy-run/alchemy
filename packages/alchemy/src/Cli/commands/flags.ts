@@ -4,6 +4,7 @@ import * as Flag from "effect/cli/Flag";
 import * as Clock from "effect/Clock";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
+import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -28,7 +29,7 @@ export const userStage = (kind: "live" | "dev" | "test") =>
       const safe = user.replace(/[^a-z0-9_-]+/gi, "-").replace(/^-+|-+$/g, "");
       return `${kind}_${safe || "unknown"}`;
     }),
-    Effect.catch(() => Effect.succeed(`${kind}_unknown`)),
+    Effect.orElseSucceed(() => `${kind}_unknown`),
   );
 
 export const ALCHEMY_STAGE = Config.String("ALCHEMY_STAGE").pipe(
@@ -73,7 +74,7 @@ export const resolveStage = Effect.fn(function* (
   const provider = yield* loadConfigProvider(envFile);
   const configured = yield* ALCHEMY_STAGE.pipe(
     Effect.provideService(ConfigProvider.ConfigProvider, provider),
-    Effect.catch(() => Effect.succeed(undefined)),
+    Effect.orElseSucceed(() => undefined),
   );
   if (configured !== undefined && configured !== "") {
     if (!STAGE_NAME_PATTERN.test(configured)) {
@@ -98,7 +99,7 @@ export const envFile = Flag.Path("env-file", { typeName: "file" }).pipe(
         Effect.option,
       );
       if (Option.isSome(type) && type.value !== "File" && type.value !== "CharacterDevice") {
-        return yield* new CliError.InvalidValue({
+        return yield* CliError.InvalidValue.make({
           option: "env-file",
           value: path,
           expected: "a file or /dev/null",
@@ -245,8 +246,9 @@ export const parseSince = (value: string) =>
               ? Duration.hours(num)
               : Duration.days(num);
       const now = yield* Clock.currentTimeMillis;
-      return new Date(now - Duration.toMillis(duration));
+      return DateTime.toDateUtc(DateTime.makeUnsafe(now - Duration.toMillis(duration)));
     }
+    // oxlint-disable-next-line effecttsgo/global-date-in-effect -- zoneless ISO input must parse as local time, DateTime.make would read it as UTC
     const parsed = new Date(value);
     if (isNaN(parsed.getTime())) {
       return yield* new UserInputError({

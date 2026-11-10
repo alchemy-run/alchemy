@@ -5,6 +5,7 @@ description: Set up CI/CD pipelines for alchemy projects with GitHub Actions, au
 
 import { Code, Steps, TabItem, Tabs } from "@astrojs/starlight/components";
 import yaml from "yaml";
+import PackageManagers from "../../../components/PackageManagers.astro";
 
 export function DeployWorkflow({ manager = "bun" }) {
   const managers = {
@@ -176,11 +177,9 @@ consumes, and `alchemy provider check-env` validates them against that
 contract. It prints one line per registered provider and exits with code 1
 when a required variable is missing:
 
-```sh
-$ bun alchemy provider check-env
+<PackageManagers script={`$ {run} alchemy provider check-env
 ok Cloudflare
-MISSING AWS: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION | AWS_DEFAULT_REGION
-```
+MISSING AWS: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION | AWS_DEFAULT_REGION`} />
 
 Run it as the first step of a deploy job to fail fast with a list of
 missing secrets instead of failing minutes later inside a provider API
@@ -226,7 +225,7 @@ By the end you'll have:
 
    ```diff lang="typescript"
    import * as Alchemy from "alchemy";
-   +import * as GitHub from "alchemy/GitHub";
+   +import * as GitHub from "@alchemy.run/github";
    +import * as Output from "alchemy/Output";
    import * as Effect from "effect/Effect";
 
@@ -385,8 +384,8 @@ token-management token.
 ```typescript
 // stacks/github.ts
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as GitHub from "alchemy/GitHub";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as GitHub from "@alchemy.run/github";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -513,8 +512,8 @@ your environment when deploying this stack.
 ```typescript
 // stacks/github.ts
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as GitHub from "alchemy/GitHub";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as GitHub from "@alchemy.run/github";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -617,8 +616,8 @@ administration.
 ```typescript
 // stacks/github.ts
 import * as Alchemy from "alchemy";
-import * as AWS from "alchemy/AWS";
-import * as GitHub from "alchemy/GitHub";
+import * as AWS from "@alchemy.run/aws";
+import * as GitHub from "@alchemy.run/github";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
@@ -749,7 +748,7 @@ AWS console.
 ```typescript
 // stacks/github.ts
 import * as Alchemy from "alchemy";
-import * as GitHub from "alchemy/GitHub";
+import * as GitHub from "@alchemy.run/github";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";

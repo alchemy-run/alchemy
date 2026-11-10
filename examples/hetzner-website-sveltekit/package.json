@@ -18,11 +18,13 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@alchemy.run/hetzner": "workspace:*",
     "alchemy": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@alchemy.run/test": "workspace:*",
     "@distilled.cloud/hetzner": "workspace:*",
     "@effect/platform-node": "catalog:",
     "@sveltejs/kit": "catalog:",

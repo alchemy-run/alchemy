@@ -31,7 +31,11 @@ import type * as NodeVm from "node:vm";
  * proxy, but CF-specific runtime behavior (workerd APIs and limits, ISR/cache
  * semantics of the built worker) still needs the preview mode.
  */
-import type { BindingHooks, WorkerdLogging } from "@alchemy.run/cloudflare-runtime/core";
+import type {
+  BindingHooks,
+  WorkerdLogging,
+  WorkerdOptions,
+} from "@alchemy.run/cloudflare-runtime/core";
 import * as PlatformProxy from "@alchemy.run/cloudflare-runtime/core/platform-proxy/PlatformProxy";
 import type * as Runtime from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import * as Effect from "effect/Effect";
@@ -68,6 +72,8 @@ export interface DevServerOptions {
   /** Name of the binding-proxy workerd service. @default "nextjs-dev-platform-proxy" */
   readonly proxyName?: string | undefined;
   readonly logging?: WorkerdLogging | undefined;
+  /** Overrides for the binding proxy's `workerd` process. */
+  readonly workerd?: WorkerdOptions | undefined;
 }
 
 export interface DevServerInstance {
@@ -299,6 +305,7 @@ export const start = Effect.fn("Nextjs.DevServer.start")(function* (options: Dev
       : {}),
     bindings: options.bindings ?? [],
     ...(options.logging !== undefined ? { logging: options.logging } : {}),
+    ...(options.workerd !== undefined ? { workerd: options.workerd } : {}),
   }).pipe(Effect.mapError(fail("Failed to start the binding proxy for next dev")));
 
   // 2. Plant the OpenNext cloudflare-context contract before any app code

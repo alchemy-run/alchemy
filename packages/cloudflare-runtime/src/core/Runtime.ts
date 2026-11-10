@@ -3,6 +3,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import * as Predicate from "effect/Predicate";
 import * as Queue from "effect/Queue";
 import * as Result from "effect/Result";
 import * as Scope from "effect/Scope";
@@ -20,7 +21,7 @@ import type { BindingHook } from "./PluginContext.ts";
 import * as PluginContext from "./PluginContext.ts";
 import * as RegistryProxy from "./registry/RegistryProxy.ts";
 import { type RuntimeError, SystemError } from "./RuntimeError.shared.ts";
-import type { BindingHooks, RuntimeWorker } from "./RuntimeWorker.ts";
+import type { BindingHooks, RuntimeWorker, WorkerdEvent } from "./RuntimeWorker.ts";
 import type * as WorkerdConfig from "./workerd/Config.ts";
 import * as Workerd from "./workerd/Workerd.ts";
 
@@ -82,7 +83,7 @@ export const RuntimeLive = Layer.effect(
           ? Effect.forEach([...new Set(names)], (scriptName) =>
               proxy.api.subscribe({ kind: "worker", scriptName }),
             )
-          : Effect.succeed(undefined);
+          : Effect.undefined;
       const [tails, streamingTails] = yield* Effect.all(
         [subscribeAll(worker.tails), subscribeAll(worker.streamingTails)],
         { concurrency: "unbounded" },
@@ -96,66 +97,101 @@ export const RuntimeLive = Layer.effect(
         return { className: namespace.className, container: namespace.container };
       });
       if (!containers.length) {
-        return { imageNames: new Map() };
+        return { containerOptions: new Map() };
       }
       // Local development with containers relies on pulling/building `linux/amd64`
       // images, which the Docker daemon on Windows cannot do (it runs Windows
       // containers). Upstream workers-sdk bails out on Windows for the same
       // reason, directing users to WSL.
       if (process.platform === "win32") {
-        return yield* new SystemError({
+        return yield* SystemError.make({
           subtag: "ContainersUnsupportedOnWindows",
           message: "Local development with containers is not supported on Windows.",
           hint: "Use WSL to develop the container part of your application, or remove the container configuration if you do not need it.",
         });
       }
-      const imageNames = new Map<string, string>();
+      // workerd container options per Durable Object class name.
+      const containerOptions = new Map<
+        string,
+        WorkerdConfig.Worker_DurableObjectNamespace_ContainerOptions
+      >();
 
-      const registerImage = (className: string, tag: string, env?: Record<string, string>) => {
-        if (env) {
-          // To prevent collisions between images with the same tag but different env,
-          // `registerImageEnv` returns a unique alias for the image, which our Docker
-          // proxy server then maps to the actual tag and injects the env variables.
-          return docker
-            .registerImageEnv(className, tag, env)
-            .pipe(Effect.andThen((alias) => Effect.sync(() => imageNames.set(className, alias))));
+      /**
+       * Make an image available to Docker and return the name workerd should
+       * use for it. Images with env get a unique alias, which the Docker proxy
+       * maps back to the real tag while injecting the env.
+       */
+      const prepareImage = Effect.fnUntraced(function* (
+        className: string,
+        image: Docker.ContainerImage,
+      ) {
+        let tag: string;
+        if ("tag" in image) {
+          tag = image.tag;
+        } else {
+          tag = docker.generateImageTag(className);
+          if ("imageUri" in image) {
+            yield* docker.pull(tag, image);
+          } else {
+            yield* docker.build(tag, image);
+          }
+          // Each start cleans up ONLY its own image tag when its scope
+          // closes. Do NOT prune other same-name tags as "stale" here: a
+          // dev session starts the worker more than once (precreate stub
+          // → reconcile), and a cleanup that guesses which sibling tags
+          // are dead can untag the tag a live workerd is about to
+          // `docker create` from — every container start then fails and
+          // the session serves 500s until redeploy.
+          yield* Effect.addFinalizer(() =>
+            docker
+              .removeContainer(tag)
+              .pipe(Effect.andThen(docker.removeImageTag(tag)), Effect.ignore),
+          );
         }
-        return Effect.sync(() => imageNames.set(className, tag));
-      };
+        yield* docker.validate(tag);
+        if (image.env) {
+          return yield* docker.registerImageEnv(className, tag, image.env);
+        }
+        return tag;
+      });
 
+      /** A Durable Object-managed container exposes every image by name. */
+      const prepareNamedImages = (
+        className: string,
+        images: Record<string, Docker.ContainerImage>,
+      ) =>
+        Effect.forEach(
+          Object.entries(images),
+          Effect.fnUntraced(function* ([name, image]) {
+            return { name, image: yield* prepareImage(className, image) };
+          }),
+          { concurrency: "unbounded" },
+        );
+
+      // FUSE privileges are decided once per runtime and
+      // resolve alongside the first image build or pull.
       const [, containerEngine] = yield* Effect.forEach(
         containers,
-        ({ className, container }) => {
-          if ("tag" in container) {
-            return docker
-              .validate(container.tag)
-              .pipe(Effect.andThen(registerImage(className, container.tag, container.env)));
+        Effect.fnUntraced(function* ({ className, container }) {
+          if ("images" in container) {
+            const [images, privileges] = yield* Effect.zip(
+              prepareNamedImages(className, container.images),
+              docker.getContainerPrivileges,
+              { concurrent: true },
+            );
+            containerOptions.set(className, { images, privileges });
+          } else {
+            const [imageName, privileges] = yield* Effect.zip(
+              prepareImage(className, container),
+              docker.getContainerPrivileges,
+              { concurrent: true },
+            );
+            containerOptions.set(className, { imageName, privileges });
           }
-          const tag = docker.generateImageTag(className);
-          const prepare =
-            "imageUri" in container ? docker.pull(tag, container) : docker.build(tag, container);
-          return prepare.pipe(
-            Effect.andThen(docker.validate(tag)),
-            Effect.tap(() => {
-              // Each start cleans up ONLY its own image tag when its scope
-              // closes. Do NOT prune other same-name tags as "stale" here: a
-              // dev session starts the worker more than once (precreate stub
-              // → reconcile), and a cleanup that guesses which sibling tags
-              // are dead can untag the tag a live workerd is about to
-              // `docker create` from — every container start then fails and
-              // the session serves 500s until redeploy.
-              return Effect.addFinalizer(() =>
-                docker
-                  .removeContainer(tag)
-                  .pipe(Effect.andThen(docker.removeImageTag(tag)), Effect.ignore),
-              );
-            }),
-            Effect.tap(() => registerImage(className, tag, container.env)),
-          );
-        },
+        }),
         { concurrency: "unbounded", discard: true },
       ).pipe(Effect.zip(docker.getWorkerdDockerConfiguration, { concurrent: true }));
-      return { imageNames, containerEngine };
+      return { containerOptions, containerEngine };
     });
 
     return Runtime.of({
@@ -168,10 +204,13 @@ export const RuntimeLive = Layer.effect(
         };
         const [
           { config, context, bindings, tails, streamingTails },
-          { containerEngine, imageNames },
+          { containerEngine, containerOptions },
         ] = yield* Effect.all([preparePlugins(worker), prepareContainers(worker)], {
           concurrency: "unbounded",
         });
+        // Everything slow (image builds/pulls) is done; let the caller retire
+        // whatever must be gone before this workerd boots.
+        if (worker.beforeServe) yield* worker.beforeServe;
         const sockets: Array<WorkerdConfig.Socket> = [
           {
             name: SOCKET_USER_ENTRY,
@@ -181,6 +220,34 @@ export const RuntimeLive = Layer.effect(
           ...config.sockets,
         ];
         const exits = yield* Queue.unbounded<Workerd.WorkerdExit>();
+        // Logs a failed callback outside any fiber, so a callback that never
+        // settles holds nothing open.
+        const services = yield* Effect.context<never>();
+        /**
+         * Reports an event to the host. Events are side effects: recovery
+         * never waits for the callback, and a callback that throws or
+         * rejects is logged instead of ending crash recovery.
+         */
+        const emit = (event: WorkerdEvent) => {
+          const failed = (cause: unknown) =>
+            Effect.logWarning(
+              `The onEvent callback for "${worker.name}" failed on ${event.type}.`,
+              cause,
+            );
+          return Effect.try(() => {
+            const result = worker.onEvent?.(event);
+            // Handle a rejection in the same tick the promise is returned:
+            // Node reports one nobody has handled by then as unhandled.
+            if (Predicate.isPromiseLike(result)) {
+              Promise.resolve(result).then(undefined, (cause: unknown) => {
+                Effect.runForkWith(services)(failed(cause));
+              });
+            }
+          }).pipe(Effect.catch((error) => failed(error.cause)));
+        };
+        // The PID of the process being started, reported with `Started` once
+        // its plugins are up too.
+        let pid = 0;
         /**
          * Serves the Worker. `pinned` reuses the ports of a previous process,
          * so a replacement is reachable through the same URL, proxy target
@@ -199,7 +266,7 @@ export const RuntimeLive = Layer.effect(
                     bindings,
                     modules: worker.modules.map(moduleToWorkerd),
                     durableObjectNamespaces: worker.durableObjectNamespaces?.map((namespace) => {
-                      const imageName = imageNames.get(namespace.className);
+                      const container = containerOptions.get(namespace.className);
                       return {
                         className: namespace.className,
                         enableSql: namespace.sql,
@@ -207,7 +274,7 @@ export const RuntimeLive = Layer.effect(
                           namespace.uniqueKey ??
                           defaultDurableObjectUniqueKey(worker.name, namespace.className),
                         ephemeralLocal: namespace.ephemeralLocal,
-                        container: imageName ? { imageName } : undefined,
+                        container,
                       };
                     }),
                     durableObjectStorage: { localDisk: storage.name },
@@ -221,20 +288,31 @@ export const RuntimeLive = Layer.effect(
                 ...config.services,
               ],
               extensions: config.extensions,
+              v8Flags: worker.workerd?.v8Flags,
             },
             {
               "debug-port": `127.0.0.1:${pinned?.[SOCKET_DEBUG_PORT] ?? 0}`,
               ...(worker.logging?.verbose ? { verbose: true } : undefined),
             },
             {
+              bin: worker.workerd?.path,
+              env: worker.workerd?.env,
               onOutput: worker.logging?.onOutput,
+              onStarted: (started) => {
+                pid = started;
+              },
               onExit: (exit) => {
                 Queue.offerUnsafe(exits, exit);
               },
             },
           );
         const parentScope = yield* Effect.scope;
-        let processScope = yield* Scope.fork(parentScope);
+        // Every process generation lives in this scope, forked before the
+        // recovery fiber below. Closing the runtime then interrupts recovery
+        // before it kills a replacement that is still starting, which would
+        // otherwise report as a failed restart.
+        const generations = yield* Scope.fork(parentScope);
+        let processScope = yield* Scope.fork(generations);
         const startProcess = (pinned?: Workerd.WorkerdPorts) =>
           serveWorker(pinned).pipe(
             Effect.tap((ports) => context.start(ports)),
@@ -244,6 +322,8 @@ export const RuntimeLive = Layer.effect(
             ),
           );
         const ports = yield* startProcess();
+        let generation = 0;
+        yield* emit({ type: "workerd.process.started", pid, generation });
         // A process that dies after startup (V8 aborting on heap exhaustion
         // is the common case) is replaced on the same ports. Without this
         // every request fails until the whole dev session is restarted.
@@ -251,6 +331,7 @@ export const RuntimeLive = Layer.effect(
           let restartTimes: Array<number> = [];
           while (true) {
             const exit = yield* Queue.take(exits);
+            yield* emit({ type: "workerd.process.exited", exit });
             // Release the old process, output listeners and plugin tasks before
             // starting another generation. Closing also detaches this child
             // scope from the parent, so repeated crashes do not retain it.
@@ -261,22 +342,34 @@ export const RuntimeLive = Layer.effect(
               yield* Effect.logError(
                 `The Workers runtime for "${worker.name}" stopped after 3 restarts within 60 seconds. Fix the crash and restart the dev session.`,
               );
+              yield* emit({ type: "workerd.recovery.stopped", reason: "restart-limit" });
               return;
             }
             restartTimes.push(now);
-            yield* Effect.sleep(250 * 2 ** (restartTimes.length - 1));
+            const delayMs = 250 * 2 ** (restartTimes.length - 1);
+            yield* emit({
+              type: "workerd.restart.scheduled",
+              attempt: restartTimes.length,
+              delayMs,
+            });
+            yield* Effect.sleep(delayMs);
             yield* Effect.logWarning(
               `The Workers runtime for "${worker.name}" exited unexpectedly (exit code ${exit.exitCode}, signal ${exit.signal}); starting a replacement on the same ports.${exit.stderr ? `\n${exit.stderr}` : ""}`,
             );
-            processScope = yield* Scope.fork(parentScope);
+            processScope = yield* Scope.fork(generations);
             const restarted = yield* startProcess(ports).pipe(Effect.result);
             if (Result.isFailure(restarted)) {
               yield* Effect.logError(
                 `The Workers runtime for "${worker.name}" could not be restarted: ${restarted.failure.message}`,
               );
+              yield* emit({
+                type: "workerd.recovery.stopped",
+                reason: "restart-failed",
+                error: restarted.failure,
+              });
               return;
             }
-            worker.onRestart?.(exit);
+            yield* emit({ type: "workerd.process.started", pid, generation: ++generation });
           }
         }).pipe(Effect.forkScoped);
         return new URL(`http://127.0.0.1:${ports[SOCKET_USER_ENTRY]}`);

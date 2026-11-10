@@ -49,6 +49,10 @@ export const PATH_STREAM_PUBLIC_URL = "/stream/public-url";
 /**
  * Path prefix videos are served under, mirroring Miniflare's
  * `CorePaths.STREAM_VIDEO` (`workers/core/constants.ts`): the preview URL of
- * every video is `{publicUrl}/cdn-cgi/mf/stream/<id>/watch`.
+ * every video is `{publicUrl}/__cf_local/stream/<id>/watch`. It sits outside
+ * `/cdn-cgi/` so it stays reachable over tunnels.
  */
-export const PATH_STREAM_VIDEO = "/cdn-cgi/mf/stream";
+export const PATH_STREAM_VIDEO = "/__cf_local/stream";
+
+/** Miniflare's former stream prefix, still served for older preview URLs. */
+export const PATH_STREAM_VIDEO_LEGACY = "/cdn-cgi/mf/stream";

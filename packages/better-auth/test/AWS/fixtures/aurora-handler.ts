@@ -1,5 +1,5 @@
-import * as AWS from "alchemy/AWS";
-import * as Lambda from "alchemy/AWS/Lambda";
+import * as AWS from "@alchemy.run/aws";
+import * as Lambda from "@alchemy.run/aws/Lambda";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";

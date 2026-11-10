@@ -75,7 +75,7 @@ name:
 
 ```typescript
 // alchemy.run.ts
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 
 export const Website = AWS.Website.Vite("Vue");
 ```
@@ -102,9 +102,7 @@ export default Alchemy.Stack(
 );
 ```
 
-```sh
-bun alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 Alchemy runs `vite build`, uploads `dist` to S3, and serves it from
 CloudFront at the returned `url`. Input files are content-hashed, so a
@@ -222,9 +220,7 @@ same S3 + CloudFront stack.
 
 ## Local dev
 
-```sh
-bun alchemy dev
-```
+<PackageManagers run="alchemy dev" />
 
 `alchemy dev` runs Vue's own Vite dev server with native HMR instead of
 deploying; `site.url` is the local address and no AWS resources are

@@ -1,200 +1,103 @@
 ---
-title: React to S3 Events
-description: Subscribe a Lambda Function to S3 bucket notifications, process them as an Effect Stream, and let Alchemy wire up the IAM and event-source plumbing.
-sidebar:
-  order: 3
+title: S3 events
+description: How a Bucket notifies a Function when objects are created or deleted, what each notification carries, and how to process notifications as an Effect Stream.
 ---
 
-Reading and writing S3 objects on demand is one half of the story.
-The other half is **reacting** to objects as they arrive — for
-indexing, virus scanning, thumbnail generation, you name it. In
-this part you'll subscribe the same Lambda from the previous part
-to bucket notifications and process them as an Effect `Stream`.
+import Sequence from "../../../../components/diagrams/Sequence.astro";
 
-## Subscribe to bucket notifications
+A Bucket can tell you when something happens to its objects. Each time an object is created, deleted or restored, S3 sends a **notification** naming the Bucket, the key and the event. A Function that receives them can make a thumbnail of every uploaded image, index every new document or scan every file for viruses, without the uploader doing anything but upload.
 
-Bucket notifications live behind an Alchemy helper:
-`S3.consumeBucketEvents(bucket, process)`. Add the smallest
-possible subscription — log every new object's key — alongside
-the existing bindings:
+## S3 invokes the Function
 
-```diff lang="typescript"
-// src/api.ts
-import * as AWS from "alchemy/AWS";
-import * as S3 from "alchemy/AWS/S3";
-+import * as Console from "effect/Console";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-+import * as Stream from "effect/Stream";
-// ...
+Notifications are pushed. S3 invokes the Function directly, with a batch of notifications, shortly after each change.
 
-Effect.gen(function* () {
-  const bucket = yield* S3.Bucket("Blobs");
-  const putObject = yield* S3.PutObject(bucket);
-  const getObject = yield* S3.GetObject(bucket);
+<Sequence
+  actors={[
+    { id: "client", label: "uploader", type: "your app" },
+    { id: "bucket", label: "Uploads", type: "S3 Bucket", tone: "accent" },
+    { id: "fn", label: "Thumbnails", type: "Lambda Function" },
+  ]}
+  steps={[
+    { from: "client", to: "bucket", label: "PutObject photo.jpg" },
+    { from: "bucket", to: "client", label: "200 OK, stored", dashed: true },
+    { from: "bucket", to: "fn", label: "s3:ObjectCreated", dashed: true },
+    { from: "fn", to: "bucket", label: "GetObject photo.jpg" },
+    { from: "fn", to: "bucket", label: "PutObject thumbs/photo.jpg" },
+    { divider: "occasionally" },
+    { from: "bucket", to: "fn", label: "the same notification again", dashed: true, tone: "warn" },
+  ]}
+  caption="S3 answers the upload first and invokes the Function shortly after. A notification can arrive twice, so writing the thumbnail again must be safe."
+/>
 
-+  yield* S3.consumeBucketEvents(bucket, (stream) =>
-+    stream.pipe(
-+      Stream.runForEach((event) =>
-+        Console.log(`new object: ${event.key}`),
-+      ),
-+    ),
-+  );
+S3 delivers each notification at least once, and occasionally more than once, so processing the same key twice should be safe. Write the thumbnail under a key derived from the original's, and a second run just replaces it.
 
-  return {
-    fetch: /* ... unchanged ... */,
-  };
-});
-```
+## Subscribe a Function
 
-That single `yield*` does three things in one shot: it
-configures the bucket's notification settings to push events
-into the function, adds the `lambda:InvokeFunction` permission
-S3 needs to call you, and registers the stream handler that
-runs every time an event batch lands.
+Subscribe from the Function's Construction phase. Notifications arrive as a `Stream`:
 
-## Filter the event types
-
-Without a filter you get every notification S3 emits — object
-created, deleted, restored, replicated, the lot. Constrain the
-subscription to a specific subset with `events`:
-
-```diff lang="typescript"
--yield* S3.consumeBucketEvents(bucket, (stream) =>
-+yield* S3.consumeBucketEvents(
-+  bucket,
-+  { events: ["s3:ObjectCreated:*"] },
-+  (stream) =>
-  stream.pipe(
-    Stream.runForEach((event) =>
-      Console.log(`new object: ${event.key}`),
-    ),
-  ),
-);
-```
-
-The `events` filter is type-checked against the AWS S3 event
-catalog, so typos surface at the call site rather than at deploy
-time.
-
-## What the stream actually carries
-
-`stream` is a `Stream.Stream<BucketNotification>` — a normalized
-shape with `type`, `bucket`, `key`, `size`, and `eTag`. Each
-Lambda invocation delivers one batch as one stream emission
-sequence, then completes; the next invocation starts a fresh
-stream. Treating events as a `Stream` means the usual operators
-(`mapEffect`, `groupedWithin`, `mapAccum`) work without thinking
-about the Lambda payload envelope.
-
-## Provide the runtime layer
-
-The runtime side of the subscription lives in
-`Lambda.BucketEventSource`. It's the layer that turns the abstract
-`BucketEventSource` capability into a concrete Lambda event-source
-mapping plus IAM grant. Add it alongside the S3 bindings:
-
-```diff lang="typescript"
-}).pipe(
-  Effect.provide(
--    Layer.mergeAll(S3.PutObjectHttp, S3.GetObjectHttp),
-+    Layer.mergeAll(
-+      AWS.Lambda.BucketEventSource,
-+      S3.PutObjectHttp,
-+      S3.GetObjectHttp,
-+    ),
-  ),
-),
-```
-
-`BucketEventSource` and the `PutObject`/`GetObject` lives are all
-peers here — none of them require each other — so a flat
-`Layer.mergeAll(...)` is enough.
-
-## Run an Effect per event
-
-Logging is a good smoke test, but a real handler usually wants
-to do something async per event. Swap `runForEach` for
-`mapEffect` so each event runs through a generator block:
-
-```diff lang="typescript"
-yield* S3.consumeBucketEvents(
-  bucket,
-  { events: ["s3:ObjectCreated:*"] },
-  (stream) =>
-  stream.pipe(
--    Stream.runForEach((event) =>
--      Console.log(`new object: ${event.key}`),
--    ),
-+    Stream.mapEffect((event) =>
-+      Console.log(`new object: ${event.key}`),
-+    ),
-+    Stream.runDrain,
-+  ),
-);
-```
-
-`Stream.runDrain` consumes the stream without collecting — we
-only care about the side effects, not the return values.
-
-## Read the object back
-
-`getObject` is already bound to the bucket, so the per-event
-Effect can fetch the new object's contents inline:
-
-```diff lang="typescript"
-stream.pipe(
-  Stream.mapEffect((event) =>
--    Console.log(`new object: ${event.key}`),
-+    Effect.gen(function* () {
-+      const result = yield* getObject({ Key: event.key });
-+      const body = yield* result.Body!.pipe(
-+        Stream.decodeText,
-+        Stream.mkString,
-+      );
-+      yield* Console.log(`${event.key} -> ${body}`);
-+    }).pipe(Effect.orDie),
-  ),
-  Stream.runDrain,
-),
-```
-
-`Stream.mapEffect` is back-pressured by default — events flow
-through one at a time. Pass a `concurrency` option (we'll see it
-in later parts) when you want fan-out.
-
-## Deploy and verify
-
-```sh
-bun alchemy deploy
-```
-
-The CLI applies the new bucket notification configuration and
-redeploys the function with the broader IAM policy. Then trigger
-the subscription end-to-end by `PUT`ing an object via the HTTP
-route from the previous part:
-
-```typescript
-// test/integ.test.ts
-test(
-  "PUT triggers notification handler",
+```typescript title="src/thumbnails.ts"
+export default class Thumbnails extends AWS.Lambda.Function<Thumbnails>()(
+  "Thumbnails",
+  { main: import.meta.url, functionUrl: false },
   Effect.gen(function* () {
-    const { url } = yield* stack;
-    yield* HttpClient.put(`${url}/notify-me.txt`, {
-      body: HttpBody.text("payload"),
-    });
-    // ...optionally tail CloudWatch logs to assert the message landed
-  }),
+    const uploads = yield* Uploads;
+    yield* AWS.S3.consumeBucketEvents(uploads, (stream) =>
+      stream.pipe(Stream.runForEach((event) => Console.log(`${event.type}: ${event.key}`))),
+    );
+    return {};
+  }).pipe(Effect.provide(AWS.Lambda.BucketEventSource)),
+) {}
+```
+
+Deploy adds the notification to the Bucket and the Lambda permission that lets S3 invoke the Function. Each notification carries its `type`, `bucket`, `key`, `size` and `eTag`.
+
+## Choose which events
+
+Without a filter, the Function receives every kind of notification: created, removed, restored, replicated. Name the ones you want:
+
+```typescript title="src/thumbnails.ts"
+yield* AWS.S3.consumeBucketEvents(uploads, { events: ["s3:ObjectCreated:*"] }, (stream) =>
+  stream.pipe(Stream.runForEach((event) => Console.log(event.key))),
 );
 ```
 
-You'll see the `notify-me.txt -> payload` line in the function's
-log group within a couple of seconds.
+The event names are checked against S3's own list, so a typo fails to compile.
 
-S3 events typically arrive in batches of up to 10 records — the
-same `Stream` is fed each batch and completes between invocations,
-so you get the same composition story whether the batch is one
-event or a hundred.
+## Process each object
 
-Next we'll trade blob storage for structured records and
-[add a DynamoDB table](/aws/data/dynamodb).
+To read each new object, bind `S3.GetObject` to the same Bucket and run an Effect per notification:
+
+```typescript title="src/thumbnails.ts"
+const getObject = yield* AWS.S3.GetObject(uploads);
+
+yield* AWS.S3.consumeBucketEvents(uploads, { events: ["s3:ObjectCreated:*"] }, (stream) =>
+  stream.pipe(
+    Stream.mapEffect(
+      (event) =>
+        getObject({ Key: event.key }).pipe(
+          Effect.flatMap((object) => makeThumbnail(event.key, object.Body!)),
+          Effect.orDie,
+        ),
+      { concurrency: 4 },
+    ),
+    Stream.runDrain,
+  ),
+);
+```
+
+Provide `AWS.S3.GetObjectHttp` next to the event source. Here four objects are processed at a time. Leave out `concurrency` to take them one by one.
+
+A batch is one invocation. The stream ends when the batch is done, and the next invocation starts a new one.
+
+## Don't trigger yourself
+
+A Function that writes its output into the Bucket it watches will be notified about its own output. A thumbnail of an upload produces a new object, which produces a notification, which produces a thumbnail of the thumbnail.
+
+Write outputs to a second Bucket, or keep inputs and outputs under separate prefixes and ignore the output prefix:
+
+```typescript title="src/thumbnails.ts"
+stream.pipe(
+  Stream.filter((event) => !event.key.startsWith("thumbnails/")),
+  Stream.runForEach((event) => Console.log(event.key)),
+)
+```

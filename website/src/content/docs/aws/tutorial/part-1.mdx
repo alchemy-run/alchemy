@@ -8,14 +8,14 @@ sidebar:
 import Terminal from "../../../../components/Terminal.astro";
 import PackageManagers from "../../../../components/PackageManagers.astro";
 
-export const pkgs = `alchemy@latest effect @effect/platform-bun @effect/platform-node`;
+export const pkgs = `alchemy@latest @alchemy.run/aws@latest effect @effect/platform-bun @effect/platform-node`;
 
 In this first part you'll install Alchemy and Effect, create a Stack
 with an AWS S3 Bucket, and deploy it — all in under five minutes.
 
 ## Prerequisites
 
-- [Bun](https://bun.sh) or Node.js 22+
+- [Node.js](https://nodejs.org) 24.11.1+ or [Bun](https://bun.sh)
 - An AWS account and an IAM identity with permission to create the
   resources you plan to deploy
 
@@ -27,7 +27,7 @@ Start with an empty directory and initialize a `package.json`:
 
 ## Install dependencies
 
-Install `alchemy@latest` and `effect`:
+Install `alchemy@latest`, `@alchemy.run/aws`, and `effect`:
 
 <PackageManagers add={pkgs} />
 
@@ -41,7 +41,7 @@ Create an `alchemy.run.ts` file:
 ```typescript
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import * as Effect from "effect/Effect";
 
 export default Alchemy.Stack(
@@ -70,11 +70,10 @@ keys with `alchemy profile edit --add AWS`. See
 
 ## Where state lives
 
-`state: AWS.state()` stores deploy state in an account-regional S3
-bucket (`alchemy-state-{accountId}-{region}-an`), created lazily on
+`state: AWS.state()` stores deploy state in a DynamoDB table
+(`alchemy-state`) in your account, created lazily on
 the first deploy. Because the state lives in your AWS account rather
-than on disk, the same configuration works locally and in CI with no
-extra setup.
+than on disk, the same configuration works locally and in CI.
 
 :::note[Other state stores]
 For purely local iteration you can use `Alchemy.localState()`
@@ -93,7 +92,7 @@ Add an S3 Bucket:
 ```diff lang="typescript"
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as AWS from "alchemy/AWS";
+import * as AWS from "@alchemy.run/aws";
 import * as Effect from "effect/Effect";
 
 export default Alchemy.Stack(
@@ -139,8 +138,8 @@ Run `alchemy deploy` to create the Bucket on AWS:
 <PackageManagers run="alchemy deploy" />
 
 Connect AWS first with `alchemy profile edit --add AWS` and pick a
-local authentication method: **SSO** (recommended), **console login**
-(`aws login`), or **stored access keys**. The choice is saved to your
+local authentication method: **console login** (recommended,
+`aws login`), **SSO** through IAM Identity Center, or **stored access keys**. The choice is saved to your
 **`default`** [profile](/environments/profiles); the region and account
 come from whichever method you pick, and a deploy with nothing
 configured fails with that exact command to run. CI instead reads AWS
@@ -195,11 +194,9 @@ Alchemy figures out what changed.
 The inverse of `deploy` is `destroy` — it plans against an empty
 desired state and deletes everything the stack created:
 
-```sh
-bun alchemy destroy
-```
+<PackageManagers run="alchemy destroy" />
 
-Try it if you like, then run `bun alchemy deploy` again to bring the
+Try it if you like, then run `alchemy deploy` again to bring the
 bucket back — we'll build on it in Part 2.
 
 ## Recap

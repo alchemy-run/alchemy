@@ -1,190 +1,103 @@
 ---
 title: D1
-description: Cloudflare D1 is serverless SQLite — create a database, apply migrations on deploy, and query it from a Worker through a typed binding.
+description: How D1 runs a SQLite database for your app, where its primary and read replicas live, how migrations are applied on deploy, and how Workers query it through a binding or Effect SQL.
 ---
 
-D1 is Cloudflare's serverless SQLite database. There's nothing to
-provision or scale — you get a SQL database addressed by name, with
-reads served close to your users when read replication is enabled.
+import WorldMap from "../../../../components/diagrams/WorldMap.astro";
 
-Reach for D1 when your app needs relational data without operating a
-database: user tables, content, app state queried with plain SQL. If
-you need Postgres or MySQL (or already have one), front it with
-[Hyperdrive](/cloudflare/data/hyperdrive) instead.
+D1 is a SQL database Cloudflare runs for you, built on SQLite. You write ordinary SQL against tables you define, and there's no server to size: you pay for the rows you read and write and the data you store.
+
+## One primary, near its users
+
+A D1 database has one **primary** copy, in one location. Every write goes to it, in order, so there's no conflict to resolve. Workers in any city reach it through a binding.
+
+<WorldMap
+  places={[
+    { id: "par", label: "Worker", type: "Madrid", lat: 40.4, lon: -3.7, place: "below" },
+    { id: "primary", label: "primary", type: "weur", lat: 52.4, lon: 4.9, tone: "accent" },
+    { id: "replica", label: "read replica", type: "apac", lat: 1.3, lon: 103.8, place: "below" },
+    { id: "tyo", label: "Worker", type: "Tokyo", lat: 35.7, lon: 139.7, place: "right" },
+  ]}
+  links={[
+    { from: "par", to: "primary", bend: 0.3 },
+    { from: "tyo", to: "primary", label: "writes", bend: 0.2 },
+    { from: "tyo", to: "replica", label: "reads", bend: -0.25 },
+    { from: "primary", to: "replica", dashed: true, bend: -0.2 },
+  ]}
+  crop={{ west: -30, east: 160, north: 70, south: -15 }}
+  caption="Every write goes to the primary, in one location. With read replication on, a Worker far away can read from a replica near it."
+/>
+
+A database holds up to 10 GB. That's a lot for one app's data, and a hint about how D1 is meant to be used: many small databases, one per app, per tenant or per user, rather than one huge one.
 
 ## Create a database
 
-A database is one resource declaration:
+```typescript title="src/database.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
 
-```typescript
-// src/database.ts
-import * as Cloudflare from "alchemy/Cloudflare";
-
-export const Database = Cloudflare.D1.Database("Database");
+export const Database = Cloudflare.D1.Database("Database", { migrations: "./migrations" });
 ```
 
-Yield it inside your Stack like any other resource:
+The primary is placed near the first requests. Set `primaryLocationHint`, like `"weur"`, to choose. To keep its data inside a legal boundary, set `jurisdiction`.
 
-```typescript
-// alchemy.run.ts
-import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Effect from "effect/Effect";
-import { Database } from "./src/database.ts";
+## Apply migrations on deploy
 
-export default Alchemy.Stack(
-  "MyApp",
-  {
-    providers: Cloudflare.providers(),
-    state: Cloudflare.state(),
-  },
-  Effect.gen(function* () {
-    const db = yield* Database;
+`migrations` points at a directory of `.sql` files. Each deploy applies the ones that haven't run yet, in the order of their numeric prefix, `0001_`, `0002_`:
 
-    return { databaseName: db.databaseName };
-  }),
-);
+```sql title="migrations/0001_users.sql"
+CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT NOT NULL UNIQUE);
 ```
 
-## Migrations
-
-Point `migrations` at a folder of `.sql` files. Files are sorted
-by numeric prefix (`0001_`, `0002_`, …) and applied in order as part
-of every deploy; already-applied migrations are skipped:
-
-```typescript
-const db = yield* Cloudflare.D1.Database("my-db", {
-  migrations: "./migrations",
-});
-```
-
-Bookkeeping lives in Alchemy's `__alchemy_migrations` table. A
-database previously migrated with `wrangler d1 migrations apply` or
-`drizzle-kit migrate` is
-[adopted automatically](/sql/effect-sql/migrations#adopting-an-existing-database):
-the old tool's applied history is copied in once and its table is
-frozen — never written, never dropped. D1 has no transactions over
-HTTP, so each migration and its bookkeeping row are sent as one
-batched query, matching wrangler's own behavior.
-
-The migration files themselves don't have to be hand-written —
-[Drizzle.Schema](/sql/drizzle/migrations) can generate them from a
-Drizzle schema on deploy. [Drizzle on D1](/cloudflare/data/d1-drizzle)
-walks through the whole flow: schema → generated migrations → typed
-queries from the Worker.
+Applied files are recorded in an `__alchemy_migrations` table. A database already migrated with wrangler or drizzle-kit is picked up where it left off. To generate migrations from a schema instead of writing them, see [Drizzle on D1](/cloudflare/data/d1-drizzle).
 
 ## Query from a Worker
 
-Bind the database into a Worker with `Cloudflare.D1.QueryDatabase`
-and provide the `QueryDatabaseBinding` layer. The client exposes
-`prepare`, `exec`, `batch`, and `raw`; prepared statements execute
-with `all`, `first`, or `run`:
+Bind the database with `D1.QueryDatabase`, and prepare statements against it:
 
-```typescript
-// src/worker.ts
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import { Database } from "./database.ts";
-
+```typescript title="src/worker.ts"
 export default Cloudflare.Worker(
   "Worker",
   { main: import.meta.url },
   Effect.gen(function* () {
-    // Construction: register the binding, get a typed client
     const db = yield* Cloudflare.D1.QueryDatabase(Database);
-
     return {
       fetch: Effect.gen(function* () {
-        // runtime: run queries
-        const results = yield* db
-          .prepare("SELECT * FROM users WHERE id = ?")
-          .bind(1)
-          .all();
-        return yield* HttpServerResponse.json(results);
-      }),
+        const users = yield* db.prepare("SELECT * FROM users WHERE id = ?").bind(1).all();
+        return yield* HttpServerResponse.json(users);
+      }).pipe(Effect.orDie),
     };
   }).pipe(Effect.provide(Cloudflare.D1.QueryDatabaseBinding)),
 );
 ```
 
-`prepare` and `bind` are synchronous plan builders — only the
-executors (`all`, `first`, `run`, `raw`) round-trip to the database,
-and those return Effects. For libraries that want the native
-`D1Database` object (e.g. Better Auth), use the client's `raw`
-escape hatch.
+`prepare` and `bind` only build the statement. `all`, `first` and `run` send it, and return Effects. `batch` sends several statements in one round trip, applied together or not at all.
 
-## SQL with `@effect/sql-d1`
+## Write SQL as Effect SQL
 
-Prefer tagged-template SQL over hand-written prepared statements?
-`SQL.D1` (from `alchemy/SQL/D1` — each low-level effect-sql client
-lives on its own subpath) wraps the same binding in an
-`@effect/sql-d1` `D1Client` —
-interpolated values are parameterized, every query is an Effect, and
-failures surface as typed `SqlError`s:
+For SQL written as a template, with values parameterized for you and typed errors, wrap the binding in an Effect SQL client:
 
-```typescript
-import * as SQL from "alchemy/SQL/D1";
+```typescript title="src/worker.ts"
+const d1 = yield* Cloudflare.D1.QueryDatabase(Database);
+const sql = yield* SQL.D1(d1);
 
-Effect.gen(function* () {
-  const d1 = yield* Cloudflare.D1.QueryDatabase(Database);
-  const sql = yield* SQL.D1(d1);
-
-  return {
-    fetch: Effect.gen(function* () {
-      const id = 1;
-      const users = yield* sql`SELECT * FROM users WHERE id = ${id}`;
-      return yield* HttpServerResponse.json({ users });
-    }),
-  };
-}).pipe(Effect.provide(Cloudflare.D1.QueryDatabaseBinding));
+const users = yield* sql`SELECT * FROM users WHERE id = ${id}`;
 ```
 
-The client is built lazily on the first query and memoized per
-execution — a `fetch`/`queue`/`scheduled` event, a Durable Object
-call, or a Workflow run — then torn down when the event settles.
+`SQL` comes from `@alchemy.run/cloudflare/D1/SQL`. The client implements Effect's `SqlClient`, so code written against `SqlClient.SqlClient` runs on D1 unchanged. See [Effect SQL on D1](/sql/effect-sql/d1).
 
-`D1Client` implements Effect's generic `SqlClient` interface, so
-services written against `SqlClient.SqlClient` run on D1 unchanged.
-Provide both tags with the layer form:
+## Read close to users
 
-```typescript
-import * as SqlClient from "effect/sql/SqlClient";
+With read replication on, D1 keeps read-only copies of the database in other regions, and serves reads from the nearest one:
 
-const makeApp = Effect.gen(function* () {
-  const sql = yield* SqlClient.SqlClient;
-  // ... services that only know about SqlClient
+```typescript title="src/database.ts"
+export const Database = Cloudflare.D1.Database("Database", {
+  migrations: "./migrations",
+  readReplication: { mode: "auto" },
 });
-
-const app = yield* makeApp.pipe(
-  Effect.provide(SQL.D1Layer(d1)),
-);
 ```
 
-The complete runnable project is
-[`cloudflare-effect-sql-d1`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-effect-sql-d1).
-The full client API, the Layer pattern, and the lifecycle contract
-live in the SQL hub — [Effect SQL: D1](/sql/effect-sql/d1) and
-[Connection lifecycle](/sql/effect-sql/lifecycle). For typed schemas
-and an ORM on top of the same binding, see
-[Drizzle on D1](/cloudflare/data/d1-drizzle).
+A replica can be slightly behind the primary. To read your own writes, use Cloudflare's sessions API on the native database, which the client's `raw` escape hatch gives you: a session carries a bookmark from each write, and later reads in the session wait until their replica has caught up to it.
 
-## Where next
+## When to use something else
 
-Guides:
-
-- [Drizzle on D1](/cloudflare/data/d1-drizzle) — typed schemas,
-  generated migrations, and the `effect-d1` driver on this database.
-- [`cloudflare-effect-sql-d1`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-effect-sql-d1)
-  — the runnable `@effect/sql-d1` example.
-
-Related:
-
-- [Workers](/cloudflare/compute/workers) — where your queries run.
-- [Hyperdrive](/cloudflare/data/hyperdrive) — for external Postgres/MySQL
-  instead of SQLite.
-
-Reference:
-
-- [Database API reference](/providers/cloudflare/d1/database)
-- [QueryDatabase API reference](/providers/cloudflare/d1/querydatabase)
+Use D1 for relational data owned by one app or one tenant. For data that's read everywhere and rarely written, [KV](/cloudflare/data/kv) is faster. For state that belongs to one entity and must be consistent per request, a [Durable Object](/cloudflare/compute/durable-objects)'s own SQLite fits better. For Postgres or MySQL you already run, or need, connect through [Hyperdrive](/cloudflare/data/hyperdrive).

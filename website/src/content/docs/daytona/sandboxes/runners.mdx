@@ -1,0 +1,68 @@
+---
+title: Regions and runners
+description: Where Daytona sandboxes run — shared regions, the region a sandbox picks, and a region of your own with runners on machines you operate.
+---
+
+import Tree from "../../../../components/diagrams/Tree.astro";
+
+A **region** is where sandboxes run, such as `us` or `eu`. Inside a region, **runners** are the machines that host sandboxes, and Daytona's scheduler places each new sandbox on one. Daytona runs shared regions for every organization. An organization allowed to bring its own compute can add a **custom region**: Daytona still runs the API and the scheduler, and the runners are machines you operate.
+
+## Runners host sandboxes inside a region
+
+<Tree
+  nodes={[
+    { id: "home", label: "Home", type: "custom region", areas: ["box1 box2"], colGap: 3.5, specs: [["proxy", "proxy.daytona.example.com"], ["ssh", "ssh.daytona.example.com:2222"]] },
+    { id: "box1", label: "Box1", type: "runner", parent: "home", tone: "accent" },
+    { id: "a", label: "user-sam", type: "sandbox", parent: "box1" },
+    { id: "b", label: "user-ana", type: "sandbox", parent: "box1" },
+    { id: "box2", label: "Box2", type: "runner · draining", parent: "home", tone: "muted" },
+    { id: "c", label: "ci-417", type: "sandbox · moving off", parent: "box2" },
+  ]}
+  links={[{ from: "c", to: "box1", label: "moves", dashed: true }]}
+  caption="A custom region has its own proxy and SSH gateway, and runners you operate. The scheduler places sandboxes on runners; a draining runner takes no new ones and its sandboxes move off."
+/>
+
+## Pick a region
+
+A sandbox runs in its organization's default region unless it sets `target`. Changing `target` replaces the sandbox.
+
+```typescript title="src/DevBox.ts"
+import * as Daytona from "@alchemy.run/daytona";
+import { Base } from "./Images.ts";
+
+export const DevBox = Daytona.Sandbox("DevBox", { snapshot: Base, target: "eu" });
+```
+
+Set the organization's default with `defaultRegionId` on [OrganizationSettings](/daytona/organization/organization#change-organization-settings).
+
+## Add a region of your own
+
+```typescript title="src/Compute.ts"
+import * as Daytona from "@alchemy.run/daytona";
+
+export const Home = Daytona.Region("Home", {
+  proxyUrl: "https://proxy.daytona.example.com",
+  sshGatewayUrl: "ssh.daytona.example.com:2222",
+});
+```
+
+Daytona shows the region's proxy and SSH gateway keys only when it creates or rotates them, so Alchemy keeps them in state. Bump a counter in `rotate`, like `rotate: { proxyApiKey: 1 }`, to rotate one.
+
+## Register a runner
+
+```diff lang="typescript"
+// src/Compute.ts
++export const Box1 = Daytona.Runner("Box1", { region: Home });
+```
+
+`Box1.apiKey` is the key you start the runner daemon with on your machine.
+
+## Drain a runner
+
+```diff lang="typescript"
+// src/Compute.ts
+-export const Box2 = Daytona.Runner("Box2", { region: Home });
++export const Box2 = Daytona.Runner("Box2", { region: Home, draining: true });
+```
+
+A draining runner takes no new sandboxes, and its sandboxes move off. `unschedulable: true` only stops new ones. Both change in place.

@@ -1061,29 +1061,26 @@ const safeRedirect = async (
 /**
  * Decode all incoming paths to ensure that we can handle paths with non-ASCII characters.
  */
-const decodePath = (pathname: string) => {
-  return (
-    pathname
-      .split("/")
-      .map((x) => {
-        try {
-          const decoded = decodeURIComponent(x);
-          return decoded;
-        } catch {
-          return x;
-        }
-      })
-      .join("/")
-      // normalize the path; remove multiple slashes which could lead to same-schema redirects
-      .replace(/\/+/g, "/")
-  );
-};
+const decodePath = (pathname: string) =>
+  pathname
+    .split("/")
+    .map((x) => {
+      try {
+        const decoded = decodeURIComponent(x);
+        return decoded;
+      } catch {
+        return x;
+      }
+    })
+    .join("/")
+    // normalize the path; remove multiple slashes which could lead to same-schema redirects
+    .replace(/\/+/g, "/");
 /**
  * Use the encoded path as the canonical path for sometimes-encoded characters
  * e.g. /[boop] -> /%5Bboop%5D 307
  */
-const encodePath = (pathname: string) => {
-  return pathname
+const encodePath = (pathname: string) =>
+  pathname
     .split("/")
     .map((x) => {
       try {
@@ -1094,7 +1091,6 @@ const encodePath = (pathname: string) => {
       }
     })
     .join("/");
-};
 
 const handleRedirects = (
   env: Env,

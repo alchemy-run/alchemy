@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { expect, it } from "alchemy-test";
+import { expect, it } from "@alchemy.run/test";
 
 const cli = fileURLToPath(new URL("../../bin/cli.js", import.meta.url));
 
@@ -33,12 +33,12 @@ it(
       const cleared = run([...args, "--yes"]);
       expect(cleared.status).toBe(0);
       expect(cleared.stdout).toContain("• First\n• Second");
-      expect(cleared.stdout).toContain("Cleared First");
-      expect(cleared.stdout).toContain("Cleared Second");
+      expect(cleared.stderr).toContain("Cleared First");
+      expect(cleared.stderr).toContain("Cleared Second");
       expect(readdirSync(state)).toEqual([]);
       const empty = run(args);
       expect(empty.status).toBe(0);
-      expect(empty.stdout).toContain("Nothing to clear");
+      expect(empty.stderr).toContain("Nothing to clear");
       expect(run(["state", "delete", "/", "--recursive", "--backend", "local"]).status).toBe(1);
     } finally {
       rmSync(cwd, { recursive: true, force: true });

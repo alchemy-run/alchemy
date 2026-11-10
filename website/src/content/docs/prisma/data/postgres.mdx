@@ -10,7 +10,7 @@ other resource.
 ## Project
 
 ```typescript
-import * as Prisma from "alchemy/Prisma";
+import * as Prisma from "@alchemy.run/prisma";
 
 const project = yield* Prisma.Project("app", {
   createDatabase: false,
@@ -67,7 +67,7 @@ patterns and default-branch promotion.
 
 ## Local dev
 
-Under `bun alchemy dev`, the database resolves to a local
+Under `alchemy dev`, the database resolves to a local
 `@prisma/dev` Postgres instead of the cloud — same outputs, zero
 provisioning. The `dev` prop tunes it:
 

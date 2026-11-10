@@ -1,0 +1,81 @@
+---
+title: "Part 5: Testing"
+description: Deploy the Stack in a test, fork the set-up sandbox, and check what the fork contains.
+sidebar:
+  order: 5
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+## Install the test harness
+
+<PackageManagers dev="@alchemy.run/test" />
+
+## Deploy once per test file
+
+`Test.make` takes the same providers and state as your Stack:
+
+```typescript title="test/integ.test.ts"
+import { expect } from "bun:test";
+import * as Archil from "@alchemy.run/archil";
+import * as Test from "@alchemy.run/test/Bun";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Schedule from "effect/Schedule";
+import Stack from "../alchemy.run.ts";
+
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Archil.providers(),
+  state: Alchemy.localState(),
+  profile: process.env.ALCHEMY_PROFILE,
+});
+
+const stack = beforeAll(deploy(Stack), { timeout: 300_000 });
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), { timeout: 180_000 });
+```
+
+The test deploys the Stack to a stage of its own, `Golden` included, and destroys it afterwards.
+
+## Retry while the program starts
+
+A new program sandbox can take a few seconds to answer:
+
+```typescript title="test/integ.test.ts"
+const run = (url: string, command: string) =>
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    const res = yield* client.execute(HttpClientRequest.post(`${url}/run`).pipe(HttpClientRequest.bodyText(command))).pipe(
+      Effect.flatMap((res) => (res.status >= 500 ? Effect.fail(new Error(`HTTP ${res.status}`)) : Effect.succeed(res))),
+      Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 20 }),
+    );
+    return (yield* res.json) as { stdout: string; exitCode: number };
+  });
+```
+
+## Check a fork starts from Golden
+
+```typescript title="test/integ.test.ts"
+test(
+  "forks Golden for each request",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const both = yield* run(url, "ls ..");
+    expect(both.stdout).toContain("slugify");
+  }),
+  { timeout: 300_000 },
+);
+```
+
+`slugify` is only there if the fork came from the new `Golden`. The program deletes the fork when the request ends, so none is left behind.
+
+## Run it
+
+<PackageManagers script={`bun test`} />
+
+Set `NO_DESTROY=1` to keep the deployment between runs while you iterate.
+
+## Next
+
+[Part 6](/archil/tutorial/part-6) deploys more copies, from CI.

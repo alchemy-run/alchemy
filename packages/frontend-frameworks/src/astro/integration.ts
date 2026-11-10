@@ -10,7 +10,7 @@ import cloudflareVitePlugin from "@alchemy.run/cloudflare-runtime/vite";
  * (v14.1.3, `src/index.ts`) with:
  *
  * - `@cloudflare/vite-plugin` swapped for `@alchemy.run/cloudflare-runtime/vite`
- *   (main = this package's vendored server entrypoint, entry env `ssr`,
+ *   (main defaults to this package's vendored server entrypoint, entry env `ssr`,
  *   Astro's node-side `astro`/`prerender` environments in `skipEnvironments`).
  * - `loadWranglerEnv`, wrangler config watchers, `previewEntrypoint`, and the
  *   output-wrangler.json patch dropped.
@@ -36,6 +36,7 @@ import { createRedirectsFromAstroRoutes, printAsRedirects } from "@astrojs/under
 import type { AstroConfig, AstroIntegration, IntegrationResolvedRoute } from "astro";
 import { passthroughImageService, sessionDrivers } from "astro/config";
 import type * as vite from "vite";
+import { usesCloudflareCacheProvider } from "./cache.ts";
 import { createConfigPlugin } from "./config-plugin.ts";
 import { NODE_ENVIRONMENTS } from "./environments.ts";
 import { buildAssetsHeadersContent } from "./headers.ts";
@@ -54,8 +55,10 @@ export interface DistilledCloudflareOptions {
   /**
    * Options forwarded to `@alchemy.run/cloudflare-runtime/vite`
    * (compatibility date/flags, worker name/bindings/assets, runtime context).
-   * `main`, `viteEnvironments`, and the Astro node environments in
-   * `skipEnvironments` are managed by the integration.
+   * `viteEnvironments` and the Astro node environments in `skipEnvironments`
+   * are managed by the integration. `main` defaults to the vendored server
+   * entrypoint ({@link SERVER_ENTRYPOINT}); set it to deploy a custom Worker
+   * entry that wraps that entrypoint's handler.
    */
   readonly vite?: CloudflareVitePluginOptions | undefined;
   /**
@@ -165,7 +168,9 @@ const CLOUDFLARE_KV_SESSION_DRIVER_ENTRYPOINT = sessionDrivers.cloudflareKVBindi
 
 type SessionConfigLike =
   | {
-      driver?: string | { entrypoint: string | { toString(): string } } | undefined;
+      // Astro types `entrypoint` as optional `any` (it comes from a
+      // `z.instanceof(URL)` schema), though its config validation requires it.
+      driver?: string | { entrypoint?: string | URL } | undefined;
       cookie?: unknown;
       ttl?: unknown;
     }
@@ -179,8 +184,10 @@ export const usesCloudflareKVSessionDriver = (session: SessionConfigLike): boole
   if (typeof driver === "string") {
     return driver === "cloudflareKVBinding" || driver === "cloudflare-kv-binding";
   }
-  const entrypoint =
-    typeof driver.entrypoint === "string" ? driver.entrypoint : driver.entrypoint.toString();
+  if (driver.entrypoint == null) {
+    return false;
+  }
+  const entrypoint = String(driver.entrypoint);
   return (
     entrypoint === CLOUDFLARE_KV_SESSION_DRIVER_ENTRYPOINT ||
     entrypoint.endsWith("cloudflare-kv-binding")
@@ -232,9 +239,16 @@ export const withPrerenderSessionKv = (
 
 /**
  * The `@alchemy.run/cloudflare-runtime/vite` options for an Astro project:
- * user options with `main` pinned to the vendored server entrypoint, the
+ * user options with `main` defaulted to the vendored server entrypoint, the
  * worker pinned to Astro's `ssr` environment, and Astro's node-side
  * environments merged into `skipEnvironments` (exported for testing).
+ *
+ * A user `main` (the deploy target's user-entry seam) takes precedence: a
+ * Worker entry that wraps the vendored entrypoint's handler (imported from
+ * {@link SERVER_ENTRYPOINT}) and adds exports of its own — Durable Object
+ * classes, a `scheduled` handler. The vite plugin resolves it against the
+ * Astro root. The workerd `prerender` environment keeps building the vendored
+ * entrypoint: prerendering only needs Astro's handler.
  *
  * During a `build` with `prerenderEnvironment: "workerd"`, the `prerender`
  * environment stops being a skipped node environment and becomes a child
@@ -258,7 +272,7 @@ export const makeIntegrationPluginOptions = (
   const workerdPrerender = prerenderEnvironment === "workerd" && command === "build";
   return {
     ...viteOptions,
-    main: SERVER_ENTRYPOINT,
+    main: viteOptions.main ?? SERVER_ENTRYPOINT,
     viteEnvironments: workerdPrerender
       ? { entry: "ssr", children: ["prerender"] }
       : { entry: "ssr" },
@@ -301,6 +315,11 @@ export function distilledCloudflare(options: DistilledCloudflareOptions = {}): A
       "astro:config:setup": ({ command, config, updateConfig, logger }) => {
         const isTypeGenPhase = command === "build" || command === "sync";
         const userOptimizeDeps = config.vite?.optimizeDeps;
+        // Route caching through Workers Cache (mirrors upstream's
+        // `needsWorkerCache`). The provider module is pre-bundled with the
+        // rest of the server runtime so dev does not re-optimize on first use.
+        const needsWorkerCache = usesCloudflareCacheProvider(config);
+        const cacheProviderEntrypoint = config.cache?.provider?.entrypoint;
 
         // Zero-config sessions (mirrors upstream): default the session
         // driver to Cloudflare KV against `sessionKVBindingName` when the
@@ -438,6 +457,9 @@ export function distilledCloudflare(options: DistilledCloudflareOptions = {}): A
                           "astro/virtual-modules/transitions-swap-functions.js",
                           "astro/virtual-modules/transitions-types.js",
                           "astro/components",
+                          ...(needsWorkerCache && typeof cacheProviderEntrypoint === "string"
+                            ? [cacheProviderEntrypoint]
+                            : []),
                           ...(Array.isArray(userOptimizeDeps?.include)
                             ? userOptimizeDeps.include
                             : []),
@@ -481,7 +503,7 @@ export function distilledCloudflare(options: DistilledCloudflareOptions = {}): A
               createConfigPlugin({
                 sessionKVBindingName,
                 compileImageConfig: null,
-                cacheProviderEnabled: false,
+                cacheProviderEnabled: needsWorkerCache,
               }),
             ],
           },

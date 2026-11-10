@@ -1,7 +1,7 @@
 import { expect } from "bun:test";
+import * as Fly from "@alchemy.run/fly";
+import * as Test from "@alchemy.run/test/Bun";
 import * as Alchemy from "alchemy";
-import * as Fly from "alchemy/Fly";
-import * as Test from "alchemy/Test/Bun";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -40,7 +40,8 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   profile: process.env.ALCHEMY_PROFILE,
 });
 
-const stack = beforeAll(deploy(Stack), { timeout: 240_000 });
+// Postgres, an image build on a Fly remote builder and the site, like fly-microservices.
+const stack = beforeAll(deploy(Stack), { timeout: 400_000 });
 
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
   timeout: 180_000,

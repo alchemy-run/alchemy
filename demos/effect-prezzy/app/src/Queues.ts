@@ -1,4 +1,4 @@
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 
 /** Background jobs: fetch a link's page and store its preview. */
 export const Jobs = Cloudflare.Queues.Queue("Jobs");

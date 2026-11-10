@@ -33,7 +33,7 @@ not a Node container.
 
 ```typescript
 // alchemy.run.ts
-import * as Prisma from "alchemy/Prisma";
+import * as Prisma from "@alchemy.run/prisma";
 
 export const Website = Prisma.Website.Astro("Website");
 ```
@@ -138,7 +138,7 @@ The bag also exposes `base`, `srcDir`, `publicDir`, `outDir`, and
 
 ## Local dev
 
-`bun alchemy dev` starts Astro's own server with HMR; the Website
+`alchemy dev` starts Astro's own server with HMR; the Website
 creates no Prisma resources. `site.url` is the local address.
 `.pipe(Alchemy.remote())` opts into the live deployment during dev.
 
@@ -150,8 +150,7 @@ export const Website = Prisma.Website.Astro("Website", {
 });
 ```
 
-`Prisma.CustomDomain` requires the app to be on the project's current
-default branch. Configure its returned `dnsRecords` yourself and verify
+Configure the returned `dnsRecords` yourself and verify
 status before routing traffic. See
 [Custom domains](/prisma/frontend/websites#custom-domains).
 

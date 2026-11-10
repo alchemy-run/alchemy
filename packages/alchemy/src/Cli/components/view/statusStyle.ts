@@ -3,8 +3,8 @@
  * icons — shared by the plan tree, the live progress view, and the plain
  * logging CLI so an action never renders two different hues.
  */
-import type { ApplyStatus } from "../../../Report.ts";
-import { theme, type GlyphName } from "../../CliKit/index.ts";
+import type { ApplyStatus } from "../../../Events.ts";
+import { theme, type GlyphName } from "../../../Util/Theme.ts";
 
 /** Every verb a plan row can carry (resource CRUD + namespace/action rollups). */
 export type PlanAction =

@@ -1,4 +1,6 @@
 import { expect } from "bun:test";
+import * as AWS from "@alchemy.run/aws";
+import * as Test from "@alchemy.run/test/Bun";
 /**
  * LIVE counterpart to test/dev.test.ts: deploys the exact same orders app
  * to real AWS (Test.make + deploy, no CLI) — VPC, shared ALB, Fargate
@@ -10,8 +12,6 @@ import { expect } from "bun:test";
  * two Fargate services (~5-10 minutes).
  */
 import * as Alchemy from "alchemy";
-import * as AWS from "alchemy/AWS";
-import * as Test from "alchemy/Test/Bun";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";

@@ -2,6 +2,7 @@
 title: Connections
 description: Every Neon project and branch exposes direct and pooled connection URIs plus pre-parsed origin outputs — feed the direct origin to Hyperdrive and the pooled one to everything else.
 ---
+import Tree from "../../../../components/diagrams/Tree.astro";
 
 Every Neon project and branch exposes its connection details as
 outputs: raw URIs and pre-parsed origins, each in a direct and a
@@ -13,7 +14,7 @@ Both `Neon.Project` and `Neon.Branch` expose the same four
 attributes:
 
 ```typescript
-import * as Neon from "alchemy/Neon";
+import * as Neon from "@alchemy.run/neon";
 
 const project = yield* Neon.Project("app-db");
 const branch = yield* Neon.Branch("preview", { project });
@@ -31,6 +32,15 @@ The direct URI connects straight to the branch's compute endpoint.
 The pooled URI routes through Neon's pgbouncer-based pooler, which
 lets many short-lived clients share a small number of Postgres
 connections.
+
+<Tree
+  nodes={[
+    { id: "branch", label: "main", type: "branch" },
+    { id: "pool", label: "pooler", type: "pgbouncer · ep-…-pooler host", parent: "branch", tone: "accent", specs: [["URI", "pooled"], ["for", "Workers, Lambdas, short clients"]] },
+    { id: "ep", label: "compute endpoint", type: "Postgres · ep-… host", parent: "branch", specs: [["URI", "direct"], ["for", "migrations, long sessions"]] },
+  ]}
+  caption="Both URIs reach the same branch. The pooled one shares a few Postgres connections among many short-lived clients. The direct one is a real session, for work that needs one."
+/>
 
 ## The origin shape
 
@@ -67,7 +77,7 @@ const hyperdrive = yield* Cloudflare.Hyperdrive.Connection("app-hyperdrive", {
 });
 ```
 
-The `dev` override matters because `bun alchemy dev` doesn't create
+The `dev` override matters because `alchemy dev` doesn't create
 a Hyperdrive config at all — the local Worker connects to the
 database directly. With Hyperdrive out of the path, nothing pools
 those connections, so `pooledOrigin` sends local dev through Neon's

@@ -1,200 +1,109 @@
 ---
 title: KV
-description: Cloudflare Workers KV is edge key-value storage — create a namespace, bind it into a Worker with read/write-scoped bindings, and get/put values with metadata.
+description: How Workers KV replicates values to every city for fast reads, what eventual consistency means for writes, and how Workers read, write, list and expire keys through access-scoped bindings.
 ---
 
-Workers KV is Cloudflare's key-value store: values addressed by key,
-replicated globally, with eventually-consistent, low-latency reads at
-the edge. In alchemy a namespace is a one-line resource, and Workers
-reach it through typed, access-scoped bindings.
+import Timeline from "../../../../components/diagrams/Timeline.astro";
 
-Reach for KV when reads dominate and a little staleness is fine —
-config, feature flags, sessions, cached API responses, redirects. If
-you need relational queries, use [D1](/cloudflare/data/d1); if you need
-strongly-consistent state coordinated per object, use
-[Durable Object storage](/cloudflare/compute/durable-objects).
+Workers KV is a key-value store copied to every city in Cloudflare's network. A Worker reads a key from the copy nearest the request, so reads are fast everywhere. Writes go to a central store and spread out from there.
 
-## Create a namespace
+## Fast reads, eventual writes
 
-```typescript
-// src/cache.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+A value written in one city reaches the others within about a minute. Until it does, a read elsewhere can return the old value, or nothing.
+
+<Timeline
+  end={60}
+  lanes={[
+    { id: "par", label: "Paris", type: "writes" },
+    { id: "tyo", label: "Tokyo" },
+    { id: "nyc", label: "New York" },
+  ]}
+  bars={[
+    { lane: "par", start: 0, end: 60, label: "reads v2" },
+    { lane: "tyo", start: 0, end: 22, label: "still reads v1", tone: "muted" },
+    { lane: "tyo", start: 22, end: 60, label: "reads v2" },
+    { lane: "nyc", start: 0, end: 41, label: "still reads v1", tone: "muted" },
+    { lane: "nyc", start: 41, end: 60, label: "reads v2" },
+  ]}
+  marks={[{ at: 0, label: "put v2" }]}
+  ticks={[{ at: 0, label: "0s" }, { at: 30, label: "30s" }, { at: 60, label: "about a minute" }]}
+  caption="A write is read back at once where it was made. Other cities see it within about a minute, and until then they read the old value."
+/>
+
+So KV fits data that's read far more often than it's written, where a moment of staleness is fine: configuration, feature flags, sessions, cached API responses, redirects. For relational data, use [D1](/cloudflare/data/d1). For state that must be consistent the instant it's written, use a [Durable Object](/cloudflare/compute/durable-objects).
+
+## Declare a namespace
+
+Keys live in a **namespace**:
+
+```typescript title="src/cache.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
 
 export const Cache = Cloudflare.KV.Namespace("Cache");
 ```
 
-Yield it inside your Stack:
+Alchemy names it from your app, stage and id, so each stage gets its own.
 
-```typescript
-// alchemy.run.ts
-import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Effect from "effect/Effect";
-import { Cache } from "./src/cache.ts";
+## Read and write values
 
-export default Alchemy.Stack(
-  "MyApp",
-  {
-    providers: Cloudflare.providers(),
-    state: Cloudflare.state(),
-  },
-  Effect.gen(function* () {
-    const cache = yield* Cache;
+Bind the namespace in a Worker and get a typed client. `ReadWriteNamespace` gives it both reads and writes:
 
-    return { namespaceId: cache.namespaceId };
-  }),
-);
-```
-
-No name required — alchemy generates a unique title from the app,
-stage, and logical ID. Pass `title` to control it:
-
-```typescript
-export const Cache = Cloudflare.KV.Namespace("Cache", {
-  title: "my-app-cache",
-});
-```
-
-## Bind it to a Worker
-
-Bind the namespace in the Worker's Construction phase and use the typed
-client in the runtime handlers. This Worker stores a value on
-`PUT /?key=` and serves it back on `GET /?key=`:
-
-```typescript
-// src/worker.ts
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Effect from "effect/Effect";
-import { HttpServerRequest } from "effect/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import { Cache } from "./cache.ts";
-
+```typescript title="src/worker.ts"
 export default Cloudflare.Worker(
   "Worker",
   { main: import.meta.url },
   Effect.gen(function* () {
     const kv = yield* Cloudflare.KV.ReadWriteNamespace(Cache);
-
     return {
       fetch: Effect.gen(function* () {
-        const request = yield* HttpServerRequest;
-        const url = new URL(request.url, "http://localhost");
-        const key = url.searchParams.get("key") ?? "";
-
-        if (request.method === "PUT") {
-          const body = yield* request.text;
-          yield* kv.put(key, body);
-          return HttpServerResponse.empty({ status: 204 });
-        }
-
-        const value = yield* kv.get(key);
-        if (value === null) {
-          return HttpServerResponse.text("Not found", { status: 404 });
-        }
-        return HttpServerResponse.text(value);
-      }).pipe(
-        Effect.catchTag("NamespaceError", (error) =>
-          Effect.succeed(
-            HttpServerResponse.text(error.message, { status: 500 }),
-          ),
-        ),
-      ),
+        yield* kv.put("greeting", "hello");
+        const value = yield* kv.get("greeting");
+        return HttpServerResponse.text(value ?? "not found");
+      }).pipe(Effect.orDie),
     };
   }).pipe(Effect.provide(Cloudflare.KV.ReadWriteNamespaceBinding)),
 );
 ```
 
-KV operations can fail with a typed `NamespaceError` — Effect keeps
-it in the type system until you handle it, here with
-`Effect.catchTag`.
+A missing key reads as `null`. Every operation can fail with a `NamespaceError`, which stays in the type until you handle it.
 
-## Typed reads
+## Read typed values
 
-`get` defaults to text; pass a type to parse JSON, or an array of
-keys for a bulk read:
+`get` returns text by default. Ask for JSON and give its type, or read several keys at once:
 
-```typescript
-const text = yield* kv.get("greeting"); // string | null
-const config = yield* kv.get<Config>("config", "json"); // Config | null
-const many = yield* kv.get(["a", "b"], "text"); // Map<string, string | null>
+```typescript title="src/worker.ts"
+const config = yield* kv.get<Config>("config", "json");
+const many = yield* kv.get(["a", "b"], "text");
 ```
 
-`arrayBuffer` and `stream` types are also supported for binary
-values.
+`"arrayBuffer"` and `"stream"` read binary values.
 
-## Metadata and expiry
+## Expire keys and attach metadata
 
-`put` accepts per-key metadata and a TTL; `getWithMetadata` reads
-both back in one call:
+A key can expire on its own, after at least 60 seconds. It can also carry metadata, read back with the value in one call:
 
-```typescript
-yield* kv.put("session:abc", token, {
-  metadata: { userId: "u_123" },
-  expirationTtl: 3600, // seconds — minimum 60
+```typescript title="src/worker.ts"
+yield* kv.put(`session:${id}`, token, {
+  expirationTtl: 3600,
+  metadata: { userId },
 });
 
-const { value, metadata } = yield* kv.getWithMetadata<{
-  userId: string;
-}>("session:abc");
+const { value, metadata } = yield* kv.getWithMetadata<{ userId: string }>(`session:${id}`);
 ```
 
 ## List keys
 
-`list` pages through keys, optionally filtered by prefix:
+`list` returns keys a page at a time, optionally those starting with a prefix:
 
-```typescript
-const result = yield* kv.list({ prefix: "session:" });
-const keys = result.keys.map((k) => k.name);
+```typescript title="src/worker.ts"
+const page = yield* kv.list({ prefix: "session:" });
+const names = page.keys.map((key) => key.name);
 ```
 
-Each entry carries its `name` and any metadata stored alongside the
-value.
+Each key comes with its metadata. Put what you need to show in a list into metadata, and you can render the list without reading every value.
 
-## Delete
+## Ask for only the access you need
 
-```typescript
-yield* kv.delete("session:abc");
-```
+The client comes in three access levels. `ReadNamespace` can `get`, `getWithMetadata` and `list`. `WriteNamespace` can `put` and `delete`. `ReadWriteNamespace` can do both. A Worker that only serves configuration should bind `ReadNamespace`, so its code can't change it.
 
-KV is eventually consistent — a fresh write or delete can take a
-short while to become visible to reads at other edge locations.
-
-## Read, Write, ReadWrite
-
-The namespace capability is split by access level so each Worker
-gets least privilege:
-
-- `Cloudflare.KV.ReadNamespace` — `get`, `getWithMetadata`, `list`.
-- `Cloudflare.KV.WriteNamespace` — `put`, `delete`.
-- `Cloudflare.KV.ReadWriteNamespace` — both.
-
-Each level has two interchangeable implementations you provide as a
-layer on the Worker:
-
-- **`*NamespaceBinding`** (`ReadNamespaceBinding`,
-  `WriteNamespaceBinding`, `ReadWriteNamespaceBinding`) — a native
-  KV binding on the Worker, the default choice.
-- **`*NamespaceHttp`** (`ReadNamespaceHttp`, `WriteNamespaceHttp`,
-  `ReadWriteNamespaceHttp`) — the same client over Cloudflare's HTTP
-  API. Alchemy mints an API token scoped to Workers KV Storage
-  read/write and binds it into the Worker — for when a native
-  binding isn't available.
-
-Your runtime code depends only on the capability
-(`ReadNamespace(Cache)` etc.) — swapping the implementation layer
-doesn't touch the handlers.
-
-## Where next
-
-Related:
-
-- [Workers](/cloudflare/compute/workers) — how namespaces get read and
-  written.
-- [D1](/cloudflare/data/d1) — serverless SQLite when you need relational
-  queries.
-- [Durable Objects](/cloudflare/compute/durable-objects) —
-  strongly-consistent per-object state.
-
-Reference:
-
-- [Namespace API reference](/providers/cloudflare/kv/namespace)
+Each level has two implementations, chosen by the Layer the Worker provides. The `*NamespaceBinding` Layers use a native KV binding on the Worker. The `*NamespaceHttp` Layers use Cloudflare's API instead, with an API token Alchemy creates for just that namespace's access, for code running outside a Worker. The handlers don't change between them.

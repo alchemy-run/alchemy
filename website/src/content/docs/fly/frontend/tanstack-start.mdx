@@ -80,7 +80,7 @@ Stack):
 
 ```typescript
 // alchemy.run.ts
-import * as Fly from "alchemy/Fly";
+import * as Fly from "@alchemy.run/fly";
 
 export const Website = Fly.Website.TanStackStart("Website");
 ```
@@ -210,9 +210,7 @@ server and client output from `dist/server` and `dist/client`.
 
 ## Local dev
 
-```sh
-bun alchemy dev
-```
+<PackageManagers run="alchemy dev" />
 
 `alchemy dev` runs TanStack Start's own Vite dev server (native HMR)
 instead of deploying; `site.url` is the local address and no Fly

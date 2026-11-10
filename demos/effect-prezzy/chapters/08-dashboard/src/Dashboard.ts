@@ -1,5 +1,5 @@
+import * as Axiom from "@alchemy.run/axiom";
 import * as Alchemy from "alchemy";
-import * as Axiom from "alchemy/Axiom";
 import * as Effect from "effect/Effect";
 
 /** Shorty's service dashboard, declared next to the code it observes. */

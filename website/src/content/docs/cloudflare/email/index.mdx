@@ -3,6 +3,8 @@ title: Email
 description: Cloudflare Email Routing turns a zone into a mail endpoint — enable routing, verify destinations, forward with rules and a catch-all, hand mail to a Worker, and send from Workers with the send_email binding.
 ---
 
+import Fanout from "../../../../components/diagrams/Fanout.astro";
+
 Email Routing turns a zone you own into a mail endpoint: rules match
 inbound mail and forward it, drop it, or hand it to a Worker — and
 once routing is enabled, Workers can also *send* mail from the domain
@@ -13,6 +15,17 @@ Receiving needs a verified destination address (or a Worker); sending
 needs routing enabled on the sender's domain. The category also
 covers sending subdomains and the enterprise Email Security suite,
 both below.
+
+<Fanout
+  item={{ title: "inbound mail", lines: ["to: inbox@example.com", "from: ana@customer.example"] }}
+  group="example.com · Email Routing"
+  routes={[
+    { label: "rule", condition: ["to = inbox@example.com"], target: { label: "you@personal.example", type: "forward" } },
+    { label: "rule", condition: ["to = orders@example.com"], target: { label: "Orders", type: "Worker · email handler" }, match: false },
+    { label: "catch-all", condition: ["anything unmatched"], target: { label: "drop", type: "discard" }, match: false },
+  ]}
+  caption="Rules match each inbound message in priority order and forward it, hand it to a Worker, or drop it. Mail no rule matches falls to the catch-all."
+/>
 
 ## Enable routing on the zone
 
@@ -104,7 +117,7 @@ enforces at send time:
 
 ```typescript
 // src/email.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 
 export const Email = Cloudflare.Email.SendEmail("Email", {
   allowedSenderAddresses: ["bot@example.com"],
@@ -124,7 +137,7 @@ provide `Email.SendBinding` as the implementation layer:
 
 ```typescript
 // src/notifier.ts
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { Email } from "./email.ts";

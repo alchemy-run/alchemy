@@ -15,6 +15,7 @@ export function assert(condition: unknown, message?: string): asserts condition 
   if (!condition) throw new Error(message ?? "Assertion failed");
 }
 
+// oxlint-disable-next-line effecttsgo/extends-native-error -- plain workerd runtime code (no Effect); `name`/`toResponse` form the HTTP error protocol
 export class HttpError extends Error {
   constructor(
     readonly code: number,
@@ -60,7 +61,7 @@ export class Timers {
     const result = closure();
     if (result instanceof Promise) {
       this.#fakeRunningTasks.add(result);
-      result.finally(() => this.#fakeRunningTasks.delete(result));
+      void result.finally(() => this.#fakeRunningTasks.delete(result));
     }
   }
 
@@ -266,7 +267,7 @@ async function writeMultipleRanges(
     const res = await fetcher.fetch(url, { headers: rangeHeaders(range) });
     assert(
       res.ok && res.body !== null,
-      `Failed to fetch ${url}[${range.start},${range.end}], received ${res.status} ${res.statusText}`,
+      `Failed to fetch ${url.href}[${range.start},${range.end}], received ${res.status} ${res.statusText}`,
     );
     // If we specified a range, but received full content, make sure the range
     // covered the full content

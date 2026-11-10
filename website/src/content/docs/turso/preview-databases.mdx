@@ -1,0 +1,68 @@
+---
+title: Preview databases
+description: Give every pull request its own copy of your staging database.
+---
+import BranchGraph from "../../../components/diagrams/BranchGraph.astro";
+
+Give every pull request a copy of your staging database. Each preview gets real data to test with, and is deleted when you're done.
+
+<BranchGraph
+  end={10}
+  branches={[
+    { id: "staging", label: "staging", type: "database", tone: "accent" },
+    { id: "pr12", label: "pr-12", type: "copy", from: { branch: "staging", at: 2.5 }, until: 6.5 },
+    { id: "pr15", label: "pr-15", type: "copy", from: { branch: "staging", at: 5 } },
+  ]}
+  points={[
+    { branch: "pr12", at: 4.4, label: "PR's migrations" },
+    { branch: "pr12", at: 6.5, label: "PR closed", below: true },
+    { branch: "pr15", at: 7.6, label: "PR's migrations" },
+  ]}
+  caption="Each preview copies staging's database as it is when the PR deploys, runs the PR's own migrations on the copy, and is deleted with the PR. Staging never changes."
+/>
+
+## Read the stage
+
+```typescript
+import * as Alchemy from "alchemy";
+
+const { stage } = yield* Alchemy.Stack;
+const preview = stage.startsWith("pr-");
+```
+
+## Reuse staging's group
+
+```typescript
+const group = preview
+  ? yield* Turso.Group.ref("Group", { stage: "staging" })
+  : yield* Turso.Group("Group", { location: "aws-us-east-1" });
+```
+
+`Turso.Group.ref` uses the group from the `staging` stage. Previews never create or delete it.
+
+## Copy staging's database
+
+```typescript
+const source = preview ? yield* Turso.Database.ref("Db", { stage: "staging" }) : undefined;
+
+const db = yield* Turso.Database("Db", {
+  group: group.name,
+  seed: source ? { type: "database", name: source.name } : undefined,
+  migrations: "./migrations",
+});
+```
+
+Each preview gets its own copy of staging's database, then runs any new migrations from the pull request.
+
+## Tear it down
+
+```sh
+alchemy destroy --stage pr-42
+```
+
+This deletes the preview's database. Staging's group and database stay.
+
+## Where next
+
+- [Databases](/turso/databases#copy-another-database)
+- [Migrations](/turso/migrations)

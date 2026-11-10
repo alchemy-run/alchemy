@@ -1,5 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
@@ -296,18 +298,18 @@ export const make: (
 
       const url = server.resolvedUrls?.local[0];
       if (url === undefined) {
-        return yield* Effect.fail(fail("Could not determine the dev server URL"));
+        return yield* fail("Could not determine the dev server URL");
       }
 
       // Bounded readiness probe: any HTTP response counts (vite serves
       // lazily; we only need the listener to answer).
-      yield* Effect.tryPromise({
-        try: async () => {
-          const response = await fetch(url, { redirect: "manual" });
-          await response.arrayBuffer().catch(() => {});
-        },
-        catch: (error) => fail("The dev server did not become reachable", error),
-      }).pipe(Effect.retry({ schedule: Schedule.spaced("250 millis"), times: 40 }));
+      yield* HttpClient.get(url).pipe(
+        Effect.flatMap((response) => Effect.ignore(response.arrayBuffer)),
+        Effect.provide(FetchHttpClient.layer),
+        Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }),
+        Effect.mapError((error) => fail("The dev server did not become reachable", error)),
+        Effect.retry({ schedule: Schedule.spaced("250 millis"), times: 40 }),
+      );
 
       return { url };
     });
@@ -329,9 +331,7 @@ export const readViteOutput = (options: {
     const fs = yield* FileSystem.FileSystem;
     const exists = yield* Effect.orElseSucceed(fs.exists(options.outDir), () => false);
     if (!exists) {
-      return yield* Effect.fail(
-        fail(`The Vite build produced no output directory at ${options.outDir}`),
-      );
+      return yield* fail(`The Vite build produced no output directory at ${options.outDir}`);
     }
     return {
       distDirectory: options.outDir,

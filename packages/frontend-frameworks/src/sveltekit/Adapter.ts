@@ -384,6 +384,13 @@ export interface CloudflareDevPlatformOptions {
    * cannot serve.
    */
   readonly services?: unknown;
+  /** `cloudflare-runtime` `WorkerdOptions` for the proxy's workerd process. */
+  readonly workerd?: unknown;
+  /**
+   * Directory whose files the `ASSETS` binding in `bindings` serves (kit's
+   * static directory), as the deployed Worker's assets do.
+   */
+  readonly assetsDirectory?: string | undefined;
   /** Compatibility date for the binding-proxy workerd instance. */
   readonly compatibilityDate?: string | undefined;
   /** Compatibility flags for the binding-proxy workerd instance. */
@@ -413,6 +420,10 @@ export interface OpenDevPlatformProxyOptions {
   readonly bindings: ReadonlyArray<unknown>;
   /** See {@link CloudflareDevPlatformOptions.services}. */
   readonly services?: unknown;
+  /** See {@link CloudflareDevPlatformOptions.workerd}. */
+  readonly workerd?: unknown;
+  /** Static assets served to an `Assets.local` binding. */
+  readonly assets?: { readonly directory: string } | undefined;
 }
 
 export type OpenDevPlatformProxy = (
@@ -442,10 +453,14 @@ const openPlatformProxy: OpenDevPlatformProxy = async (options) => {
       ? { compatibilityFlags: [...options.compatibilityFlags] }
       : undefined),
     bindings: options.bindings as BindingHooks,
+    ...(options.assets !== undefined ? { assets: { ...options.assets } } : undefined),
     ...(options.services !== undefined
       ? {
           services: options.services as Parameters<typeof getPlatformProxy>[0]["services"],
         }
+      : undefined),
+    ...(options.workerd !== undefined
+      ? { workerd: options.workerd as Parameters<typeof getPlatformProxy>[0]["workerd"] }
       : undefined),
   });
 };
@@ -499,6 +514,10 @@ export const makeDevPlatformEmulator = (
       compatibilityFlags: options.compatibilityFlags,
       bindings: options.bindings ?? [],
       services: options.services,
+      workerd: options.workerd,
+      ...(options.assetsDirectory !== undefined
+        ? { assets: { directory: options.assetsDirectory } }
+        : undefined),
     }));
   return {
     platform: async ({ prerender }) => {

@@ -2,11 +2,12 @@
 title: Blue/green deployments
 description: Deploy a new version, check it before serving traffic, and give the old version time to finish work.
 ---
+import Timeline from "../../../../components/diagrams/Timeline.astro";
 
 Use blue/green when you want to start a checked replacement before stopping your running Service. Add the deployment policy to your application:
 
 ```typescript title="api.ts"
-import * as Fly from "alchemy/Fly";
+import * as Fly from "@alchemy.run/fly";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
@@ -23,6 +24,23 @@ export default class Api extends Fly.Service<Api>()(
 ```
 
 You still declare one Service. Alchemy creates the temporary replacement Machines during each rollout.
+
+<Timeline
+  end={10}
+  lanes={[
+    { id: "blue", label: "blue", type: "current Machines" },
+    { id: "green", label: "green", type: "replacement Machines" },
+  ]}
+  bars={[
+    { lane: "blue", start: 0, end: 6.4, label: "serving traffic" },
+    { lane: "blue", start: 6.4, end: 7.6, label: "stopping", tone: "muted" },
+    { lane: "green", start: 2, end: 3.6, label: "starting", tone: "warn" },
+    { lane: "green", start: 3.6, end: 6.4, label: "health checks" , tone: "default" },
+    { lane: "green", start: 6.4, end: 10, label: "serving traffic" },
+  ]}
+  marks={[{ at: 2, label: "deploy" }, { at: 6.4, label: "checks pass: promote" }]}
+  caption="The old Machines keep serving while the new ones start and pass their checks. Only then does traffic move, and the old Machines stop. A failed check leaves blue serving."
+/>
 
 ## Deploy named containers as a group
 
@@ -70,7 +88,7 @@ Return the Service URL for your clients:
 
 ```typescript title="alchemy.run.ts"
 import * as Alchemy from "alchemy";
-import * as Fly from "alchemy/Fly";
+import * as Fly from "@alchemy.run/fly";
 import * as Effect from "effect/Effect";
 import Api from "./api.ts";
 
@@ -206,7 +224,7 @@ For jobs, [register your queue worker's cleanup](#close-your-queue-worker-on-shu
 Keep queue processing in `run` and expose a private readiness endpoint through `fetch`. This BullMQ example returns HTTP 503 until its initial Redis connection is ready:
 
 ```typescript title="jobs-service.ts"
-import * as Fly from "alchemy/Fly";
+import * as Fly from "@alchemy.run/fly";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";

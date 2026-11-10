@@ -42,7 +42,7 @@ No Alchemy plugin is required in `vite.config.ts`; deployment settings belong on
 
 ```typescript
 // alchemy.run.ts
-import * as Hetzner from "alchemy/Hetzner";
+import * as Hetzner from "@alchemy.run/hetzner";
 
 export const Website = Hetzner.Website.Vinext("Website", {
   rootDir: ".",
@@ -105,9 +105,7 @@ The Website does not install or provision Redis. Protect credentials with
 
 ## Local development
 
-```sh
-bun alchemy dev
-```
+<PackageManagers run="alchemy dev" />
 
 The Website runs `vinext dev` with native HMR and creates no cloud resources.
 Other resources declared in the Stack retain their own provider behavior.

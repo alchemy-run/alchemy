@@ -65,7 +65,7 @@ export const createAssetsIgnoreFunction = Effect.fn(function* (dir: string) {
   const assetsIgnore = yield* fs.readFileString(cfAssetIgnorePath).pipe(
     Effect.catchIf(
       (error) => error.reason._tag === "NotFound",
-      () => Effect.succeed(undefined),
+      () => Effect.undefined,
     ),
   );
   if (assetsIgnore !== undefined) {

@@ -75,9 +75,7 @@ const unifiedDriftLines = (
   ];
 };
 
-const mark = (marker: "-" | "+") => (line: string) => {
-  return `${marker} ${line}`;
-};
+const mark = (marker: "-" | "+") => (line: string) => `${marker} ${line}`;
 
 export interface YamlChangeMatch {
   readonly marker: "-" | "+";

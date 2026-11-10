@@ -1,0 +1,4 @@
+{
+  "ok": false,
+  "error": "dockerfile parse error on line 2: device name already set to /dev/x"
+}

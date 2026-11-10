@@ -4,9 +4,10 @@ description: Serve Workers from your own domain — create or adopt a Zone, atta
 sidebar:
   order: 0
 ---
+import Fanout from "../../../../components/diagrams/Fanout.astro";
 
 Every Worker gets a `workers.dev` URL by default, but production apps
-live on their own domain. This guide covers the pieces involved: the
+live on their own domain. That takes a few pieces: the
 Zone that holds your domain, the `domain` prop that attaches hostnames
 to a Worker, Routes for pattern-based dispatch, plain DNS records, and
 the account's `workers.dev` subdomain.
@@ -16,7 +17,7 @@ All the snippets below run inside a Stack's `Effect.gen` body:
 ```typescript
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 
 export default Alchemy.Stack(
@@ -28,6 +29,17 @@ export default Alchemy.Stack(
   }),
 );
 ```
+
+<Fanout
+  item={{ title: "request", lines: ["GET https://api.example.com/v1/users"] }}
+  group="example.com · zone"
+  routes={[
+    { label: "custom domain", condition: ["api.example.com"], target: { label: "Api", type: "Worker" } },
+    { label: "route", condition: ["shop.example.com/*"], target: { label: "Shop", type: "Worker" }, match: false },
+    { label: "DNS record", condition: ["app.example.com → origin"], target: { label: "your server", type: "proxied origin" }, match: false },
+  ]}
+  caption="Every request to the zone arrives at Cloudflare first. A custom domain or a route decides which Worker answers it, and a hostname with neither goes to its DNS record's origin."
+/>
 
 ## Create a Zone
 
@@ -117,6 +129,34 @@ of this Worker are served at `<preview-name>.api.example.com`. That is
 a parent setting — enable it on the production Worker, not on the
 Preview Worker. Use a dedicated hostname (`previews.example.com`) if
 production already has subdomains, so the wildcard does not collide.
+
+## Serve a hostname whose DNS is elsewhere
+
+A native custom domain needs the hostname in a Cloudflare zone of the
+account. When the hostname's DNS lives in Route 53 or Hetzner DNS, pass
+that host as `domain.dns`. The Worker then serves the hostname through
+[Cloudflare for SaaS](https://developers.cloudflare.com/cloudflare-for-platforms/cloudflare-for-saas/start/advanced-settings/worker-as-origin/)
+on a Cloudflare zone you own:
+
+```typescript
+const worker = yield* Cloudflare.Worker("Api", {
+  main: "./src/api.ts",
+  domain: {
+    name: "app.example.com",
+    zoneId: saasZone.zoneId, // a Cloudflare zone with Cloudflare for SaaS enabled
+    cnameTarget: fallback.origin, // the zone's FallbackOrigin hostname
+    dns: AWS.Route53.Adapter(),
+  },
+});
+```
+
+Alchemy creates a custom hostname on the SaaS zone, publishes its
+ownership and certificate `TXT` records and a `CNAME` to `cnameTarget` in
+Route 53, and routes `app.example.com/*` on the SaaS zone to the Worker.
+Declare the zone's `Cloudflare.CustomHostname.FallbackOrigin` once; several
+Workers can share it. `redirects` and `previews` need a native custom
+domain. See [DNS Adapters](/infrastructure-as-code/dns-adapters) for the
+full setup.
 
 ## Route a hostname pattern to a Worker
 
@@ -222,10 +262,14 @@ yield* Cloudflare.DNS.Record("AdminCname", {
 ```
 
 DNS records get the same adoption safety as routes: if a record with
-the same `(name, type)` already exists in the zone, Alchemy reports it
-as unowned and requires `adopt(true)` to take it over. This protects
-hand-edited records — especially apex `A`/`AAAA` and email
-DKIM/SPF records the dashboard often manages — from being clobbered.
+the same name, type and `content` (and `priority`, for MX and URI)
+already exists in the zone, Alchemy reports it as unowned and
+requires `adopt(true)` to take it over. A record with different
+content is left alone, and a new one is created beside it; only a
+CNAME, which a name holds just one of, is adopted whatever it points
+at. This protects hand-edited records — especially apex `A`/`AAAA`
+and email DKIM/SPF records the dashboard often manages — from being
+clobbered.
 
 ## Disable Workers on a path
 

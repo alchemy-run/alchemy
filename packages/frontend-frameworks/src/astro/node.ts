@@ -171,8 +171,8 @@ const makeNodeAdapterTarget = (config: AstroNodeConfig = {}): AstroNodeTarget =>
         const path = yield* Path.Path;
         if (buildOutput === "static") {
           if (output.clientDirectory === undefined) {
-            return yield* Effect.fail(
-              fail("The Astro static build produced no client directory for the Node serve entry"),
+            return yield* fail(
+              "The Astro static build produced no client directory for the Node serve entry",
             );
           }
           const servePath = path.join(output.clientDirectory, NODE_SERVE_ENTRY_FILE_NAME);
@@ -187,8 +187,8 @@ const makeNodeAdapterTarget = (config: AstroNodeConfig = {}): AstroNodeTarget =>
           });
         }
         if (output.distDirectory === undefined || output.clientDirectory === undefined) {
-          return yield* Effect.fail(
-            fail("The Astro build produced no dist/client directories for the Node serve entry"),
+          return yield* fail(
+            "The Astro build produced no dist/client directories for the Node serve entry",
           );
         }
         const entryName = serverEntryName ?? "entry.mjs";

@@ -7,8 +7,7 @@ Providers are Effect `Layer`s — adding support for a new cloud or
 third-party API is "declare a type, implement a Layer". See
 [Providers](/infrastructure-as-code/provider) for the operation contract.
 
-This guide walks through building a Stripe `Product` provider
-end-to-end: declaring props and attributes, defining the resource
+Take a Stripe `Product` provider, built end to end: declaring props and attributes, defining the resource
 type, implementing the lifecycle (`reconcile`, `delete`, `diff`,
 `read`), bundling it into a `providers()` layer, and writing a
 test.
@@ -464,6 +463,42 @@ return StripeProduct.Provider.of({
 Resources with no enumeration API (singletons, existence-only
 resources) keep the `Effect.succeed([])` stub instead.
 
+## Implement `lookup` (optional)
+
+`lookup` lets users bind a product they created outside Alchemy:
+`StripeProduct.lookup({ productId })`. Declare what it takes as the
+Resource type's sixth parameter:
+
+```diff lang="typescript"
+export type StripeProduct = Resource<
+  "Stripe.Product",
+  StripeProductProps,
+-  StripeProductAttributes
++  StripeProductAttributes,
++  never,
++  undefined,
++  { productId: string }
+>;
+```
+
+Then return the product's attributes, or `undefined` when there is no
+such product (see [Providers › lookup](/infrastructure-as-code/provider#lookup)):
+
+```diff lang="typescript"
+return StripeProduct.Provider.of({
+  stables: ["productId"],
++  lookup: Effect.fn(function* ({ productId }) {
++    const { apiKey } = yield* yield* StripeCredentials;
++    const stripe = new Stripe(Redacted.value(apiKey));
++    const product = yield* Effect.tryPromise(() =>
++      stripe.products.retrieve(productId),
++    ).pipe(Effect.catch(() => Effect.undefined));
++    return product ? { productId: product.id, created: product.created } : undefined;
++  }),
+  // ...
+});
+```
+
 ## Bundle into a `providers()` layer
 
 Users expect the same one-line ergonomics as the built-ins
@@ -542,7 +577,7 @@ providers: Layer.mergeAll(Cloudflare.providers(), Stripe.providers()),
 
 Full `test.provider` reference and patterns: [Testing Providers](/testing/testing-providers).
 
-Alchemy's test harness (`alchemy/Test/Vitest` or `alchemy/Test/Bun`)
+Alchemy's test harness (`@alchemy.run/test/Vitest` or `@alchemy.run/test/Bun`)
 configures providers + state once at the top of the file, then
 exposes `test.provider(name, (stack) => ...)` for provider-level
 tests. Each `test.provider` body receives a fresh in-memory scratch
@@ -562,7 +597,7 @@ Create `test/Product.test.ts`:
 
 ```typescript
 // test/Product.test.ts
-import * as Test from "alchemy/Test/Vitest";
+import * as Test from "@alchemy.run/test/Vitest";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import Stripe from "stripe";
@@ -623,8 +658,8 @@ field your `diff` flags as `replace`) and assert that
 
 If you'd rather start from a real provider:
 
-- [`Axiom/VirtualField.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/Axiom/VirtualField.ts) — minimal CRUD with `diff` and `read`
-- [`Cloudflare/R2/Bucket.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/alchemy/src/Cloudflare/R2/Bucket.ts) — production provider with bindings and replace semantics
+- [`Axiom/VirtualField.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/axiom/src/VirtualField.ts) — minimal CRUD with `diff` and `read`
+- [`Cloudflare/R2/Bucket.ts`](https://github.com/alchemy-run/alchemy/blob/main/packages/cloudflare/src/R2/Bucket.ts) — production provider with bindings and replace semantics
 
 ## Where next
 
@@ -632,7 +667,7 @@ If you'd rather start from a real provider:
   resource a second, dev-mode implementation that emulates it locally
   (`ProviderLayer.dual`, `LocalProvider.make`).
 - [Custom Auth Provider](/environments/custom-auth-provider) — build
-  the `StripeCredentials` service and login flow this guide
+  the `StripeCredentials` service and login flow the provider
   consumes.
 - [Auth Providers](/environments/auth-providers) — how credentials
   resolve: lazy Effects, Profiles, auto-refresh.

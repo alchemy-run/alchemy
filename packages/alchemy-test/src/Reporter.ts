@@ -12,7 +12,7 @@ export type TestStatus = "pass" | "fail" | "skip" | "todo";
 export interface TestMeta {
   readonly tags: ReadonlyArray<string>;
   readonly optInTags: ReadonlyArray<string>;
-  /** Stable id: `<file> > <describe chain> > <name>`. */
+  /** Unique test identity, stable across retries; use titlePath for display. */
   readonly id: string;
   readonly file: string;
   readonly titlePath: ReadonlyArray<string>;
@@ -122,6 +122,14 @@ export type TestEvent =
       readonly test: TestMeta;
       /** LIVE reference to the test's captured-output buffer (see FileStart). */
       readonly logs?: ReadonlyArray<LogEntry>;
+    }
+  | {
+      /**
+       * The test holds its run lock (`exclusive`) and starts executing. Until
+       * then it is queued: an exclusive test can wait out a busy phase.
+       */
+      readonly _tag: "TestLocked";
+      readonly test: TestMeta;
     }
   | {
       readonly _tag: "TestEnd";

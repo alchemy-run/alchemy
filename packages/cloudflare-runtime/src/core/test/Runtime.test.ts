@@ -1,3 +1,4 @@
+import * as NodeHttp from "node:http";
 import { expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -139,6 +140,220 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime", (it) => {
         );
         expect(captured).toContain("kaboom-marker");
       }),
+    { timeout: 30_000 },
+  );
+
+  // Bun's HTTP parser keeps only the last of repeated header lines, so the
+  // runtime sends each repeated header as one comma-joined line.
+  it.effect(
+    "sends repeated response headers as one line, keeping Set-Cookie lines",
+    () =>
+      Effect.gen(function* () {
+        const runtime = yield* Runtime.Runtime;
+        const url = yield* runtime.start({
+          name: "repeated-headers",
+          compatibilityDate: "2026-03-10",
+          compatibilityFlags: [],
+          bindings: [],
+          modules: [
+            {
+              name: "main.js",
+              type: "ESModule",
+              content: `export default {
+  fetch() {
+    const response = new Response("ok");
+    for (const value of ["one", "two", "three"]) response.headers.append("x-multi", value);
+    response.headers.append("set-cookie", "a=1");
+    response.headers.append("set-cookie", "b=2");
+    return response;
+  }
+};`,
+            },
+          ],
+        });
+        const rawHeaders = yield* Effect.promise(
+          () =>
+            new Promise<Array<string>>((resolve, reject) =>
+              NodeHttp.get(url, (res) => {
+                res.resume();
+                resolve(res.rawHeaders);
+              }).on("error", reject),
+            ),
+        );
+        const lines = (name: string) =>
+          rawHeaders.flatMap((value, index) =>
+            index % 2 === 1 && rawHeaders[index - 1]!.toLowerCase() === name ? [value] : [],
+          );
+        expect(lines("x-multi")).toEqual(["one, two, three"]);
+        expect(lines("set-cookie")).toEqual(["a=1", "b=2"]);
+      }),
+    { timeout: 30_000 },
+  );
+
+  // The outbound interceptor drops `CF-Connecting-IP`. Unlike Miniflare it
+  // adds no `CF-Worker`: Cloudflare-fronted sites answer 403 to one sent
+  // from a developer machine (#2965).
+  it.effect(
+    "outbound fetches drop CF-Connecting-IP and add no CF-Worker",
+    () =>
+      Effect.gen(function* () {
+        const seen: Array<{ cfWorker?: string; connectingIp?: string }> = [];
+        // Only the Worker's own requests count: local tools (T3 Code, VS Code
+        // port detection) probe fresh localhost servers with `GET /`.
+        const echo = NodeHttp.createServer((req, res) => {
+          if (req.url === "/echo") {
+            seen.push({
+              cfWorker: req.headers["cf-worker"] as string | undefined,
+              connectingIp: req.headers["cf-connecting-ip"] as string | undefined,
+            });
+          }
+          res.end("ok");
+        });
+        yield* Effect.acquireRelease(
+          Effect.promise(
+            () => new Promise<void>((resolve) => echo.listen(0, "127.0.0.1", resolve)),
+          ),
+          () => Effect.promise(() => new Promise<void>((resolve) => echo.close(() => resolve()))),
+        );
+        const target = `http://127.0.0.1:${(echo.address() as { port: number }).port}/echo`;
+        const runtime = yield* Runtime.Runtime;
+        const url = yield* runtime.start({
+          name: "outbound",
+          compatibilityDate: "2026-03-10",
+          compatibilityFlags: [],
+          bindings: [],
+          modules: [
+            {
+              name: "main.js",
+              type: "ESModule",
+              content: `export default {
+  fetch: (request) =>
+    new URL(request.url).pathname === "/outbound"
+      ? fetch(${JSON.stringify(target)}, { headers: { "CF-Connecting-IP": "1.2.3.4" } })
+      : new Response("Not Found", { status: 404 }),
+};`,
+            },
+          ],
+        });
+        yield* Effect.promise(() => fetch(new URL("/outbound", url)).then((r) => r.text()));
+        expect(seen).toEqual([{ cfWorker: undefined, connectingIp: undefined }]);
+      }).pipe(Effect.scoped),
+    { timeout: 30_000 },
+  );
+
+  // Wrangler's `access.dev`: `ctx.access` carries the simulated audience and
+  // `getIdentity()` the identity; a client can't forge the access blob.
+  it.effect(
+    "simulates Cloudflare Access on ctx.access",
+    () =>
+      Effect.gen(function* () {
+        const runtime = yield* Runtime.Runtime;
+        const start = (
+          name: string,
+          access?: { aud?: string; identity?: Record<string, unknown> },
+        ) =>
+          runtime.start({
+            name,
+            access,
+            compatibilityDate: "2026-03-10",
+            compatibilityFlags: [],
+            bindings: [],
+            modules: [
+              {
+                name: "main.js",
+                type: "ESModule",
+                content: `export default {
+  async fetch(request, env, ctx) {
+    return Response.json({ aud: ctx.access?.aud ?? null, identity: (await ctx.access?.getIdentity()) ?? null });
+  },
+};`,
+              },
+            ],
+          });
+        const forged = { "MF-Access-Blob": JSON.stringify({ app_aud: "forged" }) };
+        const authed = yield* start("access-authed", {
+          aud: "test-aud",
+          identity: { email: "dev@example.com" },
+        });
+        expect(
+          yield* Effect.promise(() => fetch(authed, { headers: forged }).then((r) => r.json())),
+        ).toEqual({ aud: "test-aud", identity: { email: "dev@example.com" } });
+        const anonymous = yield* start("access-anonymous");
+        expect(
+          yield* Effect.promise(() => fetch(anonymous, { headers: forged }).then((r) => r.json())),
+        ).toEqual({ aud: null, identity: null });
+      }).pipe(Effect.scoped),
+    { timeout: 30_000 },
+  );
+
+  // Miniflare's `cf.image` mock: the interceptor fetches the origin image and
+  // transforms it with Sharp.
+  it.effect(
+    "transforms cf.image fetches locally with Sharp",
+    () =>
+      Effect.gen(function* () {
+        const { default: sharp } = yield* Effect.promise(() => import("sharp"));
+        const png = yield* Effect.promise(() =>
+          sharp({
+            create: {
+              width: 8,
+              height: 4,
+              channels: 4,
+              background: { r: 255, g: 0, b: 0, alpha: 1 },
+            },
+          })
+            .png()
+            .toBuffer(),
+        );
+        const via: Array<string | undefined> = [];
+        // Only the Worker's own requests count: local tools (T3 Code, VS Code
+        // port detection) probe fresh localhost servers with `GET /`.
+        const origin = NodeHttp.createServer((req, res) => {
+          if (req.url === "/image.png") via.push(req.headers.via as string | undefined);
+          res.setHeader("content-type", "image/png");
+          res.end(png);
+        });
+        yield* Effect.acquireRelease(
+          Effect.promise(
+            () => new Promise<void>((resolve) => origin.listen(0, "127.0.0.1", resolve)),
+          ),
+          () => Effect.promise(() => new Promise<void>((resolve) => origin.close(() => resolve()))),
+        );
+        const target = `http://127.0.0.1:${(origin.address() as { port: number }).port}/image.png`;
+        const runtime = yield* Runtime.Runtime;
+        const url = yield* runtime.start({
+          name: "cf-image",
+          compatibilityDate: "2026-03-10",
+          compatibilityFlags: [],
+          bindings: [],
+          modules: [
+            {
+              name: "main.js",
+              type: "ESModule",
+              content: `export default {
+  fetch: (request) =>
+    new URL(request.url).pathname === "/image"
+      ? fetch(${JSON.stringify(target)}, { cf: { image: { width: 4, format: "png" } } })
+      : new Response("Not Found", { status: 404 }),
+};`,
+            },
+          ],
+        });
+        const response = yield* Effect.promise(() => fetch(new URL("/image", url)));
+        const body = Buffer.from(yield* Effect.promise(() => response.arrayBuffer()));
+        const metadata = yield* Effect.promise(() => sharp(body).metadata());
+        expect({
+          status: response.status,
+          resized: response.headers.get("cf-resized"),
+          size: [metadata.width, metadata.height],
+          via,
+        }).toEqual({
+          status: 200,
+          resized: "internal=ok/m",
+          size: [4, 2],
+          via: ["image-resizing"],
+        });
+      }).pipe(Effect.scoped),
     { timeout: 30_000 },
   );
 });

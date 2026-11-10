@@ -1,0 +1,11 @@
+{
+	"name": "vue-app",
+	"compatibility_date": "2025-10-08",
+	"main": "server/index.ts",
+	"assets": {
+		"not_found_handling": "single-page-application",
+	},
+	"observability": {
+		"enabled": true
+	}
+}

@@ -1,13 +1,13 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { expect, it } from "alchemy-test";
+import { expect, it } from "@alchemy.run/test";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const cli = resolve(here, "../bin/alchemy-test.ts");
 const apiUrl = pathToFileURL(resolve(here, "../src/index.ts")).href;
-const effectUrl = pathToFileURL(resolve(here, "../../../node_modules/effect/dist/Effect.js")).href;
+const effectUrl = import.meta.resolve("effect/Effect");
 
 it(
   "excludes exclusive-lock queue time from test durations",
@@ -45,6 +45,207 @@ it(
       const duration = `${stdout}\n${stderr}`.match(/queued exclusive \((\d+)ms\)/);
       expect(duration).not.toBeNull();
       expect(Number(duration![1])).toBeLessThan(250);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+  { tags: ["unit", "local"] },
+);
+
+it(
+  "later tests overtake a waiting exclusive test, which then runs alone",
+  async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "alchemy-test-exclusive-"));
+    try {
+      await writeFile(
+        resolve(root, "exclusive.test.ts"),
+        `
+        import { describe, it, expect } from ${JSON.stringify(apiUrl)};
+        describe.concurrent("exclusive", () => {
+          let running = 0;
+          let laterStarted = false;
+          it("holder", async () => {
+            running++;
+            await new Promise(resolve => setTimeout(resolve, 300));
+            running--;
+          });
+          it("waiting exclusive", () => {
+            expect(laterStarted).toBe(true);
+            expect(running).toBe(0);
+          }, { exclusive: true });
+          it("later", async () => {
+            running++;
+            laterStarted = true;
+            await new Promise(resolve => setTimeout(resolve, 300));
+            running--;
+          });
+        });
+        `,
+      );
+      const child = Bun.spawn([process.execPath, cli, root, "--retry", "0"], {
+        cwd: root,
+        stdout: "pipe",
+        stderr: "pipe",
+        env: { ...process.env, NO_COLOR: "1" },
+      });
+      const [exitCode, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      expect(`${stdout}\n${stderr}`).toContain("3 passed");
+      expect(exitCode).toBe(0);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+  { tags: ["unit", "local"] },
+);
+
+it(
+  "exclusive labels serialize holders of the same label and nothing else",
+  async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "alchemy-test-labels-"));
+    try {
+      await writeFile(
+        resolve(root, "labels.test.ts"),
+        `
+        import { describe, it, expect } from ${JSON.stringify(apiUrl)};
+        const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+        describe.concurrent("labels", () => {
+          let activeA = 0;
+          const holdA = async () => {
+            activeA++;
+            expect(activeA).toBe(1);
+            await sleep(200);
+            activeA--;
+          };
+          it("a1", holdA, { exclusive: "a" });
+          it("a2", holdA, { exclusive: "a" });
+          it("b", async () => {
+            await sleep(50);
+            expect(activeA).toBe(1);
+          }, { exclusive: "b" });
+          it("unlabeled", async () => {
+            await sleep(50);
+            expect(activeA).toBe(1);
+          });
+        });
+        `,
+      );
+      const child = Bun.spawn([process.execPath, cli, root, "--retry", "0"], {
+        cwd: root,
+        stdout: "pipe",
+        stderr: "pipe",
+        env: { ...process.env, NO_COLOR: "1" },
+      });
+      const [exitCode, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      expect(`${stdout}\n${stderr}`).toContain("4 passed");
+      expect(exitCode).toBe(0);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+  { tags: ["unit", "local"] },
+);
+
+it(
+  "a limit caps holders of its label across files without charging queue time to timeouts",
+  async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "alchemy-test-limits-"));
+    try {
+      // Three files, twelve 150ms tests, two permits: the queue takes about
+      // 900ms, longer than each test's 400ms timeout.
+      for (const file of ["a", "b", "c"]) {
+        await writeFile(
+          resolve(root, `${file}.test.ts`),
+          `
+          import { describe, it, expect } from ${JSON.stringify(apiUrl)};
+          const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+          const counter = ((globalThis as any).__limitCounter ??= { active: 0, peak: 0 });
+          describe.concurrent(${JSON.stringify(file)}, () => {
+            for (const n of [1, 2, 3, 4]) {
+              it(${JSON.stringify(file)} + n, async () => {
+                counter.active++;
+                counter.peak = Math.max(counter.peak, counter.active);
+                expect(counter.active).toBeLessThanOrEqual(2);
+                await sleep(150);
+                counter.active--;
+              }, { exclusive: { label: "api", permits: 2 }, timeout: 400 });
+            }
+            it(${JSON.stringify(file)} + " unlimited", async () => {
+              await sleep(10);
+            });
+          });
+          `,
+        );
+      }
+      await writeFile(
+        resolve(root, "z.test.ts"),
+        `
+        import { it, expect } from ${JSON.stringify(apiUrl)};
+        it("peak", async () => {
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          expect((globalThis as any).__limitCounter?.peak).toBe(2);
+        }, { timeout: 5000 });
+        `,
+      );
+      const child = Bun.spawn([process.execPath, cli, root, "--retry", "0"], {
+        cwd: root,
+        stdout: "pipe",
+        stderr: "pipe",
+        env: { ...process.env, NO_COLOR: "1" },
+      });
+      const [exitCode, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      expect(`${stdout}\n${stderr}`).toContain("16 passed");
+      expect(exitCode).toBe(0);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+  { tags: ["unit", "local"] },
+);
+
+it(
+  "a retried attempt's error stays in the run log when the retry passes",
+  async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "alchemy-test-retry-log-"));
+    try {
+      await writeFile(
+        resolve(root, "retry.test.ts"),
+        `
+        import { it } from ${JSON.stringify(apiUrl)};
+        let attempts = 0;
+        it("flaky", () => {
+          if (++attempts === 1) throw new Error("first-attempt-marker");
+        }, { retry: 1 });
+        `,
+      );
+      const child = Bun.spawn([process.execPath, cli, root], {
+        cwd: root,
+        stdout: "pipe",
+        stderr: "pipe",
+        env: { ...process.env, NO_COLOR: "1" },
+      });
+      const [exitCode, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      expect(exitCode).toBe(0);
+      const logFile = `${stdout}\n${stderr}`.match(/Full log: (\S+\.log)/)?.[1];
+      expect(logFile).toBeDefined();
+      const log = await readFile(logFile!, "utf8");
+      expect(log).toContain("attempt 1 failed, retrying");
+      expect(log).toContain("first-attempt-marker");
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -477,6 +678,78 @@ it(
     `,
       );
       expect(await run([])).toContain("0 passed");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+  { tags: ["unit", "local"], timeout: 90_000 },
+);
+
+it(
+  "fails and abandons test bodies, retries and hooks that outlive their timeout",
+  async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "alchemy-test-deadline-"));
+    const header = `
+      import { describe, it, registerHook } from ${JSON.stringify(apiUrl)};
+      import * as Effect from ${JSON.stringify(effectUrl)};
+      const hang = () => Effect.uninterruptible(Effect.never);
+    `;
+    const hookFixture = (kind: string, timeout = ", timeout: 300") => `${header}
+      describe(${JSON.stringify(kind)}, () => {
+        registerHook(${JSON.stringify(kind)}, { body: hang${timeout} });
+        it("body", () => {});
+      });
+    `;
+    try {
+      await Promise.all([
+        writeFile(
+          resolve(root, "body.test.ts"),
+          `${header}
+          it.effect("uninterruptible body", hang, { timeout: 300 });
+          it("never-resolving promise body", () => new Promise(() => {}), { timeout: 300 });
+          it.effect("hung finalizer body", () =>
+            Effect.addFinalizer(() => Effect.never).pipe(Effect.andThen(Effect.never)),
+            { timeout: 300 });
+          it.effect("retried uninterruptible body", hang, { timeout: 300, retry: 2 });
+          `,
+        ),
+        writeFile(resolve(root, "before-all.test.ts"), hookFixture("beforeAll")),
+        writeFile(resolve(root, "before-each.test.ts"), hookFixture("beforeEach")),
+        writeFile(resolve(root, "after-each.test.ts"), hookFixture("afterEach")),
+        // No hook timeout: falls back to the run's --timeout.
+        writeFile(resolve(root, "after-all.test.ts"), hookFixture("afterAll", "")),
+      ]);
+
+      const started = Date.now();
+      const child = Bun.spawn([process.execPath, cli, root, "--retry", "0", "--timeout", "300"], {
+        cwd: root,
+        stdout: "pipe",
+        stderr: "pipe",
+        env: { ...process.env, NO_COLOR: "1", ALCHEMY_TEST_TEARDOWN_GRACE_MS: "500" },
+        // A regression hangs forever; kill it so the assertion fails instead.
+        timeout: 60_000,
+        killSignal: "SIGKILL",
+      });
+      const [exitCode, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      const elapsed = Date.now() - started;
+      const output = `${stdout}\n${stderr}`;
+
+      expect(exitCode).toBe(1);
+      const abandoned = "(teardown did not settle within 500ms and was abandoned)";
+      expect(output).toContain(`test timed out after 300ms ${abandoned}`);
+      expect(output).toContain("test timed out after 300ms\n");
+      expect(output).toContain(`hook timed out after 300ms ${abandoned}`);
+      for (const hook of ["beforeAll", "beforeEach", "afterEach", "afterAll"]) {
+        expect(output).toContain(`${hook} hook failed:`);
+      }
+      expect(output).toMatch(/retried uninterruptible body \([\d.]+m?s\) \[retried x2\]/);
+      expect(output).toContain("Tests: 8 failed | 1 passed");
+      // Every hang is bounded by (timeout + grace) per attempt.
+      expect(elapsed).toBeLessThan(30_000);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

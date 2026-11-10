@@ -2,6 +2,7 @@
 title: Shared database across stages
 description: Have ephemeral PR-preview stages reference a long-lived Neon or PlanetScale database from a staging stage instead of provisioning their own — fast previews, copy-on-write branches, no extra clusters.
 ---
+import Tree from "../../../../components/diagrams/Tree.astro";
 
 [Stages](/environments/stages) make it cheap to spin up isolated copies
 of a stack — per-developer, `pr-42`, `prod`. Most resources should
@@ -9,6 +10,19 @@ be isolated. But some — a Neon Postgres project, a shared S3
 bucket, a global rate limiter — are too expensive or too stateful
 to re-provision per stage. PR-preview stages should *point at* the
 shared instance instead.
+
+<Tree
+  nodes={[
+    { id: "stack", label: "my-app", type: "stack" },
+    { id: "staging", label: "staging", type: "stage", parent: "stack" },
+    { id: "db", label: "app-db", type: "Neon project · created here", parent: "staging", tone: "accent" },
+    { id: "w1", label: "Api", type: "Worker", parent: "staging" },
+    { id: "pr", label: "pr-42", type: "stage", parent: "stack" },
+    { id: "ref", label: "app-db", type: 'ref("app-db", { stage: "staging" })', parent: "pr", tone: "muted" },
+    { id: "w2", label: "Api", type: "Worker", parent: "pr" },
+  ]}
+  caption="The staging stage owns the database. pr-42 deploys its own Worker but only references staging's database, so destroying the PR stage leaves it alone."
+/>
 
 `Resource.ref(id, { stage })` reads a deployed resource's
 attributes from another stage of the same stack — typed, lazy,
@@ -29,8 +43,8 @@ project — wasteful for short-lived PR previews:
 ```typescript
 // src/Db.ts
 import * as Alchemy from "alchemy";
-import * as Drizzle from "alchemy/Drizzle";
-import * as Neon from "alchemy/Neon";
+import * as Drizzle from "@alchemy.run/drizzle";
+import * as Neon from "@alchemy.run/neon";
 import * as Effect from "effect/Effect";
 
 export const NeonDb = Effect.gen(function* () {
@@ -137,8 +151,8 @@ copy-on-write and free; projects aren't.
 ```typescript
 // src/Db.ts
 import * as Alchemy from "alchemy";
-import * as Drizzle from "alchemy/Drizzle";
-import * as Neon from "alchemy/Neon";
+import * as Drizzle from "@alchemy.run/drizzle";
+import * as Neon from "@alchemy.run/neon";
 import * as Effect from "effect/Effect";
 
 export const NeonDb = Effect.gen(function* () {
@@ -259,4 +273,4 @@ in what shape they return.
 - [Monorepos](/project-structure/monorepo) — whole-stack references via
   typed `Stack` handles.
 - [Neon](/neon) and [PlanetScale](/planetscale) — the two database
-  providers used in this guide.
+  providers in these examples.

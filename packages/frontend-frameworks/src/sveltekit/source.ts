@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
  * SvelteKit projects.
  *
  * The default export satisfies alchemy's `WorkerSourceModule` contract
- * (`packages/alchemy/src/Cloudflare/Workers/Source.ts`) **structurally**:
+ * (`packages/cloudflare/src/Workers/Source.ts`) **structurally**:
  * the `Source*` shapes below mirror alchemy's `SourceProvider` /
  * `SourceContext` / `SourceBuildOutput` interfaces rather than importing
  * them, so this package carries no dependency on alchemy. Version skew
@@ -41,7 +41,7 @@ import type { PlatformError } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
 import type * as Scope from "effect/Scope";
 import { glob } from "tinyglobby";
-import { runBuildChild } from "../core/BuildChild.ts";
+import { resolveBuildEnv, runBuildChild } from "../core/BuildChild.ts";
 import { makeCloudflareTarget } from "./cloudflare.ts";
 import {
   make as makeSvelteKit,
@@ -53,7 +53,7 @@ const PROVIDER = "@alchemy.run/frontend-frameworks/sveltekit/source";
 
 // ─────────────────────────────────────────────────────────────────────
 // Structural mirror of alchemy's Worker source contract
-// (packages/alchemy/src/Cloudflare/Workers/Source.ts). Do not import
+// (packages/cloudflare/src/Workers/Source.ts). Do not import
 // alchemy here — the contract is structural by design.
 // ─────────────────────────────────────────────────────────────────────
 
@@ -118,6 +118,8 @@ export interface SourceDevContext extends SourceContext {
   readonly worker: {
     readonly name: string;
     readonly bindings: ReadonlyArray<unknown>;
+    /** The Worker's runtime settings; `workerd` reaches the dev platform proxy. */
+    readonly options: { readonly workerd?: unknown };
   };
   /**
    * The host's pre-built `Context<RuntimeServices>` (opaque here). Handed
@@ -154,6 +156,7 @@ type SourceServices = FileSystem.FileSystem | Path.Path;
 /** Mirror of alchemy's `SourceProvider` (structural). */
 export interface SourceProvider {
   readonly ownsAssets: boolean;
+  readonly devAssetsBinding?: boolean;
   readonly build: (
     ctx: SourceContext,
   ) => Effect.Effect<SourceBuildOutput, SourceError, SourceServices>;
@@ -341,7 +344,7 @@ const hashDirectory = Effect.fnUntraced(function* (
             ]),
             (file) => (file ? NodePath.relative(cwd, file) : undefined),
           )
-        : Effect.succeed(undefined),
+        : Effect.undefined,
     ],
     { concurrency: "unbounded" },
   );
@@ -420,7 +423,7 @@ const maybeReadString = (fs: FileSystem.FileSystem, file: string) =>
     .readFileString(file)
     .pipe(
       Effect.catchTag("PlatformError", (error) =>
-        error.reason._tag === "NotFound" ? Effect.succeed(undefined) : Effect.fail(error),
+        error.reason._tag === "NotFound" ? Effect.undefined : Effect.fail(error),
       ),
     );
 
@@ -449,12 +452,10 @@ const readAssetsDirectory = Effect.fnUntraced(function* (
     }),
   );
   if (files.length > MAX_ASSET_COUNT) {
-    return yield* Effect.fail(
-      new SourceProviderError({
-        provider: PROVIDER,
-        message: `Too many assets in ${directory} (maximum is ${MAX_ASSET_COUNT}, found ${files.length})`,
-      }),
-    );
+    return yield* new SourceProviderError({
+      provider: PROVIDER,
+      message: `Too many assets in ${directory} (maximum is ${MAX_ASSET_COUNT}, found ${files.length})`,
+    });
   }
   const entries = yield* Effect.forEach(
     files.sort(),
@@ -462,12 +463,10 @@ const readAssetsDirectory = Effect.fnUntraced(function* (
       const file = NodePath.join(directory, name);
       const content = yield* fs.readFile(file);
       if (content.byteLength > MAX_ASSET_SIZE) {
-        return yield* Effect.fail(
-          new SourceProviderError({
-            provider: PROVIDER,
-            message: `Asset ${name} is too large (the maximum size is 25 MB)`,
-          }),
-        );
+        return yield* new SourceProviderError({
+          provider: PROVIDER,
+          message: `Asset ${name} is too large (the maximum size is 25 MB)`,
+        });
       }
       const hash = (yield* sha256Hex(content)).slice(0, 32);
       return [`/${name.replaceAll("\\", "/")}`, { hash, size: content.byteLength }] as const;
@@ -578,11 +577,14 @@ export const makeSvelteKitSource = (options: SvelteKitSourceOptions): SourceProv
   });
   return {
     ownsAssets: true,
+    // The dev platform proxy serves kit's static directory to `ASSETS`.
+    devAssetsBinding: true,
     build: Effect.fnUntraced(function* (ctx) {
       const output = yield* runBuildChild({
         module: import.meta.url,
         rootDir,
         framework: "sveltekit",
+        env: resolveBuildEnv(ctx.env),
         config: {
           rootDir,
           compatibilityDate: ctx.compatibility.date,
@@ -592,20 +594,16 @@ export const makeSvelteKitSource = (options: SvelteKitSourceOptions): SourceProv
         } satisfies SvelteKitBuildChildConfig,
       }).pipe(Effect.mapError(wrapFrameworkError));
       if (output.serverModules === undefined || output.serverModules.length === 0) {
-        return yield* Effect.fail(
-          new SourceProviderError({
-            provider: PROVIDER,
-            message: "The SvelteKit build produced no server modules",
-          }),
-        );
+        return yield* new SourceProviderError({
+          provider: PROVIDER,
+          message: "The SvelteKit build produced no server modules",
+        });
       }
       if (output.clientDirectory === undefined) {
-        return yield* Effect.fail(
-          new SourceProviderError({
-            provider: PROVIDER,
-            message: "The SvelteKit build produced no client directory",
-          }),
-        );
+        return yield* new SourceProviderError({
+          provider: PROVIDER,
+          message: "The SvelteKit build produced no client directory",
+        });
       }
       const files = output.serverModules.map((module): SourceBundleFile => ({
         path: module.name,
@@ -652,6 +650,7 @@ export const makeSvelteKitSource = (options: SvelteKitSourceOptions): SourceProv
           // credential-free internal layer, so `Alchemy.remote()` bindings
           // resolve in dev.
           services: ctx.runtimeContext,
+          workerd: ctx.worker.options.workerd,
         }),
       );
       const server = yield* framework

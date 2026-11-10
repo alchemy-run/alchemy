@@ -36,7 +36,10 @@ export class AppNotInstalled extends Data.TaggedError("AppNotInstalled")<{
 export const importPrivateKey = (pem: string) =>
   Effect.try({
     try: () => crypto.createPrivateKey({ key: pem }),
-    catch: (cause) => new CryptoError({ message: `invalid private key: ${cause}` }),
+    catch: (cause) =>
+      new CryptoError({
+        message: `invalid private key: ${cause instanceof Error ? cause.message : String(cause)}`,
+      }),
   });
 
 /** Sign a compact RS256 JWT, used to authenticate as the GitHub App. */
@@ -49,7 +52,10 @@ export const signJwt = (claims: Record<string, unknown>, key: crypto.KeyObject) 
       const signature = crypto.sign("sha256", Buffer.from(input), key);
       return `${input}.${Base64Url.encode(new Uint8Array(signature))}`;
     },
-    catch: (cause) => new CryptoError({ message: `signing failed: ${cause}` }),
+    catch: (cause) =>
+      new CryptoError({
+        message: `signing failed: ${cause instanceof Error ? cause.message : String(cause)}`,
+      }),
   });
 
 /**
@@ -160,7 +166,7 @@ const make = Effect.gen(function* () {
   // two GitHub calls a mint makes, so nothing is kept between mints.
   const appJwt = Effect.gen(function* () {
     const pem = yield* config.github.privateKey;
-    const key = yield* importPrivateKey(Redacted.value(pem));
+    const key = yield* pem.pipe(Redacted.value, importPrivateKey);
     const now = Math.floor((yield* Clock.currentTimeMillis) / 1000);
     return yield* signJwt({ iat: now - 60, exp: now + 540, iss: yield* config.github.appId }, key);
   });

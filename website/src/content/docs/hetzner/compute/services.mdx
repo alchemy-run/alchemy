@@ -2,12 +2,22 @@
 title: Services
 description: Deploy Effect programs to Hetzner Servers as supervised systemd units — HTTP handlers, background workers, env & config, updates, and logs.
 ---
+import Tree from "../../../../components/diagrams/Tree.astro";
 
 A [`Service`](/providers/hetzner/service) is your code on a
 [Server](/hetzner/compute/servers): an Effect program that Alchemy
 bundles with Rolldown, copies over SSH, and runs under systemd with
 `Restart=always`. You never write a unit file, a Dockerfile, or a
 deploy script — and several Services can share one Server.
+
+<Tree
+  nodes={[
+    { id: "srv", label: "app", type: "Server · cpx12 · ubuntu-24.04 · fsn1" },
+    { id: "api", label: "api", type: "systemd unit · port + /health", parent: "srv", tone: "accent", specs: [["restart", "always"]] },
+    { id: "worker", label: "worker", type: "systemd unit · no port", parent: "srv", specs: [["restart", "always"]] },
+  ]}
+  caption="Several Services share one Server, each as its own systemd unit that restarts when it crashes. A Service with a port must answer /health before the deploy succeeds."
+/>
 
 ## Declare a Service
 
@@ -16,7 +26,7 @@ implementation:
 
 ```typescript
 // src/api.ts
-import * as Hetzner from "alchemy/Hetzner";
+import * as Hetzner from "@alchemy.run/hetzner";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { Box } from "./server.ts";
@@ -32,13 +42,7 @@ export default class Api extends Hetzner.Service<Api>()(
 ) {}
 ```
 
-- `server` — the machine to run on (a `Hetzner.Server`, yielded or
-  module-scope). Changing it **replaces** the Service.
-- `main: import.meta.url` — this file is the bundle entrypoint.
-- `port` — written to the `PORT` env var and used to build the
-  `url` attribute (`http://<server-ipv4>:<port>`). Default `3000`.
-- `fetch` — returning it from the constructor Effect boots an HTTP server
-  on that port; omit it for a [background service](#background-services).
+`server` is the machine to run on, a `Hetzner.Server`, and changing it replaces the Service. `main: import.meta.url` makes this file the bundle's entry point. `port` is written to the `PORT` environment variable and used to build the `url` attribute, `http://<server-ipv4>:<port>`, and defaults to `3000`. Returning `fetch` boots an HTTP server on that port. Leave it out for a [background service](#background-services).
 
 The resolved resource exposes `url`, `port`, `unitName`, `serverId`,
 and the bundle's `code.hash`.
@@ -131,8 +135,8 @@ long-running loop — a worker, a queue consumer, a cron-ish daemon:
 
 ```typescript
 // src/worker.ts
-import * as Hetzner from "alchemy/Hetzner";
-import { ServerHost } from "alchemy/Server";
+import * as Hetzner from "@alchemy.run/hetzner";
+import { ServerHost } from "alchemy/Runtime/Process";
 import * as Effect from "effect/Effect";
 
 export default class Worker extends Hetzner.Service<Worker>()(
