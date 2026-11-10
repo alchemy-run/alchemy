@@ -102,12 +102,18 @@ test.provider(
   },
 );
 
-/** GET `url` until it answers 200: a fresh Server cold-starts its container. */
+/** GET `url` until it answers 200: a fresh Server or Function cold-starts its container. */
 const getText = Effect.fn(function* (url: string) {
-  const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
+  const client = yield* HttpClient.HttpClient;
   return yield* client.get(url).pipe(
-    Effect.flatMap((response) => response.text),
-    Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 40 }),
+    Effect.flatMap((response) =>
+      response.status === 200
+        ? response.text
+        : Effect.flatMap(response.text, (body) =>
+            Effect.fail(new Error(`${url} answered ${response.status}: ${body}`)),
+          ),
+    ),
+    Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 80 }),
   );
 });
 
@@ -130,9 +136,11 @@ test.provider(
         .pipe(withCollectorUrl(collector.url!));
 
       // Over HTTP to a Server, and through Modal's relay to a Function.
+      // A tag per attempt, so spans from an earlier attempt can't match.
+      const attempt = Date.now().toString(36);
       for (const [path, tag] of [
-        ["server", "modal-rpc-server"],
-        ["function", "modal-rpc-function"],
+        ["server", `modal-rpc-server-${attempt}`],
+        ["function", `modal-rpc-function-${attempt}`],
       ] as const) {
         expect(yield* getText(`${caller.url}/${path}?tag=${tag}`)).toBe(`traced ${tag}`);
         expect(yield* waitForRpcLink(collector.url!, tag)).toEqual({

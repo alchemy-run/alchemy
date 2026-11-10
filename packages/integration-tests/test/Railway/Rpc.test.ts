@@ -167,6 +167,8 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
+      // A tag per attempt, so spans from an earlier attempt can't match.
+      const tag = `railway-rpc-${Date.now().toString(36)}`;
       const collector = yield* stack.deploy(OtelCollector());
       const caller = yield* stack
         .deploy(
@@ -178,10 +180,8 @@ test.provider(
         )
         .pipe(withCollectorUrl(collector.url!));
 
-      expect(yield* getText(`${caller.url}/rpc-traced?tag=railway-rpc`)).toEqual(
-        "traced railway-rpc",
-      );
-      expect(yield* waitForRpcLink(collector.url!, "railway-rpc")).toEqual({
+      expect(yield* getText(`${caller.url}/rpc-traced?tag=${tag}`)).toEqual(`traced ${tag}`);
+      expect(yield* waitForRpcLink(collector.url!, tag)).toEqual({
         found: true,
         sameTrace: true,
         belowCaller: true,
