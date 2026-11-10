@@ -882,8 +882,14 @@ const observeInstanceRequests = Effect.gen(function* () {
     disabledLogs: string[];
   }> = [];
   const observedClient = client.pipe(
-    HttpClient.tapRequest((request) =>
+    // Record a request once RDS accepts it. The provider resends a modify
+    // that reaches an instance still settling from the previous one
+    // (`InvalidDBInstanceStateFault`); the rejected attempt wrote nothing, so
+    // it is not one of the writes these cases count.
+    HttpClient.tap((response) =>
       Effect.sync(() => {
+        if (response.status >= 400) return;
+        const request = response.request;
         if (request.body._tag !== "Uint8Array") return;
         const parameters = new URLSearchParams(new TextDecoder().decode(request.body.body));
         const action = parameters.get("Action");
