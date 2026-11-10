@@ -32,6 +32,7 @@ import { Contract, ContractProvider } from "./ORM/Contract.ts";
 import { Migrate, MigrateProvider } from "./ORM/Migrate.ts";
 import { fromProfile } from "./PrismaEnvironment.ts";
 import { Project, ProjectProvider } from "./Project.ts";
+import { RoutingUrl, RoutingUrlProvider } from "./RoutingUrl.ts";
 import { SourceRepository, SourceRepositoryProvider } from "./SourceRepository.ts";
 import { WebsiteArtifact, WebsiteArtifactProvider } from "./Website/Artifact.ts";
 
@@ -189,6 +190,7 @@ export const providers = () =>
       CustomDomain,
       DomainVerification,
       DomainOwnershipProof,
+      RoutingUrl,
       EnvironmentVariable,
       SourceRepository,
       Contract,
@@ -211,6 +213,7 @@ export const providers = () =>
         CustomDomainProvider(),
         DomainVerificationProvider(),
         DomainOwnershipProofProvider(),
+        RoutingUrlProvider(),
         EnvironmentVariableProvider(),
         SourceRepositoryProvider(),
         ContractProvider(),

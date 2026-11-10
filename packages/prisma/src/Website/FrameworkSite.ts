@@ -11,6 +11,7 @@ import * as Redacted from "effect/Redacted";
 import { Compute, type ComputeProps } from "../Compute.ts";
 import { CustomDomain } from "../CustomDomain.ts";
 import { DomainOwnership } from "../DomainOwnership.ts";
+import { switchboardTarget } from "../internal/Switchboard.ts";
 import { Project } from "../Project.ts";
 import type { Providers } from "../Providers.ts";
 import type { PrismaRegionId } from "../Types.ts";
@@ -61,17 +62,6 @@ export type WebsiteDomain =
 /** The hostname of a {@link WebsiteDomain}. */
 export const websiteDomainName = (domain: WebsiteDomain | undefined): string | undefined =>
   domain === undefined || typeof domain === "string" ? domain : domain.name;
-
-/**
- * The regional switchboard a custom hostname CNAMEs to, derived from the
- * app endpoint (`https://{app}.{region}.prisma.build` →
- * `switchboard.{region}.prisma.build`).
- */
-const switchboardTarget = (endpoint: string | undefined) => {
-  const host = (endpoint ?? "").replace(/^https?:\/\//, "").replace(/\/.*$/, "");
-  const dot = host.indexOf(".");
-  return dot < 0 ? host : `switchboard${host.slice(dot)}`;
-};
 
 /** Shared contract for Prisma's framework website composites. */
 export interface FrameworkSiteProps {

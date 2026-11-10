@@ -167,6 +167,26 @@ Changing the hostname or app in place is intentionally rejected.
 Create a second domain, verify DNS and TLS, cut traffic over, and then
 remove the old resource.
 
+## Routing URLs
+
+`Prisma.RoutingUrl` saves a hostname for an app before its DNS exists. The deploy succeeds at once, and the resource reports the records still to publish:
+
+```typescript
+const url = yield* Prisma.RoutingUrl("api", {
+  app,
+  hostname: "api.example.com",
+});
+// url.status: "pending"
+// url.records: the TXT record that proves ownership and the CNAME to the switchboard
+// url.setupUrl: the Console page that shows what to do next
+```
+
+Prisma makes the RoutingUrl `active` once both records are published. It also creates the domain ownership the `TXT` record proves; destroying the RoutingUrl leaves that domain ownership in place.
+
+A RoutingUrl is identified on its Branch by `logicalId`, which defaults to the resource's name. A RoutingUrl Prisma already made for the same app and hostname, with no `logicalId`, is taken over. Changing the hostname of an `active` RoutingUrl fails before anything changes, until the new hostname has a verified domain ownership and its `CNAME`.
+
+Don't declare a `Prisma.DomainOwnership` for the same exact hostname as a `Prisma.RoutingUrl`. The `Prisma.DomainOwnership` takes over the domain ownership Prisma created for the RoutingUrl, and deletes it on destroy.
+
 ## Local dev
 
 Under `alchemy dev`, `dev.command` runs your app locally (e.g.

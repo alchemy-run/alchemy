@@ -6,7 +6,7 @@ import * as Schedule from "effect/Schedule";
 
 /** The record Prisma is about to look up. */
 export type ExpectedRecord =
-  | { readonly type: "CNAME"; readonly name: string }
+  | { readonly type: "CNAME"; readonly name: string; readonly value?: string }
   | { readonly type: "TXT"; readonly name: string; readonly value: string };
 
 /**
@@ -88,7 +88,12 @@ export const waitForAuthoritativeRecord = (
           );
         const found =
           record.type === "CNAME"
-            ? (yield* lookup(() => resolver.resolveCname(record.name))).length > 0
+            ? (yield* lookup(() => resolver.resolveCname(record.name))).some(
+                (target) =>
+                  record.value === undefined ||
+                  (typeof target === "string" &&
+                    target.replace(/\.$/, "").toLowerCase() === record.value.toLowerCase()),
+              )
             : (yield* lookup(() => resolver.resolveTxt(record.name))).some(
                 (chunks) => Array.isArray(chunks) && chunks.join("") === record.value,
               );
