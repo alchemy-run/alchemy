@@ -2465,7 +2465,22 @@ export const DBInstanceProvider = () =>
               SkipFinalSnapshot: skipFinalSnapshot,
               FinalDBSnapshotIdentifier: finalDBSnapshotIdentifier,
             })
-            .pipe(Effect.catchTag("DBInstanceNotFoundFault", () => Effect.void));
+            .pipe(
+              Effect.catchTag("DBInstanceNotFoundFault", () => Effect.void),
+              // RDS rejects a delete of an instance that is already deleting:
+              // a destroy interrupted during the wait below and run again, or
+              // a delete started outside the stack. That delete is the one we
+              // want, so wait for it. Any other state is a real failure.
+              Effect.catchTag("InvalidDBInstanceStateFault", (error) =>
+                readInstance(output.dbInstanceIdentifier).pipe(
+                  Effect.flatMap((instance) =>
+                    instance === undefined || instance.DBInstanceStatus === "deleting"
+                      ? Effect.void
+                      : Effect.fail(error),
+                  ),
+                ),
+              ),
+            );
           // Block until the instance is fully gone. RDS deletion is async; if we
           // return while it is still `deleting`, a dependent (e.g. a
           // DBSubnetGroup or VPC) is torn down next and AWS rejects it with
