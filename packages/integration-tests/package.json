@@ -69,6 +69,7 @@
     "@distilled.cloud/zerossl": "workspace:*",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
+    "@effect/sql-libsql": "catalog:",
     "@effect/sql-mysql2": "catalog:",
     "@effect/sql-pg": "catalog:",
     "@electric-sql/pglite": "catalog:",
