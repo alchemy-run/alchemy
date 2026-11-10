@@ -13,21 +13,22 @@ Take one small app: a `MyTemplate` template with Node.js and git, and a `Warm` s
   nodes={[
     {
       id: "team", label: "acme", type: "team", icon: "brand:e2b", colGap: 4.5,
-      areas: ["template warm sandbox", "github home sandbox"],
-      phoneAreas: ["template github", "warm home", "sandbox sandbox"],
+      areas: ["template warm github", "home sandbox sandbox"],
+      phoneAreas: ["template github", "warm sandbox", "home home"],
     },
     { id: "template", label: "MyTemplate", type: "template", parent: "team", icon: "package" },
     { id: "warm", label: "Warm", type: "snapshot", parent: "team", icon: "camera" },
-    { id: "sandbox", label: "user-42", type: "sandbox", parent: "team", tone: "accent", icon: "box" },
     { id: "github", label: "GitHubToken", type: "secret", parent: "team", icon: "key-round" },
-    { id: "home", label: "home-42", type: "volume", parent: "team", icon: "hard-drive" },
+    { id: "home", label: "home-42", type: "volume · one per user", parent: "team", icon: "hard-drive" },
+    { id: "sandbox", label: "user-42", type: "sandbox · one per user", parent: "team", tone: "accent", icon: "box" },
   ]}
   links={[
     { from: "template", to: "warm", label: "snapshot" },
     { from: "warm", to: "sandbox", label: "boots" },
+    { from: "github", to: "sandbox", label: "github.com" },
     { from: "home", to: "sandbox", label: "/home/user" },
   ]}
-  caption="Everything belongs to the team acme. The sandbox boots from the Warm snapshot of the MyTemplate template, with the home-42 volume mounted at /home/user. A Cloudflare Worker outside E2B creates the volume and the sandbox through E2B's API."
+  caption="Everything belongs to the team acme. Each user gets a sandbox that boots from the Warm snapshot of MyTemplate, with a volume of their own mounted at /home/user. E2B adds GitHubToken to the sandbox's requests to github.com, so code inside never sees it. A Cloudflare Worker outside E2B creates the volume and the sandbox through E2B's API."
 />
 
 ## Teams: who owns and pays

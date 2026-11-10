@@ -16,22 +16,23 @@ Take one small app: a Cloudflare Worker gives each user a Sandbox from the `Warm
     { id: "ws", label: "acme", type: "workspace", icon: "brand:modal" },
     {
       id: "env", label: "MyEnv", type: "environment", parent: "ws", dashed: true, icon: "folder", colGap: 4.5,
-      areas: ["home coder", "openai inference"],
-      phoneAreas: ["home openai", "coder coder", "inference inference"],
+      areas: ["home coder", "hf inference"],
+      phoneAreas: ["home", "coder", "hf", "inference"],
     },
-    { id: "home", label: "home-sam", type: "Volume", parent: "env", icon: "hard-drive" },
-    { id: "openai", label: "OpenAI", type: "Secret", parent: "env", icon: "key-round" },
+    { id: "home", label: "home-sam", type: "Volume · one per user", parent: "env", icon: "hard-drive" },
     { id: "coder", label: "Coder", type: "app", parent: "env", icon: "app-window", areas: ["sbx warm"], phoneAreas: ["sbx warm"], colGap: 3 },
-    { id: "sbx", label: "session-sam", type: "Sandbox", parent: "coder", tone: "accent", icon: "box" },
+    { id: "sbx", label: "session-sam", type: "Sandbox · one per user", parent: "coder", tone: "accent", icon: "box" },
     { id: "warm", label: "Warm", type: "image", parent: "coder", icon: "package" },
+    { id: "hf", label: "HuggingFace", type: "Secret", parent: "env", icon: "key-round" },
     { id: "inference", label: "Inference", type: "app", parent: "env", icon: "app-window" },
     { id: "embed", label: "Embed", type: "Function", parent: "inference", icon: "square-function", specs: [["gpu", "L4"]] },
   ]}
   links={[
     { from: "warm", to: "sbx", label: "boots" },
     { from: "home", to: "sbx", label: "/home/user" },
+    { from: "hf", to: "embed", label: "HF_TOKEN" },
   ]}
-  caption="Everything lives in one environment of the workspace. Apps hold the code that runs, and each Sandbox and Function container starts from an image. The Volume and the Secret belong to the environment, so any app in it can use them."
+  caption="Everything lives in one environment of the workspace. Apps hold the code that runs, and each Sandbox and Function container starts from an image. Each user's Sandbox mounts a Volume of their own, and the Embed Function gets the HuggingFace Secret as HF_TOKEN to download its model."
 />
 
 ## Workspaces: who owns and pays
@@ -180,9 +181,9 @@ See [Volumes](/modal/storage/volumes), [Dicts](/modal/storage/dicts) and [Queues
 A **Secret** is a named set of environment variables, stored in an environment and attached to the containers that need them. A Sandbox can also keep a Secret out of its environment entirely: Modal adds it to outgoing requests for the hosts you name, so code inside never sees it.
 
 ```typescript title="src/secrets.ts"
-export const OpenAI = Modal.Secret("OpenAI", {
+export const HuggingFace = Modal.Secret("HuggingFace", {
   environment: MyEnv,
-  env: { OPENAI_API_KEY: Config.Redacted("OPENAI_API_KEY") },
+  env: { HF_TOKEN: Config.Redacted("HF_TOKEN") },
 });
 ```
 
