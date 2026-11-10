@@ -23,8 +23,13 @@ export class BoundMrap extends Context.Service<
 /** The testing account (bucket names are global). */
 export const MRAP_ACCOUNT_ID = "391965393224";
 
-/** Region of the MRAP's second member bucket. */
-export const SECOND_REGION = "us-east-1";
+/**
+ * Region of the MRAP's second member bucket: a Multi-Region Access Point takes
+ * one bucket per Region, so it is whichever of us-east-1 and us-west-2 the
+ * stack's own bucket is not in.
+ */
+export const secondRegionFor = (stackRegion: string) =>
+  stackRegion === "us-east-1" ? "us-west-2" : "us-east-1";
 
 /**
  * The second member bucket, created out-of-band by the test: stack resources
