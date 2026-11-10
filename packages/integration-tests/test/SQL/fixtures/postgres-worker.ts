@@ -1,11 +1,15 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Drizzle from "@alchemy.run/drizzle/Postgres";
 import * as Neon from "@alchemy.run/neon";
 import * as SQL from "@alchemy.run/sql/Postgres";
+import { eq, sql as fragment } from "drizzle-orm";
+import { integer, pgTable, text } from "drizzle-orm/pg-core";
 import type * as Arr from "effect/Array";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Stream from "effect/Stream";
 import { makeLayerUsers, makeSqlRoutes, type UserRow } from "./routes.ts";
 
 export const Hyperdrive = Effect.gen(function* () {
@@ -27,14 +31,21 @@ const DDL = `CREATE TABLE IF NOT EXISTS ${TABLE} (
   email TEXT NOT NULL
 )`;
 
+const users = pgTable(TABLE, {
+  id: integer("id").primaryKey(),
+  name: text("name").notNull(),
+  email: text("email").notNull(),
+});
+
 class Rollback extends Data.TaggedError("Rollback")<{}> {}
 
 /**
  * Init effect for the whole route surface: binds the Hyperdrive connection,
  * builds the `SQL.Postgres` client and the `SQL.PostgresLayer`-backed users
  * service, and returns a handler that serves the Postgres-only routes
- * (`withTransaction` commit/rollback, multi-row `sql.updateValues`) before
- * falling through to the shared dialect-agnostic table.
+ * (`withTransaction` commit/rollback, multi-row `sql.updateValues`,
+ * `sql.json`, a streamed statement, a Drizzle CTE) before falling through to
+ * the shared dialect-agnostic table.
  */
 const PostgresRoutes = Effect.gen(function* () {
   const hd = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
@@ -43,6 +54,18 @@ const PostgresRoutes = Effect.gen(function* () {
     Effect.provide(SQL.PostgresLayer({ url: hd.connectionString })),
   );
   const shared = makeSqlRoutes({ sql, layerUsers, ddl: DDL, table: TABLE });
+
+  // Built here, at Construction phase, with no connection: a CTE column
+  // inside a `sql` fragment and a join condition (alchemy-run/alchemy#2001).
+  const db = yield* Drizzle.Postgres(hd.connectionString);
+  const everyone = db.$with("everyone").as(db.select().from(users));
+  const matches = db
+    .with(everyone)
+    .select({ id: users.id, n: fragment<number>`count(${everyone.id})`.mapWith(Number) })
+    .from(users)
+    .leftJoin(everyone, eq(everyone.name, users.name))
+    .groupBy(users.id)
+    .orderBy(users.id);
 
   const handle = Effect.fn(function* (request: HttpServerRequest.HttpServerRequest) {
     // POST /tx/commit — statements inside `withTransaction` share one
@@ -107,6 +130,27 @@ const PostgresRoutes = Effect.gen(function* () {
         ORDER BY id
       `;
       return yield* HttpServerResponse.json({ rows: updated });
+    }
+
+    // POST /json — `sql.json` binds a value as a JSON parameter.
+    if (request.method === "POST" && request.url === "/json") {
+      const doc = yield* request.json;
+      const rows = yield* sql<{ doc: unknown }>`SELECT ${sql.json(doc)}::jsonb AS doc`;
+      return yield* HttpServerResponse.json({ doc: rows[0]?.doc });
+    }
+
+    // GET /users/stream — a streamed statement opens a client for the
+    // stream's lifetime.
+    if (request.method === "GET" && request.url === "/users/stream") {
+      const rows = yield* Stream.runCollect(
+        sql<{ id: number }>`SELECT id FROM ${sql(TABLE)} ORDER BY id`.stream,
+      );
+      return yield* HttpServerResponse.json({ ids: Array.from(rows, (row) => row.id) });
+    }
+
+    // GET /drizzle/cte — the query built at Construction phase above.
+    if (request.method === "GET" && request.url === "/drizzle/cte") {
+      return yield* HttpServerResponse.json({ sql: matches.toSQL().sql, rows: yield* matches });
     }
 
     return yield* shared.handle(request);
