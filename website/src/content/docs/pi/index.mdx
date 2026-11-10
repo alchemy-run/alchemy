@@ -132,7 +132,7 @@ const harness = yield* Pi.Harness({ models: [Fast], tools: [SaveNote] });
 A Durable Object can't run processes, so Pi's coding tools run in a sandbox. `Pi.Sandbox` is the function that finds or creates a conversation's sandbox:
 
 ```typescript
-const SandboxLive = Layer.effect(
+const E2BSandbox = Layer.effect(
   Pi.Sandbox,
   Effect.gen(function* () {
     const base = yield* E2B.Template("Base", { image: "node:22-bookworm" });
@@ -142,10 +142,10 @@ const SandboxLive = Layer.effect(
       const [existing] = yield* sandboxes.list({ metadata, state: ["running", "paused"] });
       return existing
         ? yield* sandboxes.connect(existing.sandboxID)
-        : yield* sandboxes.create({ metadata, autoPause: true, timeout: 1800 });
+        : yield* sandboxes.create({ metadata, timeout: 600 });
     });
   }),
-);
+).pipe(Layer.provide(E2B.CreateSandboxHttp));
 ```
 
 The template is the image every sandbox boots from; the deploy builds it. Finding the sandbox by metadata keeps one sandbox per conversation, also after the Durable Object is evicted. Conversation ids repeat from one Durable Object to the next, so the metadata also carries `instanceId`, the Durable Object's id.
@@ -157,8 +157,46 @@ const HarnessLive = Layer.mergeAll(
   FastLive,
   PiCloudflare.DurableObjectStorage,
   Pi.SandboxEnv,
-).pipe(Layer.provide(SandboxLive), Layer.provide(E2B.CreateSandboxHttp));
+).pipe(Layer.provide(E2BSandbox));
 ```
+
+### Another sandbox platform
+
+The sandbox can be on E2B, Daytona, Modal, Boat or Archil. Each is its own `Pi.Sandbox` Layer:
+
+```typescript
+const DaytonaSandbox = Layer.effect(
+  Pi.Sandbox,
+  Effect.gen(function* () {
+    const base = yield* Daytona.Snapshot("Base", { image: "node:22-bookworm" });
+    const sandboxes = yield* Daytona.CreateSandbox(base);
+    return Effect.fn(function* ({ instanceId, conversationId }) {
+      const name = `pi-${instanceId.slice(0, 16)}-${conversationId}`;
+      const existing = yield* sandboxes.get(name);
+      if (existing === undefined) {
+        return yield* sandboxes.create({ name, autoStopInterval: 15 });
+      }
+      yield* existing.startSandbox();
+      return existing;
+    });
+  }),
+).pipe(Layer.provide(Daytona.CreateSandboxHttp));
+```
+
+Changing platform is changing that one Layer:
+
+```diff lang="typescript"
+const HarnessLive = Layer.mergeAll(
+  FastLive,
+  PiCloudflare.DurableObjectStorage,
+  Pi.SandboxEnv,
+-).pipe(Layer.provide(E2BSandbox));
++).pipe(Layer.provide(DaytonaSandbox));
+```
+
+The [cloudflare-pi example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-pi) has the Layer for each of the five platforms.
+
+The image needs `sh`, `curl`, `tar`, `sha512sum`, `base64`, `dd` and `mkfifo`, and the sandbox needs to reach `registry.npmjs.org` once, to install the daemon. `node:22-bookworm` has them all.
 
 ## Extensions and skills
 

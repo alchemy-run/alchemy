@@ -1,68 +1,30 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as E2B from "@alchemy.run/e2b";
 import * as Pi from "@alchemy.run/pi";
 import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Fast, FastLive } from "./models.ts";
-
-/**
- * Marks a conversation's sandbox. Conversation ids repeat from one Durable
- * Object to the next, so the object's id is part of the mark.
- */
-const markOf = (instanceId: string, conversationId: number) => ({
-  "pi-instance": instanceId,
-  "pi-conversation": String(conversationId),
-});
-
-/** The sandbox client, bound to the image every conversation's sandbox boots from. */
-const Sandboxes = Effect.gen(function* () {
-  const base = yield* E2B.Template("Base", { image: "node:22-bookworm" });
-  return yield* E2B.CreateSandbox(base);
-});
-
-/** One E2B sandbox per conversation, found again by its mark. */
-const SandboxLive = Layer.effect(
-  Pi.Sandbox,
-  Effect.gen(function* () {
-    const sandboxes = yield* Sandboxes;
-    return Effect.fn(function* ({ instanceId, conversationId }) {
-      const metadata = markOf(instanceId, conversationId);
-      const [existing] = yield* sandboxes.list({ metadata, state: ["running", "paused"] });
-      return existing
-        ? yield* sandboxes.connect(existing.sandboxID)
-        : yield* sandboxes.create({ metadata, timeout: 600 });
-    });
-  }),
-);
-
-const HarnessLive = Layer.mergeAll(FastLive, PiCloudflare.DurableObjectStorage, Pi.SandboxEnv).pipe(
-  Layer.provide(SandboxLive),
-  Layer.provideMerge(E2B.CreateSandboxHttp),
-);
+import { ArchilSandbox } from "./sandboxes/Archil.ts";
+import { BoatSandbox } from "./sandboxes/Boat.ts";
+import { DaytonaSandbox } from "./sandboxes/Daytona.ts";
+import { E2BSandbox } from "./sandboxes/E2B.ts";
+import { ModalSandbox } from "./sandboxes/Modal.ts";
+import { RemoveSandbox } from "./sandboxes/RemoveSandbox.ts";
 
 /**
  * A coding agent: Pi's own `read`, `write`, `edit` and `bash` tools, run in
- * an E2B sandbox because a Durable Object has no file system or processes.
+ * a sandbox because a Durable Object has no file system or processes.
+ *
+ * Which platform the sandbox is on is the one Layer passed in. Nothing else
+ * changes from one platform to the next.
  */
-export default class Workspace extends Cloudflare.DurableObject<Workspace>()(
-  "Workspace",
+const workspace = <E, R>(sandbox: Layer.Layer<Pi.Sandbox | RemoveSandbox, E, R>) =>
   Effect.gen(function* () {
-    const sandboxes = yield* Sandboxes;
+    const removeSandbox = yield* RemoveSandbox;
     const harness = yield* Pi.Harness({ models: [Fast], tools: [Pi.CodingTools] });
 
     return Effect.gen(function* () {
       const state = yield* Cloudflare.DurableObjectState;
-
-      /** The id of the conversation's sandbox, if it has one. */
-      const sandboxIdOf = Effect.fn(function* (name: string) {
-        const conversation = yield* harness.conversationByName(name);
-        const [found] = yield* sandboxes.list({
-          metadata: markOf(state.id.toString(), conversation.id),
-          state: ["running", "paused"],
-        });
-        return found?.sandboxID;
-      });
 
       return {
         create: Effect.fn(function* (name: string) {
@@ -100,24 +62,45 @@ export default class Workspace extends Cloudflare.DurableObject<Workspace>()(
               : [],
           );
         }),
-        /** Read a file out of the conversation's sandbox: `null` when the file or the sandbox is gone. */
-        readFile: Effect.fn(function* (name: string, path: string) {
-          const sandboxId = yield* sandboxIdOf(name);
-          if (sandboxId === undefined) return null;
-          // A sandbox killed a moment ago can still be listed.
-          const sandbox = yield* sandboxes
-            .connect(sandboxId)
-            .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-          return sandbox === undefined
-            ? null
-            : yield* sandbox.files.readText(path).pipe(Effect.orElseSucceed(() => null));
-        }),
-        /** Stop the conversation's sandbox. */
-        kill: Effect.fn(function* (name: string) {
-          const sandboxId = yield* sandboxIdOf(name);
-          if (sandboxId !== undefined) yield* sandboxes.kill(sandboxId);
+        /** Delete the conversation's sandbox. Its next tool call starts a new one. */
+        remove: Effect.fn(function* (name: string) {
+          const conversation = yield* harness.conversationByName(name);
+          yield* removeSandbox({
+            instanceId: state.id.toString(),
+            conversationId: conversation.id,
+          });
         }),
       };
     });
-  }).pipe(Effect.provide(HarnessLive)),
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(FastLive, PiCloudflare.DurableObjectStorage, Pi.SandboxEnv).pipe(
+        Layer.provideMerge(sandbox),
+      ),
+    ),
+  );
+
+export class E2BWorkspace extends Cloudflare.DurableObject<E2BWorkspace>()(
+  "E2BWorkspace",
+  workspace(E2BSandbox),
+) {}
+
+export class DaytonaWorkspace extends Cloudflare.DurableObject<DaytonaWorkspace>()(
+  "DaytonaWorkspace",
+  workspace(DaytonaSandbox),
+) {}
+
+export class ModalWorkspace extends Cloudflare.DurableObject<ModalWorkspace>()(
+  "ModalWorkspace",
+  workspace(ModalSandbox),
+) {}
+
+export class BoatWorkspace extends Cloudflare.DurableObject<BoatWorkspace>()(
+  "BoatWorkspace",
+  workspace(BoatSandbox),
+) {}
+
+export class ArchilWorkspace extends Cloudflare.DurableObject<ArchilWorkspace>()(
+  "ArchilWorkspace",
+  workspace(ArchilSandbox),
 ) {}

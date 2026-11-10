@@ -4,13 +4,20 @@ import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { Notes } from "./Notes.ts";
 import Session from "./Session.ts";
-import Workspace from "./Workspace.ts";
+import {
+  ArchilWorkspace,
+  BoatWorkspace,
+  DaytonaWorkspace,
+  E2BWorkspace,
+  ModalWorkspace,
+} from "./Workspace.ts";
 
 /**
  * The HTTP front of both agents:
  *
  * - `/chat/<user>/<conversation>/<action>` reaches a user's `Session`.
- * - `/code/<conversation>/<action>` reaches a `Workspace` with a sandbox.
+ * - `/code/<platform>/<conversation>/<action>` reaches a workspace whose
+ *   sandbox is on that platform: `e2b`, `daytona`, `modal`, `boat` or `archil`.
  * - `/notes/<key>` reads what the `save_note` tool wrote.
  */
 export default class Api extends Cloudflare.Worker<Api>()(
@@ -18,7 +25,14 @@ export default class Api extends Cloudflare.Worker<Api>()(
   { main: import.meta.url },
   Effect.gen(function* () {
     const sessions = yield* Session;
-    const workspaces = yield* Workspace;
+    // The same coding agent, once per sandbox platform.
+    const workspaces = {
+      e2b: yield* E2BWorkspace,
+      daytona: yield* DaytonaWorkspace,
+      modal: yield* ModalWorkspace,
+      boat: yield* BoatWorkspace,
+      archil: yield* ArchilWorkspace,
+    };
     const notes = yield* Cloudflare.KV.ReadWriteNamespace(Notes);
 
     return {
@@ -33,9 +47,9 @@ export default class Api extends Cloudflare.Worker<Api>()(
           return yield* HttpServerResponse.json({ text: yield* notes.get(rest[0]!) });
         }
 
-        if (area === "code") {
-          const [name, action] = rest as [string, string];
-          const workspace = workspaces.getByName(name);
+        if (area === "code" && rest[0]! in workspaces) {
+          const [platform, name, action] = rest as [keyof typeof workspaces, string, string];
+          const workspace = workspaces[platform].getByName(name);
           switch (action) {
             case "create":
               return yield* HttpServerResponse.json({ id: yield* workspace.create(name) });
@@ -45,12 +59,8 @@ export default class Api extends Cloudflare.Worker<Api>()(
               });
             case "tool-calls":
               return yield* HttpServerResponse.json(yield* workspace.toolCalls(name));
-            case "file":
-              return yield* HttpServerResponse.json({
-                text: yield* workspace.readFile(name, body.path),
-              });
-            case "kill":
-              yield* workspace.kill(name);
+            case "remove":
+              yield* workspace.remove(name);
               return yield* ok;
           }
         }

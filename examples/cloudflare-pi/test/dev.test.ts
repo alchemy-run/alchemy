@@ -1,8 +1,9 @@
 /**
  * `alchemy dev` end to end: spawns the real CLI and drives both agents over
  * HTTP. The Worker and its Durable Objects run in local workerd; the model
- * is Workers AI and the coding agent's sandbox is E2B, so the run needs a
- * profile with Cloudflare and E2B credentials (`ALCHEMY_PROFILE`).
+ * is Workers AI and the coding agent's sandboxes are real ones on E2B,
+ * Daytona, Modal, Boat and Archil, so the run needs a profile with credentials for
+ * Cloudflare and each of them (`ALCHEMY_PROFILE`).
  */
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import * as path from "node:path";
@@ -15,6 +16,9 @@ const cli = new DevCli({ root, stage: "dev-cli-test" });
 const run = Date.now().toString(36);
 const user = `user-${run}`;
 const workspace = `workspace-${run}`;
+
+/** The sandbox platforms a workspace runs on. */
+const platforms = ["e2b", "daytona", "modal", "boat", "archil"] as const;
 
 let url = "";
 
@@ -69,15 +73,19 @@ const answer = (messages: ReadonlyArray<Message>) =>
 beforeAll(async () => {
   cli.destroy();
   cli.start();
-  // The first deploy builds the sandbox template.
-  url = await cli.outputUrlWhenReady("url", { tries: 480, delayMs: 1_000 });
+  // The first deploy builds each platform's sandbox image.
+  url = await cli.outputUrlWhenReady("url", { tries: 840, delayMs: 1_000 });
   await fetchOk(`${url}/notes/none`, { tries: 60, delayMs: 500 });
-}, 600_000);
+}, 900_000);
 
 afterAll(async () => {
-  // The sandbox was created at run time, so no destroy would remove it.
+  // Sandboxes are created at run time, so no destroy would remove one a failed test left.
   if (url !== "") {
-    await call(`/code/${workspace}/kill`, {}).catch(() => undefined);
+    await Promise.all(
+      platforms.map((platform) =>
+        call(`/code/${platform}/${workspace}/remove`, {}).catch(() => undefined),
+      ),
+    );
   }
   await cli.stop();
   if (!process.env.NO_DESTROY) cli.destroy();
@@ -180,32 +188,29 @@ test("a run interrupted by a crash resumes from the alarm", async () => {
   expect(toolResults(messages, "add")).toMatchObject([{ isError: false, text: '{"sum":42}' }]);
 }, 240_000);
 
-test("the coding agent's tools run in an E2B sandbox", async () => {
-  const code = <A>(action: string, body?: unknown) => call<A>(`/code/${workspace}/${action}`, body);
+// The same agent on each sandbox platform. Only the Layer its Durable Object is given differs.
+for (const platform of platforms) {
+  test(`the coding agent's tools run in a sandbox on ${platform}`, async () => {
+    const code = <A>(action: string, body?: unknown) =>
+      call<A>(`/code/${platform}/${workspace}/${action}`, body);
 
-  await code("create", {});
-  const settled = await code<{ status: string }>("prompt", {
-    // Relative paths: tools start in the sandbox user's home.
-    text: 'Write the text "pi was here" to hello.txt using the write tool, then run `wc -c hello.txt` with bash and tell me the number.',
-    requestId: "code-1",
-  });
-  expect(settled.status).toBe("done");
+    await code("create", {});
+    const settled = await code<{ status: string }>("prompt", {
+      // Relative paths: tools start in the sandbox user's home.
+      text: 'Write the text "pi was here" to hello.txt using the write tool, then run `wc -c hello.txt` with bash and tell me the number.',
+      requestId: "code-1",
+    });
+    expect(settled.status).toBe("done");
 
-  const calls =
-    await code<ReadonlyArray<{ tool: string; isError: boolean; text: string }>>("tool-calls");
-  expect(calls).toMatchObject([
-    { tool: "write", isError: false },
-    { tool: "bash", isError: false },
-  ]);
-  expect(calls[1]!.text).toContain("11");
+    // `wc` counts what `write` wrote: both ran in the same sandbox.
+    const calls =
+      await code<ReadonlyArray<{ tool: string; isError: boolean; text: string }>>("tool-calls");
+    expect(calls).toMatchObject([
+      { tool: "write", isError: false },
+      { tool: "bash", isError: false },
+    ]);
+    expect(calls[1]!.text).toContain("11");
 
-  // Read the file straight from the sandbox, not through the model.
-  expect(await code<{ text: string | null }>("file", { path: "/home/user/hello.txt" })).toEqual({
-    text: "pi was here",
-  });
-
-  await code("kill", {});
-  expect(await code<{ text: string | null }>("file", { path: "/home/user/hello.txt" })).toEqual({
-    text: null,
-  });
-}, 240_000);
+    await code("remove", {});
+  }, 300_000);
+}

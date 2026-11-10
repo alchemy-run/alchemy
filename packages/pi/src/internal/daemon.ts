@@ -24,7 +24,7 @@ export interface DaemonSandbox {
   exec(
     command: SandboxApi.Command,
     options?: any,
-  ): Effect.Effect<{ readonly exitCode: number }, unknown, RuntimeContext>;
+  ): Effect.Effect<{ readonly exitCode: number | undefined }, unknown, RuntimeContext>;
   start(
     command: SandboxApi.Command,
     options?: any,

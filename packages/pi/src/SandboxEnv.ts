@@ -44,6 +44,9 @@ export type SandboxLike = DaemonSandbox;
  * same sandbox after its Durable Object is evicted. Conversation ids repeat
  * across Durable Objects, so key the sandbox on `instanceId` too.
  *
+ * The sandbox can be on any platform (E2B, Daytona, Modal, Boat, Archil):
+ * changing platform is providing a different Layer.
+ *
  * **Example:** One E2B sandbox per conversation
  * ```typescript
  * const SandboxLive = Layer.effect(
@@ -56,10 +59,30 @@ export type SandboxLike = DaemonSandbox;
  *       const [existing] = yield* sandboxes.list({ metadata, state: ["running", "paused"] });
  *       return existing
  *         ? yield* sandboxes.connect(existing.sandboxID)
- *         : yield* sandboxes.create({ metadata, autoPause: true, timeout: 1800 });
+ *         : yield* sandboxes.create({ metadata, timeout: 600 });
  *     });
  *   }),
- * );
+ * ).pipe(Layer.provide(E2B.CreateSandboxHttp));
+ * ```
+ *
+ * **Example:** The same on Daytona
+ * ```typescript
+ * const SandboxLive = Layer.effect(
+ *   Pi.Sandbox,
+ *   Effect.gen(function* () {
+ *     const base = yield* Daytona.Snapshot("Base", { image: "node:22-bookworm" });
+ *     const sandboxes = yield* Daytona.CreateSandbox(base);
+ *     return Effect.fn(function* ({ instanceId, conversationId }) {
+ *       const name = `pi-${instanceId.slice(0, 16)}-${conversationId}`;
+ *       const existing = yield* sandboxes.get(name);
+ *       if (existing === undefined) {
+ *         return yield* sandboxes.create({ name, autoStopInterval: 15 });
+ *       }
+ *       yield* existing.startSandbox();
+ *       return existing;
+ *     });
+ *   }),
+ * ).pipe(Layer.provide(Daytona.CreateSandboxHttp));
  * ```
  */
 export class Sandbox extends Context.Service<
@@ -83,7 +106,7 @@ export class Sandbox extends Context.Service<
  *   ModelsLive,
  *   PiCloudflare.DurableObjectStorage,
  *   Pi.SandboxEnv,
- * ).pipe(Layer.provide(SandboxLive), Layer.provide(E2B.CreateSandboxHttp));
+ * ).pipe(Layer.provide(SandboxLive));
  * ```
  *
  * @layer
