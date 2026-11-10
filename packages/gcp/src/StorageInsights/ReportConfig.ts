@@ -1,4 +1,6 @@
+import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as insights from "@distilled.cloud/gcp/storageinsights_v1";
+import * as serviceusage from "@distilled.cloud/gcp/unstable/serviceusage_v1beta1";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { deepEqual, isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
@@ -6,14 +8,17 @@ import { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { updateIamMembership } from "../IamPolicy.ts";
 import {
   createInternalLabels,
   hasAlchemyLabels,
   stripInternalLabels,
   toLabels,
 } from "../Labels.ts";
+import { waitForOperation } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
 
 export type ReportConfigProps = {
@@ -89,10 +94,12 @@ export type ReportConfig = Resource<
  * the configuration. Deletion removes report details but preserves exported
  * objects in the destination bucket.
  *
- * Enable storageinsights.googleapis.com before deployment. Grant its service
- * agent roles/storage.insightsCollectorService on the source bucket and
- * roles/storage.objectCreator on the destination. Both buckets must be in
- * the same project and location. This resource does not change bucket IAM.
+ * Enable storageinsights.googleapis.com before deployment. Both buckets
+ * must be in the same project and location. Alchemy grants the Storage
+ * Insights service agent `roles/storage.insightsCollectorService` on the
+ * source bucket and `roles/storage.objectCreator` on the destination. The
+ * grants stay when the configuration is deleted, since every inventory
+ * configuration in the project shares the agent.
  *
  * ### Creating an Inventory Report
  * **Example:** Daily Parquet inventory
@@ -171,11 +178,12 @@ const getConfig = (name: string) =>
     .getProjectsLocationsReportConfigs({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
-const listConfigs = (parent: string) =>
-  insights.listProjectsLocationsReportConfigs.pages({ parent }).pipe(
-    Stream.flatMap((page) => Stream.fromIterable(page.reportConfigs ?? [])),
-    Stream.runCollect,
-  );
+const configsOf = (parent: string) =>
+  insights.listProjectsLocationsReportConfigs
+    .pages({ parent })
+    .pipe(Stream.flatMap((page) => Stream.fromIterable(page.reportConfigs ?? [])));
+
+const listConfigs = (parent: string) => configsOf(parent).pipe(Stream.runCollect);
 
 const observe = Effect.fn(function* (
   id: string,
@@ -187,15 +195,69 @@ const observe = Effect.fn(function* (
     const existing = yield* getConfig(name);
     if (existing !== undefined) return existing;
   }
-  for (const config of yield* listConfigs(parent)) {
-    if (
-      sourceBucket !== undefined &&
-      config.objectMetadataReportOptions?.storageFilters?.bucket !== sourceBucket
-    )
-      continue;
-    if (yield* hasAlchemyLabels(id, config.labels)) return config;
+  const found = yield* configsOf(parent).pipe(
+    Stream.filter(
+      (config) =>
+        sourceBucket === undefined ||
+        config.objectMetadataReportOptions?.storageFilters?.bucket === sourceBucket,
+    ),
+    Stream.filterEffect((config) => hasAlchemyLabels(id, config.labels)),
+    Stream.runHead,
+  );
+  return Option.getOrUndefined(found);
+});
+
+/**
+ * Google creates the Storage Insights service agent
+ * (`service-{number}@gcp-sa-storageinsights…`) lazily; granting it a role
+ * before it exists fails. Generating the identity is idempotent.
+ */
+const ensureServiceAgent = Effect.fn(function* (project: string) {
+  const resource = yield* resourcemanager.getProjects({ name: `projects/${project}` });
+  const projectNumber = resource.name!.split("/")[1];
+  const operation = yield* serviceusage
+    .generateServiceIdentityServices({
+      parent: `projects/${projectNumber}/services/storageinsights.googleapis.com`,
+    })
+    .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
+  if (operation !== undefined) {
+    yield* waitForOperation(operation, (name) => serviceusage.getOperations({ name }), {
+      budget: "2 minutes",
+      interval: "2 seconds",
+    });
   }
-  return undefined;
+  return `serviceAccount:service-${projectNumber}@gcp-sa-storageinsights.iam.gserviceaccount.com`;
+});
+
+/**
+ * The service agent reads the source bucket and writes reports to the
+ * destination. The grants are add-only: the agent is shared by every
+ * inventory configuration in the project, so revoking on delete could break
+ * another configuration reading the same bucket.
+ */
+const grantServiceAgent = Effect.fn(function* (
+  project: string,
+  options: insights.ObjectMetadataReportOptions,
+) {
+  const member = yield* ensureServiceAgent(project);
+  const source = options.storageFilters?.bucket;
+  const destination = options.storageDestinationOptions?.bucket;
+  if (source !== undefined) {
+    yield* updateIamMembership({
+      kind: "storage.bucket",
+      name: source,
+      member,
+      add: ["roles/storage.insightsCollectorService"],
+    });
+  }
+  if (destination !== undefined) {
+    yield* updateIamMembership({
+      kind: "storage.bucket",
+      name: destination,
+      member,
+      add: ["roles/storage.objectCreator"],
+    });
+  }
 });
 
 export const ReportConfigProvider = () =>
@@ -279,6 +341,7 @@ export const ReportConfigProvider = () =>
               },
         parquetOptions: news.parquetOptions,
       };
+      yield* grantServiceAgent(env.project, news.objectMetadataReportOptions);
       let current = yield* observe(
         id,
         parent,

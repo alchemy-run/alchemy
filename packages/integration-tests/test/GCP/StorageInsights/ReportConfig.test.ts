@@ -39,23 +39,6 @@ const frequencyOptions = {
   endDate: { year: 2091, month: 1, day: 1 },
 };
 
-// The test owns both buckets. Keep existing policy bindings when granting
-// the Storage Insights service agent access to these fixtures.
-const grantInventoryAccess = Effect.fn(function* (bucket: string, member: string) {
-  const policy = yield* storage.getIamPolicyBuckets({ bucket });
-  yield* storage.setIamPolicyBuckets({
-    bucket,
-    body: {
-      ...policy,
-      bindings: [
-        ...(policy.bindings ?? []),
-        { role: "roles/storage.insightsCollectorService", members: [member] },
-        { role: "roles/storage.objectCreator", members: [member] },
-      ],
-    },
-  });
-});
-
 test.provider(
   "create, update format, replace location, and delete inventory configuration",
   (stack) =>
@@ -66,9 +49,12 @@ test.provider(
       const project = yield* projects.getProjects({ name: `projects/${env.project}` });
       const projectNumber = project.name!.split("/")[1];
       const member = `serviceAccount:service-${projectNumber}@gcp-sa-storageinsights.iam.gserviceaccount.com`;
-      yield* grantInventoryAccess(fixtures.primary, member);
-      yield* grantInventoryAccess(fixtures.secondary, member);
-      yield* grantInventoryAccess(fixtures.alternate, member);
+      const rolesOf = Effect.fn(function* (bucket: string) {
+        const policy = yield* storage.getIamPolicyBuckets({ bucket });
+        return (policy.bindings ?? [])
+          .filter((binding) => binding.members?.includes(member))
+          .map((binding) => binding.role);
+      });
 
       const deploy = (parquet: boolean, secondary = false, alternate = false) =>
         stack.deploy(
@@ -103,6 +89,13 @@ test.provider(
       expect(initial.csvOptions?.delimiter).toEqual("|");
       expect(initial.csvOptions?.headerRequired).toEqual(true);
       expect(initial.labels?.["alchemy-id"]).toEqual(expect.any(String));
+      // The deploy granted the service agent read and write on the bucket.
+      expect(yield* rolesOf(fixtures.primary)).toEqual(
+        expect.arrayContaining([
+          "roles/storage.insightsCollectorService",
+          "roles/storage.objectCreator",
+        ]),
+      );
 
       // Recover the server-assigned UUID without its cached output.
       yield* Effect.gen(function* () {
