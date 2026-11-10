@@ -97,6 +97,7 @@ const flociOptInGates = [
   "AWS_ORG_MANAGEMENT_ACCOUNT",
   "AWS_TEST_APIGWV2_VPCLINK",
   "AWS_TEST_APPSYNC_CACHE",
+  "AWS_TEST_BEDROCK_AGENTS",
   "AWS_TEST_CLOUDHSM",
   "AWS_TEST_CLOUDTRAIL_LAKE",
   "AWS_TEST_CLOUDMAP_PUBLIC",
@@ -143,6 +144,13 @@ const flociFixedValues: Record<string, string> = {
   AWS_TEST_SNS_PLATFORM: "1",
   AWS_TEST_SNS_PLATFORM_NAME: "GCM",
   // Floci accepts GCM credentials of 24+ chars without "invalid"/"fake"/"probe".
+  // Floci's knowledge bases need no vector store or embedding model: any
+  // well-formed role, collection, and model ARNs are accepted.
+  BEDROCK_KB_ROLE_ARN: "arn:aws:iam::000000000000:role/alchemy-floci-bedrock-kb",
+  BEDROCK_KB_COLLECTION_ARN: "arn:aws:aoss:us-east-1:000000000000:collection/alchemyflocikb",
+  BEDROCK_KB_INDEX_NAME: "bedrock-index",
+  BEDROCK_KB_EMBEDDING_MODEL_ARN:
+    "arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v2:0",
   AWS_TEST_SNS_PLATFORM_CREDENTIAL: "alchemy-floci-gcm-server-key-000000000000",
   AWS_TEST_SNS_PLATFORM_TOKEN: "alchemy-floci-device-token-0001",
   // Floci's AgentCore control plane records the artifact without pulling it.

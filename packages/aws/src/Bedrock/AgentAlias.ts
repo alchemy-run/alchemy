@@ -164,8 +164,13 @@ export const AgentAliasProvider = () =>
         );
       });
 
+      // An alias can't exist under an agent that doesn't, so a missing agent
+      // means no alias by that name.
       const findByName = Effect.fn(function* (agentId: string, name: string) {
-        const pages = yield* bedrock.listAgentAliases.pages({ agentId }).pipe(Stream.runCollect);
+        const pages = yield* bedrock.listAgentAliases.pages({ agentId }).pipe(
+          Stream.runCollect,
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed([])),
+        );
         return Array.from(pages)
           .flatMap((page) => page.agentAliasSummaries ?? [])
           .find((s) => s.agentAliasName === name)?.agentAliasId;
