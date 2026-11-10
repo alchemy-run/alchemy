@@ -9,7 +9,8 @@ import { flociServices } from "./FlociServices.ts";
  * header is the AWS hostname (`{bucket}.s3-website-{region}.amazonaws.com`,
  * `{apiId}.appsync-api.{region}.amazonaws.com`,
  * `{apiId}.execute-api.{region}.amazonaws.com`,
- * `{distributionId}.cloudfront.net`, `{branch}.{appId}.amplifyapp.com`). Live tests GET those hosts; under
+ * `{distributionId}.cloudfront.net`, `{branch}.{appId}.amplifyapp.com`,
+ * `{serviceId}.{region}.awsapprunner.com`). Live tests GET those hosts; under
  * `ALCHEMY_TEST_DEV` rewrite the URL to the emulator and keep the Host so
  * the virtual-host filter still fires.
  */
@@ -23,7 +24,8 @@ const rewriteVirtualHostToFloci = (
     !/\.appsync-api\.[a-z0-9-]+\.amazonaws\.com$/i.test(url.hostname) &&
     !/\.execute-api\.[a-z0-9-]+\.amazonaws\.com$/i.test(url.hostname) &&
     !/\.cloudfront\.net$/i.test(url.hostname) &&
-    !/\.amplifyapp\.com$/i.test(url.hostname)
+    !/\.amplifyapp\.com$/i.test(url.hostname) &&
+    !/\.awsapprunner\.com$/i.test(url.hostname)
   ) {
     return request;
   }
