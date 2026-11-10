@@ -1,0 +1,208 @@
+---
+title: Pi
+description: Run Pi Durable agent harnesses with Alchemy. Conversations in a Durable Object's SQLite, tools and models as Effect Layers, tools in a sandbox, and runs that resume after a crash.
+---
+
+[Pi Durable](https://github.com/earendil-works/pi/tree/main/packages/durable) is the durable engine behind the Pi coding agent. It keeps conversations, model calls and tool calls as checkpointed tasks in one storage, so a process that dies mid-run picks up where it stopped. `@alchemy.run/pi` hosts it on Alchemy runtimes: a harness is yielded like a binding, tools and models are Effect Layers, and conversations live in the storage of whatever hosts them.
+
+```sh
+npm install @alchemy.run/pi
+```
+
+## A harness in a Durable Object
+
+Name a model once. Which LLM answers is the Layer you back it with:
+
+```typescript title="src/models.ts"
+import * as Pi from "@alchemy.run/pi";
+
+export class Fast extends Pi.Model<Fast>()("fast") {}
+```
+
+Declare a tool as a contract. Its `success` schema becomes the type programs see:
+
+```typescript title="src/tools.ts"
+import * as Pi from "@alchemy.run/pi";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+export class RunTests extends Pi.Tool<RunTests>()("run_tests", {
+  description: "Run the test suite and report failures.",
+  parameters: Schema.Struct({ filter: Schema.optional(Schema.String) }),
+  success: Schema.Struct({ exitCode: Schema.Number, output: Schema.String }),
+  replay: "safe",
+}) {}
+
+export const RunTestsLive = RunTests.make(
+  Effect.gen(function* () {
+    return Effect.fn(function* ({ filter }) {
+      const env = yield* Pi.Env;
+      const result = yield* env.exec(["npm", "test", ...(filter ? ["--", filter] : [])]);
+      return { exitCode: result.exitCode, output: result.stdout.slice(-8000) };
+    });
+  }),
+);
+```
+
+Yield the harness in the Durable Object's outer Effect, where its Layers are provided, and use it in the instance:
+
+```typescript title="src/Session.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Pi from "@alchemy.run/pi";
+import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Gateway } from "./Gateway.ts";
+import { Fast } from "./models.ts";
+import { RunTests, RunTestsLive } from "./tools.ts";
+
+const ModelsLive = Layer.unwrap(
+  Effect.map(Cloudflare.AI.QueryGateway(Gateway), (gateway) =>
+    Fast.layer(gateway.model({ model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast" })),
+  ),
+);
+
+const HarnessLive = Layer.mergeAll(
+  ModelsLive,
+  RunTestsLive,
+  PiCloudflare.DurableObjectStorage,
+  Pi.NoEnv,
+).pipe(Layer.provideMerge(Cloudflare.AI.QueryGatewayBinding));
+
+export default class Session extends Cloudflare.DurableObject<Session>()(
+  "Session",
+  Effect.gen(function* () {
+    const harness = yield* Pi.Harness({ models: [Fast], tools: [RunTests] });
+
+    return Effect.gen(function* () {
+      return {
+        prompt: Effect.fn(function* (name: string, text: string, requestId: string) {
+          const conversation = yield* harness.createConversation({ name, tools: [RunTests] });
+          const submission = yield* conversation.submit({ type: "input", content: text, requestId });
+          return (yield* submission.wait).status;
+        }),
+      };
+    });
+  }).pipe(Effect.provide(HarnessLive)),
+) {}
+```
+
+`createConversation({ name })` returns the existing conversation when the name is taken, and `requestId` makes a submission exactly-once, so a retried call never runs twice.
+
+## Conversations at runtime
+
+A conversation stores what it runs with. Change it from any call; the next model request uses it:
+
+```typescript
+const conversation = yield* harness.conversationByName("pr-142");
+yield* conversation.configure({ tools: { remove: [Pi.Bash] } });
+yield* conversation.configure({ model: Fast, instructions: "Review only. Never edit files." });
+yield* conversation.configure({ extensions: { add: [Releasing] } });
+```
+
+Steer a running conversation, stop it, or start fresh from a note:
+
+```typescript
+yield* conversation.submit({ type: "input", content: "Use pnpm, not npm", whenBusy: "steer" });
+yield* conversation.abort();
+yield* conversation.reset("We were fixing the flaky login test. Continue.");
+```
+
+## Inline tools
+
+A tool can close over what its Durable Object binds:
+
+```typescript
+const notes = yield* Cloudflare.KV.ReadWriteNamespace(Notes);
+const SaveNote = Pi.Tool(
+  "save_note",
+  {
+    description: "Save a note the user can read later.",
+    parameters: Schema.Struct({ key: Schema.String, text: Schema.String }),
+  },
+  Effect.fn(function* ({ key, text }) {
+    yield* notes.put(key, text);
+  }),
+);
+const harness = yield* Pi.Harness({ models: [Fast], tools: [SaveNote] });
+```
+
+## Tools in a sandbox
+
+A Durable Object can't run processes, so Pi's coding tools run in a sandbox. `Pi.SandboxEnv` starts Pi's own `pi-env` daemon in it, so `read`, `write`, `edit` and `bash` behave exactly as they do locally:
+
+```typescript
+const SandboxEnvLive = Pi.SandboxEnv(
+  Effect.gen(function* () {
+    const sandboxes = yield* E2B.CreateSandbox(Workspace);
+    return Effect.fn(function* ({ conversationId }) {
+      const metadata = { conversation: String(conversationId) };
+      const [existing] = yield* sandboxes.list({ metadata, state: ["running", "paused"] });
+      return existing
+        ? yield* sandboxes.connect(existing.sandboxID)
+        : yield* sandboxes.create({ metadata, autoPause: true, timeout: 1800 });
+    });
+  }),
+);
+```
+
+Finding the sandbox by metadata keeps one sandbox per conversation, also after the Durable Object is evicted.
+
+## Extensions and skills
+
+An extension bundles prompt sections, tools and hooks that conversations select by name:
+
+```typescript
+export class Guard extends Pi.Extension<Guard>()(
+  "guard",
+  { sections: { policy: "Deploys need approval." } },
+  Effect.gen(function* () {
+    return {
+      hooks: {
+        beforeTool: Effect.fn(function* (call) {
+          return call.name === "deploy" ? Pi.block("Deploys need approval.") : undefined;
+        }),
+      },
+    };
+  }),
+) {}
+```
+
+A skill is advertised in the system prompt and loaded with `load_skill` when the task calls for it:
+
+```typescript
+export class Releasing extends Pi.Skill<Releasing>()("releasing", {
+  description: "Cut and upload a release. Use when the user asks to ship.",
+  instructions: "Run the tests, run .skills/releasing/bump.sh, build, then call deploy.",
+  files: { "bump.sh": "npm version patch --no-git-tag-version\n" },
+  tools: [Deploy],
+}) {}
+```
+
+## Code mode
+
+In code mode the model writes a program that calls the conversation's tools, and only its output reaches the model. Provide a convention over a runtime:
+
+```typescript
+const CodeModeLive = Pi.CodeModeAsync.pipe(Layer.provide(PiCloudflare.EvalInline()));
+const harness = yield* Pi.Harness({ models: [Fast], tools: [RunTests], extensions: [Pi.CodeMode] });
+```
+
+Scripts run deterministically, so a script cut off by a crash replays its finished tool calls and continues.
+
+## Surviving a crash
+
+The harness keeps the Durable Object's alarm armed while Pi has work. An evicted or crashed object wakes from the alarm and resumes every unfinished run from its last checkpoint: an interrupted model request is retried after Pi's backoff, and a tool declared `replay: "safe"` runs again.
+
+## Other hosts
+
+On a long-lived machine (a Fly Machine, an ECS task, a container) swap the storage and the environment; the harness and its tools are unchanged:
+
+```typescript
+const BoxLive = Layer.mergeAll(
+  ModelsLive,
+  RunTestsLive,
+  Pi.SqliteFile("/data/pi.sqlite"),
+  Pi.LocalEnv({ cwd: "/workspace" }),
+);
+```
