@@ -2,6 +2,8 @@ import * as IAM from "@alchemy.run/aws/IAM";
 import * as Lambda from "@alchemy.run/aws/Lambda";
 import * as Scheduler from "@alchemy.run/aws/Scheduler";
 import * as SQS from "@alchemy.run/aws/SQS";
+import * as Alchemy from "alchemy";
+import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -11,6 +13,8 @@ import path from "pathe";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
+class FirstAttemptFails extends Data.TaggedError("FirstAttemptFails") {}
+
 // Shared Lambda fixture for the EventBridge Scheduler runtime surface:
 // - CreateSchedule / UpdateSchedule / GetSchedule / DeleteSchedule /
 //   ListSchedules bindings, one HTTP route per operation. Runtime-minted
@@ -19,6 +23,8 @@ const main = path.resolve(import.meta.dirname, "handler.ts");
 // - consumeSchedule (the cron-handler DX): a rate(1 minute) schedule invokes
 //   this same Lambda; the handler forwards the typed event into the cron
 //   queue for out-of-band observation.
+// - Alchemy.makeCallback over AWS.Lambda.Callbacks: jobs call this Lambda
+//   back, and the handlers forward into the cron queue too.
 export class SchedulerTestFunction extends Lambda.Function<Lambda.Function>()(
   "SchedulerTestFunction",
 ) {}
@@ -68,12 +74,6 @@ export default SchedulerTestFunction.make(
     const schedule = yield* Scheduler.CreateSchedule(sinkQueue);
     const reschedule = yield* Scheduler.UpdateSchedule(sinkQueue);
     const scheduleWithRole = yield* Scheduler.CreateSchedule(sinkQueue, { role: executionRole });
-    // A delayed callback to this same Lambda: the Function target path.
-    const self = yield* Lambda.Function;
-    const callback = yield* Scheduler.CreateSchedule(self);
-    // The route id the consumeSchedule registration below listens on, so a
-    // callback carrying its envelope is forwarded into the cron queue.
-    const cronRouteId = Scheduler.createScheduleRouteId({ expression: "rate(1 minute)" }, self);
     const getSchedule = yield* Scheduler.GetSchedule();
     const deleteSchedule = yield* Scheduler.DeleteSchedule();
     const listSchedules = yield* Scheduler.ListSchedules();
@@ -91,6 +91,35 @@ export default SchedulerTestFunction.make(
           executionId: event.executionId,
         }),
       }).pipe(Effect.orDie, Effect.asVoid),
+    );
+
+    // Durable callbacks into this Lambda. `remind` forwards its payload into
+    // the cron queue; `flaky` fails its first attempt, so the forwarded
+    // message proves the retry ran.
+    const remind = yield* Alchemy.makeCallback(
+      "remind",
+      Effect.fn(function* ({ marker }: { marker: string }) {
+        yield* sendCron({
+          MessageBody: JSON.stringify({ marker: "alch-schedtest-callback", id: marker }),
+        }).pipe(Effect.orDie);
+      }),
+    );
+    const flaky: Alchemy.Callback<{ marker: string }> = yield* Alchemy.makeCallback(
+      "flaky",
+      Effect.fn(function* ({ marker }: { marker: string }) {
+        const status = yield* flaky.getStatus(marker).pipe(Effect.orDie);
+        if (status === undefined || status.attempts === 0) {
+          return yield* new FirstAttemptFails();
+        }
+        yield* sendCron({
+          MessageBody: JSON.stringify({
+            marker: "alch-schedtest-callback",
+            id: marker,
+            attempts: status.attempts,
+          }),
+        }).pipe(Effect.orDie);
+      }),
+      { retry: { delay: "1 second", maxAttempts: 3 } },
     );
 
     const sinkQueueArn = yield* sinkQueue.queueArn;
@@ -146,33 +175,28 @@ export default SchedulerTestFunction.make(
           return yield* HttpServerResponse.json({ scheduleArn: created.ScheduleArn, expression });
         }
 
-        // One-shot callback into this Lambda. The payload is the cron route's
-        // envelope with the schedule name as executionId, so the handler
-        // forwards it into the cron queue where the test can see it.
-        if (request.method === "POST" && pathname.startsWith("/callbacks/")) {
-          const name = pathname.slice("/callbacks/".length);
-          const fireAt = yield* Effect.sync(() => new Date(Date.now() + 15_000));
-          return yield* callback
-            .at(fireAt, {
-              name,
-              payload: {
-                source: "alchemy.scheduler",
-                scheduleId: cronRouteId,
-                scheduleArn: "callback",
-                scheduledTime: fireAt.toISOString(),
-                executionId: name,
-                attemptNumber: "1",
-              },
-            })
-            .pipe(
-              Effect.flatMap((created) =>
-                HttpServerResponse.json({ scheduleArn: created.ScheduleArn }),
-              ),
-              // Surface the typed failure (424 so the 5xx retry doesn't mask it).
+        // Durable callbacks: schedule, read, cancel. Typed failures surface
+        // in the body (424 so the 5xx retry doesn't mask them).
+        if (pathname.startsWith("/callbacks/") || pathname.startsWith("/flaky/")) {
+          const callback = pathname.startsWith("/flaky/") ? flaky : remind;
+          const id = pathname.slice(pathname.indexOf("/", 1) + 1);
+          const after = `${Number(url.searchParams.get("after") ?? "0")} seconds` as const;
+          const respond = <A, R>(effect: Effect.Effect<A, Alchemy.CallbackError, R>) =>
+            effect.pipe(
+              Effect.flatMap((value) => HttpServerResponse.json({ status: value ?? null })),
               Effect.catch((e) =>
-                HttpServerResponse.json({ error: e._tag, message: String(e) }, { status: 424 }),
+                HttpServerResponse.json({ error: e._tag, message: e.message }, { status: 424 }),
               ),
             );
+          if (request.method === "POST") {
+            return yield* respond(
+              callback
+                .schedule(id, { after, payload: { marker: id } })
+                .pipe(Effect.andThen(callback.getStatus(id))),
+            );
+          }
+          if (request.method === "GET") return yield* respond(callback.getStatus(id));
+          if (request.method === "DELETE") return yield* respond(callback.cancel(id));
         }
 
         // Recurring schedule through the `every` shortcut.
@@ -272,6 +296,7 @@ export default SchedulerTestFunction.make(
         Scheduler.DeleteScheduleHttp,
         Scheduler.ListSchedulesHttp,
         Lambda.ScheduleEventSource,
+        Lambda.Callbacks,
         SQS.SendMessageHttp,
       ),
     ),

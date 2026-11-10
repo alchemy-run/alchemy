@@ -142,19 +142,29 @@ yield* schedule.at(new Date(Date.now() + 15 * 60_000), {
 
 The binding creates the role Scheduler assumes, which may send to that Queue only, and lets the runtime pass it. `schedule.every` and `schedule.cron` create recurring schedules the same way. A one-time `at` schedule deletes itself after it runs.
 
-A Function can schedule a call back to itself:
+Provide `AWS.Scheduler.CreateScheduleHttp` to the runtime. `UpdateSchedule`, `GetSchedule`, `DeleteSchedule` and `ListSchedules` change, read and cancel the schedules it created.
+
+## Call a Function back later
+
+A Function that needs to finish something later, like expiring an order in an hour, registers a callback with `Alchemy.makeCallback`. The Function routes each scheduled job to the handler registered under the callback's name:
 
 ```typescript title="src/orders.ts"
-const self = yield* AWS.Lambda.Function;
-const callback = yield* AWS.Scheduler.CreateSchedule(self);
-
-yield* callback.at(new Date(Date.now() + 60 * 60_000), {
-  name: `expire-${orderId}`,
-  payload: { orderId },
-});
+const onExpire = yield* Alchemy.makeCallback(
+  "expire",
+  Effect.fn(function* ({ orderId }: { orderId: string }) {
+    yield* expireOrder(orderId);
+  }),
+);
 ```
 
-The payload arrives as the invocation's event. Provide `AWS.Scheduler.CreateScheduleHttp` to the runtime. `UpdateSchedule`, `GetSchedule`, `DeleteSchedule` and `ListSchedules` change, read and cancel the schedules it created.
+Schedule a job with an ID. Scheduling the same ID again replaces the pending job, and `cancel` removes it:
+
+```typescript title="src/orders.ts"
+yield* onExpire.schedule(orderId, { after: "1 hour", payload: { orderId } });
+yield* onExpire.cancel(orderId);
+```
+
+Provide `AWS.Lambda.Callbacks` to the Function. It keeps each job as a one-time schedule in a schedule group of the Function's own, retries a handler that fails, and deletes the job once its handler succeeds. Delivery is at least once, so handlers must be idempotent. The same `makeCallback` code runs on a Cloudflare Durable Object.
 
 ## Schedule containers
 

@@ -28,6 +28,7 @@ import type { InputProps } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import type { ResourceLike } from "alchemy/Resource";
 import { Stack } from "alchemy/Stack";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as AWSBindings from "../AWSBindings.ts";
@@ -52,7 +53,7 @@ import type {
  * Passes unresolved Outputs — binding data is resolved by the engine before
  * the host reconciles.
  */
-const scheduleArnPattern = Effect.fn(function* (group: ScheduleGroup | undefined) {
+export const scheduleArnPattern = Effect.fn(function* (group: ScheduleGroup | undefined) {
   const { accountId, region } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
     accountId: string;
     region: string;
@@ -147,7 +148,7 @@ export const makeScheduleGroupScopedHttpBinding = <
  * the Queue or invoke the Function. The role is declared under the target's logical id,
  * so every host (and both write bindings) binding the same target shares it.
  */
-const executionRolePropsOf = (target: ScheduleTarget): InputProps<RoleProps> => ({
+export const executionRolePropsOf = (target: ScheduleTarget): InputProps<RoleProps> => ({
   assumeRolePolicyDocument: {
     Version: "2012-10-17",
     Statement: [
@@ -209,7 +210,7 @@ const cronExpression = (expression: string) =>
  * An ARN in the deploying account, bound into the host's env from the AWS
  * environment rather than from another resource's output.
  */
-const accountArn = (format: (accountId: string, region: string) => string) =>
+export const accountArn = (format: (accountId: string, region: string) => string) =>
   Output.fromEffect(
     AWSEnvironment.use((env) =>
       Effect.map(env, ({ accountId, region }) => format(accountId, region)),
@@ -221,21 +222,21 @@ const accountArn = (format: (accountId: string, region: string) => string) =>
  * Outputs are keyed by their source text by default, which is the same for
  * every `accountArn`, so each one needs its own key.
  */
-const bindAccountArn = (output: Output.Output<string, never>, key: string) =>
+export const bindAccountArn = (output: Output.Output<string, never>, key: string) =>
   (output as unknown as { bind(key: string): Effect.Effect<Effect.Effect<string>> }).bind(key);
 
 /**
- * The execution role name for a Function's callbacks to itself, derived
- * from the stack, stage and host so the host can name the role without
- * reading its output. IAM role names are at most 64 characters.
+ * The name of a role whose policy names `host`, derived from the stack,
+ * stage and host so the host can name the role without reading its output.
+ * IAM role names are at most 64 characters.
  */
-const selfRoleName = Effect.fn(function* (host: ResourceLike) {
+export const hostRoleName = Effect.fn(function* (host: ResourceLike, kind: string) {
   const stack = yield* Effect.serviceOption(Stack);
   const prefix = Option.isSome(stack)
-    ? `${stack.value.name}-${host.LogicalId}-${stack.value.stage}-sched-`
-    : `${host.LogicalId}-sched-`;
+    ? `${stack.value.name}-${host.LogicalId}-${stack.value.stage}-${kind}-`
+    : `${host.LogicalId}-${kind}-`;
   const hash = yield* Effect.sync(() =>
-    createHash("sha256").update(`${host.FQN}:schedule`).digest("hex").slice(0, 12),
+    createHash("sha256").update(`${host.FQN}:${kind}`).digest("hex").slice(0, 12),
   );
   return `${prefix.replaceAll(/[^a-zA-Z0-9-]/g, "-").slice(0, 64 - hash.length)}${hash}`;
 });
@@ -244,10 +245,10 @@ const selfRoleName = Effect.fn(function* (host: ResourceLike) {
  * The executing Function's own ARN: the account and region come from the
  * deploy-time AWS environment, the name from the Lambda runtime.
  */
-const selfFunctionArn = Effect.fn(function* (fn: LambdaFunction) {
+export const selfFunctionArn = Effect.fn(function* (fn: ResourceLike) {
   const prefix = yield* bindAccountArn(
     accountArn((accountId, region) => `arn:aws:lambda:${region}:${accountId}:function:`),
-    `${fn.LogicalId}.scheduleFunctionArnPrefix`,
+    `${fn.LogicalId}.functionArnPrefix`,
   );
   return Effect.gen(function* () {
     // oxlint-disable-next-line effecttsgo/process-env-in-effect -- reads the executing Lambda's identity
@@ -255,6 +256,11 @@ const selfFunctionArn = Effect.fn(function* (fn: LambdaFunction) {
     return `${yield* prefix}${name}`;
   });
 });
+
+/** A schedule write targets the Function it runs in. */
+export class ScheduleTargetIsHostError extends Data.TaggedError("ScheduleTargetIsHostError")<{
+  readonly message: string;
+}> {}
 
 /** The raw request a shortcut (`at`/`every`/`cron`) sends. */
 interface WriteRequest {
@@ -331,32 +337,23 @@ export const makeScheduleWriteHttpBinding = <
     ) {
       const group = writeOptions.group;
       const host = yield* Binding.Host;
-      // A Function scheduling callbacks to itself. Its env can't hold its own
-      // ARN or the ARN of a role whose policy names it — both are cycles — so
-      // the role gets a name derived from the host and both ARNs are built
-      // from the account, region and function name instead.
-      const self = !isQueue(target) && host !== undefined && host.LogicalId === target.LogicalId;
-      let roleArn: Output.Output<string, never>;
-      if (writeOptions.role) {
-        roleArn = writeOptions.role.roleArn as Output.Output<string, never>;
-      } else if (self) {
-        const roleName = yield* selfRoleName(host);
-        yield* IamRole(`${target.LogicalId}ScheduleExecutionRole`, {
-          ...executionRolePropsOf(target),
-          roleName,
-        });
-        roleArn = accountArn((accountId) => `arn:aws:iam::${accountId}:role/${roleName}`);
-      } else {
-        const role = yield* IamRole(
-          `${target.LogicalId}ScheduleExecutionRole`,
-          executionRolePropsOf(target),
+      // A Function can't bind its own ARN into its env (a cycle). Calling
+      // back into the host is what `Alchemy.makeCallback` is for.
+      if (!isQueue(target) && host !== undefined && host.LogicalId === target.LogicalId) {
+        return yield* Effect.die(
+          new ScheduleTargetIsHostError({
+            message: `${options.tag} can't target "${host.LogicalId}", the Function it runs in. Use Alchemy.makeCallback with AWS.Lambda.Callbacks to call this Function back later.`,
+          }),
         );
-        roleArn = role.roleArn as Output.Output<string, never>;
       }
-      const RoleArn = self
-        ? yield* bindAccountArn(roleArn, `${target.LogicalId}.scheduleExecutionRoleArn`)
-        : yield* roleArn;
-      const TargetArn = self ? yield* selfFunctionArn(target) : yield* targetArnOf(target);
+      const roleArn = writeOptions.role
+        ? (writeOptions.role.roleArn as Output.Output<string, never>)
+        : ((yield* IamRole(
+            `${target.LogicalId}ScheduleExecutionRole`,
+            executionRolePropsOf(target),
+          )).roleArn as Output.Output<string, never>);
+      const RoleArn = yield* roleArn;
+      const TargetArn = yield* targetArnOf(target);
       const GroupName = group ? yield* group.scheduleGroupName : undefined;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const pattern = yield* scheduleArnPattern(group);

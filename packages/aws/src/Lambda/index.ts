@@ -62,6 +62,7 @@ export * from "./RoomMessageReviewEventSource.ts";
 export * from "./ResumeMicrovmHttp.ts";
 export * from "./RunMicrovm.ts";
 export * from "./RunMicrovmHttp.ts";
+export * from "./Callbacks.ts";
 export * from "./ScheduleEventSource.ts";
 export * from "./SecretRotationEventSource.ts";
 export * from "./StreamEventSource.ts";

@@ -71,21 +71,9 @@ export type CreateScheduleClient = ScheduleWriteClient<
  * });
  * ```
  *
- * **Example:** Call This Function Back Later
- * ```typescript
- * // bind the host Function to itself for delayed callbacks
- * const self = yield* AWS.Lambda.Function;
- * const callback = yield* AWS.Scheduler.CreateSchedule(self);
- *
- * // runtime: the payload arrives as the invocation event
- * yield* callback.at(new Date(Date.now() + 60 * 60_000), {
- *   name: `expire-${orderId}`,
- *   payload: { orderId },
- * });
- * ```
- *
- * A callback to the host itself invokes the function's unqualified ARN,
- * even when the function routes through an alias.
+ * To call the Function the binding runs in back later, use
+ * `Alchemy.makeCallback` with `AWS.Lambda.Callbacks` instead: the
+ * Function routes each job to the handler registered under its name.
  *
  * **Example:** Run On A Cron Expression In A Timezone
  * ```typescript

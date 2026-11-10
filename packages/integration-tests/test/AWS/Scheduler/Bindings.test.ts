@@ -276,37 +276,6 @@ describe(
         { timeout: 150_000 },
       );
 
-      test.provider(
-        "a Function target invokes the bound Lambda (delayed self-callback)",
-        (_stack) =>
-          Effect.gen(function* () {
-            const name = `${SCHEDULE_PREFIX}callback`;
-
-            const created = (yield* send(
-              HttpClientRequest.post(`${baseUrl}/callbacks/${name}`),
-            ).pipe(Effect.flatMap((r) => r.json))) as {
-              scheduleArn?: string;
-              error?: string;
-              message?: string;
-            };
-            expect(created.message).toBeUndefined();
-
-            const observed = yield* scheduler.getSchedule({ Name: name });
-            expect(observed.Target?.Arn).toMatch(/^arn:aws:lambda:.*:function:/);
-
-            // The schedule invoked this Lambda, whose cron route forwarded the
-            // payload into the cron queue.
-            const event = yield* receiveMatching(
-              cronQueueUrl,
-              (body) => body.marker === "alch-schedtest-cron-fired" && body.executionId === name,
-              { times: 30 },
-            );
-            expect(event.scheduleArn).toBe("callback");
-            yield* waitUntilScheduleGone(name);
-          }),
-        { timeout: 150_000 },
-      );
-
       test.provider("every() creates a recurring rate schedule", (_stack) =>
         Effect.gen(function* () {
           const name = `${SCHEDULE_PREFIX}every`;
@@ -456,6 +425,98 @@ describe(
       );
     });
 
+    describe("makeCallback", () => {
+      type StatusBody = {
+        status: {
+          scheduledAt: number;
+          retryAt?: number;
+          attempts: number;
+          parked: boolean;
+        } | null;
+        error?: string;
+        message?: string;
+      };
+      const call = (request: HttpClientRequest.HttpClientRequest) =>
+        send(request).pipe(Effect.flatMap((r) => r.json as Effect.Effect<StatusBody, any>));
+
+      test.provider(
+        "routes a scheduled job to its handler and removes it",
+        (_stack) =>
+          Effect.gen(function* () {
+            const id = `${SCHEDULE_PREFIX}remind`;
+            const scheduled = yield* call(
+              HttpClientRequest.post(`${baseUrl}/callbacks/${id}?after=0`),
+            );
+            expect(scheduled.message).toBeUndefined();
+            expect(scheduled.status?.attempts).toBe(0);
+
+            const delivered = yield* receiveMatching(
+              cronQueueUrl,
+              (body) => body.marker === "alch-schedtest-callback" && body.id === id,
+              { times: 30 },
+            );
+            expect(delivered.attempts).toBeUndefined();
+
+            // A successful delivery deletes its job.
+            yield* call(HttpClientRequest.get(`${baseUrl}/callbacks/${id}`)).pipe(
+              Effect.flatMap((body) =>
+                body.status === null ? Effect.void : Effect.fail(new ScheduleStillExists()),
+              ),
+              Effect.retry({
+                while: (error) => error._tag === "ScheduleStillExists",
+                schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(15)]),
+              }),
+            );
+          }),
+        { timeout: 150_000 },
+      );
+
+      test.provider("replaces and cancels a pending job", (_stack) =>
+        Effect.gen(function* () {
+          const id = `${SCHEDULE_PREFIX}pending`;
+          const first = yield* call(
+            HttpClientRequest.post(`${baseUrl}/callbacks/${id}?after=3600`),
+          );
+          expect(first.message).toBeUndefined();
+          const replaced = yield* call(
+            HttpClientRequest.post(`${baseUrl}/callbacks/${id}?after=7200`),
+          );
+          expect(replaced.status!.scheduledAt - first.status!.scheduledAt).toBeGreaterThan(
+            3_000_000,
+          );
+          expect(replaced.status?.parked).toBe(false);
+
+          const cancelled = yield* call(HttpClientRequest.delete(`${baseUrl}/callbacks/${id}`));
+          expect(cancelled.message).toBeUndefined();
+          const read = yield* call(HttpClientRequest.get(`${baseUrl}/callbacks/${id}`));
+          expect(read.status).toBeNull();
+
+          // Cancelling an absent job succeeds.
+          const again = yield* call(HttpClientRequest.delete(`${baseUrl}/callbacks/${id}`));
+          expect(again.message).toBeUndefined();
+        }),
+      );
+
+      test.provider(
+        "retries a handler that fails",
+        (_stack) =>
+          Effect.gen(function* () {
+            const id = `${SCHEDULE_PREFIX}flaky`;
+            const scheduled = yield* call(HttpClientRequest.post(`${baseUrl}/flaky/${id}?after=0`));
+            expect(scheduled.message).toBeUndefined();
+
+            // The first attempt fails; the retry sees one attempt and forwards.
+            const delivered = yield* receiveMatching(
+              cronQueueUrl,
+              (body) => body.marker === "alch-schedtest-callback" && body.id === id,
+              { times: 45 },
+            );
+            expect(delivered.attempts).toBe(1);
+          }),
+        { timeout: 180_000 },
+      );
+    });
+
     describe("ScheduleEventSource", () => {
       test.provider(
         "the cron handler consumes its own scheduled invocations",
@@ -468,8 +529,7 @@ describe(
             // ~90s to ride out one full rate window.
             const event = yield* receiveMatching(
               cronQueueUrl,
-              (body) =>
-                body.marker === "alch-schedtest-cron-fired" && body.scheduleArn !== "callback",
+              (body) => body.marker === "alch-schedtest-cron-fired",
               { times: 15 },
             );
 
