@@ -42,6 +42,7 @@ import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
+import { CODEMODE_TOOL, CodeModeConvention, isCodeMode } from "./CodeMode.ts";
 import { EnvHost } from "./Env.ts";
 import { ConversationNotFound, NotOnHarness, PiError } from "./Errors.ts";
 import type { AnyExtension, ExtensionImpl, ExtensionRequirements } from "./Extension.ts";
@@ -345,14 +346,21 @@ export const Harness = <
       Effect.gen(function* () {
         const impl: ExtensionImpl | undefined = extension.impl
           ? yield* extension.impl
-          : isSkill(extension)
+          : isSkill(extension) || isCodeMode(extension)
             ? undefined
             : Option.getOrUndefined(
                 yield* Effect.serviceOption(
                   extension as unknown as Context.Key<unknown, ExtensionImpl>,
                 ),
               );
-        return { extension, impl, tools: yield* resolveTools(extension.spec.tools ?? []) };
+        // Code mode's extension is built by its convention when an instance opens.
+        const codemode = isCodeMode(extension) ? yield* CodeModeConvention : undefined;
+        return {
+          extension,
+          impl,
+          codemode,
+          tools: yield* resolveTools(extension.spec.tools ?? []),
+        };
       }),
     );
     const skills = new Map(
@@ -380,12 +388,14 @@ export const Harness = <
         return Effect.sync(() => void settled.delete(done));
       });
 
-    const toolByName = new Map(
-      [...tools, ...extensions.flatMap((extension) => extension.tools)].map(({ tool }) => [
-        tool.toolName,
-        tool,
-      ]),
-    );
+    const toolByName = new Map<string, ToolRef>([
+      ...[...tools, ...extensions.flatMap((extension) => extension.tools)].map(
+        ({ tool }) => [tool.toolName, tool] as const,
+      ),
+      ...(extensions.some(({ codemode }) => codemode !== undefined)
+        ? [[CODEMODE_TOOL, { toolName: CODEMODE_TOOL } as ToolRef] as const]
+        : []),
+    ]);
     const modelName = (model: AnyModel) => model.modelName;
 
     const open = Effect.gen(function* () {
@@ -444,52 +454,61 @@ export const Harness = <
           name: BASE_EXTENSION,
           tools: [...tools.map(compile), ...(skills.size > 0 ? [loadSkill(skills)] : [])],
         };
-        const piExtensions: PiExtension[] = extensions.map(({ extension, impl, tools }) => {
-          const sections: PromptSection[] = [
-            ...Object.entries(extension.spec.sections ?? {}).map(([key, text]) =>
-              section(key, () => text),
-            ),
-            ...Object.entries(impl?.sections ?? {}).map(([key, render]) =>
-              section(key, (input) => runHook(render({ conversationId: input.conversationId }))),
-            ),
-          ];
-          const hooks: HookRegistration[] = [];
-          const toolHooks = impl?.hooks;
-          if (toolHooks?.beforeTool || toolHooks?.afterTool) {
-            hooks.push(
-              hook(ToolTask, {
-                ...(toolHooks.beforeTool
-                  ? { beforeTool: (call) => runHook(toolHooks.beforeTool!(call)) }
-                  : {}),
-                ...(toolHooks.afterTool
-                  ? { afterTool: (call, result) => runHook(toolHooks.afterTool!(call, result)) }
-                  : {}),
-              }),
-            );
-          }
-          if (toolHooks?.beforeRequest || toolHooks?.afterResponse || toolHooks?.onYield) {
-            hooks.push(
-              hook(GenerationTask, {
-                ...(toolHooks.beforeRequest
-                  ? {
-                      beforeRequest: (request) =>
-                        runHook(toolHooks.beforeRequest!(request)) as never,
-                    }
-                  : {}),
-                ...(toolHooks.afterResponse
-                  ? { afterResponse: (message) => runHook(toolHooks.afterResponse!(message)) }
-                  : {}),
-                ...(toolHooks.onYield
-                  ? { onYield: (answer) => runHook(toolHooks.onYield!(answer)) }
-                  : {}),
-              }),
-            );
-          }
-          return { name: extension.extensionName, tools: tools.map(compile), sections, hooks };
-        });
+        const piExtensions: PiExtension[] = extensions.map(
+          ({ extension, impl, tools, codemode }) => {
+            if (codemode !== undefined) return { name: extension.extensionName };
+            const sections: PromptSection[] = [
+              ...Object.entries(extension.spec.sections ?? {}).map(([key, text]) =>
+                section(key, () => text),
+              ),
+              ...Object.entries(impl?.sections ?? {}).map(([key, render]) =>
+                section(key, (input) => runHook(render({ conversationId: input.conversationId }))),
+              ),
+            ];
+            const hooks: HookRegistration[] = [];
+            const toolHooks = impl?.hooks;
+            if (toolHooks?.beforeTool || toolHooks?.afterTool) {
+              hooks.push(
+                hook(ToolTask, {
+                  ...(toolHooks.beforeTool
+                    ? { beforeTool: (call) => runHook(toolHooks.beforeTool!(call)) }
+                    : {}),
+                  ...(toolHooks.afterTool
+                    ? { afterTool: (call, result) => runHook(toolHooks.afterTool!(call, result)) }
+                    : {}),
+                }),
+              );
+            }
+            if (toolHooks?.beforeRequest || toolHooks?.afterResponse || toolHooks?.onYield) {
+              hooks.push(
+                hook(GenerationTask, {
+                  ...(toolHooks.beforeRequest
+                    ? {
+                        beforeRequest: (request) =>
+                          runHook(toolHooks.beforeRequest!(request)) as never,
+                      }
+                    : {}),
+                  ...(toolHooks.afterResponse
+                    ? { afterResponse: (message) => runHook(toolHooks.afterResponse!(message)) }
+                    : {}),
+                  ...(toolHooks.onYield
+                    ? { onYield: (answer) => runHook(toolHooks.onYield!(answer)) }
+                    : {}),
+                }),
+              );
+            }
+            return { name: extension.extensionName, tools: tools.map(compile), sections, hooks };
+          },
+        );
         const registry = createRegistry();
         registry.install(baseExtension);
-        for (const extension of piExtensions) registry.install(extension);
+        for (const extension of piExtensions) {
+          if (extension.name !== "codemode") registry.install(extension);
+        }
+        const buildCodemode = Effect.forEach(
+          extensions.flatMap(({ codemode }) => (codemode ? [codemode] : [])),
+          (convention) => convention.extension,
+        ).pipe(Effect.provideContext(base));
         // Selected by default: the base and every extension; skills only where added.
         const defaultExtensions = [
           baseExtension,
@@ -497,7 +516,12 @@ export const Harness = <
         ];
 
         opened = Effect.runPromise(
-          Effect.all([buildModels, storage.open(prefix)]).pipe(
+          Effect.all([buildModels, storage.open(prefix), buildCodemode]).pipe(
+            Effect.tap(([, , codemode]) =>
+              Effect.sync(() => {
+                for (const extension of codemode) registry.install(extension);
+              }),
+            ),
             Effect.flatMap(([piModels, piStorage]) =>
               fromPi((context) =>
                 PiHarness.open(
@@ -694,9 +718,10 @@ export const Harness = <
                 requested.extensions && !Array.isArray(requested.extensions)
                   ? ((requested.extensions as { add?: ReadonlyArray<AnyExtension> }).add ?? [])
                   : [];
-              const broughtTools = added.flatMap((extension) =>
-                flattenTools(extension.spec.tools ?? []),
-              );
+              const broughtTools = added.flatMap((extension) => [
+                ...flattenTools(extension.spec.tools ?? []),
+                ...(isCodeMode(extension) ? [{ toolName: CODEMODE_TOOL } as ToolRef] : []),
+              ]);
               const agent: AgentOptions =
                 broughtTools.length > 0 && requested.tools === undefined
                   ? { ...requested, tools: { add: broughtTools } }

@@ -23,6 +23,7 @@ const ModelsLive = Layer.unwrap(
 const HarnessLive = Layer.mergeAll(
   ModelsLive,
   AddLive,
+  Pi.CodeModeAsync.pipe(Layer.provide(PiCloudflare.EvalInline())),
   PiCloudflare.DurableObjectStorage,
   Pi.NoEnv,
   Cloudflare.KV.ReadWriteNamespaceBinding,
@@ -49,7 +50,7 @@ export default class PiSession extends Cloudflare.DurableObject<PiSession>()(
     const harness = yield* Pi.Harness({
       models: [Fast],
       tools: [Add, SaveNote],
-      extensions: [Guard, Greeting],
+      extensions: [Guard, Greeting, Pi.CodeMode],
     });
 
     return Effect.gen(function* () {
@@ -102,6 +103,10 @@ export default class PiSession extends Cloudflare.DurableObject<PiSession>()(
         enable: Effect.fn(function* (name: string, tool: "add" | "save_note") {
           const conversation = yield* harness.conversationByName(name);
           yield* conversation.configure({ tools: { add: [tool === "add" ? Add : SaveNote] } });
+        }),
+        addCodeMode: Effect.fn(function* (name: string) {
+          const conversation = yield* harness.conversationByName(name);
+          yield* conversation.configure({ extensions: { add: [Pi.CodeMode] } });
         }),
         addSkill: Effect.fn(function* (name: string) {
           const conversation = yield* harness.conversationByName(name);

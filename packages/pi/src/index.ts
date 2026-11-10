@@ -1,3 +1,11 @@
+export {
+  CodeMode,
+  CodeModeAsync,
+  CodeModeConvention,
+  Eval,
+  EvalQuickJS,
+  type CodeModeExtension,
+} from "./CodeMode.ts";
 export { CodingTools, Bash, Edit, Read, Write } from "./CodingTools.ts";
 export {
   Env,

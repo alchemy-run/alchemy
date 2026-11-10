@@ -219,3 +219,26 @@ test(
   }),
   { tags, timeout: 180_000 },
 );
+
+test(
+  "code mode runs a script that calls tools, in QuickJS on the Durable Object",
+  Effect.gen(function* () {
+    const user = `user-${Date.now()}`;
+    yield* call(`/${user}/script/create`, { tools: ["add"] });
+    yield* call(`/${user}/script/codemode`, {});
+    yield* call(`/${user}/script/prompt`, {
+      text: "Use the codemode tool once: write a script that calls tools.add({ a: 2, b: 3 }) and tools.add({ a: 10, b: 20 }) and prints both results with console.log.",
+      requestId: "script-1",
+    });
+    const results = (yield* call(`/${user}/script/results`)) as ReadonlyArray<{
+      tool: string;
+      isError: boolean;
+      text: string;
+    }>;
+    const script = results.find((result) => result.tool === "codemode");
+    expect(script?.isError).toBe(false);
+    expect(script?.text).toContain("1005");
+    expect(script?.text).toContain("1030");
+  }),
+  { tags, timeout: 180_000 },
+);

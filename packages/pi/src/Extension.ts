@@ -94,7 +94,7 @@ export interface ExtensionClass<
 
 /** Any extension, structurally: what a harness reads off it. */
 export interface AnyExtension {
-  readonly [ExtensionTypeId]: "class" | "skill";
+  readonly [ExtensionTypeId]: "class" | "skill" | "codemode";
   readonly key: string;
   readonly extensionName: string;
   readonly spec: ExtensionSpec;
@@ -105,7 +105,9 @@ export interface AnyExtension {
 export type ExtensionRequirements<T> =
   T extends ExtensionClass<any, any, infer Spec, infer Requires>
     ? Requires | ToolRequirements<NonNullable<Spec["tools"]>[number]>
-    : never;
+    : T extends { readonly "~requires": infer Requires }
+      ? Requires
+      : never;
 
 /**
  * Declare an extension: a named bundle of prompt sections, tools and

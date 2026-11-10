@@ -7,6 +7,7 @@ import { DurableObjectState } from "@alchemy.run/cloudflare/Workers/DurableObjec
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import { Eval } from "../CodeMode.ts";
 import { PiError } from "../Errors.ts";
 import { fromPi } from "../internal/promise.ts";
 import { Storage } from "../Storage.ts";
@@ -46,3 +47,30 @@ export const DurableObjectStorage: Layer.Layer<Storage> = Layer.succeed(Storage,
           }),
   })),
 });
+
+/**
+ * Run code-mode scripts in QuickJS on the Durable Object's own thread. A
+ * script that computes without calling a tool blocks the object until it
+ * calls one or spends its `interruptBudget`, so keep scripts to glue code.
+ *
+ * **Example:** Code mode in a Durable Object
+ * ```typescript
+ * const CodeModeLive = Pi.CodeModeAsync.pipe(Layer.provide(PiCloudflare.EvalInline()));
+ * ```
+ *
+ * @layer
+ * @provides Pi.Eval
+ */
+export const EvalInline = (
+  options: { readonly timeoutMs?: number; readonly interruptBudget?: number } = {},
+): Layer.Layer<Eval> =>
+  Layer.succeed(Eval, {
+    sandbox: fromPi(async () => {
+      const { createInlineCodemodeSandbox } =
+        await import("@earendil-works/pi-codemode/cloudflare");
+      return createInlineCodemodeSandbox({
+        timeoutMs: options.timeoutMs ?? 60_000,
+        interruptBudget: options.interruptBudget ?? 50_000,
+      });
+    }),
+  });
