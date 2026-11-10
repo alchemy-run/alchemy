@@ -17,10 +17,6 @@ test.provider(
       yield* stack.destroy();
       const name = missingName(stack.stage);
       yield* expectAllMissing(stack, {
-        "missing-app-connection": GCP.BeyondCorp.AppConnection.lookup({ appConnectionId: name })
-          .name,
-        "missing-app-connector": GCP.BeyondCorp.AppConnector.lookup({ appConnectorId: name }).name,
-        "missing-app-gateway": GCP.BeyondCorp.AppGateway.lookup({ appGatewayId: name }).name,
         "missing-security-gateway": GCP.BeyondCorp.SecurityGateway.lookup({
           securityGatewayId: name,
         }).name,

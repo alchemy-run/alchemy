@@ -429,9 +429,6 @@ import {
   VolumesSnapshot as BaremetalsolutionVolumesSnapshot,
   VolumesSnapshotProvider as BaremetalsolutionVolumesSnapshotProvider,
 } from "./BareMetalSolution/VolumesSnapshot.ts";
-import { AppConnection, AppConnectionProvider } from "./BeyondCorp/AppConnection.ts";
-import { AppConnector, AppConnectorProvider } from "./BeyondCorp/AppConnector.ts";
-import { AppGateway, AppGatewayProvider } from "./BeyondCorp/AppGateway.ts";
 import { SecurityGateway, SecurityGatewayProvider } from "./BeyondCorp/SecurityGateway.ts";
 import {
   SecurityGatewaysApplication,
@@ -911,10 +908,6 @@ import {
 } from "./ContactCenterInsights/ConversationsFeedbackLabel.ts";
 import { Dashboard, DashboardProvider } from "./ContactCenterInsights/Dashboard.ts";
 import {
-  DashboardsChart,
-  DashboardsChartProvider,
-} from "./ContactCenterInsights/DashboardsChart.ts";
-import {
   DatasetsConversationsFeedbackLabel,
   DatasetsConversationsFeedbackLabelProvider,
 } from "./ContactCenterInsights/DatasetsConversationsFeedbackLabel.ts";
@@ -978,7 +971,6 @@ import {
   SynonymSetProvider as ContentwarehouseSynonymSetProvider,
 } from "./ContentWarehouse/SynonymSet.ts";
 import * as Credentials from "./Credentials.ts";
-import { TagTemplate, TagTemplateProvider } from "./DataCatalog/TagTemplate.ts";
 import {
   TaxonomiesPolicyTag,
   TaxonomiesPolicyTagProvider,
@@ -3104,7 +3096,6 @@ const makeProviders = () =>
           LakesEntity,
           LakesEntitiesPartition,
           MetadataFeed,
-          TagTemplate,
           Taxonomy,
           TaxonomiesPolicyTag,
           DataStoresBranchesDocument,
@@ -3143,7 +3134,6 @@ const makeProviders = () =>
           ConversationsAssessment,
           ConversationsFeedbackLabel,
           Dashboard,
-          DashboardsChart,
           DatasetsConversationsFeedbackLabel,
           IssueModel,
           IssueModelsIssue,
@@ -3463,9 +3453,6 @@ const makeProviders = () =>
           ClouddeployTarget,
           ConfigDeploymentGroup,
           ConfigPreview,
-          AppConnection,
-          AppConnector,
-          AppGateway,
           SecurityGateway,
           SecurityGatewaysApplication,
           ManagedKafkaCluster,
@@ -4104,7 +4091,7 @@ const makeProviders = () =>
             LakesEntitiesPartitionProvider(),
             MetadataFeedProvider(),
           ),
-          Layer.mergeAll(TagTemplateProvider(), TaxonomyProvider(), TaxonomiesPolicyTagProvider()),
+          Layer.mergeAll(TaxonomyProvider(), TaxonomiesPolicyTagProvider()),
           Layer.mergeAll(
             DataStoresBranchesDocumentProvider(),
             DataStoresControlProvider(),
@@ -4149,7 +4136,6 @@ const makeProviders = () =>
               ConversationsAssessmentProvider(),
               ConversationsFeedbackLabelProvider(),
               DashboardProvider(),
-              DashboardsChartProvider(),
               DatasetsConversationsFeedbackLabelProvider(),
               IssueModelProvider(),
               IssueModelsIssueProvider(),
@@ -4600,13 +4586,7 @@ const makeProviders = () =>
                 SchemaRegistriesSubjectsVersionProvider(),
                 SchemaRegistriesContextsSubjectsVersionProvider(),
               ),
-              Layer.mergeAll(
-                AppConnectionProvider(),
-                AppConnectorProvider(),
-                AppGatewayProvider(),
-                SecurityGatewayProvider(),
-                SecurityGatewaysApplicationProvider(),
-              ),
+              Layer.mergeAll(SecurityGatewayProvider(), SecurityGatewaysApplicationProvider()),
               Layer.mergeAll(
                 RepositoriesBranchRuleProvider(),
                 RepositoriesHookProvider(),

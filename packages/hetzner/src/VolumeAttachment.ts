@@ -239,7 +239,7 @@ const attach = (volumeId: number, serverId: number, automount: boolean) =>
   Hetzner.volumeActions
     .attachVolume({
       id: volumeId,
-      server: serverId,
+      assignee: { id: serverId, type: "server" },
       automount,
     })
     .pipe(
