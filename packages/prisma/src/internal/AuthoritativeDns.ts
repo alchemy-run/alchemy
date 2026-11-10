@@ -7,7 +7,9 @@ import * as Schedule from "effect/Schedule";
 /** The record Prisma is about to look up. */
 export type ExpectedRecord =
   | { readonly type: "CNAME"; readonly name: string; readonly value?: string }
-  | { readonly type: "TXT"; readonly name: string; readonly value: string };
+  | { readonly type: "TXT"; readonly name: string; readonly value: string }
+  /** A or AAAA answers that include an address of `target`, as CNAME flattening, ALIAS and ANAME give. */
+  | { readonly type: "ADDRESS"; readonly name: string; readonly target: string };
 
 /**
  * `seen`: every authoritative nameserver returns the record. `absent`: one
@@ -50,7 +52,7 @@ export const waitForAuthoritativeRecord = (
     if (dns === undefined || typeof dns.Resolver !== "function") return "unknown";
     const labels = record.name.split(".");
     let servers: string[] = [];
-    for (let i = 1; i < labels.length - 1 && servers.length === 0; i++) {
+    for (let i = 0; i < labels.length - 1 && servers.length === 0; i++) {
       const names = yield* Effect.tryPromise(() => dns.resolveNs(labels.slice(i).join("."))).pipe(
         Effect.orElseSucceed(() => [] as string[]),
       );
@@ -65,6 +67,16 @@ export const waitForAuthoritativeRecord = (
       servers = addresses.flat();
     }
     if (servers.length === 0) return "unknown";
+    const targetAddresses =
+      record.type === "ADDRESS"
+        ? new Set(
+            (yield* Effect.forEach(
+              [() => dns.resolve4(record.target), () => dns.resolve6(record.target)],
+              (query) => Effect.tryPromise(query).pipe(Effect.orElseSucceed(() => [] as string[])),
+            )).flat(),
+          )
+        : new Set<string>();
+    if (record.type === "ADDRESS" && targetAddresses.size === 0) return "unknown";
     const answerOf = (server: string) =>
       Effect.gen(function* () {
         const resolver = yield* Effect.sync(() => {
@@ -86,17 +98,29 @@ export const waitForAuthoritativeRecord = (
             // A timed-out query keeps retrying in c-ares unless cancelled.
             Effect.onInterrupt(() => Effect.sync(() => resolver.cancel())),
           );
+        const addressesOf = (query: () => Promise<ReadonlyArray<unknown>>) =>
+          lookup(query).pipe(
+            Effect.catchIf(
+              (error) => error.code !== undefined && NEGATIVE_ANSWERS.has(error.code),
+              () => Effect.succeed([] as ReadonlyArray<unknown>),
+            ),
+          );
         const found =
-          record.type === "CNAME"
-            ? (yield* lookup(() => resolver.resolveCname(record.name))).some(
-                (target) =>
-                  record.value === undefined ||
-                  (typeof target === "string" &&
-                    target.replace(/\.$/, "").toLowerCase() === record.value.toLowerCase()),
-              )
-            : (yield* lookup(() => resolver.resolveTxt(record.name))).some(
-                (chunks) => Array.isArray(chunks) && chunks.join("") === record.value,
-              );
+          record.type === "ADDRESS"
+            ? [
+                ...(yield* addressesOf(() => resolver.resolve4(record.name))),
+                ...(yield* addressesOf(() => resolver.resolve6(record.name))),
+              ].some((address) => typeof address === "string" && targetAddresses.has(address))
+            : record.type === "CNAME"
+              ? (yield* lookup(() => resolver.resolveCname(record.name))).some(
+                  (target) =>
+                    record.value === undefined ||
+                    (typeof target === "string" &&
+                      target.replace(/\.$/, "").toLowerCase() === record.value.toLowerCase()),
+                )
+              : (yield* lookup(() => resolver.resolveTxt(record.name))).some(
+                  (chunks) => Array.isArray(chunks) && chunks.join("") === record.value,
+                );
         return found ? ("seen" as const) : ("absent" as const);
       }).pipe(
         Effect.catchTag("DnsQueryFailed", (error) =>

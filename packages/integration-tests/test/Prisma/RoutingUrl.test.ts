@@ -10,6 +10,7 @@ import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
 import {
   AuthoritativeRecordCheck,
+  type ExpectedRecord,
   type RecordVisibility,
 } from "../../../prisma/src/internal/AuthoritativeDns.ts";
 import {
@@ -107,6 +108,10 @@ type WireRoutingUrl = ReturnType<typeof routingUrl>;
 interface CloudState {
   /** What the authoritative nameservers report for the new hostname's CNAME. */
   cname: RecordVisibility;
+  /** Whether its A/AAAA answers include a switchboard address. */
+  address: RecordVisibility;
+  /** The records the authoritative check was asked about. */
+  checked: Array<ExpectedRecord>;
   /** Status of the workspace's domain ownership for the new hostname, if any. */
   ownership: "verified" | "unverified" | undefined;
   /** Whether that domain ownership is for the exact hostname or its wildcard. */
@@ -119,6 +124,8 @@ const makeUrlCloud = () => {
   const rows = new Map<string, WireRoutingUrl>();
   const state: CloudState = {
     cname: "absent",
+    address: "absent",
+    checked: [],
     ownership: undefined,
     ownershipOn: "exact",
     refusal: undefined,
@@ -208,7 +215,14 @@ const makeUrlCloud = () => {
     for (const row of initial) rows.set(row.id, row);
     Object.assign(
       state,
-      { cname: "absent", ownership: undefined, ownershipOn: "exact", refusal: undefined },
+      {
+        cname: "absent",
+        address: "absent",
+        checked: [],
+        ownership: undefined,
+        ownershipOn: "exact",
+        refusal: undefined,
+      },
       options,
     );
     fake.captured.length = 0;
@@ -231,7 +245,12 @@ const testFor = (cloud: UrlCloud) =>
     providers: Layer.effect(TestPrismaProviders, Provider.collection([RoutingUrl])).pipe(
       Layer.provideMerge(RoutingUrlProvider()),
       Layer.provide(
-        Layer.succeed(AuthoritativeRecordCheck, () => Effect.succeed(cloud.state.cname)),
+        Layer.succeed(AuthoritativeRecordCheck, (record) =>
+          Effect.sync(() => {
+            cloud.state.checked.push(record);
+            return record.type === "ADDRESS" ? cloud.state.address : cloud.state.cname;
+          }),
+        ),
       ),
       Layer.provide(
         Layer.succeed(AlchemyContext, { dotAlchemy: ".alchemy-test", dev: false, adopt: false }),
@@ -454,6 +473,64 @@ testFor(pendingChange).test.provider(
       expect(pendingChange.routes().some((route) => route.includes("domain-ownerships"))).toBe(
         false,
       );
+
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+const flattenedApex = makeUrlCloud();
+testFor(flattenedApex).test.provider(
+  "accepts an apex whose A or AAAA answers include a switchboard address",
+  (stack) =>
+    Effect.gen(function* () {
+      flattenedApex.reset({}, routingUrl("url-1", { status: "active" }));
+      yield* stack.destroy();
+      yield* stack.deploy(urlStack());
+
+      Object.assign(flattenedApex.state, {
+        ownership: "verified",
+        cname: "absent",
+        address: "seen",
+      });
+      const url = yield* stack.deploy(urlStack("example.org"));
+
+      expect(url.hostname).toBe("example.org");
+      expect(flattenedApex.state.checked).toContainEqual({
+        type: "ADDRESS",
+        name: "example.org",
+        target: "switchboard.us-east-1.prisma.build",
+      });
+      expect(PATCHES(flattenedApex)).toEqual(["PATCH /v1/urls/url-1"]);
+
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+const unroutedApex = makeUrlCloud();
+testFor(unroutedApex).test.provider(
+  "refuses an apex whose addresses are not the switchboard's, with no PATCH",
+  (stack) =>
+    Effect.gen(function* () {
+      unroutedApex.reset({}, routingUrl("url-1", { status: "active" }));
+      yield* stack.destroy();
+      yield* stack.deploy(urlStack());
+
+      unroutedApex.fake.captured.length = 0;
+      Object.assign(unroutedApex.state, {
+        ownership: "verified",
+        cname: "absent",
+        address: "absent",
+      });
+      const failure = yield* failureOf(stack.deploy(urlStack("example.org")));
+
+      expect(failure).toContain("RoutingUrlHostnameChangeRefused");
+      expect(failure).toContain(
+        "an ALIAS, ANAME or flattened CNAME example.org = switchboard.us-east-1.prisma.build",
+      );
+      expect(PATCHES(unroutedApex)).toEqual([]);
+      expect(unroutedApex.rows.get("url-1")?.hostname).toBe(HOSTNAME);
 
       yield* stack.destroy();
     }),

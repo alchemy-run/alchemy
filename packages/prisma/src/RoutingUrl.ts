@@ -18,7 +18,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { App } from "./App.ts";
 import type { Compute } from "./Compute.ts";
-import { AuthoritativeRecordCheck } from "./internal/AuthoritativeDns.ts";
+import { AuthoritativeRecordCheck, type RecordVisibility } from "./internal/AuthoritativeDns.ts";
 import { attrOrString, devId, devProvider } from "./internal/DevStub.ts";
 import { concreteIdOf, isPrismaDevId } from "./internal/Refs.ts";
 import { switchboardTarget } from "./internal/Switchboard.ts";
@@ -69,7 +69,8 @@ export class RoutingUrlHostnameChangeRefused extends Data.TaggedError(
   readonly from: string;
   readonly to: string;
   readonly records: ReadonlyArray<{
-    readonly type: "TXT" | "CNAME";
+    /** `ALIAS` means an ALIAS, ANAME or flattened CNAME, for an apex hostname. */
+    readonly type: "TXT" | "CNAME" | "ALIAS";
     readonly name: string;
     readonly value: string;
   }>;
@@ -148,9 +149,10 @@ export interface RoutingUrl extends Resource<
  *
  * Changing the hostname of an `active` RoutingUrl is refused, before anything
  * changes, until the new hostname has a verified domain ownership and its
- * `CNAME` at every authoritative nameserver. Prisma needs a direct `CNAME`,
- * which an apex domain such as `example.com` cannot have, so a change to an
- * apex hostname is refused. The check does not see a RoutingUrl in another
+ * `CNAME` to the regional switchboard at every authoritative nameserver. An
+ * apex hostname such as `example.com` passes instead with an ALIAS, ANAME or
+ * flattened `CNAME` whose A or AAAA answers include a switchboard address.
+ * The check does not see a RoutingUrl in another
  * workspace that holds the new hostname; the change then goes through and
  * the new hostname stays `pending` behind `heldBy`.
  *
@@ -281,6 +283,18 @@ const wildcardOf = (hostname: string) => {
   return labels.length >= 3 ? `*.${labels.slice(1).join(".")}` : undefined;
 };
 
+/** A hostname of two labels, such as `example.com`, which cannot have a CNAME. */
+const isApex = (hostname: string) => hostname.split(".").length === 2;
+
+const describeRecord = (record: RoutingUrlHostnameChangeRefused["records"][number]) =>
+  record.type === "ALIAS"
+    ? `an ALIAS, ANAME or flattened CNAME ${record.name} = ${record.value}`
+    : `${record.type} ${record.name} = ${record.value}`;
+
+/** A CNAME, or A/AAAA answers that include a switchboard address, routes the hostname. */
+const combineRouting = (cname: RecordVisibility, address: RecordVisibility): RecordVisibility =>
+  address === "seen" ? "seen" : cname === "unknown" || address === "unknown" ? "unknown" : "absent";
+
 const ProviderLive = () =>
   Provider.effect(
     RoutingUrl,
@@ -303,8 +317,17 @@ const ProviderLive = () =>
             { type: "CNAME", name: to, value: target },
             { margin: "if-unseen" },
           );
-          const routed = cname === "seen";
-          if (owned && routed) return;
+          const routing =
+            cname === "seen"
+              ? cname
+              : combineRouting(
+                  cname,
+                  yield* checkRecord(
+                    { type: "ADDRESS", name: to, target },
+                    { margin: "if-unseen" },
+                  ),
+                );
+          if (owned && routing === "seen") return;
           const verification = owned
             ? undefined
             : (yield* getWorkspaceDomainOwnershipsVerification({ workspaceId, domain: to })).data;
@@ -312,15 +335,23 @@ const ProviderLive = () =>
             ...(verification
               ? [{ type: "TXT" as const, name: verification.name, value: verification.value }]
               : []),
-            ...(cname === "absent" ? [{ type: "CNAME" as const, name: to, value: target }] : []),
+            ...(routing === "absent"
+              ? [
+                  {
+                    type: isApex(to) ? ("ALIAS" as const) : ("CNAME" as const),
+                    name: to,
+                    value: target,
+                  },
+                ]
+              : []),
           ];
           const publish =
             records.length === 0
               ? ""
-              : ` Publish ${records.map((record) => `${record.type} ${record.name} = ${record.value}`).join(" and ")}, then redeploy.`;
+              : ` Publish ${records.map(describeRecord).join(" and ")}, then redeploy.`;
           const unchecked =
-            cname === "unknown"
-              ? ` The CNAME of '${to}' to ${target} could not be checked from this machine: no authoritative nameserver for it could be found or reached. Redeploy from a machine that can reach them.`
+            routing === "unknown"
+              ? ` Whether '${to}' points at ${target} could not be checked from this machine: no authoritative nameserver for it could be found or reached. Redeploy from a machine that can reach them.`
               : "";
           return yield* new RoutingUrlHostnameChangeRefused({
             from,
