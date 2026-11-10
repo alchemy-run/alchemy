@@ -4,6 +4,7 @@ import { deepEqual, isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
@@ -109,6 +110,30 @@ export type ReportConfig = Resource<
  *     storageFilters: { bucket: "source-bucket" },
  *     storageDestinationOptions: {
  *       bucket: "inventory-bucket",
+ *       destinationPath: "inventory/",
+ *     },
+ *   },
+ * });
+ * ```
+ *
+ * ### Choosing a Report Format
+ * Set exactly one of `parquetOptions` or `csvOptions`. Switching between
+ * them updates the configuration in place.
+ *
+ * **Example:** Weekly CSV inventory with a header row
+ * ```typescript
+ * const inventory = yield* GCP.StorageInsights.ReportConfig("Inventory", {
+ *   frequencyOptions: {
+ *     frequency: "WEEKLY",
+ *     startDate: { year: 2030, month: 1, day: 1 },
+ *     endDate: { year: 2031, month: 1, day: 1 },
+ *   },
+ *   csvOptions: { delimiter: ",", headerRequired: true },
+ *   objectMetadataReportOptions: {
+ *     metadataFields: ["project", "bucket", "name", "size"],
+ *     storageFilters: { bucket: source.bucketName },
+ *     storageDestinationOptions: {
+ *       bucket: destination.bucketName,
  *       destinationPath: "inventory/",
  *     },
  *   },
@@ -261,9 +286,10 @@ export const ReportConfigProvider = () =>
         news.objectMetadataReportOptions.storageFilters?.bucket,
       );
       if (current === undefined) {
+        const random = yield* SecureRandom.SecureRandom;
         current = yield* insights.createProjectsLocationsReportConfigs({
           parent,
-          requestId: yield* Effect.sync(() => crypto.randomUUID()),
+          requestId: yield* random.uuidV4(),
           body: desired,
         });
       }
@@ -277,7 +303,9 @@ export const ReportConfigProvider = () =>
         ["csvOptions", "csv_options"],
         ["parquetOptions", "parquet_options"],
       ] as const;
-      const observed = current;
+      // The API omits an empty display name; compare it as "" so an unset
+      // name doesn't patch on every reconcile.
+      const observed = { ...current, displayName: current.displayName ?? "" };
       const changed: string[] = fields
         .filter(([key]) => !deepEqual(observed[key], desired[key], { stripNullish: true }))
         .map(([, wireName]) => wireName);
