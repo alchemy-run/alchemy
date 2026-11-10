@@ -136,18 +136,19 @@ export const createVolume = Effect.fn(function* (input: {
       require_unique_zone: input.disk.requireUniqueZone,
     })
     .pipe(
-      Effect.catchTag("Conflict", () => Effect.undefined),
-      Effect.catchTag("StorageHostCapacity", (error) =>
-        Effect.gen(function* () {
-          // Its outcome is unknown: a single new volume in the group is the
-          // one this call made. Otherwise create again after a pause.
-          yield* Effect.sleep(Duration.seconds(5));
-          const fresh = (yield* listVolumeGroup(input.appName, input.name, input.region)).filter(
-            (volume) => volume.id !== undefined && !before.has(volume.id),
-          );
-          return fresh.length === 1 ? fresh[0] : yield* Effect.fail(error);
-        }),
-      ),
+      Effect.catchTags({
+        Conflict: () => Effect.undefined,
+        StorageHostCapacity: (error) =>
+          Effect.gen(function* () {
+            // Its outcome is unknown: a single new volume in the group is the
+            // one this call made. Otherwise create again after a pause.
+            yield* Effect.sleep(Duration.seconds(5));
+            const fresh = (yield* listVolumeGroup(input.appName, input.name, input.region)).filter(
+              (volume) => volume.id !== undefined && !before.has(volume.id),
+            );
+            return fresh.length === 1 ? fresh[0] : yield* error;
+          }),
+      }),
       Effect.retry({
         while: (error) => error._tag === "StorageHostCapacity",
         schedule: Schedule.spaced(Duration.seconds(5)),
