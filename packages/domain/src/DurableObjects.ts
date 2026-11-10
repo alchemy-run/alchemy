@@ -311,6 +311,19 @@ interface Armed {
 const LEASE_MS = 60_000;
 
 /**
+ * Take a drain's lease: `undefined` once taken, or when the lease another
+ * drain holds expires. Run it exclusively.
+ */
+const acquireLease = (state: ObjectStateShape, lease: string) =>
+  Effect.gen(function* () {
+    const now = yield* Clock.currentTimeMillis;
+    const held = yield* state.storage.get<number>(lease);
+    if (held !== undefined && held > now) return held;
+    yield* state.storage.put(lease, now + LEASE_MS);
+    return undefined;
+  });
+
+/**
  * A durable, ordered work queue in the instance's storage. Rows are written
  * in the same transaction as the state change that produced them, processed
  * right after the commit (`kick`), and again by a durable callback if the
@@ -322,17 +335,17 @@ const queue = <Row>(name: string, process: (row: Row) => Effect.Effect<void>) =>
     const state = yield* ObjectState;
     const prefix = `${name}:`;
     const lease = `${name}-lease`;
-    const acquire = exclusively(
-      Effect.gen(function* () {
-        const held = yield* state.storage.get<number>(lease);
-        if (held !== undefined && held > (yield* Clock.currentTimeMillis)) return false;
-        yield* state.storage.put(lease, (yield* Clock.currentTimeMillis) + LEASE_MS);
-        return true;
-      }),
-    );
+    const acquire = exclusively(acquireLease(state, lease));
     // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the Durable Object provides its state and RuntimeContext on every event
     const drain: Effect.Effect<void> = Effect.gen(function* () {
-      if (!(yield* acquire)) return;
+      const held = yield* acquire;
+      if (held !== undefined) {
+        // Another drain holds the lease, or held it when its instance died
+        // (its rows are still here). Look again once the lease expires:
+        // nothing else may, if no more rows are staged.
+        yield* callback.schedule("drain", { at: held, payload: {} }).pipe(Effect.orDie);
+        return;
+      }
       yield* Effect.gen(function* () {
         const rows = yield* state.storage.list<Row>({ prefix });
         for (const [key, row] of rows) {
@@ -1252,14 +1265,7 @@ const projectionObject = (
     const size = kit.options.batch?.size ?? 1;
     const waitMillis = kit.options.batch?.waitMillis ?? 0;
     const lease = "drain-lease";
-    const acquire = exclusively(
-      Effect.gen(function* () {
-        const held = yield* state.storage.get<number>(lease);
-        if (held !== undefined && held > (yield* Clock.currentTimeMillis)) return false;
-        yield* state.storage.put(lease, (yield* Clock.currentTimeMillis) + LEASE_MS);
-        return true;
-      }),
-    );
+    const acquire = exclusively(acquireLease(state, lease));
     // Re-run the drain later: when a short batch has waited long enough, or after a failure.
     let wake: (at: number) => Effect.Effect<void> = () => Effect.void;
     // Each input's backstop advances this cursor: once an input arrives, a
@@ -1272,7 +1278,9 @@ const projectionObject = (
     });
     // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the Durable Object provides its state and RuntimeContext on every event
     const drain: Effect.Effect<void> = Effect.gen(function* () {
-      if (!(yield* acquire)) return;
+      const held = yield* acquire;
+      // Held by another drain, or by one whose instance died: look again once it expires.
+      if (held !== undefined) return yield* wake(held);
       const exit = yield* Effect.exit(
         Effect.gen(function* () {
           while (true) {
