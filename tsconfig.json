@@ -139,6 +139,9 @@
       "path": "./packages/boat/tsconfig.json"
     },
     {
+      "path": "./packages/pi/tsconfig.json"
+    },
+    {
       "path": "./packages/rivet/tsconfig.json"
     },
     {

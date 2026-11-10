@@ -27,6 +27,7 @@ import { buildEventTelemetry } from "../TelemetryRuntime.ts";
 import type { DurableObjectExport, DurableObjectShape } from "./DurableObject.ts";
 import { EventLifetime, makeEventLifetime } from "./EventLifetime.ts";
 import { gateCall, InstanceInputGate, makeInputGate } from "./InputGate.ts";
+import { InstanceSetup } from "./InstanceSetup.ts";
 import { handleRpcExit, type Pin, type WorkerBuild } from "./Worker.ts";
 import { withEventContext } from "./WorkerBridge.ts";
 
@@ -165,15 +166,20 @@ export const makeDurableObjectInstance = ({
       // Construction runs through the gate as a call of its own, so fibers it
       // forks (a background loop) belong to that call and their storage is
       // gated like any call's.
+      // Setup the outer Effect registers for this instance (InstanceSetup),
+      // run where the inner Effect runs: with callback registration open.
+      const setups: Array<Effect.Effect<void, never, RuntimeContext>> = [];
       return gateCall(
         constructor.pipe(
+          Effect.provideService(InstanceSetup, { add: (effect) => void setups.push(effect) }),
           Effect.flatMap((inner) =>
             Effect.suspend(() => {
               const seal = initialize?.();
               const instanceContext = Layer.succeed(RuntimeContext, instanceRuntimeContext).pipe(
                 Layer.provideMerge(doContext),
               );
-              return inner.pipe(
+              return Effect.forEach(setups, (setup) => setup, { discard: true }).pipe(
+                Effect.andThen(inner),
                 Effect.provide(instanceContext),
                 Effect.ensuring(Effect.sync(() => seal?.())),
               );
