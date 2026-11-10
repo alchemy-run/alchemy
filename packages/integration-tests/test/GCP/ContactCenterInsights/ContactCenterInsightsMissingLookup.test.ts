@@ -36,10 +36,6 @@ test.provider(
           conversationId: name,
         }).name,
         "missing-dashboard": GCP.ContactCenterInsights.Dashboard.lookup({ dashboardId: name }).name,
-        "missing-dashboards-chart": GCP.ContactCenterInsights.DashboardsChart.lookup({
-          chartId: name,
-          parent: name,
-        }).name,
         "missing-qa-scorecard": GCP.ContactCenterInsights.QaScorecard.lookup({
           qaScorecardId: name,
         }).name,

@@ -191,9 +191,12 @@ export const AccountProvider = () =>
           }
         }),
         lookup: Effect.fn(function* (props) {
-          return "accountId" in props
-            ? yield* readAccountById(props.accountId)
-            : yield* readAccountByNameOrEmail({ name: "", email: props.email });
+          // An account outside any organization has no member accounts to find.
+          return yield* (
+            "accountId" in props
+              ? readAccountById(props.accountId)
+              : readAccountByNameOrEmail({ name: "", email: props.email })
+          ).pipe(Effect.catchTag("AWSOrganizationsNotInUseException", () => Effect.undefined));
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const state = output?.accountId

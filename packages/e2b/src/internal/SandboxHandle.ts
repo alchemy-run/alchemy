@@ -112,6 +112,12 @@ const processConfig = (
 const signalOf = (signal: "SIGTERM" | "SIGKILL" | undefined) =>
   signal === "SIGTERM" ? ("SIGNAL_SIGTERM" as const) : ("SIGNAL_SIGKILL" as const);
 
+/** The entry envd reports for a filesystem call; envd always sends one on success. */
+const entryOf = (entry: filesystem.EntryInfo | undefined, call: string) =>
+  entry === undefined
+    ? Effect.fail(new E2BUnexpectedResponse({ message: `envd sent no entry for ${call}` }))
+    : Effect.succeed(entry);
+
 /**
  * The operations every handle shares. `reach` resolves how to address the
  * sandbox; `domainOf` is the domain its ports are served under; `resumed`
@@ -337,7 +343,9 @@ const makeOperations = (
           Effect.map((res) => res.entries ?? []),
         ),
       stat: (path) =>
-        inSandbox(filesystem.statPath({ path })).pipe(Effect.map((res) => res.entry ?? { path })),
+        inSandbox(filesystem.statPath({ path })).pipe(
+          Effect.flatMap((res) => entryOf(res.entry, `stat ${path}`)),
+        ),
       exists: (path) =>
         inSandbox(filesystem.statPath({ path })).pipe(
           Effect.as(true),
@@ -346,7 +354,7 @@ const makeOperations = (
       makeDir: (path) => inSandbox(filesystem.makeDir({ path })).pipe(Effect.asVoid),
       move: (source, destination) =>
         inSandbox(filesystem.movePath({ source, destination })).pipe(
-          Effect.map((res) => res.entry ?? { path: destination }),
+          Effect.flatMap((res) => entryOf(res.entry, `move to ${destination}`)),
         ),
       remove: (path) => inSandbox(filesystem.removePath({ path })).pipe(Effect.asVoid),
       compose: (sources, destination) =>

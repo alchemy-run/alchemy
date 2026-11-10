@@ -14,10 +14,11 @@ export type Dashboard = Resource<
     /** Stable Axiom dashboard `uid` (used as the path identifier). */
     uid: string;
     id: string;
-    createdAt: string;
-    createdBy: string;
-    updatedAt: string;
-    updatedBy: string;
+    /** Axiom omits the audit fields on some dashboards. */
+    createdAt: string | undefined;
+    createdBy: string | undefined;
+    updatedAt: string | undefined;
+    updatedBy: string | undefined;
     /** The full dashboard document as returned by Axiom. */
     dashboard: Axiom.DashboardWriteResponse["dashboard"]["dashboard"];
   },
@@ -152,19 +153,19 @@ export const DashboardProvider = () =>
       const toAttrsFromCreate = (envelope: Axiom.DashboardWriteResponse) => ({
         uid: envelope.dashboard.uid,
         id: envelope.dashboard.id,
-        createdAt: envelope.dashboard.createdAt,
-        createdBy: envelope.dashboard.createdBy,
-        updatedAt: envelope.dashboard.updatedAt,
-        updatedBy: envelope.dashboard.updatedBy,
+        createdAt: envelope.dashboard.createdAt ?? undefined,
+        createdBy: envelope.dashboard.createdBy ?? undefined,
+        updatedAt: envelope.dashboard.updatedAt ?? undefined,
+        updatedBy: envelope.dashboard.updatedBy ?? undefined,
         dashboard: envelope.dashboard.dashboard,
       });
       const toAttrsFromGet = (current: Axiom.DashboardResource) => ({
         uid: current.uid,
         id: current.id,
-        createdAt: current.createdAt,
-        createdBy: current.createdBy,
-        updatedAt: current.updatedAt,
-        updatedBy: current.updatedBy,
+        createdAt: current.createdAt ?? undefined,
+        createdBy: current.createdBy ?? undefined,
+        updatedAt: current.updatedAt ?? undefined,
+        updatedBy: current.updatedBy ?? undefined,
         dashboard: current.dashboard,
       });
 

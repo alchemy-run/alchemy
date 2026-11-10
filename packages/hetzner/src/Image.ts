@@ -140,7 +140,7 @@ export type Image = Resource<
     rapidDeploy: boolean | undefined;
     /** Whether delete protection is enabled. */
     deleteProtection: boolean;
-    /** RFC3339 deprecation timestamp, or `null`. */
+    /** RFC3339 time Hetzner announced the deprecation, or `null`. */
     deprecated: string | null;
     /** CPU architecture compatible with the Image. */
     architecture: ImageArchitecture;
@@ -293,7 +293,7 @@ const toAttrs = (image: CloudImage): Image["Attributes"] => ({
   osVersion: image.os_version,
   rapidDeploy: image.rapid_deploy,
   deleteProtection: image.protection.delete,
-  deprecated: image.deprecated,
+  deprecated: image.deprecation?.announced ?? null,
   architecture: asArchitecture(image.architecture),
   labels: userLabels(image.labels),
 });
