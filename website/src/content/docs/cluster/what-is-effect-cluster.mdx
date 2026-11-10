@@ -13,16 +13,21 @@ Take one small app: chat rooms. Each room is an instance of the `Room` entity, a
 
 <Tree
   nodes={[
-    { id: "swarm", label: "Docker swarm", type: "your cloud", icon: "brand:docker" },
-    { id: "pool", label: "Default", type: "pool", parent: "swarm", icon: "layers" },
+    { id: "swarm", label: "Docker swarm", type: "your cloud", icon: "brand:docker", areas: ["api cluster"], colGap: 3.5 },
+    { id: "api", label: "Api", type: "your Docker Service", parent: "swarm", icon: "server" },
+    { id: "cluster", label: "cluster", type: "runners + database", parent: "swarm", dashed: true, icon: "network", areas: ["pool", "db"] },
+    { id: "pool", label: "Default", type: "pool", parent: "cluster", icon: "layers", areas: ["r1 r2"], phoneAreas: ["r1 r2"] },
     { id: "r1", label: "Runner 1", type: "shards 1–150", parent: "pool", dashed: true, icon: "server" },
     { id: "lobby", label: "lobby", type: "Room", parent: "r1", icon: "circle-user-round" },
     { id: "r2", label: "Runner 2", type: "shards 151–300", parent: "pool", dashed: true, icon: "server" },
     { id: "kitchen", label: "kitchen", type: "Room", parent: "r2", icon: "circle-user-round" },
-    { id: "api", label: "Api", type: "Docker Service", parent: "swarm", side: true, icon: "server" },
-    { id: "db", label: "Database", type: "Postgres", parent: "swarm", side: true, icon: "brand:postgresql", specs: [["shard locks", "300"], ["messages", "persisted"]] },
+    { id: "db", label: "Database", type: "Postgres", parent: "cluster", icon: "brand:postgresql", specs: [["messages", "persisted"]] },
   ]}
-  caption="Each room runs inside the runner that owns its shard. The database records the owners, so either runner can take over the other's shards."
+  links={[
+    { from: "api", to: "pool", label: "gateway" },
+    { from: "pool", to: "db", label: "shard locks" },
+  ]}
+  caption="Api is your own service: it calls a room through the pool's gateway, by the pool's name. Each room runs inside the runner that owns its shard. The database records the owners, so either runner can take over the other's shards."
 />
 
 ## Entities: a class and its instances

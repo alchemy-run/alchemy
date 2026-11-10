@@ -256,6 +256,13 @@ for (const [wname, w] of Object.entries(widths)) {
               );
           }
         }
+        for (const el of fig.querySelectorAll("[data-node] [data-node]")) {
+          const parent = el.parentElement.closest("[data-node]");
+          const r = el.getBoundingClientRect(),
+            q = parent.getBoundingClientRect();
+          if (r.left < q.left - 1 || r.right > q.right + 1 || r.bottom > q.bottom + 1)
+            out.push(`fig ${i}: ${el.dataset.node} sticks out of ${parent.dataset.node}`);
+        }
         for (const p of fig.querySelectorAll(".alc-tree__link[data-blocked]"))
           out.push(`fig ${i}: a link has no clear route (${p.getAttribute("d")})`);
         for (const el of fig.querySelectorAll(".alc-tree *")) {

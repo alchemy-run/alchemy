@@ -104,7 +104,9 @@ const gridStyle = (n: Pick<TreeNode, "areas" | "phoneAreas" | "colGap">) =>
   [
     n.areas && `--areas: ${rows(n.areas)}`,
     n.phoneAreas && `--phone-areas: ${rows(n.phoneAreas)}`,
-    n.colGap !== undefined && `--col-gap: ${n.colGap}rem`,
+    // Always set: a custom property inherits, so a nested grid would
+    // otherwise take its parent's gap.
+    (n.areas || n.phoneAreas) && `--col-gap: ${n.colGap ?? 0.625}rem`,
   ]
     .filter(Boolean)
     .join("; ") || undefined;
