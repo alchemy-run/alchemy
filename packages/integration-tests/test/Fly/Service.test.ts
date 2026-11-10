@@ -120,8 +120,9 @@ describe.concurrent("Service", () => {
             name: deployed.api.baseName ?? deployed.api.name,
           }),
           deployed.api,
-          // The bundled program's hash is this stack's record, not Fly's.
-          { ignore: ["code"] },
+          // The bundled program's hash and the App secrets the Service
+          // wrote are this stack's record, not Fly's.
+          { ignore: ["code", "secrets", "secretsVersion"] },
         );
 
         expect(deployed.api.machineId).toEqual(expect.any(String));
