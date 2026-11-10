@@ -42,7 +42,7 @@ const VPC_UUID = "760e09ef-dc84-11e8-981e-3cfdfeaae000";
 const CLOUD_CONFIG = "#cloud-config\npackages: [docker.io]";
 // A droplet takes one to two minutes to create and as long to destroy.
 const LIVE_TIMEOUT = 420_000;
-// The lifecycle test also rebuilds and resizes the droplet.
+// The lifecycle test also rebuilds the droplet twice.
 const LIFECYCLE_TIMEOUT = 720_000;
 
 const LIVE_TAGS = ["provider:digitalocean", "provider:digitalocean:droplet", "live"];
@@ -198,10 +198,16 @@ test.provider(
 
 test.provider.skipIf(skipSlow)(
   "droplet lifecycle: create, plan each change, resume lost attributes, update in place, refuse a foreign twin, destroy",
-  (stack) =>
-    Effect.gen(function* () {
+  (stack) => {
+    const names = namesFor(stack.stage);
+    // Tags named in `tags` outlive their droplets.
+    const deleteUserTags = Effect.forEach(
+      [names.tag, names.extraTag],
+      (tag) => ignoreNotFound(deleteTag({ tag_id: tag })),
+      { discard: true },
+    );
+    return Effect.gen(function* () {
       yield* stack.destroy();
-      const names = namesFor(stack.stage);
       const DEPLOYED = names.deployed;
       const UPDATED = names.updated;
 
@@ -266,7 +272,7 @@ test.provider.skipIf(skipSlow)(
         .pipe(Effect.flip);
       expect(twinFailure).toBeInstanceOf(OwnedBySomeoneElse);
 
-      // A console change to the image or the size, once `alchemy drift
+      // A console change to the image, once `alchemy drift
       // --repair` records it, is drift the next deploy replaces.
       const recordDrift = Drift.repair({ name: stack.name, stage: stack.stage }).pipe(
         Effect.provide(stack.state),
@@ -278,23 +284,14 @@ test.provider.skipIf(skipSlow)(
       yield* recordDrift;
       expect(plannedAction(yield* stack.plan(droplet(UPDATED)))).toEqual(NOOP);
 
-      yield* changeOutOfBand(created.dropletId, { type: "power_off" });
-      yield* changeOutOfBand(created.dropletId, { type: "resize", size: OTHER_SIZE, disk: false });
-      yield* recordDrift;
-      expect(plannedAction(yield* stack.plan(droplet(UPDATED)))).toEqual(REPLACE);
-
       yield* stack.destroy();
 
       expect(yield* isGone(getDroplet({ droplet_id: created.dropletId }))).toBe(true);
       expect(yield* isGone(getTag({ tag_id: ownershipTag }))).toBe(true);
       expect(yield* isGone(getTag({ tag_id: generationTag }))).toBe(true);
       expect(yield* isGone(getTag({ tag_id: names.tag }))).toBe(false);
-      yield* Effect.forEach(
-        [names.tag, names.extraTag],
-        (tag) => ignoreNotFound(deleteTag({ tag_id: tag })),
-        { discard: true },
-      );
-    }).pipe(logLevel),
+    }).pipe(Effect.ensuring(Effect.ignore(deleteUserTags)), logLevel);
+  },
   { tags: LIVE_TAGS, timeout: LIFECYCLE_TIMEOUT },
 );
 

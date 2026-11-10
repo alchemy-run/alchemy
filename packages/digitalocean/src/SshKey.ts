@@ -129,6 +129,10 @@ const PAGE_SIZE = 200;
 // GET lags a change by a few seconds.
 const SSH_KEY_POLL: PollBudget = { maxDelay: "3 seconds", times: 15 };
 
+// A key replaced moments ago can stay readable for over a minute after
+// DELETE (≈ 140 s budget).
+const SSH_KEY_DELETE_POLL: PollBudget = { maxDelay: "5 seconds", times: 30 };
+
 const parsePublicKey = (publicKey: string) =>
   Effect.sync(() => parseAuthorizedKey(publicKey)).pipe(
     Effect.flatMap(Effect.fromOption(() => new SshKeyUnparseable())),
@@ -218,7 +222,7 @@ const deleteOnce = (sshKeyId: number) =>
 
 const deleteUntilGone = (sshKeyId: number) =>
   pollUntil(deleteOnce(sshKeyId), {
-    ...SSH_KEY_POLL,
+    ...SSH_KEY_DELETE_POLL,
     until: Option.isNone,
     onTimeout: () => new SshKeyWaitTimedOut({ sshKeyId, waitingFor: "deletion" }),
   });

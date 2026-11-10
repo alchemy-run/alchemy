@@ -288,8 +288,9 @@ const PAGE_SIZE = 200;
 // A droplet takes one to two minutes to create or destroy (≈ 160 s budget).
 const PROVISIONING_POLL: PollBudget = { maxDelay: "5 seconds", times: 36 };
 
-// An action finishes within seconds (≈ 50 s budget).
-const ACTION_POLL: PollBudget = { maxDelay: "3 seconds", times: 20 };
+// Most actions finish within seconds, but `enable_ipv6` can take over a
+// minute (≈ 190 s budget).
+const ACTION_POLL: PollBudget = { maxDelay: "5 seconds", times: 40 };
 
 // A droplet GET can lag a finished change by up to a minute (≈ 80 s budget).
 const CONVERGENCE_POLL: PollBudget = { maxDelay: "5 seconds", times: 20 };
