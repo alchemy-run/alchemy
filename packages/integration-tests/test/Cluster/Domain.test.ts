@@ -8,6 +8,7 @@ import * as Layer from "effect/Layer";
 import { ensureDockerSwarm } from "../Docker/Runtime.ts";
 import { conformance, waitForReady } from "../Domain/conformance/conformance.ts";
 import { DOMAIN_FRONT_PORT } from "./fixtures/domain/cluster.ts";
+import { crash } from "./fixtures/domain/crash.ts";
 import DomainFront from "./fixtures/domain/front.ts";
 
 const testOptions = { providers: Layer.mergeAll(Docker.providers(), Cluster.providers()) };
@@ -18,7 +19,8 @@ const url = `http://localhost:${DOMAIN_FRONT_PORT}`;
 
 // The Domain conformance suite, with the model on Effect Cluster entities on
 // two local Docker runners coordinating through Postgres, called from a
-// Docker service through the gateway.
+// Docker service through the gateway. The crash cases then SIGKILL one
+// runner at a time.
 describe.skipIf(!!process.env.FAST)(
   "Domain on Effect Cluster",
   { tags: ["provider:cluster", "provider:cluster:domain", "provider:docker", "local"] },
@@ -42,5 +44,8 @@ describe.skipIf(!!process.env.FAST)(
     afterAll.skipIf(!!process.env.NO_DESTROY)(stack.destroy(), { timeout: 300_000 });
 
     conformance({ test, url: Effect.succeed(url), kind: "local" });
+
+    // Last: each case kills a runner.
+    crash({ test, url, stack });
   },
 );
