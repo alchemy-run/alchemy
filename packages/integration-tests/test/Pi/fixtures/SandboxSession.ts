@@ -18,16 +18,25 @@ const ModelsLive = Layer.unwrap(
   ),
 );
 
-/** One E2B sandbox per conversation, found again by its metadata. */
+/**
+ * Marks a conversation's sandbox. Conversation ids repeat from one Durable
+ * Object to the next, so the object's id is part of the mark.
+ */
+const markOf = (instanceId: string, conversationId: number) => ({
+  "pi-instance": instanceId,
+  "pi-conversation": String(conversationId),
+});
+
+/** One E2B sandbox per conversation, from E2B's stock template, found again by its mark. */
 const SandboxEnvLive = Pi.SandboxEnv(
   Effect.gen(function* () {
     const sandboxes = yield* E2B.CreateSandbox();
-    return Effect.fn(function* ({ conversationId }) {
-      const metadata = { "pi-conversation": String(conversationId) };
+    return Effect.fn(function* ({ instanceId, conversationId }) {
+      const metadata = markOf(instanceId, conversationId);
       const [existing] = yield* sandboxes.list({ metadata, state: ["running", "paused"] });
       return existing
         ? yield* sandboxes.connect(existing.sandboxID)
-        : yield* sandboxes.create({ metadata, timeout: 600 });
+        : yield* sandboxes.create({ templateID: "base", metadata, timeout: 600 });
     });
   }),
 );
@@ -46,17 +55,19 @@ export default class PiSandboxSession extends Cloudflare.DurableObject<PiSandbox
     const sandboxes = yield* E2B.CreateSandbox();
     const harness = yield* Pi.Harness({ models: [Fast], tools: [Pi.CodingTools] });
 
-    /** The conversation's sandbox, for checking its files out of band. */
-    const sandboxOf = Effect.fn(function* (name: string) {
-      const conversation = yield* harness.conversationByName(name);
-      const [found] = yield* sandboxes.list({
-        metadata: { "pi-conversation": String(conversation.id) },
-        state: ["running", "paused"],
-      });
-      return found === undefined ? undefined : yield* sandboxes.connect(found.sandboxID);
-    });
-
     return Effect.gen(function* () {
+      const state = yield* Cloudflare.DurableObjectState;
+
+      /** The id of the conversation's sandbox, if it has one. */
+      const sandboxIdOf = Effect.fn(function* (name: string) {
+        const conversation = yield* harness.conversationByName(name);
+        const [found] = yield* sandboxes.list({
+          metadata: markOf(state.id.toString(), conversation.id),
+          state: ["running", "paused"],
+        });
+        return found?.sandboxID;
+      });
+
       return {
         create: Effect.fn(function* (name: string) {
           const conversation = yield* harness.createConversation({
@@ -76,7 +87,12 @@ export default class PiSandboxSession extends Cloudflare.DurableObject<PiSandbox
           return (yield* submission.wait).status;
         }),
         readFile: Effect.fn(function* (name: string, path: string) {
-          const sandbox = yield* sandboxOf(name);
+          const sandboxId = yield* sandboxIdOf(name);
+          if (sandboxId === undefined) return null;
+          // A sandbox killed a moment ago can still be listed.
+          const sandbox = yield* sandboxes
+            .connect(sandboxId)
+            .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
           return sandbox === undefined
             ? null
             : yield* sandbox.files.readText(path).pipe(Effect.orElseSucceed(() => null));
@@ -91,8 +107,8 @@ export default class PiSandboxSession extends Cloudflare.DurableObject<PiSandbox
           );
         }),
         kill: Effect.fn(function* (name: string) {
-          const sandbox = yield* sandboxOf(name);
-          if (sandbox !== undefined) yield* sandbox.kill();
+          const sandboxId = yield* sandboxIdOf(name);
+          if (sandboxId !== undefined) yield* sandboxes.kill(sandboxId);
         }),
       };
     });

@@ -13,6 +13,7 @@ export {
   EnvHost,
   LocalEnv,
   NoEnv,
+  type EnvTarget,
   type ExecOptions,
   type ExecResult,
 } from "./Env.ts";

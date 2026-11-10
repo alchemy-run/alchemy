@@ -76,6 +76,7 @@ const examples = [
   "./examples/cloudflare-website-vocs",
   "./examples/cloudflare-agents",
   "./examples/cloudflare-flue",
+  "./examples/cloudflare-pi",
   "./examples/e2b-agent-sandbox",
   "./examples/e2b-program",
   "./examples/e2b-program-async",

@@ -28,6 +28,8 @@ import { Storage } from "../Storage.ts";
  */
 export const DurableObjectStorage: Layer.Layer<Storage> = Layer.succeed(Storage, {
   instance: Effect.map(Effect.serviceOption(DurableObjectState), (state) => ({
+    // At plan time the state is a stand-in with no id, and nothing opens the storage.
+    id: Option.match(state, { onNone: () => "", onSome: (state) => state.id?.toString() ?? "" }),
     evictable: true,
     open: (prefix: string) =>
       Option.isNone(state)

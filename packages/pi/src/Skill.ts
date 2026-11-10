@@ -60,7 +60,8 @@ export const Skill =
       static readonly skill = skill;
       static readonly spec = {
         sections: {
-          [`skill:${name}`]: `<skill name="${name}">${skill.description} Load it with load_skill before you start.</skill>`,
+          // Pi's section keys allow only [a-z0-9_-].
+          [`skill-${name}`]: `<skill name="${name}">${skill.description} Load it with load_skill before you start.</skill>`,
         },
         ...(skill.tools ? { tools: skill.tools } : {}),
       };

@@ -1,4 +1,3 @@
-import type { EnvTarget } from "@earendil-works/pi-durable";
 import type { Connection } from "@earendil-works/pi-env";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Sandbox from "alchemy/Sandbox";
@@ -7,7 +6,7 @@ import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import { EnvError, EnvHost } from "./Env.ts";
+import { EnvError, EnvHost, type EnvTarget } from "./Env.ts";
 import { StreamConnection } from "./internal/pienv.ts";
 import { messageOf } from "./internal/promise.ts";
 
@@ -51,16 +50,18 @@ export interface SandboxEnvOptions {
  * Run a conversation's tools in a sandbox. `sandboxFor` finds or creates
  * the conversation's sandbox; make it idempotent (find by metadata first),
  * so the same conversation reaches the same sandbox after its Durable
- * Object is evicted. Pi's own `pi-env` daemon runs inside the sandbox, so
- * `read`, `write`, `edit` and `bash` behave exactly as they do locally.
+ * Object is evicted. Conversation ids repeat across Durable Objects, so
+ * key the sandbox on `instanceId` too. Pi's own `pi-env` daemon runs inside
+ * the sandbox, so `read`, `write`, `edit` and `bash` behave exactly as they
+ * do locally.
  *
  * **Example:** One E2B sandbox per conversation
  * ```typescript
  * const SandboxEnvLive = Pi.SandboxEnv(
  *   Effect.gen(function* () {
  *     const sandboxes = yield* E2B.CreateSandbox(Workspace);
- *     return Effect.fn(function* ({ conversationId }) {
- *       const metadata = { conversation: String(conversationId) };
+ *     return Effect.fn(function* ({ instanceId, conversationId }) {
+ *       const metadata = { instance: instanceId, conversation: String(conversationId) };
  *       const [existing] = yield* sandboxes.list({ metadata, state: ["running", "paused"] });
  *       return existing
  *         ? yield* sandboxes.connect(existing.sandboxID)

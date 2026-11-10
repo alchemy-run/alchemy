@@ -135,8 +135,8 @@ A Durable Object can't run processes, so Pi's coding tools run in a sandbox. `Pi
 const SandboxEnvLive = Pi.SandboxEnv(
   Effect.gen(function* () {
     const sandboxes = yield* E2B.CreateSandbox(Workspace);
-    return Effect.fn(function* ({ conversationId }) {
-      const metadata = { conversation: String(conversationId) };
+    return Effect.fn(function* ({ instanceId, conversationId }) {
+      const metadata = { instance: instanceId, conversation: String(conversationId) };
       const [existing] = yield* sandboxes.list({ metadata, state: ["running", "paused"] });
       return existing
         ? yield* sandboxes.connect(existing.sandboxID)
@@ -146,7 +146,7 @@ const SandboxEnvLive = Pi.SandboxEnv(
 );
 ```
 
-Finding the sandbox by metadata keeps one sandbox per conversation, also after the Durable Object is evicted.
+Finding the sandbox by metadata keeps one sandbox per conversation, also after the Durable Object is evicted. Conversation ids repeat from one Durable Object to the next, so the metadata also carries `instanceId`, the Durable Object's id.
 
 ## Extensions and skills
 

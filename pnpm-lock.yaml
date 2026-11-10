@@ -3607,6 +3607,31 @@ importers:
         specifier: 'catalog:'
         version: 4.3.3
 
+  examples/cloudflare-pi:
+    dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
+      '@alchemy.run/e2b':
+        specifier: workspace:*
+        version: link:../../packages/e2b
+      '@alchemy.run/pi':
+        specifier: workspace:*
+        version: link:../../packages/pi
+      '@cloudflare/workers-types':
+        specifier: 5.20261026.1
+        version: 5.20261026.1
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.1.0
+        version: 4.1.0
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
+
   examples/cloudflare-planetscale-mysql-drizzle:
     dependencies:
       '@alchemy.run/cloudflare':

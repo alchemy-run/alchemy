@@ -230,9 +230,11 @@ const BASE_EXTENSION = "alchemy";
  * `load_skill`: gives the model a selected skill's instructions and writes
  * its files into the conversation's environment.
  */
+const LOAD_SKILL = "load_skill";
+
 const loadSkill = (skills: ReadonlyMap<string, AnySkill>): ToolRegistration =>
   ({
-    name: "load_skill",
+    name: LOAD_SKILL,
     description:
       "Load a skill listed in <skill> sections: returns its instructions and writes its files under .skills/<name>/.",
     parameters: {
@@ -395,7 +397,16 @@ export const Harness = <
       ...(extensions.some(({ codemode }) => codemode !== undefined)
         ? [[CODEMODE_TOOL, { toolName: CODEMODE_TOOL } as ToolRef] as const]
         : []),
+      ...(skills.size > 0 ? [[LOAD_SKILL, { toolName: LOAD_SKILL } as ToolRef] as const] : []),
     ]);
+
+    /** The tools selecting these extensions enables: their own, and the one that drives them. */
+    const broughtBy = (selected: ReadonlyArray<AnyExtension>): ReadonlyArray<ToolRef> =>
+      selected.flatMap((extension) => [
+        ...flattenTools(extension.spec.tools ?? []),
+        ...(isCodeMode(extension) ? [{ toolName: CODEMODE_TOOL } as ToolRef] : []),
+        ...(isSkill(extension) ? [{ toolName: LOAD_SKILL } as ToolRef] : []),
+      ]);
     const modelName = (model: AnyModel) => model.modelName;
 
     const open = Effect.gen(function* () {
@@ -535,9 +546,10 @@ export const Harness = <
                     },
                     env: (target) =>
                       Effect.runPromise(
-                        Effect.provideContext(envHost.make(target), base).pipe(
-                          Effect.catch((error) => Effect.die(new Error(error.message))),
-                        ),
+                        Effect.provideContext(
+                          envHost.make({ ...target, instanceId: storage.id }),
+                          base,
+                        ).pipe(Effect.catch((error) => Effect.die(new Error(error.message)))),
                       ),
                     // With `onWake`, Pi arms no timers of its own: the
                     // instance's alarm wakes it (see `arm`).
@@ -608,26 +620,41 @@ export const Harness = <
             ? Effect.fail(new NotOnHarness({ kind: "tool", name: ref.toolName }))
             : Effect.succeed({ name: ref.toolName } as ToolRegistration);
         };
+        // Selecting an extension enables the tools it brings.
+        const brought = broughtBy(
+          agent.extensions == null
+            ? []
+            : Array.isArray(agent.extensions)
+              ? agent.extensions
+              : ((agent.extensions as { add?: ReadonlyArray<AnyExtension> }).add ?? []),
+        );
+        const exactly = (names: ReadonlyArray<string>) =>
+          Effect.forEach(
+            [...new Set(names)].map((toolName) => ({ toolName }) as ToolRef),
+            registration,
+          );
         let tools: AgentChange["tools"];
         if (agent.tools === null) tools = null;
-        else if (agent.tools === undefined) tools = undefined;
-        else if (Array.isArray(agent.tools))
-          tools = yield* Effect.forEach(agent.tools, registration);
-        else {
+        else if (agent.tools === undefined) {
+          // Nothing asked of the tools: an exact list only when the
+          // conversation has one that the new extensions must join.
+          tools =
+            current !== undefined && brought.length > 0
+              ? yield* exactly([...current, ...brought.map((tool) => tool.toolName)])
+              : undefined;
+        } else if (Array.isArray(agent.tools)) {
+          tools = yield* exactly([...agent.tools, ...brought].map((tool) => tool.toolName));
+        } else {
           const edit = agent.tools as {
             add?: ReadonlyArray<ToolRef>;
             remove?: ReadonlyArray<ToolRef>;
           };
           const remove = new Set((edit.remove ?? []).map((tool) => tool.toolName));
-          const add = (edit.add ?? []).map((tool) => tool.toolName);
+          const add = [...(edit.add ?? []), ...brought].map((tool) => tool.toolName);
           // Pi stores only a removal list or an exact list; adding means
           // writing out the exact list.
           const enabled = current ?? [...toolByName.keys()];
-          const names = [...new Set([...enabled, ...add])].filter((name) => !remove.has(name));
-          tools = yield* Effect.forEach(
-            names.map((toolName) => ({ toolName }) as ToolRef),
-            registration,
-          );
+          tools = yield* exactly([...enabled, ...add].filter((name) => !remove.has(name)));
         }
         const named = (extension: AnyExtension) =>
           ({ name: extension.extensionName }) as PiExtension;
@@ -713,24 +740,13 @@ export const Harness = <
         configure: (requested) =>
           on((conversation) =>
             Effect.gen(function* () {
-              // Adding an extension enables the tools it brings.
-              const added =
-                requested.extensions && !Array.isArray(requested.extensions)
-                  ? ((requested.extensions as { add?: ReadonlyArray<AnyExtension> }).add ?? [])
-                  : [];
-              const broughtTools = added.flatMap((extension) => [
-                ...flattenTools(extension.spec.tools ?? []),
-                ...(isCodeMode(extension) ? [{ toolName: CODEMODE_TOOL } as ToolRef] : []),
-              ]);
-              const agent: AgentOptions =
-                broughtTools.length > 0 && requested.tools === undefined
-                  ? { ...requested, tools: { add: broughtTools } }
-                  : requested;
+              // An edit (to the tools, or extensions bringing tools) is
+              // applied to what the conversation has enabled now.
               const current =
-                agent.tools && !Array.isArray(agent.tools)
-                  ? yield* enabledTools(conversation)
-                  : undefined;
-              const change = yield* changeOf(agent, current);
+                Array.isArray(requested.tools) || requested.tools === null
+                  ? undefined
+                  : yield* enabledTools(conversation);
+              const change = yield* changeOf(requested, current);
               yield* fromPi((context) => conversation.configure(change, context));
             }),
           ),

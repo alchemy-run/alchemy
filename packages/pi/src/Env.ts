@@ -1,5 +1,5 @@
 import type { Context as ChordContext } from "@earendil-works/chord/context";
-import type { EnvTarget } from "@earendil-works/pi-durable";
+import type { EnvTarget as PiEnvTarget } from "@earendil-works/pi-durable";
 import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Context from "effect/Context";
@@ -104,6 +104,16 @@ export const makeEnv = (raw: ExecutionEnv): Env["Service"] => ({
   writeFile: (path, content) =>
     unwrap("writeFile", (context) => raw.writeFile(path, content, context)),
 });
+
+/** What a tool call's environment is built from: Pi's target, and the instance that owns the conversation. */
+export type EnvTarget = PiEnvTarget & {
+  /**
+   * Identifies the harness instance: the Durable Object's id
+   * (`state.id.toString()`), a SQLite file's path. Conversation ids are only
+   * unique within one instance, so key anything shared on both.
+   */
+  readonly instanceId: string;
+};
 
 /**
  * Where a conversation's tools run: builds the Pi `ExecutionEnv` for each

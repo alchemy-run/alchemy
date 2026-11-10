@@ -383,6 +383,9 @@
       "path": "./examples/cloudflare-neon-prisma-psl/tsconfig.json"
     },
     {
+      "path": "./examples/cloudflare-pi/tsconfig.json"
+    },
+    {
       "path": "./examples/cloudflare-planetscale-mysql-drizzle/tsconfig.json"
     },
     {

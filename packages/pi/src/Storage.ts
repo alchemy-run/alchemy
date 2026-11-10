@@ -7,6 +7,11 @@ import { fromPi } from "./internal/promise.ts";
 
 /** One instance's storage, opened on first use. */
 export interface InstanceStorage {
+  /**
+   * Identifies this instance among every instance of the harness: a Durable
+   * Object's id, a file's path. Conversation ids are only unique within it.
+   */
+  readonly id: string;
   /** Open Pi's storage. Runs once per instance, on the first call. */
   readonly open: (prefix: string) => Effect.Effect<PiStorage, PiError>;
   /**
@@ -42,6 +47,7 @@ export class Storage extends Context.Service<
  */
 export const MemoryStorage: Layer.Layer<Storage> = Layer.succeed(Storage, {
   instance: Effect.sync(() => ({
+    id: `memory:${crypto.randomUUID()}`,
     evictable: false,
     open: () =>
       fromPi(async () => {
@@ -62,6 +68,7 @@ export const MemoryStorage: Layer.Layer<Storage> = Layer.succeed(Storage, {
 export const SqliteFile = (path: string): Layer.Layer<Storage> =>
   Layer.succeed(Storage, {
     instance: Effect.sync((): InstanceStorage => ({
+      id: path,
       evictable: false,
       open: (prefix) =>
         fromPi(async () => {
