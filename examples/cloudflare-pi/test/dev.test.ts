@@ -69,9 +69,10 @@ const answer = (messages: ReadonlyArray<Message>) =>
 beforeAll(async () => {
   cli.destroy();
   cli.start();
-  url = await cli.outputUrlWhenReady("url", { tries: 180, delayMs: 1_000 });
+  // The first deploy builds the sandbox template.
+  url = await cli.outputUrlWhenReady("url", { tries: 480, delayMs: 1_000 });
   await fetchOk(`${url}/notes/none`, { tries: 60, delayMs: 500 });
-}, 300_000);
+}, 600_000);
 
 afterAll(async () => {
   // The sandbox was created at run time, so no destroy would remove it.
@@ -184,7 +185,8 @@ test("the coding agent's tools run in an E2B sandbox", async () => {
 
   await code("create", {});
   const settled = await code<{ status: string }>("prompt", {
-    text: 'Write the text "pi was here" to /home/user/hello.txt using the write tool, then run `wc -c /home/user/hello.txt` with bash and tell me the number.',
+    // Relative paths: tools start in the sandbox user's home.
+    text: 'Write the text "pi was here" to hello.txt using the write tool, then run `wc -c hello.txt` with bash and tell me the number.',
     requestId: "code-1",
   });
   expect(settled.status).toBe("done");

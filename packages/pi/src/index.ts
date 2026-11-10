@@ -26,7 +26,7 @@ export {
   type Submission,
   type SubmissionDraft,
 } from "./Harness.ts";
-export { SandboxEnv, type SandboxEnvOptions, type SandboxLike } from "./SandboxEnv.ts";
+export { Sandbox, SandboxEnv, type SandboxLike } from "./SandboxEnv.ts";
 export {
   block,
   Extension,

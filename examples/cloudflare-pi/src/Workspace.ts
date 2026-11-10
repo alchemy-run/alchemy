@@ -5,6 +5,7 @@ import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Fast, FastLive } from "./models.ts";
+import { Base } from "./Sandbox.ts";
 
 /**
  * Marks a conversation's sandbox. Conversation ids repeat from one Durable
@@ -15,25 +16,25 @@ const markOf = (instanceId: string, conversationId: number) => ({
   "pi-conversation": String(conversationId),
 });
 
-/** One E2B sandbox per conversation, from E2B's stock template, found again by its mark. */
-const SandboxEnvLive = Pi.SandboxEnv(
+/** One E2B sandbox per conversation, found again by its mark. */
+const SandboxLive = Layer.effect(
+  Pi.Sandbox,
   Effect.gen(function* () {
-    const sandboxes = yield* E2B.CreateSandbox();
+    const sandboxes = yield* E2B.CreateSandbox(Base);
     return Effect.fn(function* ({ instanceId, conversationId }) {
       const metadata = markOf(instanceId, conversationId);
       const [existing] = yield* sandboxes.list({ metadata, state: ["running", "paused"] });
       return existing
         ? yield* sandboxes.connect(existing.sandboxID)
-        : yield* sandboxes.create({ templateID: "base", metadata, timeout: 600 });
+        : yield* sandboxes.create({ metadata, timeout: 600 });
     });
   }),
 );
 
-const HarnessLive = Layer.mergeAll(
-  FastLive,
-  SandboxEnvLive,
-  PiCloudflare.DurableObjectStorage,
-).pipe(Layer.provideMerge(E2B.CreateSandboxHttp));
+const HarnessLive = Layer.mergeAll(FastLive, PiCloudflare.DurableObjectStorage, Pi.SandboxEnv).pipe(
+  Layer.provide(SandboxLive),
+  Layer.provideMerge(E2B.CreateSandboxHttp),
+);
 
 /**
  * A coding agent: Pi's own `read`, `write`, `edit` and `bash` tools, run in
@@ -42,7 +43,7 @@ const HarnessLive = Layer.mergeAll(
 export default class Workspace extends Cloudflare.DurableObject<Workspace>()(
   "Workspace",
   Effect.gen(function* () {
-    const sandboxes = yield* E2B.CreateSandbox();
+    const sandboxes = yield* E2B.CreateSandbox(Base);
     const harness = yield* Pi.Harness({ models: [Fast], tools: [Pi.CodingTools] });
 
     return Effect.gen(function* () {
