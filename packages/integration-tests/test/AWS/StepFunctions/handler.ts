@@ -332,7 +332,8 @@ export default SFNTestFunction.make(
         }
 
         if (request.method === "POST" && pathname === "/start-activity") {
-          const result = yield* startActivityExecution();
+          const body = (yield* request.json) as unknown as { input?: string };
+          const result = yield* startActivityExecution({ input: body.input });
           return yield* HttpServerResponse.json({
             executionArn: result.executionArn,
           });

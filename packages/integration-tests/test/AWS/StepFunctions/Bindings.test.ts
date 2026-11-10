@@ -24,7 +24,11 @@ let functionArn: string;
 class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly status: number;
   readonly body: string;
-}> {}
+}> {
+  override get message() {
+    return `${this.status}: ${this.body}`;
+  }
+}
 
 // Retry transient 5xx only; genuine 4xx/assertion failures surface
 // immediately.
@@ -342,17 +346,26 @@ describe(
           "polls a scheduled activity task and completes it",
           (_stack) =>
             Effect.gen(function* () {
-              const started = (yield* postJson(`${baseUrl}/start-activity`, {})) as {
-                executionArn: string;
-              };
+              // The Activity's ARN is the same on every run, so its queue can
+              // still hold a task from an earlier run's execution; mark ours.
+              const run = yield* Effect.sync(() => crypto.randomUUID());
+              const started = (yield* postJson(`${baseUrl}/start-activity`, {
+                input: JSON.stringify({ run }),
+              })) as { executionArn: string };
 
-              // GetActivityTask long-polls; repeat until the scheduled task's
-              // token arrives.
+              // GetActivityTask long-polls; repeat until this execution's task
+              // arrives, passing over (and so draining) any stale one.
               const task = yield* getJson(`${baseUrl}/activity-task`).pipe(
                 Effect.repeat({
                   schedule: Schedule.spaced("2 seconds"),
-                  until: (r): boolean => (r as { taskToken: string | null }).taskToken !== null,
-                  times: 8,
+                  until: (r): boolean => {
+                    const { taskToken, input } = r as {
+                      taskToken: string | null;
+                      input: string | null;
+                    };
+                    return taskToken !== null && input !== null && JSON.parse(input).run === run;
+                  },
+                  times: 15,
                 }),
               );
               const token = (task as { taskToken: string }).taskToken;
