@@ -1,5 +1,6 @@
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -76,10 +77,23 @@ export const layer = (
 
 export const RPC_SERVER_ENVIRONMENT_KEY = "ALCHEMY_RPC_SERVER_ENVIRONMENT" as const;
 
+/** `ALCHEMY_RPC_SERVER_ENVIRONMENT` is set but isn't valid JSON. */
+export class InvalidRpcServerEnvironment extends Data.TaggedError("InvalidRpcServerEnvironment")<{
+  readonly cause: unknown;
+}> {}
+
 /** The spawn-time environment the parent baked into the child's process env. */
-export const fromProcessEnv: Effect.Effect<RpcServerEnvironment, unknown> = Config.String(
-  RPC_SERVER_ENVIRONMENT_KEY,
-).pipe(Config.map((raw) => JSON.parse(raw) as RpcServerEnvironment));
+export const fromProcessEnv: Effect.Effect<
+  RpcServerEnvironment,
+  Config.ConfigError | InvalidRpcServerEnvironment
+> = Config.String(RPC_SERVER_ENVIRONMENT_KEY).pipe(
+  Effect.flatMap((raw: string) =>
+    Effect.try({
+      try: () => JSON.parse(raw) as RpcServerEnvironment,
+      catch: (cause) => new InvalidRpcServerEnvironment({ cause }),
+    }),
+  ),
+);
 
 /**
  * Legacy single-stack boot: the full environment (including the stack) baked
@@ -91,7 +105,7 @@ export const fromProcessEnv: Effect.Effect<RpcServerEnvironment, unknown> = Conf
 export const fromEnv = () =>
   Layer.unwrap(
     fromProcessEnv.pipe(
-      Effect.flatMap((environment): Effect.Effect<ReturnType<typeof layer>, unknown, never> =>
+      Effect.flatMap((environment): Effect.Effect<ReturnType<typeof layer>> =>
         environment.stack === undefined || environment.alchemyContext === undefined
           ? Effect.die(
               new Error(

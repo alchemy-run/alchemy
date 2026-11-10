@@ -54,14 +54,16 @@ export const collectPages = <Page extends { NextToken?: string }, Item, E, R>(
     return items;
   });
 
-export const retryOrganizations = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+export const retryOrganizations = <A, E extends { readonly _tag: string }, R>(
+  effect: Effect.Effect<A, E, R>,
+) =>
   effect.pipe(
     Effect.retry({
-      while: (error: any) =>
-        error?._tag === "ConcurrentModificationException" ||
-        error?._tag === "TooManyRequestsException" ||
-        error?._tag === "ServiceException" ||
-        error?._tag === "FinalizingOrganizationException",
+      while: (error) =>
+        error._tag === "ConcurrentModificationException" ||
+        error._tag === "TooManyRequestsException" ||
+        error._tag === "ServiceException" ||
+        error._tag === "FinalizingOrganizationException",
       schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(8)]),
     }),
   );

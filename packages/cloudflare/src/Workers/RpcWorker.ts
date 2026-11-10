@@ -159,6 +159,7 @@ const bind = <Self, Rpcs extends Rpc.Any>(
   never,
   Worker
 > =>
+  // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- `RpcWorkerYieldable` extends `Effect<…, never, any>`; the declared return type pins R to `Worker`
   Effect.gen(function* () {
     const schema = (workerEff as unknown as Record<symbol, unknown>)[SchemaSymbol] as
       | RpcGroup.RpcGroup<Rpcs>
@@ -228,6 +229,7 @@ const bind = <Self, Rpcs extends Rpc.Any>(
                   (...a: unknown[]) => Effect.Effect<unknown, unknown, unknown>
                 >
               )[method];
+              // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- RPC methods are looked up by name on an untyped stub
               return yield* fn(...args);
             }).pipe(Effect.scoped);
         },

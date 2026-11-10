@@ -37,10 +37,10 @@ export const CronEventSourceHttp = Layer.effect(
   Effect.gen(function* () {
     const host = yield* Function;
     const Trigger = yield* FunctionTrigger;
-    return Effect.fn(function* (
+    return Effect.fn(function* <E>(
       name: string,
       props: CronEventSourceProps,
-      handler: (event: CronEvent) => Effect.Effect<void, unknown>,
+      handler: (event: CronEvent) => Effect.Effect<void, E>,
     ) {
       const path = `/__alchemy/neon/cron/${encodeURIComponent(name)}`;
       const triggerName = `${host.FQN}:${name}`;

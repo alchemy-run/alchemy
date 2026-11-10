@@ -402,21 +402,27 @@ const node = (root: Effect.Effect<unknown, any, any>, path: readonly PathStep[])
   new Proxy(function () {}, {
     get: (_target, prop) => {
       if (typeof prop !== "string" || prop === "then") return undefined;
+      // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- the ORM proxy builds query Effects from property paths at runtime
       return node(root, [...path, { prop }]);
     },
     apply: (_target, _this, args: unknown[]) => {
       const last = path[path.length - 1]!;
       const called = [...path.slice(0, -1), { prop: last.prop, args }];
+      // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- the ORM proxy builds query Effects from property paths at runtime
       if (!TERMINALS.has(last.prop)) return node(root, called);
+      // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- the ORM proxy builds query Effects from property paths at runtime
       const effect = Effect.flatMap(root, (base) =>
         Effect.tryPromise({
           try: () => Promise.resolve(replayPath(base, called)),
           catch: wrapPrismaError,
         }),
       );
+      // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- the ORM proxy builds query Effects from property paths at runtime
       if (!STREAMING_TERMINALS.has(last.prop)) return effect;
+      // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- the ORM proxy builds query Effects from property paths at runtime
       return Object.assign(effect, {
         stream: Stream.unwrap(
+          // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- the ORM proxy builds query Effects from property paths at runtime
           Effect.flatMap(root, (base) =>
             Effect.try({
               try: () =>

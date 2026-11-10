@@ -1,5 +1,6 @@
 import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
+import { isEffectOf } from "alchemy/Util/effect";
 import { sha256 } from "alchemy/Util/sha256";
 import * as Effect from "effect/Effect";
 
@@ -11,7 +12,7 @@ import * as Effect from "effect/Effect";
  */
 export const asScriptNameOutput = (scriptName: Input<string>): Output.Output<string> =>
   Output.asOutput(
-    (Effect.isEffect(scriptName) ? scriptName.pipe(Effect.orDie) : scriptName) as
+    (isEffectOf<string>(scriptName) ? scriptName.pipe(Effect.orDie) : scriptName) as
       | string
       | Output.Output<string>
       | Effect.Effect<string>,

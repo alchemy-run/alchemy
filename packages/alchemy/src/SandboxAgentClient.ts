@@ -189,39 +189,55 @@ export interface WireProcessOutput {
 export type WireSignal = "SIGTERM" | "SIGKILL";
 
 /**
+ * A failure as it arrives over the wire: an encoded tagged error (the agent's
+ * own, or the RPC transport's), revived by {@link reviveSandboxError}.
+ */
+export interface WireFailure {
+  readonly _tag: string;
+}
+
+/**
  * The methods a sandbox agent serves over alchemy's RPC, next to the
  * program's own. Their names start with `sandbox.` so they never collide with
  * a program's methods. Bytes travel as base64 strings.
  */
 export interface SandboxAgentRpc {
-  "sandbox.ping": () => Effect.Effect<{ readonly ok: true }, unknown>;
+  "sandbox.ping": () => Effect.Effect<{ readonly ok: true }, WireFailure>;
   "sandbox.exec": (
     command: Sandbox.Command,
     options?: WireExecOptions,
-  ) => Effect.Effect<Sandbox.ExecResult, unknown>;
+  ) => Effect.Effect<Sandbox.ExecResult, WireFailure>;
   "sandbox.start": (
     command: Sandbox.Command,
     options?: WireExecOptions,
-  ) => Effect.Effect<{ readonly id: string }, unknown>;
+  ) => Effect.Effect<{ readonly id: string }, WireFailure>;
   "sandbox.output": (
     id: string,
-  ) => Effect.Effect<Stream.Stream<WireProcessOutput, unknown>, unknown>;
-  "sandbox.write": (id: string, b64: string) => Effect.Effect<void, unknown>;
-  "sandbox.kill": (id: string, signal: WireSignal) => Effect.Effect<void, unknown>;
-  "sandbox.wait": (id: string) => Effect.Effect<{ readonly exitCode: number }, unknown>;
-  "sandbox.files.read": (path: string) => Effect.Effect<string, unknown>;
-  "sandbox.files.readText": (path: string) => Effect.Effect<string, unknown>;
-  "sandbox.files.write": (path: string, b64: string) => Effect.Effect<void, unknown>;
-  "sandbox.files.list": (path: string) => Effect.Effect<ReadonlyArray<Sandbox.FileEntry>, unknown>;
-  "sandbox.files.stat": (path: string) => Effect.Effect<Sandbox.FileEntry, unknown>;
-  "sandbox.files.remove": (path: string) => Effect.Effect<void, unknown>;
-  "sandbox.files.makeDir": (path: string) => Effect.Effect<void, unknown>;
+  ) => Effect.Effect<Stream.Stream<WireProcessOutput, WireFailure>, WireFailure>;
+  "sandbox.write": (id: string, b64: string) => Effect.Effect<void, WireFailure>;
+  "sandbox.kill": (id: string, signal: WireSignal) => Effect.Effect<void, WireFailure>;
+  "sandbox.wait": (id: string) => Effect.Effect<{ readonly exitCode: number }, WireFailure>;
+  "sandbox.files.read": (path: string) => Effect.Effect<string, WireFailure>;
+  "sandbox.files.readText": (path: string) => Effect.Effect<string, WireFailure>;
+  "sandbox.files.write": (path: string, b64: string) => Effect.Effect<void, WireFailure>;
+  "sandbox.files.list": (
+    path: string,
+  ) => Effect.Effect<ReadonlyArray<Sandbox.FileEntry>, WireFailure>;
+  "sandbox.files.stat": (path: string) => Effect.Effect<Sandbox.FileEntry, WireFailure>;
+  "sandbox.files.remove": (path: string) => Effect.Effect<void, WireFailure>;
+  "sandbox.files.makeDir": (path: string) => Effect.Effect<void, WireFailure>;
   "sandbox.pty.open": (
     options: Sandbox.PtyOptions,
-  ) => Effect.Effect<{ readonly id: string }, unknown>;
-  "sandbox.pty.output": (id: string) => Effect.Effect<Stream.Stream<Uint8Array, unknown>, unknown>;
-  "sandbox.pty.write": (id: string, b64: string) => Effect.Effect<void, unknown>;
-  "sandbox.pty.resize": (id: string, cols: number, rows: number) => Effect.Effect<void, unknown>;
+  ) => Effect.Effect<{ readonly id: string }, WireFailure>;
+  "sandbox.pty.output": (
+    id: string,
+  ) => Effect.Effect<Stream.Stream<Uint8Array, WireFailure>, WireFailure>;
+  "sandbox.pty.write": (id: string, b64: string) => Effect.Effect<void, WireFailure>;
+  "sandbox.pty.resize": (
+    id: string,
+    cols: number,
+    rows: number,
+  ) => Effect.Effect<void, WireFailure>;
 }
 
 // ---------------------------------------------------------------------------
@@ -260,7 +276,7 @@ const wireExecOptions = (options: Sandbox.ExecOptions | undefined): WireExecOpti
  * `makeFetchRpcStub` in `alchemy/Rpc`).
  */
 export const makeSandboxAgentClient = (stub: SandboxAgentRpc): SandboxAgentClient => {
-  const call = <A>(effect: Effect.Effect<A, unknown>): Effect.Effect<A, SandboxError> =>
+  const call = <A>(effect: Effect.Effect<A, WireFailure>): Effect.Effect<A, SandboxError> =>
     Effect.mapError(effect, reviveSandboxError);
 
   const attach = (id: string): Sandbox.Process<SandboxError> => ({

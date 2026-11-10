@@ -214,7 +214,8 @@ export const getWorkerExport = <Export = any, Runtime = WorkerRuntimeContextLike
     Effect.flatMap((context) => context.exports),
     Effect.flatMap((exports) =>
       Effect.isEffect(exports[exportName])
-        ? exports[exportName]
+        ? // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- a user module export, typed as `Export` below
+          exports[exportName]
         : Effect.succeed(exports[exportName]),
     ),
   ) as Effect.Effect<Export>;
@@ -270,6 +271,7 @@ export const handleRpcExit = async (
         lifetime.extend(new Promise<void>((resolve) => (done = resolve)));
         stream = stream.pipe(Stream.onExit(() => Effect.sync(done)));
       }
+      // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- a user handler's returned Stream, encoded for the RPC transport
       return await Effect.runPromise(toRpcStream(stream) as Effect.Effect<RpcStreamEnvelope>);
     }
     return exit.value;

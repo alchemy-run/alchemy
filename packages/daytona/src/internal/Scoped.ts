@@ -87,6 +87,7 @@ export const scopeModule = <M extends object, F extends PropertyKey = SandboxFix
         return [
           name,
           (input?: Record<string, unknown>) =>
+            // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- operations are looked up by name on the generated client
             Effect.flatMap(fields, (all) => run(call({ ...input, ...fixedFor(all) }))),
         ];
       }),

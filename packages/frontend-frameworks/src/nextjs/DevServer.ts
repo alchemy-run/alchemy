@@ -295,6 +295,7 @@ export const start = Effect.fn("Nextjs.DevServer.start")(function* (options: Dev
   });
 
   // 1. Open the platform proxy hosting the worker's bindings.
+  // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- cloudflare-runtime `BindingHooks` is `ReadonlyArray<BindingHook<any>>`, so the hooks' requirements are erased
   const proxy = yield* PlatformProxy.open({
     name: options.proxyName ?? "nextjs-dev-platform-proxy",
     ...(options.compatibilityDate !== undefined

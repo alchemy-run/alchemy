@@ -44,6 +44,7 @@ export interface AxiomTelemetryProps {
  * capability bindings.
  */
 const instance = <T>(resource: ResourceInput<T>): Effect.Effect<T> =>
+  // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- a declaration's requirements are met by the deploying host; Telemetry stays Layer<never>
   Effect.isEffect(resource) ? (resource as Effect.Effect<T>) : Effect.succeed(resource);
 
 const signal = (

@@ -456,6 +456,17 @@ const readTopic = Effect.fn(function* ({
     return undefined;
   }
 
+  const readDataProtectionPolicy = sns
+    .getDataProtectionPolicy({
+      ResourceArn: resolvedTopicArn,
+    })
+    .pipe(
+      Effect.map((response) => response.DataProtectionPolicy),
+      Effect.catchTag(
+        ["NotFoundException", "FifoTopicDataProtectionUnsupported"],
+        () => Effect.undefined,
+      ),
+    );
   const topicState = yield* Effect.all(
     [
       sns.getTopicAttributes({
@@ -464,17 +475,7 @@ const readTopic = Effect.fn(function* ({
       sns.listTagsForResource({
         ResourceArn: resolvedTopicArn,
       }),
-      sns
-        .getDataProtectionPolicy({
-          ResourceArn: resolvedTopicArn,
-        })
-        .pipe(
-          Effect.map((response) => response.DataProtectionPolicy),
-          Effect.catchTag(
-            ["NotFoundException", "FifoTopicDataProtectionUnsupported"],
-            () => Effect.undefined,
-          ),
-        ),
+      readDataProtectionPolicy,
     ],
     { concurrency: "unbounded" },
   ).pipe(

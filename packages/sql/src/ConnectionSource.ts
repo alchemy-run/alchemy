@@ -49,7 +49,8 @@ export const resolveConnectionSource = (
 ): Effect.Effect<Effect.Effect<Redacted.Redacted<string>>> =>
   Effect.gen(function* () {
     if (Output.isOutput(source)) {
-      const accessor = yield* source;
+      // Output values resolve against the host env, without requirements.
+      const accessor = yield* source as Output.Output<string | Redacted.Redacted<string>, never>;
       return Effect.map(accessor as Effect.Effect<string | Redacted.Redacted<string>>, toRedacted);
     }
     if (Effect.isEffect(source)) {

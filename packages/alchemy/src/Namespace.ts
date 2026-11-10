@@ -21,12 +21,14 @@ export function push<const Id extends string>(
 export function push(id: string, eff?: Effect.Effect<any, any, any>) {
   return eff
     ? Effect.flatMap(CurrentNamespace, (parent) =>
+        // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- push wraps any declaration Effect and returns it unchanged
         Effect.provideService(eff, Namespace, {
           Id: id,
           Parent: parent,
         }),
       )
-    : (eff: Effect.Effect<any, any, any>) => push(id, eff);
+    : // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- push wraps any declaration Effect and returns it unchanged
+      (eff: Effect.Effect<any, any, any>) => push(id, eff);
 }
 
 export const set = (namespace: string | NamespaceNode) =>

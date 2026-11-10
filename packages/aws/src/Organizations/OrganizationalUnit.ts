@@ -340,14 +340,13 @@ const readOUById = Effect.fn(function* (ouId: string) {
     return undefined;
   }
 
-  const [parentId, tags] = yield* Effect.all([
-    readParentId(described.Id).pipe(
-      Effect.catchTag("ChildNotFoundException", () => Effect.undefined),
-    ),
-    readResourceTags(described.Id).pipe(
-      Effect.catchTag("TargetNotFoundException", () => Effect.succeed({})),
-    ),
-  ]);
+  const readParent = readParentId(described.Id).pipe(
+    Effect.catchTag("ChildNotFoundException", () => Effect.undefined),
+  );
+  const readTags = readResourceTags(described.Id).pipe(
+    Effect.catchTag("TargetNotFoundException", () => Effect.succeed({})),
+  );
+  const [parentId, tags] = yield* Effect.all([readParent, readTags]);
 
   return {
     ouId: described.Id,

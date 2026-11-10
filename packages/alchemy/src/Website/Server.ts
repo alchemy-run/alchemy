@@ -274,6 +274,7 @@ const makeFramework = (props: ServerProps, root: string) =>
   importFrameworkModule(props.framework).pipe(
     Effect.flatMap((module_) =>
       Effect.mapError(
+        // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- framework-core is loaded from the project at runtime; its errors are mapped to FrameworkServerError here
         module_.make({
           ...props.options,
           root,
@@ -306,6 +307,7 @@ export const ServerProviderLive = () =>
         const root = path.resolve(initialCwd, props.root ?? ".");
         const service = yield* makeFramework(props, root);
         return yield* Effect.mapError(
+          // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- framework-core is loaded from the project at runtime; its errors are mapped to FrameworkServerError here
           service.build({ root, env: definedEnv(props.env) }),
           (cause) =>
             new FrameworkServerError({

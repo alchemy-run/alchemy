@@ -29,6 +29,7 @@ const program = Effect.gen(function* () {
       new Error(`Build child module ${payload.module} does not export a buildInChild function`),
     );
   }
+  // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- the framework module is imported dynamically; `BuildChildModule` can only promise an unknown failure, which is reported by message
   const output = yield* module.buildInChild(payload.config as never).pipe(
     // Hand the failure message back to `runBuildChild` for its error.
     Effect.tapError((error) =>
@@ -46,6 +47,7 @@ const program = Effect.gen(function* () {
   yield* writeBuildOutput(payload.outputPath, output);
 }).pipe(Effect.provide([NodeServices.layer, childProcessLogger]));
 
+// oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- the child runs a dynamically imported framework module
 void Effect.runPromise(program).then(
   // The macrotask hop lets buffered stdout/stderr drain before exiting.
   () => setTimeout(() => process.exit(0), 0),

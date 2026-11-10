@@ -253,21 +253,22 @@ const readDelegatedAdministrator = Effect.fn(function* ({
   accountId,
   servicePrincipal,
 }: DelegatedAdministratorProps) {
-  const [delegatedServices, delegatedAdmins] = yield* Effect.all([
-    retryOrganizations(
-      collectPages(
-        (NextToken) =>
-          organizations.listDelegatedServicesForAccount({
-            AccountId: accountId,
-            NextToken,
-          }),
-        (page) => page.DelegatedServices,
-      ),
-    ).pipe(
-      Effect.catchTag(["AccountNotFoundException", "AccountNotRegisteredException"], () =>
-        Effect.succeed<organizations.DelegatedService[]>([]),
-      ),
+  const listDelegatedServices = retryOrganizations(
+    collectPages(
+      (NextToken) =>
+        organizations.listDelegatedServicesForAccount({
+          AccountId: accountId,
+          NextToken,
+        }),
+      (page) => page.DelegatedServices,
     ),
+  ).pipe(
+    Effect.catchTag(["AccountNotFoundException", "AccountNotRegisteredException"], () =>
+      Effect.succeed<organizations.DelegatedService[]>([]),
+    ),
+  );
+  const [delegatedServices, delegatedAdmins] = yield* Effect.all([
+    listDelegatedServices,
     retryOrganizations(
       collectPages(
         (NextToken) =>
