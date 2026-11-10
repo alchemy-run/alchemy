@@ -26,6 +26,7 @@ import type { BindingHook } from "@alchemy.run/cloudflare-runtime/core/PluginCon
 import { splitSqliteStatements } from "@alchemy.run/sql/SqlFile";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { gatewayName, localGatewayRuntime } from "../LocalGateway.ts";
 import type { D1QueryResult, D1SqlExecutor } from "./ApplyMigrations.ts";
 
@@ -136,6 +137,33 @@ export const withLocalD1Query = <A, E, R>(
         );
 
       return yield* use(query);
+    }),
+  );
+
+/**
+ * Whether the simulator holds no user tables for `databaseId` — its data
+ * was deleted (`.alchemy/local/d1` removed) or never written. Resource state
+ * can outlive the simulator's storage, so the local provider observes this
+ * instead of trusting the migration and import hashes it persisted.
+ * Simulator-internal (`_cf_*`) and SQLite tables don't count.
+ */
+export const localD1IsEmpty = (databaseId: string) =>
+  withLocalD1Query(databaseId, (query) =>
+    query({
+      sql:
+        "SELECT count(*) AS n FROM sqlite_schema WHERE type = 'table' " +
+        "AND substr(name, 1, 4) <> '_cf_' AND substr(name, 1, 7) <> 'sqlite_'",
+    }),
+  ).pipe(
+    // The gateway is a second workerd process over the same DO SQLite file
+    // as the dev Workers. A read-only transaction there can start on a
+    // snapshot another process has since written past, and the commit
+    // token lookup then fails with SQLITE_BUSY_SNAPSHOT. A fresh gateway
+    // reads the current snapshot.
+    Effect.retry({ times: 5, schedule: Schedule.spaced("100 millis") }),
+    Effect.map((response) => {
+      const rows = response.result[0]?.results as Array<{ n: number }> | undefined;
+      return (rows?.[0]?.n ?? 0) === 0;
     }),
   );
 

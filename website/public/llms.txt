@@ -314,6 +314,7 @@ A linear five-part walkthrough from zero to a tested, CI-deployed AWS project. E
 ## AWS — Compute
 
 - [Lambda MicroVMs](https://alchemy.run/aws/compute/microvms) — Build a Firecracker MicroVM image from TypeScript or a Dockerfile, then launch and drive isolated stateful instances from a Lambda Function with typed lifecycle bindings and RPC.
+- [Nitro Sandboxes](https://alchemy.run/aws/compute/nitro-sandboxes) — How Nitro Sandboxes run each ECS task, EKS pod or self-managed workload in its own lightweight VM on your EC2 instances, the difference between isolated and confidential modes, and how to turn them on for ECS, EKS and EC2.
 - [EC2](https://alchemy.run/aws/compute/ec2) — How EC2 instances give you a whole virtual machine, how to launch one from an image into a subnet, how to run your Effect program on it as a service, and how to reach it.
 - [ECS](https://alchemy.run/aws/compute/ecs) — How ECS runs containers on Fargate through clusters, task definitions, tasks and services, and how to run a server, a one-off job or a scheduled job from an image, a Dockerfile or an Effect program.
 - [Effect workflows](https://alchemy.run/aws/compute/effect-workflows) — Run Effect workflows on AWS Lambda durable functions. Host them in an AWS.Lambda.WorkflowFunction, start runs from other functions with AWS.Lambda.DurableFunctionEngine, and let them sleep and wait durably.
@@ -1199,4 +1200,4 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~256 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~253 KB) — only fetch it when you need to locate a specific resource's reference page.

@@ -342,6 +342,40 @@ cluster is still reachable, then deletes the repository and role
 whether or not the cluster still exists, so destroying a cluster and
 its workloads together leaves nothing behind in AWS.
 
+## Run each pod in its own VM
+
+Pods on the same node share its kernel. To run code you don't trust, give each pod its own [Nitro Sandbox](/aws/compute/nitro-sandboxes): a lightweight VM that the Nitro hypervisor isolates from the node and from every other pod on it. Set `runtimeClassName` on a Deployment or a Job:
+
+```typescript title="alchemy.run.ts"
+const agent = yield* Kubernetes.Deployment("Agent", {
+  cluster,
+  image: "ghcr.io/acme/agent:1",
+  port: 8080,
+  runtimeClassName: "isolated-sandbox",
+});
+```
+
+On Auto Mode, that's all it takes. Auto Mode provides the `isolated-sandbox` and `confidential-sandbox` RuntimeClasses, launches a node type that supports sandboxes, and starts each pod in its own. Sandboxes need Kubernetes 1.36 or later, so set `version` on an older cluster. Containers in one pod share its sandbox.
+
+`isolated-sandbox` protects the node and other pods from what runs inside, and keeps `kubectl exec` and logs working. `confidential-sandbox` also hides the pod's memory from the node, and needs a policy that pins its images and arguments. See [Isolated or confidential](/aws/compute/nitro-sandboxes#isolated-or-confidential).
+
+For code that must not reach the network at all, add the `network-isolated` annotation through `podTemplate`. The sandbox then boots with no network device:
+
+```typescript title="alchemy.run.ts"
+yield* Kubernetes.Job("RunGeneratedCode", {
+  cluster,
+  image: "ghcr.io/acme/runner:1",
+  runtimeClassName: "isolated-sandbox",
+  podTemplate: {
+    metadata: { annotations: { "sandbox.amazonaws.com/network-isolated": "true" } },
+  },
+});
+```
+
+A network-isolated pod can't serve traffic or pass HTTP probes, so it suits Jobs better than Deployments.
+
+Outside Auto Mode, nodes need an AMI with the Nitro Sandbox runtime and Nitro Enclaves turned on in their launch template, with `enclaveOptions: { enabled: true }` on [`AWS.AutoScaling.LaunchTemplate`](/providers/aws/autoscaling#launchtemplate). See [Run a pod in isolated mode](https://docs.aws.amazon.com/eks/latest/userguide/sandboxing-isolated-setup.html).
+
 ## Target an EKS cluster you don't manage
 
 To deploy onto a cluster created elsewhere, name it in a connection.
@@ -428,6 +462,7 @@ surface.
   cluster before deploying to EKS.
 - [VPC & networking](/aws/networking) — what the `Network` helper
   builds under the cluster.
+- [Nitro Sandboxes](/aws/compute/nitro-sandboxes) — the same VM isolation on ECS and EC2.
 - [HyperPod](/aws/compute/hyperpod) — run training fleets on this
   cluster's nodes.
 - [Choosing a runtime](/aws/compute/choosing-a-runtime) — when Lambda or ECS

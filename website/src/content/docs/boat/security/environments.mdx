@@ -14,7 +14,7 @@ Every change to an environment makes a new **version**. A sandbox keeps the vers
 <Timeline
   end={10}
   lanes={[
-    { id: "env", label: "Agents", type: "environment" },
+    { id: "env", label: "MyEnv", type: "environment" },
     { id: "t1", label: "task-1", type: "sandbox" },
     { id: "t2", label: "task-2", type: "sandbox" },
     { id: "t3", label: "task-3", type: "sandbox" },
@@ -32,11 +32,11 @@ Every change to an environment makes a new **version**. A sandbox keeps the vers
 
 ## Declare an environment with variables and secret files
 
-```typescript title="src/Agents.ts"
+```typescript title="src/MyEnv.ts"
 import * as Boat from "@alchemy.run/boat";
 import * as Config from "effect/Config";
 
-export const Agents = Boat.Environment("Agents", {
+export const MyEnv = Boat.Environment("MyEnv", {
   env: { NODE_ENV: "production", TOKEN: Config.Redacted("AGENT_TOKEN") },
   secretFiles: [{ path: ".npmrc", contents: Config.Redacted("NPMRC") }],
   passGithub: false,
@@ -52,14 +52,14 @@ An unchanged deploy makes no new version. A changed one updates only what differ
 Pass the environment to a declared sandbox:
 
 ```typescript
-export const Box = Boat.Sandbox("Box", { environment: Agents });
+export const Box = Boat.Sandbox("Box", { environment: MyEnv });
 ```
 
 A sandbox your code creates names it:
 
 ```typescript
-const agents = yield* Agents;
-const sandbox = yield* sandboxes.create({ environment: agents.name, autoStop: "10 minutes" });
+const env = yield* MyEnv;
+const sandbox = yield* sandboxes.create({ environment: env.name, autoStop: "10 minutes" });
 ```
 
 ## Choose which credentials it passes
@@ -97,7 +97,7 @@ import * as Doppler from "@alchemy.run/doppler";
 import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { Agents } from "./src/Agents.ts";
+import { MyEnv } from "./src/MyEnv.ts";
 
 export default Alchemy.Stack(
   "MyApp",
@@ -110,8 +110,8 @@ export default Alchemy.Stack(
         : Alchemy.Secrets.DotEnv(),
   },
   Effect.gen(function* () {
-    const agents = yield* Agents;
-    return { environment: agents.name };
+    const env = yield* MyEnv;
+    return { environment: env.name };
   }),
 );
 ```

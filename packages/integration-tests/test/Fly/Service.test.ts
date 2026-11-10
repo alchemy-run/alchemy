@@ -1,3 +1,4 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Fly from "@alchemy.run/fly";
 import { resolveOrgSlug } from "@alchemy.run/fly/Environment";
 import { expect, describe } from "@alchemy.run/test";
@@ -12,6 +13,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import { testName } from "../names.ts";
+import { doWork, OtelCollector, waitForWorkSpan, withCollectorUrl } from "../Utils/Telemetry.ts";
 import Api from "./fixtures/api.ts";
 import ChecksApi, { ChecksSite } from "./fixtures/checks-api.ts";
 import { ECHO_BODY, Echo } from "./fixtures/echo.ts";
@@ -27,11 +29,15 @@ import RpcUsers, { USERS } from "./fixtures/rpc-users.ts";
 import SecureGateway from "./fixtures/secure-gateway.ts";
 import SecureUsers, { SECURE_USERS_BODY } from "./fixtures/secure-users.ts";
 import { API_PORT, MARKER, Site, VOLUME_PATH } from "./fixtures/shared.ts";
+import TracedApi, { TracedSite } from "./fixtures/traced.ts";
 import UnhealthyApi, { UnhealthySite } from "./fixtures/unhealthy-api.ts";
 import { flyApi } from "./limit.ts";
 import { expectFound } from "./lookup.ts";
 
-const { test } = Test.make({ limit: flyApi, providers: Fly.providers() });
+const { test } = Test.make({
+  limit: flyApi,
+  providers: Layer.mergeAll(Fly.providers(), Cloudflare.providers()),
+});
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
@@ -988,5 +994,41 @@ describe.concurrent("Service", () => {
         expect(yield* appGone(first.appName)).toBe(true);
       }).pipe(logLevel),
     { tags: ownedTags, timeout: 500_000 },
+  );
+
+  test.provider(
+    "a Service program exports spans to the bound OTLP destination",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        // The traced program binds the collector url at deploy, so it deploys first.
+        const collector = yield* stack.deploy(OtelCollector());
+        const api = yield* stack
+          .deploy(
+            Effect.gen(function* () {
+              yield* OtelCollector();
+              // fly.dev routes only once the App has a public address.
+              yield* Fly.IpAssignment("TracedShared", {
+                app: yield* TracedSite,
+                type: "shared_v4",
+              });
+              return yield* TracedApi;
+            }),
+          )
+          .pipe(withCollectorUrl(collector.url!));
+
+        expect(yield* doWork(api.url!, "fly")).toBe("did work fly");
+        const traces = yield* waitForWorkSpan(collector.url!, "fly");
+        expect(traces).toContain("work:fly");
+        expect(traces).toContain("fly-service-e2e");
+
+        yield* stack.destroy();
+        expect(yield* appGone(api.appName)).toBe(true);
+      }).pipe(logLevel),
+    {
+      tags: [...ownedTags, "provider:cloudflare", "provider:cloudflare:worker"],
+      timeout: 300_000,
+    },
   );
 });

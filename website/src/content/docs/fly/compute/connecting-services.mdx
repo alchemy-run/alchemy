@@ -13,10 +13,15 @@ Two things decide who can call a Service. The first is the **network**. Every Ap
 
 <Tree
   nodes={[
-    { id: "net", label: "my-app-prod", type: "stack network · private" },
-    { id: "gw", label: "Gateway", type: "public · gateway.fly.dev", parent: "net", tone: "accent", specs: [["binds", "Users, Orders"]] },
-    { id: "orders", label: "Orders", type: "private · Flycast", parent: "net", specs: [["binds", "Users"]] },
-    { id: "users", label: "Users", type: "private · Flycast", parent: "net", specs: [["binds", "nothing"]] },
+    { id: "net", label: "my-app-prod", type: "stack network · private", areas: ["gw orders", "gw users"], phoneAreas: ["gw gw", "orders users"], colGap: 3 },
+    { id: "gw", label: "Gateway", type: "public · gateway.fly.dev", parent: "net", tone: "accent" },
+    { id: "orders", label: "Orders", type: "private · Flycast", parent: "net" },
+    { id: "users", label: "Users", type: "private · Flycast", parent: "net" },
+  ]}
+  links={[
+    { from: "gw", to: "orders", label: "binds" },
+    { from: "gw", to: "users", label: "binds" },
+    { from: "orders", to: "users", label: "binds" },
   ]}
   caption="All three Services sit on the stack's own network. Only the Gateway has a public address, and a Service can call another's methods only if it binds it."
 />
