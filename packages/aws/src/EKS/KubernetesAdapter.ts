@@ -467,7 +467,7 @@ export const EksKubernetesAdapter = (options?: {
       const withAws =
         (auth: { region?: string | undefined; emulator?: boolean | undefined } | undefined) =>
         <A, E, R>(self: Effect.Effect<A, E, R>) =>
-          withAwsServices(auth?.emulator)(withRegion(auth?.region)(self));
+          self.pipe(withRegion(auth?.region), withAwsServices(auth?.emulator));
 
       /**
        * Describe the cluster. NotFound is gone. DELETING is gone only when
