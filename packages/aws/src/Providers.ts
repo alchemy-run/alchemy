@@ -1887,7 +1887,8 @@ export const providers = () =>
     // The `aws-eks` Kubernetes cluster adapter is provideMerged (not just
     // provided) so the cluster-agnostic `Kubernetes.*` workload providers
     // can resolve it dynamically from the ambient stack context.
-    Layer.provideMerge(EKS.EksKubernetesAdapter()),
+    // Clusters on the local emulator (`alchemy dev`) are called there.
+    Layer.provideMerge(EKS.EksKubernetesAdapter({ emulator: flociServices })),
     Layer.provideMerge(
       Layer.mergeAll(
         Command.providers(),

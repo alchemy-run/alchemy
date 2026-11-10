@@ -303,6 +303,12 @@ const getKubernetesTransport = (
   });
 
 /** The region segment of a cluster ARN (`arn:aws:eks:REGION:...`). */
+/**
+ * Whether the cluster runs on the local AWS emulator (`alchemy dev`), whose
+ * resources all belong to account `000000000000`. AWS never issues it.
+ */
+const isEmulatorArn = (arn: string | undefined): boolean => arn?.split(":")[4] === "000000000000";
+
 const regionOfClusterArn = (arn: string | undefined): string | undefined =>
   arn?.split(":")[3] || undefined;
 
@@ -576,6 +582,7 @@ const mapClusterState = (
     region: regionOfClusterArn(cluster.arn) ?? "",
     endpoint: cluster.endpoint,
     certificateAuthorityData: cluster.certificateAuthority?.data,
+    emulator: isEmulatorArn(cluster.arn),
   }),
   version: cluster.version,
   platformVersion: cluster.platformVersion,

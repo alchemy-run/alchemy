@@ -100,6 +100,14 @@ yield* AWS.EC2.Instance("SandboxHost", {
 
 See [EC2: Host Nitro Sandboxes](/aws/compute/ec2#host-nitro-sandboxes).
 
+## Run sandboxes in `alchemy dev`
+
+The [local emulator](/aws/local-development) takes the same props, so a stack that uses sandboxes runs in `alchemy dev` without changes. Your laptop has no Nitro hypervisor, so a sandboxed workload runs as an ordinary container there. It is not isolated.
+
+On ECS, the emulator launches one EC2 instance per Managed Instances capacity provider, with enclaves enabled when `nitroEnclavesEnabled` is set. Tasks run as local containers and report their `trustedExecutionSummary`. A task that sets an isolation mode still needs a provider with `nitroEnclavesEnabled`, as it does on AWS.
+
+On an EKS Auto Mode cluster, the emulator creates the `isolated-sandbox` and `confidential-sandbox` RuntimeClasses. Both run pods on the default container runtime.
+
 ## Nitro Sandboxes or Lambda MicroVMs
 
 Both give each workload its own VM. They differ in who runs the machines.

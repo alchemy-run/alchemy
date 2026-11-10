@@ -631,6 +631,11 @@ const ensureFlociUnsynchronized = (
           : "FLOCI_SERVICES_CLOUDFRONT_EDGE_PORTS_ENABLED=false",
         "-e",
         `FLOCI_SERVICES_CLOUDFRONT_DOMAIN_SUFFIX=${FLOCI_CLOUDFRONT_DOMAIN_SUFFIX}`,
+        // Workloads deploy onto an emulated EKS cluster with the emulator's
+        // public credentials, so its k3s API server must accept their tokens.
+        // Safe here: the container publishes on loopback only.
+        "-e",
+        "FLOCI_SERVICES_EKS_IAM_AUTH_ALLOW_PUBLIC_CREDENTIALS=true",
         ...(config?.dockerSocket === false
           ? []
           : ["-v", "/var/run/docker.sock:/var/run/docker.sock", "-u", "root"]),

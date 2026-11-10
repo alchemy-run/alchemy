@@ -13,6 +13,7 @@ import * as eks from "@distilled.cloud/aws/eks";
 import { Region, type RegionName } from "@distilled.cloud/aws/Region";
 import * as SigV4 from "@distilled.cloud/aws/SigV4";
 import { createPhysicalName } from "alchemy/PhysicalName";
+import type { ProviderError } from "alchemy/Provider";
 import { Self } from "alchemy/Self";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
@@ -76,6 +77,12 @@ declare module "@alchemy.run/kubernetes/Connection" {
        * @default the ambient AWS region
        */
       region?: string;
+      /**
+       * The cluster runs on the local AWS emulator (`alchemy dev`), so the
+       * adapter calls the emulator for it instead of AWS.
+       * @default false
+       */
+      emulator?: boolean;
     };
   }
 }
@@ -188,6 +195,7 @@ export const eksConnectionOf = (options: {
   region: string;
   endpoint?: string | undefined;
   certificateAuthorityData?: string | undefined;
+  emulator?: boolean | undefined;
 }): Connection => ({
   endpoint: options.endpoint,
   certificateAuthorityData: options.certificateAuthorityData,
@@ -195,6 +203,7 @@ export const eksConnectionOf = (options: {
     kind: "aws-eks",
     clusterName: options.clusterName,
     region: options.region,
+    ...(options.emulator ? { emulator: true } : {}),
   },
 });
 
@@ -425,20 +434,40 @@ process.exit(0);
  * `AWS.providers()` so the `Kubernetes.*` workload providers can resolve
  * it from the stack context.
  */
-export const EksKubernetesAdapter = () =>
+export const EksKubernetesAdapter = (options?: {
+  /**
+   * The local AWS emulator's services, for clusters whose connection is
+   * marked `emulator`. Without it those clusters are called on AWS.
+   */
+  emulator?: () => Layer.Layer<any, ProviderError, never>;
+}) =>
   Layer.effect(
     ClusterAdapter("aws-eks"),
     Effect.gen(function* () {
       const imageSource = yield* makeImageSource;
       const context = yield* Effect.context<EksAdapterDeps>();
 
+      /** The emulator layer when the cluster runs on it, else nothing. */
+      const emulatorFor = (onEmulator: boolean | undefined) =>
+        onEmulator ? options?.emulator?.() : undefined;
+
       // Discharge the layer-captured AWS services; per-resource engine
       // services (ResourceContext/Stack/Stage) stay ambient — they are provided
-      // by the invoking lifecycle operation, never captured here.
+      // by the invoking lifecycle operation, never captured here. A cluster on
+      // the emulator gets the emulator's services closest, so they win.
+      const withAwsServices =
+        (onEmulator: boolean | undefined) =>
+        <A, E, R>(self: Effect.Effect<A, E, R>) => {
+          const emulator = emulatorFor(onEmulator);
+          return Effect.provideContext(
+            emulator ? self.pipe(Effect.provide(emulator)) : self,
+            context,
+          );
+        };
       const withAws =
-        (region: string | undefined) =>
+        (auth: { region?: string | undefined; emulator?: boolean | undefined } | undefined) =>
         <A, E, R>(self: Effect.Effect<A, E, R>) =>
-          Effect.provideContext(withRegion(region)(self), context);
+          withAwsServices(auth?.emulator)(withRegion(auth?.region)(self));
 
       /**
        * Describe the cluster. NotFound is gone. DELETING is gone only when
@@ -452,7 +481,7 @@ export const EksKubernetesAdapter = () =>
       }) {
         const described = yield* eks.describeCluster({ name: auth.clusterName }).pipe(
           Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
-          withAws(auth.region),
+          withAws(auth),
         );
         const cluster = described?.cluster;
         const apiGone = cluster?.status === "DELETING" && !cluster.endpoint;
@@ -485,7 +514,7 @@ export const EksKubernetesAdapter = () =>
           region: auth.region,
           endpoint,
           certificateAuthorityData,
-        }).pipe(withAws(auth.region));
+        }).pipe(withAws(auth));
       });
 
       const identityReconcile = Effect.fn(function* (options: WorkloadIdentityReconcileOptions) {
@@ -537,9 +566,10 @@ export const EksKubernetesAdapter = () =>
               roleName,
               associationArn,
               associationId,
+              ...(auth.emulator ? { emulator: true } : {}),
             },
           };
-        }).pipe(withAws(auth.region));
+        }).pipe(withAws(auth));
       });
 
       const identityDelete = Effect.fn(function* (options: {
@@ -568,11 +598,15 @@ export const EksKubernetesAdapter = () =>
           if (typeof state?.roleName === "string") {
             yield* deletePodRole(state.roleName);
           }
-        }).pipe(withAws(auth?.region));
+        }).pipe(
+          withAws({ region: auth?.region, emulator: auth?.emulator ?? state?.emulator === true }),
+        );
       });
 
       const registryResolve = Effect.fn(function* (options: ImageRegistryResolveOptions) {
         const state = options.state;
+        const auth =
+          options.connection !== undefined ? yield* narrowEksAuth(options.connection) : undefined;
         const repositoryName =
           typeof state?.repositoryName === "string"
             ? state.repositoryName
@@ -597,7 +631,7 @@ export const EksKubernetesAdapter = () =>
             bootstrap: options.bootstrap,
             session: options.session,
           })
-          .pipe(Effect.provideContext(context));
+          .pipe(withAwsServices(auth?.emulator));
         return {
           imageUri: resolved.imageUri,
           codeHash: resolved.codeHash,
@@ -605,6 +639,7 @@ export const EksKubernetesAdapter = () =>
             kind: "aws-ecr" as const,
             repositoryName: resolved.repositoryName,
             repositoryUri: resolved.repositoryUri,
+            ...(auth?.emulator ? { emulator: true } : {}),
           },
         };
       });
@@ -628,9 +663,13 @@ export const EksKubernetesAdapter = () =>
       });
 
       const registryDelete = Effect.fn(function* (options: {
+        connection?: Connection | undefined;
         state: Record<string, unknown> | undefined;
       }) {
         if (typeof options.state?.repositoryName !== "string") return;
+        const auth =
+          options.connection !== undefined ? yield* narrowEksAuth(options.connection) : undefined;
+        const emulator = auth?.emulator ?? options.state.emulator === true;
         yield* ecr
           .deleteRepository({
             repositoryName: options.state.repositoryName,
@@ -638,7 +677,7 @@ export const EksKubernetesAdapter = () =>
           })
           .pipe(
             Effect.catchTag("RepositoryNotFoundException", () => Effect.void),
-            Effect.provideContext(context),
+            withAwsServices(emulator),
           );
       });
 
