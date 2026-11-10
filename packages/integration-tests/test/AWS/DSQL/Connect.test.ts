@@ -197,7 +197,11 @@ describe(
             ssl: boolean;
             urlScheme: string;
           };
-          expect(info.host).toMatch(/^[a-z0-9]+\.dsql\.[a-z0-9-]+\.on\.aws$/);
+          // On floci the cluster endpoint is `<id>.dsql.<region>.localhost.floci.io`,
+          // which resolves to the emulator.
+          expect(info.host).toMatch(
+            /^[a-z0-9]+\.dsql\.[a-z0-9-]+\.(on\.aws|localhost\.floci\.io)$/,
+          );
           expect(info.port).toBe(5432);
           expect(info.database).toBe("postgres");
           expect(info.username).toBe("admin");
