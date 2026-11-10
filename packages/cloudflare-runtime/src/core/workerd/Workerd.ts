@@ -1,4 +1,5 @@
 import * as NodeChildProcess from "node:child_process";
+import * as NodeFs from "node:fs";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -78,6 +79,11 @@ export class Workerd extends Context.Service<
   Workerd,
   {
     readonly compatibilityDate: string;
+    /**
+     * Starts a workerd process for `config`. A file at a `unix:` listen
+     * address is removed before each spawn: workerd never removes the socket
+     * files it listens on, and won't bind over one.
+     */
     readonly serve: (
       config: Config,
       args?: Record<string, string | number | boolean>,
@@ -190,6 +196,19 @@ const make = (
             configuredAddresses.push(String(address));
           }
         }
+        // workerd never removes a Unix socket file it listened on, and the
+        // file left by an earlier process (a crash, or an attempt this retry
+        // replaces) fails the next bind with "Address already in use".
+        yield* Effect.sync(() => {
+          for (const address of configuredAddresses) {
+            if (!address.startsWith("unix:")) continue;
+            try {
+              NodeFs.rmSync(address.slice("unix:".length), { force: true });
+            } catch {
+              // workerd's bind reports whatever is wrong with the path.
+            }
+          }
+        });
         const handle = yield* spawn(
           // oxlint-disable-next-line effecttsgo/process-env-in-effect -- workerd knobs for this process, read from the real env
           options?.bin || process.env[PATH_ENV] || workerd.bin,

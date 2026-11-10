@@ -1,3 +1,4 @@
+import * as NodeFs from "node:fs";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -14,6 +15,7 @@ import {
   defaultDurableObjectUniqueKey,
   SERVICE_USER_WORKER,
   SOCKET_USER_ENTRY,
+  SOCKET_USER_ENTRY_UNIX,
   withDefaultFlags,
 } from "./internal/constants.ts";
 import { moduleToWorkerd } from "./internal/internal-modules.ts";
@@ -217,8 +219,33 @@ export const RuntimeLive = Layer.effect(
             address: "127.0.0.1:0",
             service: { name: config.entry ?? SERVICE_USER_WORKER },
           },
+          ...(worker.entrySocketPath === undefined
+            ? []
+            : [
+                {
+                  name: SOCKET_USER_ENTRY_UNIX,
+                  address: `unix:${worker.entrySocketPath}`,
+                  service: { name: config.entry ?? SERVICE_USER_WORKER },
+                },
+              ]),
           ...config.sockets,
         ];
+        // workerd never removes its Unix socket file; `Workerd.serve` clears a
+        // stale one before each process starts, and this removes it once the
+        // runtime stops. Registered before the process scopes, it runs after
+        // they have killed workerd.
+        const entrySocketPath = worker.entrySocketPath;
+        if (entrySocketPath !== undefined) {
+          yield* Effect.addFinalizer(() =>
+            Effect.sync(() => {
+              try {
+                NodeFs.rmSync(entrySocketPath, { force: true });
+              } catch {
+                // Best effort: the next start clears the path anyway.
+              }
+            }),
+          );
+        }
         const exits = yield* Queue.unbounded<Workerd.WorkerdExit>();
         // Logs a failed callback outside any fiber, so a callback that never
         // settles holds nothing open.
@@ -383,6 +410,8 @@ const SOCKET_DEBUG_PORT = "debug-port";
 const pinSocket =
   (ports: Workerd.WorkerdPorts) =>
   (socket: WorkerdConfig.Socket): WorkerdConfig.Socket => {
+    // A Unix socket keeps its path; workerd reports it with port 0.
+    if (socket.address?.startsWith("unix:")) return socket;
     const port = socket.name === undefined ? undefined : ports[socket.name];
     return port === undefined ? socket : { ...socket, address: `127.0.0.1:${port}` };
   };
