@@ -16,9 +16,10 @@ import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 
 /**
  * Where the container reads the AI services' canned answers. Floci's
- * Translate, Comprehend, Textract and Rekognition run no models; they answer
- * a request whose text has an entry in this file (`scripts/floci-ai-mocks.json`,
- * copied in at start) and echo the input otherwise.
+ * Translate, Comprehend, Textract and Rekognition run no models; a request
+ * that has an entry in this file (`scripts/floci-ai-mocks.json`, copied in at
+ * start) gets it: Translate keys by the text, Textract by the document's
+ * `sha256:<hex>`, so a document matches whatever bucket it was uploaded to.
  */
 const AI_MOCK_CONFIG = "/tmp/alchemy-ai-mocks.json";
 

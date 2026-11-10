@@ -14,5 +14,128 @@
         "TargetLanguageCode": "es"
       }
     }
+  },
+  "textract": {
+    "sha256:2096fd12c84360f0b35e0f26e2ca80f335739f4a5e6a9dbe520ac5f2c5ed3676": {
+      "DetectDocumentText": {
+        "DocumentMetadata": {
+          "Pages": 1
+        },
+        "Blocks": [
+          {
+            "BlockType": "PAGE",
+            "Id": "hello-page",
+            "Page": 1,
+            "Confidence": 99.9,
+            "Geometry": {
+              "BoundingBox": {
+                "Width": 1,
+                "Height": 1,
+                "Left": 0,
+                "Top": 0
+              },
+              "Polygon": [
+                {
+                  "X": 0,
+                  "Y": 0
+                },
+                {
+                  "X": 1,
+                  "Y": 0
+                },
+                {
+                  "X": 1,
+                  "Y": 1
+                },
+                {
+                  "X": 0,
+                  "Y": 1
+                }
+              ]
+            },
+            "Relationships": [
+              {
+                "Type": "CHILD",
+                "Ids": ["hello-line"]
+              }
+            ]
+          },
+          {
+            "BlockType": "LINE",
+            "Id": "hello-line",
+            "Page": 1,
+            "Confidence": 99.6,
+            "Text": "HELLO",
+            "Geometry": {
+              "BoundingBox": {
+                "Width": 0.82,
+                "Height": 0.54,
+                "Left": 0.09,
+                "Top": 0.23
+              },
+              "Polygon": [
+                {
+                  "X": 0.09,
+                  "Y": 0.23
+                },
+                {
+                  "X": 0.91,
+                  "Y": 0.23
+                },
+                {
+                  "X": 0.91,
+                  "Y": 0.77
+                },
+                {
+                  "X": 0.09,
+                  "Y": 0.77
+                }
+              ]
+            },
+            "Relationships": [
+              {
+                "Type": "CHILD",
+                "Ids": ["hello-word"]
+              }
+            ]
+          },
+          {
+            "BlockType": "WORD",
+            "Id": "hello-word",
+            "Page": 1,
+            "Confidence": 99.6,
+            "Text": "HELLO",
+            "TextType": "PRINTED",
+            "Geometry": {
+              "BoundingBox": {
+                "Width": 0.82,
+                "Height": 0.54,
+                "Left": 0.09,
+                "Top": 0.23
+              },
+              "Polygon": [
+                {
+                  "X": 0.09,
+                  "Y": 0.23
+                },
+                {
+                  "X": 0.91,
+                  "Y": 0.23
+                },
+                {
+                  "X": 0.91,
+                  "Y": 0.77
+                },
+                {
+                  "X": 0.09,
+                  "Y": 0.77
+                }
+              ]
+            }
+          }
+        ],
+        "DetectDocumentTextModelVersion": "1.0"
+      }
+    }
   }
 }
