@@ -34,6 +34,23 @@ const ssrFixtureDir = pathe.resolve(import.meta.dirname, "foldkit-ssr-fixture");
 
 const fixtureEntries = ["index.html", "package.json", "vite.config.ts", "src"];
 
+// The worker fixture as cloned, and with `ssr` configuring Foldkit's dev host
+// (no `ssr.build`, which a custom main can't build with).
+const workerViteConfigs = [
+  ["client-only", undefined],
+  [
+    "ssr dev host",
+    `import { foldkit } from "@foldkit/vite-plugin";
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  plugins: [foldkit({ ssr: { serverEntry: "/src/entry.server.ts" } })],
+  optimizeDeps: { entries: ["src/entry.ts"] },
+});
+`,
+  ],
+] as const;
+
 // Restrict the input memo to fixture sources so the test isn't re-hashing
 // the whole monorepo on every deploy.
 const memoInclude = ["index.html", "src/**", "package.json", "vite.config.ts"];
@@ -115,6 +132,59 @@ describe.concurrent(
       { timeout: 120_000 },
     );
 
+    // A Vite `base` nests the uploaded asset paths under it, and the SPA
+    // fallback still finds the shell for deep links below the base.
+    test.provider(
+      "Foldkit: a client-only app with a Vite base serves under it",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const fs = yield* FileSystem.FileSystem;
+
+          yield* stack.destroy();
+
+          const rootDir = yield* cloneFixture(fixtureDir, {
+            prefix: "alchemy-foldkit-base-",
+            tempRoot,
+            entries: fixtureEntries,
+          });
+          yield* fs.writeFileString(
+            pathe.join(rootDir, "vite.config.ts"),
+            `import { foldkit } from "@foldkit/vite-plugin";
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  base: "/app/",
+  plugins: [foldkit()],
+  optimizeDeps: { entries: ["src/entry.ts"] },
+});
+`,
+          );
+
+          const site = yield* stack.deploy(
+            Effect.gen(function* () {
+              return yield* Cloudflare.Website.Foldkit("FixFoldkitBase", foldkitProps(rootDir));
+            }),
+          );
+          yield* expectWorkerExists(site.workerName, accountId);
+
+          // The shell is served under the base, with its scripts rewritten
+          // to it.
+          yield* expectUrlContains(`${site.url!}/app/`, "/app/assets/", {
+            timeout: "30 seconds",
+            label: "foldkit base index",
+          });
+          yield* expectUrlContains(`${site.url!}/app/counter/42`, "Foldkit Fixture", {
+            timeout: "15 seconds",
+            label: "foldkit base deep link fallback",
+          });
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+        }).pipe(logLevel),
+      { timeout: 120_000 },
+    );
+
     // An explicit `assets` wins over the derived default.
     test.provider(
       "Foldkit: an explicit assets config is passed through",
@@ -164,56 +234,67 @@ describe.concurrent(
     // the assets (API routes, error reporting, Durable Objects). The client
     // build still serves through the ASSETS binding, and the derived
     // single-page-application fallback still applies behind it.
-    test.provider(
-      "Foldkit: a custom main entry serves API routes alongside the app",
-      (stack) =>
-        Effect.gen(function* () {
-          const { accountId } = yield* yield* CloudflareEnvironment;
+    // Also with `ssr` configuring Foldkit's dev host: without `ssr.build` the
+    // custom main deploys a client build, as the dev tests expect.
+    for (const [variant, viteConfig] of workerViteConfigs) {
+      test.provider(
+        `Foldkit: a custom main entry serves API routes alongside the app (${variant})`,
+        (stack) =>
+          Effect.gen(function* () {
+            const { accountId } = yield* yield* CloudflareEnvironment;
 
-          yield* stack.destroy();
+            yield* stack.destroy();
 
-          const rootDir = yield* cloneFixture(workerFixtureDir, {
-            prefix: "alchemy-foldkit-worker-",
-            tempRoot,
-            entries: fixtureEntries,
-          });
+            const rootDir = yield* cloneFixture(workerFixtureDir, {
+              prefix: `alchemy-foldkit-worker-${variant.replaceAll(" ", "-")}-`,
+              tempRoot,
+              entries: fixtureEntries,
+            });
+            if (viteConfig !== undefined) {
+              const fs = yield* FileSystem.FileSystem;
+              yield* fs.writeFileString(pathe.join(rootDir, "vite.config.ts"), viteConfig);
+            }
 
-          const site = yield* stack.deploy(
-            Effect.gen(function* () {
-              return yield* Cloudflare.Website.Foldkit("FixFoldkitWorker", {
-                ...foldkitProps(rootDir),
-                main: "src/worker.ts",
-                assets: { runWorkerFirst: ["/api/*"] },
-                env: { GREETING: "foldkit-worker-fixture" },
-              });
-            }),
-          );
+            const site = yield* stack.deploy(
+              Effect.gen(function* () {
+                return yield* Cloudflare.Website.Foldkit(
+                  viteConfig === undefined ? "FixFoldkitWorker" : "FixFoldkitWorkerSsr",
+                  {
+                    ...foldkitProps(rootDir),
+                    main: "src/worker.ts",
+                    assets: { runWorkerFirst: ["/api/*"] },
+                    env: { GREETING: "foldkit-worker-fixture" },
+                  },
+                );
+              }),
+            );
 
-          expect(site.url).toBeDefined();
-          yield* expectWorkerExists(site.workerName, accountId);
+            expect(site.url).toBeDefined();
+            yield* expectWorkerExists(site.workerName, accountId);
 
-          // The Worker entry answers its own route from the binding.
-          yield* expectUrlContains(`${site.url!}/api/hello`, "foldkit-worker-fixture", {
-            timeout: "30 seconds",
-            label: "foldkit worker api",
-          });
-          // Everything else passes through to the assets binding.
-          yield* expectUrlContains(`${site.url!}/`, "Foldkit Fixture", {
-            timeout: "15 seconds",
-            label: "foldkit worker index",
-          });
-          // The derived fallback still answers the deep link through
-          // `env.ASSETS.fetch`.
-          yield* expectUrlContains(`${site.url!}/counter/42`, "Foldkit Fixture", {
-            timeout: "15 seconds",
-            label: "foldkit worker spa fallback",
-          });
+            // The Worker entry answers its own route from the binding.
+            yield* expectUrlContains(`${site.url!}/api/hello`, "foldkit-worker-fixture", {
+              timeout: "30 seconds",
+              label: "foldkit worker api",
+            });
+            // Everything else passes through to the assets binding.
+            yield* expectUrlContains(`${site.url!}/`, "Foldkit Fixture", {
+              timeout: "15 seconds",
+              label: "foldkit worker index",
+            });
+            // The derived fallback still answers the deep link through
+            // `env.ASSETS.fetch`.
+            yield* expectUrlContains(`${site.url!}/counter/42`, "Foldkit Fixture", {
+              timeout: "15 seconds",
+              label: "foldkit worker spa fallback",
+            });
 
-          yield* stack.destroy();
-          yield* waitForWorkerToBeDeleted(site.workerName, accountId);
-        }).pipe(logLevel),
-      { timeout: 120_000 },
-    );
+            yield* stack.destroy();
+            yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+          }).pipe(logLevel),
+        { timeout: 120_000 },
+      );
+    }
 
     // With `ssr.build` the one `vite build` also emits `dist/server/fetch.js`,
     // and that handler is the Worker. The fixture prerenders `/about` and not

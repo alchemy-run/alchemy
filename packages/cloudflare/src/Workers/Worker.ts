@@ -1224,13 +1224,6 @@ export interface WorkspaceMemoOptions extends MemoOptions {
 
 export interface ViteOptions {
   /**
-   * Framework-specific build metadata interpreted after Vite completes.
-   * Set by `Website.Foldkit` to derive asset routing from its manifest.
-   * @internal
-   */
-  framework?: "foldkit";
-
-  /**
    * Overrides the module that becomes the deployed Worker entry, forwarded
    * to the Cloudflare Vite plugin's `main` option. Relative paths resolve
    * from the Vite root (`rootDir`). A package export

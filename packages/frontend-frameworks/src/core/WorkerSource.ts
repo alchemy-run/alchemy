@@ -52,6 +52,11 @@ export interface BundleOutput {
 
 export interface AssetReadResult {
   directory: string;
+  /**
+   * The normalized `base` the manifest is keyed with (`""` at the origin
+   * root); alchemy strips it back off each key to find the file on disk.
+   */
+  pathPrefix: string;
   config: Record<string, unknown> | undefined;
   manifest: Record<string, { hash: string; size: number }>;
   _headers: string | undefined;
@@ -188,7 +193,11 @@ const maybeReadString = Effect.fn(function* (file: string) {
 export const readClientAssets = Effect.fn(function* (
   directory: string,
   config: Record<string, unknown> | undefined,
+  /** Vite's resolved `base`; a root-relative one prefixes every asset path. */
+  base?: string,
 ) {
+  const pathPrefix =
+    base?.startsWith("/") && !base.startsWith("//") ? base.replace(/\/+$/, "") : "";
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const [ignoreFile, _headers, _redirects] = yield* Effect.all([
@@ -221,18 +230,29 @@ export const readClientAssets = Effect.fn(function* (
           message: `Asset ${relPath} is too large (the maximum size is 25 MB)`,
         });
       }
-      manifest.set(`/${relPath}`, {
+      manifest.set(`${pathPrefix}/${relPath}`, {
         hash: (yield* sha256(yield* fs.readFile(file))).slice(0, 32),
         size: Number(stat.size),
       });
     }),
     { concurrency: 16 },
   );
+  // Cloudflare's SPA fallback serves `/index.html` at the manifest root, so
+  // alias the shell there when it is nested under a base.
+  const shell = manifest.get(`${pathPrefix}/index.html`);
+  if (
+    shell &&
+    config?.notFoundHandling === "single-page-application" &&
+    !manifest.has("/index.html")
+  ) {
+    manifest.set("/index.html", shell);
+  }
   const sortedManifest = Object.fromEntries(
     Array.from(manifest.entries()).sort((a, b) => a[0].localeCompare(b[0])),
   );
   return {
     directory,
+    pathPrefix,
     config,
     manifest: sortedManifest,
     _headers,
@@ -279,6 +299,13 @@ export interface WorkerSourceSpec<Config> {
   readonly requireClient?: boolean | undefined;
   /** Dev runs the Worker in workerd with the Vite plugin's assets service. */
   readonly devAssetsBinding?: boolean | undefined;
+  /**
+   * Asset routing defaults derived from the build (e.g. SPA fallback for a
+   * client-only app). The resource's own `assets` config is applied over them.
+   */
+  readonly assetDefaults?:
+    | ((output: BuildOutput) => Record<string, unknown> | undefined)
+    | undefined;
   /** Start the dev server, failing with this source's `SourceProviderError`. */
   readonly dev: (
     ctx: DevContext,
@@ -344,12 +371,14 @@ export const makeWorkerSource = <Config>(spec: WorkerSourceSpec<Config>): Source
           message: `${spec.displayName} build produced neither server modules nor assets`,
         });
       }
+      const assetsConfig = { ...spec.assetDefaults?.(output), ...assetsConfigOf(ctx.assets) };
       const [assets, inputHash] = yield* Effect.all(
         [
           output.clientDirectory !== undefined
             ? readClientAssets(
                 path.resolve(rootDir, output.clientDirectory),
-                assetsConfigOf(ctx.assets),
+                Object.keys(assetsConfig).length > 0 ? assetsConfig : undefined,
+                output.assetBase,
               ).pipe(
                 Effect.catchTag("AssetLimitError", (error) =>
                   Effect.fail(

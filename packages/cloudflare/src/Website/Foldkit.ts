@@ -1,3 +1,4 @@
+import type { MemoOptions } from "alchemy/Command/Memo";
 import type { InputProps } from "alchemy/Input";
 import { effectClass } from "alchemy/Util/effect";
 import * as Effect from "effect/Effect";
@@ -6,11 +7,12 @@ import type { AssetsConfig } from "../Workers/Assets.ts";
 import {
   Worker,
   type NormalizedBindings,
-  type ViteOptions,
   type WorkerAssetsConfig,
   type WorkerBindingProps,
   type WorkerProps,
 } from "../Workers/Worker.ts";
+
+const FOLDKIT_SOURCE_PROVIDER = "@alchemy.run/frontend-frameworks/foldkit/source";
 
 export interface FoldkitProps<Bindings extends WorkerBindingProps = {}> extends Omit<
   WorkerProps<Bindings>,
@@ -31,13 +33,16 @@ export interface FoldkitProps<Bindings extends WorkerBindingProps = {}> extends 
   /**
    * Controls which files are content-hashed to decide whether to rebuild.
    * Defaults to non-gitignored project files and the nearest lockfile, with
-   * imported workspaces detected from the build. See {@link ViteOptions.memo}.
+   * imported workspaces detected from the build.
    */
-  memo?: ViteOptions["memo"];
+  memo?: MemoOptions;
   /**
-   * Overrides static asset routing defaults. Client-only apps use
-   * `notFoundHandling: "single-page-application"`. SSR and prerendered apps
-   * serve matching assets and send unmatched requests to Foldkit's handler.
+   * Overrides static asset routing defaults. Client-only apps, including
+   * any app with a custom {@link main}, use
+   * `notFoundHandling: "single-page-application"` in dev and on deploy, so
+   * a page load of a deep link gets the app shell. When Foldkit renders
+   * pages (`ssr.build` on deploy, its `ssr` dev host in dev), matching
+   * assets are served and unmatched requests reach Foldkit's handler.
    * Explicit options take precedence over these defaults.
    */
   assets?: AssetsConfig;
@@ -49,7 +54,9 @@ export interface FoldkitProps<Bindings extends WorkerBindingProps = {}> extends 
  * Builds the project's Vite configuration and deploys its client assets
  * and generated server handler. Configure rendering in the app's
  * `foldkit(...)` plugin call; Alchemy derives asset routing from the
- * plugin's completed build metadata.
+ * rendering mode.
+ *
+ * Requires `@alchemy.run/frontend-frameworks` in the project.
  *
  * Input files are content-hashed (respecting `.gitignore` by default) so
  * unchanged projects skip the build and deploy entirely.
@@ -218,11 +225,12 @@ export const Foldkit: {
           const { main, rootDir, memo, ...workerProps } = props ?? {};
           return {
             ...workerProps,
-            vite: {
-              framework: "foldkit" as const,
-              main,
+            main: undefined!,
+            source: {
+              provider: FOLDKIT_SOURCE_PROVIDER,
+              devMode: "server",
               rootDir,
-              memo,
+              options: { rootDir, main, memo },
             },
           };
         }),

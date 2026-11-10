@@ -6,6 +6,8 @@ sidebar:
 ---
 import PackageManagers from "../../../../components/PackageManagers.astro";
 
+export const devDeps = "@alchemy.run/frontend-frameworks";
+
 `Cloudflare.Website.Foldkit` deploys a [Foldkit](https://foldkit.dev) app
 as a Cloudflare Worker. Alchemy runs the project's Vite build and uploads
 the client output as Worker static assets. With `ssr.build` enabled, the
@@ -14,6 +16,15 @@ generated Fetch handler becomes the Worker entry.
 Configure rendering in the application's Foldkit plugin. The resource supports
 browser-only SPAs, server-side rendering (SSR), static site generation (SSG),
 and hybrid rendering. Asset routing follows the build's output.
+
+## Install
+
+The build integration is not bundled with alchemy. Install
+`@alchemy.run/frontend-frameworks`; the resource loads its `/foldkit`
+source from your project at deploy and dev time. It is only used to build
+and serve the app, so a dev dependency is enough:
+
+<PackageManagers dev={devDeps} />
 
 ## Configure Vite
 
