@@ -36,10 +36,6 @@ export const bindEffectRpc = <Rpcs extends Rpc.Any>(
   const serialization = options?.serialization ?? RpcSerialization.layerNdjson;
 
   return {
-    // Wrap the cached `RpcClient` Effect in a chainable Proxy so callers
-    // can `yield* counter.getByName(id).method(args)` directly. The proxy
-    // records the `.method(args)` ops and replays them against the
-    // resolved client when the chain is yielded.
     getByName: Effect.fn(function* (id: string, options?: any) {
       const httpClient = HttpClient.layerMergedContext(
         Effect.sync(() => {
