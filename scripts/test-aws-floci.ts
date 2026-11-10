@@ -172,6 +172,14 @@ const flociFixedValues: Record<string, string> = {
   AWS_CHATBOT_TEAMS_TEAM_ID: "f10c1000-0000-4000-8000-000000000001",
   AWS_CHATBOT_TEAMS_TENANT_ID: "f10c1000-0000-4000-8000-0000000000aa",
   AWS_CHATBOT_TEAMS_CHANNEL_ID: "19%3afloci%40thread.tacv2",
+  // Every Floci account and Region has an AVAILABLE demo GitHub connection with a linked
+  // repository (floci-demo/app); its handshake happens outside the API on AWS.
+  AWS_TEST_CODECONNECTIONS_CONNECTION_ARN:
+    "arn:aws:codeconnections:us-east-1:000000000000:connection/f10c1000-0000-4000-8000-0000000000c1",
+  AWS_TEST_CODECONNECTIONS_OWNER_ID: "floci-demo",
+  AWS_TEST_CODECONNECTIONS_REPOSITORY_NAME: "alchemy",
+  AWS_TEST_CODECONNECTIONS_REPO_LINK_ID: "f10c1000-0000-4000-8000-0000000000c2",
+  AWS_TEST_CODECONNECTIONS_SYNC_ROLE_ARN: "arn:aws:iam::000000000000:role/alchemy-floci-git-sync",
   // Floci stores authorizer URIs without resolving the function.
   ALCHEMY_TEST_AUTHORIZER_URI:
     "arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-1:000000000000:function:alchemy-floci-standing-authorizer/invocations",
