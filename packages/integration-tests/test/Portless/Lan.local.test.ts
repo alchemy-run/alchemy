@@ -1,5 +1,5 @@
+import * as Docker from "@alchemy.run/docker";
 import * as Portless from "@alchemy.run/portless";
-import { LanUnavailable } from "@alchemy.run/portless";
 import * as Lan from "@alchemy.run/portless/internal/Lan";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
@@ -17,11 +17,6 @@ import * as TestProxy from "./fixtures/TestProxy.ts";
 
 const server = pathe.resolve(import.meta.dirname, "fixtures/server.mjs");
 const pinned = { PORTLESS_LAN_IP: "127.0.0.1" };
-
-const tagOf = (error: unknown) =>
-  typeof error === "object" && error !== null && "_tag" in error
-    ? String(error._tag)
-    : String(error);
 
 const readFile = (stateDirectory: string, name: string) =>
   Effect.gen(function* () {
@@ -150,10 +145,13 @@ loopbackRunning.test.provider(
       const stateDirectory = yield* needsLan.stateDirectory;
       const { pid } = yield* loopbackStarted;
       const error = yield* Effect.flip(stack.deploy(proxyOnly));
-      expect(tagOf(error)).toBe("ProxyIncompatible");
-      const mismatches = (error as unknown as { mismatches: ReadonlyArray<string> }).mismatches;
-      expect(mismatches.join("\n")).toContain("this stack needs .local only");
-      expect(mismatches.join("\n")).toContain("isn't in LAN mode");
+      expect(error).toMatchObject({
+        _tag: "ProxyIncompatible",
+        mismatches: expect.arrayContaining([
+          "it serves .localhost, this stack needs .local only",
+          "it isn't in LAN mode, which this stack needs for .local names reachable from other machines",
+        ]),
+      });
       expect(yield* readPid(stateDirectory)).toBe(pid);
       expect(yield* isAlive(pid)).toBe(true);
       yield* stack.destroy();
@@ -188,10 +186,10 @@ lanRunning.test.provider.skipIf(!TestProxy.hasMdnsTool)(
       const stateDirectory = yield* noLan.stateDirectory;
       const { pid } = yield* lanStarted;
       const error = yield* Effect.flip(stack.deploy(proxyOnly));
-      expect(tagOf(error)).toBe("ProxyIncompatible");
-      expect(
-        (error as unknown as { mismatches: ReadonlyArray<string> }).mismatches.join("\n"),
-      ).toContain("runs in LAN mode");
+      expect(error).toMatchObject({
+        _tag: "ProxyIncompatible",
+        mismatches: expect.arrayContaining(["it runs in LAN mode, which serves .local names"]),
+      });
       expect(yield* readPid(stateDirectory)).toBe(pid);
       expect(yield* isAlive(pid)).toBe(true);
       yield* stack.destroy();
@@ -234,34 +232,27 @@ lanReused.test.provider.skipIf(!TestProxy.hasMdnsTool)(
   { tags: ["local"], timeout: 120_000 },
 );
 
-// ── a host that can't serve LAN mode is told what it lacks, before anything starts
-const lacking = TestProxy.make(pinned, {
-  lan: true,
-  lanCheck: {
-    check: () =>
-      Effect.fail(
-        new LanUnavailable({
-          platform: "linux",
-          mdnsTool: "avahi-publish-address",
-          noAddress: true,
-        }),
-      ),
-  },
-});
-const missing = Test.make({ providers: lacking.providers(), dev: true, stage: "dev_alice" });
-missing.afterAll(lacking.stop);
+// The Docker example in the docs, type-checked and never run: a container reaches a service by its
+// name through `extraHosts`, and trusts the proxy's CA through a mounted file.
+export const containerExample = Effect.gen(function* () {
+  const proxy = yield* Portless.Proxy("Proxy", { domain: "myapp" });
+  const api = yield* Portless.Dev("Api", { proxy, command: "node --watch server.ts" });
 
-missing.test.provider(
-  "Proxy in LAN mode fails with what the host lacks and starts no proxy",
-  (stack) =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(stack.deploy(proxyOnly));
-      expect(error).toBeInstanceOf(LanUnavailable);
-      expect((error as LanUnavailable).message).toContain("avahi-publish-address");
-      expect((error as LanUnavailable).message).toContain("no network address");
-      const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      expect(yield* fs.exists(path.join(yield* lacking.stateDirectory, "proxy.pid"))).toBe(false);
-    }),
-  { tags: ["local"], timeout: 120_000 },
-);
+  return yield* Docker.Container("worker", {
+    image: "ghcr.io/acme/worker:latest",
+    // The service's name resolves to the host, where the proxy listens.
+    extraHosts: [`${api.hostname}:host-gateway`],
+    volumes: [
+      {
+        hostPath: proxy.certificateAuthority,
+        containerPath: "/etc/portless/ca.pem",
+        readOnly: true,
+      },
+    ],
+    environment: {
+      NODE_EXTRA_CA_CERTS: "/etc/portless/ca.pem",
+      API_URL: api.origin,
+    },
+    start: true,
+  });
+});

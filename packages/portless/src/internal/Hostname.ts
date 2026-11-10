@@ -23,8 +23,8 @@ export const routedName = (id: string, stage: string, domain: string) =>
 
 /**
  * Validates a name with Portless's own grammar and appends the TLD (`.localhost`,
- * or `.local` in LAN mode). Fails with {@link HostnameInvalid} when Portless
- * can't serve it.
+ * or `.local` in LAN mode).
+ * Fails with {@link HostnameInvalid} when Portless can't serve it.
  */
 export const hostnameOf = (name: string, tld = "localhost") =>
   Effect.try({
