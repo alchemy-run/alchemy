@@ -11,6 +11,7 @@ import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import RDSDrizzleIamFunctionLive, { RDSDrizzleIamFunction } from "./drizzle-iam-handler";
 import RDSDataTestFunctionLive, { RDSDataTestFunction } from "./handler";
+import { RDSDataInfra } from "./infra";
 
 // Aurora Serverless v2 cluster + writer-instance provisioning takes 5-15
 // minutes — far beyond the speed doctrine's budget — so the ENTIRE live suite
@@ -25,6 +26,7 @@ const sharedStack = Core.scratchStack(testOptions, "RDSDataBindings");
 let baseUrl: string;
 let drizzleUrl: string;
 let clusterIdentifier: string | undefined;
+let clusterEndpoint: string | undefined;
 
 class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly status: number;
@@ -87,16 +89,23 @@ describe(
             yield* Effect.logInfo(
               "RDSData test setup: deploying Aurora SV2 + Lambda fixture (5-15 min)",
             );
-            const { dataApiUrl, drizzleIamUrl } = yield* sharedStack.deploy(
+            const deployed = yield* sharedStack.deploy(
               Effect.gen(function* () {
                 const dataApi = yield* RDSDataTestFunction;
                 const drizzleIam = yield* RDSDrizzleIamFunction;
-                return { dataApiUrl: dataApi.functionUrl, drizzleIamUrl: drizzleIam.functionUrl };
+                const { cluster } = yield* RDSDataInfra;
+                return {
+                  dataApiUrl: dataApi.functionUrl,
+                  drizzleIamUrl: drizzleIam.functionUrl,
+                  endpoint: cluster.endpoint,
+                };
               }).pipe(
                 Effect.provide(Layer.mergeAll(RDSDataTestFunctionLive, RDSDrizzleIamFunctionLive)),
               ),
             );
 
+            const { dataApiUrl, drizzleIamUrl } = deployed;
+            clusterEndpoint = deployed.endpoint;
             expect(dataApiUrl).toBeTruthy();
             expect(drizzleIamUrl).toBeTruthy();
             baseUrl = dataApiUrl!.replace(/\/+$/, "");
@@ -306,7 +315,8 @@ describe(
               hasPassword: boolean;
               ssl: boolean;
             };
-            expect(info.host).toMatch(/\.rds\.amazonaws\.com$/);
+            // The writer endpoint the cluster reports.
+            expect(info.host).toBe(clusterEndpoint);
             expect(info.port).toBe(5432);
             expect(info.database).toBe("app");
             expect(info.username).toBe("app");
@@ -338,7 +348,8 @@ describe(
               ssl: boolean;
               canRefresh: boolean;
             };
-            expect(info.host).toMatch(/\.rds\.amazonaws\.com$/);
+            // The writer endpoint the cluster reports.
+            expect(info.host).toBe(clusterEndpoint);
             expect(info.port).toBe(5432);
             expect(info.database).toBe("app");
             expect(info.username).toBe("app_iam");

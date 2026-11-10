@@ -165,6 +165,16 @@ export interface SandboxProps extends PlatformProps {
   handler?: string;
   /** Bundler configuration for `main`. */
   build?: Bundle.BundleConfig;
+  /**
+   * Who in the organization that pays for the sandbox can use it:
+   * `private`, only you; `shared`, every member. Omitted, the organization's
+   * default for new sandboxes applies. Updated in place. Sharing a sandbox
+   * that holds your logins (GitHub, Claude and Codex logins, environment
+   * secrets) wipes them at its next start and never pushes them again, so
+   * share one with `noEnv` or an environment that passes nothing. A
+   * personal sandbox is always private, and Boat refuses `shared` for one.
+   */
+  visibility?: "shared" | "private";
 }
 
 export interface SandboxAttributes {
@@ -202,6 +212,13 @@ export interface SandboxAttributes {
   urlToken: Redacted.Redacted<string> | undefined;
   /** The program the sandbox runs, for a sandbox with `main`. */
   program: ProgramState | undefined;
+  /**
+   * The organization that pays for it, fixed when it was created;
+   * `undefined` when you do.
+   */
+  org: { id: string; name: string } | undefined;
+  /** `shared` or `private` for an organization's sandbox; `undefined` for yours. */
+  visibility: "shared" | "private" | undefined;
 }
 
 export type Sandbox = Resource<
@@ -232,6 +249,11 @@ export type SandboxRuntimeContext = HostRuntimeContext;
  * Alchemy labels the sandbox with its stack, stage and logical ID
  * (`alchemy.stack`, `alchemy.stage`, `alchemy.id`) to recognise the
  * sandboxes it owns.
+ *
+ * The sandbox bills the stack's organization (`Boat.providers({ org })`,
+ * or the profile's), else your active wallet. Boat fixes the wallet at
+ * create, so changing the stack's `org` later leaves the sandbox where it
+ * is; `org` says which.
  *
  * :::caution
  * Replacing the sandbox (a new `type`, `env`, `environment`, `noEnv`,
@@ -294,6 +316,16 @@ export type SandboxRuntimeContext = HostRuntimeContext;
  *   snapshot: Golden,
  *   environment: Agents,
  *   autoStop: "30 minutes",
+ * });
+ * ```
+ *
+ * ### Sharing with an organization
+ * **Example:** A sandbox every member of the team can use
+ * ```typescript
+ * // with Boat.providers({ org: "acme" }) on the stack
+ * export const TeamBox = Boat.Sandbox("TeamBox", {
+ *   noEnv: true,
+ *   visibility: "shared",
  * });
  * ```
  *
@@ -388,6 +420,8 @@ export const toAttributes = (sandbox: boat.Sandbox): SandboxAttributes => ({
   url: undefined,
   urlToken: undefined,
   program: undefined,
+  org: sandbox.team ? { id: sandbox.team.id, name: sandbox.team.name } : undefined,
+  visibility: sandbox.visibility ?? undefined,
 });
 
 /** The bindings still attached (a removed binding arrives as a `delete`). */
@@ -514,6 +548,7 @@ export const SandboxProvider = () =>
               ...(news.monitoring === undefined ? {} : { monitoring: news.monitoring }),
               ...(news.setupScript === undefined ? {} : { setupScript: news.setupScript }),
               ...(news.snapshot === undefined ? {} : { from: resolved(news.snapshot).name }),
+              ...(news.visibility === undefined ? {} : { visibility: news.visibility }),
               labels: { ...news.labels, ...owner },
             });
             sandbox = created.sandbox;
@@ -539,6 +574,27 @@ export const SandboxProvider = () =>
               ...(subdomainChanged ? { subdomain: news.subdomain } : {}),
             });
             sandbox = updated.sandbox ?? sandbox;
+          }
+
+          // Sync — visibility, against what Boat reports.
+          if (
+            news.visibility !== undefined &&
+            (sandbox.visibility ?? "private") !== news.visibility
+          ) {
+            yield* session.note(
+              `Making sandbox ${name} ${news.visibility === "shared" ? "shared" : "private"}...`,
+            );
+            if (news.visibility === "shared") {
+              const shared = yield* boat.shareSandbox({ sandboxId: sandbox.id });
+              if (shared.restartRequired) {
+                yield* session.note(
+                  `Sandbox ${name} is shared from its next start: stop and resume it to share it now.`,
+                );
+              }
+            } else {
+              yield* boat.unshareSandbox({ sandboxId: sandbox.id });
+            }
+            sandbox = (yield* observeSandbox(sandbox.id)) ?? sandbox;
           }
 
           const attrs = toAttributes(sandbox);

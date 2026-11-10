@@ -8,7 +8,7 @@ for (const mode of ["config", "environment"] as const) {
     `external Floci fails without Docker fallback (${mode})`,
     () =>
       Effect.gen(function* () {
-        // An empty PATH hides `docker` from the spawn.
+        // Docker is unavailable: a fallback to it would fail differently.
         yield* Effect.acquireRelease(
           Effect.sync(() => {
             const previous = process.env.PATH;
@@ -21,6 +21,11 @@ for (const mode of ["config", "environment"] as const) {
               else process.env.PATH = previous;
             }),
         );
+        // `ensureFloci` reads ALCHEMY_FLOCI_EXTERNAL through Config, so the
+        // environment is the ConfigProvider's, not a process.env write.
+        const environment = ConfigProvider.fromUnknown(
+          mode === "environment" ? { ALCHEMY_FLOCI_EXTERNAL: "1" } : {},
+        );
         // Port zero cannot be a reachable gateway; Docker is also unavailable.
         const error = yield* ensureFloci({
           // Omitted in environment mode: an explicit value overrides the env var.
@@ -28,17 +33,7 @@ for (const mode of ["config", "environment"] as const) {
           port: 0,
           elbListenerPorts: [],
           cloudfrontEdgePorts: [],
-        }).pipe(
-          Effect.flip,
-          // Config reads a snapshot of the environment, so set the variable
-          // through the provider rather than on `process.env`.
-          Effect.provideService(
-            ConfigProvider.ConfigProvider,
-            ConfigProvider.fromEnvRecord(
-              mode === "environment" ? { ALCHEMY_FLOCI_EXTERNAL: "1" } : {},
-            ),
-          ),
-        );
+        }).pipe(Effect.flip, Effect.provideService(ConfigProvider.ConfigProvider, environment));
         expect(error._tag).toBe("FlociError");
         expect(error.message).toBe("external floci server unavailable at http://localhost:0");
       }),

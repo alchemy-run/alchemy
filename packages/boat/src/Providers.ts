@@ -24,12 +24,19 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
  * AuthProvider registration (so `alchemy profile edit` can configure it),
  * and credential resolution.
  *
+ * `org` picks the organization (wallet) the stack's resources bill and the
+ * one whose shared environments `Boat.Environment` manages: an org id
+ * (`team_…`), an org name, or `personal`. It overrides the profile's `org`
+ * (or `BOAT_ORG`); with neither, Boat uses the account's active wallet and
+ * environments are your personal ones.
+ *
  * @example
  * ```ts
  * Alchemy.Stack("App", { providers: Boat.providers() }, ...)
+ * Alchemy.Stack("App", { providers: Boat.providers({ org: "team_abc" }) }, ...)
  * ```
  */
-export const providers = () =>
+export const providers = (options?: { readonly org?: string }) =>
   Layer.effect(
     Providers,
     Provider.collection([ApiKey, Environment, Sandbox, Snapshot, Webhook]),
@@ -43,7 +50,7 @@ export const providers = () =>
         WebhookProvider(),
       ),
     ),
-    Layer.provideMerge(Credentials.fromAuthProvider()),
+    Layer.provideMerge(Credentials.fromAuthProvider(options)),
     Layer.provideMerge(FetchHttpClient.layer),
     Layer.provideMerge(BoatAuth),
     Layer.provideMerge(ProfileStoreLive),

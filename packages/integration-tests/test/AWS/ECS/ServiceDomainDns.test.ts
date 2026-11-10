@@ -331,7 +331,9 @@ describe.skipIf(!!process.env.FAST)(
       { timeout: 1_200_000 },
     );
 
-    test.provider(
+    // Public resolvers follow the Cloudflare delegation to the zone's name
+    // servers, which an emulator on this machine can never be.
+    test.provider.skipIf(process.env.ALCHEMY_TEST_DEV === "1")(
       "Route 53 default: alias A + AAAA records in a delegated zone serve HTTPS",
       (stack) =>
         Effect.gen(function* () {

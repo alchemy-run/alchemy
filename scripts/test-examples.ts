@@ -13,7 +13,6 @@
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Argument, Command, Flag } from "effect/cli";
-import * as Config from "effect/Config";
 import * as Console from "effect/Console";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -27,6 +26,7 @@ import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import { preferLocalFlociImage } from "./floci-image.ts";
+import { defaultTestStage } from "./test-stage.ts";
 
 /** Ends the run with `code` after the reason has already been printed. */
 class ExitWith extends Data.TaggedError("ExitWith")<{ readonly code: number }> {
@@ -173,33 +173,6 @@ const selectExamples = Effect.fn(function* (filters: readonly string[]) {
     for (const example of matches) selected.add(example);
   }
   return [...selected];
-});
-
-/**
- * The stage example suites deploy to: `test_$USER`, plus the linked git
- * worktree's name so two worktrees running the same example never share
- * deployments (mirrors alchemy-test's default stage). An explicit
- * ALCHEMY_TEST_STAGE wins.
- */
-const exampleStage = Effect.fn(function* () {
-  const explicit = yield* Config.String("ALCHEMY_TEST_STAGE").pipe(Config.option);
-  if (Option.isSome(explicit) && explicit.value !== "") return explicit.value;
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const user = yield* Config.String("USER").pipe(Config.withDefault("unknown"));
-  const base = `test_${user.replace(/[^a-z0-9_-]+/gi, "-").replace(/^-+|-+$/g, "") || "unknown"}`;
-  // A linked worktree's `.git` is a file: `gitdir: <common>/.git/worktrees/<name>`.
-  const dotGit = path.resolve(import.meta.dirname, "..", ".git");
-  const info = yield* fs.stat(dotGit).pipe(Effect.option);
-  if (Option.isNone(info) || info.value.type !== "File") return base;
-  const gitdir = /^gitdir:\s*(.+)$/m.exec(yield* fs.readFileString(dotGit))?.[1]?.trim();
-  const parts = gitdir?.split(/[\\/]+/).filter(Boolean) ?? [];
-  const worktree = parts.at(-2) === "worktrees" ? parts.at(-1) : undefined;
-  const safe = worktree
-    ?.toLowerCase()
-    .replace(/[^a-z0-9_-]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return safe ? `${base}_${safe}` : base;
 });
 
 type CommandResult = {
@@ -473,7 +446,7 @@ const command = Command.make(
     // the flag into the env every spawned `bun test` inherits. They read
     // their stage from ALCHEMY_TEST_STAGE, which the CLI lifecycle reuses.
     const env: Record<string, string> = {
-      ALCHEMY_TEST_STAGE: yield* exampleStage(),
+      ALCHEMY_TEST_STAGE: yield* defaultTestStage(),
       ...(Option.isSome(profile) ? { ALCHEMY_PROFILE: profile.value } : {}),
     };
 
