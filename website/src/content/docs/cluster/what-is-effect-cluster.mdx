@@ -14,9 +14,10 @@ Take one small app: chat rooms. Each room is an instance of the `Room` entity, a
 <Tree
   nodes={[
     { id: "swarm", label: "Docker swarm", type: "your cloud", icon: "brand:docker", areas: ["api cluster"], colGap: 3.5 },
-    { id: "api", label: "Api", type: "your Docker Service", parent: "swarm", icon: "server" },
+    { id: "api", label: "Api", type: "your app · Docker Service", parent: "swarm", icon: "server" },
     { id: "cluster", label: "cluster", type: "runners + database", parent: "swarm", dashed: true, icon: "network", areas: ["pool", "db"] },
-    { id: "pool", label: "Default", type: "pool", parent: "cluster", icon: "layers", areas: ["r1 r2"], phoneAreas: ["r1 r2"] },
+    { id: "pool", label: "Default", type: "pool", parent: "cluster", icon: "layers", areas: ["gw gw", "r1 r2"], phoneAreas: ["gw gw", "r1 r2"] },
+    { id: "gw", label: "gateway", type: "HTTP · the pool's name", parent: "pool", icon: "globe" },
     { id: "r1", label: "Runner 1", type: "shards 1–150", parent: "pool", dashed: true, icon: "server" },
     { id: "lobby", label: "lobby", type: "Room", parent: "r1", icon: "circle-user-round" },
     { id: "r2", label: "Runner 2", type: "shards 151–300", parent: "pool", dashed: true, icon: "server" },
@@ -24,10 +25,11 @@ Take one small app: chat rooms. Each room is an instance of the `Room` entity, a
     { id: "db", label: "Database", type: "Postgres", parent: "cluster", icon: "brand:postgresql", specs: [["messages", "persisted"]] },
   ]}
   links={[
-    { from: "api", to: "pool", label: "gateway" },
+    { from: "api", to: "gw", label: "calls lobby" },
+    { from: "gw", to: "r1", label: "routes" },
     { from: "pool", to: "db", label: "shard locks" },
   ]}
-  caption="Api is your own service: it calls a room through the pool's gateway, by the pool's name. Each room runs inside the runner that owns its shard. The database records the owners, so either runner can take over the other's shards."
+  caption="Api is your own service. It calls a room through the pool's gateway, reached by the pool's name, which routes the call to the runner holding the room. Each room runs inside the runner that owns its shard. The database records the owners, so either runner can take over the other's shards."
 />
 
 ## Entities: a class and its instances
