@@ -42,13 +42,13 @@ const stack = beforeAll(deploy(Stack), { timeout: 300_000 });
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), { timeout: 300_000 });
 
 /**
- * The hosts each case runs on. A Worker reaches Modal's control plane over a
- * `cloudflare:sockets` socket, but not a sandbox's task command router,
- * which speaks only HTTP/2 (exec, file access and snapshots).
+ * The hosts each case runs on. A Worker reaches Modal over
+ * `cloudflare:sockets` sockets: the control plane, and a sandbox's task
+ * command router (exec, file access and snapshots), which speaks only HTTP/2.
  */
 const hosts = [
-  { name: "a Lambda function", key: "lambda", router: true, tag: "provider:aws" },
-  { name: "a Cloudflare Worker", key: "worker", router: false, tag: "provider:cloudflare" },
+  { name: "a Lambda function", key: "lambda", tag: "provider:aws" },
+  { name: "a Cloudflare Worker", key: "worker", tag: "provider:cloudflare" },
 ] as const;
 type Host = (typeof hosts)[number];
 
@@ -70,9 +70,6 @@ const tags = (host: Host, kind: string) => [
 ];
 
 for (const host of hosts) {
-  // Exec, sandbox files and snapshots go through the task command router.
-  const routerTest = host.router ? test : test.skip;
-
   describe(`from ${host.name}`, () => {
     describe("ReadVolume / WriteVolume / ReadWriteVolume", () => {
       test(
@@ -131,7 +128,7 @@ for (const host of hosts) {
     });
 
     describe("CreateSandbox", () => {
-      routerTest(
+      test(
         "create a sandbox from a bound image and exec in it",
         Effect.gen(function* () {
           const body = yield* get<{ exitCode: number; stdout: string }>(
@@ -144,7 +141,7 @@ for (const host of hosts) {
         { tags: tags(host, "sandbox"), timeout: 300_000 },
       );
 
-      routerTest(
+      test(
         "read the output of a sandbox's program",
         Effect.gen(function* () {
           const body = yield* get<{ exitCode: number; logs: string }>(
@@ -157,7 +154,7 @@ for (const host of hosts) {
         { tags: tags(host, "sandbox"), timeout: 300_000 },
       );
 
-      routerTest(
+      test(
         "write and read sandbox files and snapshot the filesystem",
         Effect.gen(function* () {
           const body = yield* get<{ read: string; snapshot: string }>(host, "/sandbox-files");
@@ -167,7 +164,7 @@ for (const host of hosts) {
         { tags: tags(host, "sandbox"), timeout: 300_000 },
       );
 
-      routerTest(
+      test(
         "mount a volume handle and a MountVolume reference into a sandbox",
         Effect.gen(function* () {
           const body = yield* get<{
@@ -184,7 +181,7 @@ for (const host of hosts) {
         { tags: tags(host, "sandbox"), timeout: 300_000 },
       );
 
-      routerTest(
+      test(
         "start a process, stream its output, write its stdin, and open a PTY",
         Effect.gen(function* () {
           const body = yield* get<{
@@ -235,7 +232,7 @@ for (const host of hosts) {
       // Persistent sandboxes are in beta; set MODAL_TEST_PERSISTENT_SANDBOX=1
       // on an entitled workspace (PersistentSandbox.test.ts probes the
       // rejection).
-      (host.router ? test.skipIf(!process.env.MODAL_TEST_PERSISTENT_SANDBOX) : test.skip)(
+      test.skipIf(!process.env.MODAL_TEST_PERSISTENT_SANDBOX)(
         "create a persistent sandbox and reach its session by id",
         Effect.gen(function* () {
           const body = yield* get<{ read: string }>(host, `/sandbox-persistent?key=p-${host.key}`);
