@@ -1,5 +1,5 @@
 import * as billingbudgets from "@distilled.cloud/gcp/billingbudgets_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -281,7 +281,7 @@ export const BillingBudget = Resource<BillingBudget>("GCP.BillingBudgets.Billing
 export class BillingBudgetNotResolved extends Data.TaggedError(
   "GCP.BillingBudgets.BillingBudgetNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toMoney = (money: billingbudgets.GoogleTypeMoney | Money | undefined): Money | undefined => {
@@ -461,7 +461,7 @@ export const BillingBudgetProvider = () =>
       return { action: "replace" as const, deleteFirst: true };
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const billingAccountId = yield* resolveBillingAccountId(
         olds?.billingAccountId,
         output?.billingAccountId,
@@ -477,7 +477,9 @@ export const BillingBudgetProvider = () =>
         ));
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, billingAccountId);
-      return existing.displayName === generated ? attrs : Unowned(attrs);
+      return existing.displayName === generated
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -521,7 +523,7 @@ export const BillingBudgetProvider = () =>
 
       if (current === undefined || !current.name) {
         return yield* new BillingBudgetNotResolved({
-          name: output?.name ?? `${parent}/budgets`,
+          resourceName: output?.name ?? `${parent}/budgets`,
         });
       }
 

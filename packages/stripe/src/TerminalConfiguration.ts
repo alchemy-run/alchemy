@@ -308,7 +308,6 @@ export interface TerminalConfigurationProps {
 
 type DeviceKey = (typeof DEVICE_MAP)[number][0];
 type SnakeDeviceKey = (typeof DEVICE_MAP)[number][1];
-type TippingCurrency = (typeof TIPPING_CURRENCIES)[number];
 
 const DEVICE_MAP = [
   ["bbposWisepad3", "bbpos_wisepad3"],
@@ -374,8 +373,18 @@ export type TerminalConfiguration = Resource<
     livemode: boolean;
   } & DeviceAttributes,
   never,
-  Providers
+  Providers,
+  TerminalConfigurationLookup
 >;
+
+/**
+ * Props for {@link TerminalConfiguration.lookup}: find a Terminal configuration this stack
+ * doesn't manage by its id.
+ */
+export interface TerminalConfigurationLookup {
+  /** Stripe Terminal configuration id, e.g. `"tmc_A2b3C4d5E6f7G8"`. */
+  id: string;
+}
 
 /**
  * A Stripe Terminal Configuration — splash screens, tipping, offline
@@ -439,6 +448,16 @@ export type TerminalConfiguration = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing Terminal configuration
+ * `TerminalConfiguration.lookup` references a Terminal configuration Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing Terminal configuration
+ * ```typescript
+ * const ref = Stripe.TerminalConfiguration.lookup({ id: "tmc_A2b3C4d5E6f7G8" });
+ * ```
+ *
  * @resource
  * @product Terminal
  */
@@ -450,7 +469,7 @@ export class TerminalConfigurationNotResolved extends Data.TaggedError(
   "Stripe.TerminalConfigurationNotResolved",
 )<{
   configurationId: string | undefined;
-  name: string;
+  resourceName: string;
 }> {}
 
 type ConfigurationAttributes = TerminalConfiguration["Attributes"];
@@ -708,7 +727,7 @@ const isMissingConfiguration = isMissingStripeResource;
 const getById = (configuration: string) =>
   GetTerminalConfiguration({ configuration }).pipe(
     Effect.map(asConfiguration),
-    Effect.catchIf(isMissingConfiguration, () => Effect.succeed(undefined)),
+    Effect.catchIf(isMissingConfiguration, () => Effect.undefined),
   );
 
 const listNonDefault = Effect.fn(function* () {
@@ -800,6 +819,11 @@ export const TerminalConfigurationProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing);
+    }),
+
     read: Effect.fn(function* ({ output }) {
       const existing = yield* observe({
         id: output?.id,
@@ -841,7 +865,7 @@ export const TerminalConfigurationProvider = () =>
       if (current === undefined) {
         return yield* new TerminalConfigurationNotResolved({
           configurationId: output?.id,
-          name,
+          resourceName: name,
         });
       }
 
@@ -907,7 +931,7 @@ export const TerminalConfigurationProvider = () =>
       if (next === undefined) {
         return yield* new TerminalConfigurationNotResolved({
           configurationId: current.id,
-          name,
+          resourceName: name,
         });
       }
       return toAttrs(next);

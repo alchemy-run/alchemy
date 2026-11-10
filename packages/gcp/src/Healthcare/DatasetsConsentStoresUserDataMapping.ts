@@ -115,7 +115,7 @@ export const DatasetsConsentStoresUserDataMapping = Resource<DatasetsConsentStor
 export class DatasetsConsentStoresUserDataMappingNotResolved extends Data.TaggedError(
   "GCP.Healthcare.DatasetsConsentStoresUserDataMappingNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const storeOf = (
@@ -151,10 +151,10 @@ const toAttrs = (mapping: healthcare.UserDataMapping, project: string, region: s
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : healthcare
         .getProjectsLocationsDatasetsConsentStoresUserDataMappings({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const DatasetsConsentStoresUserDataMappingProvider = () =>
   Provider.succeed(DatasetsConsentStoresUserDataMapping, {
@@ -230,7 +230,7 @@ export const DatasetsConsentStoresUserDataMappingProvider = () =>
 
       if (current === undefined) {
         return yield* new DatasetsConsentStoresUserDataMappingNotResolved({
-          name: consentStore,
+          resourceName: consentStore,
         });
       }
 

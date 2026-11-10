@@ -56,8 +56,18 @@ export interface Group extends Resource<
     groupArn: string;
   },
   never,
-  Providers
+  Providers,
+  GroupLookup
 > {}
+
+/**
+ * Props for {@link Group.lookup}: find a group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface GroupLookup {
+  /** The group name of the existing group. */
+  groupName: string;
+}
 
 /**
  * An AWS X-Ray group that collects traces matching a filter expression, for
@@ -79,6 +89,16 @@ export interface Group extends Resource<
  *   insightsEnabled: true,
  *   notificationsEnabled: true,
  * });
+ * ```
+ *
+ * ### Looking up an existing group
+ * `Group.lookup` references a group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `groupName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing group
+ * ```typescript
+ * const existing = AWS.XRay.Group.lookup({ groupName: "my-group" });
  * ```
  *
  * @resource
@@ -123,7 +143,7 @@ export const GroupProvider = () =>
         xray.getGroup({ GroupName: groupName }).pipe(
           Effect.map((r) => r.Group),
           // Typed synthetic tag for a missing group.
-          Effect.catchTag("GroupNotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("GroupNotFound", () => Effect.undefined),
         );
 
       const observedTags = (groupArn: string) =>
@@ -146,6 +166,12 @@ export const GroupProvider = () =>
                 : [],
             );
           }),
+        lookup: Effect.fn(function* ({ groupName }) {
+          const found = yield* observeGroup(groupName);
+          if (!found?.GroupARN) return undefined;
+          const attrs = { groupName, groupArn: found.GroupARN };
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const groupName = output?.groupName ?? (yield* createGroupName(id, olds ?? {}));
           const found = yield* observeGroup(groupName);

@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -168,8 +169,33 @@ export type AgentGateway = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AgentGatewayLookup
 >;
+
+/**
+ * Props for {@link AgentGateway.lookup}: find an agent gateway this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface AgentGatewayLookup {
+  /**
+   * AgentGateway id (the `{agentGateway}` segment of
+   * `projects/{project}/locations/{location}/agentGateways/{agentGateway}`).
+   * Must be 1-63 characters and not start with a number.
+   */
+  agentGatewayId: string;
+  /**
+   * Location (`us-central1`, …). `US-CENTRAL1` is accepted and normalized
+   * to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Network Services Agent Gateway — the proxy that governs access to
@@ -195,6 +221,19 @@ export type AgentGateway = Resource<
  *   description: "prod agents",
  *   labels: { env: "prod" },
  *   googleManaged: { governedAccessPath: "CLIENT_TO_AGENT" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing agent gateway
+ * `AgentGateway.lookup` references an agent gateway Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * agent gateway.
+ *
+ * **Example:** Reference an existing agent gateway
+ * ```typescript
+ * const agentGateway = GCP.NetworkServices.AgentGateway.lookup({
+ *   agentGatewayId: "my-agent-gateway",
  * });
  * ```
  *
@@ -269,7 +308,7 @@ const toAttrs = (gateway: networkservices.AgentGateway, project: string, region:
 const getByName = (name: string) =>
   networkservices
     .getProjectsLocationsAgentGateways({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const AgentGatewayProvider = () =>
   Provider.succeed(AgentGateway, {
@@ -295,6 +334,15 @@ export const AgentGatewayProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ agentGatewayId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, COLLECTION, agentGatewayId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -371,7 +419,7 @@ export const AgentGatewayProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -434,7 +482,7 @@ export const AgentGatewayProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

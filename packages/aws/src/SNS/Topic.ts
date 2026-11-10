@@ -57,8 +57,23 @@ export interface Topic extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  TopicLookup
 > {}
+
+/**
+ * Props for {@link Topic.lookup}: find a topic this stack doesn't manage, in
+ * the ambient account and region, by its name or ARN.
+ */
+export type TopicLookup =
+  | {
+      /** The name of the existing topic (a FIFO topic's ends in `.fifo`). */
+      topicName: string;
+    }
+  | {
+      /** The ARN of the existing topic. */
+      topicArn: string;
+    };
 
 /**
  * An Amazon SNS topic for fan-out messaging and notifications.
@@ -132,6 +147,20 @@ export interface Topic extends Resource<
  * );
  * ```
  *
+ * ### Looking up an existing topic
+ * `Topic.lookup` references a topic Alchemy doesn't manage (created in the
+ * console or by another stack), found by `topicName` or `topicArn`. It is
+ * read during plan/deploy and never created, updated or deleted, and binds
+ * like a declared topic.
+ *
+ * **Example:** Publish to an existing topic
+ * ```typescript
+ * const topic = SNS.Topic.lookup({ topicName: "alerts" });
+ *
+ * // init
+ * const publish = yield* SNS.Publish(topic);
+ * ```
+ *
  * @resource
  */
 export const Topic = Resource<Topic>("AWS.SNS.Topic");
@@ -168,6 +197,15 @@ export const TopicProvider = () =>
       );
 
       return rows.filter((row): row is NonNullable<typeof row> => row !== undefined);
+    }),
+    lookup: Effect.fn(function* (props) {
+      return yield* "topicArn" in props
+        ? readTopic({
+            id: "",
+            topicArn: props.topicArn,
+            topicName: props.topicArn.split(":").at(-1) ?? props.topicArn,
+          })
+        : readTopic({ id: "", topicName: props.topicName });
     }),
     read: Effect.fn(function* ({ id, olds, output }) {
       const topicName = output?.topicName ?? (yield* toTopicName(id, olds ?? {}));
@@ -250,7 +288,7 @@ export const TopicProvider = () =>
       // the delta.
       const observedState = yield* sns
         .getTopicAttributes({ TopicArn: topicArn })
-        .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
       const observedAttributes = toAttributeMap(observedState?.Attributes);
 
       for (const [name, value] of Object.entries(desiredAttributes)) {
@@ -312,8 +350,8 @@ export const TopicProvider = () =>
         observedPolicy = yield* sns.getDataProtectionPolicy({ ResourceArn: topicArn }).pipe(
           Effect.map((r) => r.DataProtectionPolicy),
           Effect.catchTags({
-            NotFoundException: () => Effect.succeed(undefined),
-            InvalidParameterException: () => Effect.succeed(undefined),
+            NotFoundException: () => Effect.undefined,
+            InvalidParameterException: () => Effect.undefined,
           }),
         );
       }
@@ -432,22 +470,23 @@ const readTopic = Effect.fn(function* ({
         })
         .pipe(
           Effect.map((response) => response.DataProtectionPolicy),
-          Effect.catchTag(["NotFoundException", "FifoTopicDataProtectionUnsupported"], () =>
-            Effect.succeed(undefined),
+          Effect.catchTag(
+            ["NotFoundException", "FifoTopicDataProtectionUnsupported"],
+            () => Effect.undefined,
           ),
         ),
     ],
     { concurrency: "unbounded" },
   ).pipe(
     Effect.catchTags({
-      NotFoundException: () => Effect.succeed(undefined),
-      InvalidParameterException: () => Effect.succeed(undefined),
+      NotFoundException: () => Effect.undefined,
+      InvalidParameterException: () => Effect.undefined,
     }),
     // `list()` hydrates every topic in the account, so a topic deleted by a
     // parallel test between enumeration and hydration surfaces here —
     // `listTagsForResource` reports it as `ResourceNotFoundException`. Treat a
     // vanished topic as "not present" rather than failing the whole listing.
-    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
   );
 
   if (!topicState) {

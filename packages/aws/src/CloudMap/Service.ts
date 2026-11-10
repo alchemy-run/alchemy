@@ -128,8 +128,20 @@ export interface Service extends Resource<
     namespaceName: string;
   },
   {},
-  Providers
+  Providers,
+  ServiceLookup
 > {}
+
+/**
+ * Props for {@link Service.lookup}: find a service this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ServiceLookup {
+  /** The namespace the service belongs to. */
+  namespaceId: string;
+  /** The name of the existing service. */
+  serviceName: string;
+}
 
 /**
  * An AWS Cloud Map service — a named entry in a namespace that instances
@@ -189,6 +201,17 @@ export interface Service extends Resource<
  * const { Instances } = yield* discover({ HealthStatus: "HEALTHY" });
  * ```
  *
+ * ### Looking up an existing service
+ * `Service.lookup` references a service Alchemy doesn't manage (created in the
+ * console or by another stack), found by `namespaceId` and `serviceName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Discover instances of an existing service
+ * ```typescript
+ * const api = AWS.CloudMap.Service.lookup({ namespaceId, serviceName: "api" });
+ * const serviceId = api.serviceId;
+ * ```
+ *
  * @resource
  */
 export const Service = Resource<Service>("AWS.CloudMap.Service");
@@ -212,7 +235,7 @@ export const ServiceProvider = () =>
         if (serviceId !== undefined) {
           const byId = yield* sd.getService({ Id: serviceId }).pipe(
             Effect.map((r) => r.Service),
-            Effect.catchTag("ServiceNotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("ServiceNotFound", () => Effect.undefined),
           );
           if (byId !== undefined) {
             return byId;
@@ -234,7 +257,7 @@ export const ServiceProvider = () =>
         }
         return yield* sd.getService({ Id: summary.Id }).pipe(
           Effect.map((r) => r.Service),
-          Effect.catchTag("ServiceNotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("ServiceNotFound", () => Effect.undefined),
         );
       });
 
@@ -289,7 +312,7 @@ export const ServiceProvider = () =>
                   if (summary.Id === undefined) return undefined;
                   const service = yield* sd.getService({ Id: summary.Id }).pipe(
                     Effect.map((r) => r.Service),
-                    Effect.catchTag("ServiceNotFound", () => Effect.succeed(undefined)),
+                    Effect.catchTag("ServiceNotFound", () => Effect.undefined),
                   );
                   if (
                     service?.Id === undefined ||
@@ -314,6 +337,26 @@ export const ServiceProvider = () =>
             );
             return items.filter((item): item is Service["Attributes"] => item !== undefined);
           }),
+
+        lookup: Effect.fn(function* ({ namespaceId, serviceName }) {
+          const service = yield* observeService(namespaceId, serviceName, undefined);
+          if (
+            service?.Id === undefined ||
+            service.Arn === undefined ||
+            service.NamespaceId === undefined
+          ) {
+            return undefined;
+          }
+          return {
+            serviceId: service.Id,
+            serviceArn: service.Arn,
+            serviceName: service.Name ?? serviceName,
+            namespaceId: service.NamespaceId,
+            namespaceName: yield* resolveNamespaceName(service.NamespaceId).pipe(
+              Effect.catchTag("NamespaceNotFound", () => Effect.succeed("")),
+            ),
+          };
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const namespaceId = output?.namespaceId ?? olds?.namespaceId;

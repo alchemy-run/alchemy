@@ -133,7 +133,33 @@ export type WidgetAttributes = {
   modifiedOn: string;
 };
 
-export type Widget = Resource<TypeId, WidgetProps, WidgetAttributes, never, Providers>;
+export type Widget = Resource<
+  TypeId,
+  WidgetProps,
+  WidgetAttributes,
+  never,
+  Providers,
+  WidgetLookup
+>;
+
+/**
+ * Props for {@link Widget.lookup}: find a Turnstile widget this stack doesn't
+ * manage, by its sitekey or its name.
+ */
+export type WidgetLookup =
+  | {
+      /**
+       * The sitekey of the existing widget.
+       */
+      sitekey: string;
+    }
+  | {
+      /**
+       * The name of the existing widget. Names are not unique; the oldest
+       * widget with this exact name is used.
+       */
+      name: string;
+    };
 
 /**
  * A Cloudflare Turnstile widget — Cloudflare's CAPTCHA alternative.
@@ -170,6 +196,21 @@ export type Widget = Resource<TypeId, WidgetProps, WidgetAttributes, never, Prov
  * const secret = widget.secret; // Redacted<string>
  * ```
  *
+ * ### Looking up an existing widget
+ * `Widget.lookup` references a widget Alchemy doesn't manage (created in the
+ * dashboard or by another stack), found by `sitekey` or `name`. It is read
+ * during plan/deploy and never created, updated or deleted. Its `secret` is
+ * read too.
+ *
+ * **Example:** Verify tokens in a Worker
+ * ```typescript
+ * const widget = Cloudflare.Turnstile.Widget.lookup({ name: "signup-form" });
+ * const worker = yield* Cloudflare.Worker("Api", {
+ *   main: "./src/api.ts",
+ *   env: { TURNSTILE_SECRET: widget.secret },
+ * });
+ * ```
+ *
  * @see https://developers.cloudflare.com/turnstile/
  *
  * @resource
@@ -199,6 +240,14 @@ export const WidgetProvider = () =>
         return { action: "replace" } as const;
       }
       return undefined;
+    }),
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const sitekey =
+        "sitekey" in props ? props.sitekey : (yield* findByName(accountId, props.name))?.sitekey;
+      if (sitekey === undefined) return undefined;
+      const observed = yield* getWidget(accountId, sitekey);
+      return observed ? toAttributes(observed, accountId) : undefined;
     }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -319,7 +368,7 @@ type ObservedWidget = turnstile.GetWidgetResponse & { accountId: string };
 const getWidget = (accountId: string, sitekey: string) =>
   turnstile.getWidget({ accountId, sitekey }).pipe(
     Effect.map((w): ObservedWidget => ({ ...w, accountId })),
-    Effect.catchTag("WidgetNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("WidgetNotFound", () => Effect.undefined),
   );
 
 /**

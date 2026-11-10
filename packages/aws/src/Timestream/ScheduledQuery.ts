@@ -5,11 +5,24 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { withQueryEndpoint } from "./internal.ts";
+
+export class ScheduledQueryInvalidProps extends Data.TaggedError("ScheduledQueryInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class ScheduledQueryUnexpectedResponse extends Data.TaggedError(
+  "ScheduledQueryUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type ScheduledQueryState = TSQ.ScheduledQueryState;
 
@@ -101,8 +114,18 @@ export interface ScheduledQuery extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ScheduledQueryLookup
 > {}
+
+/**
+ * Props for {@link ScheduledQuery.lookup}: find a scheduled query this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ScheduledQueryLookup {
+  /** The ARN of the existing scheduled query. */
+  scheduledQueryArn: string;
+}
 
 /**
  * An Amazon Timestream for LiveAnalytics scheduled query — a SQL query
@@ -156,6 +179,16 @@ export interface ScheduledQuery extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing scheduled query
+ * `ScheduledQuery.lookup` references a scheduled query Alchemy doesn't manage (created in the
+ * console or by another stack), found by `scheduledQueryArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing scheduled query
+ * ```typescript
+ * const existing = AWS.Timestream.ScheduledQuery.lookup({ scheduledQueryArn: "..." });
+ * ```
+ *
  * @resource
  */
 export const ScheduledQuery = Resource<ScheduledQuery>("AWS.Timestream.ScheduledQuery");
@@ -175,7 +208,7 @@ const toTagRecord = (
 const readScheduledQuery = Effect.fn(function* (scheduledQueryArn: string) {
   const response = yield* withQueryEndpoint(
     TSQ.describeScheduledQuery({ ScheduledQueryArn: scheduledQueryArn }),
-  ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+  ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!response?.ScheduledQuery) {
     return undefined;
   }
@@ -185,7 +218,7 @@ const readScheduledQuery = Effect.fn(function* (scheduledQueryArn: string) {
       EffectStream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
     ),
-  ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+  ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!tags) {
     return undefined;
   }
@@ -234,6 +267,11 @@ export const ScheduledQueryProvider = () =>
               (attrs): attrs is ScheduledQuery["Attributes"] => attrs !== undefined,
             );
           }),
+        lookup: Effect.fn(function* ({ scheduledQueryArn }) {
+          const state = yield* readScheduledQuery(scheduledQueryArn);
+          if (!state) return undefined;
+          return state;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const state = output?.scheduledQueryArn
             ? yield* readScheduledQuery(output.scheduledQueryArn)
@@ -264,7 +302,9 @@ export const ScheduledQueryProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(new Error("Timestream ScheduledQuery requires props"));
+            return yield* new ScheduledQueryInvalidProps({
+              message: "Timestream ScheduledQuery requires props",
+            });
           }
           const name = output?.name ?? (yield* createScheduledQueryName(id, news));
           const internalTags = yield* createInternalTags(id);
@@ -307,9 +347,9 @@ export const ScheduledQueryProvider = () =>
             yield* session.note(`Creating scheduled query ${name}...`);
             state = yield* findScheduledQueryByName(name);
             if (state === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created scheduled query ${name}`),
-              );
+              return yield* new ScheduledQueryUnexpectedResponse({
+                message: `failed to read created scheduled query ${name}`,
+              });
             }
           }
 
@@ -348,9 +388,9 @@ export const ScheduledQueryProvider = () =>
 
           const final = yield* readScheduledQuery(state.scheduledQueryArn);
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled scheduled query ${name}`),
-            );
+            return yield* new ScheduledQueryUnexpectedResponse({
+              message: `failed to read reconciled scheduled query ${name}`,
+            });
           }
           return final;
         }),

@@ -18,6 +18,8 @@ import {
   createInternalLabels,
   diffLabels,
   hasAlchemyLabels,
+  isReplacedGeneration,
+  keepsName,
   stripInternalLabels,
   toLabels,
 } from "./Labels.ts";
@@ -131,8 +133,18 @@ export type PrimaryIp = Resource<
     deleteProtection: boolean;
   },
   never,
-  Providers
+  Providers,
+  PrimaryIpLookup
 >;
+
+/**
+ * Props for {@link PrimaryIp.lookup}: find a Primary IP this stack
+ * doesn't manage by its name.
+ */
+export interface PrimaryIpLookup {
+  /** Primary IP name (unique in the project). */
+  name: string;
+}
 
 /**
  * An unassigned Hetzner Cloud Primary IP. Provide `type` and either a
@@ -172,6 +184,16 @@ export type PrimaryIp = Resource<
  *   autoDelete: false,
  *   labels: { role: "mail" },
  * });
+ * ```
+ *
+ * ### Looking up an existing Primary IP
+ * `PrimaryIp.lookup` references a Primary IP Alchemy doesn't manage (created in
+ * the Hetzner Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing Primary IP
+ * ```typescript
+ * const ip = Hetzner.PrimaryIp.lookup({ name: "web-v4" });
  * ```
  *
  * @resource
@@ -252,7 +274,7 @@ const createPrimaryIpName = (id: string, name: string | undefined, existing?: st
 const getById = (id: number) =>
   Hetzner.primaryIps.getPrimaryIp({ id }).pipe(
     Effect.map(({ primary_ip }) => primary_ip),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const getByName = (name: string) =>
@@ -317,17 +339,32 @@ export const PrimaryIpProvider = () =>
       if (!isResolved(news)) return undefined;
       if (output !== undefined) {
         if (news.type !== output.type) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
         if (!samePlacement(news, output)) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
       }
       return undefined;
     }),
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ name }) {
+      const found = yield* getByName(name);
+      return found === undefined ? undefined : toAttrs(found, {});
+    }),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const found = yield* observe({ id, name: olds?.name ?? output?.name, outputId: output?.id });
       if (found === undefined) return undefined;
+      if (
+        isReplacedGeneration({
+          previousId: previous?.id,
+          foundId: found.id,
+          claimedName: olds?.name,
+          foundName: found.name,
+        })
+      ) {
+        return undefined;
+      }
       const attrs = toAttrs(found, { datacenter: olds?.datacenter ?? output?.datacenter });
       const owned = yield* hasAlchemyLabels(id, tagRecord(found.labels));
       return owned ? attrs : Unowned(attrs);

@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -111,8 +112,31 @@ export type FeatureGroup = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  FeatureGroupLookup
 >;
+
+/**
+ * Props for {@link FeatureGroup.lookup}: find a feature group this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface FeatureGroupLookup {
+  /**
+   * Feature group id. Valid characters `[a-z0-9_]`, must start with a
+   * letter, max 128.
+   */
+  featureGroupId: string;
+  /**
+   * Region.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Vertex AI Feature Registry Feature Group backed by a BigQuery table
@@ -133,6 +157,19 @@ export type FeatureGroup = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing feature group
+ * `FeatureGroup.lookup` references a feature group Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * feature group.
+ *
+ * **Example:** Reference an existing feature group
+ * ```typescript
+ * const featureGroup = GCP.AIPlatform.FeatureGroup.lookup({
+ *   featureGroupId: "my-feature-group",
+ * });
+ * ```
+ *
  * @resource
  * @category AIPlatform
  */
@@ -141,13 +178,13 @@ export const FeatureGroup = Resource<FeatureGroup>("GCP.AIPlatform.FeatureGroup"
 export class FeatureGroupNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.FeatureGroupNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class FeatureGroupStillExists extends Data.TaggedError(
   "GCP.AIPlatform.FeatureGroupStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, groupId: string) =>
@@ -210,12 +247,14 @@ const toAttrs = (group: aiplatform.GoogleCloudAiplatformV1FeatureGroup, project:
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsFeatureGroups({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((group) =>
-      group ? Effect.succeed(group) : Effect.fail(new FeatureGroupNotResolved({ name })),
+      group
+        ? Effect.succeed(group)
+        : Effect.fail(new FeatureGroupNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.FeatureGroupNotResolved",
@@ -227,7 +266,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((group) =>
-      group === undefined ? Effect.void : Effect.fail(new FeatureGroupStillExists({ name })),
+      group === undefined
+        ? Effect.void
+        : Effect.fail(new FeatureGroupStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.FeatureGroupStillExists",
@@ -260,6 +301,15 @@ export const FeatureGroupProvider = () =>
           previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ featureGroupId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, featureGroupId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -326,7 +376,7 @@ export const FeatureGroupProvider = () =>
               serviceAgentType: news.serviceAgentType,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -334,7 +384,7 @@ export const FeatureGroupProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new FeatureGroupNotResolved({ name });
+        return yield* new FeatureGroupNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -410,7 +460,7 @@ export const FeatureGroupProvider = () =>
           force: true,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -177,8 +178,30 @@ export type DbSystem = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DbSystemLookup
 >;
+
+/**
+ * Props for {@link DbSystem.lookup}: find a db system this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface DbSystemLookup {
+  /**
+   * DbSystem id.
+   */
+  dbSystemId: string;
+  /**
+   * Region.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Oracle BaseDB system on Google Cloud.
@@ -202,13 +225,25 @@ export type DbSystem = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing db system
+ * `DbSystem.lookup` references a db system Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared db system.
+ *
+ * **Example:** Reference an existing db system
+ * ```typescript
+ * const dbSystem = GCP.OracleDatabase.DbSystem.lookup({
+ *   dbSystemId: "my-db-system",
+ * });
+ * ```
+ *
  * @resource
  * @category OracleDatabase
  */
 export const DbSystem = Resource<DbSystem>("GCP.OracleDatabase.DbSystem");
 
 const mergedProperties = (news: DbSystemProps): DbSystemPropertiesInput => ({
-  ...(news.properties ?? {}),
+  ...news.properties,
   shape: news.shape ?? news.properties?.shape,
   sshPublicKeys: news.sshPublicKeys ?? news.properties?.sshPublicKeys,
   computeCount: news.computeCount ?? news.properties?.computeCount,
@@ -298,7 +333,7 @@ const toAttrs = (system: oracle.DbSystem, project: string) => {
 
 const getByName = (name: string) =>
   retryQuota(oracle.getProjectsLocationsDbSystems({ name })).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const listSystems = (project: string, region: string) => {
@@ -336,6 +371,15 @@ export const DbSystemProvider = () =>
         extra: nextOdb !== previousOdb || nextShape !== previousShape,
       });
     }),
+
+    lookup: Effect.fn(function* ({ dbSystemId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation ?? env.region);
+      const name = resourceNameOf(env.project, location, COLLECTION, dbSystemId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -376,7 +420,7 @@ export const DbSystemProvider = () =>
           })
           .pipe(
             retryQuota,
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -385,7 +429,7 @@ export const DbSystemProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new OracleDatabaseNotResolved({ name });
+        return yield* new OracleDatabaseNotResolved({ resourceName: name });
       }
 
       const ready = yield* waitUntilReady(
@@ -404,7 +448,7 @@ export const DbSystemProvider = () =>
         })
         .pipe(
           retryConflict,
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

@@ -5,7 +5,7 @@ import * as iam from "@distilled.cloud/aws/iam";
 import type { CreateFunctionRequest } from "@distilled.cloud/aws/lambda";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import { Region } from "@distilled.cloud/aws/Region";
-import { Unowned, Unresolved } from "alchemy/AdoptPolicy";
+import { Unowned, Unresolved, UnresolvedIdentity } from "alchemy/AdoptPolicy";
 import * as Binding from "alchemy/Binding";
 import type * as Bundle from "alchemy/Bundle/Bundle";
 import type { PackageInstall } from "alchemy/Bundle/InstalledPackages";
@@ -16,7 +16,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import type { LogLine, LogsInput } from "alchemy/Provider";
 import * as Provider from "alchemy/Provider";
-import { Resource, type ResourceBinding } from "alchemy/Resource";
+import { type LookupMethod, Resource, type ResourceBinding } from "alchemy/Resource";
 import type { FunctionContext, FunctionListener } from "alchemy/Runtime/Function";
 import { packEnvValue, RuntimeContext, unpackEnvValue } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
@@ -27,6 +27,7 @@ import { sha256 } from "alchemy/Util/sha256";
 import { zipCode } from "alchemy/Util/zip";
 import type * as lambda from "aws-lambda";
 import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
@@ -46,7 +47,12 @@ import * as IAM from "../IAM/index.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import { syncLogGroupRetention, type LogRetentionConfig } from "../Logs/LogRetention.ts";
 import type { Providers } from "../Providers.ts";
-import { syncEventInvokeConfig, type EventInvokeConfig } from "./EventInvokeConfig.ts";
+import {
+  observeEventInvokeConfig,
+  syncEventInvokeConfig,
+  type EventInvokeConfig,
+  type ObservedEventInvokeConfig,
+} from "./EventInvokeConfig.ts";
 import { makeFunctionBundler } from "./FunctionBundle.ts";
 import { composeFunctionDomain, functionDomainUrl, type FunctionDomain } from "./FunctionDomain.ts";
 import {
@@ -70,6 +76,11 @@ import {
   toDurationMillis,
   withInvocationDeadline,
 } from "./InvocationDeadline.ts";
+
+export class LambdaFunctionInvalidProps extends Data.TaggedError("LambdaFunctionInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type { FunctionImageSource } from "./FunctionImage.ts";
 export {
@@ -331,7 +342,8 @@ export interface FunctionCommonProps extends PlatformProps {
    * configured as `timeout + timeoutMargin`, rounded up to whole seconds;
    * the margin is billed only when an invocation actually runs past its
    * timeout. `timeout + timeoutMargin` must fit in Lambda's 900-second
-   * maximum.
+   * maximum, and a queue an SQS event source reads needs a
+   * `visibilityTimeout` of at least that sum (SQS's default is 30 seconds).
    *
    * If cleanup is still running 500 ms before Lambda's own timeout, the
    * runtime ends the invocation's root span, logs a warning and drains the
@@ -484,9 +496,9 @@ export const validateFunctionPackageProps = Effect.fn("AWS.Lambda.validateFuncti
   function* (id: string, props: FunctionPackageValidationProps) {
     if (props.image === undefined) {
       if (props.main === undefined) {
-        return yield* Effect.fail(
-          new Error(`Function(${id}): declare exactly one of main or image`),
-        );
+        return yield* new LambdaFunctionInvalidProps({
+          message: `Function(${id}): declare exactly one of main or image`,
+        });
       }
       return;
     }
@@ -502,11 +514,9 @@ export const validateFunctionPackageProps = Effect.fn("AWS.Lambda.validateFuncti
       ["durableConfig", props.durableConfig],
     ].flatMap(([name, value]) => (value === undefined ? [] : [name]));
     if (incompatible.length > 0) {
-      return yield* Effect.fail(
-        new Error(
-          `Function(${id}): image functions cannot use ZIP/runtime options: ${incompatible.join(", ")}`,
-        ),
-      );
+      return yield* new LambdaFunctionInvalidProps({
+        message: `Function(${id}): image functions cannot use ZIP/runtime options: ${incompatible.join(", ")}`,
+      });
     }
   },
 );
@@ -715,6 +725,21 @@ export interface Function extends Resource<
       managedPolicyArns: string[];
       inlinePolicies: Record<string, unknown>;
     };
+    /**
+     * Asynchronous invocation config (retries, maximum event age,
+     * destinations) of the function, or of its alias when `alias` is set,
+     * as observed. Lets `alchemy drift` detect out-of-band changes.
+     */
+    eventInvokeConfig?: ObservedEventInvokeConfig;
+    /**
+     * Durable execution settings (execution timeout and history retention),
+     * as observed on durable functions. Lets `alchemy drift` detect
+     * out-of-band changes.
+     */
+    durableConfig?: {
+      executionTimeout?: number;
+      retentionPeriodInDays?: number;
+    };
   },
   {
     env?: Record<string, any>;
@@ -741,8 +766,29 @@ export interface Function extends Resource<
       localMountPath: string;
     }[];
   },
-  Providers
+  Providers,
+  FunctionLookup
 > {}
+
+/**
+ * Props for {@link Function.lookup}: find a function this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface FunctionLookup {
+  /**
+   * The function's name, or its full or partial ARN.
+   */
+  functionName: string;
+}
+
+/** The CloudWatch Logs live-tail stream behind `alchemy logs --tail` broke. */
+export class LambdaLiveTailError extends Data.TaggedError("LambdaLiveTailError")<{
+  cause: Error;
+}> {
+  override get message() {
+    return `Lambda live tail failed: ${this.cause.message}`;
+  }
+}
 
 /**
  * Lambda refused to publish a version or create the alias for a Function
@@ -950,6 +996,18 @@ export const normalizeFunctionUrl = (
  * FROM public.ecr.aws/lambda/java:21
  * COPY target/function.jar ${LAMBDA_TASK_ROOT}/lib/
  * CMD ["com.example.Handler::handleRequest"]
+ * ```
+ *
+ * #### Cache build layers
+ * Image builds reuse the local BuildKit cache of the machine they run on. Set
+ * `cache: true` to keep every stage's layers at the function repository's
+ * `:buildcache` tag, so a fresh builder (a new CI runner) skips unchanged
+ * steps:
+ *
+ * ```typescript
+ * const func = yield* AWS.Lambda.Function("JavaFunction", {
+ *   image: { context: "./lambda", dockerfile: "Dockerfile", cache: true },
+ * });
  * ```
  *
  * ### Effect Functions
@@ -1342,6 +1400,20 @@ export const normalizeFunctionUrl = (
  * );
  * ```
  *
+ * ### Looking up an existing function
+ * `Function.lookup` references a function Alchemy doesn't manage (deployed
+ * by another tool or stack), found by `functionName`. It is read during
+ * plan/deploy and never created, updated or deleted, and binds like a
+ * declared function.
+ *
+ * **Example:** Invoke an existing function
+ * ```typescript
+ * const resize = AWS.Lambda.Function.lookup({ functionName: "image-resize" });
+ *
+ * // init
+ * const invoke = yield* AWS.Lambda.InvokeFunction(resize);
+ * ```
+ *
  * @resource
  */
 export const Function: Platform<
@@ -1351,7 +1423,8 @@ export const Function: Platform<
   FunctionContext,
   {},
   FunctionZipProps
-> = Platform(FunctionTypeId, {
+> &
+  LookupMethod<Function> = Platform(FunctionTypeId, {
   // The custom-domain front door integrates the Function's own ARN, so it
   // composes AFTER the Function resource is declared.
   onCreate: (resource, props) =>
@@ -1377,6 +1450,7 @@ export const Function: Platform<
         // Key is already canonical (see RuntimeContext.sanitizeKey). Read
         // straight from `process.env` — see `unpackEnvValue` for why this
         // must never resolve through `Config.String`.
+        // oxlint-disable-next-line effecttsgo/process-env-in-effect -- must read the raw env, Config would unwrap packed values and recurse (see unpackEnvValue)
         Effect.sync(() => unpackEnvValue<T>(process.env[key])),
       serve: (handler: HttpEffect) =>
         ctx.listen(
@@ -1442,10 +1516,10 @@ export const Function: Platform<
                       Layer.effectContext(
                         buildEventTelemetry(services, scope, (ctx as FunctionContext).telemetry),
                       ),
-                    ).pipe(Layer.provideMerge(Layer.succeedContext(services))),
+                    ),
                   ),
                   Effect.tap(Effect.logDebug),
-                  Effect.runPromiseExit,
+                  Effect.runPromiseExitWith(services),
                 );
                 if (!isScopeEjected(scope)) {
                   // The HttpMiddleware tracer ends the request's root span
@@ -1458,7 +1532,7 @@ export const Function: Platform<
                       log: "Warn",
                       message: "Lambda invocation scope close failed",
                     }),
-                    Effect.runPromise,
+                    Effect.runPromiseWith(services),
                   );
                 }
                 if (deadline.fired) {
@@ -1651,7 +1725,7 @@ export const FunctionProvider = () =>
         // EntityAlreadyExists exception (important under high concurrency).
         let role = yield* iam
           .getRole({ RoleName: roleName })
-          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
         if (role === undefined) {
           // Engine has cleared us via `read` or `observe` — foreign-tagged
           // functions are surfaced as `Unowned` and require `--adopt`. On a race between
@@ -1732,7 +1806,7 @@ export const FunctionProvider = () =>
           .getRolePolicy({ RoleName: roleName, PolicyName: logGroupGuardPolicyName })
           .pipe(
             Effect.map((policy) => decodeURIComponent(policy.PolicyDocument)),
-            Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+            Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
           );
         if (observed !== document) {
           yield* iam.putRolePolicy({
@@ -1862,7 +1936,7 @@ export const FunctionProvider = () =>
           FunctionName: functionName,
         }).pipe(
           Effect.map((config) => config.ReservedConcurrentExecutions),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 
@@ -1875,7 +1949,7 @@ export const FunctionProvider = () =>
             while: (e: any) => e._tag === "ResourceConflictException",
             schedule: Schedule.exponential(100),
           }),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
 
       // AWS managed policies Alchemy attaches to the execution role. Other
@@ -1911,14 +1985,14 @@ export const FunctionProvider = () =>
         const readInlinePolicy = (PolicyName: string) =>
           iam.getRolePolicy({ RoleName: roleName, PolicyName }).pipe(
             Effect.map((policy) => JSON.parse(decodeURIComponent(policy.PolicyDocument))),
-            Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+            Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
           );
-        const [urlConfig, logRetentionInDays, attached, bindingPolicy, guardPolicy] =
+        const [urlConfig, logRetentionInDays, attached, bindingPolicy, guardPolicy, invokeConfig] =
           yield* Effect.all(
             [
               readFunctionUrlConfig(functionName, qualifier),
               logging?.retention === undefined
-                ? Effect.succeed(undefined)
+                ? Effect.undefined
                 : logs
                     .describeLogGroups({ logGroupNamePrefix: `/aws/lambda/${functionName}` })
                     .pipe(
@@ -1941,6 +2015,7 @@ export const FunctionProvider = () =>
               ),
               readInlinePolicy(policyName),
               readInlinePolicy(logGroupGuardPolicyName),
+              observeEventInvokeConfig(functionName, qualifier),
             ],
             { concurrency: "unbounded" },
           );
@@ -1998,6 +2073,13 @@ export const FunctionProvider = () =>
               ...(guardPolicy === undefined ? {} : { [logGroupGuardPolicyName]: guardPolicy }),
             },
           },
+          eventInvokeConfig: invokeConfig,
+          durableConfig: fn.DurableConfig
+            ? {
+                executionTimeout: fn.DurableConfig.ExecutionTimeout,
+                retentionPeriodInDays: fn.DurableConfig.RetentionPeriodInDays,
+              }
+            : undefined,
         } satisfies Partial<Function["Attributes"]>;
       });
 
@@ -2183,7 +2265,7 @@ export const FunctionProvider = () =>
         session: { note: (note: string) => Effect.Effect<void> };
       }) {
         yield* Effect.logDebug(`creating function ${id}`);
-        const waitStartedAt = Date.now();
+        const waitStartedAt = yield* Clock.currentTimeMillis;
 
         // A just-created role (or its freshly attached policies, KMS grant
         // principal, or security group) isn't visible to Lambda yet.
@@ -2201,8 +2283,12 @@ export const FunctionProvider = () =>
           e._tag === "SecurityGroupNotFound";
 
         const noteCreateDependencyWait = () =>
-          session.note(
-            `Waiting for Lambda creation dependencies to propagate: ${functionName} (${Math.ceil((Date.now() - waitStartedAt) / 1000)}s)`,
+          Clock.currentTimeMillis.pipe(
+            Effect.flatMap((now) =>
+              session.note(
+                `Waiting for Lambda creation dependencies to propagate: ${functionName} (${Math.ceil((now - waitStartedAt) / 1000)}s)`,
+              ),
+            ),
           );
 
         const tags = yield* createInternalTags(id);
@@ -2291,7 +2377,6 @@ export const FunctionProvider = () =>
 
         // Update an existing function in place. Only an engine-admitted
         // function reaches this directly — see `preferUpdate`.
-        // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- erases SDK error/requirement unions; the services are ambient in the lifecycle op
         const update = Effect.gen(function* () {
           yield* Effect.logDebug(`updating function code ${id}`);
           yield* Lambda.updateFunctionCode({
@@ -2349,7 +2434,6 @@ export const FunctionProvider = () =>
           }
         }) as Effect.Effect<any, any, Credentials | Region | HttpClient>;
 
-        // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- erases SDK error/requirement unions; the services are ambient in the lifecycle op
         const getAndUpdate = Lambda.getFunction({
           FunctionName: functionName,
         }).pipe(
@@ -2373,10 +2457,9 @@ export const FunctionProvider = () =>
               // TODO(sam): add custom
               new Error("Function tags do not match expected values"),
           ),
-          Effect.flatMap(() => update),
+          Effect.andThen(update),
         ) as Effect.Effect<any, any, Credentials | Region | HttpClient>;
 
-        // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- erases SDK error/requirement unions; the services are ambient in the lifecycle op
         const create = Lambda.createFunction(createFunctionRequest).pipe(
           Effect.tapError((e) => Effect.logDebug(e)),
           Effect.retry({
@@ -2594,7 +2677,7 @@ export const FunctionProvider = () =>
           RoutingConfig: { AdditionalVersionWeights: {} },
         };
         const observed = yield* Lambda.getAlias({ FunctionName: functionName, Name: alias }).pipe(
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
         if (observed === undefined) {
           yield* Lambda.createAlias({
@@ -2816,7 +2899,7 @@ export const FunctionProvider = () =>
           yield* Effect.logDebug(`reading function ${functionName}`);
           const result = yield* Lambda.getFunction({
             FunctionName: functionName,
-          }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           const fn = result?.Configuration;
           if (!fn?.FunctionArn || !fn.FunctionName || !fn.Role) {
             return undefined;
@@ -2832,7 +2915,7 @@ export const FunctionProvider = () =>
           const aliasName = olds?.alias ?? output?.aliasName;
           const alias = aliasName
             ? yield* Lambda.getAlias({ FunctionName: fn.FunctionName, Name: aliasName }).pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
               )
             : undefined;
           const roleName = output?.roleName ?? fn.Role.split("/").pop()!;
@@ -2871,6 +2954,29 @@ export const FunctionProvider = () =>
           } satisfies Function["Attributes"];
           return (yield* hasAlchemyTags(id, tagsResult)) ? attrs : Unowned(attrs);
         }),
+        lookup: Effect.fn(function* ({ functionName }) {
+          const result = yield* Lambda.getFunction({ FunctionName: functionName }).pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
+          );
+          const fn = result?.Configuration;
+          if (!fn?.FunctionArn || !fn.FunctionName || !fn.Role) return undefined;
+          const functionUrl = yield* readFunctionUrlConfig(fn.FunctionName, undefined).pipe(
+            Effect.map((config) => config?.FunctionUrl),
+          );
+          return {
+            functionArn: fn.FunctionArn,
+            functionName: fn.FunctionName,
+            qualifiedArn: fn.FunctionArn,
+            functionUrl,
+            roleArn: fn.Role,
+            roleName: fn.Role.split("/").pop()!,
+            code: { hash: fn.CodeSha256 ?? "" },
+            ...(fn.MemorySize === undefined ? {} : { memorySize: fn.MemorySize }),
+            ...(fn.Timeout === undefined ? {} : { timeoutSeconds: fn.Timeout }),
+            ...(fn.Runtime === undefined ? {} : { runtime: fn.Runtime }),
+            ...(fn.Handler === undefined ? {} : { handler: fn.Handler }),
+          } satisfies Function["Attributes"];
+        }),
         // Account/region collection: exhaustively paginate `listFunctions`
         // (its `Functions` items are `FunctionConfiguration`s, the same shape
         // `read` pulls from `getFunction().Configuration`), then hydrate each
@@ -2898,7 +3004,7 @@ export const FunctionProvider = () =>
                     // No URL config (or the function vanished between the
                     // list and the hydrate) — surface `undefined`, matching
                     // `read`.
-                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                    Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
                   );
                   const reservedConcurrentExecutions = yield* getReservedConcurrentExecutions(
                     fn.FunctionName,
@@ -2929,7 +3035,7 @@ export const FunctionProvider = () =>
           if (!isResolved(news.functionName)) return Unresolved;
           const functionName = yield* createFunctionName(id, news.functionName);
           const result = yield* Lambda.getFunction({ FunctionName: functionName }).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           );
           const functionArn = result?.Configuration?.FunctionArn;
           if (functionArn === undefined) return undefined;
@@ -2943,6 +3049,16 @@ export const FunctionProvider = () =>
           return (yield* hasAlchemyTags(id, tags)) ? observed : Unowned(observed);
         }),
         precreate: Effect.fn(function* ({ id, news, session }) {
+          if (!isResolved(news.functionName)) {
+            return yield* new UnresolvedIdentity({
+              message:
+                `Function(${id}): \`functionName\` depends on a resource in this ` +
+                "Function's dependency cycle, so precreate cannot name the function. " +
+                "Use a literal name, or one from outside the cycle.",
+              resourceType: "AWS.Lambda.Function",
+              logicalId: id,
+            });
+          }
           yield* validateFunctionPackageProps(id, news);
           if (isFunctionImageProps(news)) {
             // Resolve and validate the image before creating the execution
@@ -3123,7 +3239,7 @@ export const FunctionProvider = () =>
             session,
           });
 
-          const configuration = yield* createOrUpdateFunction({
+          yield* createOrUpdateFunction({
             id,
             news,
             roleArn,
@@ -3224,11 +3340,11 @@ export const FunctionProvider = () =>
 
           yield* session.note(summary(prepared.deployment));
 
+          // Re-read rather than reuse the create/update response, which omits
+          // settings such as `DurableConfig` that `read` observes.
           const observed = yield* observeFunctionConfiguration({
             id,
-            configuration:
-              configuration ??
-              (yield* Lambda.getFunctionConfiguration({ FunctionName: functionName })),
+            configuration: yield* Lambda.getFunctionConfiguration({ FunctionName: functionName }),
             qualifier: news.alias,
             roleName,
             logging: news.logging,
@@ -3259,18 +3375,18 @@ export const FunctionProvider = () =>
             })
             .pipe(
               Effect.flatMap((policies) =>
-                Effect.all(
+                Effect.forEach(
                   // The log-group guard stays until the function is deleted.
-                  (policies.PolicyNames ?? [])
-                    .filter((policyName) => policyName !== logGroupGuardPolicyName)
-                    .map((policyName) =>
-                      iam
-                        .deleteRolePolicy({
-                          RoleName: output.roleName,
-                          PolicyName: policyName,
-                        })
-                        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
-                    ),
+                  (policies.PolicyNames ?? []).filter(
+                    (policyName) => policyName !== logGroupGuardPolicyName,
+                  ),
+                  (policyName) =>
+                    iam
+                      .deleteRolePolicy({
+                        RoleName: output.roleName,
+                        PolicyName: policyName,
+                      })
+                      .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
                 ),
               ),
               Effect.catchTag("NoSuchEntityException", () => Effect.void),
@@ -3282,15 +3398,13 @@ export const FunctionProvider = () =>
             })
             .pipe(
               Effect.flatMap((policies) =>
-                Effect.all(
-                  (policies.AttachedPolicies ?? []).map((policy) =>
-                    iam
-                      .detachRolePolicy({
-                        RoleName: output.roleName,
-                        PolicyArn: policy.PolicyArn!,
-                      })
-                      .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
-                  ),
+                Effect.forEach(policies.AttachedPolicies ?? [], (policy) =>
+                  iam
+                    .detachRolePolicy({
+                      RoleName: output.roleName,
+                      PolicyArn: policy.PolicyArn!,
+                    })
+                    .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
                 ),
               ),
               Effect.catchTag("NoSuchEntityException", () => Effect.void),
@@ -3366,6 +3480,7 @@ export const FunctionProvider = () =>
                 }
                 return Stream.empty;
               }),
+              Stream.mapError((cause) => new LambdaLiveTailError({ cause })),
             );
           });
 

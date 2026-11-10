@@ -188,7 +188,7 @@ function joinWithAnd(array: string[], glue = ", ", finalGlue = " and "): string 
   if (!array || array.length === 0) return "";
   if (array.length === 1) return array[0];
   if (array.length === 2) return array.join(finalGlue);
-  return `${array.slice(0, -1).join(glue)}${finalGlue}${array.slice(-1)}`;
+  return `${array.slice(0, -1).join(glue)}${finalGlue}${array[array.length - 1]}`;
 }
 
 function partition<T>(items: T[], pred: (item: T) => boolean): [T[], T[]] {

@@ -6,6 +6,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
 import {
@@ -16,6 +17,11 @@ import {
   type WafScope,
   withWafScope,
 } from "./internal.ts";
+
+export class WAFv2IPSetUnexpectedResponse extends Data.TaggedError("WAFv2IPSetUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface IPSetProps {
   /**
@@ -83,8 +89,24 @@ export interface IPSet extends Resource<
     addresses: string[];
   },
   never,
-  Providers
+  Providers,
+  IPSetLookup
 > {}
+
+/**
+ * Props for {@link IPSet.lookup}: find an IP set this stack doesn't
+ * manage, in the ambient account, by name and scope.
+ */
+export interface IPSetLookup {
+  /** The name of the existing IP set. */
+  ipSetName: string;
+  /**
+   * `REGIONAL` for one in the ambient region, `CLOUDFRONT` for one that
+   * protects CloudFront distributions.
+   * @default "REGIONAL"
+   */
+  scope?: "REGIONAL" | "CLOUDFRONT";
+}
 
 /**
  * An AWS WAFv2 IP set — a named collection of IP addresses and CIDR ranges
@@ -118,6 +140,17 @@ export interface IPSet extends Resource<
  *     },
  *   ],
  * });
+ * ```
+ *
+ * ### Looking up an existing IP set
+ * `IPSet.lookup` references an IP set Alchemy doesn't manage (created in the
+ * console or by another stack), found by `ipSetName` and `scope`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing IP set
+ * ```typescript
+ * const blocked = AWS.WAFv2.IPSet.lookup({ ipSetName: "blocked" });
+ * const ipSetArn = blocked.ipSetArn;
  * ```
  *
  * @resource
@@ -157,9 +190,7 @@ export const IPSetProvider = () =>
             scope,
             wafv2
               .getIPSet({ Name: name, Scope: scope, Id: cachedId })
-              .pipe(
-                Effect.catchTag("WAFNonexistentItemException", () => Effect.succeed(undefined)),
-              ),
+              .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.undefined)),
           );
           if (byId?.IPSet) {
             return byId;
@@ -177,9 +208,7 @@ export const IPSetProvider = () =>
               scope,
               wafv2
                 .getIPSet({ Name: name, Scope: scope, Id: summary.Id })
-                .pipe(
-                  Effect.catchTag("WAFNonexistentItemException", () => Effect.succeed(undefined)),
-                ),
+                .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.undefined)),
             );
           }
           if (!listed.NextMarker || (listed.IPSets?.length ?? 0) === 0) {
@@ -211,13 +240,9 @@ export const IPSetProvider = () =>
                         Scope: scope,
                         Id: summary.Id,
                       })
-                      .pipe(
-                        Effect.catchTag("WAFNonexistentItemException", () =>
-                          Effect.succeed(undefined),
-                        ),
-                      ),
+                      .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.undefined)),
                   )
-                : Effect.succeed(undefined),
+                : Effect.undefined,
             { concurrency: 5 },
           );
           for (const detail of details) {
@@ -257,6 +282,11 @@ export const IPSetProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ ipSetName, scope = defaultScope }) {
+          const found = yield* findIPSet(scope, ipSetName, undefined);
+          return found?.IPSet ? toAttrs(found.IPSet, scope) : undefined;
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const scope = output?.scope ?? olds?.scope ?? defaultScope;
           const name = output?.ipSetName ?? (yield* createName(id, olds ?? { addresses: [] }));
@@ -291,15 +321,15 @@ export const IPSetProvider = () =>
                   Description: news.description,
                   Tags: createTagsList(desiredTags),
                 })
-                .pipe(
-                  Effect.catchTag("WAFDuplicateItemException", () => Effect.succeed(undefined)),
-                ),
+                .pipe(Effect.catchTag("WAFDuplicateItemException", () => Effect.undefined)),
             );
             observed = yield* findIPSet(scope, name, undefined);
           }
 
           if (!observed?.IPSet) {
-            return yield* Effect.fail(new Error(`Failed to observe IPSet '${name}' after create`));
+            return yield* new WAFv2IPSetUnexpectedResponse({
+              message: `Failed to observe IPSet '${name}' after create`,
+            });
           }
 
           const ipSet = observed.IPSet;
@@ -363,9 +393,7 @@ export const IPSetProvider = () =>
                   Scope: scope,
                   Id: output.ipSetId,
                 })
-                .pipe(
-                  Effect.catchTag("WAFNonexistentItemException", () => Effect.succeed(undefined)),
-                ),
+                .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.undefined)),
             );
             if (!found?.IPSet || found.LockToken === undefined) {
               return;

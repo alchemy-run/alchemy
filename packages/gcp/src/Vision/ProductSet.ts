@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   deleteProductSet,
@@ -74,8 +75,32 @@ export type ProductSet = Resource<
       | undefined;
   },
   never,
-  Providers
+  Providers,
+  ProductSetLookup
 >;
+
+/**
+ * Props for {@link ProductSet.lookup}: find a product set this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface ProductSetLookup {
+  /**
+   * Product Search location.
+   */
+  location?: string;
+  /**
+   * Product set id (the `{productSet}` segment of
+   * `projects/{project}/locations/{location}/productSets/{productSet}`). At
+   * most 128 characters; cannot contain `/`.
+   */
+  productSetId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Vision Product Search product set.
@@ -115,13 +140,24 @@ export type ProductSet = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing product set
+ * `ProductSet.lookup` references a product set Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * product set.
+ *
+ * **Example:** Reference an existing product set
+ * ```typescript
+ * const productSet = GCP.Vision.ProductSet.lookup({ productSetId: "my-product-set" });
+ * ```
+ *
  * @resource
  * @category Vision
  */
 export const ProductSet = Resource<ProductSet>("GCP.Vision.ProductSet");
 
 export class ProductSetNotResolved extends Data.TaggedError("GCP.Vision.ProductSetNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (set: vision.ProductSet, project: string, products: string[]) => {
@@ -175,6 +211,16 @@ export const ProductSetProvider = () =>
       });
     }),
 
+    lookup: Effect.fn(function* ({ location: lookupLocation, productSetId }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = productSetNameOf(env.project, location, productSetId ?? "");
+      const existing = yield* getProductSet(name);
+      if (existing === undefined) return undefined;
+      const products = yield* productsOf(existing.name ?? name);
+      return toAttrs(existing, env.project, products);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ olds, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(olds?.location ?? output?.location);
@@ -211,7 +257,7 @@ export const ProductSetProvider = () =>
 
       if (current === undefined) {
         return yield* new ProductSetNotResolved({
-          name: name || productSetNameOf(env.project, location, productSetId),
+          resourceName: name || productSetNameOf(env.project, location, productSetId),
         });
       }
 

@@ -124,7 +124,7 @@ const tryDate = <E, R>(
 ): Effect.Effect<Date | undefined, never, R> =>
   eff.pipe(
     Effect.map(toDate),
-    Effect.catch(() => Effect.succeed(undefined)),
+    Effect.orElseSucceed(() => undefined),
   );
 
 // ---------------------------------------------------------------------------
@@ -446,7 +446,7 @@ const lookupCreatedAt = (
       );
     }
     default:
-      return Effect.succeed(undefined);
+      return Effect.undefined;
   }
 };
 
@@ -543,7 +543,7 @@ const deleteEcsService = (leak: Leak) =>
     // name = "service/{cluster}/{service}"
     const [, cluster, service] = leak.name.split("/");
     yield* ECS.updateService({ cluster, service, desiredCount: 0 }).pipe(
-      Effect.catch(() => Effect.succeed(undefined)),
+      Effect.orElseSucceed(() => undefined),
     );
     yield* retryDependencies(ECS.deleteService({ cluster, service, force: true }));
   });
@@ -556,7 +556,7 @@ const deleteEventsRule = (leak: Leak) =>
     const targets = yield* EventBridge.listTargetsByRule({
       Rule: name,
       EventBusName: bus,
-    }).pipe(Effect.catch(() => Effect.succeed({ Targets: [] })));
+    }).pipe(Effect.orElseSucceed(() => ({ Targets: [] })));
     const ids = (targets.Targets ?? [])
       .map((t) => t.Id)
       .filter((id): id is string => id !== undefined);
@@ -566,7 +566,7 @@ const deleteEventsRule = (leak: Leak) =>
         EventBusName: bus,
         Ids: ids,
         Force: true,
-      }).pipe(Effect.catch(() => Effect.succeed(undefined)));
+      }).pipe(Effect.orElseSucceed(() => undefined));
     }
     yield* EventBridge.deleteRule({
       Name: name,
@@ -597,7 +597,7 @@ const deleteVpcDeep = (vpcId: string) =>
       subnets.Subnets ?? [],
       (s) =>
         retryDependencies(EC2.deleteSubnet({ SubnetId: s.SubnetId! })).pipe(
-          Effect.catch(() => Effect.succeed(undefined)),
+          Effect.orElseSucceed(() => undefined),
         ),
       { discard: true },
     );
@@ -617,7 +617,7 @@ const deleteVpcDeep = (vpcId: string) =>
               InternetGatewayId: igw.InternetGatewayId!,
             }),
           ),
-          Effect.catch(() => Effect.succeed(undefined)),
+          Effect.orElseSucceed(() => undefined),
         ),
       { discard: true },
     );
@@ -627,7 +627,7 @@ const deleteVpcDeep = (vpcId: string) =>
       (rts.RouteTables ?? []).filter((rt) => !(rt.Associations ?? []).some((a) => a.Main)),
       (rt) =>
         EC2.deleteRouteTable({ RouteTableId: rt.RouteTableId! }).pipe(
-          Effect.catch(() => Effect.succeed(undefined)),
+          Effect.orElseSucceed(() => undefined),
         ),
       { discard: true },
     );
@@ -637,7 +637,7 @@ const deleteVpcDeep = (vpcId: string) =>
       (sgs.SecurityGroups ?? []).filter((sg) => sg.GroupName !== "default"),
       (sg) =>
         retryDependencies(EC2.deleteSecurityGroup({ GroupId: sg.GroupId! })).pipe(
-          Effect.catch(() => Effect.succeed(undefined)),
+          Effect.orElseSucceed(() => undefined),
         ),
       { discard: true },
     );
@@ -649,7 +649,7 @@ const deleteEfs = (fileSystemId: string) =>
   Effect.gen(function* () {
     const mts = yield* EFS.describeMountTargets({
       FileSystemId: fileSystemId,
-    }).pipe(Effect.catch(() => Effect.succeed({ MountTargets: [] })));
+    }).pipe(Effect.orElseSucceed(() => ({ MountTargets: [] })));
     yield* Effect.forEach(
       mts.MountTargets ?? [],
       (mt) => EFS.deleteMountTarget({ MountTargetId: mt.MountTargetId }),
@@ -804,7 +804,7 @@ const discoverIam = (stage: string, account: string) =>
       (r) =>
         IAM.listRoleTags({ RoleName: r.RoleName }).pipe(
           Effect.map((t) => ({ role: r, tags: tagRecord(t.Tags) })),
-          Effect.catch(() => Effect.succeed({ role: r, tags: {} as Record<string, string> })),
+          Effect.orElseSucceed(() => ({ role: r, tags: {} as Record<string, string> })),
         ),
       { concurrency: 5 },
     );
@@ -838,7 +838,7 @@ const discoverIam = (stage: string, account: string) =>
       (p) =>
         IAM.listPolicyTags({ PolicyArn: p.Arn! }).pipe(
           Effect.map((t) => ({ policy: p, tags: tagRecord(t.Tags) })),
-          Effect.catch(() => Effect.succeed({ policy: p, tags: {} as Record<string, string> })),
+          Effect.orElseSucceed(() => ({ policy: p, tags: {} as Record<string, string> })),
         ),
       { concurrency: 5 },
     );
@@ -885,7 +885,7 @@ const discoverSchedules = (stage: string, region: string, account: string) =>
         name: s.Name ?? "",
         createdAt: toDate(s.CreationDate),
       }));
-  }).pipe(Effect.catch(() => Effect.succeed([])));
+  }).pipe(Effect.orElseSucceed(() => []));
 
 // ---------------------------------------------------------------------------
 // Report
@@ -999,9 +999,7 @@ const main = Effect.fn(function* (args: Args) {
   // -- enrich ages ------------------------------------------------------
   const bucketDates = new Map<string, Date>();
   if (leaks.some((l) => l.kind === "s3:bucket")) {
-    const buckets = yield* S3.listBuckets({}).pipe(
-      Effect.catch(() => Effect.succeed({ Buckets: [] })),
-    );
+    const buckets = yield* S3.listBuckets({}).pipe(Effect.orElseSucceed(() => ({ Buckets: [] })));
     for (const b of buckets.Buckets ?? []) {
       const d = toDate(b.CreationDate);
       if (b.Name && d) bucketDates.set(b.Name, d);

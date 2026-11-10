@@ -73,7 +73,12 @@ export interface BaseBranchProps {
    * Adding a file is an in-place update. Editing or removing an
    * already-applied file replaces a non-production branch (re-forked from
    * its parent) and fails on a current or desired production branch — add
-   * a forward migration instead.
+   * a forward migration instead. Renaming an applied file without changing
+   * its contents keeps it applied and replaces nothing.
+   *
+   * History is linear: a new file must sort after every applied one, or
+   * the deploy fails with `NonLinearMigrationHistoryError`. See
+   * [Migrations](https://alchemy.run/sql/effect-sql/migrations#change-migration-history-safely).
    */
   migrations?: MigrationsInput;
 
@@ -361,6 +366,34 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
       return stables ? ({ action: "noop", stables } as const) : undefined;
     }),
 
+    lookup: Effect.fn(function* ({ database, name }: any) {
+      const { organization } = yield* yield* Credentials;
+      return yield* planetscale.getBranch({ organization, database, branch: name }).pipe(
+        Effect.map(
+          (data) =>
+            ({
+              name: data.name,
+              organization,
+              database,
+              parentBranch: data.parent_branch ?? "main",
+              production: data.production,
+              createdAt: data.created_at,
+              updatedAt: data.updated_at,
+              htmlUrl: data.html_url,
+              region: { slug: data.region.slug },
+              migrationsDir: undefined,
+              migrationsTable: undefined,
+              migrationsHashes: {},
+              importHashes: {},
+              desiredReplicas: undefined,
+              hasReplicas: data.has_replicas,
+              hasReadOnlyReplicas: data.has_read_only_replicas,
+            }) satisfies BaseBranchAttributes,
+        ),
+        Effect.catchTag("NotFound", () => Effect.undefined),
+      );
+    }),
+
     read: Effect.fn(function* ({ id, olds, output }: any) {
       // If we have neither a cached output nor a usable `olds.database`
       // there's no way to identify which branch to refresh — most often
@@ -412,7 +445,7 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
 
             return output ? attrs : Unowned(attrs);
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
     }),
 
@@ -440,7 +473,7 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
           database: databaseName,
           branch: observedBranchName,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
       // Ensure — if missing, create. The parent must be ready before
       // the child can fork from it. PostgreSQL short cluster sizes need

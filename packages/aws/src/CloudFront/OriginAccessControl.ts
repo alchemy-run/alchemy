@@ -3,10 +3,23 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class OriginAccessControlConflict extends Data.TaggedError("OriginAccessControlConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class OriginAccessControlUnexpectedResponse extends Data.TaggedError(
+  "OriginAccessControlUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface OriginAccessControlProps {
   /**
@@ -68,8 +81,23 @@ export interface OriginAccessControl extends Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  OriginAccessControlLookup
 > {}
+
+/**
+ * Props for {@link OriginAccessControl.lookup}: find an origin access control this stack doesn't
+ * manage, in the ambient account.
+ */
+export type OriginAccessControlLookup =
+  | {
+      /** The id of the existing origin access control. */
+      originAccessControlId: string;
+    }
+  | {
+      /** The name of the existing origin access control. */
+      name: string;
+    };
 
 /**
  * A CloudFront Origin Access Control for private origins.
@@ -82,6 +110,18 @@ export interface OriginAccessControl extends Resource<
  * const oac = yield* OriginAccessControl("SiteOriginAccess", {
  *   originType: "s3",
  * });
+ * ```
+ *
+ * ### Looking up an existing origin access control
+ * `OriginAccessControl.lookup` references an origin access control Alchemy doesn't manage (created in the
+ * console or by another stack), found by `originAccessControlId` or
+`name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Serve a bucket through an existing origin access control
+ * ```typescript
+ * const oac = AWS.CloudFront.OriginAccessControl.lookup({ name: "s3-sigv4" });
+ * const originAccessControlId = oac.originAccessControlId;
  * ```
  *
  * @resource
@@ -127,7 +167,7 @@ export const OriginAccessControlProvider = () =>
           .getOriginAccessControlConfig({
             Id: output.originAccessControlId,
           })
-          .pipe(Effect.catchTag("NoSuchOriginAccessControl", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchOriginAccessControl", () => Effect.undefined));
 
         if (!config?.OriginAccessControlConfig) {
           return undefined;
@@ -155,9 +195,7 @@ export const OriginAccessControlProvider = () =>
                 // omits it). Tolerate a concurrent delete between list and get.
                 const config = yield* cloudfront
                   .getOriginAccessControlConfig({ Id: summary.Id! })
-                  .pipe(
-                    Effect.catchTag("NoSuchOriginAccessControl", () => Effect.succeed(undefined)),
-                  );
+                  .pipe(Effect.catchTag("NoSuchOriginAccessControl", () => Effect.undefined));
                 return toAttrs(
                   {
                     Id: summary.Id!,
@@ -183,6 +221,17 @@ export const OriginAccessControlProvider = () =>
           if ((yield* createName(id, olds ?? {})) !== (yield* createName(id, news))) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* (props) {
+          const existing =
+            "originAccessControlId" in props
+              ? yield* getCurrent({
+                  originAccessControlId: props.originAccessControlId,
+                } as OriginAccessControl["Attributes"])
+              : yield* getByName(props.name);
+          const oac = existing?.OriginAccessControl;
+          if (!oac?.Id || !oac.OriginAccessControlConfig) return undefined;
+          return toAttrs(oac, existing?.ETag, oac.OriginAccessControlConfig.Name);
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const existing =
@@ -226,9 +275,9 @@ export const OriginAccessControlProvider = () =>
                       existing
                         ? Effect.succeed(existing)
                         : Effect.fail(
-                            new Error(
-                              `Origin access control '${name}' already exists but could not be recovered`,
-                            ),
+                            new OriginAccessControlConflict({
+                              message: `Origin access control '${name}' already exists but could not be recovered`,
+                            }),
                           ),
                     ),
                   ),
@@ -236,9 +285,9 @@ export const OriginAccessControlProvider = () =>
               );
 
             if (!created.OriginAccessControl?.Id) {
-              return yield* Effect.fail(
-                new Error("createOriginAccessControl returned no identifier"),
-              );
+              return yield* new OriginAccessControlUnexpectedResponse({
+                message: "createOriginAccessControl returned no identifier",
+              });
             }
 
             yield* session.note(created.OriginAccessControl.Id);
@@ -262,9 +311,9 @@ export const OriginAccessControlProvider = () =>
           });
 
           if (!updated.OriginAccessControl?.Id) {
-            return yield* Effect.fail(
-              new Error("updateOriginAccessControl returned no identifier"),
-            );
+            return yield* new OriginAccessControlUnexpectedResponse({
+              message: "updateOriginAccessControl returned no identifier",
+            });
           }
 
           yield* session.note(observed.OriginAccessControl.Id);

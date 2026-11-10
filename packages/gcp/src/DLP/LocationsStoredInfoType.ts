@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -97,8 +98,33 @@ export type LocationsStoredInfoType = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  LocationsStoredInfoTypeLookup
 >;
+
+/**
+ * Props for {@link LocationsStoredInfoType.lookup}: find a locations stored
+ * info type this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface LocationsStoredInfoTypeLookup {
+  /**
+   * StoredInfoType id (the `{storedInfoType}` segment of
+   * `projects/{project}
+   * /locations/{location}/storedInfoTypes/{storedInfoType}`). Must match
+   * `[a-zA-Z0-9_-]+` and is at most 100 characters.
+   */
+  storedInfoTypeId: string;
+  /**
+   * Processing location (`us-central1`, `global`, …).
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A regional Cloud DLP stored info type
@@ -129,6 +155,19 @@ export type LocationsStoredInfoType = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing locations stored info type
+ * `LocationsStoredInfoType.lookup` references a locations stored info type
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared locations stored info type.
+ *
+ * **Example:** Reference an existing locations stored info type
+ * ```typescript
+ * const locationsStoredInfoType = GCP.DLP.LocationsStoredInfoType.lookup({
+ *   storedInfoTypeId: "my-stored-info-type",
+ * });
+ * ```
+ *
  * @resource
  * @category DLP
  */
@@ -139,7 +178,7 @@ export const LocationsStoredInfoType = Resource<LocationsStoredInfoType>(
 export class LocationsStoredInfoTypeNotResolved extends Data.TaggedError(
   "GCP.DLP.LocationsStoredInfoTypeNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, storedInfoTypeId: string) =>
@@ -177,10 +216,10 @@ const toAttrs = (stored: dlp.GooglePrivacyDlpV2StoredInfoType, project: string, 
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dlp
         .getProjectsLocationsStoredInfoTypes({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const LocationsStoredInfoTypeProvider = () =>
   Provider.succeed(LocationsStoredInfoType, {
@@ -201,6 +240,15 @@ export const LocationsStoredInfoTypeProvider = () =>
           normalizeLocation(previousLocation, env.region);
       return replaceOnIdentity(idChanged || locationChanged);
     }),
+
+    lookup: Effect.fn(function* ({ storedInfoTypeId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, storedInfoTypeId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -267,7 +315,7 @@ export const LocationsStoredInfoTypeProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new LocationsStoredInfoTypeNotResolved({ name });
+        return yield* new LocationsStoredInfoTypeNotResolved({ resourceName: name });
       }
 
       const observed = current.currentVersion?.config;

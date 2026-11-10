@@ -1,4 +1,5 @@
 import * as Config from "effect/Config";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 
 const DEFAULT_BASE_URL = "https://api.prisma.io";
@@ -10,6 +11,11 @@ const isLoopbackHost = (hostname: string) =>
   hostname.endsWith(".localhost") ||
   hostname === "127.0.0.1" ||
   hostname === "[::1]";
+
+export class InvalidBaseUrlError extends Data.TaggedError("InvalidBaseUrlError")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 const normalizeBaseUrl = (value: string) =>
   Effect.try({
@@ -38,9 +44,13 @@ const normalizeBaseUrl = (value: string) =>
       return url.origin;
     },
     catch: (cause) =>
-      cause instanceof Error
-        ? cause
-        : new Error(`Invalid Prisma Management API URL: ${String(cause)}`),
+      new InvalidBaseUrlError({
+        message:
+          cause instanceof Error
+            ? cause.message
+            : `Invalid Prisma Management API URL: ${String(cause)}`,
+        cause,
+      }),
   });
 
 /** The Management API origin: `PRISMA_API_URL`, `PRISMA_MANAGEMENT_API_URL`, or the default. */

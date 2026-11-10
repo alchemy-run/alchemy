@@ -296,8 +296,18 @@ export type PaymentMethodConfiguration = Resource<
     livemode: boolean;
   } & PaymentMethodAttributes,
   never,
-  Providers
+  Providers,
+  PaymentMethodConfigurationLookup
 >;
+
+/**
+ * Props for {@link PaymentMethodConfiguration.lookup}: find a payment method configuration this stack
+ * doesn't manage by its id.
+ */
+export interface PaymentMethodConfigurationLookup {
+  /** Stripe payment method configuration id, e.g. `"pmc_1A2b3C4d5E6f7G8h"`. */
+  id: string;
+}
 
 /**
  * A Stripe Payment Method Configuration — which payment methods Checkout,
@@ -352,6 +362,16 @@ export type PaymentMethodConfiguration = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing payment method configuration
+ * `PaymentMethodConfiguration.lookup` references a payment method configuration Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing payment method configuration
+ * ```typescript
+ * const ref = Stripe.PaymentMethodConfiguration.lookup({ id: "pmc_1A2b3C4d5E6f7G8h" });
+ * ```
+ *
  * @resource
  * @product Payment Methods
  */
@@ -362,7 +382,7 @@ export const PaymentMethodConfiguration = Resource<PaymentMethodConfiguration>(
 export class PaymentMethodConfigurationNotResolved extends Data.TaggedError(
   "Stripe.PaymentMethodConfigurationNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 type ConfigurationAttributes = PaymentMethodConfiguration["Attributes"];
@@ -445,7 +465,7 @@ const isMissingConfiguration = isMissingStripeResource;
 
 const getById = (configuration: string) =>
   GetPaymentMethodConfiguration({ configuration }).pipe(
-    Effect.catchIf(isMissingConfiguration, () => Effect.succeed(undefined)),
+    Effect.catchIf(isMissingConfiguration, () => Effect.undefined),
   );
 
 const listByActive = Effect.fn(function* (active: boolean) {
@@ -525,6 +545,11 @@ export const PaymentMethodConfigurationProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing);
+    }),
+
     read: Effect.fn(function* ({ output }) {
       const existing = yield* observe({
         id: output?.id,
@@ -574,7 +599,7 @@ export const PaymentMethodConfigurationProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new PaymentMethodConfigurationNotResolved({ name });
+        return yield* new PaymentMethodConfigurationNotResolved({ resourceName: name });
       }
 
       const nameChanged = current.name !== name;

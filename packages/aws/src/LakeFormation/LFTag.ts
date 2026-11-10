@@ -36,8 +36,18 @@ export interface LFTag extends Resource<
     catalogId: string;
   },
   {},
-  Providers
+  Providers,
+  LFTagLookup
 > {}
+
+/**
+ * Props for {@link LFTag.lookup}: find a LF-tag this stack doesn't
+ * manage, in the ambient account's Data Catalog.
+ */
+export interface LFTagLookup {
+  /** The key of the existing LF-tag. */
+  tagKey: string;
+}
 
 /**
  * A Lake Formation LF-tag definition — a key with a list of allowed values
@@ -59,6 +69,17 @@ export interface LFTag extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing LF-tag
+ * `LFTag.lookup` references a LF-tag Alchemy doesn't manage (created in the
+ * console or by another stack), found by `tagKey`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing LF-tag
+ * ```typescript
+ * const sensitivity = AWS.LakeFormation.LFTag.lookup({ tagKey: "sensitivity" });
+ * const tagValues = sensitivity.tagValues;
+ * ```
+ *
  * @resource
  */
 export const LFTag = Resource<LFTag>("AWS.LakeFormation.LFTag");
@@ -70,7 +91,7 @@ export const LFTagProvider = () =>
       const observe = Effect.fn(function* (tagKey: string, catalogId: string | undefined) {
         return yield* lf
           .getLFTag({ TagKey: tagKey, CatalogId: catalogId })
-          .pipe(Effect.catchTag("EntityNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("EntityNotFoundException", () => Effect.undefined));
       });
 
       return LFTag.Provider.of({
@@ -89,6 +110,16 @@ export const LFTagProvider = () =>
               }));
           }),
 
+        lookup: Effect.fn(function* ({ tagKey }) {
+          const { accountId } = yield* AWSEnvironment.current;
+          const tag = yield* observe(tagKey, undefined);
+          if (tag === undefined) return undefined;
+          return {
+            tagKey,
+            tagValues: [...(tag.TagValues ?? [])],
+            catalogId: tag.CatalogId ?? accountId,
+          };
+        }),
         read: Effect.fn(function* ({ olds, output }) {
           const { accountId } = yield* AWSEnvironment.current;
           const tagKey = output?.tagKey ?? olds?.tagKey;

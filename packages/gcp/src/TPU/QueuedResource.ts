@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -165,8 +166,32 @@ export type QueuedResource = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  QueuedResourceLookup
 >;
+
+/**
+ * Props for {@link QueuedResource.lookup}: find a queued resource this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface QueuedResourceLookup {
+  /**
+   * Queued resource id (the `{queuedResource}` segment of
+   * `projects/{project
+   * }/locations/{location}/queuedResources/{queuedResource}`).
+   */
+  queuedResourceId: string;
+  /**
+   * Zone (`us-central1-c`, …).
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud TPU queued resource request. The request sits in a queue until
@@ -196,6 +221,19 @@ export type QueuedResource = Resource<
  *       labels: { env: "prod" },
  *     },
  *   }],
+ * });
+ * ```
+ *
+ * ### Looking up an existing queued resource
+ * `QueuedResource.lookup` references a queued resource Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * queued resource.
+ *
+ * **Example:** Reference an existing queued resource
+ * ```typescript
+ * const queuedResource = GCP.TPU.QueuedResource.lookup({
+ *   queuedResourceId: "my-queued-resource",
  * });
  * ```
  *
@@ -391,7 +429,7 @@ const isPlaceholder = (resource: tpu.QueuedResource) => {
 const getByName = (name: string) =>
   tpu
     .getProjectsLocationsQueuedResources({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const specIdentityChanged = (
   previous: QueuedResourceProps | { nodeSpec?: NodeSpec[] } | undefined,
@@ -448,6 +486,15 @@ export const QueuedResourceProvider = () =>
           specIdentityChanged(olds ?? output, news, parent),
       });
     }),
+
+    lookup: Effect.fn(function* ({ queuedResourceId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = resourceName(env.project, location, queuedResourceId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -510,7 +557,7 @@ export const QueuedResourceProvider = () =>
               tpu: { nodeSpec: desiredSpecs(news, parent, desiredLabels) },
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -518,7 +565,7 @@ export const QueuedResourceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project);
@@ -532,7 +579,7 @@ export const QueuedResourceProvider = () =>
           force,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

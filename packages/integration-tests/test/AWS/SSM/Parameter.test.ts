@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import { driftOf, repairDrift, waitForDrift } from "../drift.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -252,4 +253,45 @@ test.provider(
       yield* assertParameterDeleted("/alchemy-test/ssm/path-param-b");
     }),
   { tags: ["provider:aws", "provider:aws:ssm", "live"], timeout: 120_000 },
+);
+
+// #2688: `read` must observe the declared description and the tags, or an
+// out-of-band change reads as `unchanged`.
+test.provider(
+  "drift detects and repairs out-of-band parameter metadata and tags",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const param = yield* stack.deploy(
+        Parameter("DriftParam", {
+          value: "declared",
+          description: "declared",
+          tags: { team: "declared" },
+        }),
+      );
+      expect((yield* driftOf(stack, "DriftParam"))?.action).toBe("unchanged");
+
+      yield* ssm.addTagsToResource({
+        ResourceType: "Parameter",
+        ResourceId: param.parameterName,
+        Tags: [{ Key: "team", Value: "out-of-band" }],
+      });
+
+      const drifted = yield* waitForDrift(stack, "DriftParam", "drifted");
+      expect(drifted?.attr?.configuration?.tags?.team).toBe("out-of-band");
+
+      const repaired = yield* repairDrift(stack);
+      expect(repaired.resources.DriftParam?.action).toBe("repaired");
+      expect((yield* driftOf(stack, "DriftParam"))?.action).toBe("unchanged");
+      const tags = yield* ssm.listTagsForResource({
+        ResourceType: "Parameter",
+        ResourceId: param.parameterName,
+      });
+      expect(tags.TagList?.find((t) => t.Key === "team")?.Value).toBe("declared");
+
+      yield* stack.destroy();
+      yield* assertParameterDeleted(param.parameterName);
+    }),
+  { tags: ["provider:aws", "provider:aws:ssm", "live"] },
 );

@@ -1,5 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
@@ -145,6 +147,11 @@ export interface NuxtDevPlatformContext {
    * to the framework half — see `NuxtOptions.dev.services`).
    */
   readonly services?: unknown;
+  /**
+   * Overrides for the dev platform's workerd process (opaque to the
+   * framework half — see `NuxtOptions.dev.workerd`).
+   */
+  readonly workerd?: unknown;
 }
 
 /**
@@ -267,6 +274,12 @@ export interface NuxtOptions {
          * local-only.
          */
         readonly services?: unknown;
+        /**
+         * Overrides for the dev platform's workerd process (opaque to the
+         * framework half; the Cloudflare target takes `cloudflare-runtime`
+         * `WorkerdOptions`).
+         */
+        readonly workerd?: unknown;
       }
     | undefined;
 }
@@ -478,6 +491,7 @@ export const make: (
                 env: options?.dev?.env,
                 bindings: options?.dev?.bindings,
                 services: options?.dev?.services,
+                workerd: options?.dev?.workerd,
               })
               .pipe(Effect.mapError((error) => fail(error.message, error.cause)))
           : undefined;
@@ -570,13 +584,13 @@ export const make: (
 
       // Bounded readiness probe: any HTTP response counts (vite serves
       // lazily; we only need the listener to answer).
-      yield* Effect.tryPromise({
-        try: async () => {
-          const response = await fetch(url, { redirect: "manual" });
-          await response.arrayBuffer().catch(() => {});
-        },
-        catch: (error) => fail("The dev server did not become reachable", error),
-      }).pipe(Effect.retry({ schedule: Schedule.spaced("250 millis"), times: 40 }));
+      yield* HttpClient.get(url).pipe(
+        Effect.flatMap((response) => Effect.ignore(response.arrayBuffer)),
+        Effect.provide(FetchHttpClient.layer),
+        Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }),
+        Effect.mapError((error) => fail("The dev server did not become reachable", error)),
+        Effect.retry({ schedule: Schedule.spaced("250 millis"), times: 40 }),
+      );
 
       return { url };
     });

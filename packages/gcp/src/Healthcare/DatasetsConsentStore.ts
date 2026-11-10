@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -83,8 +84,37 @@ export type DatasetsConsentStore = Resource<
     enableConsentCreateOnUpdate: boolean;
   },
   never,
-  Providers
+  Providers,
+  DatasetsConsentStoreLookup
 >;
+
+/**
+ * Props for {@link DatasetsConsentStore.lookup}: find a datasets consent
+ * store this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface DatasetsConsentStoreLookup {
+  /**
+   * Consent store id. Must match letters, numbers, underscores, hyphens,
+   * and periods; 1-256 characters.
+   */
+  consentStoreId: string;
+  /**
+   * Region used when `dataset` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent dataset. Full name
+   * `projects/{project}/locations/{location}/datasets/{dataset}` or the
+   * dataset id (combined with `location`).
+   */
+  dataset: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Healthcare consent store inside a dataset.
@@ -110,6 +140,20 @@ export type DatasetsConsentStore = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing datasets consent store
+ * `DatasetsConsentStore.lookup` references a datasets consent store Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared datasets consent store.
+ *
+ * **Example:** Reference an existing datasets consent store
+ * ```typescript
+ * const datasetsConsentStore = GCP.Healthcare.DatasetsConsentStore.lookup({
+ *   consentStoreId: "my-consent-store",
+ *   dataset: "my-dataset",
+ * });
+ * ```
+ *
  * @resource
  * @category Healthcare
  */
@@ -120,7 +164,7 @@ export const DatasetsConsentStore = Resource<DatasetsConsentStore>(
 export class DatasetsConsentStoreNotResolved extends Data.TaggedError(
   "GCP.Healthcare.DatasetsConsentStoreNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const datasetOf = (dataset: string, project: string, location: string) =>
@@ -146,10 +190,10 @@ const toAttrs = (store: healthcare.ConsentStore, project: string, region: string
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : healthcare
         .getProjectsLocationsDatasetsConsentStores({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const DatasetsConsentStoreProvider = () =>
   Provider.succeed(DatasetsConsentStore, {
@@ -171,6 +215,21 @@ export const DatasetsConsentStoreProvider = () =>
         nextParent,
       });
     }),
+
+    lookup: Effect.fn(function* ({
+      consentStoreId,
+      location: lookupLocation,
+      dataset: lookupDataset,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const dataset =
+        lookupDataset !== undefined ? datasetOf(lookupDataset, env.project, location) : "";
+      const name = dataset.length > 0 ? resourceName(dataset, consentStoreId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -234,7 +293,7 @@ export const DatasetsConsentStoreProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DatasetsConsentStoreNotResolved({ name });
+        return yield* new DatasetsConsentStoreNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

@@ -79,7 +79,7 @@ export const ApiAssociationProvider = () =>
       const getAssociationSafe = (domainName: string) =>
         appsync.getApiAssociation({ domainName }).pipe(
           Effect.map((response) => response.apiAssociation),
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFoundException", () => Effect.undefined),
         );
 
       /** Associations transition PROCESSING → SUCCESS/FAILED (~seconds). */

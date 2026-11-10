@@ -11,6 +11,18 @@ import * as Schedule from "effect/Schedule";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 
+export class FeatureGroupInvalidProps extends Data.TaggedError("FeatureGroupInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class FeatureGroupUnexpectedResponse extends Data.TaggedError(
+  "FeatureGroupUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type FeatureGroupStatus = sagemaker.FeatureGroupStatus;
 
 export interface FeatureGroupProps {
@@ -87,8 +99,18 @@ export interface FeatureGroup extends Resource<
     eventTimeFeatureName: string;
   },
   never,
-  Providers
+  Providers,
+  FeatureGroupLookup
 > {}
+
+/**
+ * Props for {@link FeatureGroup.lookup}: find a feature group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface FeatureGroupLookup {
+  /** The feature group name of the existing feature group. */
+  featureGroupName: string;
+}
 
 /**
  * An Amazon SageMaker Feature Store FeatureGroup — a typed, versioned table
@@ -134,6 +156,16 @@ export interface FeatureGroup extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing feature group
+ * `FeatureGroup.lookup` references a feature group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `featureGroupName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing feature group
+ * ```typescript
+ * const existing = AWS.SageMaker.FeatureGroup.lookup({ featureGroupName: "my-feature-group" });
+ * ```
+ *
  * @resource
  */
 export const FeatureGroup = Resource<FeatureGroup>("AWS.SageMaker.FeatureGroup");
@@ -146,7 +178,7 @@ const createFeatureGroupName = (id: string, props: { featureGroupName?: string |
 const fetchFeatureGroupTags = Effect.fn(function* (arn: string) {
   const response = yield* sagemaker
     .listTags({ ResourceArn: arn })
-    .pipe(Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("AccessDeniedException", () => Effect.undefined));
   return Object.fromEntries(
     (response?.Tags ?? []).flatMap((tag) =>
       tag.Key !== undefined ? [[tag.Key, tag.Value ?? ""]] : [],
@@ -157,7 +189,7 @@ const fetchFeatureGroupTags = Effect.fn(function* (arn: string) {
 const describeFeatureGroupOrUndefined = (name: string) =>
   sagemaker
     .describeFeatureGroup({ FeatureGroupName: name })
-    .pipe(Effect.catchTag("ResourceNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFound", () => Effect.undefined));
 
 const toAttrs = (
   described: sagemaker.DescribeFeatureGroupResponse,
@@ -261,6 +293,14 @@ export const FeatureGroupProvider = () =>
               (attrs): attrs is FeatureGroup["Attributes"] => attrs !== undefined,
             );
           }),
+        lookup: Effect.fn(function* ({ featureGroupName: name }) {
+          const described = yield* describeFeatureGroupOrUndefined(name);
+          if (!described || described.FeatureGroupStatus === "Deleting") {
+            return undefined;
+          }
+          const attrs = toAttrs(described);
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.featureGroupName ?? (yield* createFeatureGroupName(id, olds ?? {}));
           const described = yield* describeFeatureGroupOrUndefined(name);
@@ -297,7 +337,9 @@ export const FeatureGroupProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(new Error("SageMaker FeatureGroup requires props"));
+            return yield* new FeatureGroupInvalidProps({
+              message: "SageMaker FeatureGroup requires props",
+            });
           }
           const name = output?.featureGroupName ?? (yield* createFeatureGroupName(id, news));
           const internalTags = yield* createInternalTags(id);
@@ -332,7 +374,9 @@ export const FeatureGroupProvider = () =>
           yield* waitForFeatureGroup(name, "Created");
           described = yield* describeFeatureGroupOrUndefined(name);
           if (described === undefined) {
-            return yield* Effect.fail(new Error(`failed to read reconciled feature group ${name}`));
+            return yield* new FeatureGroupUnexpectedResponse({
+              message: `failed to read reconciled feature group ${name}`,
+            });
           }
           const attrs = toAttrs(described);
 

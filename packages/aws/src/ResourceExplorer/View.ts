@@ -59,8 +59,23 @@ export interface View extends Resource<
     scope: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ViewLookup
 > {}
+
+/**
+ * Props for {@link View.lookup}: find a view this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type ViewLookup =
+  | {
+      /** The ARN of the existing view. */
+      viewArn: string;
+    }
+  | {
+      /** The name of the existing view. */
+      viewName: string;
+    };
 
 /**
  * An AWS Resource Explorer view — a saved search lens with an optional
@@ -100,6 +115,16 @@ export interface View extends Resource<
  *   }),
  * };
  * ```
+ *
+ * ### Looking up an existing view
+ * `View.lookup` references a view Alchemy doesn't manage (created in the
+ * console or by another stack), found by `viewArn` or `viewName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing view
+ * ```typescript
+ * const all = AWS.ResourceExplorer.View.lookup({ viewName: "all-resources" });
+ * ```
  */
 const ViewResource = Resource<View>("AWS.ResourceExplorer.View");
 
@@ -122,9 +147,7 @@ export class ViewUnobservable extends Data.TaggedError("ResourceExplorerViewUnob
 const getViewSafe = Effect.fn(function* (viewArn: string) {
   return yield* re2.getView({ ViewArn: viewArn }).pipe(
     Effect.map((r): re2.GetViewOutput | undefined => r),
-    Effect.catchTag(["UnauthorizedException", "ResourceNotFoundException"], () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag(["UnauthorizedException", "ResourceNotFoundException"], () => Effect.undefined),
   );
 });
 
@@ -214,6 +237,13 @@ export const ViewProvider = () =>
             return items.filter((item): item is View["Attributes"] => item !== undefined);
           }),
 
+        lookup: Effect.fn(function* (props) {
+          const arn = "viewArn" in props ? props.viewArn : yield* findViewArnByName(props.viewName);
+          if (arn === undefined) return undefined;
+          const found = yield* getViewSafe(arn);
+          if (!found?.View?.ViewArn) return undefined;
+          return toAttrs(found.View, found.View.ViewName ?? arn.split("/")[1]!);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           // Prefer the cached ARN; fall back to a by-name scan (state may
           // have been lost after a persistence failure).
@@ -337,8 +367,9 @@ export const ViewProvider = () =>
           // UnauthorizedException (Resource Explorer's "not found" for
           // views) or ResourceNotFoundException.
           yield* re2.deleteView({ ViewArn: output.viewArn }).pipe(
-            Effect.catchTag(["UnauthorizedException", "ResourceNotFoundException"], () =>
-              Effect.succeed(undefined),
+            Effect.catchTag(
+              ["UnauthorizedException", "ResourceNotFoundException"],
+              () => Effect.undefined,
             ),
             Effect.asVoid,
           );

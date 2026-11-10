@@ -57,7 +57,7 @@ export const deepMerge = <T>(base: T, override: unknown): T => {
  */
 export const imagePlatformOf = (
   architecture: "amd64" | "arm64" | undefined,
-  connection?: Connection | undefined,
+  connection?: Connection,
 ): string =>
   (architecture ?? connection?.architecture) === "arm64" ? "linux/arm64" : "linux/amd64";
 
@@ -320,6 +320,7 @@ export const workloadImageHash = Effect.fn(function* (options: {
 });
 
 /** The identity-adapter state persisted on workload attributes. */
+// oxlint-disable-next-line typescript/no-redundant-type-constituents -- registry type is `never` until cloud packages augment it
 export type PersistedIdentityState = IdentityState | undefined;
 
 /**
@@ -343,6 +344,7 @@ import * as Context from "effect/Context";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
@@ -360,6 +362,7 @@ const layer = makeEntrypointLayer(tag, entrypoint);
 const platform = Layer.mergeAll(
   BunServices.layer,
   FetchHttpClient.layer,
+  SecureRandom.layerWebCrypto,
   Logger.layer([Logger.consolePretty()]),
 );
 
@@ -433,6 +436,7 @@ import * as Context from "effect/Context";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
@@ -446,6 +450,7 @@ const layer = makeEntrypointLayer(tag, entrypoint);
 const platform = Layer.mergeAll(
   BunServices.layer,
   FetchHttpClient.layer,
+  SecureRandom.layerWebCrypto,
   Logger.layer([Logger.consolePretty()]),
 );
 

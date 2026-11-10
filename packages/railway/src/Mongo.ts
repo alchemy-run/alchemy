@@ -13,7 +13,7 @@ import {
   type VolumeInstanceUpdateInput,
   type VolumeState,
 } from "@distilled.cloud/railway";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { Unowned, stripUnowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -265,8 +265,22 @@ export type Mongo = Resource<
     deploymentStatus: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  MongoLookup
 >;
+
+/**
+ * Props for {@link Mongo.lookup}: find a MongoDB service this stack
+ * doesn't manage by its project, environment and id.
+ */
+export interface MongoLookup {
+  /** Railway project id. */
+  projectId: string;
+  /** Railway environment id. */
+  environmentId: string;
+  /** Railway service id of the MongoDB container. */
+  serviceId: string;
+}
 
 const resolveMongoProps = (
   props: MongoProps | Effect.Effect<MongoProps, never, Providers>,
@@ -376,6 +390,20 @@ const MongoResource = Resource<Mongo>("Railway.Mongo");
  * export const Db = Railway.mongo("Db", { project: Site });
  * ```
  *
+ * ### Looking up an existing MongoDB service
+ * `Mongo.lookup` references a MongoDB service Alchemy doesn't manage (created in
+ * the Railway dashboard or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted.
+ *
+ * **Example:** Connect to an existing MongoDB
+ * ```typescript
+ * const db = Railway.Mongo.lookup({
+ *   projectId: "a1b2c3d4-…",
+ *   environmentId: "e5f6a7b8-…",
+ *   serviceId: "c9d0e1f2-…",
+ * });
+ * ```
+ *
  * @resource
  * @product MongoDB
  */
@@ -391,7 +419,7 @@ export const Mongo: typeof MongoResource = Object.assign(
 export const mongo = Mongo;
 
 export class MongoNotCreated extends Data.TaggedError("Railway.MongoNotCreated")<{
-  name: string;
+  resourceName: string;
   projectId: string;
 }> {}
 
@@ -406,7 +434,7 @@ export class MongoDeployFailed extends Data.TaggedError("Railway.MongoDeployFail
 }> {}
 
 export class MongoVolumeNotCreated extends Data.TaggedError("Railway.MongoVolumeNotCreated")<{
-  name: string;
+  resourceName: string;
   serviceId: string;
 }> {}
 
@@ -603,13 +631,13 @@ const toAttrs = (input: {
 const getById = (serviceId: string) =>
   readService(serviceId).pipe(
     Effect.map((service) => (isGoneService(service) ? undefined : service)),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 const getInstance = (environmentId: string, serviceId: string) =>
   readServiceInstance(environmentId, serviceId).pipe(
     Effect.map((instance) => (isGoneInstance(instance) ? undefined : instance)),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 const listProjectServices = (projectId: string) =>
@@ -626,7 +654,7 @@ const findByName = (projectId: string, name: string) =>
 const getVolumeByInstanceId = (volumeInstanceId: string) =>
   readVolumeInstance(volumeInstanceId).pipe(
     Effect.map((instance) => (isGoneVolume(instance) ? undefined : instance)),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 const listVolumeInstances = (environmentId: string, projectId: string) =>
@@ -808,6 +836,71 @@ export const pingMongo = (url: string): Effect.Effect<{ ok: number }, MongoComma
     catch: (cause) => new MongoCommandError({ cause }),
   });
 
+/**
+ * Observe a Mongo from its last known attributes or its props. `lookup`
+ * passes the ids it was given as a partial `output`, as a refresh would.
+ */
+const readMongoAttributes = Effect.fn(function* ({
+  id,
+  olds,
+  output,
+}: {
+  id: string;
+  olds?: MongoProps;
+  output?: Partial<Mongo["Attributes"]>;
+}) {
+  const projectId =
+    output?.projectId ?? (olds !== undefined ? projectIdOf(olds.project) : undefined);
+  const environmentId =
+    output?.environmentId ??
+    (olds !== undefined
+      ? (environmentIdOf(olds.environment) ?? environmentIdOf(olds.project))
+      : undefined);
+  const name = yield* resolveName(id, olds?.name, output?.name);
+  const byId =
+    output?.serviceId !== undefined && output.serviceId.length > 0
+      ? yield* getById(output.serviceId)
+      : undefined;
+  const found = byId ?? (projectId !== undefined ? yield* findByName(projectId, name) : undefined);
+  if (found === undefined) return undefined;
+  const resolvedProjectId = projectIdOf(found) ?? projectId ?? "";
+  const resolvedEnvId =
+    environmentId ?? environmentIdOf(olds?.project) ?? output?.environmentId ?? "";
+  const instance =
+    resolvedEnvId.length > 0 ? yield* getInstance(resolvedEnvId, found.id) : undefined;
+  const volume =
+    output?.volumeInstanceId !== undefined && output.volumeInstanceId.length > 0
+      ? yield* getVolumeByInstanceId(output.volumeInstanceId)
+      : resolvedEnvId.length > 0 && resolvedProjectId.length > 0
+        ? yield* findVolume(
+            resolvedEnvId,
+            resolvedProjectId,
+            (row) =>
+              (row.serviceId ?? undefined) === found.id ||
+              (output?.volumeId !== undefined && row.volumeId === output.volumeId),
+          )
+        : undefined;
+  const proxy =
+    resolvedEnvId.length > 0 ? yield* findProxy(resolvedEnvId, found.id, MONGO_PORT) : undefined;
+  const vars =
+    resolvedProjectId.length > 0 && resolvedEnvId.length > 0
+      ? yield* listVariableMap(resolvedProjectId, resolvedEnvId, found.id)
+      : {};
+  const attrs = toAttrs({
+    service: found,
+    instance,
+    volume,
+    proxy,
+    projectId: resolvedProjectId,
+    environmentId: resolvedEnvId,
+    user: vars.MONGO_INITDB_ROOT_USERNAME ?? output?.user ?? DEFAULT_MONGO_USER,
+    password: vars.MONGO_INITDB_ROOT_PASSWORD ?? "",
+    database: vars.MONGO_INITDB_DATABASE ?? output?.database ?? DEFAULT_MONGO_DATABASE,
+  });
+  if (output !== undefined) return attrs;
+  return matchesAlchemyPhysicalName(found.name) ? attrs : Unowned(attrs);
+});
+
 export const MongoProvider = () =>
   Provider.succeed(Mongo, {
     stables: ["serviceId", "projectId", "environmentId", "volumeId"],
@@ -827,61 +920,19 @@ export const MongoProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
-      const projectId =
-        output?.projectId ?? (olds !== undefined ? projectIdOf(olds.project) : undefined);
-      const environmentId =
-        output?.environmentId ??
-        (olds !== undefined
-          ? (environmentIdOf(olds.environment) ?? environmentIdOf(olds.project))
-          : undefined);
-      const name = yield* resolveName(id, olds?.name, output?.name);
-      const byId =
-        output?.serviceId !== undefined && output.serviceId.length > 0
-          ? yield* getById(output.serviceId)
-          : undefined;
-      const found =
-        byId ?? (projectId !== undefined ? yield* findByName(projectId, name) : undefined);
-      if (found === undefined) return undefined;
-      const resolvedProjectId = projectIdOf(found) ?? projectId ?? "";
-      const resolvedEnvId =
-        environmentId ?? environmentIdOf(olds?.project) ?? output?.environmentId ?? "";
-      const instance =
-        resolvedEnvId.length > 0 ? yield* getInstance(resolvedEnvId, found.id) : undefined;
-      const volume =
-        output?.volumeInstanceId !== undefined && output.volumeInstanceId.length > 0
-          ? yield* getVolumeByInstanceId(output.volumeInstanceId)
-          : resolvedEnvId.length > 0 && resolvedProjectId.length > 0
-            ? yield* findVolume(
-                resolvedEnvId,
-                resolvedProjectId,
-                (row) =>
-                  (row.serviceId ?? undefined) === found.id ||
-                  (output?.volumeId !== undefined && row.volumeId === output.volumeId),
-              )
-            : undefined;
-      const proxy =
-        resolvedEnvId.length > 0
-          ? yield* findProxy(resolvedEnvId, found.id, MONGO_PORT)
-          : undefined;
-      const vars =
-        resolvedProjectId.length > 0 && resolvedEnvId.length > 0
-          ? yield* listVariableMap(resolvedProjectId, resolvedEnvId, found.id)
-          : {};
-      const attrs = toAttrs({
-        service: found,
-        instance,
-        volume,
-        proxy,
-        projectId: resolvedProjectId,
-        environmentId: resolvedEnvId,
-        user: vars.MONGO_INITDB_ROOT_USERNAME ?? output?.user ?? DEFAULT_MONGO_USER,
-        password: vars.MONGO_INITDB_ROOT_PASSWORD ?? "",
-        database: vars.MONGO_INITDB_DATABASE ?? output?.database ?? DEFAULT_MONGO_DATABASE,
-      });
-      if (output !== undefined) return attrs;
-      return matchesAlchemyPhysicalName(found.name) ? attrs : Unowned(attrs);
-    }),
+    lookup: ({ projectId, environmentId, serviceId }) =>
+      // The ids find it; an empty name only stops `read` deriving a physical
+      // name, which needs a deploy's resource context. Railway answers an id
+      // it doesn't know with Not Authorized, so that is a miss too.
+      readMongoAttributes({
+        id: serviceId,
+        output: { projectId, environmentId, serviceId, name: "" },
+      }).pipe(
+        Effect.map((attrs) => (attrs === undefined ? undefined : stripUnowned(attrs))),
+        Effect.catchTag("RailwayForbidden", () => Effect.undefined),
+      ),
+
+    read: readMongoAttributes,
 
     list: Effect.fn(function* () {
       const projects = yield* ownedProjects();
@@ -988,12 +1039,12 @@ export const MongoProvider = () =>
       if (current === undefined) {
         const created = yield* serviceCreate({
           input: { projectId, environmentId, name, source: { image: sourceImage }, variables },
-        }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.succeed(undefined)));
+        }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.undefined));
         current = created ?? (yield* findByName(projectId, name));
       }
 
       if (current === undefined || isGoneService(current)) {
-        return yield* new MongoNotCreated({ name, projectId });
+        return yield* new MongoNotCreated({ resourceName: name, projectId });
       }
 
       if (current.name !== name) {
@@ -1067,7 +1118,10 @@ export const MongoProvider = () =>
         volume = yield* waitForVolume(environmentId, projectId, created.id);
       }
       if (volume === undefined || isGoneVolume(volume)) {
-        return yield* new MongoVolumeNotCreated({ name: volumeName, serviceId: current.id });
+        return yield* new MongoVolumeNotCreated({
+          resourceName: volumeName,
+          serviceId: current.id,
+        });
       }
       if (volume.volume.name !== volumeName) {
         yield* stampVolumeName(volume.volumeId, volumeName);
@@ -1093,7 +1147,7 @@ export const MongoProvider = () =>
       if (wantPublic && proxy === undefined) {
         const created = yield* tcpProxyCreate({
           input: { applicationPort: MONGO_PORT, environmentId, serviceId: current.id },
-        }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.succeed(undefined)));
+        }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.undefined));
         proxy =
           created !== undefined && !isGoneProxy(created)
             ? created

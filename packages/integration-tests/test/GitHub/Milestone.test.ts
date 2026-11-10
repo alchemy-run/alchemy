@@ -7,6 +7,7 @@ import * as Provider from "alchemy/Provider";
 import { destroy } from "alchemy/RemovalPolicy";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
+import { repoOf, expectFound } from "./lookup.ts";
 import { scopedToOwner } from "./scope.ts";
 import { gh } from "./scope.ts";
 
@@ -69,6 +70,10 @@ test.provider(
           title: "v1.0.0",
           description: "First release",
         }),
+      );
+      yield* expectFound(
+        GitHub.Milestone.lookup({ ...repoOf(created.htmlUrl), number: created.milestoneNumber }),
+        created,
       );
       expect(created.title).toBe("v1.0.0");
       expect(created.state).toBe("open");

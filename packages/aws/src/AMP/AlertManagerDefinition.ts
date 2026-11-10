@@ -66,7 +66,7 @@ export const AlertManagerDefinitionProvider = () =>
       const describe = Effect.fn(function* (workspaceId: string) {
         const response = yield* amp
           .describeAlertManagerDefinition({ workspaceId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.alertManagerDefinition;
       });
 

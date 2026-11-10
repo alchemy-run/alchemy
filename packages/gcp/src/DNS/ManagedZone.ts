@@ -8,6 +8,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -101,8 +102,28 @@ export type ManagedZone = Resource<
     creationTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ManagedZoneLookup
 >;
+
+/**
+ * Props for {@link ManagedZone.lookup}: find a managed zone this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface ManagedZoneLookup {
+  /**
+   * User-assigned zone name, unique within the project. Must be 1-63
+   * characters, begin with a letter, end with a letter or digit, and
+   * contain only lowercase letters, digits, or dashes.
+   */
+  zoneName: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud DNS managed zone.
@@ -140,6 +161,17 @@ export type ManagedZone = Resource<
  *   networks: ["app-vpc"],
  *   forceDestroy: true,
  * });
+ * ```
+ *
+ * ### Looking up an existing managed zone
+ * `ManagedZone.lookup` references a managed zone Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * managed zone.
+ *
+ * **Example:** Reference an existing managed zone
+ * ```typescript
+ * const managedZone = GCP.DNS.ManagedZone.lookup({ zoneName: "my-zone" });
  * ```
  *
  * @resource
@@ -232,7 +264,7 @@ const toAttrs = (zone: dns.ManagedZone, project: string) => ({
 const getByName = (project: string, zoneName: string) =>
   dns
     .getManagedZones({ project, managedZone: zoneName })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /** Cloud DNS operations and changes report `status: "pending" | "done"`. */
 const asLongRunning = (value: { id?: string; status?: string }): LongRunningOperation => ({
@@ -347,6 +379,13 @@ export const ManagedZoneProvider = () =>
           previousName !== undefined && nextName !== undefined && nextName === previousName,
       };
     }),
+
+    lookup: Effect.fn(function* ({ zoneName }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(env.project, zoneName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

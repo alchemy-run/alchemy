@@ -15,6 +15,7 @@ import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { expectFound } from "./lookup.ts";
 import { suitePartition } from "./suiteProject.ts";
 
 const { test } = Test.make({ providers: Railway.providers() });
@@ -123,6 +124,14 @@ test.provider(
           const bucket = yield* Railway.Bucket("Data", { project, environment });
           return { project, environment, bucket };
         }),
+      );
+      yield* expectFound(
+        Railway.Bucket.lookup({
+          projectId: created.bucket.projectId,
+          environmentId: created.bucket.environmentId,
+          bucketId: created.bucket.bucketId,
+        }),
+        created.bucket,
       );
 
       expect(created.bucket.bucketId).toEqual(expect.any(String));

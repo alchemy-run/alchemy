@@ -10,5 +10,5 @@ import * as Data from "effect/Data";
  * operation fails with this instead of signing an anonymous request.
  */
 export class TigrisCredentialsMissing extends Data.TaggedError("Fly.TigrisCredentialsMissing")<{
-  name: string;
+  resourceName: string;
 }> {}

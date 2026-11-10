@@ -1,5 +1,5 @@
 import * as apigee from "@distilled.cloud/gcp/apigee_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import { lastSegment, orgParent, organizationFromName, sameJson, toResourceId } from "./names.ts";
 import {
@@ -92,8 +93,31 @@ export type SecurityProfilesV2 = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SecurityProfilesV2Lookup
 >;
+
+/**
+ * Props for {@link SecurityProfilesV2.lookup}: find a security profiles v2
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface SecurityProfilesV2Lookup {
+  /**
+   * Profile id (the `{profile}` segment of
+   * `organizations/{org}/securityProfilesV2/{profile}`).
+   */
+  securityProfileV2Id: string;
+  /**
+   * Apigee organization id.
+   */
+  organization?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Advanced API Security profile (risk assessment v2).
@@ -122,6 +146,19 @@ export type SecurityProfilesV2 = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing security profiles v2
+ * `SecurityProfilesV2.lookup` references a security profiles v2 Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared security profiles v2.
+ *
+ * **Example:** Reference an existing security profiles v2
+ * ```typescript
+ * const securityProfilesV2 = GCP.Apigee.SecurityProfilesV2.lookup({
+ *   securityProfileV2Id: "my-security-profile-v2",
+ * });
+ * ```
+ *
  * @resource
  * @category Apigee
  */
@@ -130,7 +167,7 @@ export const SecurityProfilesV2 = Resource<SecurityProfilesV2>("GCP.Apigee.Secur
 export class SecurityProfilesV2NotResolved extends Data.TaggedError(
   "GCP.Apigee.SecurityProfilesV2NotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_ASSESSMENTS: Record<string, ProfileAssessmentConfig> = {
@@ -200,7 +237,7 @@ const toAttrs = (profile: apigee.GoogleCloudApigeeV1SecurityProfileV2, organizat
 const getByName = (name: string) =>
   apigee
     .getOrganizationsSecurityProfilesV2({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 const toBody = (
   news: SecurityProfilesV2Props,
@@ -232,7 +269,17 @@ export const SecurityProfilesV2Provider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ securityProfileV2Id, organization: lookupOrganization }) {
+      const env = yield* GcpEnvironment.current;
+      const organization = lookupOrganization ?? env.project;
+      const name = resourceName(organization, securityProfileV2Id);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      const attrs = toAttrs(existing, organization);
+      return attrs;
+    }, inLookupProject),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const organization = organizationFromName(output?.name) ?? olds?.organization ?? env.project;
       const securityProfileV2Id = yield* toResourceId(
@@ -246,7 +293,9 @@ export const SecurityProfilesV2Provider = () =>
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, organization);
       const { labels } = parseOwnership(existing.description);
-      return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, labels))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>
@@ -300,7 +349,7 @@ export const SecurityProfilesV2Provider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SecurityProfilesV2NotResolved({ name });
+        return yield* new SecurityProfilesV2NotResolved({ resourceName: name });
       }
 
       const descriptionChanged = (current.description ?? "") !== desiredDescription;

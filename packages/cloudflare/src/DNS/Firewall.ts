@@ -423,7 +423,7 @@ type ObservedCluster = dnsFirewall.GetDnsFirewallResponse & {
 const getCluster = (accountId: string, dnsFirewallId: string) =>
   dnsFirewall.getDnsFirewall({ accountId, dnsFirewallId }).pipe(
     Effect.map((c): ObservedCluster => ({ ...c, accountId })),
-    Effect.catchTag("DnsFirewallNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("DnsFirewallNotFound", () => Effect.undefined),
   );
 
 /**

@@ -3,10 +3,18 @@ import { deepEqual } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Clock from "effect/Clock";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { organization } from "./Credentials.ts";
 import type { Providers } from "./Providers.ts";
+
+export class DatabaseTokenUnexpectedResponse extends Data.TaggedError(
+  "DatabaseTokenUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /** Access level of a Turso SQL auth token. */
 export type TokenAuthorization = "full-access" | "read-only";
@@ -185,7 +193,9 @@ export const DatabaseTokenProvider = () =>
               : undefined,
           });
           if (!jwt) {
-            return yield* Effect.fail(new Error(`Turso returned no token for ${news.database}`));
+            return yield* new DatabaseTokenUnexpectedResponse({
+              message: `Turso returned no token for ${news.database}`,
+            });
           }
           return {
             token: jwt,

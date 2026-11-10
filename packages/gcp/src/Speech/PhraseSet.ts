@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_LOCATION,
@@ -81,8 +82,34 @@ export type PhraseSet = Resource<
     kmsKeyName: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  PhraseSetLookup
 >;
+
+/**
+ * Props for {@link PhraseSet.lookup}: find a phrase set this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface PhraseSetLookup {
+  /**
+   * Phrase set id (the `{phrase_set}` segment of
+   * `projects/{project}/locations/{location}/phraseSets/{phrase_set}`).
+   * Letters, numbers, and hyphens; 4-63 characters; must start with a
+   * letter.
+   */
+  phraseSetId: string;
+  /**
+   * Speech-to-Text Adaptation location. The global Speech endpoint accepts
+   * `global`; `us` and `eu` need matching regional endpoints.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Speech-to-Text Adaptation phrase set. Phrase sets bias recognition
@@ -125,13 +152,26 @@ export type PhraseSet = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing phrase set
+ * `PhraseSet.lookup` references a phrase set Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * phrase set.
+ *
+ * **Example:** Reference an existing phrase set
+ * ```typescript
+ * const phraseSet = GCP.Speech.PhraseSet.lookup({
+ *   phraseSetId: "my-phrase-set",
+ * });
+ * ```
+ *
  * @resource
  * @category Speech
  */
 export const PhraseSet = Resource<PhraseSet>("GCP.Speech.PhraseSet");
 
 export class PhraseSetNotResolved extends Data.TaggedError("GCP.Speech.PhraseSetNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const phraseSetNameOf = (project: string, location: string, phraseSetId: string) =>
@@ -167,6 +207,14 @@ export const PhraseSetProvider = () =>
         nextLocation: news.location ?? olds?.location ?? output?.location,
       });
     }),
+
+    lookup: Effect.fn(function* ({ phraseSetId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const existing = yield* getPhraseSet(phraseSetNameOf(env.project, location, phraseSetId));
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -223,7 +271,7 @@ export const PhraseSetProvider = () =>
 
       if (current === undefined) {
         return yield* new PhraseSetNotResolved({
-          name: name || phraseSetNameOf(env.project, location, phraseSetId),
+          resourceName: name || phraseSetNameOf(env.project, location, phraseSetId),
         });
       }
 

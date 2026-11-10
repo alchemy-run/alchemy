@@ -27,9 +27,9 @@ export const DescribeAlarmsHttp = Layer.effect(
         });
       }
 
-      return Effect.fn(`AWS.CloudWatch.DescribeAlarms(${sorted})`)(function* (
-        request: DescribeAlarmsRequest = {},
-      ) {
+      return Effect.fn(
+        `AWS.CloudWatch.DescribeAlarms(${sorted.map((alarm) => alarm.LogicalId).join(", ")})`,
+      )(function* (request: DescribeAlarmsRequest = {}) {
         return yield* describeAlarms({
           ...request,
           AlarmTypes: getAlarmTypes(sorted),

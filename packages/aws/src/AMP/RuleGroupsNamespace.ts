@@ -4,10 +4,16 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { Providers } from "../Providers.ts";
 import { decodeDefinition, encodeDefinition, syncAmpTags, toTagRecord } from "./internal.ts";
+
+export class RuleGroupsNamespaceNotReady extends Data.TaggedError("RuleGroupsNamespaceNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface RuleGroupsNamespaceProps {
   /**
@@ -41,8 +47,20 @@ export interface RuleGroupsNamespace extends Resource<
     status: string;
   },
   never,
-  Providers
+  Providers,
+  RuleGroupsNamespaceLookup
 > {}
+
+/**
+ * Props for {@link RuleGroupsNamespace.lookup}: find a rule groups namespace this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface RuleGroupsNamespaceLookup {
+  /** The workspace the namespace belongs to. */
+  workspaceId: string;
+  /** The name of the existing namespace. */
+  name: string;
+}
 
 /**
  * A rule groups namespace inside an Amazon Managed Service for Prometheus
@@ -64,6 +82,16 @@ export interface RuleGroupsNamespace extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing rule groups namespace
+ * `RuleGroupsNamespace.lookup` references a rule groups namespace Alchemy doesn't manage (created in the
+ * console or by another stack), found by `workspaceId` and `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing rule groups namespace
+ * ```typescript
+ * const alerts = AWS.AMP.RuleGroupsNamespace.lookup({ workspaceId, name: "alerts" });
+ * ```
+ *
  * @resource
  */
 export const RuleGroupsNamespace = Resource<RuleGroupsNamespace>("AWS.AMP.RuleGroupsNamespace");
@@ -83,7 +111,7 @@ export const RuleGroupsNamespaceProvider = () =>
       const describe = Effect.fn(function* (workspaceId: string, name: string) {
         const response = yield* amp
           .describeRuleGroupsNamespace({ workspaceId, name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.ruleGroupsNamespace;
       });
 
@@ -105,11 +133,9 @@ export const RuleGroupsNamespaceProvider = () =>
           }),
         );
         if (ns.status.statusCode !== "ACTIVE") {
-          return yield* Effect.fail(
-            new Error(
-              `AMP rule groups namespace ${name} did not become ACTIVE (status: ${ns.status.statusCode})`,
-            ),
-          );
+          return yield* new RuleGroupsNamespaceNotReady({
+            message: `AMP rule groups namespace ${name} did not become ACTIVE (status: ${ns.status.statusCode})`,
+          });
         }
         return ns;
       });
@@ -124,6 +150,10 @@ export const RuleGroupsNamespaceProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ workspaceId, name }) {
+          const ns = yield* describe(workspaceId, name);
+          return ns === undefined ? undefined : { ...toAttrs(ns), workspaceId };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const workspaceId = output?.workspaceId ?? olds?.workspaceId;
           const name = output?.name ?? olds?.name;

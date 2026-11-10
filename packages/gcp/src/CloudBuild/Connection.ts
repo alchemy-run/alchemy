@@ -11,6 +11,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -292,8 +293,33 @@ export type Connection = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ConnectionLookup
 >;
+
+/**
+ * Props for {@link Connection.lookup}: find a connection this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface ConnectionLookup {
+  /**
+   * Connection id (the `{connection}` segment of
+   * `projects/{project}/locations/{location}/connections/{connection}`).
+   * Must be unique per project and location.
+   */
+  connectionId: string;
+  /**
+   * Cloud Build location (`us-central1`, `us-east1`, …). `US-CENTRAL1` is
+   * accepted and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Build v2 connection to a source-control host (GitHub, GitHub
@@ -361,6 +387,19 @@ export type Connection = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing connection
+ * `Connection.lookup` references a connection Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * connection.
+ *
+ * **Example:** Reference an existing connection
+ * ```typescript
+ * const connection = GCP.CloudBuild.Connection.lookup({
+ *   connectionId: "my-connection",
+ * });
+ * ```
+ *
  * @resource
  * @category CloudBuild
  */
@@ -369,13 +408,13 @@ export const Connection = Resource<Connection>("GCP.CloudBuild.Connection");
 export class ConnectionNotResolved extends Data.TaggedError(
   "GCP.CloudBuild.ConnectionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ConnectionStillExists extends Data.TaggedError(
   "GCP.CloudBuild.ConnectionStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 type ScmKind = "github" | "githubEnterprise" | "gitlab" | "bitbucketDataCenter" | "bitbucketCloud";
@@ -824,7 +863,7 @@ const toAttrs = (connection: cloudbuild.Connection, project: string) => {
 const getByName = (name: string) =>
   cloudbuild
     .getProjectsLocationsConnections({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /**
  * Wait on a Cloud Build connections long-running operation (seconds to a minute).
@@ -880,7 +919,9 @@ const waitForOperation = (operation: cloudbuild.Operation, options?: { notFoundO
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((connection) =>
-      connection ? Effect.succeed(connection) : Effect.fail(new ConnectionNotResolved({ name })),
+      connection
+        ? Effect.succeed(connection)
+        : Effect.fail(new ConnectionNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CloudBuild.ConnectionNotResolved",
@@ -892,7 +933,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((connection) =>
-      connection === undefined ? Effect.void : Effect.fail(new ConnectionStillExists({ name })),
+      connection === undefined
+        ? Effect.void
+        : Effect.fail(new ConnectionStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CloudBuild.ConnectionStillExists",
@@ -939,6 +982,15 @@ export const ConnectionProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ connectionId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, connectionId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -1000,7 +1052,7 @@ export const ConnectionProvider = () =>
               annotations: desiredAnnotations,
             }),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -1008,7 +1060,7 @@ export const ConnectionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ConnectionNotResolved({ name });
+        return yield* new ConnectionNotResolved({ resourceName: name });
       }
 
       const observedAnnotations = tagRecord(current.annotations);
@@ -1075,7 +1127,7 @@ export const ConnectionProvider = () =>
             updateMask: updateMask.join(","),
             body,
           })
-          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
         if (operation === undefined) {
           const created = yield* cloudbuild
             .createProjectsLocationsConnections({
@@ -1087,7 +1139,7 @@ export const ConnectionProvider = () =>
                 annotations: desiredAnnotations,
               }),
             })
-            .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
           if (created !== undefined) {
             yield* waitForOperation(created);
           }
@@ -1098,7 +1150,7 @@ export const ConnectionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ConnectionNotResolved({ name });
+        return yield* new ConnectionNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project);
@@ -1107,7 +1159,7 @@ export const ConnectionProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* cloudbuild
         .deleteProjectsLocationsConnections({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

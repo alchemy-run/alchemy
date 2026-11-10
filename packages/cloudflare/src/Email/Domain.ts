@@ -3,11 +3,17 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+
+export class EmailDomainInvalidProps extends Data.TaggedError("EmailDomainInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 const EmailSecurityDomainTypeId = "Cloudflare.Email.Domain" as const;
 type EmailSecurityDomainTypeId = typeof EmailSecurityDomainTypeId;
@@ -226,14 +232,13 @@ export const DomainProvider = () =>
         observed = yield* findByName(accountId, news.domain);
       }
       if (!observed) {
-        return yield* Effect.fail(
-          new Error(
+        return yield* new EmailDomainInvalidProps({
+          message:
             `Domain "${news.domain}" is not onboarded to Email Security on ` +
-              `account ${accountId}. Cloudflare.Email.Domain only ` +
-              `manages settings on an existing domain — onboard the domain ` +
-              `in the Email Security dashboard first.`,
-          ),
-        );
+            `account ${accountId}. Cloudflare.Email.Domain only ` +
+            `manages settings on an existing domain — onboard the domain ` +
+            `in the Email Security dashboard first.`,
+        });
       }
 
       // 2. Sync — diff observed settings against the declared props and
@@ -291,7 +296,7 @@ type ObservedDomain = emailSecurity.GetSettingDomainResponse;
 const getDomain = (accountId: string, domainId: string) =>
   emailSecurity.getSettingDomain({ accountId, domainId }).pipe(
     Effect.map((domain): ObservedDomain | undefined => domain),
-    Effect.catchTag("EmailSecurityDomainNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("EmailSecurityDomainNotFound", () => Effect.undefined),
   );
 
 /**

@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -90,8 +91,32 @@ export type SacRealm = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SacRealmLookup
 >;
+
+/**
+ * Props for {@link SacRealm.lookup}: find a sac realm this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface SacRealmLookup {
+  /**
+   * Realm id (the `{sacRealm}` segment of
+   * `projects/{project}/locations/global/sacRealms/{sacRealm}`).
+   */
+  sacRealmId: string;
+  /**
+   * Location of the realm. Realms are global — always `"global"`. `GLOBAL`
+   * is accepted and normalized to `global`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Secure Access Connect (SAC) realm — the handshake between a Google
@@ -115,6 +140,18 @@ export type SacRealm = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing sac realm
+ * `SacRealm.lookup` references a sac realm Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared sac realm.
+ *
+ * **Example:** Reference an existing sac realm
+ * ```typescript
+ * const sacRealm = GCP.NetworkSecurity.SacRealm.lookup({
+ *   sacRealmId: "my-sac-realm",
+ * });
+ * ```
+ *
  * @resource
  * @category NetworkSecurity
  */
@@ -123,18 +160,18 @@ export const SacRealm = Resource<SacRealm>("GCP.NetworkSecurity.SacRealm");
 export class SacRealmNotResolved extends Data.TaggedError(
   "GCP.NetworkSecurity.SacRealmNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class SacRealmFailed extends Data.TaggedError("GCP.NetworkSecurity.SacRealmFailed")<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
 export class SacRealmStillExists extends Data.TaggedError(
   "GCP.NetworkSecurity.SacRealmStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const isPendingState = (state: string | undefined) => state === "STATE_UNSPECIFIED";
@@ -169,21 +206,21 @@ const toAttrs = (realm: networksecurity.SACRealm, project: string) => {
 const getByName = (name: string) =>
   networksecurity
     .getProjectsLocationsSacRealms({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (realm): realm is networksecurity.SACRealm => realm !== undefined,
-      () => new SacRealmNotResolved({ name }),
+      () => new SacRealmNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (realm) => realm.state !== "KEY_EXPIRED",
-      (realm) => new SacRealmFailed({ name, state: realm.state }),
+      (realm) => new SacRealmFailed({ resourceName: name, state: realm.state }),
     ),
     Effect.filterOrFail(
       (realm) => !isPendingState(realm.state),
-      () => new SacRealmNotResolved({ name }),
+      () => new SacRealmNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.SacRealmNotResolved",
@@ -195,7 +232,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((realm) =>
-      realm === undefined ? Effect.void : Effect.fail(new SacRealmStillExists({ name })),
+      realm === undefined
+        ? Effect.void
+        : Effect.fail(new SacRealmStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.SacRealmStillExists",
@@ -254,6 +293,15 @@ export const SacRealmProvider = () =>
       return { action: "replace" as const };
     }),
 
+    lookup: Effect.fn(function* ({ sacRealmId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = resourceName(env.project, location, COLLECTION, sacRealmId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const sacRealmId = yield* toId(id, olds?.sacRealmId, output?.sacRealmId, "sacr");
@@ -300,7 +348,7 @@ export const SacRealmProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -309,7 +357,7 @@ export const SacRealmProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SacRealmNotResolved({ name });
+        return yield* new SacRealmNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project);
@@ -324,7 +372,7 @@ export const SacRealmProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

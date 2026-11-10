@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   ApihubNotResolved,
@@ -125,8 +126,31 @@ export type Attribute = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AttributeLookup
 >;
+
+/**
+ * Props for {@link Attribute.lookup}: find an attribute this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface AttributeLookup {
+  /**
+   * Attribute id (the `{attribute}` segment of
+   * `projects/{project}/locations/{location}/attributes/{attribute}`).
+   */
+  attributeId: string;
+  /**
+   * Location (`us-central1`, …).
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A user-defined attribute in API Hub. System-defined attributes cannot
@@ -157,6 +181,19 @@ export type Attribute = Resource<
  *     { id: "gold", displayName: "gold" },
  *     { id: "silver", displayName: "silver" },
  *   ],
+ * });
+ * ```
+ *
+ * ### Looking up an existing attribute
+ * `Attribute.lookup` references an attribute Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * attribute.
+ *
+ * **Example:** Reference an existing attribute
+ * ```typescript
+ * const attribute = GCP.ApiHub.Attribute.lookup({
+ *   attributeId: "my-attribute",
  * });
  * ```
  *
@@ -207,10 +244,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : apihub
         .getProjectsLocationsAttributes({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const AttributeProvider = () =>
   Provider.succeed(Attribute, {
@@ -232,6 +269,15 @@ export const AttributeProvider = () =>
           (news.scope ?? olds?.scope) !== (olds?.scope ?? output?.scope),
       });
     }),
+
+    lookup: Effect.fn(function* ({ attributeId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, attributeId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -285,7 +331,7 @@ export const AttributeProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ApihubNotResolved({ name });
+        return yield* new ApihubNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

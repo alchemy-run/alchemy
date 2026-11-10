@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_GLOBAL,
@@ -116,8 +117,32 @@ export type NetworkPolicy = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  NetworkPolicyLookup
 >;
+
+/**
+ * Props for {@link NetworkPolicy.lookup}: find a network policy this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface NetworkPolicyLookup {
+  /**
+   * Network policy id (the `{networkPolicy}` segment of
+   * `projects/{project}/
+   * locations/{location}/networkPolicies/{networkPolicy}`).
+   */
+  networkPolicyId: string;
+  /**
+   * Region.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A regional VMware Engine network policy that controls internet and
@@ -137,6 +162,19 @@ export type NetworkPolicy = Resource<
  *   internetAccess: { enabled: false },
  *   externalIp: { enabled: false },
  *   description: "edge policy",
+ * });
+ * ```
+ *
+ * ### Looking up an existing network policy
+ * `NetworkPolicy.lookup` references a network policy Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * network policy.
+ *
+ * **Example:** Reference an existing network policy
+ * ```typescript
+ * const networkPolicy = GCP.VMwareEngine.NetworkPolicy.lookup({
+ *   networkPolicyId: "my-network-policy",
  * });
  * ```
  *
@@ -182,7 +220,7 @@ const toAttrs = (item: vmwareengine.NetworkPolicy, project: string, region: stri
 const getByName = (name: string) =>
   vmwareengine
     .getProjectsLocationsNetworkPolicies({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const NetworkPolicyProvider = () =>
   Provider.succeed(NetworkPolicy, {
@@ -208,6 +246,15 @@ export const NetworkPolicyProvider = () =>
         extra: previousVen.length > 0 && nextVen.length > 0 && previousVen !== nextVen,
       });
     }),
+
+    lookup: Effect.fn(function* ({ networkPolicyId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, networkPolicyId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -283,7 +330,7 @@ export const NetworkPolicyProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -292,7 +339,7 @@ export const NetworkPolicyProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new VmwareengineNotResolved({ name });
+        return yield* new VmwareengineNotResolved({ resourceName: name });
       }
 
       const descriptionChanged = (current.description ?? "") !== desiredDescription;
@@ -334,7 +381,7 @@ export const NetworkPolicyProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

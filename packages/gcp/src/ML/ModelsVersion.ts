@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -13,7 +14,6 @@ import {
   expandModel,
   fieldMask,
   getVersion,
-  lastSegment,
   listOwnedVersions,
   parseOwnership,
   parseVersionName,
@@ -177,8 +177,32 @@ export type ModelsVersion = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ModelsVersionLookup
 >;
+
+/**
+ * Props for {@link ModelsVersion.lookup}: find a models version this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface ModelsVersionLookup {
+  /**
+   * Version id (the `{version}` segment of
+   * `projects/{project}/models/{model}/versions/{version}`).
+   */
+  versionId: string;
+  /**
+   * Parent model. Full name `projects/{project}/models/{model}` or the
+   * model id.
+   */
+  model: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A deployed version of an AI Platform (legacy ML Engine)
@@ -220,6 +244,20 @@ export type ModelsVersion = Resource<
  * const version = yield* GCP.ML.ModelsVersion("V1", {
  *   model: model.name,
  *   autoScaling: { minNodes: 1 },
+ * });
+ * ```
+ *
+ * ### Looking up an existing models version
+ * `ModelsVersion.lookup` references a models version Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * models version.
+ *
+ * **Example:** Reference an existing models version
+ * ```typescript
+ * const modelsVersion = GCP.ML.ModelsVersion.lookup({
+ *   versionId: "my-version",
+ *   model: "my-model",
  * });
  * ```
  *
@@ -301,6 +339,15 @@ export const ModelsVersionProvider = () =>
       });
     }),
 
+    lookup: Effect.fn(function* ({ versionId, model: lookupModel }) {
+      const env = yield* GcpEnvironment.current;
+      const model = expandModel(env.project, lookupModel ?? "");
+      const name = model.length > 0 ? versionResourceName(model, versionId) : "";
+      const existing = yield* getVersion(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const versionId = yield* toPhysicalId(id, olds?.versionId, output?.versionId, "version");
@@ -358,7 +405,7 @@ export const ModelsVersionProvider = () =>
               requestLoggingConfig: news.requestLoggingConfig,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -366,7 +413,7 @@ export const ModelsVersionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;
@@ -418,7 +465,7 @@ export const ModelsVersionProvider = () =>
           times: 8,
           schedule: Schedule.spaced("2 seconds"),
         }),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

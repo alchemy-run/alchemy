@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -89,8 +90,28 @@ export type JobTrigger = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  JobTriggerLookup
 >;
+
+/**
+ * Props for {@link JobTrigger.lookup}: find a job trigger this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface JobTriggerLookup {
+  /**
+   * Trigger id (the `{jobTrigger}` segment of
+   * `projects/{project}/jobTriggers/{jobTrigger}`). Must match
+   * `[a-zA-Z0-9_-]+` and is at most 100 characters.
+   */
+  triggerId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A project-scoped Cloud DLP job trigger.
@@ -128,13 +149,24 @@ export type JobTrigger = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing job trigger
+ * `JobTrigger.lookup` references a job trigger Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * job trigger.
+ *
+ * **Example:** Reference an existing job trigger
+ * ```typescript
+ * const jobTrigger = GCP.DLP.JobTrigger.lookup({ triggerId: "my-trigger" });
+ * ```
+ *
  * @resource
  * @category DLP
  */
 export const JobTrigger = Resource<JobTrigger>("GCP.DLP.JobTrigger");
 
 export class JobTriggerNotResolved extends Data.TaggedError("GCP.DLP.JobTriggerNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_STATUS: JobTriggerStatus = "PAUSED";
@@ -162,10 +194,10 @@ const toAttrs = (trigger: dlp.GooglePrivacyDlpV2JobTrigger, project: string) => 
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dlp
         .getProjectsJobTriggers({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const JobTriggerProvider = () =>
   Provider.succeed(JobTrigger, {
@@ -178,6 +210,14 @@ export const JobTriggerProvider = () =>
         previous !== undefined && news.triggerId !== undefined && news.triggerId !== previous,
       );
     }),
+
+    lookup: Effect.fn(function* ({ triggerId }) {
+      const env = yield* GcpEnvironment.current;
+      const name = resourceName(env.project, triggerId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -239,7 +279,7 @@ export const JobTriggerProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new JobTriggerNotResolved({ name });
+        return yield* new JobTriggerNotResolved({ resourceName: name });
       }
 
       const displayChanged = !sameText(current.displayName, news.displayName);

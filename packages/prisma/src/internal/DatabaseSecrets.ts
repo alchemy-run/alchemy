@@ -13,6 +13,20 @@ import { parsePostgresOrigin, type PostgresOrigin } from "../PostgresOrigin.ts";
 import type { PrismaSecretConnection } from "../Types.ts";
 import type { ObservedDatabase } from "./Observed.ts";
 
+export class DatabaseSecretsOperationFailed extends Data.TaggedError(
+  "DatabaseSecretsOperationFailed",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class DatabaseSecretsUnexpectedResponse extends Data.TaggedError(
+  "DatabaseSecretsUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export const hasCanonicalConnectionSecrets = (secrets: PrismaSecretConnection) =>
   secrets.directConnectionString !== undefined ||
   secrets.pooledConnectionString !== undefined ||
@@ -77,20 +91,20 @@ const waitForRotatableDatabase = (database: ObservedDatabase) =>
         }),
       ),
     ),
-    Effect.flatMap((observed) =>
-      observed.status === "failure"
-        ? Effect.fail(
-            new Error(
-              `Prisma database '${observed.name}' (${observed.id}) entered terminal status 'failure' before credentials could be recovered.`,
-            ),
-          )
-        : observed.status === "ready" && observed.defaultConnectionId !== null
-          ? Effect.succeed(observed)
-          : Effect.fail(
-              new DatabaseCredentialsNotReady({
-                message: `Prisma database '${observed.name}' (${observed.id}) is '${observed.status}' with defaultConnectionId '${observed.defaultConnectionId ?? "null"}'; waiting for a ready default connection before recovering credentials.`,
-              }),
-            ),
+    Effect.flatMap(
+      Effect.fnUntraced(function* (observed) {
+        if (observed.status === "failure") {
+          return yield* new DatabaseSecretsOperationFailed({
+            message: `Prisma database '${observed.name}' (${observed.id}) entered terminal status 'failure' before credentials could be recovered.`,
+          });
+        }
+        if (observed.status === "ready" && observed.defaultConnectionId !== null) {
+          return observed;
+        }
+        return yield* new DatabaseCredentialsNotReady({
+          message: `Prisma database '${observed.name}' (${observed.id}) is '${observed.status}' with defaultConnectionId '${observed.defaultConnectionId ?? "null"}'; waiting for a ready default connection before recovering credentials.`,
+        });
+      }),
     ),
     Effect.retry({
       while: (error) => error instanceof DatabaseCredentialsNotReady,
@@ -108,11 +122,9 @@ export const recoverDatabaseConnectionSecrets = Effect.fn(function* <D extends O
   known: PrismaSecretConnection,
 ) {
   if (initialDatabase.status === "failure") {
-    return yield* Effect.fail(
-      new Error(
-        `Prisma database '${initialDatabase.name}' (${initialDatabase.id}) is in terminal status 'failure'; credentials cannot be recovered.`,
-      ),
-    );
+    return yield* new DatabaseSecretsOperationFailed({
+      message: `Prisma database '${initialDatabase.name}' (${initialDatabase.id}) is in terminal status 'failure'; credentials cannot be recovered.`,
+    });
   }
   let database: D | GetDatabaseResponse["data"] = initialDatabase;
   const observedConnection =
@@ -151,19 +163,15 @@ export const recoverDatabaseConnectionSecrets = Effect.fn(function* <D extends O
     Effect.map((response) => response.data),
   );
   if (rotated.id !== connectionId || rotated.database.id !== database.id) {
-    return yield* Effect.fail(
-      new Error(
-        `Prisma rotated connection '${rotated.id}' for database '${rotated.database.id}', but connection '${connectionId}' belonging to database '${database.id}' was requested. Refusing to persist mismatched credentials.`,
-      ),
-    );
+    return yield* new DatabaseSecretsUnexpectedResponse({
+      message: `Prisma rotated connection '${rotated.id}' for database '${rotated.database.id}', but connection '${connectionId}' belonging to database '${database.id}' was requested. Refusing to persist mismatched credentials.`,
+    });
   }
   const recovered = mergeConnectionSecrets(extractConnectionSecrets(rotated), refreshed);
   if (!hasCanonicalConnectionSecrets(recovered)) {
-    return yield* Effect.fail(
-      new Error(
-        `Prisma rotated default connection '${connectionId}' for database '${database.id}' without returning a canonical connection URL. Retry after database provisioning completes.`,
-      ),
-    );
+    return yield* new DatabaseSecretsUnexpectedResponse({
+      message: `Prisma rotated default connection '${connectionId}' for database '${database.id}' without returning a canonical connection URL. Retry after database provisioning completes.`,
+    });
   }
   return { database, secrets: recovered };
 });

@@ -4,10 +4,16 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class NeptuneDBInstanceNotReady extends Data.TaggedError("NeptuneDBInstanceNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface DBInstanceProps {
   /**
@@ -99,8 +105,18 @@ export interface DBInstance extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DBInstanceLookup
 > {}
+
+/**
+ * Props for {@link DBInstance.lookup}: find a Neptune instance this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DBInstanceLookup {
+  /** The db instance identifier of the existing Neptune instance. */
+  dbInstanceIdentifier: string;
+}
 
 /**
  * An Amazon Neptune instance — a compute member of a Neptune
@@ -126,6 +142,16 @@ export interface DBInstance extends Resource<
  *   dbClusterIdentifier: cluster.dbClusterIdentifier,
  *   dbInstanceClass: "db.serverless",
  * });
+ * ```
+ *
+ * ### Looking up an existing Neptune instance
+ * `DBInstance.lookup` references a Neptune instance Alchemy doesn't manage (created in the
+ * console or by another stack), found by `dbInstanceIdentifier`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing Neptune instance
+ * ```typescript
+ * const existing = AWS.Neptune.DBInstance.lookup({ dbInstanceIdentifier: "my-neptune-instance" });
  * ```
  *
  * @resource
@@ -185,7 +211,7 @@ export const DBInstanceProvider = () =>
           .describeDBInstances({
             DBInstanceIdentifier: instanceId,
           })
-          .pipe(Effect.catchTag("DBInstanceNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("DBInstanceNotFoundFault", () => Effect.undefined));
         return response?.DBInstances?.[0];
       });
 
@@ -193,7 +219,7 @@ export const DBInstanceProvider = () =>
         if (!arn) return {} as Record<string, string>;
         const response = yield* neptune
           .listTagsForResource({ ResourceName: arn })
-          .pipe(Effect.catchTag("DBInstanceNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("DBInstanceNotFoundFault", () => Effect.undefined));
         return toTagRecord(response?.TagList);
       });
 
@@ -206,7 +232,9 @@ export const DBInstanceProvider = () =>
         return yield* readInstance(instanceId).pipe(
           Effect.flatMap((instance) => {
             if (!instance?.DBInstanceArn) {
-              return Effect.fail(new Error(`DB instance '${instanceId}' not found`));
+              return Effect.fail(
+                new NeptuneDBInstanceNotReady({ message: `DB instance '${instanceId}' not found` }),
+              );
             }
             const status = instance.DBInstanceStatus;
             if (
@@ -215,7 +243,9 @@ export const DBInstanceProvider = () =>
               status !== "incompatible-restore"
             ) {
               return Effect.fail(
-                new Error(`DB instance '${instanceId}' not available (status: ${status})`),
+                new NeptuneDBInstanceNotReady({
+                  message: `DB instance '${instanceId}' not available (status: ${status})`,
+                }),
               );
             }
             return Effect.succeed(instance);
@@ -269,6 +299,14 @@ export const DBInstanceProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ dbInstanceIdentifier: identifier }) {
+          const instance = yield* readInstance(identifier);
+          if (!instance?.DBInstanceArn) {
+            return undefined;
+          }
+          const tags = yield* readTags(instance.DBInstanceArn);
+          return toAttrs({ instance, tags });
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const identifier =

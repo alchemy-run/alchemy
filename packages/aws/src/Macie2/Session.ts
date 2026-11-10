@@ -85,8 +85,8 @@ export { SessionResource as Session };
 const getSession = macie2.getMacieSession({}).pipe(
   Effect.map((s) => s as macie2.GetMacieSessionResponse | undefined),
   Effect.catchTags({
-    AccessDeniedException: () => Effect.succeed(undefined),
-    ResourceNotFoundException: () => Effect.succeed(undefined),
+    AccessDeniedException: () => Effect.undefined,
+    ResourceNotFoundException: () => Effect.undefined,
   }),
 );
 

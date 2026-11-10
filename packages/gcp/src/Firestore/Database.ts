@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -173,8 +174,29 @@ export type Database = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DatabaseLookup
 >;
+
+/**
+ * Props for {@link Database.lookup}: find a database this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface DatabaseLookup {
+  /**
+   * Database id (the `{database}` segment of
+   * `projects/{project}/databases/{database}`). Must be 4-63 characters,
+   * match `[a-z][a-z0-9-]*[a-z0-9]`, and must not look like a UUID.
+   * `"(default)"` is valid for the Standard edition default database.
+   */
+  databaseId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Firestore database.
@@ -215,17 +237,29 @@ export type Database = Resource<
  * const doc = yield* getDocument({ documentPath: "users/alice" });
  * ```
  *
+ * ### Looking up an existing database
+ * `Database.lookup` references a database Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared database.
+ *
+ * **Example:** Reference an existing database
+ * ```typescript
+ * const database = GCP.Firestore.Database.lookup({
+ *   databaseId: "my-database",
+ * });
+ * ```
+ *
  * @resource
  * @category Firestore
  */
 export const Database = Resource<Database>("GCP.Firestore.Database");
 
 export class DatabaseNotResolved extends Data.TaggedError("GCP.Firestore.DatabaseNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class DatabaseStillExists extends Data.TaggedError("GCP.Firestore.DatabaseStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -313,7 +347,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   firestore.getProjectsDatabases({ name }).pipe(
     Effect.map((database) => (database.deleteTime !== undefined ? undefined : database)),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 /**
@@ -341,7 +375,7 @@ const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (database): database is firestore.GoogleFirestoreAdminV1Database => database !== undefined,
-      () => new DatabaseNotResolved({ name }),
+      () => new DatabaseNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Firestore.DatabaseNotResolved",
@@ -354,7 +388,7 @@ const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (database) => database === undefined,
-      () => new DatabaseStillExists({ name }),
+      () => new DatabaseStillExists({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Firestore.DatabaseStillExists",
@@ -430,6 +464,14 @@ export const DatabaseProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({ databaseId }) {
+      const env = yield* GcpEnvironment.current;
+      const name = resourceName(env.project, databaseId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const databaseId = yield* toDatabaseId(id, olds?.databaseId, output?.databaseId);
@@ -474,7 +516,7 @@ export const DatabaseProvider = () =>
                 : undefined,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }
@@ -482,7 +524,7 @@ export const DatabaseProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DatabaseNotResolved({ name });
+        return yield* new DatabaseNotResolved({ resourceName: name });
       }
 
       const mask: string[] = [];

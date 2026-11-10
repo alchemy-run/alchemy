@@ -44,8 +44,24 @@ export type Managed = Resource<
     selfLink: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ManagedLookup
 >;
+
+/**
+ * Props for {@link Managed.lookup}: find a managed this stack doesn't
+ * manage by its identifiers.
+ */
+export interface ManagedLookup {
+  /**
+   * Managed folder path.
+   */
+  managedFolderName: string;
+  /**
+   * Name of the uniform-access bucket that contains this managed folder.
+   */
+  bucketName: string;
+}
 
 /**
  * A Cloud Storage managed folder.
@@ -75,6 +91,19 @@ export type Managed = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing managed
+ * `Managed.lookup` references a managed Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared managed.
+ *
+ * **Example:** Reference an existing managed
+ * ```typescript
+ * const managed = GCP.Storage.Managed.lookup({
+ *   managedFolderName: "my-managed-folder",
+ *   bucketName: "my-bucket",
+ * });
+ * ```
+ *
  * @resource
  * @category Storage
  */
@@ -101,7 +130,7 @@ const getByName = (bucketName: string, managedFolderName: string) =>
       bucket: bucketName,
       managedFolder: managedFolderName,
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOnBucket = (bucketName: string) =>
   storage.listManagedFolders.items({ bucket: bucketName, pageSize: 1000 }).pipe(
@@ -148,6 +177,13 @@ export const ManagedProvider = () =>
         return { action: "replace" as const, deleteFirst: false };
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ managedFolderName, bucketName }) {
+      if (!bucketName) return undefined;
+      const existing = yield* getByName(bucketName, managedFolderName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, bucketName);
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {

@@ -1,11 +1,12 @@
 import * as discoveryengine from "@distilled.cloud/gcp/discoveryengine_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   expandDataStore,
@@ -124,8 +125,31 @@ export type DataStoresServingConfig = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DataStoresServingConfigLookup
 >;
+
+/**
+ * Props for {@link DataStoresServingConfig.lookup}: find a data stores
+ * serving config this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface DataStoresServingConfigLookup {
+  /**
+   * Serving config id (4-63 characters, `a-zA-Z0-9`).
+   */
+  servingConfigId: string;
+  /**
+   * Parent Data Store resource name
+   * `projects/{project}/locations/{location}/dataStores/{dataStore}`.
+   */
+  dataStore: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Vertex AI Search ServingConfig attached to a Data Store.
@@ -157,6 +181,20 @@ export type DataStoresServingConfig = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing data stores serving config
+ * `DataStoresServingConfig.lookup` references a data stores serving config
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared data stores serving config.
+ *
+ * **Example:** Reference an existing data stores serving config
+ * ```typescript
+ * const dataStoresServingConfig = GCP.DiscoveryEngine.DataStoresServingConfig.lookup({
+ *   servingConfigId: "my-serving-config",
+ *   dataStore: "my-data-store",
+ * });
+ * ```
+ *
  * @resource
  * @category DiscoveryEngine
  */
@@ -167,7 +205,7 @@ export const DataStoresServingConfig = Resource<DataStoresServingConfig>(
 export class DataStoresServingConfigNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.DataStoresServingConfigNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_SOLUTION = "SOLUTION_TYPE_SEARCH";
@@ -205,10 +243,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : discoveryengine
         .getProjectsLocationsDataStoresServingConfigs({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const DataStoresServingConfigProvider = () =>
   Provider.succeed(DataStoresServingConfig, {
@@ -236,7 +274,16 @@ export const DataStoresServingConfigProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ servingConfigId, dataStore }) {
+      const env = yield* GcpEnvironment.current;
+      const parent = dataStore ? expandDataStore(dataStore, env.project, "global") : undefined;
+      const name = parent ? resourceName(parent, servingConfigId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, parent);
+    }, inLookupProject),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const servingConfigId = yield* toPhysical(
         id,
@@ -250,9 +297,9 @@ export const DataStoresServingConfigProvider = () =>
       const name = output?.name ?? (parent ? resourceName(parent, servingConfigId) : "");
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, parent ?? output?.dataStore);
       // No labels field: without prior state it may not be ours.
-      return output !== undefined ? attrs : Unowned(attrs);
+      return output !== undefined ? attrs : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -297,7 +344,7 @@ export const DataStoresServingConfigProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DataStoresServingConfigNotResolved({ name });
+        return yield* new DataStoresServingConfigNotResolved({ resourceName: name });
       }
 
       const displayChanged = (current.displayName ?? "") !== displayName;

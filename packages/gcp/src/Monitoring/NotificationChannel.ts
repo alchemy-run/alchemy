@@ -1,5 +1,5 @@
 import * as monitoring from "@distilled.cloud/gcp/monitoring_v3";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -80,8 +80,21 @@ export type NotificationChannel = Resource<
     verificationStatus: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  NotificationChannelLookup
 >;
+
+/**
+ * Props for {@link NotificationChannel.lookup}: find a notification channel
+ * this stack doesn't manage by its identifiers.
+ */
+export interface NotificationChannelLookup {
+  /**
+   * Full resource name of the notification channel
+   * (`projects/{project}/notificationChannels/{id}`).
+   */
+  name: string;
+}
 
 /**
  * A Cloud Monitoring notification channel — email, webhook, Pub/Sub, or
@@ -121,6 +134,19 @@ export type NotificationChannel = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing notification channel
+ * `NotificationChannel.lookup` references a notification channel Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared notification channel.
+ *
+ * **Example:** Reference an existing notification channel
+ * ```typescript
+ * const notificationChannel = GCP.Monitoring.NotificationChannel.lookup({
+ *   name: "projects/my-project/notificationChannels/1234567890",
+ * });
+ * ```
+ *
  * @resource
  * @category Monitoring
  */
@@ -131,7 +157,7 @@ export const NotificationChannel = Resource<NotificationChannel>(
 export class NotificationChannelNotResolved extends Data.TaggedError(
   "GCP.Monitoring.NotificationChannelNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -191,7 +217,7 @@ const toAttrs = (channel: monitoring.NotificationChannel, project: string) => {
 const getByName = (name: string) =>
   monitoring
     .getProjectsNotificationChannels({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string) =>
   monitoring.listProjectsNotificationChannels
@@ -253,12 +279,21 @@ export const NotificationChannelProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, output }) {
+    lookup: Effect.fn(function* ({ name }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }),
+
+    read: Effect.fn(function* ({ id, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const existing = yield* observe(env.project, id, output?.name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.userLabels))) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.userLabels)))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>
@@ -302,7 +337,7 @@ export const NotificationChannelProvider = () =>
 
       if (current === undefined) {
         return yield* new NotificationChannelNotResolved({
-          name: output?.name ?? displayName,
+          resourceName: output?.name ?? displayName,
         });
       }
 

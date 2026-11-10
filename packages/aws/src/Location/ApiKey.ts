@@ -5,11 +5,19 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { toTagRecord } from "./internal.ts";
+
+export class LocationApiKeyUnexpectedResponse extends Data.TaggedError(
+  "LocationApiKeyUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * What a Location API key is allowed to call. Keys authorize *unsigned*
@@ -89,8 +97,18 @@ export interface ApiKey extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ApiKeyLookup
 > {}
+
+/**
+ * Props for {@link ApiKey.lookup}: find an API key this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ApiKeyLookup {
+  /** The key name of the existing API key. */
+  keyName: string;
+}
 
 /**
  * An Amazon Location Service API key. API keys authorize **unsigned**
@@ -136,6 +154,16 @@ export interface ApiKey extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing API key
+ * `ApiKey.lookup` references an API key Alchemy doesn't manage (created in the
+ * console or by another stack), found by `keyName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing API key
+ * ```typescript
+ * const existing = AWS.Location.ApiKey.lookup({ keyName: "my-api-key" });
+ * ```
+ *
  * @resource
  */
 export const ApiKey = Resource<ApiKey>("AWS.Location.ApiKey");
@@ -172,7 +200,7 @@ const sameRestrictions = (a: ApiKeyRestrictions, b: ApiKeyRestrictions) => {
 const readKey = Effect.fn(function* (keyName: string) {
   const found = yield* location
     .describeKey({ KeyName: keyName })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!found) return undefined;
   return {
     keyName: found.KeyName,
@@ -206,6 +234,11 @@ export const ApiKeyProvider = () =>
             });
             return hydrated.filter((attrs): attrs is ApiKey["Attributes"] => attrs !== undefined);
           }),
+        lookup: Effect.fn(function* ({ keyName }) {
+          const state = yield* readKey(keyName);
+          if (!state) return undefined;
+          return state;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const keyName = output?.keyName ?? (yield* createKeyName(id, olds ?? {}));
           const state = yield* readKey(keyName);
@@ -238,19 +271,25 @@ export const ApiKeyProvider = () =>
                 KeyName: keyName,
                 Restrictions: desiredRestrictions,
                 Description: news.description,
-                ExpireTime: news.expireTime ? new Date(news.expireTime) : undefined,
+                ExpireTime: news.expireTime
+                  ? // oxlint-disable-next-line effecttsgo/global-date-in-effect -- `new Date` reads timezone-less date-times as local time; `DateTime.makeUnsafe` would read them as UTC
+                    new Date(news.expireTime)
+                  : undefined,
                 NoExpiry: news.expireTime ? undefined : (news.noExpiry ?? true),
                 Tags: desiredTags,
               })
               .pipe(Effect.catchTag("ConflictException", () => Effect.void));
             state = yield* readKey(keyName);
             if (state === undefined) {
-              return yield* Effect.fail(new Error(`failed to read created API key ${keyName}`));
+              return yield* new LocationApiKeyUnexpectedResponse({
+                message: `failed to read created API key ${keyName}`,
+              });
             }
           }
 
           const desiredExpireTime = news.expireTime
-            ? new Date(news.expireTime).toISOString()
+            ? // oxlint-disable-next-line effecttsgo/global-date-in-effect -- `new Date` reads timezone-less date-times as local time; `DateTime.makeUnsafe` would read them as UTC
+              new Date(news.expireTime).toISOString()
             : undefined;
           if (
             state.description !== (news.description ?? undefined) ||
@@ -261,7 +300,10 @@ export const ApiKeyProvider = () =>
               KeyName: keyName,
               Description: news.description,
               Restrictions: desiredRestrictions,
-              ExpireTime: desiredExpireTime ? new Date(desiredExpireTime) : undefined,
+              ExpireTime: desiredExpireTime
+                ? // oxlint-disable-next-line effecttsgo/global-date-in-effect -- `new Date` reads timezone-less date-times as local time; `DateTime.makeUnsafe` would read them as UTC
+                  new Date(desiredExpireTime)
+                : undefined,
               NoExpiry: desiredExpireTime ? undefined : true,
               // Required to update a key that has been used recently.
               ForceUpdate: true,
@@ -286,7 +328,9 @@ export const ApiKeyProvider = () =>
 
           const final = yield* readKey(keyName);
           if (!final) {
-            return yield* Effect.fail(new Error(`failed to read reconciled API key ${keyName}`));
+            return yield* new LocationApiKeyUnexpectedResponse({
+              message: `failed to read reconciled API key ${keyName}`,
+            });
           }
           return final;
         }),

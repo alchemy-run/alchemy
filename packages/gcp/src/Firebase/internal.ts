@@ -10,7 +10,7 @@ export const MAX_DISPLAY_NAME = 32;
 export const MAX_PACKAGE_SUFFIX = 40;
 
 export class ResourceNotResolved extends Data.TaggedError("GCP.Firebase.ResourceNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {

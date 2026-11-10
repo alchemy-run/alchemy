@@ -251,8 +251,8 @@ export const PostgresRoleProvider = () =>
             }),
           ),
           Effect.catchTags({
-            Forbidden: () => Effect.succeed(undefined),
-            NotFound: () => Effect.succeed(undefined),
+            Forbidden: () => Effect.undefined,
+            NotFound: () => Effect.undefined,
           }),
         );
     }),
@@ -277,7 +277,7 @@ export const PostgresRoleProvider = () =>
               organization,
               database: databaseName,
             })
-            .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)))
+            .pipe(Effect.catchTag("NotFound", () => Effect.undefined))
         : undefined;
 
       // 2. Ensure — create if missing. Single branch covers both
@@ -292,7 +292,7 @@ export const PostgresRoleProvider = () =>
       //    once on create; on an observe-hit we re-use the cached
       //    plaintext from output (which is why adoption requires
       //    pre-existing state — see `read`).
-      let live: planetscale.GetRoleOutput | planetscale.CreateRoleOutput;
+      let live: planetscale.GetRoleOutput;
       let plaintext: Redacted.Redacted<string>;
       if (observed) {
         live = observed;

@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -186,8 +187,33 @@ export type Instance = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  InstanceLookup
 >;
+
+/**
+ * Props for {@link Instance.lookup}: find an instance this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface InstanceLookup {
+  /**
+   * Instance id (the `{instance}` segment of
+   * `projects/{project}/locations/{location}/instances/{instance}`). Must
+   * match `^[a-z][a-z0-9-]{0,38}[a-z0-9]$` (1-40 characters).
+   */
+  instanceId: string;
+  /**
+   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Memorystore for Memcached instance.
@@ -229,22 +255,32 @@ export type Instance = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing instance
+ * `Instance.lookup` references an instance Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared instance.
+ *
+ * **Example:** Reference an existing instance
+ * ```typescript
+ * const instance = GCP.Memcache.Instance.lookup({ instanceId: "my-instance" });
+ * ```
+ *
  * @resource
  * @category Memcache
  */
 export const Instance = Resource<Instance>("GCP.Memcache.Instance");
 
 export class InstanceNotResolved extends Data.TaggedError("GCP.Memcache.InstanceNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class InstanceNotReady extends Data.TaggedError("GCP.Memcache.InstanceNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class InstanceStillExists extends Data.TaggedError("GCP.Memcache.InstanceStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -412,7 +448,7 @@ const isPlaceholder = (instance: memcache.Instance) => {
 const getByName = (name: string) =>
   memcache
     .getProjectsLocationsInstances({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /**
  * Wait for a Memorystore for Memcached operation; instance create,
@@ -436,7 +472,9 @@ const waitForOperation = (operation: memcache.Operation, options?: { notFoundOk?
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((instance) =>
-      instance ? Effect.succeed(instance) : Effect.fail(new InstanceNotResolved({ name })),
+      instance
+        ? Effect.succeed(instance)
+        : Effect.fail(new InstanceNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Memcache.InstanceNotResolved",
@@ -449,13 +487,13 @@ const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (instance): instance is memcache.Instance => instance !== undefined,
-      () => new InstanceNotResolved({ name }),
+      () => new InstanceNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (instance) => (instance.state ?? "STATE_UNSPECIFIED") === "READY",
       (instance) =>
         new InstanceNotReady({
-          name,
+          resourceName: name,
           state: instance.state ?? "STATE_UNSPECIFIED",
         }),
     ),
@@ -471,7 +509,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((instance) =>
-      instance === undefined ? Effect.void : Effect.fail(new InstanceStillExists({ name })),
+      instance === undefined
+        ? Effect.void
+        : Effect.fail(new InstanceStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Memcache.InstanceStillExists",
@@ -543,6 +583,15 @@ export const InstanceProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({ instanceId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, instanceId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const instanceId = yield* toId(id, olds?.instanceId, output?.instanceId);
@@ -597,7 +646,7 @@ export const InstanceProvider = () =>
             instanceId,
             body: toCreateBody(news, desiredLabels, nodeCount, nodeConfig),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -605,7 +654,7 @@ export const InstanceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new InstanceNotResolved({ name });
+        return yield* new InstanceNotResolved({ resourceName: name });
       }
 
       if ((current.state ?? "") !== "READY") {
@@ -700,7 +749,7 @@ export const InstanceProvider = () =>
       const operation = yield* memcache
         .deleteProjectsLocationsInstances({ name: output.name })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

@@ -42,7 +42,7 @@ const waitBackoff = Schedule.exponential("500 millis");
 const SERVICE_CHECK_NAME_PREFIX = "servicecheck-";
 
 export class ReplicaNotCreated extends Data.TaggedError("Fly.ReplicaNotCreated")<{
-  name: string;
+  resourceName: string;
   appName: string;
 }> {}
 
@@ -115,7 +115,7 @@ export const gone = (machine: FlyMachine | undefined) =>
 export const getMachineById = (appName: string, machineId: string) =>
   machines.getMachine({ app_name: appName, machine_id: machineId }).pipe(
     Effect.map((machine) => (gone(machine) ? undefined : machine)),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 /**
@@ -137,7 +137,7 @@ const getLeasedMachine = (appName: string, machineId: string) =>
 const getLeasedMachineById = (appName: string, machineId: string) =>
   getLeasedMachine(appName, machineId).pipe(
     Effect.map((machine) => (gone(machine) ? undefined : machine)),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 export const listMachinesByApp = (appName: string) =>
@@ -653,6 +653,8 @@ export const leaseSnapshot = Effect.fn(function* (
     (machine) =>
       Effect.gen(function* () {
         if (!machine.id || machine.host_status === "unreachable") return;
+        // Already deleted by this operation (a scale-down retired it).
+        if (leases.wasRemoved(machine.id)) return;
         const id = machine.id;
         yield* leases.acquire([id]).pipe(
           Effect.tap(() => Effect.sync(() => leased.add(id))),
@@ -670,7 +672,7 @@ export const leaseSnapshot = Effect.fn(function* (
   ).pipe(Effect.timeout("30 seconds"));
   const observed: FlyMachine[] = [];
   for (const machine of ordered) {
-    if (!machine.id) continue;
+    if (!machine.id || leases.wasRemoved(machine.id)) continue;
     if (machine.host_status === "unreachable") {
       observed.push(machine);
       continue;
@@ -1163,7 +1165,7 @@ const reconcileLeasedReplicas = Effect.fn(function* (
       );
       const volumeId = volume?.id;
       if (volumeId === undefined) {
-        return yield* new ReplicaNotCreated({ name, appName: input.appName });
+        return yield* new ReplicaNotCreated({ resourceName: name, appName: input.appName });
       }
       usedVolumeIds.add(volumeId);
       mounts.push({ volume: volumeId, path: group.disk.path });
@@ -1187,7 +1189,7 @@ const reconcileLeasedReplicas = Effect.fn(function* (
           skip_launch: input.skipLaunch === true ? true : undefined,
           min_secrets_version: input.minSecretsVersion,
         })
-        .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
       current =
         created ??
         (yield* listMachinesByApp(input.appName).pipe(
@@ -1200,11 +1202,11 @@ const reconcileLeasedReplicas = Effect.fn(function* (
           ),
         ));
       if (current === undefined || current.id === undefined) {
-        return yield* new ReplicaNotCreated({ name, appName: input.appName });
+        return yield* new ReplicaNotCreated({ resourceName: name, appName: input.appName });
       }
       const observed = (yield* leaseSnapshot(input.appName, [current], leases))[0];
       if (!observed || input.configDrifted(observed, { mounts, metadata })) {
-        return yield* new ReplicaNotCreated({ name, appName: input.appName });
+        return yield* new ReplicaNotCreated({ resourceName: name, appName: input.appName });
       }
       current = observed;
     } else if (
@@ -1243,7 +1245,7 @@ const reconcileLeasedReplicas = Effect.fn(function* (
             !sameChecks(observed.config?.checks, config.checks) ||
             !sameStopConfig(observed.config?.stop_config, config.stop_config)
           )
-            return yield* new ReplicaNotCreated({ appName: input.appName, name });
+            return yield* new ReplicaNotCreated({ appName: input.appName, resourceName: name });
           return observed;
         }).pipe(
           Effect.retry({
@@ -1477,4 +1479,53 @@ export const observeReplicaSet = Effect.fn(function* (input: {
       rolloutPending: true,
     };
   return undefined;
+});
+
+/**
+ * The Machines a lookup names: those whose name (or Alchemy base name) is
+ * `name`, or `name-N` for a replica, or every Machine in the App when
+ * `name` is omitted. Of an Alchemy deployment, only the newest generation
+ * that finished rolling out counts; a Machine without that metadata
+ * counts as it is. `undefined` when nothing in the App matches.
+ */
+export const lookupReplicaSet = Effect.fn(function* (input: { appName: string; name?: string }) {
+  const named = (yield* listMachinesByApp(input.appName)).filter((machine) => {
+    if (input.name === undefined) return true;
+    const base = machine.config?.metadata?.[alchemyMetadataKeys.baseName];
+    return (
+      base === input.name ||
+      machine.name === input.name ||
+      (base === undefined && machine.name?.startsWith(`${input.name}-`) === true)
+    );
+  });
+  const active = named.filter((machine) => {
+    const phase = machine.config?.metadata?.[alchemyMetadataKeys.phase];
+    return (phase === undefined || phase === "active") && machine.cordoned !== true;
+  });
+  const sequenceOf = (machine: FlyMachine) =>
+    Number(machine.config?.metadata?.[alchemyMetadataKeys.sequence] ?? 0);
+  const newest = Math.max(0, ...active.map(sequenceOf));
+  const listed = active
+    .filter((machine) => sequenceOf(machine) === newest)
+    .sort((a, b) => replicaIndexOf(a) - replicaIndexOf(b));
+  if (listed.length === 0) return undefined;
+  const volumesById = new Map<string, FlyVolume>();
+  for (const machine of listed) {
+    for (const mount of machine.config?.mounts ?? []) {
+      const volumeId = mount.volume;
+      if (volumeId === undefined || volumesById.has(volumeId)) continue;
+      const volume = yield* getVolumeById(input.appName, volumeId);
+      if (volume !== undefined) volumesById.set(volumeId, volume);
+    }
+  }
+  const replicas = listed.map((machine) => toReplica(machine, volumesById));
+  return toReplicaSet(
+    replicas,
+    input.appName,
+    listed[0]?.config?.metadata?.[alchemyMetadataKeys.baseName] ??
+      input.name ??
+      replicas[0]?.name ??
+      "",
+    listed[0]?.config?.services,
+  );
 });

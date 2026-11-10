@@ -7,6 +7,7 @@
 const FLOOD = "Error: immediate step failure";
 
 export default function setup() {
+  // oxlint-disable-next-line typescript/unbound-method -- saved only to restore the original on teardown; calls go through the bound `forward`
   const write = process.stdout.write;
   const forward = write.bind(process.stdout) as (...args: Array<unknown>) => boolean;
   process.stdout.write = ((chunk: unknown, ...rest: Array<unknown>) =>

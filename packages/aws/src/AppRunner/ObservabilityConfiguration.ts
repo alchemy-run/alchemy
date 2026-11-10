@@ -5,11 +5,19 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { isActiveStatus, readAppRunnerTags, syncAppRunnerTags, toWireTags } from "./internal.ts";
+
+export class ObservabilityConfigurationUnexpectedResponse extends Data.TaggedError(
+  "ObservabilityConfigurationUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * Tracing configuration for an observability configuration.
@@ -62,8 +70,18 @@ export interface ObservabilityConfiguration extends Resource<
     traceVendor: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ObservabilityConfigurationLookup
 > {}
+
+/**
+ * Props for {@link ObservabilityConfiguration.lookup}: find an observability configuration this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ObservabilityConfigurationLookup {
+  /** The observability configuration name of the existing observability configuration. */
+  observabilityConfigurationName: string;
+}
 
 /**
  * An AWS App Runner observability configuration — enables AWS X-Ray tracing
@@ -98,6 +116,16 @@ export interface ObservabilityConfiguration extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing observability configuration
+ * `ObservabilityConfiguration.lookup` references an observability configuration Alchemy doesn't manage (created in the
+ * console or by another stack), found by `observabilityConfigurationName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing observability configuration
+ * ```typescript
+ * const existing = AWS.AppRunner.ObservabilityConfiguration.lookup({ observabilityConfigurationName: "my-observability-configuration" });
+ * ```
+ *
  * @resource
  */
 export const ObservabilityConfiguration = Resource<ObservabilityConfiguration>(
@@ -129,7 +157,7 @@ export const ObservabilityConfigurationProvider = () =>
           .describeObservabilityConfiguration({
             ObservabilityConfigurationArn: summary.ObservabilityConfigurationArn,
           })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         const config = described?.ObservabilityConfiguration;
         return config !== undefined && isActiveStatus(config.Status) ? config : undefined;
       });
@@ -140,11 +168,9 @@ export const ObservabilityConfigurationProvider = () =>
           !config.ObservabilityConfigurationArn ||
           config.ObservabilityConfigurationRevision === undefined
         ) {
-          return yield* Effect.fail(
-            new Error(
-              "App Runner observability configuration is missing its name, ARN, or revision",
-            ),
-          );
+          return yield* new ObservabilityConfigurationUnexpectedResponse({
+            message: "App Runner observability configuration is missing its name, ARN, or revision",
+          });
         }
         return {
           observabilityConfigurationName: config.ObservabilityConfigurationName,
@@ -202,6 +228,12 @@ export const ObservabilityConfigurationProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ observabilityConfigurationName: name }) {
+          const config = yield* findLatest(name);
+          if (config === undefined) return undefined;
+          const attrs = yield* toAttrs(config);
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.observabilityConfigurationName ?? (yield* toName(id, olds ?? {}));
           const config = yield* findLatest(name);
@@ -286,10 +318,10 @@ export const ObservabilityConfigurationProvider = () =>
                               (attrs) =>
                                 attrs as ObservabilityConfiguration["Attributes"] | undefined,
                             )
-                          : Effect.succeed(undefined),
+                          : Effect.undefined,
                       ),
                       // Tolerate a delete race — drop the item.
-                      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                      Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
                     ),
                 { concurrency: 4 },
               ),

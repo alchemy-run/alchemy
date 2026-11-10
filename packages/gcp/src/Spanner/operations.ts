@@ -242,9 +242,7 @@ export const retryConcurrentChanges = <A, E extends { readonly _tag: string }, R
   );
 
 export const getInstanceByName = (name: string) =>
-  spanner
-    .getProjectsInstances({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  spanner.getProjectsInstances({ name }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const listAlchemyInstances = (project: string) =>
   spanner.listProjectsInstances

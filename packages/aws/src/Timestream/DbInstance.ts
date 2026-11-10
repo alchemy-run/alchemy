@@ -12,6 +12,16 @@ import * as Schedule from "effect/Schedule";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 
+export class DbInstanceInvalidProps extends Data.TaggedError("DbInstanceInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class DbInstanceUnexpectedResponse extends Data.TaggedError("DbInstanceUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type DbInstanceStatus = influxdb.Status;
 
 export interface DbInstanceProps {
@@ -145,8 +155,23 @@ export interface DbInstance extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DbInstanceLookup
 > {}
+
+/**
+ * Props for {@link DbInstance.lookup}: find an InfluxDB instance this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type DbInstanceLookup =
+  | {
+      /** The id of the existing instance. */
+      id: string;
+    }
+  | {
+      /** The name of the existing instance. */
+      name: string;
+    };
 
 /**
  * An Amazon Timestream for InfluxDB DB instance — a managed, single-tenant
@@ -173,6 +198,16 @@ export interface DbInstance extends Resource<
  *   vpcSecurityGroupIds: [securityGroup.groupId],
  *   password: Redacted.make("SuperSecretPassword1"),
  * });
+ * ```
+ *
+ * ### Looking up an existing InfluxDB instance
+ * `DbInstance.lookup` references an InfluxDB instance Alchemy doesn't manage (created in the
+ * console or by another stack), found by `id` or `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing InfluxDB instance
+ * ```typescript
+ * const metrics = AWS.Timestream.DbInstance.lookup({ name: "metrics" });
  * ```
  *
  * @resource
@@ -207,7 +242,7 @@ const toAttrs = (
 const fetchTags = Effect.fn(function* (arn: string) {
   const response = yield* influxdb
     .listTagsForResource({ resourceArn: arn })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   const tags = response?.tags ?? {};
   return Object.fromEntries(
     Object.entries(tags).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
@@ -217,7 +252,7 @@ const fetchTags = Effect.fn(function* (arn: string) {
 const readInstanceById = Effect.fn(function* (identifier: string) {
   const instance = yield* influxdb
     .getDbInstance({ identifier })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!instance) return undefined;
   return toAttrs(instance, yield* fetchTags(instance.arn));
 });
@@ -270,7 +305,7 @@ const waitForStatus = (identifier: string, target: "AVAILABLE" | "DELETED") =>
     Effect.gen(function* () {
       const instance = yield* influxdb
         .getDbInstance({ identifier })
-        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       if (target === "DELETED") {
         if (instance === undefined) return;
         return yield* new DbInstanceNotReady({ identifier, status: instance.status });
@@ -307,6 +342,11 @@ export const DbInstanceProvider = () =>
               (attrs): attrs is DbInstance["Attributes"] => attrs !== undefined,
             );
           }),
+        lookup: Effect.fn(function* (props) {
+          return "id" in props
+            ? yield* readInstanceById(props.id)
+            : yield* findInstanceByName(props.name);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const state = output?.id
             ? yield* readInstanceById(output.id)
@@ -337,7 +377,9 @@ export const DbInstanceProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(new Error("Timestream DbInstance requires props"));
+            return yield* new DbInstanceInvalidProps({
+              message: "Timestream DbInstance requires props",
+            });
           }
           const name = output?.name ?? (yield* createInstanceName(id, news));
           const internalTags = yield* createInternalTags(id);
@@ -375,7 +417,9 @@ export const DbInstanceProvider = () =>
             yield* waitForStatus(created.id, "AVAILABLE");
             state = yield* readInstanceById(created.id);
             if (state === undefined) {
-              return yield* Effect.fail(new Error(`failed to read created DB instance ${name}`));
+              return yield* new DbInstanceUnexpectedResponse({
+                message: `failed to read created DB instance ${name}`,
+              });
             }
           }
 
@@ -424,7 +468,9 @@ export const DbInstanceProvider = () =>
 
           const final = yield* readInstanceById(state.id);
           if (!final) {
-            return yield* Effect.fail(new Error(`failed to read reconciled DB instance ${name}`));
+            return yield* new DbInstanceUnexpectedResponse({
+              message: `failed to read reconciled DB instance ${name}`,
+            });
           }
           return final;
         }),

@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -286,8 +287,38 @@ export type CertificateAuthority = Resource<
   CertificateAuthorityProps,
   CertificateAuthorityAttrs,
   never,
-  Providers
+  Providers,
+  CertificateAuthorityLookup
 >;
+
+/**
+ * Props for {@link CertificateAuthority.lookup}: find a certificate
+ * authority this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface CertificateAuthorityLookup {
+  /**
+   * CertificateAuthority id (the last path segment). Must match
+   * `[a-zA-Z0-9_-]{1,63}`.
+   */
+  certificateAuthorityId: string;
+  /**
+   * Parent CaPool. Full name
+   * `projects/{project}/locations/{location}/caPools/{caPool}` or the pool
+   * id (combined with `location`).
+   */
+  caPool: string;
+  /**
+   * Location (`us-central1`, …). Used when `caPool` is a bare id.
+   * `US-CENTRAL1` is accepted and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Certificate Authority Service CertificateAuthority — a named CA in a
@@ -351,6 +382,20 @@ export type CertificateAuthority = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing certificate authority
+ * `CertificateAuthority.lookup` references a certificate authority Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared certificate authority.
+ *
+ * **Example:** Reference an existing certificate authority
+ * ```typescript
+ * const certificateAuthority = GCP.PrivateCA.CertificateAuthority.lookup({
+ *   certificateAuthorityId: "my-certificate-authority",
+ *   caPool: "my-ca-pool",
+ * });
+ * ```
+ *
  * @resource
  * @category PrivateCA
  */
@@ -361,20 +406,20 @@ export const CertificateAuthority = Resource<CertificateAuthority>(
 export class CertificateAuthorityNotResolved extends Data.TaggedError(
   "GCP.PrivateCA.CertificateAuthorityNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class CertificateAuthorityNotReady extends Data.TaggedError(
   "GCP.PrivateCA.CertificateAuthorityNotReady",
 )<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class CertificateAuthorityStillExists extends Data.TaggedError(
   "GCP.PrivateCA.CertificateAuthorityStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -582,7 +627,7 @@ const configKey = (config: CertificateConfig | undefined) => jsonKey(config);
 const getByName = (name: string) =>
   privateca
     .getProjectsLocationsCaPoolsCertificateAuthorities({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /**
  * Wait for a Certificate Authority Service operation; CA creation and
@@ -606,7 +651,9 @@ const waitForOperation = (operation: privateca.Operation, options?: { notFoundOk
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((ca) =>
-      ca ? Effect.succeed(ca) : Effect.fail(new CertificateAuthorityNotResolved({ name })),
+      ca
+        ? Effect.succeed(ca)
+        : Effect.fail(new CertificateAuthorityNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.PrivateCA.CertificateAuthorityNotResolved",
@@ -619,13 +666,13 @@ const waitUntilSteady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (ca): ca is privateca.CertificateAuthority => ca !== undefined,
-      () => new CertificateAuthorityNotResolved({ name }),
+      () => new CertificateAuthorityNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (ca) => STEADY_STATES.has((ca.state ?? "").toUpperCase()),
       (ca) =>
         new CertificateAuthorityNotReady({
-          name,
+          resourceName: name,
           state: ca.state ?? "STATE_UNSPECIFIED",
         }),
     ),
@@ -644,7 +691,9 @@ const isGone = (ca: privateca.CertificateAuthority | undefined) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((ca) =>
-      isGone(ca) ? Effect.void : Effect.fail(new CertificateAuthorityStillExists({ name })),
+      isGone(ca)
+        ? Effect.void
+        : Effect.fail(new CertificateAuthorityStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.PrivateCA.CertificateAuthorityStillExists",
@@ -693,9 +742,9 @@ const disableIfNeeded = (current: privateca.CertificateAuthority) => {
     })
     .pipe(
       Effect.catchTags({
-        NotFound: () => Effect.succeed(undefined),
-        BadRequest: () => Effect.succeed(undefined),
-        Conflict: () => Effect.succeed(undefined),
+        NotFound: () => Effect.undefined,
+        BadRequest: () => Effect.undefined,
+        Conflict: () => Effect.undefined,
       }),
       Effect.flatMap((operation) => runOperation(operation)),
       Effect.flatMap(() => waitUntilSteady(name)),
@@ -843,6 +892,32 @@ export const CertificateAuthorityProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({ certificateAuthorityId, caPool, location }) {
+      const env = yield* GcpEnvironment.current;
+      // A recovery read of an interrupted create gets persisted props whose
+      // unresolved parent reference was stripped; without the parent there
+      // is no name to look up, so report nothing found rather than calling
+      // the API with an empty path segment.
+      if (typeof caPool !== "string" || caPool.length === 0) {
+        return undefined;
+      }
+      const { parent } = resolveParent(
+        env.project,
+        typeof caPool === "string" ? caPool : "",
+        location ?? env.region,
+      );
+      const name = resourceName(parent, certificateAuthorityId);
+      if (name.endsWith("/certificateAuthorities/") || name.endsWith("/_")) {
+        return undefined;
+      }
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      if ((existing.state ?? "").toUpperCase() === "DELETED") {
+        return undefined;
+      }
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const caPool = olds?.caPool ?? output?.caPool;
@@ -910,13 +985,13 @@ export const CertificateAuthorityProvider = () =>
             certificateAuthorityId,
             body: toCreateBody(news, certificateAuthorityId, desiredLabels),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         yield* runOperation(created);
         current = yield* waitUntilExists(name);
       }
 
       if (current === undefined) {
-        return yield* new CertificateAuthorityNotResolved({ name });
+        return yield* new CertificateAuthorityNotResolved({ resourceName: name });
       }
 
       current = yield* undeleteIfNeeded(current);
@@ -956,7 +1031,7 @@ export const CertificateAuthorityProvider = () =>
               subordinateConfig: news.subordinateConfig,
             },
           })
-          .pipe(Effect.catchTag("BadRequest", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("BadRequest", () => Effect.undefined));
         yield* runOperation(patched);
         current = yield* waitUntilSteady(name);
       }
@@ -982,8 +1057,8 @@ export const CertificateAuthorityProvider = () =>
           })
           .pipe(
             Effect.catchTags({
-              NotFound: () => Effect.succeed(undefined),
-              BadRequest: () => Effect.succeed(undefined),
+              NotFound: () => Effect.undefined,
+              BadRequest: () => Effect.undefined,
             }),
             Effect.retry({
               while: (error) => error._tag === "Conflict",

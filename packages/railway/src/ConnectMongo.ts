@@ -62,7 +62,7 @@ export const connectEnvKeys = (mongo: Pick<Mongo, "LogicalId">) => {
 };
 
 export class MongoUrlMissing extends Data.TaggedError("Railway.MongoUrlMissing")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export interface ConnectMongoClient {

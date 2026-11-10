@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -112,8 +113,36 @@ export type BackupPlansBackup = Resource<
     completeTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  BackupPlansBackupLookup
 >;
+
+/**
+ * Props for {@link BackupPlansBackup.lookup}: find a backup plans backup
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface BackupPlansBackupLookup {
+  /**
+   * Backup id (the `{backup}` segment).
+   */
+  backupId: string;
+  /**
+   * Region used when `backupPlan` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent BackupPlan. Full name
+   * `projects/{project}/locations/{location}/backupPlans/{backupPlan}` or
+   * the plan id (combined with `location`).
+   */
+  backupPlan: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Backup for GKE backup — a point-in-time capture of a cluster under
@@ -149,6 +178,20 @@ export type BackupPlansBackup = Resource<
  *   backupPlan: plan.name,
  *   description: "pre-release v2",
  *   labels: { env: "prod", team: "platform" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing backup plans backup
+ * `BackupPlansBackup.lookup` references a backup plans backup Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared backup plans backup.
+ *
+ * **Example:** Reference an existing backup plans backup
+ * ```typescript
+ * const backupPlansBackup = GCP.GKEBackup.BackupPlansBackup.lookup({
+ *   backupId: "my-backup",
+ *   backupPlan: "my-backup-plan",
  * });
  * ```
  *
@@ -188,7 +231,7 @@ const toAttrs = (item: gkebackup.Backup, project: string, region: string) => {
 const getByName = (name: string) =>
   gkebackup
     .getProjectsLocationsBackupPlansBackups({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string) =>
   listAtNested(project, "backupPlans/-", (parent) =>
@@ -221,6 +264,16 @@ export const BackupPlansBackupProvider = () =>
         nextParent: news.backupPlan,
       });
     }),
+
+    lookup: Effect.fn(function* ({ backupId, location: lookupLocation, backupPlan }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const plan = expandParent(backupPlan ?? "", env.project, location, "backupPlans");
+      const name = resourceName(plan, backupId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -271,7 +324,7 @@ export const BackupPlansBackupProvider = () =>
               labels: desiredLabels,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -279,7 +332,7 @@ export const BackupPlansBackupProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -324,7 +377,7 @@ export const BackupPlansBackupProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForDeleteOperation(operation);

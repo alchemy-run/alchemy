@@ -50,8 +50,18 @@ export interface OpenIDConnectProvider extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  OpenIDConnectProviderLookup
 > {}
+
+/**
+ * Props for {@link OpenIDConnectProvider.lookup}: find an open ID connect provider this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface OpenIDConnectProviderLookup {
+  /** The open ID connect provider arn of the existing open ID connect provider. */
+  openIDConnectProviderArn: string;
+}
 
 /**
  * An IAM OpenID Connect provider for web identity federation.
@@ -66,6 +76,16 @@ export interface OpenIDConnectProvider extends Resource<
  *   clientIDList: ["sts.amazonaws.com"],
  *   thumbprintList: ["6938fd4d98bab03faadb97b34396831e3780aea1"],
  * });
+ * ```
+ *
+ * ### Looking up an existing open ID connect provider
+ * `OpenIDConnectProvider.lookup` references an open ID connect provider Alchemy doesn't manage (created in the
+ * console or by another stack), found by `openIDConnectProviderArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing open ID connect provider
+ * ```typescript
+ * const existing = AWS.IAM.OpenIDConnectProvider.lookup({ openIDConnectProviderArn: "my-open-id-connect-provider" });
  * ```
  *
  * @resource
@@ -91,7 +111,7 @@ export const OpenIDConnectProviderProvider = () =>
           .getOpenIDConnectProvider({
             OpenIDConnectProviderArn: providerArn,
           })
-          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
         return response;
       });
 
@@ -115,7 +135,7 @@ export const OpenIDConnectProviderProvider = () =>
           // A peer test may delete a provider between
           // `listOpenIDConnectProviders` and hydrating its tags — skip the
           // vanished entry rather than failing the whole enumeration.
-          Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+          Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
         );
 
       return {
@@ -141,6 +161,22 @@ export const OpenIDConnectProviderProvider = () =>
           if (olds.url !== news.url) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ openIDConnectProviderArn: providerArn }) {
+          const provider = yield* readProvider(providerArn);
+          if (!provider?.Url) {
+            return undefined;
+          }
+          const tags = yield* iam.listOpenIDConnectProviderTags({
+            OpenIDConnectProviderArn: providerArn,
+          });
+          return {
+            openIDConnectProviderArn: providerArn,
+            url: provider.Url,
+            clientIDList: provider.ClientIDList ?? [],
+            thumbprintList: provider.ThumbprintList ?? [],
+            tags: toTagRecord(tags.Tags),
+          };
         }),
         read: Effect.fn(function* ({ olds, output }) {
           const providerArn =

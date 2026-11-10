@@ -64,8 +64,20 @@ export type SecretKey = Resource<
     updatedAt: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SecretKeyLookup
 >;
+
+/**
+ * Props for {@link SecretKey.lookup}: find a secret key this stack
+ * doesn't manage by its App and name.
+ */
+export interface SecretKeyLookup {
+  /** Fly App name the key belongs to. */
+  appName: string;
+  /** Secret key name. */
+  name: string;
+}
 
 const resolveSecretKeyProps = (
   props: SecretKeyProps | Effect.Effect<SecretKeyProps, never, Providers>,
@@ -173,6 +185,17 @@ const SecretKeyResource = Resource<SecretKey>("Fly.SecretKey");
  * const { valid } = yield* verify({ plaintext, signature });
  * ```
  *
+ * ### Looking up an existing key
+ * `SecretKey.lookup` references a key Alchemy doesn't manage (created with
+ * `fly secrets keys` or by another stack). It is read during plan/deploy,
+ * never generated or deleted. Bind it like a declared key.
+ *
+ * **Example:** Verify with an existing key
+ * ```typescript
+ * const Signing = Fly.SecretKey.lookup({ appName: "my-site", name: "signing" });
+ * const verify = yield* Fly.Verify(Signing);
+ * ```
+ *
  * @resource
  * @product Secret Key
  */
@@ -184,7 +207,7 @@ export const SecretKey: typeof SecretKeyResource = Object.assign(
 
 export class SecretKeyNotCreated extends Data.TaggedError("Fly.SecretKeyNotCreated")<{
   appName: string;
-  name: string;
+  secretName: string;
 }> {}
 
 export class SecretKeyAppRequired extends Data.TaggedError("Fly.SecretKeyAppRequired")<{
@@ -223,7 +246,7 @@ const getByName = (appName: string, secretName: string) =>
       app_name: appName,
       secret_name: secretName,
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listKeys = (appName: string) =>
   machines.listSecretKeys({ app_name: appName }).pipe(
@@ -283,6 +306,11 @@ export const SecretKeyProvider = () =>
         };
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ appName, name }) {
+      const found = yield* getByName(appName, name);
+      return found === undefined ? undefined : toAttrs(appName, found, name);
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
@@ -346,7 +374,7 @@ export const SecretKeyProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SecretKeyNotCreated({ appName, name });
+        return yield* new SecretKeyNotCreated({ appName, secretName: name });
       }
 
       // Sync — re-set when the caller supplied new material. Observed

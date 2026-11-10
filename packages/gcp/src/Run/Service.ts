@@ -1,3 +1,4 @@
+import type { BuildCacheOptions } from "@alchemy.run/docker/BuildCache";
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";
 import { Unowned } from "alchemy/AdoptPolicy";
@@ -7,7 +8,7 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
-import { Resource, type ResourceBinding } from "alchemy/Resource";
+import { type LookupMethod, Resource, type ResourceBinding } from "alchemy/Resource";
 import { type ServerHost } from "alchemy/Runtime/Process";
 import { tagRecord } from "alchemy/Tags";
 import type { ExtraFile } from "alchemy/Util/extraFiles";
@@ -17,7 +18,12 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { destroyHostImageRepository, makeImageSource } from "../ArtifactRegistry/ImageSource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import { retryActAs, type AppliedIamGrant, type GcpHostBinding } from "../Host.ts";
+import {
+  retryActAs,
+  serviceAccountUniqueId,
+  type AppliedIamGrant,
+  type GcpHostBinding,
+} from "../Host.ts";
 import {
   createGcpHostRuntimeContext,
   RPC_METHODS_ENV,
@@ -32,6 +38,7 @@ import {
   releaseHostIdentity,
   resolveHostIdentity,
 } from "../HostRuntime.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -349,9 +356,10 @@ export type ServiceProps = PlatformProps & {
   /**
    * Bundler configuration for `main`. `install` lists packages
    * `npm install`ed into an unbundled Node program image (see
-   * {@link extraFiles}); Next.js needs `next`.
+   * {@link extraFiles}); Next.js needs `next`. `cache` configures the image
+   * build's BuildKit layer cache.
    */
-  build?: Bundle.BundleConfig & { install?: PackageInstall };
+  build?: Bundle.BundleConfig & BuildCacheOptions & { install?: PackageInstall };
   /**
    * Host files or directories baked into the image next to `main`
    * (`dest` is relative to `/app`; `"."` merges into `/app`). When set on
@@ -421,8 +429,34 @@ export type Service = Resource<
     codeHash: string | undefined;
   },
   GcpHostBinding,
-  Providers
+  Providers,
+  ServiceLookup
 >;
+
+/**
+ * Props for {@link Service.lookup}: find a service this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface ServiceLookup {
+  /**
+   * Service id (the `{service}` segment of
+   * `projects/{project}/locations/{location}/services/{service}`). Must
+   * begin with a letter, not end with a hyphen, and be fewer than 50
+   * characters.
+   */
+  serviceId: string;
+  /**
+   * Region (`us-central1`, `europe-west1`, …). `US-CENTRAL1` is accepted
+   * and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 export type ServiceRuntimeContext = GcpHostRuntimeContext;
 export type ServiceServices = Credentials | GcpEnvironment | ServerHost;
@@ -604,6 +638,35 @@ export type ServiceShape = Main<ServiceServices>;
  * ) {}
  * ```
  *
+ * ### Caching Build Layers
+ * Builds reuse the local BuildKit cache of the machine they run on, and
+ * nothing but the image is pushed. A builder that has never built the image,
+ * such as a fresh CI runner, reruns every step. Set `build.cache: true` to keep
+ * every stage's layers at the image repository's `:buildcache` tag, so fresh
+ * builders skip unchanged steps. For another backend, pass BuildKit's own
+ * `--cache-from` / `--cache-to` values as `from` and `to`.
+ *
+ * **Example:** Cache layers in Artifact Registry
+ * ```typescript
+ * const api = yield* GCP.Run.Service("Api", {
+ *   main: import.meta.url,
+ *   build: { cache: true },
+ * });
+ * ```
+ *
+ * **Example:** Cache layers in GitHub Actions
+ * ```typescript
+ * const api = yield* GCP.Run.Service("Api", {
+ *   main: import.meta.url,
+ *   build: {
+ *     cache: {
+ *       from: ["type=gha,scope=api"],
+ *       to: ["type=gha,scope=api,mode=max"],
+ *     },
+ *   },
+ * });
+ * ```
+ *
  * ### Updating a Service
  * **Example:** New revision
  * ```typescript
@@ -626,28 +689,38 @@ export type ServiceShape = Main<ServiceServices>;
  * const live = yield* getService();
  * ```
  *
+ * ### Looking up an existing service
+ * `Service.lookup` references a service Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared service.
+ *
+ * **Example:** Reference an existing service
+ * ```typescript
+ * const service = GCP.Run.Service.lookup({ serviceId: "my-service" });
+ * ```
+ *
  * @resource
  * @category Run
  */
-export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRuntimeContext> =
-  Platform("GCP.Run.Service", {
-    createRuntimeContext: createGcpHostRuntimeContext("GCP.Run.Service", {
-      rpc: "private",
-    }) as (id: string) => ServiceRuntimeContext,
-  });
+export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRuntimeContext> &
+  LookupMethod<Service> = Platform("GCP.Run.Service", {
+  createRuntimeContext: createGcpHostRuntimeContext("GCP.Run.Service", {
+    rpc: "private",
+  }) as (id: string) => ServiceRuntimeContext,
+});
 
 export class ServiceNotResolved extends Data.TaggedError("GCP.Run.ServiceNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ServiceNotReady extends Data.TaggedError("GCP.Run.ServiceNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
   message: string;
 }> {}
 
 export class ServiceReconciling extends Data.TaggedError("GCP.Run.ServiceReconciling")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
@@ -664,7 +737,7 @@ export class ServiceRpcPublic extends Data.TaggedError("GCP.Run.ServiceRpcPublic
 }
 
 export class ServiceStillExists extends Data.TaggedError("GCP.Run.ServiceStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -1095,7 +1168,7 @@ const sourceOf = (news: ServiceProps, main: string) => ({
 const getByName = (name: string) =>
   cloudrun
     .getProjectsLocationsServices({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /** Waits on a Cloud Run long-running operation (revisions roll out in minutes). */
 const waitForOperation = (
@@ -1147,13 +1220,13 @@ const waitUntilReady = (name: string) =>
     Effect.filterOrFail(
       (service): service is cloudrun.GoogleCloudRunV2Service =>
         service !== undefined && service.deleteTime === undefined,
-      () => new ServiceNotResolved({ name }),
+      () => new ServiceNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (service) => (service.terminalCondition?.state ?? "") !== "CONDITION_FAILED",
       (service) =>
         new ServiceNotReady({
-          name,
+          resourceName: name,
           state: service.terminalCondition?.state ?? "",
           message: service.terminalCondition?.message ?? "revision failed",
         }),
@@ -1162,7 +1235,7 @@ const waitUntilReady = (name: string) =>
       (service) => !isPendingService(service),
       (service) =>
         new ServiceReconciling({
-          name,
+          resourceName: name,
           state: service.terminalCondition?.state || "reconciling",
         }),
     ),
@@ -1177,7 +1250,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((service) =>
-      service === undefined ? Effect.void : Effect.fail(new ServiceStillExists({ name })),
+      service === undefined
+        ? Effect.void
+        : Effect.fail(new ServiceStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Run.ServiceStillExists",
@@ -1236,6 +1311,23 @@ export const ServiceProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ serviceId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, serviceId);
+      const existing = yield* getByName(name);
+      if (existing === undefined || existing.deleteTime !== undefined) {
+        return undefined;
+      }
+      const attrs = toAttrs(existing, env.project, env.region);
+      // The id AWS roles trust the runtime's Google ID tokens by.
+      const uniqueId =
+        attrs.serviceAccount === undefined
+          ? undefined
+          : yield* serviceAccountUniqueId(attrs.serviceAccount);
+      return { ...attrs, serviceAccountUniqueId: uniqueId };
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -1392,7 +1484,7 @@ export const ServiceProvider = () =>
           })
           .pipe(
             retryActAs,
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
             Effect.onError(() => identity.cleanup),
           );
         if (created !== undefined) {
@@ -1402,7 +1494,7 @@ export const ServiceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ServiceNotResolved({ name });
+        return yield* new ServiceNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -1483,7 +1575,7 @@ export const ServiceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ServiceNotResolved({ name });
+        return yield* new ServiceNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region, {
@@ -1500,7 +1592,7 @@ export const ServiceProvider = () =>
           times: 8,
           schedule: Schedule.spaced("2 seconds"),
         }),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

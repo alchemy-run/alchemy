@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -127,8 +128,33 @@ export type TrustConfig = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  TrustConfigLookup
 >;
+
+/**
+ * Props for {@link TrustConfig.lookup}: find a trust config this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface TrustConfigLookup {
+  /**
+   * TrustConfig id (the `{trustConfig}` segment of
+   * `projects/{project}/locations/{location}/trustConfigs/{trustConfig}`).
+   * Must be 1-63 characters and match `[a-z0-9-]{1,63}`.
+   */
+  trustConfigId: string;
+  /**
+   * Certificate Manager location (`global`, `us-central1`, …).
+   * `US-CENTRAL1` is accepted and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Certificate Manager TrustConfig — the PKI used to validate client
@@ -189,6 +215,19 @@ export type TrustConfig = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing trust config
+ * `TrustConfig.lookup` references a trust config Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * trust config.
+ *
+ * **Example:** Reference an existing trust config
+ * ```typescript
+ * const trustConfig = GCP.CertificateManager.TrustConfig.lookup({
+ *   trustConfigId: "my-trust-config",
+ * });
+ * ```
+ *
  * @resource
  * @category CertificateManager
  */
@@ -197,13 +236,13 @@ export const TrustConfig = Resource<TrustConfig>("GCP.CertificateManager.TrustCo
 export class TrustConfigNotResolved extends Data.TaggedError(
   "GCP.CertificateManager.TrustConfigNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class TrustConfigStillExists extends Data.TaggedError(
   "GCP.CertificateManager.TrustConfigStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -339,12 +378,14 @@ const toAttrs = (config: certificatemanager.TrustConfig, project: string) => {
 const getByName = (name: string) =>
   certificatemanager
     .getProjectsLocationsTrustConfigs({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((config) =>
-      config ? Effect.succeed(config) : Effect.fail(new TrustConfigNotResolved({ name })),
+      config
+        ? Effect.succeed(config)
+        : Effect.fail(new TrustConfigNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CertificateManager.TrustConfigNotResolved",
@@ -356,7 +397,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((config) =>
-      config === undefined ? Effect.void : Effect.fail(new TrustConfigStillExists({ name })),
+      config === undefined
+        ? Effect.void
+        : Effect.fail(new TrustConfigStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CertificateManager.TrustConfigStillExists",
@@ -425,6 +468,15 @@ export const TrustConfigProvider = () =>
       return { action: "replace" as const };
     }),
 
+    lookup: Effect.fn(function* ({ trustConfigId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = resourceName(env.project, location, trustConfigId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const trustConfigId = yield* toId(id, olds?.trustConfigId, output?.trustConfigId);
@@ -467,7 +519,7 @@ export const TrustConfigProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -476,7 +528,7 @@ export const TrustConfigProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new TrustConfigNotResolved({ name });
+        return yield* new TrustConfigNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -536,7 +588,7 @@ export const TrustConfigProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

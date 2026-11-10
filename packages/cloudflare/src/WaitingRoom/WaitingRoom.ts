@@ -425,8 +425,8 @@ const getRoom = (zoneId: string, waitingRoomId: string) =>
   waitingRooms.getWaitingRoom({ zoneId, waitingRoomId }).pipe(
     Effect.map((room): ObservedRoom | undefined => room),
     Effect.catchTags({
-      WaitingRoomNotFound: () => Effect.succeed(undefined),
-      InvalidRoute: () => Effect.succeed(undefined),
+      WaitingRoomNotFound: () => Effect.undefined,
+      InvalidRoute: () => Effect.undefined,
     }),
   );
 
@@ -441,7 +441,7 @@ const findByName = (zoneId: string, name: string) =>
       Array.from(chunk).find((room): room is ObservedRoom => room.name === name),
     ),
     // Zone deleted out-of-band — nothing to find.
-    Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+    Effect.catchTag("InvalidRoute", () => Effect.undefined),
   );
 
 /**

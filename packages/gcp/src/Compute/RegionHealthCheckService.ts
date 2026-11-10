@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -101,8 +102,31 @@ export type RegionHealthCheckService = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RegionHealthCheckServiceLookup
 >;
+
+/**
+ * Props for {@link RegionHealthCheckService.lookup}: find a region health
+ * check service this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface RegionHealthCheckServiceLookup {
+  /**
+   * Service name (RFC1035, 1-63 characters).
+   */
+  serviceName: string;
+  /**
+   * Region the service lives in. `US-CENTRAL1` is accepted and normalized
+   * to `us-central1`.
+   */
+  region?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A regional Compute Engine Health Check as a Service (HCSS) resource.
@@ -129,6 +153,19 @@ export type RegionHealthCheckService = Resource<
  * const service = yield* GCP.Compute.RegionHealthCheckService("Hcss", {
  *   healthChecks: [check.selfLink],
  *   healthStatusAggregationPolicy: "AND",
+ * });
+ * ```
+ *
+ * ### Looking up an existing region health check service
+ * `RegionHealthCheckService.lookup` references a region health check
+ * service Alchemy doesn't manage (created in the console or by another
+ * stack). It is read during plan/deploy, never created, updated or deleted,
+ * and binds like a declared region health check service.
+ *
+ * **Example:** Reference an existing region health check service
+ * ```typescript
+ * const regionHealthCheckService = GCP.Compute.RegionHealthCheckService.lookup({
+ *   serviceName: "my-service",
  * });
  * ```
  *
@@ -177,7 +214,7 @@ const getByName = (project: string, region: string, name: string) =>
       region,
       healthCheckService: name,
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, region: string, serviceName: string) =>
   getByName(project, region, serviceName).pipe(
@@ -215,6 +252,14 @@ export const RegionHealthCheckServiceProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ serviceName, region: lookupRegion }) {
+      const env = yield* GcpEnvironment.current;
+      const region = normalizeRegion(lookupRegion, env.region);
+      const existing = yield* getByName(env.project, region, serviceName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -292,7 +337,7 @@ export const RegionHealthCheckServiceProvider = () =>
             },
           }),
           { ignoreAlreadyExists: true },
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = yield* awaitResource(env.project, region, serviceName);
       }
 
@@ -362,6 +407,6 @@ export const RegionHealthCheckServiceProvider = () =>
           healthCheckService: output.serviceName,
         }),
         { ignoreNotFound: true },
-      ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      ).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
     }),
   });

@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { listAlchemyDataProducts } from "./DataProduct.ts";
@@ -87,8 +88,31 @@ export type DataProductsDataAsset = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DataProductsDataAssetLookup
 >;
+
+/**
+ * Props for {@link DataProductsDataAsset.lookup}: find a data products data
+ * asset this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface DataProductsDataAssetLookup {
+  /**
+   * Data asset id. Must match `^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$`.
+   */
+  dataAssetId: string;
+  /**
+   * Parent Data Product resource name
+   * (`projects/{project}/locations/{location}/dataProducts/{dataProduct}`).
+   */
+  parent: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Dataplex Data Asset packaged inside a Data Product.
@@ -104,6 +128,20 @@ export type DataProductsDataAsset = Resource<
  *   resource:
  *     "//bigquery.googleapis.com/projects/my-project/datasets/sales/tables/orders",
  *   labels: { env: "test" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing data products data asset
+ * `DataProductsDataAsset.lookup` references a data products data asset
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared data products data asset.
+ *
+ * **Example:** Reference an existing data products data asset
+ * ```typescript
+ * const dataProductsDataAsset = GCP.Dataplex.DataProductsDataAsset.lookup({
+ *   dataAssetId: "my-data-asset",
+ *   parent: "my-parent",
  * });
  * ```
  *
@@ -138,9 +176,9 @@ const toAttrs = (asset: dataplex.GoogleCloudDataplexV1DataAsset, project: string
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : retryQuota(dataplex.getProjectsLocationsDataProductsDataAssets({ name })).pipe(
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       );
 
 const listAtParent = (parent: string) =>
@@ -182,6 +220,14 @@ export const DataProductsDataAssetProvider = () =>
           news.resource !== (olds?.resource ?? output?.resource),
       });
     }),
+
+    lookup: Effect.fn(function* ({ dataAssetId, parent }) {
+      const env = yield* GcpEnvironment.current;
+      const name = parent ? resourceNameOf(parent, dataAssetId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -240,7 +286,7 @@ export const DataProductsDataAssetProvider = () =>
               accessGroupConfigs: news.accessGroupConfigs,
             },
           }),
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -248,7 +294,7 @@ export const DataProductsDataAssetProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DataplexNotResolved({ name });
+        return yield* new DataplexNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -293,7 +339,7 @@ export const DataProductsDataAssetProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

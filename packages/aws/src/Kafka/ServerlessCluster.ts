@@ -5,10 +5,23 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class ServerlessClusterNotReady extends Data.TaggedError("ServerlessClusterNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class ServerlessClusterUnexpectedResponse extends Data.TaggedError(
+  "ServerlessClusterUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ServerlessClusterProps {
   /**
@@ -60,8 +73,23 @@ export interface ServerlessCluster extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ServerlessClusterLookup
 > {}
+
+/**
+ * Props for {@link ServerlessCluster.lookup}: find a serverless cluster this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type ServerlessClusterLookup =
+  | {
+      /** The ARN of the existing cluster. */
+      clusterArn: string;
+    }
+  | {
+      /** The name of the existing cluster. */
+      clusterName: string;
+    };
 
 /**
  * An Amazon MSK (Managed Streaming for Apache Kafka) **Serverless** cluster.
@@ -89,6 +117,17 @@ export interface ServerlessCluster extends Resource<
  * yield* Kafka.consumeKafkaTopic(cluster, { topics: ["orders"] }, (records) =>
  *   records.pipe(Stream.runForEach((r) => Effect.log(r.value))),
  * );
+ * ```
+ *
+ * ### Looking up an existing serverless cluster
+ * `ServerlessCluster.lookup` references a serverless cluster Alchemy doesn't manage (created in the
+ * console or by another stack), found by `clusterArn` or `clusterName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Produce to an existing cluster
+ * ```typescript
+ * const events = AWS.Kafka.ServerlessCluster.lookup({ clusterName: "events" });
+ * const clusterArn = events.clusterArn;
  * ```
  *
  * @resource
@@ -141,7 +180,7 @@ export const ServerlessClusterProvider = () =>
       const describeByArn = Effect.fn(function* (arn: string) {
         const response = yield* kafka
           .describeClusterV2({ ClusterArn: arn })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
         return response?.ClusterInfo;
       });
 
@@ -150,8 +189,8 @@ export const ServerlessClusterProvider = () =>
           Effect.map((r) => r.BootstrapBrokerStringSaslIam),
           // Brokers are only resolvable once the cluster is ACTIVE.
           Effect.catchTags({
-            BadRequestException: () => Effect.succeed(undefined),
-            ConflictException: () => Effect.succeed(undefined),
+            BadRequestException: () => Effect.undefined,
+            ConflictException: () => Effect.undefined,
           }),
         );
       });
@@ -163,7 +202,9 @@ export const ServerlessClusterProvider = () =>
         return yield* describeByArn(arn).pipe(
           Effect.flatMap((cluster) => {
             if (!cluster) {
-              return Effect.fail(new Error(`MSK cluster '${arn}' not found`));
+              return Effect.fail(
+                new ServerlessClusterNotReady({ message: `MSK cluster '${arn}' not found` }),
+              );
             }
             if (cluster.State === "FAILED") {
               return Effect.die(
@@ -174,7 +215,9 @@ export const ServerlessClusterProvider = () =>
             }
             if (cluster.State !== "ACTIVE") {
               return Effect.fail(
-                new Error(`MSK cluster '${arn}' not active (state: ${cluster.State})`),
+                new ServerlessClusterNotReady({
+                  message: `MSK cluster '${arn}' not active (state: ${cluster.State})`,
+                }),
               );
             }
             return Effect.succeed(cluster);
@@ -185,9 +228,9 @@ export const ServerlessClusterProvider = () =>
 
       const toAttrs = Effect.fn(function* (cluster: kafka.Cluster) {
         if (!cluster.ClusterName || !cluster.ClusterArn) {
-          return yield* Effect.fail(
-            new Error(`MSK cluster is missing its name or ARN (state: ${cluster.State})`),
-          );
+          return yield* new ServerlessClusterUnexpectedResponse({
+            message: `MSK cluster is missing its name or ARN (state: ${cluster.State})`,
+          });
         }
         const bootstrap =
           cluster.State === "ACTIVE" ? yield* readBrokers(cluster.ClusterArn) : undefined;
@@ -222,6 +265,14 @@ export const ServerlessClusterProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* (props) {
+          const cluster =
+            "clusterArn" in props
+              ? yield* describeByArn(props.clusterArn)
+              : yield* findByName(props.clusterName);
+          return cluster?.ClusterArn ? yield* toAttrs(cluster) : undefined;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

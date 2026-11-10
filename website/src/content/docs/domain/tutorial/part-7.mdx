@@ -4,6 +4,7 @@ description: Send the bank's traces and logs to Axiom, follow a deposit through 
 sidebar:
   order: 7
 ---
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 The bank already records a span for every command, event, view and policy. Nothing receives them yet. In this part you send them to [Axiom](/axiom), then add the browser's spans, so one trace runs from a click to every Durable Object it reaches.
 
@@ -16,9 +17,7 @@ You need a [configured Axiom profile](/axiom/setup).
 
 ## Install the Axiom provider
 
-```sh
-bun add @alchemy.run/axiom
-```
+<PackageManagers add="@alchemy.run/axiom" />
 
 ## Let the stack create Axiom resources
 
@@ -27,17 +26,22 @@ bun add @alchemy.run/axiom
 import * as Alchemy from "alchemy";
 +import * as Axiom from "@alchemy.run/axiom";
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import * as Effect from "effect/Effect";
-+import * as Layer from "effect/Layer";
+import * as Layer from "effect/Layer";
 import BankWorker from "./src/BankWorker.ts";
 
 export default Alchemy.Stack(
   "Bank",
--  { providers: Cloudflare.providers(), state: Cloudflare.state() },
-+  {
-+    providers: Layer.mergeAll(Cloudflare.providers(), Axiom.providers()),
-+    state: Cloudflare.state(),
-+  },
+  {
+-    providers: Layer.mergeAll(Cloudflare.providers(), DomainCloudflare.providers()),
++    providers: Layer.mergeAll(
++      Cloudflare.providers(),
++      DomainCloudflare.providers(),
++      Axiom.providers(),
++    ),
+    state: Cloudflare.state(),
+  },
   Effect.gen(function* () {
     const bank = yield* BankWorker;
     const app = yield* Cloudflare.Website.Foldkit("BankApp", {
@@ -92,7 +96,7 @@ Dataset names are global to your Axiom org. If you deploy more than one stage, g
 // src/BankWorker.ts
 +import * as Axiom from "@alchemy.run/axiom";
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as Layer from "effect/Layer";
@@ -112,7 +116,7 @@ import { SessionLive, sessionRoute } from "./Session.middleware.ts";
 +
 +const BankLive = Layer.mergeAll(SessionLive, TelemetryLive).pipe(
   Layer.provideMerge(Bank.layer(BankHandlers)),
-  Layer.provide(DomainCloudflare.DurableObjects),
+  Layer.provide(DomainCloudflare.layerDurableObjects()),
 );
 
 export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
@@ -135,18 +139,18 @@ This is the only change the bank needs. `Axiom.Telemetry` gives the Worker the d
 
 ## Follow a deposit
 
-```sh
-bun alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 Open the app, deposit, and open `bank-traces` in Axiom. The deposit is one trace:
 
 ```text
-Domain.send Account.DepositMoney         the bank's Worker received the command
-└─ Domain.decide Account.DepositMoney    the account's Durable Object decided and committed
-   │   event MoneyDeposited              one span event per committed event
-   ├─ Domain.view AccountSummary         the summary view applied the event
-   └─ Domain.view Statement              the statement view applied the event
+POST                                            the bank's Worker received the request
+└─ DepositMoney                                 the Api ran the call
+   └─ Domain.send Account.DepositMoney          the Worker sent the command to the account
+      └─ Domain.decide Account.DepositMoney     the account's Durable Object decided and committed
+         │   event MoneyDeposited               one span event per committed event
+         ├─ Domain.view AccountSummary          the summary view applied the event
+         └─ Domain.view Statement               the statement view applied the event
 ```
 
 The trace crosses the Worker and three Durable Objects. Each event carries the span that committed it, so the views that react to it continue the same trace.
@@ -164,36 +168,25 @@ Every span carries `domain.correlation_id`, the id of the first command in the f
 ## Record the amount on every withdrawal
 
 ```diff lang="typescript"
-// src/WithdrawMoney.command.ts
-import * as Domain from "@alchemy.run/domain";
-import * as Schema from "effect/Schema";
-import { AccountId } from "./Account.id.ts";
-import { NotOpen } from "./NotOpen.rejection.ts";
-import { NotOwner } from "./NotOwner.rejection.ts";
-import { Session } from "./Session.middleware.ts";
-
-export class MoneyWithdrawn extends Domain.Event("MoneyWithdrawn", {
-  amount: Schema.Int,
-  balanceAfter: Schema.Int,
-}) {}
-
-export class InsufficientFunds extends Domain.Rejection("InsufficientFunds", {
-  balance: Schema.Int,
-  requested: Schema.Int,
-}) {}
-
-export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
-  target: AccountId,
-  middleware: [Session],
-  input: { amount: Schema.Int },
-  events: [MoneyWithdrawn],
-  rejects: [NotOpen, NotOwner, InsufficientFunds],
-  reply: { balance: Schema.Int },
-+  attributes: (cmd) => ({ "bank.amount": cmd.amount }),
+// src/Account.aggregate.ts
+export class Account extends Domain.Aggregate("Account", {
+  // ...
+  decide: {
+    // ...
+    WithdrawMoney: Effect.fn(function* (account, cmd) {
++      yield* Effect.annotateCurrentSpan("bank.amount", cmd.amount);
+      const open = yield* owned(account);
+      if (cmd.amount > open.balance) {
+        return yield* new InsufficientFunds({ balance: open.balance, requested: cmd.amount });
+      }
+      return [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: open.balance - cmd.amount })];
+    }),
+  },
+  // ...
 }) {}
 ```
 
-Spans record nothing from a command's input unless you ask. `attributes` adds `bank.amount` to every span the withdrawal makes, so you can find large withdrawals in Axiom. Events and rejections accept `attributes` too, and a `Redacted` value is always recorded as `<redacted>`.
+Spans record nothing from a command's input unless a handler annotates it. `decide` runs inside the withdrawal's `Domain.decide Account.WithdrawMoney` span, so `bank.amount` lands on it, and you can find large withdrawals in Axiom.
 
 ## Trace the browser
 
@@ -217,7 +210,7 @@ The Worker will forward spans only from signed-in customers, so a stranger can't
 // src/BankWorker.ts
 import * as Axiom from "@alchemy.run/axiom";
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 +import * as Telemetry from "alchemy/Telemetry";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -239,7 +232,7 @@ const TelemetryLive = Axiom.Telemetry({
 
 const BankLive = Layer.mergeAll(SessionLive, TelemetryLive).pipe(
   Layer.provideMerge(Bank.layer(BankHandlers)),
-  Layer.provide(DomainCloudflare.DurableObjects),
+  Layer.provide(DomainCloudflare.layerDurableObjects()),
 );
 
 +// Accepts spans from the browser and forwards them to Axiom, for signed-in customers only.
@@ -342,23 +335,25 @@ Runtime.run(
 
 ## Follow a click
 
-```sh
-bun alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 Deposit again. The trace now starts in the browser:
 
 ```text
-Deposit                                     the app ran its Deposit command
-└─ Domain.send Account.DepositMoney         the bank's Worker received the command
-   └─ Domain.decide Account.DepositMoney    the account's Durable Object decided and committed
-      │   event MoneyDeposited
-      ├─ Domain.view AccountSummary
-      └─ Domain.view Statement
+Deposit                                                  the app ran its Deposit command
+└─ DepositMoney                                          the app's bank client made the call
+   └─ POST                                               the browser sent the request
+      └─ POST                                            the bank's Worker received it
+         └─ DepositMoney
+            └─ Domain.send Account.DepositMoney
+               └─ Domain.decide Account.DepositMoney
+                  │   event MoneyDeposited
+                  ├─ Domain.view AccountSummary
+                  └─ Domain.view Statement
 ```
 
 One trace shows the click, the command it sent, and everything it changed.
 
 :::note
-Metrics, logs from handlers, and turning off view spans are in [Observability](/domain/observability). To get alerted on what you now record, see [Monitors & Alerting](/axiom/guides/alerting).
+Next, [change a deployed model](/domain/tutorial/part-8). Metrics, logs from handlers, and turning off view spans are in [Observability](/domain/observability). To get alerted on what you now record, see [Monitors & Alerting](/axiom/guides/alerting).
 :::

@@ -274,8 +274,7 @@ export const SynProtectionRuleProvider = () =>
 
 type ObservedRule = ddos.GetAdvancedTcpProtectionSynProtectionRuleItemResponse;
 
-const ruleName = (props: { scope: SynProtectionRuleScope | string; name?: string }) =>
-  props.name ?? "global";
+const ruleName = (props: { scope: string; name?: string }) => props.name ?? "global";
 
 /**
  * Read a rule by id, mapping "gone" (`SynProtectionRuleNotFound`, HTTP 404)
@@ -284,7 +283,7 @@ const ruleName = (props: { scope: SynProtectionRuleScope | string; name?: string
 const getRule = (accountId: string, ruleId: string) =>
   ddos.getAdvancedTcpProtectionSynProtectionRuleItem({ accountId, ruleId }).pipe(
     Effect.map((rule): ObservedRule | undefined => rule),
-    Effect.catchTag("SynProtectionRuleNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("SynProtectionRuleNotFound", () => Effect.undefined),
   );
 
 /**

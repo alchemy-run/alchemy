@@ -86,8 +86,27 @@ export interface Label extends Resource<
     default: boolean;
   },
   never,
-  GitHub.Providers
+  GitHub.Providers,
+  LabelLookup
 > {}
+
+/**
+ * Props for {@link Label.lookup}: find a label this stack
+ * doesn't manage by its repository and name.
+ */
+export interface LabelLookup {
+  /** Repository owner (user or organization). */
+  owner: string;
+  /** Repository name. */
+  repository: string;
+  /** Label name. */
+  name: string;
+  /**
+   * GitHub Enterprise Server URL.
+   * @default `https://github.com`
+   */
+  baseUrl?: string;
+}
 
 /**
  * A GitHub repository label.
@@ -212,6 +231,16 @@ export interface Label extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing label
+ * `Label.lookup` references a label Alchemy doesn't manage (created on
+ * GitHub or by another stack). It is read during plan/deploy, never created,
+ * updated or deleted.
+ *
+ * **Example:** Reference an existing label
+ * ```typescript
+ * const bug = GitHub.Label.lookup({ owner: "alchemy-run", repository: "alchemy", name: "bug" });
+ * ```
+ *
  * @resource
  * @product Issue
  */
@@ -236,13 +265,23 @@ export const LabelProvider = () =>
       }
     }),
 
+    lookup: Effect.fn(
+      function* ({ owner, repository, name }) {
+        return yield* Issues.getLabel({ owner, repo: repository, name }).pipe(
+          Effect.map(attrsOf),
+          Effect.catchTag("NotFound", () => Effect.undefined),
+        );
+      },
+      (effect, { baseUrl }) => effect.pipe(withBaseUrl(baseUrl)),
+    ),
+
     reconcile: Effect.fn(
       function* ({ news }) {
         const scope = { owner: news.owner, repo: news.repository, name: news.name };
 
         // Observe — probe for an existing label by name
         const observed = yield* Issues.getLabel(scope).pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
 
         // Ensure — when no label exists, create one

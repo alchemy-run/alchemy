@@ -1,16 +1,22 @@
 ---
 name: pr-queue
-description: Run a pull-request (or issue) queue for an area of alchemy — search GitHub for open PRs/issues matching a criteria (e.g. "cloudflare", "docker", "aws/rds", an author, a label), shortlist the top 10 ordered by ease of fixing, then fan each one out to its own T3 thread in its own worktree via the t3-code orchestrator: each thread checks out, merges main, resolves conflicts, audits tests and JSDoc, runs the suites, rewrites the PR description as DX snippets, and stops with a merge-or-close recommendation, while this thread coordinates. Use for "start working on a pull request queue for cloudflare", "PR queue for docker", "triage open PRs for X", "work through the open fix(aws) PRs", "next PR" while a queue is running.
+description: Run a pull-request (or issue) queue for an area of alchemy — search GitHub for open PRs/issues matching a criteria (e.g. "cloudflare", "docker", "aws/rds", an author, a label), shortlist the top 10 ordered by ease of fixing, then launch each one as its own detached top-level T3 thread (`t3_thread_launch`, `workspaceStrategy: "worktree"`): each thread checks out, merges main, resolves conflicts, audits tests and JSDoc, runs the suites, rewrites the PR description as DX snippets, and asks the user directly to merge or close it, while this thread keeps the status table. Use for "start working on a pull request queue for cloudflare", "PR queue for docker", "triage open PRs for X", "work through the open fix(aws) PRs", "next PR" while a queue is running.
 metadata:
   internal: true
 ---
 
 # Pull request queue
 
-This thread is the coordinator. Build the catalog once, then launch one T3
-thread per PR or issue, each in its own worktree, and track them from here.
-Each thread fixes its item, pushes it, and ends with a merge-or-close
-recommendation. The user merges; no thread ever does.
+This thread is the coordinator. Build the catalog once, then launch one
+**detached top-level thread** per PR or issue, each in its own worktree. Each
+thread owns its item end to end: it fixes it, pushes it, watches CI, and asks
+the user to merge or close it. The user merges; no thread ever does.
+
+Item threads MUST be top-level threads from `t3_thread_launch`, never
+subagent threads from `delegate_task`. A subagent thread can't watch CI,
+reports only back to the coordinator, and routes every user answer through
+it. A top-level thread sits in the sidebar on its own, the user talks to it
+directly, and it carries its PR to merge-ready without the coordinator.
 
 ## 1. Build the catalog and shortlist
 
@@ -55,23 +61,41 @@ Keep the shortlist as a status table with a thread link per row
 
 ## 2. Launch one thread per item
 
-Write each brief to `/tmp/pr-queue/brief-<N>.md` and launch it with
-`t3_thread_launch` in its own worktree
-(`{ type: "worktree", baseRef: "main", branch, startFromOrigin: true }`),
-about 3 at a time. A PR's brief starts with `/audit <N>`; an issue's says to
-fix it per [audit/procedure.md](../audit/procedure.md) and open a PR ending in
-`Fixes #<N>`. Every brief adds: `pnpm install` first, no subagents, one live
-suite at a time with `--concurrency 8`, `link_pull_request` on every PR, and
-for features, post the proposed API and wait before building.
+Start each item with `t3_thread_launch`:
 
-If a launch fails in preparation, don't retry it (the branch already exists):
-launch a new thread on that worktree with `existing_worktree` and archive the
-failed one.
+```ts
+t3_thread_launch({
+  title: "#<N> <short title>",
+  workspaceStrategy: { type: "worktree", baseRef: "origin/main" }, // its own checkout
+  message: "<contents of /tmp/pr-queue/brief-<N>.md>",
+})
+```
+
+Keep each returned thread `link` in the status table. Launch the whole
+shortlist; there is no cap on running threads. Send the launches in batches
+of about 3: each one cuts a worktree, and cutting many at once in the same
+repo contends for git's locks. The brief checks out the PR branch (or a new
+`fix/…` branch for an issue) itself.
+
+A PR's brief starts with `/audit <N>`; an issue's says to fix it per
+[audit/procedure.md](../audit/procedure.md) and open a PR ending in
+`Fixes #<N>`. Every brief adds: `pnpm install` first, no subagents of its
+own, one live suite at a time with `--concurrency 8`, `link_pull_request` on
+every PR, for features post the proposed API and wait before building, after
+each push `watch_pull_request` the PR and end the turn, and leave the PR with
+every CI check passing on its final head
+([audit/procedure.md §6](../audit/procedure.md#6-push-and-update-the-pr))
+before asking the user to merge per
+[audit/procedure.md §7](../audit/procedure.md#7-report-and-ask).
+
+If a thread fails in preparation, launch a fresh one; don't relaunch into the
+same branch by hand.
 
 ## 3. Coordinate
 
-Don't do an item's work here. When a thread finishes, read it, update the
-table, and relay its recommendation per
-[audit/procedure.md §7](../audit/procedure.md#7-report-and-ask). Pass the
-user's answers to threads with `t3_thread_send`. On "enqueue more", re-run the
-§1 search and launch the next batch.
+Don't do an item's work here, and don't poll threads (`sleep`,
+`t3_thread_wait`). Item threads report to the user, not to this thread. When
+the user asks for status, `t3_thread_read` each thread, update the table, and
+re-print it. Answers and merge decisions go to the item's own thread, not
+through here. On "enqueue more", re-run the §1 search and launch the next
+batch.

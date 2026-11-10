@@ -115,8 +115,18 @@ export type Alert = Resource<
     livemode: boolean;
   },
   never,
-  Providers
+  Providers,
+  AlertLookup
 >;
+
+/**
+ * Props for {@link Alert.lookup}: find a billing alert this stack
+ * doesn't manage by its id.
+ */
+export interface AlertLookup {
+  /** Stripe billing alert id, e.g. `"alrt_61A2b3C4d5E6f7G8h"`. */
+  id: string;
+}
 
 /**
  * A Stripe Billing Alert — notifies you when a usage threshold on a
@@ -190,6 +200,16 @@ export type Alert = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing billing alert
+ * `Alert.lookup` references a billing alert Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing billing alert
+ * ```typescript
+ * const ref = Stripe.Alert.lookup({ id: "alrt_61A2b3C4d5E6f7G8h" });
+ * ```
+ *
  * @resource
  * @product Billing
  */
@@ -245,7 +265,7 @@ const toAttrs = (alert: StripeBillingAlert): AlertAttributes => ({
 const isMissingAlert = isMissingStripeResource;
 
 const getById = (id: string) =>
-  GetBillingAlert({ id }).pipe(Effect.catchIf(isMissingAlert, () => Effect.succeed(undefined)));
+  GetBillingAlert({ id }).pipe(Effect.catchIf(isMissingAlert, () => Effect.undefined));
 
 const listAlerts = Effect.fn(function* () {
   const alerts: StripeBillingAlert[] = [];
@@ -350,6 +370,11 @@ export const AlertProvider = () =>
         return { action: "replace" } as const;
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing);
     }),
 
     read: Effect.fn(function* ({ output }) {

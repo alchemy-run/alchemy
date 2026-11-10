@@ -5,6 +5,8 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
@@ -15,6 +17,13 @@ import {
   syncImageBuilderTags,
   toTagRecord,
 } from "./internal.ts";
+
+export class DistributionConfigurationUnexpectedResponse extends Data.TaggedError(
+  "DistributionConfigurationUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface DistributionConfigurationProps {
   /**
@@ -51,8 +60,18 @@ export interface DistributionConfiguration extends Resource<
     dateCreated: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DistributionConfigurationLookup
 > {}
+
+/**
+ * Props for {@link DistributionConfiguration.lookup}: find a distribution configuration this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DistributionConfigurationLookup {
+  /** The distribution configuration arn of the existing distribution configuration. */
+  distributionConfigurationArn: string;
+}
 
 /**
  * An EC2 Image Builder distribution configuration — defines where and how
@@ -82,6 +101,16 @@ export interface DistributionConfiguration extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing distribution configuration
+ * `DistributionConfiguration.lookup` references a distribution configuration Alchemy doesn't manage (created in the
+ * console or by another stack), found by `distributionConfigurationArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing distribution configuration
+ * ```typescript
+ * const existing = AWS.ImageBuilder.DistributionConfiguration.lookup({ distributionConfigurationArn: "my-distribution-configuration" });
+ * ```
+ *
  * @resource
  */
 export const DistributionConfiguration = Resource<DistributionConfiguration>(
@@ -104,15 +133,15 @@ export const DistributionConfigurationProvider = () =>
           .getDistributionConfiguration({
             distributionConfigurationArn: arn,
           })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.distributionConfiguration;
       });
 
       const toAttrs = Effect.fn(function* (config: imagebuilder.DistributionConfiguration) {
         if (!config.arn || !config.name) {
-          return yield* Effect.fail(
-            new Error("Image Builder distribution configuration is missing its ARN or name"),
-          );
+          return yield* new DistributionConfigurationUnexpectedResponse({
+            message: "Image Builder distribution configuration is missing its ARN or name",
+          });
         }
         return {
           distributionConfigurationName: config.name,
@@ -131,6 +160,12 @@ export const DistributionConfigurationProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ distributionConfigurationArn: arn }) {
+          const config = yield* getConfiguration(arn);
+          if (config === undefined) return undefined;
+          const attrs = yield* toAttrs(config);
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const arn =
             output?.distributionConfigurationArn ?? (yield* toArn(yield* toName(id, olds)));
@@ -144,7 +179,8 @@ export const DistributionConfigurationProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, olds, output, session }) {
           // One idempotency token per reconcile — retries within this run
           // are deduplicated by the API.
-          const clientToken = yield* Effect.sync(() => crypto.randomUUID());
+          const random = yield* SecureRandom.SecureRandom;
+          const clientToken = yield* random.uuidV4();
           const name = output?.distributionConfigurationName ?? (yield* toName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
@@ -163,16 +199,12 @@ export const DistributionConfigurationProvider = () =>
                 tags: desiredTags,
                 clientToken,
               })
-              .pipe(
-                Effect.catchTag("ResourceAlreadyExistsException", () => Effect.succeed(undefined)),
-              );
+              .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.undefined));
             observed = yield* getConfiguration(created?.distributionConfigurationArn ?? arn);
             if (observed === undefined) {
-              return yield* Effect.fail(
-                new Error(
-                  `created Image Builder distribution configuration '${name}' is not readable`,
-                ),
-              );
+              return yield* new DistributionConfigurationUnexpectedResponse({
+                message: `created Image Builder distribution configuration '${name}' is not readable`,
+              });
             }
           }
 

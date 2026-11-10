@@ -100,7 +100,7 @@ export const EnvironmentsKeyvaluemapsEntry = Resource<EnvironmentsKeyvaluemapsEn
 export class EnvironmentsKeyvaluemapsEntryNotResolved extends Data.TaggedError(
   "GCP.Apigee.EnvironmentsKeyvaluemapsEntryNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const mapIdOf = (value: string) => segmentAfter(value, "keyvaluemaps") ?? lastSegment(value);
@@ -211,7 +211,7 @@ export const EnvironmentsKeyvaluemapsEntryProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new EnvironmentsKeyvaluemapsEntryNotResolved({ name });
+        return yield* new EnvironmentsKeyvaluemapsEntryNotResolved({ resourceName: name });
       }
 
       if (!sameText(current.value, news.value)) {

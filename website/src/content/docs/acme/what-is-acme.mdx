@@ -1,0 +1,83 @@
+---
+title: What is ACME?
+description: The concepts behind ACME certificates — certificate authorities, accounts, orders, challenges and DNS-01 validation, certificates and keys, renewal and revocation — and how @alchemy.run/acme models each of them.
+---
+
+import Boundaries from "../../../components/diagrams/Boundaries.astro";
+
+A TLS certificate proves to a browser that a server really is `example.com`. **ACME** is the protocol certificate authorities like Let's Encrypt and ZeroSSL use to issue those certificates automatically: you prove you control a domain, and the authority signs a certificate for it, for free, in under a minute.
+
+Take one certificate: a wildcard for `*.example.com`, validated through a Cloudflare zone and installed on a Fly app. An account asks the authority for a certificate. The authority sets a challenge, which is answered with a DNS record. Once it sees the record, the authority signs the certificate, which goes to whatever serves the domain.
+
+<Boundaries
+  nodes={[
+    { id: "acct", label: "Account", type: "your key pair", col: 0, row: 0 },
+    { id: "solver", label: "DNS solver", type: "Cloudflare API", col: 0, row: 1 },
+    { id: "ca", label: "Let's Encrypt", type: "certificate authority", col: 1, row: 0, tone: "accent" },
+    { id: "txt", label: "_acme-challenge", type: "TXT record", col: 1, row: 1 },
+  ]}
+  zones={[
+    { id: "you", label: "your deploy", nodes: ["acct", "solver"] },
+    { id: "zone", label: "example.com", nodes: ["txt"] },
+  ]}
+  links={[
+    { from: "acct", to: "ca", label: "order" },
+    { from: "solver", to: "txt", label: "publish" },
+    { from: "ca", to: "txt", label: "checks" },
+  ]}
+  caption="The authority signs only after it finds the TXT record in your zone, which only the domain's owner could publish."
+/>
+
+## Certificate authorities
+
+A **certificate authority** (CA) is an organization browsers trust to vouch for domains. Let's Encrypt and ZeroSSL issue certificates over ACME for free. Each has a **staging** environment, whose certificates browsers don't trust but whose limits are generous, for testing, and a **production** one, with rate limits on how many certificates you can issue.
+
+See [Certificate authorities](/acme/certificate-authorities).
+
+## Accounts
+
+You talk to a CA as an **account**: a key pair registered with it. Every order is signed with the account's key. Some CAs, like ZeroSSL, also ask for **external account binding**, credentials that tie the ACME account to an account on their website.
+
+```typescript title="alchemy.run.ts"
+const account = yield* ACME.Account("Issuer", {
+  ca: ACME.LetsEncryptStaging,
+  contact: ["mailto:ops@example.com"],
+  termsOfServiceAgreed: true,
+});
+```
+
+## Orders and challenges
+
+To get a certificate, the account places an **order** for one or more names. For each name, the CA sets a **challenge**: a task only the domain's owner could complete. Once every challenge passes, the CA signs the certificate.
+
+**DNS-01** is the challenge Alchemy uses: publish a TXT record at `_acme-challenge.example.com` with a value the CA gives you. It's the only challenge that can prove control of a **wildcard** like `*.example.com`, and it needs no running server.
+
+See [DNS validation](/acme/dns-validation).
+
+## Certificates and keys
+
+A **certificate** is a chain: your certificate, signed by the CA, and the intermediates linking it to a root browsers trust. It's paired with a **private key**, which never leaves your hands. Whatever terminates TLS, a load balancer, a CDN or your own server, needs both.
+
+```typescript title="alchemy.run.ts"
+const cert = yield* ACME.Certificate("Wildcard", {
+  account,
+  identifiers: ["example.com", "*.example.com"],
+  solver: Cloudflare.ACME.ZoneSolver({ zoneId: Config.String("CLOUDFLARE_ZONE_ID") }),
+});
+```
+
+See [Using certificates](/acme/using-certificates).
+
+## Renewal and revocation
+
+Certificates expire, after 90 days for Let's Encrypt, so they must be **renewed** before then. **Revocation** tells the CA to stop vouching for a certificate early, if its key leaked.
+
+Renewal needs something to run. A certificate declared in your Stack checks its expiry on each deploy, so deploy on a schedule. One issued by your app at runtime renews when your app's scheduler says.
+
+See [Renewal & revocation](/acme/renewal).
+
+## How @alchemy.run/acme models these concepts
+
+An account and a certificate are resources, issued at deploy time and kept in your Stack's state, with the DNS challenge answered by a solver for your DNS host. The certificate's chain and key are outputs, passed to whatever serves TLS, on any provider. When an app must issue certificates itself, for its own customers' domains, the `IssueCertificate` binding does the same at runtime. See [Runtime issuance](/acme/runtime).
+
+Next, issue one: [Getting started](/acme/getting-started) deploys a staging certificate with a Cloudflare zone.

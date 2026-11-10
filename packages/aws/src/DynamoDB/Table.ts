@@ -2,7 +2,7 @@ import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import type * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import type { TimeToLiveSpecification } from "@distilled.cloud/aws/dynamodb";
 import * as dynamodb from "@distilled.cloud/aws/dynamodb";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { havePropsChanged, isResolved } from "alchemy/Diff";
 import type { Input } from "alchemy/Input";
 import { createPhysicalName } from "alchemy/PhysicalName";
@@ -19,6 +19,11 @@ import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
+
+export class TableUnexpectedResponse extends Data.TaggedError("TableUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type TableName = string;
 
@@ -291,8 +296,18 @@ export interface Table extends Resource<
     contributorInsightsEnabled?: boolean;
   },
   TableBinding,
-  Providers
+  Providers,
+  TableLookup
 > {}
+
+/**
+ * Props for {@link Table.lookup}: find a table this stack doesn't manage, in
+ * the ambient account and region, by its name.
+ */
+export interface TableLookup {
+  /** The name of the existing table. */
+  tableName: string;
+}
 
 /**
  * An Amazon DynamoDB table with optional indexes, PITR, TTL, and stream-aware
@@ -509,6 +524,20 @@ export interface Table extends Resource<
  *     }
  *   }),
  * );
+ * ```
+ *
+ * ### Looking up an existing table
+ * `Table.lookup` references a table Alchemy doesn't manage (created in the
+ * console or by another stack), found by `tableName`. It is read during
+ * plan/deploy and never created, updated or deleted, and binds like a
+ * declared table.
+ *
+ * **Example:** Read items from an existing table
+ * ```typescript
+ * const table = DynamoDB.Table.lookup({ tableName: "users" });
+ *
+ * // init
+ * const getItem = yield* DynamoDB.GetItem(table);
  * ```
  *
  * @resource
@@ -779,7 +808,7 @@ export const TableProvider = () =>
       const readTableResourcePolicy = (tableArn: string) =>
         dynamodb.getResourcePolicy({ ResourceArn: tableArn }).pipe(
           Effect.map((response) => response.Policy),
-          Effect.catchTag("PolicyNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("PolicyNotFoundException", () => Effect.undefined),
           Effect.retry({
             while: isRetryableControlPlaneError,
             schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(15)]),
@@ -1256,7 +1285,7 @@ export const TableProvider = () =>
             );
           const table = response.Table;
           if (!table?.TableArn) {
-            return yield* Effect.fail(new Error(`Table ${tableName} not found`));
+            return yield* new TableUnexpectedResponse({ message: `Table ${tableName} not found` });
           }
 
           const [tagsResult, continuousBackupsResult, ttlResult] = yield* Effect.all([
@@ -1307,7 +1336,7 @@ export const TableProvider = () =>
               continuousBackupsResult.ContinuousBackupsDescription?.PointInTimeRecoveryDescription,
             timeToLiveDescription: ttlResult.TimeToLiveDescription,
           };
-        }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+        }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       const toAttrs = (state: {
         table: DynamoDB.TableDescription;
@@ -1650,26 +1679,34 @@ export const TableProvider = () =>
                       "TableNotFoundException",
                       "ResourceNotFoundException",
                     ],
-                    () => Effect.succeed(undefined),
+                    () => Effect.undefined,
                   ),
                 ),
               { concurrency: 8 },
             );
             return states.filter((state) => state !== undefined).map((state) => toAttrs(state));
           }),
-        read: Effect.fn(function* ({ id, olds, output }) {
+        lookup: Effect.fn(function* ({ tableName }) {
+          const state = yield* readTableState(tableName).pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
+          );
+          return state ? toAttrs(state) : undefined;
+        }),
+        read: Effect.fn(function* ({ id, olds, output, previous }) {
           const tableName =
             output?.tableName ?? (olds ? yield* createTableName(id, olds) : undefined);
           if (!tableName) return undefined;
           const state = yield* readTableState(tableName).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           );
           if (!state) return undefined;
           const attrs = {
             ...toAttrs(state),
             ...(yield* observeTableConfiguration(state, olds)),
           };
-          return (yield* hasAlchemyTags(id, state.tags as any)) ? attrs : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, state.tags as any))
+            ? attrs
+            : unownedUnlessPrevious(attrs, previous, "tableName");
         }),
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
@@ -1786,7 +1823,9 @@ export const TableProvider = () =>
 
             state = yield* readTableState(tableName);
             if (!state) {
-              return yield* Effect.fail(new Error(`Failed to read created table ${tableName}`));
+              return yield* new TableUnexpectedResponse({
+                message: `Failed to read created table ${tableName}`,
+              });
             }
           }
 
@@ -2135,7 +2174,9 @@ export const TableProvider = () =>
           // attributes reflect the post-reconcile cloud state.
           const final = yield* readTableState(tableName);
           if (!final) {
-            return yield* Effect.fail(new Error(`Failed to read reconciled table ${tableName}`));
+            return yield* new TableUnexpectedResponse({
+              message: `Failed to read reconciled table ${tableName}`,
+            });
           }
 
           yield* session.note(final.table.TableArn!);

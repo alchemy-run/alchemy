@@ -97,7 +97,7 @@ export type Tenant = Resource<
 export const Tenant = Resource<Tenant>("GCP.Jobs.Tenant");
 
 export class TenantNotResolved extends Data.TaggedError("GCP.Jobs.TenantNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (tenant: jobs.Tenant, project: string) => {
@@ -167,7 +167,7 @@ export const TenantProvider = () =>
 
       if (current === undefined) {
         return yield* new TenantNotResolved({
-          name: name || `projects/${env.project}/tenants/${clientId}`,
+          resourceName: name || `projects/${env.project}/tenants/${clientId}`,
         });
       }
 

@@ -9,7 +9,12 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import { syncEventInvokeConfig, type EventInvokeConfig } from "./EventInvokeConfig.ts";
+import {
+  observeEventInvokeConfig,
+  syncEventInvokeConfig,
+  type EventInvokeConfig,
+  type ObservedEventInvokeConfig,
+} from "./EventInvokeConfig.ts";
 import type { Version } from "./Version.ts";
 
 export interface AliasProps {
@@ -75,10 +80,28 @@ export interface Alias extends Resource<
      * Latest Lambda revision id for this alias.
      */
     revisionId?: string;
+    /**
+     * Asynchronous invocation config (retries, maximum event age,
+     * destinations) scoped to the alias, as observed. Lets `alchemy drift`
+     * detect out-of-band changes.
+     */
+    eventInvokeConfig?: ObservedEventInvokeConfig;
   },
   never,
-  Providers
+  Providers,
+  AliasLookup
 > {}
+
+/**
+ * Props for {@link Alias.lookup}: find an alias this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface AliasLookup {
+  /** The function the alias points into. */
+  functionName: string;
+  /** The name of the existing alias. */
+  aliasName: string;
+}
 
 type ResolvedAliasProps = Input.ResolveProps<AliasProps>;
 
@@ -129,6 +152,17 @@ const resolvedProps = (props: AliasProps): ResolvedAliasProps =>
  *     },
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing alias
+ * `Alias.lookup` references an alias Alchemy doesn't manage (created in the
+ * console or by another stack), found by `functionName` and `aliasName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Invoke an existing alias
+ * ```typescript
+ * const live = AWS.Lambda.Alias.lookup({ functionName: "checkout", aliasName: "live" });
+ * const aliasArn = live.aliasArn;
  * ```
  */
 export const Alias = Resource<Alias>("AWS.Lambda.Alias");
@@ -205,6 +239,19 @@ export const AliasProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        lookup: Effect.fn(function* ({ functionName, aliasName }) {
+          const { region } = yield* AWSEnvironment.current;
+          const alias = yield* Lambda.getAlias({
+            FunctionName: functionName,
+            Name: aliasName,
+          }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
+          const attrs = alias ? snapshotAlias(functionName, alias, region) : undefined;
+          if (!attrs) return undefined;
+          return {
+            ...attrs,
+            eventInvokeConfig: yield* observeEventInvokeConfig(functionName, attrs.aliasName),
+          };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           // An interrupted create's first checkpoint strips the Version
           // reference while the Version is still being created (see
@@ -219,8 +266,13 @@ export const AliasProvider = () =>
           const alias = yield* Lambda.getAlias({
             FunctionName: functionName,
             Name: aliasName,
-          }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
-          return alias ? snapshotAlias(functionName, alias, region) : undefined;
+          }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
+          const attrs = alias ? snapshotAlias(functionName, alias, region) : undefined;
+          if (!attrs) return undefined;
+          return {
+            ...attrs,
+            eventInvokeConfig: yield* observeEventInvokeConfig(functionName, attrs.aliasName),
+          };
         }),
         list: () =>
           Effect.gen(function* () {
@@ -265,7 +317,7 @@ export const AliasProvider = () =>
           const getAlias = Lambda.getAlias({
             FunctionName: functionName,
             Name: aliasName,
-          }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
           let alias = yield* getAlias;
 
@@ -314,7 +366,10 @@ export const AliasProvider = () =>
 
           yield* session.note(`Alias ${attrs.aliasName} on ${attrs.functionName}`);
 
-          return attrs;
+          return {
+            ...attrs,
+            eventInvokeConfig: yield* observeEventInvokeConfig(functionName, attrs.aliasName),
+          };
         }),
         delete: Effect.fn(function* ({ output }) {
           // The alias-scoped async config does not die with the alias — clear

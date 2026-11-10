@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -161,8 +162,32 @@ export type Stream = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  StreamLookup
 >;
+
+/**
+ * Props for {@link Stream.lookup}: find a stream this stack doesn't manage
+ * by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface StreamLookup {
+  /**
+   * Stream id (the `{stream}` segment of
+   * `projects/{project}/locations/{location}/streams/{stream}`).
+   */
+  streamId: string;
+  /**
+   * Region (`us-central1`, …). `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Datastream stream: continuously replicates data from a source
@@ -203,6 +228,16 @@ export type Stream = Resource<
  *   backfillAll: {},
  *   force: true,
  * });
+ * ```
+ *
+ * ### Looking up an existing stream
+ * `Stream.lookup` references a stream Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared stream.
+ *
+ * **Example:** Reference an existing stream
+ * ```typescript
+ * const stream = GCP.Datastream.Stream.lookup({ streamId: "my-stream" });
  * ```
  *
  * @resource
@@ -261,10 +296,10 @@ const toAttrs = (item: ds.Stream, project: string, region: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : ds
         .getProjectsLocationsStreams({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string, region: string) =>
   listAtLocation(project, region, (parent) =>
@@ -333,6 +368,15 @@ export const StreamProvider = () =>
       });
     }),
 
+    lookup: Effect.fn(function* ({ streamId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, streamId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const streamId = yield* toPhysicalId(id, olds?.streamId, output?.streamId, "stream");
@@ -400,13 +444,13 @@ export const StreamProvider = () =>
             validateOnly: news.validateOnly,
             body,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         yield* settleOperation(created);
         current = yield* waitUntilExists(getByName(name), name);
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -479,7 +523,7 @@ export const StreamProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag(["NotFound", "Conflict"], () => Effect.succeed(undefined)),
+          Effect.catchTag(["NotFound", "Conflict"], () => Effect.undefined),
         );
       // Stream deletes take a few minutes.
       yield* settleOperation(operation, { notFoundOk: true });

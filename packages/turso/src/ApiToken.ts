@@ -4,10 +4,16 @@ import { deepEqual, isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { organization } from "./Credentials.ts";
 import type { Providers } from "./Providers.ts";
+
+export class ApiTokenUnexpectedResponse extends Data.TaggedError("ApiTokenUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * A permission granted to a group-scoped API token. `read-only` and
@@ -179,7 +185,9 @@ export const ApiTokenProvider = () =>
             scopes: news.scopes,
           });
           if (!created.token || !created.id) {
-            return yield* Effect.fail(new Error(`Turso returned no token for ${name}`));
+            return yield* new ApiTokenUnexpectedResponse({
+              message: `Turso returned no token for ${name}`,
+            });
           }
           const minted = yield* observe(name);
           return {

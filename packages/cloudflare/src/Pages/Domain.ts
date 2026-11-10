@@ -294,8 +294,8 @@ type ObservedDomain =
 const getDomain = (accountId: string, projectName: string, domainName: string) =>
   pages.getProjectDomain({ accountId, projectName, domainName }).pipe(
     Effect.catchTags({
-      PagesDomainNotFound: () => Effect.succeed(undefined),
-      ProjectNotFound: () => Effect.succeed(undefined),
+      PagesDomainNotFound: () => Effect.undefined,
+      ProjectNotFound: () => Effect.undefined,
     }),
   );
 

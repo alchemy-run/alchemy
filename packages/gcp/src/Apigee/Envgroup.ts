@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   defaultOrgName,
@@ -55,8 +56,31 @@ export type Envgroup = Resource<
     lastModifiedAt: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  EnvgroupLookup
 >;
+
+/**
+ * Props for {@link Envgroup.lookup}: find an envgroup this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface EnvgroupLookup {
+  /**
+   * Environment group id (the `{envgroup}` segment of
+   * `organizations/{org}/envgroups/{envgroup}`).
+   */
+  envgroupId: string;
+  /**
+   * Apigee organization id or `organizations/{org}`.
+   */
+  organization?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Apigee environment group that maps hostnames to one or more
@@ -84,13 +108,23 @@ export type Envgroup = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing envgroup
+ * `Envgroup.lookup` references an envgroup Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared envgroup.
+ *
+ * **Example:** Reference an existing envgroup
+ * ```typescript
+ * const envgroup = GCP.Apigee.Envgroup.lookup({ envgroupId: "my-envgroup" });
+ * ```
+ *
  * @resource
  * @category Apigee
  */
 export const Envgroup = Resource<Envgroup>("GCP.Apigee.Envgroup");
 
 export class EnvgroupNotResolved extends Data.TaggedError("GCP.Apigee.EnvgroupNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organization: string, envgroupId: string) =>
@@ -112,7 +146,7 @@ const toAttrs = (group: apigee.GoogleCloudApigeeV1EnvironmentGroup, organization
 const getByName = (name: string) =>
   apigee
     .getOrganizationsEnvgroups({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 export const EnvgroupProvider = () =>
   Provider.succeed(Envgroup, {
@@ -136,6 +170,15 @@ export const EnvgroupProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ envgroupId, organization: lookupOrganization }) {
+      const env = yield* GcpEnvironment.current;
+      const organization = defaultOrgName(env.project, lookupOrganization);
+      const name = resourceName(organization, envgroupId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, organization);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -168,7 +211,7 @@ export const EnvgroupProvider = () =>
               hostnames: desiredHostnames,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (operation !== undefined) {
           yield* waitForOperation(operation);
         }
@@ -176,7 +219,7 @@ export const EnvgroupProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new EnvgroupNotResolved({ name });
+        return yield* new EnvgroupNotResolved({ resourceName: name });
       }
 
       if (!sameStringList(current.hostnames, desiredHostnames)) {
@@ -195,9 +238,7 @@ export const EnvgroupProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* apigee
         .deleteOrganizationsEnvgroups({ name: output.name })
-        .pipe(
-          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

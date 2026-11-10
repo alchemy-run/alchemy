@@ -31,7 +31,9 @@ class Wallet extends Domain.Aggregate("Wallet", {
   initial: { balance: 0 },
   commands: [Deposit],
   decide: {
-    Deposit: (s, cmd) => [new Deposited({ amount: cmd.amount, balance: s.balance + cmd.amount })],
+    Deposit: (wallet, cmd) => [
+      new Deposited({ amount: cmd.amount, balance: wallet.balance + cmd.amount }),
+    ],
   },
   evolve: { Deposited: (_, e) => ({ balance: e.balance }) },
   reply: { Deposit: (s) => ({ balance: s.balance }) },
@@ -150,10 +152,16 @@ class WalletCard extends Domain.Stream("WalletCard", {
   entries: [BalanceChanged],
   middleware: [ViewerSession],
   rejects: [NotYours],
-  validate: Effect.fn(function* (_request, latest) {
-    if (latest && latest.event.owner !== (yield* Viewer)) return yield* new NotYours();
-  }),
 }) {}
+
+/** Who may read each key of WalletCard. */
+const WalletCardLive = WalletCard.toLayer(
+  Effect.succeed(
+    Effect.fn(function* (_request, latest) {
+      if (latest && latest.event.owner !== (yield* Viewer)) return yield* new NotYours();
+    }),
+  ),
+);
 
 class WalletCards extends Domain.Projection("WalletCards", {
   from: [Wallet],
@@ -215,24 +223,52 @@ const LargeMovementsLive = LargeMovements.toLayer(
   { retry: Schedule.recurs(2) },
 );
 
+/** A wallet's latest balance, from its card: the query waits for the stream's writer. */
+class LatestBalance extends Domain.Query("LatestBalance", {
+  input: { wallet: Schema.String },
+  success: Schema.NullOr(Schema.Number),
+  waitsFor: [WalletCard],
+}) {}
+const LatestBalanceLive = LatestBalance.toLayer(
+  Effect.gen(function* () {
+    const cards = yield* WalletCard;
+    return Effect.fn(function* ({ wallet }) {
+      const latest = yield* cards.peek(Wallet.ref(wallet)).pipe(Effect.orDie);
+      return Option.getOrNull(latest)?.event.balance ?? null;
+    });
+  }),
+);
+
 class Wallets extends Domain.Model("Wallets", {
   aggregates: [Wallet, Payment, Review],
   policies: [LargeMovements],
   projections: [WalletLedger, WalletCards],
   streams: [WalletCard],
+  queries: [LatestBalance],
 }) {}
 
-class WalletApi extends Domain.Api("WalletApi", Deposit, WalletCard) {}
+class WalletApi extends Domain.Api("WalletApi", {
+  model: Wallets,
+  commands: ["Deposit"],
+  streams: ["WalletCard"],
+  queries: ["LatestBalance"],
+}) {}
 
 const handlers = (options?: Domain.Projection.Options) =>
-  Layer.mergeAll(walletLedgerLayer(options), WalletCardsLive, LargeMovementsLive);
+  Layer.mergeAll(
+    walletLedgerLayer(options),
+    WalletCardsLive,
+    LargeMovementsLive,
+    WalletCardLive,
+    LatestBalanceLive,
+  );
 
 const story = Story.make(Wallets, { layer: handlers() });
 const sam = Wallet.ref("sam-1");
 const kim = Wallet.ref("kim-1");
 const p1 = Payment.ref("p-1");
 
-describe("Domain Projection", () => {
+describe("Domain Projection", { tags: ["unit", "local"] }, () => {
   it.effect("routes inputs to keys and writes a store you own", () =>
     Effect.gen(function* () {
       yield* story(
@@ -320,6 +356,11 @@ describe("Domain Projection", () => {
         Effect.flip,
       );
       expect(refused._tag).toBe("NotYours");
+      // A read without a session fails with the middleware's error, and the client's type has it.
+      const anonymous = yield* api.WalletCard.peek("sam-1").pipe(
+        Effect.catchTag("Unauthenticated", (e) => Effect.succeed(e._tag)),
+      );
+      expect(anonymous).toBe("Unauthenticated");
       yield* wallets.send(sam, new Deposit({ amount: 2 }));
       const all = yield* api.WalletCard.events("sam-1", asSam).pipe(
         Stream.filter(Domain.Read.isEvent),
@@ -329,6 +370,22 @@ describe("Domain Projection", () => {
       expect([...all].map((entry) => entry.event.balance)).toEqual([40, 42]);
       const page = yield* api.WalletCard.list("sam-1", { ...asSam, order: "desc", take: 1 });
       expect(page.entries.map((entry) => entry.event.balance)).toEqual([42]);
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        Wallets.layer(handlers()).pipe(
+          Layer.provideMerge(Layer.mergeAll(InMemory, Ledger.memory, ViewerSessionLive)),
+        ),
+      ),
+    ),
+  );
+
+  it.live("a query waits for a stream in waitsFor through the projection that writes it", () =>
+    Effect.gen(function* () {
+      const wallets = yield* Wallet;
+      const api = yield* WalletApi.clientInProcess;
+      const receipt = yield* wallets.send(kim, new Deposit({ amount: 70 }));
+      expect(yield* api.LatestBalance({ wallet: "kim-1" }, { atLeast: receipt })).toBe(70);
     }).pipe(
       Effect.scoped,
       Effect.provide(
@@ -354,7 +411,11 @@ describe("Domain Projection", () => {
     const exit = Effect.runSyncExit(
       Layer.build(
         Broken.layer(
-          Layer.mergeAll(WalletCardsLive, AlsoCards.toLayer(Effect.succeed(() => Effect.void))),
+          Layer.mergeAll(
+            WalletCardsLive,
+            WalletCardLive,
+            AlsoCards.toLayer(Effect.succeed(() => Effect.void)),
+          ),
         ),
       ).pipe(Effect.scoped, Effect.provide(InMemory)) as Effect.Effect<unknown>,
     );

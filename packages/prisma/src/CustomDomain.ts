@@ -3,6 +3,7 @@ import { isResolved } from "alchemy/Diff";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
@@ -19,6 +20,28 @@ import { DEV_TIMESTAMP, attrOrString, devId, devProvider } from "./internal/DevS
 import { concreteIdOf, concreteIdsChanged, isInputObject, isPrismaDevId } from "./internal/Refs.ts";
 import type { Providers } from "./Providers.ts";
 import type { CustomDomain as ApiCustomDomain } from "./Types.ts";
+
+export class CustomDomainConflict extends Data.TaggedError("CustomDomainConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class CustomDomainInvalidProps extends Data.TaggedError("CustomDomainInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class CustomDomainOperationFailed extends Data.TaggedError("CustomDomainOperationFailed")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class CustomDomainUnexpectedResponse extends Data.TaggedError(
+  "CustomDomainUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 type AppReference = string | App | Compute;
 
@@ -132,10 +155,16 @@ const normalizeHostname = (hostname: string) => hostname.trim().replace(/\.$/, "
 const sameHostname = (left: string, right: string) =>
   normalizeHostname(left) === normalizeHostname(right);
 
+export class PrismaCustomDomainAdoptionRequired extends Data.TaggedError(
+  "PrismaCustomDomainAdoptionRequired",
+)<{
+  readonly message: string;
+}> {}
+
 const adoptionRequiredError = (hostname: string, appId: string, detail: string) =>
-  new Error(
-    `Prisma custom domain '${hostname}' ${detail} on App '${appId}' but is not owned by this resource. Import it with explicit adoption instead of silently taking it over.`,
-  );
+  new PrismaCustomDomainAdoptionRequired({
+    message: `Prisma custom domain '${hostname}' ${detail} on App '${appId}' but is not owned by this resource. Import it with explicit adoption instead of silently taking it over.`,
+  });
 
 const appIdValue = (app: AppReference | undefined) => (typeof app === "string" ? app : app?.appId);
 
@@ -145,7 +174,7 @@ const resolveAppId = (app: AppReference) => {
   const value = appIdValue(app);
   return typeof value === "string"
     ? Effect.succeed(value)
-    : Effect.fail(new Error("Unable to resolve Prisma app id."));
+    : Effect.fail(new CustomDomainOperationFailed({ message: "Unable to resolve Prisma app id." }));
 };
 
 const findDomain = (client: PrismaManagementClient, appId: string, hostname: string) =>
@@ -155,9 +184,9 @@ const findDomain = (client: PrismaManagementClient, appId: string, hostname: str
       const matches = domains.filter((domain) => sameHostname(domain.hostname, hostname));
       return matches.length > 1
         ? Effect.fail(
-            new Error(
-              `Prisma app '${appId}' has multiple custom domains matching '${hostname}'; refusing to select one arbitrarily.`,
-            ),
+            new CustomDomainConflict({
+              message: `Prisma app '${appId}' has multiple custom domains matching '${hostname}'; refusing to select one arbitrarily.`,
+            }),
           )
         : Effect.succeed(matches[0]);
     }),
@@ -179,6 +208,7 @@ interface NodeDns {
   readonly Resolver: new () => {
     setServers(servers: string[]): void;
     resolveCname(name: string): Promise<string[]>;
+    cancel(): void;
   };
 }
 
@@ -192,9 +222,9 @@ interface NodeDns {
  */
 const waitForAuthoritativeCname = (hostname: string) =>
   Effect.gen(function* () {
-    const dns = yield* Effect.tryPromise(
-      () => import("node:dns/promises") as unknown as Promise<NodeDns>,
-    ).pipe(Effect.orElseSucceed(() => undefined));
+    const dns = yield* Effect.tryPromise((): Promise<NodeDns> => import("node:dns/promises")).pipe(
+      Effect.orElseSucceed(() => undefined),
+    );
     if (dns === undefined || typeof dns.Resolver !== "function") return;
     const labels = hostname.split(".");
     let servers: string[] = [];
@@ -220,7 +250,10 @@ const waitForAuthoritativeCname = (hostname: string) =>
           instance.setServers([server]);
           return instance;
         });
-        const answers = yield* Effect.tryPromise(() => resolver.resolveCname(hostname));
+        // A timed-out query keeps retrying in c-ares unless cancelled.
+        const answers = yield* Effect.tryPromise(() => resolver.resolveCname(hostname)).pipe(
+          Effect.onInterrupt(() => Effect.sync(() => resolver.cancel())),
+        );
         return answers.length > 0;
       }).pipe(
         Effect.timeout("3 seconds"),
@@ -275,11 +308,9 @@ const ProviderLive = () =>
             concreteIdsChanged(oldAppId, newAppId) ||
             (newHostname !== undefined && newHostname !== oldHostname)
           ) {
-            return yield* Effect.fail(
-              new Error(
-                `Prisma cannot atomically replace custom domain '${oldHostname}' without risking traffic before the new domain is active. Create a second Prisma.CustomDomain logical resource, verify DNS/TLS and cut traffic over explicitly, then remove this resource.`,
-              ),
-            );
+            return yield* new CustomDomainInvalidProps({
+              message: `Prisma cannot atomically replace custom domain '${oldHostname}' without risking traffic before the new domain is active. Create a second Prisma.CustomDomain logical resource, verify DNS/TLS and cut traffic over explicitly, then remove this resource.`,
+            });
           }
           // A live failed Foundry attempt reaches the canonical retry endpoint
           // below. Each reconcile performs at most one retry and never polls.
@@ -299,7 +330,7 @@ const ProviderLive = () =>
           const domain = customDomainId
             ? yield* client
                 .getCustomDomain(customDomainId)
-                .pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)))
+                .pipe(Effect.catchIf(isNotFound, () => Effect.undefined))
             : yield* findDomainInApp;
           if (!domain) return undefined;
           const attrs = attrsFrom(domain);
@@ -314,19 +345,17 @@ const ProviderLive = () =>
           const domain = customDomainId
             ? yield* client
                 .getCustomDomain(customDomainId)
-                .pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)))
+                .pipe(Effect.catchIf(isNotFound, () => Effect.undefined))
             : yield* findDomain(client, appId, hostname);
           const identityMatches = (domain: ApiCustomDomain) =>
             domain.appId === appId && sameHostname(domain.hostname, hostname);
           if (domain && !identityMatches(domain)) {
-            return yield* Effect.fail(
-              new Error(
-                `Prisma custom domain '${customDomainId}' resolves to app '${domain.appId}' and hostname '${domain.hostname}', not requested app '${appId}' and hostname '${hostname}'. Refusing to claim convergence; replace the mismatched domain.`,
-              ),
-            );
+            return yield* new CustomDomainConflict({
+              message: `Prisma custom domain '${customDomainId}' resolves to app '${domain.appId}' and hostname '${domain.hostname}', not requested app '${appId}' and hostname '${hostname}'. Refusing to claim convergence; replace the mismatched domain.`,
+            });
           }
           if (domain && customDomainId === undefined) {
-            return yield* Effect.fail(adoptionRequiredError(hostname, appId, "already exists"));
+            return yield* adoptionRequiredError(hostname, appId, "already exists");
           }
           if (!domain) {
             yield* waitForAuthoritativeCname(hostname);
@@ -359,29 +388,26 @@ const ProviderLive = () =>
                 ),
               );
           if (!identityMatches(reconciled)) {
-            return yield* Effect.fail(
-              new Error(
-                `Prisma custom domain '${reconciled.id}' retry/create response resolves to app '${reconciled.appId}' and hostname '${reconciled.hostname}', not requested app '${appId}' and hostname '${hostname}'. Refusing to persist mismatched identity.`,
-              ),
-            );
+            return yield* new CustomDomainUnexpectedResponse({
+              message: `Prisma custom domain '${reconciled.id}' retry/create response resolves to app '${reconciled.appId}' and hostname '${reconciled.hostname}', not requested app '${appId}' and hostname '${hostname}'. Refusing to persist mismatched identity.`,
+            });
           }
           return attrsFrom(reconciled);
         }),
         delete: Effect.fn(function* ({ output }) {
-          if (isPrismaDevId(output.customDomainId)) return;
+          const customDomainId = concreteIdOf(output.customDomainId);
+          if (customDomainId === undefined) return;
           const domain = yield* client
-            .getCustomDomain(output.customDomainId)
-            .pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)));
+            .getCustomDomain(customDomainId)
+            .pipe(Effect.catchIf(isNotFound, () => Effect.undefined));
           if (!domain) return;
           if (domain.appId !== output.appId || !sameHostname(domain.hostname, output.hostname)) {
-            return yield* Effect.fail(
-              new Error(
-                `Prisma custom domain '${output.customDomainId}' no longer matches app '${output.appId}' and hostname '${output.hostname}'. Refusing to delete a mismatched domain.`,
-              ),
-            );
+            return yield* new CustomDomainConflict({
+              message: `Prisma custom domain '${customDomainId}' no longer matches app '${output.appId}' and hostname '${output.hostname}'. Refusing to delete a mismatched domain.`,
+            });
           }
           yield* client
-            .deleteCustomDomain(output.customDomainId)
+            .deleteCustomDomain(customDomainId)
             .pipe(Effect.catchIf(isNotFound, () => Effect.void));
         }),
       };

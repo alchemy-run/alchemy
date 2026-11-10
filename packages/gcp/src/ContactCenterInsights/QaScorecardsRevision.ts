@@ -1,5 +1,5 @@
 import * as cci from "@distilled.cloud/gcp/contactcenterinsights_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   hasOwnershipMarker,
@@ -57,8 +58,31 @@ export type QaScorecardsRevision = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  QaScorecardsRevisionLookup
 >;
+
+/**
+ * Props for {@link QaScorecardsRevision.lookup}: find a qa scorecards
+ * revision this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface QaScorecardsRevisionLookup {
+  /**
+   * Revision id (the `{revision}` segment). Must match `^[a-z0-9-]{4,64}$`.
+   */
+  qaScorecardRevisionId: string;
+  /**
+   * Parent QaScorecard resource name
+   * (`projects/{project}/locations/{location}/qaScorecards/{qa_scorecard}`).
+   */
+  parent: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A revision of a Contact Center AI Insights QA scorecard. Changing a
@@ -81,6 +105,20 @@ export type QaScorecardsRevision = Resource<
  * );
  * ```
  *
+ * ### Looking up an existing qa scorecards revision
+ * `QaScorecardsRevision.lookup` references a qa scorecards revision Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared qa scorecards revision.
+ *
+ * **Example:** Reference an existing qa scorecards revision
+ * ```typescript
+ * const qaScorecardsRevision = GCP.ContactCenterInsights.QaScorecardsRevision.lookup({
+ *   qaScorecardRevisionId: "my-qa-scorecard-revision",
+ *   parent: "my-parent",
+ * });
+ * ```
+ *
  * @resource
  * @category ContactCenterInsights
  */
@@ -91,7 +129,7 @@ export const QaScorecardsRevision = Resource<QaScorecardsRevision>(
 export class QaScorecardsRevisionNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.QaScorecardsRevisionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (parent: string, qaScorecardRevisionId: string) =>
@@ -117,10 +155,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cci
         .getProjectsLocationsQaScorecardsRevisions({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listScorecards = (parent: string) =>
   cci.listProjectsLocationsQaScorecards.pages({ parent, pageSize: 100 }).pipe(
@@ -177,7 +215,15 @@ export const QaScorecardsRevisionProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ qaScorecardRevisionId, parent }) {
+      const env = yield* GcpEnvironment.current;
+      const name = parent !== undefined ? resourceName(parent, qaScorecardRevisionId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const qaScorecardRevisionId = yield* toResourceId(
         id,
@@ -192,7 +238,7 @@ export const QaScorecardsRevisionProvider = () =>
       const attrs = toAttrs(existing, env.project);
       return hasOwnershipMarker(existing.snapshot?.description) || output?.name === existing.name
         ? attrs
-        : Unowned(attrs);
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>
@@ -244,7 +290,7 @@ export const QaScorecardsRevisionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new QaScorecardsRevisionNotResolved({ name });
+        return yield* new QaScorecardsRevisionNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project);
@@ -261,8 +307,8 @@ export const QaScorecardsRevisionProvider = () =>
           })
           .pipe(
             Effect.catchTags({
-              NotFound: () => Effect.succeed(undefined),
-              BadRequest: () => Effect.succeed(undefined),
+              NotFound: () => Effect.undefined,
+              BadRequest: () => Effect.undefined,
             }),
           );
       }

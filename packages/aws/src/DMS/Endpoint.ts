@@ -5,10 +5,16 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class EndpointUnexpectedResponse extends Data.TaggedError("EndpointUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * Direction of a DMS endpoint relative to the replication:
@@ -134,8 +140,18 @@ export interface Endpoint extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  EndpointLookup
 > {}
+
+/**
+ * Props for {@link Endpoint.lookup}: find an endpoint this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface EndpointLookup {
+  /** The endpoint identifier of the existing endpoint. */
+  endpointIdentifier: string;
+}
 
 /**
  * An AWS Database Migration Service (DMS) endpoint — the source or target
@@ -166,6 +182,16 @@ export interface Endpoint extends Resource<
  *     ServiceAccessRoleArn: role.roleArn,
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing endpoint
+ * `Endpoint.lookup` references an endpoint Alchemy doesn't manage (created in the
+ * console or by another stack), found by `endpointIdentifier`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing endpoint
+ * ```typescript
+ * const existing = AWS.DMS.Endpoint.lookup({ endpointIdentifier: "my-endpoint" });
  * ```
  *
  * @resource
@@ -200,7 +226,7 @@ export const EndpointProvider = () =>
           .describeEndpoints({
             Filters: [{ Name: "endpoint-id", Values: [identifier] }],
           })
-          .pipe(Effect.catchTag("ResourceNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundFault", () => Effect.undefined));
         return response?.Endpoints?.[0];
       });
 
@@ -213,11 +239,9 @@ export const EndpointProvider = () =>
 
       const toAttrs = Effect.fn(function* (endpoint: dms.Endpoint) {
         if (!endpoint.EndpointIdentifier || !endpoint.EndpointArn) {
-          return yield* Effect.fail(
-            new Error(
-              `DMS endpoint '${endpoint.EndpointIdentifier}' is missing its identifier or ARN`,
-            ),
-          );
+          return yield* new EndpointUnexpectedResponse({
+            message: `DMS endpoint '${endpoint.EndpointIdentifier}' is missing its identifier or ARN`,
+          });
         }
         return {
           endpointIdentifier: endpoint.EndpointIdentifier,
@@ -271,6 +295,13 @@ export const EndpointProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ endpointIdentifier: name }) {
+          const endpoint = yield* findEndpoint(name);
+          if (!endpoint?.EndpointArn) return undefined;
+          const attrs = yield* toAttrs(endpoint);
+          return attrs;
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =
             output?.endpointIdentifier ?? (yield* toName(id, olds ?? ({} as EndpointProps)));
@@ -322,9 +353,9 @@ export const EndpointProvider = () =>
           }
 
           if (!observed?.EndpointArn) {
-            return yield* Effect.fail(
-              new Error(`DMS endpoint '${name}' has no ARN after reconcile`),
-            );
+            return yield* new EndpointUnexpectedResponse({
+              message: `DMS endpoint '${name}' has no ARN after reconcile`,
+            });
           }
 
           // 3b. Sync tags — diff against OBSERVED cloud tags.

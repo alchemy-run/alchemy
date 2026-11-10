@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_GLOBAL,
@@ -145,8 +146,27 @@ export type NetworkPeering = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  NetworkPeeringLookup
 >;
+
+/**
+ * Props for {@link NetworkPeering.lookup}: find a network peering this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface NetworkPeeringLookup {
+  /**
+   * Network peering id (the `{networkPeering}` segment of
+   * `projects/{project}/locations/global/networkPeerings/{networkPeering}`).
+   */
+  networkPeeringId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A peering between a VMware Engine network and a VPC or another VMware
@@ -164,6 +184,19 @@ export type NetworkPeering = Resource<
  *   peerNetwork: "projects/my-project/global/networks/default",
  *   peerNetworkType: "STANDARD",
  *   description: "gcve to vpc",
+ * });
+ * ```
+ *
+ * ### Looking up an existing network peering
+ * `NetworkPeering.lookup` references a network peering Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * network peering.
+ *
+ * **Example:** Reference an existing network peering
+ * ```typescript
+ * const networkPeering = GCP.VMwareEngine.NetworkPeering.lookup({
+ *   networkPeeringId: "my-network-peering",
  * });
  * ```
  *
@@ -210,7 +243,7 @@ const toAttrs = (item: vmwareengine.NetworkPeering, project: string) => {
 const getByName = (name: string) =>
   vmwareengine
     .getProjectsLocationsNetworkPeerings({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const NetworkPeeringProvider = () =>
   Provider.succeed(NetworkPeering, {
@@ -238,6 +271,14 @@ export const NetworkPeeringProvider = () =>
           (previousType.length > 0 && previousType !== news.peerNetworkType),
       });
     }),
+
+    lookup: Effect.fn(function* ({ networkPeeringId }) {
+      const env = yield* GcpEnvironment.current;
+      const name = resourceName(env.project, networkPeeringId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -320,7 +361,7 @@ export const NetworkPeeringProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -329,7 +370,7 @@ export const NetworkPeeringProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new VmwareengineNotResolved({ name });
+        return yield* new VmwareengineNotResolved({ resourceName: name });
       }
 
       current = yield* waitUntilReady(
@@ -370,7 +411,7 @@ export const NetworkPeeringProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

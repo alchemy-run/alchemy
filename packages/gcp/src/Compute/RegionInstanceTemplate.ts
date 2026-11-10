@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   hasAlchemyLabels,
@@ -126,8 +127,31 @@ export type RegionInstanceTemplate = Resource<
     creationTimestamp: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RegionInstanceTemplateLookup
 >;
+
+/**
+ * Props for {@link RegionInstanceTemplate.lookup}: find a region instance
+ * template this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface RegionInstanceTemplateLookup {
+  /**
+   * Template name.
+   */
+  templateName: string;
+  /**
+   * Region the template lives in. `US-CENTRAL1` is accepted and normalized
+   * to `us-central1`.
+   */
+  region?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A regional Compute Engine instance template.
@@ -157,6 +181,19 @@ export type RegionInstanceTemplate = Resource<
  *       diskSizeGb: 10,
  *     },
  *   ],
+ * });
+ * ```
+ *
+ * ### Looking up an existing region instance template
+ * `RegionInstanceTemplate.lookup` references a region instance template
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared region instance template.
+ *
+ * **Example:** Reference an existing region instance template
+ * ```typescript
+ * const regionInstanceTemplate = GCP.Compute.RegionInstanceTemplate.lookup({
+ *   templateName: "my-template",
  * });
  * ```
  *
@@ -334,7 +371,7 @@ const toAttrs = (
 const getByName = (project: string, region: string, instanceTemplate: string) =>
   compute
     .getRegionInstanceTemplates({ project, region, instanceTemplate })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, region: string, templateName: string) =>
   getByName(project, region, templateName).pipe(
@@ -387,6 +424,14 @@ export const RegionInstanceTemplateProvider = () =>
           previousName !== undefined && nextName !== undefined && nextName === previousName,
       };
     }),
+
+    lookup: Effect.fn(function* ({ templateName, region: lookupRegion }) {
+      const env = yield* GcpEnvironment.current;
+      const region = normalizeRegion(lookupRegion, env.region);
+      const existing = yield* getByName(env.project, region, templateName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -463,7 +508,7 @@ export const RegionInstanceTemplateProvider = () =>
             },
           }),
           { ignoreAlreadyExists: true },
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = yield* awaitResource(env.project, region, templateName);
       }
 
@@ -489,6 +534,6 @@ export const RegionInstanceTemplateProvider = () =>
           instanceTemplate: output.templateName,
         }),
         { ignoreNotFound: true },
-      ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      ).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
     }),
   });

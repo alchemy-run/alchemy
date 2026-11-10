@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   collectPages,
@@ -127,8 +128,36 @@ export type AppsAgent = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AppsAgentLookup
 >;
+
+/**
+ * Props for {@link AppsAgent.lookup}: find an apps agent this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface AppsAgentLookup {
+  /**
+   * Agent id (the `{agent}` segment).
+   */
+  agentId: string;
+  /**
+   * Region used when `app` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent CES app. Full name
+   * `projects/{project}/locations/{location}/apps/{app}` or the app id
+   * (combined with `location`).
+   */
+  app: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Customer Engagement Suite agent inside an app. Agents give the LLM
@@ -149,13 +178,27 @@ export type AppsAgent = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing apps agent
+ * `AppsAgent.lookup` references an apps agent Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * apps agent.
+ *
+ * **Example:** Reference an existing apps agent
+ * ```typescript
+ * const appsAgent = GCP.CES.AppsAgent.lookup({
+ *   agentId: "my-agent",
+ *   app: "my-app",
+ * });
+ * ```
+ *
  * @resource
  * @category CES
  */
 export const AppsAgent = Resource<AppsAgent>("GCP.CES.AppsAgent");
 
 export class AppsAgentNotResolved extends Data.TaggedError("GCP.CES.AppsAgentNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (app: string, agentId: string) => `${app}/agents/${agentId}`;
@@ -187,10 +230,10 @@ const toAttrs = (agent: ces.Agent, project: string, region: string, appHint?: st
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : ces
         .getProjectsLocationsAppsAgents({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string, region: string) =>
   collectPages(
@@ -221,6 +264,16 @@ export const AppsAgentProvider = () =>
         nextParent: news.app,
       });
     }),
+
+    lookup: Effect.fn(function* ({ agentId, location: lookupLocation, app: lookupApp }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const app = lookupApp ? expandApp(lookupApp, env.project, location) : undefined;
+      const name = app !== undefined ? resourceName(app, agentId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region, app);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -280,7 +333,7 @@ export const AppsAgentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AppsAgentNotResolved({ name });
+        return yield* new AppsAgentNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

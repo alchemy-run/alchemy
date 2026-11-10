@@ -25,6 +25,7 @@ import {
   labelSelector,
   stripInternalLabels,
   toLabels,
+  isReplacedGeneration,
 } from "./Labels.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -131,8 +132,18 @@ export interface Firewall extends Resource<
     labels: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  FirewallLookup
 > {}
+
+/**
+ * Props for {@link Firewall.lookup}: find a firewall this stack
+ * doesn't manage by its name.
+ */
+export interface FirewallLookup {
+  /** Firewall name (unique in the project). */
+  name: string;
+}
 
 /**
  * A Hetzner Cloud firewall — a named set of inbound/outbound rules that
@@ -198,13 +209,23 @@ export interface Firewall extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing firewall
+ * `Firewall.lookup` references a firewall Alchemy doesn't manage (created in
+ * the Hetzner Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing firewall
+ * ```typescript
+ * const firewall = Hetzner.Firewall.lookup({ name: "web" });
+ * ```
+ *
  * @resource
  * @product Firewall
  */
 export const Firewall = Resource<Firewall>("Hetzner.Firewall");
 
 export class FirewallNotCreated extends Data.TaggedError("Hetzner.FirewallNotCreated")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 type FirewallAttributes = Firewall["Attributes"];
@@ -360,7 +381,7 @@ const toAttrs = (firewall: ObservedFirewall): FirewallAttributes => ({
 const getById = (id: number) =>
   Hetzner.firewalls.getFirewall({ id }).pipe(
     Effect.map(({ firewall }) => firewall),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const findByName = (name: string) =>
@@ -536,7 +557,12 @@ export const FirewallProvider = () =>
       }
       return undefined;
     }),
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ name }) {
+      const found = yield* findByName(name);
+      return found === undefined ? undefined : toAttrs(found);
+    }),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const name =
         output?.name ??
         (olds?.name !== undefined
@@ -553,6 +579,16 @@ export const FirewallProvider = () =>
             ? ((yield* findByName(name)) ?? (yield* findByLabels(id)))
             : yield* findByLabels(id);
       if (observed === undefined) return undefined;
+      if (
+        isReplacedGeneration({
+          previousId: previous?.id,
+          foundId: observed.id,
+          claimedName: olds?.name,
+          foundName: observed.name,
+        })
+      ) {
+        return undefined;
+      }
       const attrs = toAttrs(observed);
       const ours = yield* hasAlchemyLabels(id, compactLabels(observed.labels));
       return ours ? attrs : Unowned(attrs);
@@ -575,7 +611,7 @@ export const FirewallProvider = () =>
         current = yield* observe({ id, name, output });
       }
       if (current === undefined) {
-        return yield* new FirewallNotCreated({ name });
+        return yield* new FirewallNotCreated({ resourceName: name });
       }
 
       // Sync each mutable aspect against observed cloud state.

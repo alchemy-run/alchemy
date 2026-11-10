@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -171,8 +172,32 @@ export type Evaluation = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  EvaluationLookup
 >;
+
+/**
+ * Props for {@link Evaluation.lookup}: find an evaluation this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface EvaluationLookup {
+  /**
+   * Evaluation id (the `{evaluation}` segment of
+   * `projects/{project}/locations/{location}/evaluations/{evaluation}`).
+   */
+  evaluationId: string;
+  /**
+   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Workload Manager evaluation — a named set of best-practice rules
@@ -214,6 +239,19 @@ export type Evaluation = Resource<
  *   ruleNames: ["sap-hana"],
  *   description: "nightly SAP scan v2",
  *   labels: { env: "prod", team: "platform" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing evaluation
+ * `Evaluation.lookup` references an evaluation Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * evaluation.
+ *
+ * **Example:** Reference an existing evaluation
+ * ```typescript
+ * const evaluation = GCP.WorkloadManager.Evaluation.lookup({
+ *   evaluationId: "my-evaluation",
  * });
  * ```
  *
@@ -292,7 +330,7 @@ const toAttrs = (item: workloadmanager.Evaluation, project: string, region: stri
 const getByName = (name: string) =>
   workloadmanager
     .getProjectsLocationsEvaluations({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string, region: string) =>
   listAtLocation(project, region, (parent) =>
@@ -327,6 +365,15 @@ export const EvaluationProvider = () =>
           (olds?.kmsKey ?? output?.kmsKey) !== news.kmsKey,
       });
     }),
+
+    lookup: Effect.fn(function* ({ evaluationId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, evaluationId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -388,7 +435,7 @@ export const EvaluationProvider = () =>
             evaluationId,
             body,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           // ALREADY_EXISTS (6): a concurrent create won the race.
           yield* waitForOperation(created).pipe(
@@ -401,7 +448,7 @@ export const EvaluationProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       current = yield* waitUntilReady(
@@ -454,7 +501,7 @@ export const EvaluationProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         // NOT_FOUND (5): already gone.

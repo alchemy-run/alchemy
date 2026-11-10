@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   createInternalLabels,
@@ -61,8 +62,31 @@ export type Space = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SpaceLookup
 >;
+
+/**
+ * Props for {@link Space.lookup}: find a space this stack doesn't manage by
+ * its identifiers, in the ambient project unless `project` names another.
+ */
+export interface SpaceLookup {
+  /**
+   * Space id (the `{space}` segment of
+   * `organizations/{org}/spaces/{space}`). Must be 1-63 characters, start
+   * with a letter, and match `[a-z][a-z0-9-]*`.
+   */
+  spaceId: string;
+  /**
+   * Apigee organization id.
+   */
+  organization?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Apigee organization space used to group API proxies, shared flows,
@@ -97,13 +121,23 @@ export type Space = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing space
+ * `Space.lookup` references a space Alchemy doesn't manage (created in the
+ * console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared space.
+ *
+ * **Example:** Reference an existing space
+ * ```typescript
+ * const space = GCP.Apigee.Space.lookup({ spaceId: "my-space" });
+ * ```
+ *
  * @resource
  * @category Apigee
  */
 export const Space = Resource<Space>("GCP.Apigee.Space");
 
 export class SpaceNotResolved extends Data.TaggedError("GCP.Apigee.SpaceNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const rfc1035 = (name: string): string => {
@@ -157,7 +191,7 @@ const toAttrs = (space: apigee.GoogleCloudApigeeV1Space, org: string) => {
 const getByName = (name: string) =>
   apigee
     .getOrganizationsSpaces({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 export const SpaceProvider = () =>
   Provider.succeed(Space, {
@@ -180,6 +214,15 @@ export const SpaceProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ spaceId, organization }) {
+      const env = yield* GcpEnvironment.current;
+      const org = orgIdOf(organization, env.project);
+      const name = resourceName(org, spaceId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, org);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -236,7 +279,7 @@ export const SpaceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SpaceNotResolved({ name });
+        return yield* new SpaceNotResolved({ resourceName: name });
       }
 
       if ((current.displayName ?? "") !== desiredDisplayName) {

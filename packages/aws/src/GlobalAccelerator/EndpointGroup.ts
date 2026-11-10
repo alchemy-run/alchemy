@@ -137,8 +137,18 @@ export interface EndpointGroup extends Resource<
     }[];
   },
   never,
-  Providers
+  Providers,
+  EndpointGroupLookup
 > {}
+
+/**
+ * Props for {@link EndpointGroup.lookup}: find an endpoint group this stack doesn't
+ * manage, in the ambient account.
+ */
+export interface EndpointGroupLookup {
+  /** The ARN of the existing endpoint group. */
+  endpointGroupArn: string;
+}
 
 /**
  * A Global Accelerator endpoint group — the set of regional endpoints
@@ -181,6 +191,16 @@ export interface EndpointGroup extends Resource<
  *   endpointGroupRegion: "eu-west-1",
  *   trafficDialPercentage: 10,
  * });
+ * ```
+ *
+ * ### Looking up an existing endpoint group
+ * `EndpointGroup.lookup` references an endpoint group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `endpointGroupArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing endpoint group
+ * ```typescript
+ * const usWest = AWS.GlobalAccelerator.EndpointGroup.lookup({ endpointGroupArn });
  * ```
  *
  * @resource
@@ -282,7 +302,7 @@ const hasDrift = (live: ga.EndpointGroup, news: EndpointGroupProps): boolean => 
 const describeEndpointGroup = Effect.fn(function* (endpointGroupArn: string) {
   return yield* withGaRegion(ga.describeEndpointGroup({ EndpointGroupArn: endpointGroupArn })).pipe(
     Effect.map((r) => r.EndpointGroup),
-    Effect.catchTag("EndpointGroupNotFoundException", () => Effect.succeed(undefined)),
+    Effect.catchTag("EndpointGroupNotFoundException", () => Effect.undefined),
   );
 });
 
@@ -308,6 +328,10 @@ export const EndpointGroupProvider = () =>
     // Sub-resource keyed entirely by its parent listener (and untagged) —
     // account-wide enumeration happens via the Accelerator resource.
     list: () => Effect.succeed([]),
+    lookup: Effect.fn(function* ({ endpointGroupArn }) {
+      const live = yield* describeEndpointGroup(endpointGroupArn);
+      return live ? toAttributes(live, endpointGroupArn) : undefined;
+    }),
     read: Effect.fn(function* ({ olds, output }) {
       if (output?.endpointGroupArn) {
         const live = yield* describeEndpointGroup(output.endpointGroupArn);

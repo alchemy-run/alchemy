@@ -26,13 +26,13 @@ export const LIST_LOCATIONS = [
 export class JobTemplateNotResolved extends Data.TaggedError(
   "GCP.Transcoder.JobTemplateNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class JobTemplateStillExists extends Data.TaggedError(
   "GCP.Transcoder.JobTemplateStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {
@@ -153,10 +153,10 @@ export const configKey = (config: transcoder.JobConfig | undefined): string => j
 
 export const getJobTemplate = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : transcoder
         .getProjectsLocationsJobTemplates({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /**
  * Wait (bounded) for a template we know exists — e.g. after a create
@@ -168,7 +168,7 @@ export const waitUntilExists = (name: string) =>
     Effect.flatMap((template) =>
       template !== undefined
         ? Effect.succeed(template)
-        : Effect.fail(new JobTemplateNotResolved({ name })),
+        : Effect.fail(new JobTemplateNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Transcoder.JobTemplateNotResolved",
@@ -180,7 +180,9 @@ export const waitUntilExists = (name: string) =>
 export const waitUntilGone = (name: string) =>
   getJobTemplate(name).pipe(
     Effect.flatMap((template) =>
-      template === undefined ? Effect.void : Effect.fail(new JobTemplateStillExists({ name })),
+      template === undefined
+        ? Effect.void
+        : Effect.fail(new JobTemplateStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Transcoder.JobTemplateStillExists",

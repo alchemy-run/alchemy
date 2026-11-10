@@ -143,8 +143,18 @@ export type Plan = Resource<
     livemode: boolean;
   },
   never,
-  Providers
+  Providers,
+  PlanLookup
 >;
+
+/**
+ * Props for {@link Plan.lookup}: find a plan this stack
+ * doesn't manage by its id.
+ */
+export interface PlanLookup {
+  /** Stripe plan id, e.g. `"plan_A2b3C4d5E6f7G8"`. */
+  id: string;
+}
 
 /**
  * A Stripe Plan — the legacy (pre-Price) catalog object that defines
@@ -196,6 +206,16 @@ export type Plan = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing plan
+ * `Plan.lookup` references a plan Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing plan
+ * ```typescript
+ * const ref = Stripe.Plan.lookup({ id: "plan_A2b3C4d5E6f7G8" });
+ * ```
+ *
  * @resource
  * @product Product
  */
@@ -240,7 +260,7 @@ const toAttrs = (plan: StripePlan): PlanAttributes => ({
 const isMissingPlan = isMissingStripeResource;
 
 const getById = (plan: string) =>
-  GetPlan({ plan }).pipe(Effect.catchIf(isMissingPlan, () => Effect.succeed(undefined)));
+  GetPlan({ plan }).pipe(Effect.catchIf(isMissingPlan, () => Effect.undefined));
 
 const listByActive = Effect.fn(function* (active: boolean) {
   const plans: StripePlan[] = [];
@@ -344,6 +364,11 @@ export const PlanProvider = () =>
         return { action: "replace" } as const;
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing);
     }),
 
     read: Effect.fn(function* ({ id, output }) {

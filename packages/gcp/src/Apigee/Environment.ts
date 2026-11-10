@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   createOwnership,
@@ -133,8 +134,32 @@ export type Environment = Resource<
     lastModifiedAt: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  EnvironmentLookup
 >;
+
+/**
+ * Props for {@link Environment.lookup}: find an environment this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface EnvironmentLookup {
+  /**
+   * Environment id (the `{env}` segment of
+   * `organizations/{org}/environments/{env}`). Must match
+   * `^[.\\p{Alnum}-_]{1,255}$`.
+   */
+  environmentId: string;
+  /**
+   * Apigee organization id or `organizations/{org}`.
+   */
+  organization?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Apigee environment that hosts API proxies and shared flows.
@@ -163,13 +188,26 @@ export type Environment = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing environment
+ * `Environment.lookup` references an environment Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * environment.
+ *
+ * **Example:** Reference an existing environment
+ * ```typescript
+ * const environment = GCP.Apigee.Environment.lookup({
+ *   environmentId: "my-environment",
+ * });
+ * ```
+ *
  * @resource
  * @category Apigee
  */
 export const Environment = Resource<Environment>("GCP.Apigee.Environment");
 
 export class EnvironmentNotResolved extends Data.TaggedError("GCP.Apigee.EnvironmentNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organization: string, environmentId: string) =>
@@ -201,7 +239,7 @@ const toAttrs = (environment: apigee.GoogleCloudApigeeV1Environment, organizatio
 const getByName = (name: string) =>
   apigee
     .getOrganizationsEnvironments({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 export const EnvironmentProvider = () =>
   Provider.succeed(Environment, {
@@ -249,6 +287,15 @@ export const EnvironmentProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ environmentId, organization: lookupOrganization }) {
+      const env = yield* GcpEnvironment.current;
+      const organization = defaultOrgName(env.project, lookupOrganization);
+      const name = resourceName(organization, environmentId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, organization);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const organization = defaultOrgName(env.project, olds?.organization ?? output?.organization);
@@ -273,11 +320,7 @@ export const EnvironmentProvider = () =>
         for (const organization of orgs) {
           const org = yield* apigee
             .getOrganizations({ name: organization })
-            .pipe(
-              Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
           for (const environmentId of org?.environments ?? []) {
             const existing = yield* getByName(`${organization}/environments/${environmentId}`);
             if (existing !== undefined && hasOwnershipMarker(existing.description)) {
@@ -322,7 +365,7 @@ export const EnvironmentProvider = () =>
               nodeConfig: news.nodeConfig,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (operation !== undefined) {
           yield* waitForOperation(operation);
         }
@@ -330,7 +373,7 @@ export const EnvironmentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new EnvironmentNotResolved({ name });
+        return yield* new EnvironmentNotResolved({ resourceName: name });
       }
 
       const observedProperties = propertiesToRecord(current.properties);
@@ -372,9 +415,7 @@ export const EnvironmentProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* apigee
         .deleteOrganizationsEnvironments({ name: output.name })
-        .pipe(
-          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

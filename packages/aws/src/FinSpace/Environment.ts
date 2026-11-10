@@ -10,6 +10,13 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { Providers } from "../Providers.ts";
 
+export class EnvironmentUnexpectedResponse extends Data.TaggedError(
+  "EnvironmentUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type EnvironmentStatus = finspace.EnvironmentStatus;
 export type FederationMode = finspace.FederationMode;
 export type FederationParameters = finspace.FederationParameters;
@@ -98,8 +105,18 @@ export interface Environment extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  EnvironmentLookup
 > {}
+
+/**
+ * Props for {@link Environment.lookup}: find an environment this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface EnvironmentLookup {
+  /** The id of the existing environment. */
+  environmentId: string;
+}
 
 /**
  * An Amazon FinSpace environment — a managed data management and analytics
@@ -132,6 +149,16 @@ export interface Environment extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing environment
+ * `Environment.lookup` references an environment Alchemy doesn't manage (created in the
+ * console or by another stack), found by `environmentId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing environment
+ * ```typescript
+ * const existing = AWS.FinSpace.Environment.lookup({ environmentId: "..." });
+ * ```
+ *
  * @resource
  */
 export const Environment = Resource<Environment>("AWS.FinSpace.Environment");
@@ -143,8 +170,9 @@ const fetchTags = Effect.fn(function* (arn: string) {
   const response = yield* finspace
     .listTagsForResource({ resourceArn: arn })
     .pipe(
-      Effect.catchTag(["ResourceNotFoundException", "InvalidRequestException"], () =>
-        Effect.succeed(undefined),
+      Effect.catchTag(
+        ["ResourceNotFoundException", "InvalidRequestException"],
+        () => Effect.undefined,
       ),
     );
   return Object.fromEntries(
@@ -177,7 +205,7 @@ const isGone = (status: EnvironmentStatus | undefined) =>
 const readEnvironmentById = Effect.fn(function* (environmentId: string) {
   const response = yield* finspace
     .getEnvironment({ environmentId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   const env = response?.environment;
   if (!env || isGone(env.status)) return undefined;
   return env;
@@ -240,7 +268,7 @@ const waitForEnvironmentStatus = (environmentId: string, target: "CREATED" | "DE
     Effect.gen(function* () {
       const response = yield* finspace
         .getEnvironment({ environmentId })
-        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       const status = response?.environment?.status;
       if (target === "DELETED") {
         if (response === undefined || isGone(status)) return;
@@ -270,6 +298,12 @@ export const EnvironmentProvider = () =>
             );
             return hydrated;
           }),
+        lookup: Effect.fn(function* ({ environmentId }) {
+          const env = yield* readEnvironmentById(environmentId);
+          if (!env) return undefined;
+          const attrs = yield* toAttributes(env, environmentId);
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const env = output?.environmentId
             ? yield* readEnvironmentById(output.environmentId)
@@ -315,9 +349,9 @@ export const EnvironmentProvider = () =>
               tags: desiredTags,
             });
             if (!created.environmentId) {
-              return yield* Effect.fail(
-                new Error(`CreateEnvironment for '${name}' returned no id`),
-              );
+              return yield* new EnvironmentUnexpectedResponse({
+                message: `CreateEnvironment for '${name}' returned no id`,
+              });
             }
             yield* session.note(
               `Creating FinSpace environment ${name} (${created.environmentId})...`,
@@ -325,12 +359,16 @@ export const EnvironmentProvider = () =>
             yield* waitForEnvironmentStatus(created.environmentId, "CREATED");
             env = yield* readEnvironmentById(created.environmentId);
             if (env === undefined) {
-              return yield* Effect.fail(new Error(`failed to read created environment ${name}`));
+              return yield* new EnvironmentUnexpectedResponse({
+                message: `failed to read created environment ${name}`,
+              });
             }
           }
           const environmentId = env.environmentId;
           if (environmentId === undefined) {
-            return yield* Effect.fail(new Error(`environment '${name}' has no environmentId`));
+            return yield* new EnvironmentUnexpectedResponse({
+              message: `environment '${name}' has no environmentId`,
+            });
           }
 
           // Sync mutable settings — only call UpdateEnvironment on drift.
@@ -371,7 +409,9 @@ export const EnvironmentProvider = () =>
 
           const final = yield* readEnvironmentById(environmentId);
           if (!final) {
-            return yield* Effect.fail(new Error(`failed to read reconciled environment ${name}`));
+            return yield* new EnvironmentUnexpectedResponse({
+              message: `failed to read reconciled environment ${name}`,
+            });
           }
           return yield* toAttributes(final, environmentId);
         }),

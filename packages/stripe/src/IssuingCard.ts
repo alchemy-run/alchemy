@@ -217,8 +217,18 @@ export type IssuingCard = Resource<
     livemode: boolean;
   },
   never,
-  Providers
+  Providers,
+  IssuingCardLookup
 >;
+
+/**
+ * Props for {@link IssuingCard.lookup}: find an Issuing card this stack
+ * doesn't manage by its id.
+ */
+export interface IssuingCardLookup {
+  /** Stripe Issuing card id, e.g. `"ic_1A2b3C4d5E6f7G8h"`. */
+  id: string;
+}
 
 /**
  * A Stripe Issuing Card — a virtual or physical card issued to a
@@ -280,6 +290,16 @@ export type IssuingCard = Resource<
  *   currency: "usd",
  *   type: "physical",
  * });
+ * ```
+ *
+ * ### Looking up an existing Issuing card
+ * `IssuingCard.lookup` references an Issuing card Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing Issuing card
+ * ```typescript
+ * const ref = Stripe.IssuingCard.lookup({ id: "ic_1A2b3C4d5E6f7G8h" });
  * ```
  *
  * @resource
@@ -418,11 +438,11 @@ const isIssuingUnavailable = (error: StripeOpError): boolean =>
 const getById = (card: string) =>
   GetIssuingCard({ card }).pipe(
     Effect.map((live) => (live.status === "canceled" ? undefined : live)),
-    Effect.catchIf(isMissingCard, () => Effect.succeed(undefined)),
+    Effect.catchIf(isMissingCard, () => Effect.undefined),
   );
 
 const getByIdAny = (card: string) =>
-  GetIssuingCard({ card }).pipe(Effect.catchIf(isMissingCard, () => Effect.succeed(undefined)));
+  GetIssuingCard({ card }).pipe(Effect.catchIf(isMissingCard, () => Effect.undefined));
 
 const listByStatus = Effect.fn(function* (status: "active" | "inactive") {
   const cards: StripeIssuingCard[] = [];
@@ -546,6 +566,11 @@ export const IssuingCardProvider = () =>
         return { action: "replace" } as const;
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing);
     }),
 
     read: Effect.fn(function* ({ id, output }) {

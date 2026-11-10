@@ -12,6 +12,18 @@ import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { readElastiCacheTags, sameStringSet, tagsToWire } from "./internal.ts";
 
+export class ReplicationGroupNotReady extends Data.TaggedError("ReplicationGroupNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class ReplicationGroupUnexpectedResponse extends Data.TaggedError(
+  "ReplicationGroupUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export interface ReplicationGroupProps {
   /** Replication group identifier. Generated deterministically when omitted. */
   replicationGroupId?: string;
@@ -74,8 +86,18 @@ export interface ReplicationGroup extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ReplicationGroupLookup
 > {}
+
+/**
+ * Props for {@link ReplicationGroup.lookup}: find a replication group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ReplicationGroupLookup {
+  /** The id of the existing replication group. */
+  replicationGroupId: string;
+}
 
 /** Invalid desired topology rejected before AWS can start a partial create. */
 export class InvalidReplicationGroupConfiguration extends Data.TaggedError(
@@ -139,6 +161,16 @@ export const validateReplicationGroupProps = (
  * });
  * ```
  *
+ * ### Looking up an existing replication group
+ * `ReplicationGroup.lookup` references a replication group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `replicationGroupId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing replication group
+ * ```typescript
+ * const existing = AWS.ElastiCache.ReplicationGroup.lookup({ replicationGroupId: "sessions" });
+ * ```
+ *
  * @resource
  */
 export const ReplicationGroup = Resource<ReplicationGroup>("AWS.ElastiCache.ReplicationGroup");
@@ -156,7 +188,7 @@ export const ReplicationGroupProvider = () =>
       const readGroup = Effect.fn(function* (name: string) {
         const response = yield* elasticache
           .describeReplicationGroups({ ReplicationGroupId: name })
-          .pipe(Effect.catchTag("ReplicationGroupNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ReplicationGroupNotFoundFault", () => Effect.undefined));
         return response?.ReplicationGroups?.[0];
       });
       const waitForAvailable = Effect.fn(function* (name: string) {
@@ -164,7 +196,11 @@ export const ReplicationGroupProvider = () =>
           Effect.flatMap((group) =>
             group?.Status === "available"
               ? Effect.succeed(group)
-              : Effect.fail(new Error(`Replication group '${name}' is not available`)),
+              : Effect.fail(
+                  new ReplicationGroupNotReady({
+                    message: `Replication group '${name}' is not available`,
+                  }),
+                ),
           ),
           Effect.retry({
             schedule: Schedule.max([
@@ -181,7 +217,11 @@ export const ReplicationGroupProvider = () =>
           Effect.flatMap((group) =>
             group === undefined
               ? Effect.void
-              : Effect.fail(new Error(`Replication group '${name}' is still deleting`)),
+              : Effect.fail(
+                  new ReplicationGroupNotReady({
+                    message: `Replication group '${name}' is still deleting`,
+                  }),
+                ),
           ),
           Effect.retry({
             schedule: Schedule.max([
@@ -209,9 +249,9 @@ export const ReplicationGroupProvider = () =>
         );
       const attrs = Effect.fn(function* (group: elasticache.ReplicationGroup) {
         if (!group.ReplicationGroupId || !group.ARN || !group.Status || !group.Engine) {
-          return yield* Effect.fail(
-            new Error("ElastiCache replication group is missing its id, ARN, status, or engine"),
-          );
+          return yield* new ReplicationGroupUnexpectedResponse({
+            message: "ElastiCache replication group is missing its id, ARN, status, or engine",
+          });
         }
         const engineVersion = group.MemberClusters?.[0]
           ? (yield* elasticache.describeCacheClusters({
@@ -263,6 +303,10 @@ export const ReplicationGroupProvider = () =>
             return { action: "replace" } as const;
           }
           if (replacement(olds ?? {}, news ?? {})) return { action: "replace" } as const;
+        }),
+        lookup: Effect.fn(function* ({ replicationGroupId }) {
+          const found = yield* readGroup(replicationGroupId);
+          return found?.ARN ? yield* attrs(found) : undefined;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const group = yield* readGroup(

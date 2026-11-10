@@ -9,6 +9,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -273,8 +274,40 @@ export type ClustersNodePool = Resource<
     selfLink: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ClustersNodePoolLookup
 >;
+
+/**
+ * Props for {@link ClustersNodePool.lookup}: find a clusters node pool this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface ClustersNodePoolLookup {
+  /**
+   * Node pool id (the `{nodePool}` segment of
+   * `.../clusters/{cluster}/nodePools/{nodePool}`). Must be 1-40 characters
+   * and match `[a-z]([a-z0-9-]*[a-z0-9])?`.
+   */
+  nodePoolId: string;
+  /**
+   * Compute Engine zone of the parent cluster (`us-central1-a`, …). Ignored
+   * when `cluster` is a full resource name. The legacy zonal API only
+   * accepts zones, not regions.
+   */
+  zone?: string;
+  /**
+   * Parent cluster id or full resource name
+   * (`projects/{project}/zones/{zone}/clusters/{cluster}` or the
+   * locations-form equivalent).
+   */
+  cluster: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Google Kubernetes Engine node pool managed through the legacy zonal
@@ -332,6 +365,20 @@ export type ClustersNodePool = Resource<
  * const live = yield* getPool();
  * ```
  *
+ * ### Looking up an existing clusters node pool
+ * `ClustersNodePool.lookup` references a clusters node pool Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * clusters node pool.
+ *
+ * **Example:** Reference an existing clusters node pool
+ * ```typescript
+ * const clustersNodePool = GCP.Container.ClustersNodePool.lookup({
+ *   nodePoolId: "my-node-pool",
+ *   cluster: "my-cluster",
+ * });
+ * ```
+ *
  * @resource
  * @category Container
  */
@@ -340,7 +387,7 @@ export const ClustersNodePool = Resource<ClustersNodePool>("GCP.Container.Cluste
 export class ClustersNodePoolNotResolved extends Data.TaggedError(
   "GCP.Container.ClustersNodePoolNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ClustersNodePoolClusterMissing extends Data.TaggedError(
@@ -352,7 +399,7 @@ export class ClustersNodePoolClusterMissing extends Data.TaggedError(
 export class ClustersNodePoolNotReady extends Data.TaggedError(
   "GCP.Container.ClustersNodePoolNotReady",
 )<{
-  name: string;
+  resourceName: string;
   status: string;
 }> {}
 
@@ -366,7 +413,7 @@ export class ClustersNodePoolOperationFailed extends Data.TaggedError(
 export class ClustersNodePoolStillExists extends Data.TaggedError(
   "GCP.Container.ClustersNodePoolStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -566,7 +613,7 @@ const getByRef = (project: string, zone: string, clusterId: string, nodePoolId: 
       clusterId,
       nodePoolId,
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const getByName = (name: string) => {
   const parsed = parseName(name);
@@ -621,7 +668,7 @@ const waitUntilExists = (project: string, zone: string, clusterId: string, nodeP
   return getByRef(project, zone, clusterId, nodePoolId).pipe(
     Effect.filterOrFail(
       (pool): pool is container.NodePool => pool !== undefined,
-      () => new ClustersNodePoolNotResolved({ name }),
+      () => new ClustersNodePoolNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Container.ClustersNodePoolNotResolved",
@@ -636,7 +683,7 @@ const waitUntilReady = (project: string, zone: string, clusterId: string, nodePo
   return getByRef(project, zone, clusterId, nodePoolId).pipe(
     Effect.filterOrFail(
       (pool): pool is container.NodePool => pool !== undefined,
-      () => new ClustersNodePoolNotResolved({ name }),
+      () => new ClustersNodePoolNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (pool) => {
@@ -656,7 +703,7 @@ const waitUntilReady = (project: string, zone: string, clusterId: string, nodePo
       },
       (pool) =>
         new ClustersNodePoolNotReady({
-          name,
+          resourceName: name,
           status: pool.status ?? "STATUS_UNSPECIFIED",
         }),
     ),
@@ -675,7 +722,9 @@ const waitUntilGone = (project: string, zone: string, clusterId: string, nodePoo
   const name = resourceName(project, zone, clusterId, nodePoolId);
   return getByRef(project, zone, clusterId, nodePoolId).pipe(
     Effect.flatMap((pool) =>
-      pool === undefined ? Effect.void : Effect.fail(new ClustersNodePoolStillExists({ name })),
+      pool === undefined
+        ? Effect.void
+        : Effect.fail(new ClustersNodePoolStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Container.ClustersNodePoolStillExists",
@@ -836,6 +885,27 @@ export const ClustersNodePoolProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({ nodePoolId, zone, cluster }) {
+      const env = yield* GcpEnvironment.current;
+      const clusterRef = (typeof cluster === "string" ? cluster : undefined) ?? "";
+      // A pool whose cluster never resolved (e.g. the cluster create failed)
+      // was never created and cannot be looked up.
+      if (clusterRef.trim().length === 0) {
+        return undefined;
+      }
+      const ref = parseClusterRef(clusterRef, env.project, zone);
+      const name = resourceName(ref.project, ref.zone, ref.clusterId, nodePoolId);
+      const identity = identityOf(name, { ...ref, nodePoolId });
+      const existing = yield* getByRef(
+        identity.project,
+        identity.zone,
+        identity.clusterId,
+        identity.nodePoolId,
+      );
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, identity.project, identity.zone, identity.clusterId);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const nodePoolId = yield* toId(id, olds?.nodePoolId, output?.nodePoolId);
@@ -949,7 +1019,7 @@ export const ClustersNodePoolProvider = () =>
             zone: ref.zone,
             clusterId: ref.clusterId,
           })
-          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
         const workloadIdentity = (cluster?.workloadIdentityConfig?.workloadPool ?? "").length > 0;
         const created = yield* retryConflict(
           container
@@ -961,7 +1031,7 @@ export const ClustersNodePoolProvider = () =>
                 nodePool: toCreatePool(news, nodePoolId, desiredLabels, workloadIdentity),
               },
             })
-            .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined))),
+            .pipe(Effect.catchTag("Conflict", () => Effect.undefined)),
         );
         if (created !== undefined) {
           yield* waitForOperation(ref.project, ref.zone, created);
@@ -970,7 +1040,7 @@ export const ClustersNodePoolProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ClustersNodePoolNotResolved({ name });
+        return yield* new ClustersNodePoolNotResolved({ resourceName: name });
       }
 
       let live = current;
@@ -1143,7 +1213,7 @@ export const ClustersNodePoolProvider = () =>
           nodePoolId,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

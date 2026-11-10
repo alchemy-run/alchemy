@@ -37,7 +37,30 @@ export interface RoleAttributes extends ResolvedBranchScope {
   createdAt: string;
 }
 
-export interface Role extends Resource<"Neon.Role", RoleProps, RoleAttributes, never, Providers> {}
+export interface Role extends Resource<
+  "Neon.Role",
+  RoleProps,
+  RoleAttributes,
+  never,
+  Providers,
+  RoleLookup
+> {}
+
+/**
+ * Props for {@link Role.lookup}: find a role this stack doesn't
+ * manage by its project, branch and name.
+ */
+export interface RoleLookup {
+  /** Neon project id. */
+  projectId: string;
+  /**
+   * Branch id.
+   * @default the project's default branch
+   */
+  branchId?: string;
+  /** Postgres role name. */
+  roleName: string;
+}
 
 /**
  * A Postgres role on a Neon branch. Neon makes every role it creates a
@@ -61,6 +84,18 @@ export interface Role extends Resource<"Neon.Role", RoleProps, RoleAttributes, n
  * **Example:** A role that cannot log in
  * ```typescript
  * const owner = yield* Neon.Role("Owner", { branch, name: "app_owner", noLogin: true });
+ * ```
+ *
+ * ### Looking up an existing role
+ * `Role.lookup` references a role Alchemy doesn't manage (created in
+ * the Neon Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ * `password` is the one Neon has stored, or `undefined` when it has none; a
+ * lookup never resets it.
+ *
+ * **Example:** Reference an existing role
+ * ```typescript
+ * const app = Neon.Role.lookup({ projectId: "plain-wave-12345678", roleName: "app" });
  * ```
  *
  * @resource
@@ -87,7 +122,7 @@ const createRoleName = (id: string, name: string | undefined) =>
 const observeRole = Effect.fn(function* (scope: ResolvedBranchScope, roleName: string) {
   return yield* Neon.getProjectBranchRole({ ...requestScope(scope), role_name: roleName }).pipe(
     Effect.map(({ role }) => role),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 });
 
@@ -99,7 +134,7 @@ const revealPassword = Effect.fn(function* (scope: ResolvedBranchScope, role: Ne
   const request = { ...requestScope(scope), role_name: role.name };
   const stored = yield* Neon.getProjectBranchRolePassword(request).pipe(
     Effect.map(({ password }) => redact(password)),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
   if (stored) return stored;
   const reset = yield* Neon.resetProjectBranchRolePassword(request);
@@ -140,6 +175,24 @@ export const RoleProvider = () =>
         };
       }
     }),
+    lookup: Effect.fn(function* ({ projectId, branchId, roleName }) {
+      const scope = yield* resolveBranchScope(
+        branchId === undefined ? { project: { projectId } } : { branch: { projectId, branchId } },
+      );
+      const role = yield* observeRole(scope, roleName);
+      if (!role) return undefined;
+      const password = isNoLogin(role)
+        ? undefined
+        : yield* Neon.getProjectBranchRolePassword({
+            ...requestScope(scope),
+            role_name: role.name,
+          }).pipe(
+            Effect.map(({ password }) => redact(password)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
+          );
+      return toAttributes(scope, role, password);
+    }),
+
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       if (!output && !olds?.branch && !olds?.project) return undefined;
       const scope = output ?? (yield* resolveBranchScope(olds!));
@@ -167,7 +220,7 @@ export const RoleProvider = () =>
         const created = yield* Neon.createProjectBranchRole({
           ...requestScope(scope),
           role: { name: roleName, ...(news.noLogin ? { no_login: true } : {}) },
-        }).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        }).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created) {
           yield* waitForOperations(created.operations);
           return toAttributes(
@@ -194,7 +247,7 @@ export const RoleProvider = () =>
       const deleted = yield* Neon.deleteProjectBranchRole({
         ...requestScope(output),
         role_name: output.roleName,
-      }).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (deleted) yield* waitForOperations(deleted.operations);
     }),
   });

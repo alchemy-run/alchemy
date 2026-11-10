@@ -32,6 +32,12 @@ export interface EdgeSessionOptions {
   readonly bindings: ReadonlyArray<EdgeBinding>;
   /** @default "2026-08-31" */
   readonly compatibilityDate?: string;
+  /**
+   * Serve the preview on a custom domain or route host in a zone instead of
+   * `{scriptName}.{subdomain}.workers.dev`. The script must already serve
+   * that host.
+   */
+  readonly route?: { readonly zoneId: string; readonly host: string };
 }
 
 /**
@@ -53,13 +59,12 @@ const wrap = <A, E, R>(effect: Effect.Effect<A, E, R>, message: string) =>
  * short-lived upload token; when present we do the swap, falling back
  * to the original if the exchange fails.
  */
-const createUploadToken = Effect.gen(function* () {
+const createUploadToken = Effect.fn(function* (route: EdgeSessionOptions["route"]) {
   const env = yield* yield* CloudflareEnvironment;
   const http = yield* HttpClient.HttpClient;
-  const createSubdomainEdgePreviewSession = yield* workers.createSubdomainEdgePreviewSession;
-  const { token, exchangeUrl } = yield* createSubdomainEdgePreviewSession({
-    accountId: env.accountId,
-  });
+  const { token, exchangeUrl } = route
+    ? yield* workers.createZoneEdgePreviewSession({ zoneId: route.zoneId })
+    : yield* workers.createSubdomainEdgePreviewSession({ accountId: env.accountId });
   if (!exchangeUrl) return token;
   const json = yield* http.get(exchangeUrl).pipe(
     Effect.flatMap((r) => r.json),
@@ -85,7 +90,9 @@ const uploadScript = (options: EdgeSessionOptions, uploadToken: string) =>
       accountId: env.accountId,
       scriptName: options.scriptName,
       cfPreviewUploadConfigToken: uploadToken,
-      wranglerSessionConfig: { workersDev: true, minimalMode: true },
+      wranglerSessionConfig: options.route
+        ? { routes: [`${options.route.host}/*`], minimalMode: true }
+        : { workersDev: true, minimalMode: true },
       metadata: {
         compatibilityDate: options.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE,
         bindings: options.bindings as EdgeMetadata["bindings"],
@@ -125,8 +132,8 @@ export const createEdgeSession = (
   Effect.gen(function* () {
     const [{ previewToken }, { url, headers }] = yield* Effect.all(
       [
-        createUploadToken.pipe(Effect.flatMap((t) => uploadScript(options, t))),
-        workerHost(options.scriptName).pipe(
+        createUploadToken(options.route).pipe(Effect.flatMap((t) => uploadScript(options, t))),
+        (options.route ? Effect.succeed(options.route.host) : workerHost(options.scriptName)).pipe(
           Effect.flatMap(
             Effect.fn(function* (host) {
               const headers = yield* Access.use((access) => access.getAccessHeaders(host));

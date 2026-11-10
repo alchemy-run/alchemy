@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -254,8 +255,34 @@ export type AutonomousDatabase = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AutonomousDatabaseLookup
 >;
+
+/**
+ * Props for {@link AutonomousDatabase.lookup}: find an autonomous database
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface AutonomousDatabaseLookup {
+  /**
+   * Autonomous Database id (the `{autonomous_database}` segment of
+   * `projects
+   * /{project}/locations/{location}/autonomousDatabases/{autonomous_database
+   * }`).
+   */
+  autonomousDatabaseId: string;
+  /**
+   * Region (`us-central1`, `us-east4`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Oracle Autonomous Database on Google Cloud.
@@ -299,6 +326,19 @@ export type AutonomousDatabase = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing autonomous database
+ * `AutonomousDatabase.lookup` references an autonomous database Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared autonomous database.
+ *
+ * **Example:** Reference an existing autonomous database
+ * ```typescript
+ * const autonomousDatabase = GCP.OracleDatabase.AutonomousDatabase.lookup({
+ *   autonomousDatabaseId: "my-autonomous-database",
+ * });
+ * ```
+ *
  * @resource
  * @category OracleDatabase
  */
@@ -307,7 +347,7 @@ export const AutonomousDatabase = Resource<AutonomousDatabase>(
 );
 
 const mergedProperties = (news: AutonomousDatabaseProps): AutonomousDatabasePropertiesInput => ({
-  ...(news.properties ?? {}),
+  ...news.properties,
   licenseType: news.licenseType ?? news.properties?.licenseType,
   dbWorkload: news.dbWorkload ?? news.properties?.dbWorkload,
   cpuCoreCount: news.cpuCoreCount ?? news.properties?.cpuCoreCount,
@@ -441,7 +481,7 @@ const toAttrs = (database: oracle.AutonomousDatabase, project: string) => {
 
 const getByName = (name: string) =>
   retryQuota(oracle.getProjectsLocationsAutonomousDatabases({ name })).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const listDatabases = (project: string, region: string) => {
@@ -516,6 +556,15 @@ export const AutonomousDatabaseProvider = () =>
       });
     }),
 
+    lookup: Effect.fn(function* ({ autonomousDatabaseId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation ?? env.region);
+      const name = resourceNameOf(env.project, location, COLLECTION, autonomousDatabaseId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const autonomousDatabaseId = yield* toPhysicalId(
@@ -566,7 +615,7 @@ export const AutonomousDatabaseProvider = () =>
           })
           .pipe(
             retryQuota,
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -575,7 +624,7 @@ export const AutonomousDatabaseProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new OracleDatabaseNotResolved({ name });
+        return yield* new OracleDatabaseNotResolved({ resourceName: name });
       }
 
       const ready = yield* waitUntilReady(
@@ -679,7 +728,7 @@ export const AutonomousDatabaseProvider = () =>
         })
         .pipe(
           retryConflict,
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

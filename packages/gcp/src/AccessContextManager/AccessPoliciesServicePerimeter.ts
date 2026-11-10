@@ -102,8 +102,25 @@ export type AccessPoliciesServicePerimeter = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AccessPoliciesServicePerimeterLookup
 >;
+
+/**
+ * Props for {@link AccessPoliciesServicePerimeter.lookup}: find an access
+ * policies service perimeter this stack doesn't manage by its identifiers.
+ */
+export interface AccessPoliciesServicePerimeterLookup {
+  /**
+   * Service perimeter id (the `{service_perimeter}` segment). Must begin
+   * with a letter, then alphanumeric or `_`.
+   */
+  servicePerimeterId: string;
+  /**
+   * Parent access policy (`accessPolicies/{policy}` or the policy id).
+   */
+  policy: string;
+}
 
 /**
  * An Access Context Manager service perimeter.
@@ -154,6 +171,20 @@ export type AccessPoliciesServicePerimeter = Resource<
  * );
  * ```
  *
+ * ### Looking up an existing access policies service perimeter
+ * `AccessPoliciesServicePerimeter.lookup` references an access policies
+ * service perimeter Alchemy doesn't manage (created in the console or by
+ * another stack). It is read during plan/deploy, never created, updated or
+ * deleted, and binds like a declared access policies service perimeter.
+ *
+ * **Example:** Reference an existing access policies service perimeter
+ * ```typescript
+ * const accessPoliciesServicePerimeter = GCP.AccessContextManager.AccessPoliciesServicePerimeter.lookup({
+ *   servicePerimeterId: "my-service-perimeter",
+ *   policy: "my-policy",
+ * });
+ * ```
+ *
  * @resource
  * @category AccessContextManager
  */
@@ -164,7 +195,7 @@ export const AccessPoliciesServicePerimeter = Resource<AccessPoliciesServicePeri
 export class AccessPoliciesServicePerimeterNotResolved extends Data.TaggedError(
   "GCP.AccessContextManager.AccessPoliciesServicePerimeterNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_TYPE = "PERIMETER_TYPE_REGULAR";
@@ -193,7 +224,7 @@ const toAttrs = (perimeter: acm.ServicePerimeter): AccessPoliciesServicePerimete
 const getByName = (name: string) =>
   acm
     .getAccessPoliciesServicePerimeters({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listPerimeters = (policy: string) =>
   collectPages(
@@ -222,6 +253,14 @@ export const AccessPoliciesServicePerimeterProvider = () =>
       const nextType = typeOf(news.perimeterType ?? olds?.perimeterType ?? output?.perimeterType);
       const typeChanged = previousType !== nextType;
       return replaceOnIdentity(idChanged || policyChanged || typeChanged);
+    }),
+
+    lookup: Effect.fn(function* ({ servicePerimeterId, policy }) {
+      if (policy === undefined) return undefined;
+      const name = resourceNameOf(policy, "servicePerimeters", servicePerimeterId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing);
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
@@ -299,7 +338,7 @@ export const AccessPoliciesServicePerimeterProvider = () =>
               spec: news.spec,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           // ALREADY_EXISTS (6): a concurrent create won the race.
           yield* waitForOperation(created).pipe(
@@ -312,7 +351,7 @@ export const AccessPoliciesServicePerimeterProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AccessPoliciesServicePerimeterNotResolved({ name });
+        return yield* new AccessPoliciesServicePerimeterNotResolved({ resourceName: name });
       }
 
       const titleChanged = (current.title ?? "") !== desiredTitle;
@@ -348,7 +387,7 @@ export const AccessPoliciesServicePerimeterProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AccessPoliciesServicePerimeterNotResolved({ name });
+        return yield* new AccessPoliciesServicePerimeterNotResolved({ resourceName: name });
       }
 
       return toAttrs(current);
@@ -357,7 +396,7 @@ export const AccessPoliciesServicePerimeterProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* acm
         .deleteAccessPoliciesServicePerimeters({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         // NOT_FOUND (5): already gone.
         yield* waitForOperation(operation).pipe(

@@ -295,7 +295,9 @@ export class ExternalService extends WorkerEntrypoint<Env, Subscriber.Worker> {
     if (controller.scheduledTime) {
       params.set("time", String(controller.scheduledTime));
     }
-    const response = await fetcher.fetch(`http://localhost/cdn-cgi/handler/scheduled?${params}`);
+    const response = await fetcher.fetch(
+      `http://localhost/cdn-cgi/handler/scheduled?${params.toString()}`,
+    );
     if (!response.ok) {
       const body = await response.text();
       throw new Error(`Scheduled handler returned HTTP ${response.status}: ${body}`);
@@ -385,16 +387,16 @@ export class ExternalService extends WorkerEntrypoint<Env, Subscriber.Worker> {
   private static SERIALIZED_DATE = "___serialized_date___";
   private static SERIALIZED_BIGINT = "___serialized_bigint___";
 
-  private static tailEventsReplacer(_: string, value: any) {
+  private static tailEventsReplacer = (_: string, value: any) => {
     if (value instanceof Date) {
       return { [ExternalService.SERIALIZED_DATE]: value.toISOString() };
     } else if (typeof value === "bigint") {
       return { [ExternalService.SERIALIZED_BIGINT]: value.toString() };
     }
     return value;
-  }
+  };
 
-  private static tailEventsReviver(_: string, value: any) {
+  private static tailEventsReviver = (_: string, value: any) => {
     if (value && typeof value === "object") {
       if (ExternalService.SERIALIZED_DATE in value) {
         return new Date(value[ExternalService.SERIALIZED_DATE]);
@@ -403,7 +405,7 @@ export class ExternalService extends WorkerEntrypoint<Env, Subscriber.Worker> {
       }
     }
     return value;
-  }
+  };
 }
 
 /**

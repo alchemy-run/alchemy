@@ -46,18 +46,23 @@ export const make: (
   const createScriptEdgePreview = yield* workers.createScriptEdgePreview;
 
   const AccountSubdomain = yield* Effect.cached(
-    sandboxApi(
-      "PreviewSubdomain",
-      `Failed to get the workers.dev subdomain for account ${accountId}.`,
-      accountId.pipe(Effect.flatMap((accountId) => getSubdomain({ accountId }))),
+    accountId.pipe(
+      Effect.flatMap((accountId) =>
+        sandboxApi(
+          "PreviewSubdomain",
+          `Failed to get the workers.dev subdomain for account ${accountId}.`,
+          getSubdomain({ accountId }),
+        ),
+      ),
     ),
   );
 
   const createPreviewUploadToken = Effect.fn(function* () {
+    const resolvedAccountId = yield* accountId;
     const { token, exchangeUrl } = yield* sandboxApi(
       "PreviewSession",
-      `Failed to create a preview session for account ${accountId}.`,
-      createSubdomainEdgePreviewSession({ accountId: yield* accountId }),
+      `Failed to create a preview session for account ${resolvedAccountId}.`,
+      createSubdomainEdgePreviewSession({ accountId: resolvedAccountId }),
     );
     if (!exchangeUrl) {
       return token;

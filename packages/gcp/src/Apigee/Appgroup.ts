@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { lastSegment, orgParent, resolveOrgId, sameJson, toPhysicalId } from "./operations.ts";
@@ -85,8 +86,30 @@ export type Appgroup = Resource<
     lastModifiedAt: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AppgroupLookup
 >;
+
+/**
+ * Props for {@link Appgroup.lookup}: find an appgroup this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface AppgroupLookup {
+  /**
+   * AppGroup name (`A-Z0-9._-$ %`).
+   */
+  appgroupId: string;
+  /**
+   * Apigee organization id.
+   */
+  organizationId?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Apigee AppGroup — a logical grouping of apps that share credentials.
@@ -111,13 +134,23 @@ export type Appgroup = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing appgroup
+ * `Appgroup.lookup` references an appgroup Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared appgroup.
+ *
+ * **Example:** Reference an existing appgroup
+ * ```typescript
+ * const appgroup = GCP.Apigee.Appgroup.lookup({ appgroupId: "my-appgroup" });
+ * ```
+ *
  * @resource
  * @category Apigee
  */
 export const Appgroup = Resource<Appgroup>("GCP.Apigee.Appgroup");
 
 export class AppgroupNotResolved extends Data.TaggedError("GCP.Apigee.AppgroupNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organizationId: string, appgroupId: string) =>
@@ -150,7 +183,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsAppgroups({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 export const AppgroupProvider = () =>
   Provider.succeed(Appgroup, {
@@ -172,6 +205,15 @@ export const AppgroupProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ appgroupId, organizationId: lookupOrganizationId }) {
+      const env = yield* GcpEnvironment.current;
+      const organizationId = lookupOrganizationId ?? (yield* resolveOrgId(env.project));
+      const name = resourceName(organizationId, appgroupId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, organizationId);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -248,7 +290,7 @@ export const AppgroupProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AppgroupNotResolved({ name });
+        return yield* new AppgroupNotResolved({ resourceName: name });
       }
 
       const needsUpdate =

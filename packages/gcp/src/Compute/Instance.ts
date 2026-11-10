@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { deepEqual, isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -224,8 +225,30 @@ export type Instance = Resource<
     cpuPlatform: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  InstanceLookup
 >;
+
+/**
+ * Props for {@link Instance.lookup}: find an instance this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface InstanceLookup {
+  /**
+   * Instance name.
+   */
+  instanceName: string;
+  /**
+   * Zone to create the instance in (e.g. `us-central1-a`).
+   */
+  zone?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Google Compute Engine VM instance.
@@ -295,6 +318,18 @@ export type Instance = Resource<
  * ```typescript
  * const start = yield* GCP.Compute.StartInstance(vm);
  * yield* start();
+ * ```
+ *
+ * ### Looking up an existing instance
+ * `Instance.lookup` references an instance Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared instance.
+ *
+ * **Example:** Reference an existing instance
+ * ```typescript
+ * const instance = GCP.Compute.Instance.lookup({
+ *   instanceName: "my-instance",
+ * });
  * ```
  *
  * @resource
@@ -488,7 +523,7 @@ const toAttrs = (instance: compute.Instance, project: string) => {
 const getByName = (project: string, zone: string, instance: string) =>
   compute
     .getInstances({ project, zone, instance })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilGone = (project: string, zone: string, instanceName: string) =>
   getByName(project, zone, instanceName).pipe(
@@ -691,14 +726,24 @@ export const InstanceProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ instanceName, zone: lookupZone }) {
+      const env = yield* GcpEnvironment.current;
+      const zone = lastSegment(lookupZone ?? DEFAULT_ZONE);
+      const existing = yield* getByName(env.project, zone, instanceName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const instanceName = yield* toName(id, olds?.instanceName, output?.instanceName);
       const zone = lastSegment(olds?.zone ?? output?.zone ?? DEFAULT_ZONE);
       const existing = yield* getByName(env.project, zone, instanceName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "instanceName");
     }),
 
     list: () =>

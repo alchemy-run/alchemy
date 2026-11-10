@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -167,8 +168,28 @@ export type Instance = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  InstanceLookup
 >;
+
+/**
+ * Props for {@link Instance.lookup}: find an instance this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface InstanceLookup {
+  /**
+   * Instance id (the `{instance}` segment of
+   * `projects/{project}/instances/{instance}`). Must match
+   * `^[a-z][-a-z0-9]*[a-z0-9]$` (2–64 characters).
+   */
+  instanceId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Spanner instance.
@@ -203,22 +224,32 @@ export type Instance = Resource<
  * const live = yield* getInstance();
  * ```
  *
+ * ### Looking up an existing instance
+ * `Instance.lookup` references an instance Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared instance.
+ *
+ * **Example:** Reference an existing instance
+ * ```typescript
+ * const instance = GCP.Spanner.Instance.lookup({ instanceId: "my-instance" });
+ * ```
+ *
  * @resource
  * @category Spanner
  */
 export const Instance = Resource<Instance>("GCP.Spanner.Instance");
 
 export class InstanceNotResolved extends Data.TaggedError("GCP.Spanner.InstanceNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class InstanceNotReady extends Data.TaggedError("GCP.Spanner.InstanceNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class InstanceStillExists extends Data.TaggedError("GCP.Spanner.InstanceStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -362,14 +393,14 @@ const toAttrs = (instance: spanner.Instance, project: string): Instance["Attribu
 };
 
 const getByName = (name: string) =>
-  spanner
-    .getProjectsInstances({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  spanner.getProjectsInstances({ name }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((instance) =>
-      instance ? Effect.succeed(instance) : Effect.fail(new InstanceNotResolved({ name })),
+      instance
+        ? Effect.succeed(instance)
+        : Effect.fail(new InstanceNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Spanner.InstanceNotResolved",
@@ -382,13 +413,13 @@ const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (instance): instance is spanner.Instance => instance !== undefined,
-      () => new InstanceNotResolved({ name }),
+      () => new InstanceNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (instance) => (instance.state ?? "STATE_UNSPECIFIED") === "READY",
       (instance) =>
         new InstanceNotReady({
-          name,
+          resourceName: name,
           state: instance.state ?? "STATE_UNSPECIFIED",
         }),
     ),
@@ -404,7 +435,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((instance) =>
-      instance === undefined ? Effect.void : Effect.fail(new InstanceStillExists({ name })),
+      instance === undefined
+        ? Effect.void
+        : Effect.fail(new InstanceStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Spanner.InstanceStillExists",
@@ -490,6 +523,14 @@ export const InstanceProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({ instanceId }) {
+      const env = yield* GcpEnvironment.current;
+      const name = resourceName(env.project, instanceId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const instanceId = yield* toId(id, olds?.instanceId, output?.instanceId);
@@ -550,7 +591,7 @@ export const InstanceProvider = () =>
               ),
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }
@@ -558,7 +599,7 @@ export const InstanceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new InstanceNotResolved({ name });
+        return yield* new InstanceNotResolved({ resourceName: name });
       }
 
       if ((current.state ?? "") !== "READY") {

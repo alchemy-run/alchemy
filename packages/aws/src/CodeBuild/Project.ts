@@ -6,6 +6,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
 import { toWireMinutes } from "alchemy/Util/Duration";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -16,6 +17,11 @@ import {
   type PolicyDocument,
 } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
+
+export class ProjectUnexpectedResponse extends Data.TaggedError("ProjectUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * Where CodeBuild fetches the source to build.
@@ -290,8 +296,18 @@ export interface Project extends Resource<
     projectArn: string;
   },
   never,
-  Providers
+  Providers,
+  ProjectLookup
 > {}
+
+/**
+ * Props for {@link Project.lookup}: find a project this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ProjectLookup {
+  /** The project name of the existing project. */
+  projectName: string;
+}
 
 /**
  * An AWS CodeBuild build project — a reusable definition of how to run a
@@ -334,6 +350,16 @@ export interface Project extends Resource<
  *     environmentVariables: [{ name: "STAGE", value: "prod" }],
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing project
+ * `Project.lookup` references a project Alchemy doesn't manage (created in the
+ * console or by another stack), found by `projectName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing project
+ * ```typescript
+ * const existing = AWS.CodeBuild.Project.lookup({ projectName: "my-project" });
  * ```
  *
  * @resource
@@ -439,6 +465,18 @@ export const ProjectProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ projectName: name }) {
+          const project = yield* getProject(name);
+          if (project === undefined || project.arn === undefined) {
+            return undefined;
+          }
+          const attrs = {
+            projectName: project.name ?? name,
+            projectArn: project.arn,
+          };
+          return attrs;
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.projectName ?? (yield* toName(id, olds ?? {}));
           const project = yield* getProject(name);
@@ -485,7 +523,7 @@ export const ProjectProvider = () =>
           if (observed !== undefined) {
             observed = yield* retryIamPropagation(codebuild.updateProject({ name, ...spec })).pipe(
               Effect.map((updated) => updated.project),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
             );
           }
 
@@ -502,9 +540,9 @@ export const ProjectProvider = () =>
           }
 
           if (observed === undefined || observed.arn === undefined) {
-            return yield* Effect.fail(
-              new Error(`CodeBuild project '${name}' disappeared while reconciling`),
-            );
+            return yield* new ProjectUnexpectedResponse({
+              message: `CodeBuild project '${name}' disappeared while reconciling`,
+            });
           }
 
           // 3b. Sync — resource policy. Compare observed against desired in
@@ -521,7 +559,7 @@ export const ProjectProvider = () =>
             .getResourcePolicy({ resourceArn: observed.arn })
             .pipe(
               Effect.map((res) => res.policy),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
             );
           if (desiredPolicy === undefined) {
             if (observedPolicy !== undefined && observedPolicy !== "") {

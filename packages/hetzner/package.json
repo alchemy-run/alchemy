@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/hetzner",
-  "version": "2.0.0-beta.84",
+  "version": "2.0.0-beta.85",
   "description": "Hetzner Cloud servers and networking for Alchemy.",
   "keywords": [
     "alchemy",
@@ -66,6 +66,7 @@
     "build:package": "node scripts/build.ts"
   },
   "dependencies": {
+    "@alchemy.run/docker": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/hetzner": "workspace:*",
     "rolldown": "catalog:"

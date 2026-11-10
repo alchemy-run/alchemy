@@ -11,7 +11,6 @@ import { Stack } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
-import { Certificate } from "../ACM/Certificate.ts";
 import { CachePolicy } from "../CloudFront/CachePolicy.ts";
 import { Distribution } from "../CloudFront/Distribution.ts";
 import { Function as CloudFrontFunction } from "../CloudFront/Function.ts";
@@ -730,6 +729,7 @@ export const makeKvSite = Effect.fn("AWS.Website.KvSite")(function* (
           // pinned.
           dns.alias(`AliasRecord${index + 1}`, {
             name,
+            ipv6: true,
             target: {
               hostname: dist.domainName,
               route53Alias: { hostedZoneId: dist.hostedZoneId },

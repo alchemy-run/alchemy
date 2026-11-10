@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -108,8 +109,33 @@ export type DeploymentGroup = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DeploymentGroupLookup
 >;
+
+/**
+ * Props for {@link DeploymentGroup.lookup}: find a deployment group this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface DeploymentGroupLookup {
+  /**
+   * Deployment group id (the `{deploymentGroup}` segment of
+   * `projects/{proje
+   * ct}/locations/{location}/deploymentGroups/{deploymentGroup}`).
+   */
+  deploymentGroupId: string;
+  /**
+   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Infrastructure Manager deployment group — a DAG of deployment units
@@ -151,6 +177,19 @@ export type DeploymentGroup = Resource<
  *     { id: "apps", dependencies: ["cluster"] },
  *   ],
  *   labels: { env: "prod", team: "platform" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing deployment group
+ * `DeploymentGroup.lookup` references a deployment group Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * deployment group.
+ *
+ * **Example:** Reference an existing deployment group
+ * ```typescript
+ * const deploymentGroup = GCP.Config.DeploymentGroup.lookup({
+ *   deploymentGroupId: "my-deployment-group",
  * });
  * ```
  *
@@ -214,7 +253,7 @@ const toAttrs = (item: config.DeploymentGroup, project: string, region: string) 
 const getByName = (name: string) =>
   config
     .getProjectsLocationsDeploymentGroups({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string, region: string) =>
   listAtLocation(project, region, (parent) =>
@@ -248,6 +287,15 @@ export const DeploymentGroupProvider = () =>
         ),
       });
     }),
+
+    lookup: Effect.fn(function* ({ deploymentGroupId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, deploymentGroupId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -304,7 +352,7 @@ export const DeploymentGroupProvider = () =>
               labels: desiredLabels,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -312,7 +360,7 @@ export const DeploymentGroupProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -355,7 +403,7 @@ export const DeploymentGroupProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

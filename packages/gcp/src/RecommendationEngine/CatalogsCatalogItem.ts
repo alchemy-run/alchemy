@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   type CatalogItem,
@@ -132,8 +133,37 @@ export type CatalogsCatalogItem = Resource<
     itemAttributes: FeatureMap | undefined;
   },
   never,
-  Providers
+  Providers,
+  CatalogsCatalogItemLookup
 >;
+
+/**
+ * Props for {@link CatalogsCatalogItem.lookup}: find a catalogs catalog
+ * item this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface CatalogsCatalogItemLookup {
+  /**
+   * Catalog item id (max 128 bytes).
+   */
+  catalogItemId: string;
+  /**
+   * Location used when `catalog` is a bare id. Recommendations AI catalogs
+   * live at `global`.
+   */
+  location?: string;
+  /**
+   * Parent catalog resource name
+   * `projects/{project}/locations/{location}/catalogs/{catalog}` or a
+   * catalog id (combined with `location`).
+   */
+  catalog?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Recommendations AI catalog item.
@@ -183,6 +213,19 @@ export type CatalogsCatalogItem = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing catalogs catalog item
+ * `CatalogsCatalogItem.lookup` references a catalogs catalog item Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared catalogs catalog item.
+ *
+ * **Example:** Reference an existing catalogs catalog item
+ * ```typescript
+ * const catalogsCatalogItem = GCP.RecommendationEngine.CatalogsCatalogItem.lookup({
+ *   catalogItemId: "my-catalog-item",
+ * });
+ * ```
+ *
  * @resource
  * @category RecommendationEngine
  */
@@ -193,7 +236,7 @@ export const CatalogsCatalogItem = Resource<CatalogsCatalogItem>(
 export class CatalogsCatalogItemNotResolved extends Data.TaggedError(
   "GCP.RecommendationEngine.CatalogsCatalogItemNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (item: CatalogItem, project: string, nameHint?: string) => {
@@ -263,6 +306,22 @@ export const CatalogsCatalogItemProvider = () =>
       });
     }),
 
+    lookup: Effect.fn(function* ({
+      catalogItemId,
+      location: lookupLocation,
+      catalog: lookupCatalog,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const catalog = expandCatalog(lookupCatalog, env.project, location);
+      const name = itemName(catalog, catalogItemId);
+      const existing = yield* getCatalogItem(name);
+      if (existing === undefined) return undefined;
+      const attrs = toAttrs(existing, env.project, name);
+      // Description and tags feed recommendations, so they carry no
+      return attrs;
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(olds?.location ?? output?.location);
@@ -323,7 +382,7 @@ export const CatalogsCatalogItemProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CatalogsCatalogItemNotResolved({ name });
+        return yield* new CatalogsCatalogItemNotResolved({ resourceName: name });
       }
 
       const title = news.title ?? catalogItemId;

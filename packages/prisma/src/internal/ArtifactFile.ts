@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { constants, type BigIntStats } from "node:fs";
 import { lstat, open, realpath } from "node:fs/promises";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 
@@ -26,7 +27,13 @@ export interface ArtifactFile extends VerifiedFile {
   readonly cleanup: Effect.Effect<void>;
 }
 
-const toError = (message: string, cause: unknown) => new Error(message, { cause });
+export class ArtifactFileError extends Data.TaggedError("ArtifactFileError")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+const toArtifactFileError = (message: string) => (cause: unknown) =>
+  new ArtifactFileError({ message: cause instanceof Error ? cause.message : message, cause });
 
 const isSameIdentity = (stat: BigIntStats, identity: VerifiedFile["identity"]) =>
   stat.isFile() &&
@@ -145,7 +152,7 @@ export const inspectVerifiedFile = (
 ) =>
   Effect.tryPromise({
     try: () => inspectVerifiedFilePromise(inputPath, maxBytes, options),
-    catch: (cause) => (cause instanceof Error ? cause : toError("Failed to validate file.", cause)),
+    catch: toArtifactFileError("Failed to validate file."),
   });
 
 export const inspectArtifactFile = (
@@ -176,15 +183,13 @@ export const inspectArtifactFile = (
         cleanup: options?.cleanup ?? Effect.void,
       } satisfies ArtifactFile;
     },
-    catch: (cause) =>
-      cause instanceof Error
-        ? cause
-        : toError("Failed to validate Prisma deployment artifact.", cause),
+    catch: toArtifactFileError("Failed to validate Prisma deployment artifact."),
   });
 
 export const artifactFileStream = (artifact: ArtifactFile) =>
-  Stream.fromAsyncIterable(readVerifiedChunks(artifact), (cause) =>
-    cause instanceof Error ? cause : toError("Failed to stream Prisma deployment artifact.", cause),
+  Stream.fromAsyncIterable(
+    readVerifiedChunks(artifact),
+    toArtifactFileError("Failed to stream Prisma deployment artifact."),
   );
 
 export const verifiedFileChunks = (file: VerifiedFile) => readVerifiedChunks(file);
@@ -200,9 +205,9 @@ export const readArtifactFile = (artifact: ArtifactFile) =>
       }),
     );
     if (offset !== artifact.size) {
-      return yield* Effect.fail(
-        new Error("Prisma deployment artifact length changed while it was being read."),
-      );
+      return yield* new ArtifactFileError({
+        message: "Prisma deployment artifact length changed while it was being read.",
+      });
     }
     return bytes;
   });

@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   hasAlchemyLabels,
@@ -112,8 +113,30 @@ export type Job = Resource<
     endTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  JobLookup
 >;
+
+/**
+ * Props for {@link Job.lookup}: find a job this stack doesn't manage by its
+ * identifiers, in the ambient project unless `project` names another.
+ */
+export interface JobLookup {
+  /**
+   * Job id (the `{jobId}` segment of `projects/{project}/jobs/{jobId}`).
+   * Letters, numbers, underscores, and dashes; max 1,024 characters.
+   */
+  jobId: string;
+  /**
+   * Geographic location (`US`, `EU`, `US-CENTRAL1`, `us-central1`, …).
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Google BigQuery job — a one-shot query, load, copy, or extract.
@@ -156,13 +179,23 @@ export type Job = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing job
+ * `Job.lookup` references a job Alchemy doesn't manage (created in the
+ * console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared job.
+ *
+ * **Example:** Reference an existing job
+ * ```typescript
+ * const job = GCP.BigQuery.Job.lookup({ jobId: "my-job" });
+ * ```
+ *
  * @resource
  * @category BigQuery
  */
 export const Job = Resource<Job>("GCP.BigQuery.Job");
 
 export class JobNotResolved extends Data.TaggedError("GCP.BigQuery.JobNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class JobNotDone extends Data.TaggedError("GCP.BigQuery.JobNotDone")<{
@@ -234,12 +267,12 @@ const toAttrs = (
 const getByRef = (projectId: string, jobId: string, location: string) =>
   bigquery
     .getJobs({ projectId, jobId, location })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilDone = (projectId: string, jobId: string, location: string) =>
   getByRef(projectId, jobId, location).pipe(
     Effect.flatMap((job) => {
-      if (job === undefined) return Effect.succeed(undefined);
+      if (job === undefined) return Effect.undefined;
       const state = job.status?.state ?? "";
       if (state === "DONE") return Effect.succeed(job);
       return Effect.fail(new JobNotDone({ jobId, state }));
@@ -375,6 +408,15 @@ export const JobProvider = () =>
       return { action: "replace" as const, deleteFirst: false };
     }),
 
+    lookup: Effect.fn(function* ({ jobId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = lookupLocation ?? env.region;
+      const project = env.project;
+      const existing = yield* getByRef(project, jobId, location);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, project, env.region);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const jobId = yield* toId(id, olds?.jobId, output?.jobId);
@@ -455,7 +497,7 @@ export const JobProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new JobNotResolved({ name });
+        return yield* new JobNotResolved({ resourceName: name });
       }
 
       const state = current.status?.state ?? "";

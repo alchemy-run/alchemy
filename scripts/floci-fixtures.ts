@@ -57,6 +57,12 @@ export interface FlociStandingFixtures {
 export interface FlociStandingFixtureOptions {
   /** Selected test files (relative or absolute). Omit to provision every group. */
   readonly files?: ReadonlyArray<string>;
+  /**
+   * The image the run started the emulator with. Without it `ensureFloci`
+   * falls back to the pinned release and recreates the container, discarding
+   * the fixtures and testing the wrong emulator.
+   */
+  readonly image?: string;
 }
 
 const NAME = "alchemy-floci-standing";
@@ -419,7 +425,7 @@ const ensureRole = (
       .getRole({ RoleName: roleName })
       .pipe(Effect.map((response) => response.Role));
     const existing = yield* getRole.pipe(
-      Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+      Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
     );
     const role =
       existing === undefined
@@ -459,7 +465,7 @@ const ensureRole = (
 
 const findEksCluster = eks.describeCluster({ name: NAME }).pipe(
   Effect.map((response) => response.cluster),
-  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+  Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
 );
 
 const deleteEksCluster = Effect.gen(function* () {
@@ -790,7 +796,7 @@ const VPC_LINK_NLB = `${NAME}-nlb`;
 
 const findLoadBalancer = elbv2.describeLoadBalancers({ Names: [VPC_LINK_NLB] }).pipe(
   Effect.map((response) => response.LoadBalancers?.[0]),
-  Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(undefined)),
+  Effect.catchTag("LoadBalancerNotFoundException", () => Effect.undefined),
 );
 
 const deleteLoadBalancer = Effect.gen(function* () {
@@ -1443,9 +1449,14 @@ const selectGroups = (files: ReadonlyArray<string> | undefined) =>
     return selected;
   });
 
-const provision = (external: boolean, groups: ReadonlySet<Group>, ledger: Array<Cleanup>) =>
+const provision = (
+  external: boolean,
+  groups: ReadonlySet<Group>,
+  ledger: Array<Cleanup>,
+  image: string | undefined,
+) =>
   Effect.gen(function* () {
-    yield* Floci.ensureFloci({ port: Floci.DEFAULT_FLOCI_PORT, external });
+    yield* Floci.ensureFloci({ port: Floci.DEFAULT_FLOCI_PORT, external, image });
     yield* log(`fixtures: provisioning ${[...groups].join(", ")}`);
     const env: Record<string, string> = {};
     // Shared by every group that needs subnets; cleanups register once.
@@ -1610,7 +1621,7 @@ export const provisionFlociStandingFixtures = Effect.fn(function* (
     ledger.length === 0 ? Effect.void : runCleanups(ledger),
   ).pipe(Effect.provide(fixtureLayer));
   if (groups.size === 0) return { env: {}, teardown } satisfies FlociStandingFixtures;
-  const env = yield* provision(external, groups, ledger).pipe(
+  const env = yield* provision(external, groups, ledger, options.image).pipe(
     Effect.onError(() =>
       runCleanups(ledger).pipe(Effect.catch((error) => Console.error(String(error.message)))),
     ),

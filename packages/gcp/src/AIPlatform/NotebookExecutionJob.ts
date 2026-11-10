@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { listLocations } from "./names.ts";
@@ -152,8 +153,30 @@ export type NotebookExecutionJob = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  NotebookExecutionJobLookup
 >;
+
+/**
+ * Props for {@link NotebookExecutionJob.lookup}: find a notebook execution
+ * job this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface NotebookExecutionJobLookup {
+  /**
+   * Job id.
+   */
+  notebookExecutionJobId: string;
+  /**
+   * Vertex AI location.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Vertex AI notebook execution job — runs an ipynb once against a
@@ -173,6 +196,19 @@ export type NotebookExecutionJob = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing notebook execution job
+ * `NotebookExecutionJob.lookup` references a notebook execution job Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared notebook execution job.
+ *
+ * **Example:** Reference an existing notebook execution job
+ * ```typescript
+ * const notebookExecutionJob = GCP.AIPlatform.NotebookExecutionJob.lookup({
+ *   notebookExecutionJobId: "my-notebook-execution-job",
+ * });
+ * ```
+ *
  * @resource
  * @category AIPlatform
  */
@@ -183,7 +219,7 @@ export const NotebookExecutionJob = Resource<NotebookExecutionJob>(
 export class NotebookExecutionJobNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.NotebookExecutionJobNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, id: string) =>
@@ -211,13 +247,13 @@ const toAttrs = (job: aiplatform.GoogleCloudAiplatformV1NotebookExecutionJob, pr
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsNotebookExecutionJobs({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (job): job is aiplatform.GoogleCloudAiplatformV1NotebookExecutionJob => job !== undefined,
-      () => new AiPlatformNotResolved({ name }),
+      () => new AiPlatformNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.NotResolved",
@@ -230,7 +266,7 @@ const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (job) => job === undefined,
-      () => new AiPlatformStillExists({ name }),
+      () => new AiPlatformStillExists({ resourceName: name }),
     ),
     Effect.asVoid,
     Effect.retry({
@@ -268,6 +304,16 @@ export const NotebookExecutionJobProvider = () =>
           previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ notebookExecutionJobId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, notebookExecutionJobId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      const attrs = toAttrs(existing, env.project);
+      return attrs;
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -347,7 +393,7 @@ export const NotebookExecutionJobProvider = () =>
               encryptionSpec: news.encryptionSpec,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }
@@ -356,7 +402,7 @@ export const NotebookExecutionJobProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new NotebookExecutionJobNotResolved({ name });
+        return yield* new NotebookExecutionJobNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project);
@@ -365,7 +411,7 @@ export const NotebookExecutionJobProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* aiplatform
         .deleteProjectsLocationsNotebookExecutionJobs({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

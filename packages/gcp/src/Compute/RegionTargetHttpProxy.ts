@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitRegionOperation } from "./operations.ts";
@@ -84,8 +85,31 @@ export type RegionTargetHttpProxy = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RegionTargetHttpProxyLookup
 >;
+
+/**
+ * Props for {@link RegionTargetHttpProxy.lookup}: find a region target http
+ * proxy this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface RegionTargetHttpProxyLookup {
+  /**
+   * TargetHttpProxy name (RFC1035, 1-63 characters).
+   */
+  targetHttpProxyName: string;
+  /**
+   * Region the proxy lives in (e.g. `us-central1`). `US-CENTRAL1` is
+   * accepted and normalized to `us-central1`.
+   */
+  region?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A regional Compute Engine target HTTP proxy.
@@ -123,6 +147,19 @@ export type RegionTargetHttpProxy = Resource<
  *   region: "us-central1",
  *   description: "public http frontend",
  *   urlMap: map.selfLink,
+ * });
+ * ```
+ *
+ * ### Looking up an existing region target http proxy
+ * `RegionTargetHttpProxy.lookup` references a region target http proxy
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared region target http proxy.
+ *
+ * **Example:** Reference an existing region target http proxy
+ * ```typescript
+ * const regionTargetHttpProxy = GCP.Compute.RegionTargetHttpProxy.lookup({
+ *   targetHttpProxyName: "my-target-http-proxy",
  * });
  * ```
  *
@@ -225,7 +262,7 @@ const toAttrs = (proxy: compute.TargetHttpProxy, project: string) => {
 const getByName = (project: string, region: string, targetHttpProxy: string) =>
   compute
     .getRegionTargetHttpProxies({ project, region, targetHttpProxy })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const immutableChanged = (
   news: RegionTargetHttpProxyProps,
@@ -279,6 +316,14 @@ export const RegionTargetHttpProxyProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ targetHttpProxyName, region: lookupRegion }) {
+      const env = yield* GcpEnvironment.current;
+      const region = normalizeRegion(lookupRegion, env.region);
+      const existing = yield* getByName(env.project, region, targetHttpProxyName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -353,7 +398,7 @@ export const RegionTargetHttpProxyProvider = () =>
                 ignore: ["RESOURCE_ALREADY_EXISTS"],
               }),
             ),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         current = yield* getByName(env.project, region, targetHttpProxyName);
       }
@@ -395,7 +440,7 @@ export const RegionTargetHttpProxyProvider = () =>
           region,
           targetHttpProxy: output.targetHttpProxyName,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitRegionOperation(env.project, region, operation).pipe(
           Effect.catchTag("NotFound", () => Effect.void),

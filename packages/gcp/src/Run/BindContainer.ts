@@ -129,7 +129,7 @@ const bindSidecar = <Shape, Req>(
     }
     return {
       id,
-      port: (ctx === undefined ? Effect.succeed(undefined) : ctx.get<unknown>(key)).pipe(
+      port: (ctx === undefined ? Effect.undefined : ctx.get<unknown>(key)).pipe(
         Effect.flatMap((port) =>
           port === undefined || port === null || port === ""
             ? Effect.fail(new BoundContainerUnavailable({ container: id }))

@@ -270,8 +270,18 @@ export type Account = Resource<
     metadata: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  AccountLookup
 >;
+
+/**
+ * Props for {@link Account.lookup}: find a connected account this stack
+ * doesn't manage by its id.
+ */
+export interface AccountLookup {
+  /** Stripe connected account id, e.g. `"acct_1A2b3C4d5E6f7G8h"`. */
+  id: string;
+}
 
 /**
  * A Stripe Connect connected account — a Standard, Express, or Custom
@@ -352,6 +362,16 @@ export type Account = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing connected account
+ * `Account.lookup` references a connected account Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing connected account
+ * ```typescript
+ * const ref = Stripe.Account.lookup({ id: "acct_1A2b3C4d5E6f7G8h" });
+ * ```
+ *
  * @resource
  * @product Account
  */
@@ -385,18 +405,13 @@ const toWireBusinessProfile = (
 const toWireController = (controller: AccountController): CreateAccountRequestController => ({
   ...(controller.fees !== undefined
     ? {
-        fees: {
-          ...(controller.fees.payer !== undefined ? { payer: controller.fees.payer } : {}),
-        },
+        fees: controller.fees.payer !== undefined ? { payer: controller.fees.payer } : {},
       }
     : {}),
   ...(controller.losses !== undefined
     ? {
-        losses: {
-          ...(controller.losses.payments !== undefined
-            ? { payments: controller.losses.payments }
-            : {}),
-        },
+        losses:
+          controller.losses.payments !== undefined ? { payments: controller.losses.payments } : {},
       }
     : {}),
   ...(controller.requirementCollection !== undefined
@@ -404,11 +419,10 @@ const toWireController = (controller: AccountController): CreateAccountRequestCo
     : {}),
   ...(controller.stripeDashboard !== undefined
     ? {
-        stripe_dashboard: {
-          ...(controller.stripeDashboard.type !== undefined
+        stripe_dashboard:
+          controller.stripeDashboard.type !== undefined
             ? { type: controller.stripeDashboard.type }
-            : {}),
-        },
+            : {},
       }
     : {}),
 });
@@ -442,9 +456,7 @@ const toAttrs = (account: StripeAccount) => ({
 const isMissingAccount = isMissingStripeResource;
 
 const getById = (account: string) =>
-  GetAccountByAccount({ account }).pipe(
-    Effect.catchIf(isMissingAccount, () => Effect.succeed(undefined)),
-  );
+  GetAccountByAccount({ account }).pipe(Effect.catchIf(isMissingAccount, () => Effect.undefined));
 
 const listAllAccounts = Effect.fn(function* () {
   const accounts: StripeAccount[] = [];
@@ -586,6 +598,11 @@ export const AccountProvider = () =>
         return { action: "replace" as const };
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing);
     }),
 
     read: Effect.fn(function* ({ id, output }) {

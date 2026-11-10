@@ -64,6 +64,11 @@ export interface SubscriptionFilter extends Resource<
     destinationArn: string;
     roleArn?: string;
     distribution?: SubscriptionDistribution;
+    /**
+     * Whether the filter applies to transformed logs, as observed. Lets
+     * `alchemy drift` detect out-of-band changes.
+     */
+    applyOnTransformedLogs?: boolean;
   },
   never,
   Providers
@@ -143,6 +148,7 @@ export const SubscriptionFilterProvider = () =>
         destinationArn: filter.destinationArn ?? "",
         roleArn: filter.roleArn,
         distribution: filter.distribution,
+        applyOnTransformedLogs: filter.applyOnTransformedLogs ?? false,
       });
 
       const observe = Effect.fn(function* (logGroupName: string, filterName: string) {
@@ -158,7 +164,7 @@ export const SubscriptionFilterProvider = () =>
             ),
             Stream.runHead,
             Effect.map(Option.getOrUndefined),
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           );
       });
 
@@ -250,14 +256,20 @@ export const SubscriptionFilterProvider = () =>
 
           yield* session.note(`${logGroupName}:${filterName}`);
 
-          return {
-            filterName,
-            logGroupName,
-            filterPattern: desiredPattern,
-            destinationArn: news.destinationArn,
-            roleArn: news.roleArn,
-            distribution: news.distribution,
-          };
+          // Re-read so defaults CloudWatch Logs fills in (distribution,
+          // applyOnTransformedLogs) match what `read` reports.
+          const final = yield* observe(logGroupName, filterName);
+          return final
+            ? toAttributes(logGroupName, final)
+            : {
+                filterName,
+                logGroupName,
+                filterPattern: desiredPattern,
+                destinationArn: news.destinationArn,
+                roleArn: news.roleArn,
+                distribution: news.distribution,
+                applyOnTransformedLogs: news.applyOnTransformedLogs ?? false,
+              };
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* logs

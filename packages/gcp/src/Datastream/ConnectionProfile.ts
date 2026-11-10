@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -217,8 +218,33 @@ export type ConnectionProfile = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ConnectionProfileLookup
 >;
+
+/**
+ * Props for {@link ConnectionProfile.lookup}: find a connection profile
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface ConnectionProfileLookup {
+  /**
+   * Connection profile id (the `{connectionProfile}` segment of
+   * `projects/{p
+   * roject}/locations/{location}/connectionProfiles/{connectionProfile}`).
+   */
+  connectionProfileId: string;
+  /**
+   * Region (`us-central1`, …). `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Datastream connection profile: credentials and connectivity for a
@@ -261,6 +287,19 @@ export type ConnectionProfile = Resource<
  * ```typescript
  * const gcs = yield* GCP.Datastream.ConnectionProfile("GcsDest", {
  *   gcsProfile: { bucket: bucket.bucketName, rootPath: "/data" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing connection profile
+ * `ConnectionProfile.lookup` references a connection profile Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared connection profile.
+ *
+ * **Example:** Reference an existing connection profile
+ * ```typescript
+ * const connectionProfile = GCP.Datastream.ConnectionProfile.lookup({
+ *   connectionProfileId: "my-connection-profile",
  * });
  * ```
  *
@@ -624,10 +663,10 @@ const toAttrs = (profile: ds.ConnectionProfile, project: string, locationHint: s
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : ds
         .getProjectsLocationsConnectionProfiles({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string, region: string) =>
   listAtLocation(project, region, (parent) =>
@@ -688,6 +727,15 @@ export const ConnectionProfileProvider = () =>
             previousSpanner !== nextSpanner),
       });
     }),
+
+    lookup: Effect.fn(function* ({ connectionProfileId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, connectionProfileId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, location);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -758,7 +806,7 @@ export const ConnectionProfileProvider = () =>
             body,
           })
           .pipe(
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
             Effect.flatMap((created) => settleOperation(created)),
             // Datastream intermittently fails the create operation with
             // INTERNAL ("an internal error has occurred") under load.
@@ -772,7 +820,7 @@ export const ConnectionProfileProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -932,7 +980,7 @@ export const ConnectionProfileProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag(["NotFound", "Conflict"], () => Effect.succeed(undefined)),
+          Effect.catchTag(["NotFound", "Conflict"], () => Effect.undefined),
         );
       yield* settleOperation(operation, { notFoundOk: true });
       yield* waitUntilGone(getByName(output.name), output.name, {

@@ -11,6 +11,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -345,8 +346,41 @@ export type Instance = Resource<
     suspensionReasons: string[];
   },
   never,
-  Providers
+  Providers,
+  InstanceLookup
 >;
+
+/**
+ * Props for {@link Instance.lookup}: find an instance this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface InstanceLookup {
+  /**
+   * Instance id (the `{instance}` segment of
+   * `projects/{project}/locations/{location}/instances/{instance}`). Must
+   * be 1-63 characters, start with a letter, and end with a letter or
+   * digit.
+   */
+  instanceId: string;
+  /**
+   * Service tier. `STANDARD` is an alias for `BASIC_HDD`; `PREMIUM` for
+   * `BASIC_SSD`.
+   */
+  tier?: file.InstanceTierEnum | (string & {});
+  /**
+   * Location of the instance. Basic, Zonal, and High Scale use a zone
+   * (`us-central1-a`). Enterprise and Regional use a region
+   * (`us-central1`). `US-CENTRAL1-A` is accepted and normalized to
+   * `us-central1-a`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Filestore instance (NFS file share).
@@ -394,28 +428,40 @@ export type Instance = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing instance
+ * `Instance.lookup` references an instance Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared instance.
+ *
+ * **Example:** Reference an existing instance
+ * ```typescript
+ * const instance = GCP.Filestore.Instance.lookup({
+ *   instanceId: "my-instance",
+ * });
+ * ```
+ *
  * @resource
  * @category Filestore
  */
 export const Instance = Resource<Instance>("GCP.Filestore.Instance");
 
 export class InstanceNotResolved extends Data.TaggedError("GCP.Filestore.InstanceNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class InstanceNotReady extends Data.TaggedError("GCP.Filestore.InstanceNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class InstanceFailed extends Data.TaggedError("GCP.Filestore.InstanceFailed")<{
-  name: string;
+  resourceName: string;
   state: string;
   statusMessage: string | undefined;
 }> {}
 
 export class InstanceStillExists extends Data.TaggedError("GCP.Filestore.InstanceStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -779,7 +825,7 @@ const isPlaceholder = (instance: file.Instance) => {
 const getByName = (name: string) =>
   file
     .getProjectsLocationsInstances({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /**
  * Wait on a Filestore instance long-running operation (5–20 minutes).
@@ -835,7 +881,9 @@ const waitForOperation = (operation: file.Operation, options?: { notFoundOk?: bo
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((instance) =>
-      instance ? Effect.succeed(instance) : Effect.fail(new InstanceNotResolved({ name })),
+      instance
+        ? Effect.succeed(instance)
+        : Effect.fail(new InstanceNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Filestore.InstanceNotResolved",
@@ -848,13 +896,13 @@ const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (instance): instance is file.Instance => instance !== undefined,
-      () => new InstanceNotResolved({ name }),
+      () => new InstanceNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (instance) => (instance.state ?? "") !== "ERROR",
       (instance) =>
         new InstanceFailed({
-          name,
+          resourceName: name,
           state: instance.state ?? "ERROR",
           statusMessage: instance.statusMessage,
         }),
@@ -863,7 +911,7 @@ const waitUntilReady = (name: string) =>
       (instance) => (instance.state ?? "STATE_UNSPECIFIED") === "READY",
       (instance) =>
         new InstanceNotReady({
-          name,
+          resourceName: name,
           state: instance.state ?? "STATE_UNSPECIFIED",
         }),
     ),
@@ -880,7 +928,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((instance) =>
-      instance === undefined ? Effect.void : Effect.fail(new InstanceStillExists({ name })),
+      instance === undefined
+        ? Effect.void
+        : Effect.fail(new InstanceStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Filestore.InstanceStillExists",
@@ -1015,6 +1065,16 @@ export const InstanceProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({ instanceId, tier: lookupTier, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const tier = canonicalizeTier(lookupTier);
+      const location = normalizeLocation(lookupLocation, tier, env.region);
+      const name = resourceName(env.project, location, instanceId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const instanceId = yield* toId(id, olds?.instanceId, output?.instanceId);
@@ -1076,7 +1136,7 @@ export const InstanceProvider = () =>
             instanceId,
             body: toCreateBody(news, desiredLabels, tier, protocol),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -1084,12 +1144,12 @@ export const InstanceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new InstanceNotResolved({ name });
+        return yield* new InstanceNotResolved({ resourceName: name });
       }
 
       if ((current.state ?? "") === "ERROR") {
         return yield* new InstanceFailed({
-          name,
+          resourceName: name,
           state: current.state ?? "ERROR",
           statusMessage: current.statusMessage,
         });
@@ -1166,7 +1226,7 @@ export const InstanceProvider = () =>
               deletionProtectionReason: "",
             },
           })
-          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
         if (patched !== undefined) {
           yield* waitForOperation(patched, { notFoundOk: true });
         }
@@ -1178,7 +1238,7 @@ export const InstanceProvider = () =>
           force: true,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

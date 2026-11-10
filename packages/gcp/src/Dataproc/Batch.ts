@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -107,8 +108,31 @@ export type Batch = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  BatchLookup
 >;
+
+/**
+ * Props for {@link Batch.lookup}: find a batch this stack doesn't manage by
+ * its identifiers, in the ambient project unless `project` names another.
+ */
+export interface BatchLookup {
+  /**
+   * Batch id (the `{batch}` segment of
+   * `projects/{project}/locations/{location}/batches/{batch}`).
+   */
+  batchId: string;
+  /**
+   * Location (`us-central1`, …). `US-CENTRAL1` is accepted and normalized
+   * to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Dataproc serverless batch workload.
@@ -137,17 +161,27 @@ export type Batch = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing batch
+ * `Batch.lookup` references a batch Alchemy doesn't manage (created in the
+ * console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared batch.
+ *
+ * **Example:** Reference an existing batch
+ * ```typescript
+ * const batch = GCP.Dataproc.Batch.lookup({ batchId: "my-batch" });
+ * ```
+ *
  * @resource
  * @category Dataproc
  */
 export const Batch = Resource<Batch>("GCP.Dataproc.Batch");
 
 export class BatchNotResolved extends Data.TaggedError("GCP.Dataproc.BatchNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class BatchNotTerminal extends Data.TaggedError("GCP.Dataproc.BatchNotTerminal")<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
@@ -200,18 +234,18 @@ const desiredBody = (news: BatchProps, desiredLabels: Record<string, string>): d
 const getByName = (name: string) =>
   dataproc
     .getProjectsLocationsBatches({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilTerminal = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((batch) =>
       batch === undefined
-        ? Effect.succeed(undefined)
+        ? Effect.undefined
         : TERMINAL.has(batch.state ?? "")
           ? Effect.succeed(batch)
           : Effect.fail(
               new BatchNotTerminal({
-                name,
+                resourceName: name,
                 state: batch.state,
               }),
             ),
@@ -267,6 +301,15 @@ export const BatchProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ batchId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, batchId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, location);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(olds?.location ?? output?.location, env.region);
@@ -321,7 +364,7 @@ export const BatchProvider = () =>
             batchId,
             body: desired,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created) {
           yield* waitForOperation(created);
         }
@@ -329,7 +372,7 @@ export const BatchProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new BatchNotResolved({ name });
+        return yield* new BatchNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, location);

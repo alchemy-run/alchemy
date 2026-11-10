@@ -1,5 +1,5 @@
 import * as Neon from "@distilled.cloud/neon";
-import { OwnedBySomeoneElse, Unowned } from "alchemy/AdoptPolicy";
+import { OwnedBySomeoneElse, unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import type { Input } from "alchemy/Input";
 import * as Provider from "alchemy/Provider";
@@ -57,7 +57,28 @@ export interface AuthAttributes {
   name: string | undefined;
 }
 
-export interface Auth extends Resource<"Neon.Auth", AuthProps, AuthAttributes, never, Providers> {}
+export interface Auth extends Resource<
+  "Neon.Auth",
+  AuthProps,
+  AuthAttributes,
+  never,
+  Providers,
+  AuthLookup
+> {}
+
+/**
+ * Props for {@link Auth.lookup}: find a branch's Neon Auth this
+ * stack doesn't manage by its project and branch.
+ */
+export interface AuthLookup {
+  /** Neon project id. */
+  projectId: string;
+  /**
+   * Branch id.
+   * @default the project's default branch
+   */
+  branchId?: string;
+}
 
 /**
  * Own the managed Better Auth integration on one branch. This is distinct from
@@ -77,6 +98,17 @@ export interface Auth extends Resource<"Neon.Auth", AuthProps, AuthAttributes, n
  *   emailAndPassword: { enabled: true, require_email_verification: true },
  * });
  * yield* Neon.AuthTrustedDomain("SiteOrigin", { auth, domain: site.url });
+ * ```
+ *
+ * ### Looking up an existing Neon Auth
+ * `Auth.lookup` references a Neon Auth Alchemy doesn't manage (created in
+ * the Neon Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing Neon Auth
+ * ```typescript
+ * const auth = Neon.Auth.lookup({ projectId: "plain-wave-12345678" });
+ * const jwks = auth.jwksUrl;
  * ```
  *
  * @resource
@@ -189,9 +221,7 @@ export const authSettingsMatch = (observed: object, desired: object) =>
   );
 
 const observeAuth = (scope: { projectId: string; branchId: string }) =>
-  Neon.getNeonAuth(authRequest(scope)).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-  );
+  Neon.getNeonAuth(authRequest(scope)).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const attributes = Effect.fn(function* (
   scope: { projectId: string; branchId: string },
@@ -279,7 +309,15 @@ export const AuthProvider = () =>
       )
         return { action: "update" } as const;
     }),
-    read: Effect.fn(function* ({ olds, output }) {
+    lookup: Effect.fn(function* ({ projectId, branchId }) {
+      const scope = yield* resolveBranchScope(
+        branchId === undefined ? { project: { projectId } } : { branch: { projectId, branchId } },
+      );
+      const observed = yield* observeAuth(scope);
+      return observed === undefined ? undefined : yield* attributes(scope, observed);
+    }),
+
+    read: Effect.fn(function* ({ olds, output, previous }) {
       if (
         !output &&
         !(olds?.branch?.projectId && olds.branch.branchId) &&
@@ -290,7 +328,7 @@ export const AuthProvider = () =>
       const observed = yield* observeAuth(scope);
       if (!observed) return undefined;
       const attrs = yield* attributes(scope, observed);
-      return output ? attrs : Unowned(attrs);
+      return output ? attrs : unownedUnlessPrevious(attrs, previous, "database");
     }),
     reconcile: Effect.fn(function* ({ news, output, olds }) {
       yield* validateAuthRemoval(olds, news);

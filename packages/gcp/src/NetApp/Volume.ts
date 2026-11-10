@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -308,8 +309,32 @@ export type Volume = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  VolumeLookup
 >;
+
+/**
+ * Props for {@link Volume.lookup}: find a volume this stack doesn't manage
+ * by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface VolumeLookup {
+  /**
+   * Volume id (the `{volume}` segment of
+   * `projects/{project}/locations/{location}/volumes/{volume}`).
+   */
+  volumeId: string;
+  /**
+   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud NetApp Volumes file or block volume hosted in a storage pool.
@@ -353,6 +378,16 @@ export type Volume = Resource<
  *   description: "app share v2",
  *   labels: { env: "prod", team: "storage" },
  * });
+ * ```
+ *
+ * ### Looking up an existing volume
+ * `Volume.lookup` references a volume Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared volume.
+ *
+ * **Example:** Reference an existing volume
+ * ```typescript
+ * const volume = GCP.NetApp.Volume.lookup({ volumeId: "my-volume" });
  * ```
  *
  * @resource
@@ -467,7 +502,7 @@ const toAttrs = (item: netapp.Volume, project: string, region: string) => {
 const getByName = (name: string) =>
   netapp
     .getProjectsLocationsVolumes({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string) =>
   listAtLocation(project, (parent) =>
@@ -546,6 +581,15 @@ export const VolumeProvider = () =>
       });
     }),
 
+    lookup: Effect.fn(function* ({ volumeId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, volumeId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const volumeId = yield* toPhysicalId(id, olds?.volumeId, output?.volumeId, "volume");
@@ -622,7 +666,7 @@ export const VolumeProvider = () =>
               labels: desiredLabels,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -630,7 +674,7 @@ export const VolumeProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       current = yield* waitUntilReady(
@@ -723,7 +767,7 @@ export const VolumeProvider = () =>
           times: 8,
           schedule: Schedule.spaced("2 seconds"),
         }),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       );
       if (operation !== undefined) {
         yield* waitForDeleteOperation(operation);

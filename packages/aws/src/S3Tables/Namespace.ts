@@ -6,14 +6,13 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { Providers } from "../Providers.ts";
-import type { TableBucketArn } from "./TableBucket.ts";
 
 export interface NamespaceProps {
   /**
    * ARN of the table bucket that owns the namespace. Changing it replaces
    * the namespace.
    */
-  tableBucket: TableBucketArn | string;
+  tableBucket: string;
   /**
    * Name of the namespace. Must be 1-255 characters of lowercase letters,
    * numbers, and underscores, beginning with a letter or number. Changing
@@ -35,8 +34,20 @@ export interface Namespace extends Resource<
     ownerAccountId: string;
   },
   never,
-  Providers
+  Providers,
+  NamespaceLookup
 > {}
+
+/**
+ * Props for {@link Namespace.lookup}: find a namespace this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface NamespaceLookup {
+  /** The table bucket the namespace belongs to. */
+  tableBucketArn: string;
+  /** The name of the existing namespace. */
+  namespace: string;
+}
 
 /**
  * A namespace within an Amazon S3 Tables {@link TableBucket} — a logical
@@ -58,6 +69,16 @@ export interface Namespace extends Resource<
  *   tableBucket: bucket.tableBucketArn,
  *   namespace: "raw_events",
  * });
+ * ```
+ *
+ * ### Looking up an existing namespace
+ * `Namespace.lookup` references a namespace Alchemy doesn't manage (created in the
+ * console or by another stack), found by `tableBucketArn` and `namespace`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing namespace
+ * ```typescript
+ * const sales = AWS.S3Tables.Namespace.lookup({ tableBucketArn, namespace: "sales" });
  * ```
  *
  * @resource
@@ -88,6 +109,19 @@ export const NamespaceProvider = () =>
     // enumeration without a bucket ARN, so the engine drives lifecycle from
     // state alone.
     list: () => Effect.succeed([]),
+    lookup: Effect.fn(function* ({ tableBucketArn, namespace }) {
+      return yield* s3tables.getNamespace({ tableBucketARN: tableBucketArn, namespace }).pipe(
+        Effect.map((n): Namespace["Attributes"] => ({
+          tableBucketArn,
+          namespace: n.namespace[0] ?? namespace,
+          namespaceId: n.namespaceId,
+          createdAt: n.createdAt,
+          createdBy: n.createdBy,
+          ownerAccountId: n.ownerAccountId,
+        })),
+        Effect.catchTag("NotFoundException", () => Effect.undefined),
+      );
+    }),
     read: Effect.fn(function* ({ id, olds, output }) {
       const tableBucketArn = output?.tableBucketArn ?? olds?.tableBucket;
       if (typeof tableBucketArn !== "string") return undefined;
@@ -101,7 +135,7 @@ export const NamespaceProvider = () =>
           createdBy: n.createdBy,
           ownerAccountId: n.ownerAccountId,
         })),
-        Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFoundException", () => Effect.undefined),
       );
     }),
     diff: Effect.fn(function* ({ id, news, olds }) {
@@ -123,7 +157,7 @@ export const NamespaceProvider = () =>
       // out-of-band even if `output` cached it.
       let ns = yield* s3tables.getNamespace({ tableBucketARN: tableBucketArn, namespace }).pipe(
         Effect.map((n) => n),
-        Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFoundException", () => Effect.undefined),
       );
 
       // Ensure — create if missing, tolerating a concurrent create.

@@ -162,8 +162,28 @@ export type EnvironmentsSecurityAction = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  EnvironmentsSecurityActionLookup
 >;
+
+/**
+ * Props for {@link EnvironmentsSecurityAction.lookup}: find an environments
+ * security action this stack doesn't manage by its identifiers.
+ */
+export interface EnvironmentsSecurityActionLookup {
+  /**
+   * Security action id (rfc1035, 1-63 chars).
+   */
+  securityActionId: string;
+  /**
+   * Apigee organization id or `organizations/{org}`.
+   */
+  organization?: string;
+  /**
+   * Environment id or `organizations/{org}/environments/{env}`.
+   */
+  environment: string;
+}
 
 /**
  * An environment-level Apigee SecurityAction — allow, deny, or flag
@@ -183,6 +203,20 @@ export type EnvironmentsSecurityAction = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing environments security action
+ * `EnvironmentsSecurityAction.lookup` references an environments security
+ * action Alchemy doesn't manage (created in the console or by another
+ * stack). It is read during plan/deploy, never created, updated or deleted,
+ * and binds like a declared environments security action.
+ *
+ * **Example:** Reference an existing environments security action
+ * ```typescript
+ * const environmentsSecurityAction = GCP.Apigee.EnvironmentsSecurityAction.lookup({
+ *   securityActionId: "my-security-action",
+ *   environment: "my-environment",
+ * });
+ * ```
+ *
  * @resource
  * @category Apigee
  */
@@ -193,7 +227,7 @@ export const EnvironmentsSecurityAction = Resource<EnvironmentsSecurityAction>(
 export class EnvironmentsSecurityActionNotResolved extends Data.TaggedError(
   "GCP.Apigee.EnvironmentsSecurityActionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organizationId: string, environmentId: string, securityActionId: string) =>
@@ -308,6 +342,16 @@ export const EnvironmentsSecurityActionProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ securityActionId, organization, environment }) {
+      const { project } = yield* GcpEnvironment.current;
+      const organizationId = organizationIdOf(organization, project);
+      const environmentId = environmentIdOf(environment ?? "");
+      const name = resourceName(organizationId, environmentId, securityActionId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, organizationId, environmentId);
+    }),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const { project } = yield* GcpEnvironment.current;
       const organizationId = organizationIdOf(
@@ -381,7 +425,7 @@ export const EnvironmentsSecurityActionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new EnvironmentsSecurityActionNotResolved({ name });
+        return yield* new EnvironmentsSecurityActionNotResolved({ resourceName: name });
       }
 
       const descriptionChanged = !sameText(current.description, desiredDescription);

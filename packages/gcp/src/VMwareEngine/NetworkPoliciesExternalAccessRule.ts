@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   VmwareengineNotResolved,
@@ -149,8 +150,39 @@ export type NetworkPoliciesExternalAccessRule = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  NetworkPoliciesExternalAccessRuleLookup
 >;
+
+/**
+ * Props for {@link NetworkPoliciesExternalAccessRule.lookup}: find a
+ * network policies external access rule this stack doesn't manage by its
+ * identifiers, in the ambient project unless `project` names another.
+ */
+export interface NetworkPoliciesExternalAccessRuleLookup {
+  /**
+   * Rule id (the `{externalAccessRule}` segment of
+   * `.../networkPolicies/{net
+   * workPolicy}/externalAccessRules/{externalAccessRule}`).
+   */
+  externalAccessRuleId: string;
+  /**
+   * Region of the parent policy. Inferred from `networkPolicy` when that
+   * value is a full resource name.
+   */
+  location?: string;
+  /**
+   * Parent NetworkPolicy resource name
+   * (`projects/{project}/locations/{locat
+   * ion}/networkPolicies/{networkPolicy}`) or the policy id.
+   */
+  networkPolicy: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An inbound firewall rule on a VMware Engine network policy that filters
@@ -178,6 +210,20 @@ export type NetworkPoliciesExternalAccessRule = Resource<
  *     description: "allow https",
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing network policies external access rule
+ * `NetworkPoliciesExternalAccessRule.lookup` references a network policies
+ * external access rule Alchemy doesn't manage (created in the console or by
+ * another stack). It is read during plan/deploy, never created, updated or
+ * deleted, and binds like a declared network policies external access rule.
+ *
+ * **Example:** Reference an existing network policies external access rule
+ * ```typescript
+ * const networkPoliciesExternalAccessRule = GCP.VMwareEngine.NetworkPoliciesExternalAccessRule.lookup({
+ *   externalAccessRuleId: "my-external-access-rule",
+ *   networkPolicy: "my-network-policy",
+ * });
  * ```
  *
  * @resource
@@ -229,7 +275,7 @@ const toAttrs = (item: vmwareengine.ExternalAccessRule, project: string, region:
 const getByName = (name: string) =>
   vmwareengine
     .getProjectsLocationsNetworkPoliciesExternalAccessRules({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const NetworkPoliciesExternalAccessRuleProvider = () =>
   Provider.succeed(NetworkPoliciesExternalAccessRule, {
@@ -261,6 +307,23 @@ export const NetworkPoliciesExternalAccessRuleProvider = () =>
         nextParent: news.networkPolicy,
       });
     }),
+
+    lookup: Effect.fn(function* ({
+      externalAccessRuleId,
+      location: lookupLocation,
+      networkPolicy,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(
+        lookupLocation ?? (networkPolicy ? locationFromName(networkPolicy, env.region) : undefined),
+        env.region,
+      );
+      const parent = parentPolicyName(env.project, location, networkPolicy ?? "");
+      const name = resourceNameOf(parent, externalAccessRuleId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -367,7 +430,7 @@ export const NetworkPoliciesExternalAccessRuleProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -376,7 +439,7 @@ export const NetworkPoliciesExternalAccessRuleProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new VmwareengineNotResolved({ name });
+        return yield* new VmwareengineNotResolved({ resourceName: name });
       }
 
       current = yield* waitUntilReady(
@@ -446,7 +509,7 @@ export const NetworkPoliciesExternalAccessRuleProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

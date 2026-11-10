@@ -1,4 +1,5 @@
 import type { HttpEffect } from "alchemy/Http";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -74,7 +75,7 @@ export const serveRailwayRpc = <Req = never>(
             }
           });
     const forwarded = header(headers, "x-forwarded-host");
-    const expected = yield* Effect.sync(() => process.env[RPC_TOKEN_ENV] ?? "");
+    const expected = yield* Config.String(RPC_TOKEN_ENV).pipe(Effect.orElseSucceed(() => ""));
     const provided = header(headers, RPC_TOKEN_HEADER);
     if (
       !isPrivateMesh(host) ||
@@ -91,7 +92,8 @@ export const serveRailwayRpc = <Req = never>(
     if (queryAt !== -1) name = name.slice(0, queryAt);
     name = decodeURIComponent(name);
 
-    const method = shape[name];
+    // Never `Object.prototype` members (`constructor`, `__proto__`, ...).
+    const method = name in Object.prototype ? undefined : shape[name];
     if (typeof method !== "function") {
       return HttpServerResponse.text(`Unknown RPC method "${name}"`, {
         status: 404,
@@ -101,13 +103,13 @@ export const serveRailwayRpc = <Req = never>(
     const text = yield* request.text;
     let args: unknown[] = [];
     if (text.length > 0) {
-      try {
-        args = JSON.parse(text) as unknown[];
-      } catch {
+      const parsed = yield* Effect.result(Effect.try(() => JSON.parse(text) as unknown[]));
+      if (Result.isFailure(parsed)) {
         return HttpServerResponse.text(`Invalid RPC arguments for "${name}"`, {
           status: 400,
         });
       }
+      args = parsed.success;
     }
 
     const invoked = (method as (...a: unknown[]) => unknown)(...args);

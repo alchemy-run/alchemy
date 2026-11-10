@@ -1,5 +1,5 @@
 import * as logging from "@distilled.cloud/gcp/logging_v2";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -63,8 +63,27 @@ export type LocationsBucketsLink = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  LocationsBucketsLinkLookup
 >;
+
+/**
+ * Props for {@link LocationsBucketsLink.lookup}: find a locations buckets
+ * link this stack doesn't manage by its identifiers.
+ */
+export interface LocationsBucketsLinkLookup {
+  /**
+   * Link id (also the BigQuery dataset id). Up to 100 characters: letters,
+   * digits, and underscores.
+   */
+  linkId: string;
+  /**
+   * Full resource name of the parent analytics-enabled log bucket
+   * (`{parent}/locations/{location}/buckets/{bucket}`). A bucket may
+   * contain only one link.
+   */
+  bucketName: string;
+}
 
 /**
  * A BigQuery linked dataset for an analytics-enabled log bucket, managed
@@ -88,6 +107,20 @@ export type LocationsBucketsLink = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing locations buckets link
+ * `LocationsBucketsLink.lookup` references a locations buckets link Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared locations buckets link.
+ *
+ * **Example:** Reference an existing locations buckets link
+ * ```typescript
+ * const locationsBucketsLink = GCP.Logging.LocationsBucketsLink.lookup({
+ *   linkId: "my-link",
+ *   bucketName: "my-bucket",
+ * });
+ * ```
+ *
  * @resource
  * @category Logging
  */
@@ -98,13 +131,13 @@ export const LocationsBucketsLink = Resource<LocationsBucketsLink>(
 export class LocationsBucketsLinkNotResolved extends Data.TaggedError(
   "GCP.Logging.LocationsBucketsLinkNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class LocationsBucketsLinkFailed extends Data.TaggedError(
   "GCP.Logging.LocationsBucketsLinkFailed",
 )<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
@@ -133,22 +166,22 @@ const toAttrs = (link: logging.Link, bucketName: string) => {
 const getByName = (name: string) =>
   logging
     .getLocationsBucketsLinks({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilActive = (name: string) =>
   Effect.gen(function* () {
     const link = yield* getByName(name);
     if (link === undefined || isDeleted(link)) {
-      return yield* new LocationsBucketsLinkNotResolved({ name });
+      return yield* new LocationsBucketsLinkNotResolved({ resourceName: name });
     }
     if (link.lifecycleState === "FAILED") {
       return yield* new LocationsBucketsLinkFailed({
-        name,
+        resourceName: name,
         state: link.lifecycleState,
       });
     }
     if (isPending(link.lifecycleState)) {
-      return yield* new LocationsBucketsLinkNotResolved({ name });
+      return yield* new LocationsBucketsLinkNotResolved({ resourceName: name });
     }
     return link;
   }).pipe(
@@ -181,7 +214,15 @@ export const LocationsBucketsLinkProvider = () =>
       return { action: "replace" as const, deleteFirst: true };
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ linkId, bucketName }) {
+      if (bucketName === undefined) return undefined;
+      const name = resourceName(bucketName, linkId);
+      const existing = yield* getByName(name);
+      if (isDeleted(existing)) return undefined;
+      return toAttrs(existing, bucketName);
+    }),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const linkId = yield* toLinkId(id, olds?.linkId, output?.linkId);
       const bucketName = olds?.bucketName ?? output?.bucketName;
       if (bucketName === undefined) return undefined;
@@ -190,7 +231,7 @@ export const LocationsBucketsLinkProvider = () =>
       if (isDeleted(existing)) return undefined;
       const attrs = toAttrs(existing, bucketName);
       const { labels } = parseDescription(existing.description);
-      return (yield* ownedBy(id, labels)) ? attrs : Unowned(attrs);
+      return (yield* ownedBy(id, labels)) ? attrs : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>
@@ -255,7 +296,7 @@ export const LocationsBucketsLinkProvider = () =>
       }
 
       if (isDeleted(current)) {
-        return yield* new LocationsBucketsLinkNotResolved({ name });
+        return yield* new LocationsBucketsLinkNotResolved({ resourceName: name });
       }
 
       if (isPending(current.lifecycleState)) {
@@ -275,7 +316,7 @@ export const LocationsBucketsLinkProvider = () =>
         Effect.flatMap((link) =>
           isDeleted(link)
             ? Effect.void
-            : Effect.fail(new LocationsBucketsLinkNotResolved({ name: output.name })),
+            : Effect.fail(new LocationsBucketsLinkNotResolved({ resourceName: output.name })),
         ),
         Effect.retry({
           while: (error) => error._tag === "GCP.Logging.LocationsBucketsLinkNotResolved",

@@ -130,8 +130,18 @@ export interface Job extends Resource<
     role: string;
   },
   {},
-  Providers
+  Providers,
+  JobLookup
 > {}
+
+/**
+ * Props for {@link Job.lookup}: find a job this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface JobLookup {
+  /** The name of the existing job. */
+  jobName: string;
+}
 
 /**
  * An AWS Glue job — a Spark (`glueetl`), Python shell (`pythonshell`), or
@@ -181,6 +191,16 @@ export interface Job extends Resource<
  * const { JobRunId } = yield* startJobRun({});
  * ```
  *
+ * ### Looking up an existing job
+ * `Job.lookup` references a job Alchemy doesn't manage (created in the
+ * console or by another stack), found by `jobName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing job
+ * ```typescript
+ * const existing = AWS.Glue.Job.lookup({ jobName: "..." });
+ * ```
+ *
  * @resource
  */
 export const Job = Resource<Job>("AWS.Glue.Job");
@@ -196,7 +216,7 @@ export const JobProvider = () =>
       const observe = Effect.fn(function* (name: string) {
         return yield* glue.getJob({ JobName: name }).pipe(
           Effect.map((r) => r.Job),
-          Effect.catchTag("EntityNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("EntityNotFoundException", () => Effect.undefined),
         );
       });
 
@@ -243,6 +263,19 @@ export const JobProvider = () =>
                 role: j.Role ?? "",
               }));
           }),
+
+        lookup: Effect.fn(function* ({ jobName: name }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const job = yield* observe(name);
+          if (job?.Name === undefined) return undefined;
+          const arn = jobArn(region, accountId, job.Name);
+          const attrs = {
+            jobName: job.Name,
+            jobArn: arn,
+            role: job.Role ?? "",
+          };
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;

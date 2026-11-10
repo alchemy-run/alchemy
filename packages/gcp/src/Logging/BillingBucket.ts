@@ -126,8 +126,33 @@ export type BillingBucket = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  BillingBucketLookup
 >;
+
+/**
+ * Props for {@link BillingBucket.lookup}: find a billing bucket this stack
+ * doesn't manage by its identifiers.
+ */
+export interface BillingBucketLookup {
+  /**
+   * Bucket id (the `{bucket}` segment of
+   * `billingAccounts/{billingAccount}/l
+   * ocations/{location}/buckets/{bucket}`). Limited to 100 characters:
+   * letters, digits, underscores, hyphens, periods; first character must be
+   * alphanumeric.
+   */
+  bucketId: string;
+  /**
+   * Location that stores log entries. `global` leaves placement
+   * unspecified.
+   */
+  location?: string;
+  /**
+   * Billing account id (`XXXXXX-XXXXXX-XXXXXX` or `billingAccounts/{id}`).
+   */
+  billingAccountId?: string;
+}
 
 /**
  * A Cloud Logging log bucket owned by a billing account.
@@ -168,6 +193,19 @@ export type BillingBucket = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing billing bucket
+ * `BillingBucket.lookup` references a billing bucket Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * billing bucket.
+ *
+ * **Example:** Reference an existing billing bucket
+ * ```typescript
+ * const billingBucket = GCP.Logging.BillingBucket.lookup({
+ *   bucketId: "my-bucket",
+ * });
+ * ```
+ *
  * @resource
  * @category Logging
  */
@@ -176,11 +214,11 @@ export const BillingBucket = Resource<BillingBucket>("GCP.Logging.BillingBucket"
 export class BillingBucketNotResolved extends Data.TaggedError(
   "GCP.Logging.BillingBucketNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class BillingBucketFailed extends Data.TaggedError("GCP.Logging.BillingBucketFailed")<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
@@ -259,7 +297,7 @@ const toAttrs = (bucket: logging.LogBucket, billingAccountId: string, location: 
 const getByName = (name: string) =>
   logging
     .getBillingAccountsLocationsBuckets({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const undelete = (name: string) =>
   logging
@@ -270,16 +308,16 @@ const waitUntilActive = (name: string) =>
   Effect.gen(function* () {
     const bucket = yield* getByName(name);
     if (bucket === undefined || isDeleted(bucket)) {
-      return yield* new BillingBucketNotResolved({ name });
+      return yield* new BillingBucketNotResolved({ resourceName: name });
     }
     if (bucket.lifecycleState === "FAILED") {
       return yield* new BillingBucketFailed({
-        name,
+        resourceName: name,
         state: bucket.lifecycleState,
       });
     }
     if (isPending(bucket.lifecycleState)) {
-      return yield* new BillingBucketNotResolved({ name });
+      return yield* new BillingBucketNotResolved({ resourceName: name });
     }
     return bucket;
   }).pipe(
@@ -293,7 +331,9 @@ const waitUntilActive = (name: string) =>
 const waitUntilDeleted = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((bucket) =>
-      isDeleted(bucket) ? Effect.void : Effect.fail(new BillingBucketNotResolved({ name })),
+      isDeleted(bucket)
+        ? Effect.void
+        : Effect.fail(new BillingBucketNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Logging.BillingBucketNotResolved",
@@ -342,6 +382,20 @@ export const BillingBucketProvider = () =>
         billingAccountIdOf(news.billingAccountId) !== billingAccountIdOf(previousAccount);
       if (!idChanged && !locationChanged && !accountChanged) return undefined;
       return { action: "replace" as const, deleteFirst: false };
+    }),
+
+    lookup: Effect.fn(function* ({
+      bucketId,
+      location: lookupLocation,
+      billingAccountId: lookupBillingAccountId,
+    }) {
+      const billingAccountId = yield* resolveBillingAccountId(lookupBillingAccountId, undefined);
+      const location = lookupLocation ?? DEFAULT_LOCATION;
+      const name = resourceName(billingAccountId, location, bucketId);
+      const existing = yield* getByName(name);
+      if (isDeleted(existing)) return undefined;
+      const attrs = toAttrs(existing, billingAccountId, location);
+      return attrs;
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
@@ -417,7 +471,7 @@ export const BillingBucketProvider = () =>
       }
 
       if (isDeleted(current)) {
-        return yield* new BillingBucketNotResolved({ name });
+        return yield* new BillingBucketNotResolved({ resourceName: name });
       }
 
       const desiredLocked = news.locked === true;

@@ -4,10 +4,13 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
+import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -170,8 +173,38 @@ export type CryptoKey = Resource<
   CryptoKeyProps,
   CryptoKeyAttrs,
   never,
-  Providers
+  Providers,
+  CryptoKeyLookup
 >;
+
+/**
+ * Props for {@link CryptoKey.lookup}: find a crypto key this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface CryptoKeyLookup {
+  /**
+   * CryptoKey id (the last path segment). Must match `[a-zA-Z0-9_-]{1,63}`.
+   */
+  cryptoKeyId: string;
+  /**
+   * Parent KeyRing. Full name
+   * `projects/{project}/locations/{location}/keyRings/{keyRing}` or the key
+   * ring id (combined with `location`).
+   */
+  keyRing: string;
+  /**
+   * Cloud KMS location (`us-central1`, `global`, `us`, …). Used when
+   * `keyRing` is a bare id. `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud KMS CryptoKey — a named key that holds zero or more versions.
@@ -226,13 +259,27 @@ export type CryptoKey = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing crypto key
+ * `CryptoKey.lookup` references a crypto key Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * crypto key.
+ *
+ * **Example:** Reference an existing crypto key
+ * ```typescript
+ * const cryptoKey = GCP.KMS.CryptoKey.lookup({
+ *   cryptoKeyId: "my-crypto-key",
+ *   keyRing: "my-key-ring",
+ * });
+ * ```
+ *
  * @resource
  * @category KMS
  */
 export const CryptoKey = Resource<CryptoKey>("GCP.KMS.CryptoKey");
 
 export class CryptoKeyNotResolved extends Data.TaggedError("GCP.KMS.CryptoKeyNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class CryptoKeyOperationFailed extends Data.TaggedError("GCP.KMS.CryptoKeyOperationFailed")<{
@@ -241,7 +288,7 @@ export class CryptoKeyOperationFailed extends Data.TaggedError("GCP.KMS.CryptoKe
 }> {}
 
 export class CryptoKeyVersionPending extends Data.TaggedError("GCP.KMS.CryptoKeyVersionPending")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
@@ -386,7 +433,7 @@ const toAttrs = (key: kms.CryptoKey, project: string, region: string): CryptoKey
 const getByName = (name: string) =>
   kms
     .getProjectsLocationsKeyRingsCryptoKeys({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const paginate = <A, E, R>(
   fetch: (
@@ -525,7 +572,7 @@ const waitPrimaryReady = (
         CryptoKeyNotResolved | CryptoKeyOperationFailed | CryptoKeyVersionPending
       > => {
         if (key === undefined) {
-          return Effect.fail(new CryptoKeyNotResolved({ name }));
+          return Effect.fail(new CryptoKeyNotResolved({ resourceName: name }));
         }
         const state = key.primary?.state;
         if (state === undefined || state === "ENABLED") {
@@ -541,7 +588,7 @@ const waitPrimaryReady = (
         }
         return Effect.fail(
           new CryptoKeyVersionPending({
-            name,
+            resourceName: name,
             state,
           }),
         );
@@ -564,10 +611,10 @@ const desiredAlgorithm = (
   template?.algorithm ?? (purpose === "ENCRYPT_DECRYPT" ? DEFAULT_ALGORITHM : template?.algorithm);
 
 const nextRotationFromPeriod = (period: string) =>
-  Effect.sync(() => {
+  Effect.map(Clock.currentTimeMillis, (now) => {
     const match = /^(\d+)s$/.exec(period);
     const seconds = match ? Number(match[1]) : 86_400;
-    return new Date(Date.now() + seconds * 1000).toISOString();
+    return DateTime.formatIso(DateTime.makeUnsafe(now + seconds * 1000));
   });
 
 const destroyVersion = (name: string) =>
@@ -587,9 +634,9 @@ const destroyVersion = (name: string) =>
 const deleteVersion = (name: string) =>
   kms.deleteProjectsLocationsKeyRingsCryptoKeysCryptoKeyVersions({ name }).pipe(
     Effect.catchTags({
-      NotFound: () => Effect.succeed(undefined),
-      BadRequest: () => Effect.succeed(undefined),
-      Conflict: () => Effect.succeed(undefined),
+      NotFound: () => Effect.undefined,
+      BadRequest: () => Effect.undefined,
+      Conflict: () => Effect.undefined,
     }),
     Effect.flatMap(
       (
@@ -748,6 +795,14 @@ export const CryptoKeyProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({ cryptoKeyId, keyRing, location }) {
+      const env = yield* GcpEnvironment.current;
+      const { parent } = resolveParent(env.project, keyRing, location, env.region);
+      const existing = yield* getByName(resourceName(parent, cryptoKeyId));
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const cryptoKeyId = yield* toId(id, olds, output?.cryptoKeyId);
@@ -857,7 +912,7 @@ export const CryptoKeyProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CryptoKeyNotResolved({ name });
+        return yield* new CryptoKeyNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

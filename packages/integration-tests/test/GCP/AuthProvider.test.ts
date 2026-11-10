@@ -7,10 +7,11 @@ import {
 } from "@alchemy.run/gcp/AuthProvider";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { AuthProviders, getAuthProvider, presentEnvironment } from "alchemy/Auth/AuthProvider";
+import { AuthProvidersLive, getAuthProvider, presentEnvironment } from "alchemy/Auth/AuthProvider";
 import { CredentialsStore } from "alchemy/Auth/Credentials";
 import * as Interaction from "alchemy/Interaction";
 import * as ConfigProvider from "effect/ConfigProvider";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -33,7 +34,8 @@ const testLayer = (env: Record<string, string>) =>
     Layer.provideMerge(
       Layer.mergeAll(
         NodeServices.layer,
-        Layer.succeed(AuthProviders, {}),
+        SecureRandom.layerWebCrypto,
+        AuthProvidersLive,
         Layer.succeed(CredentialsStore, credentialsStore),
         ConfigProvider.layer(ConfigProvider.fromEnv({ env })),
         Interaction.layerNonInteractive(),
@@ -46,7 +48,7 @@ const readGcloud = (config: Omit<Extract<GcpAuthConfig, { method: "gcloud" }>, "
     const auth = yield* getAuthProvider<GcpAuthConfig, GcpResolvedCredentials>(
       GCP_AUTH_PROVIDER_NAME,
     );
-    return yield* auth.read("default", { method: "gcloud", ...config });
+    return yield* auth.read("default", Effect.succeed({ method: "gcloud" as const, ...config }));
   });
 
 /**
@@ -66,7 +68,11 @@ const withGcloudConfig = <A, E, R>(
       yield* fs.writeFileString(path.join(dir, "configurations", `config_${name}`), properties);
     }
     return yield* effect.pipe(Effect.provide(testLayer({ CLOUDSDK_CONFIG: dir })));
-  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer));
+  }).pipe(
+    Effect.scoped,
+    Effect.provide(NodeServices.layer),
+    Effect.provide(SecureRandom.layerWebCrypto),
+  );
 
 describe("parseGcloudLoginOutput", { tags: ["unit", "provider:gcp", "local"] }, () => {
   it("reads the authorization URL from gcloud's prompt", () => {

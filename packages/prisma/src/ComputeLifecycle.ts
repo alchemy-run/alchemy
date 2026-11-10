@@ -6,6 +6,7 @@ import {
   deleteProject,
   getServices,
 } from "@distilled.cloud/prisma/management";
+import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -34,6 +35,12 @@ export class PrismaDeploymentWaitInvalidOptions extends Data.TaggedError(
 /** The deployment reached the terminal `failed` status while being waited on. */
 export class PrismaDeploymentFailed extends Data.TaggedError("PrismaDeploymentFailed")<{
   message: string;
+}> {}
+
+/** Deleting a deployment failed; the message names the manual cleanup routes. */
+export class PrismaDeploymentDeleteFailed extends Data.TaggedError("PrismaDeploymentDeleteFailed")<{
+  message: string;
+  cause?: unknown;
 }> {}
 
 export interface WaitForDeploymentStatusOptions {
@@ -101,13 +108,6 @@ const DELETE_CONFLICT_RETRY_ATTEMPTS = 5;
 
 const deleteRetryDelay = (attempt: number) => Effect.sleep(Duration.millis(250 * 2 ** attempt));
 
-const ensureError = (error: unknown): Error =>
-  error instanceof Error
-    ? error
-    : new Error("Prisma deployment lifecycle operation failed.", {
-        cause: error,
-      });
-
 const deploymentDeleteFailed = (
   deploymentId: string,
   statusAtDelete: string | undefined,
@@ -117,8 +117,8 @@ const deploymentDeleteFailed = (
   const detail = format(error);
   const isKnownStoppedDeleteFailure =
     statusAtDelete === "stopped" && Category.hasCategory(error, "ServerError");
-  return new Error(
-    [
+  return new PrismaDeploymentDeleteFailed({
+    message: [
       `Failed to delete Prisma deployment '${deploymentId}' while it was in status '${statusAtDelete ?? "unknown"}'.`,
       detail,
       isKnownStoppedDeleteFailure
@@ -129,8 +129,8 @@ const deploymentDeleteFailed = (
     ]
       .filter((line): line is string => line !== undefined)
       .join(" "),
-    { cause: error },
-  );
+    cause: error,
+  });
 };
 
 const deploymentWaitTimedOut = (
@@ -160,12 +160,12 @@ export const waitForDeploymentStatus = Effect.fn(function* (
     });
   }
   const timeoutMs = timeoutSeconds * 1_000;
-  const startedAt = yield* Effect.sync(() => Date.now());
+  const startedAt = yield* Clock.currentTimeMillis;
   const deadline = startedAt + timeoutMs;
   let lastStatus: string | undefined;
 
   while (true) {
-    const remainingBeforeObservation = yield* Effect.sync(() => deadline - Date.now());
+    const remainingBeforeObservation = deadline - (yield* Clock.currentTimeMillis);
     if (remainingBeforeObservation <= 0) {
       return yield* deploymentWaitTimedOut(deploymentId, targetStatus, lastStatus);
     }
@@ -186,7 +186,7 @@ export const waitForDeploymentStatus = Effect.fn(function* (
       });
     }
 
-    const elapsed = yield* Effect.sync(() => Date.now() - startedAt);
+    const elapsed = (yield* Clock.currentTimeMillis) - startedAt;
     if (elapsed >= timeoutMs) {
       return yield* deploymentWaitTimedOut(deploymentId, targetStatus, lastStatus);
     }
@@ -206,7 +206,7 @@ export const destroyDeployment = Effect.fn(function* (
   options: WaitForDeploymentStatusOptions = {},
 ) {
   const deployment = yield* observeDeployment(deploymentId).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
   if (!deployment) {
     return {
@@ -230,13 +230,12 @@ export const destroyDeployment = Effect.fn(function* (
     if (deployment.status !== "stopping") {
       yield* stopDeploymentIdempotent(deploymentId).pipe(
         Effect.catchTag("NotFound", () => Effect.void),
-        Effect.mapError(ensureError),
       );
       stopped = true;
     }
     // Only a stopped deployment can be deleted.
     const stoppedVersion = yield* waitForDeploymentStatus(deploymentId, "stopped", options).pipe(
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      Effect.catchTag("NotFound", () => Effect.undefined),
     );
     statusAtDelete = stoppedVersion?.status ?? "stopped";
   }
@@ -326,7 +325,7 @@ export const destroyProjectApps = Effect.fn(function* (
         cursor = nextCursor;
       }
       return items;
-    }).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
     if (!apps) return false;
     for (const app of apps) {
       const result = yield* destroyApp(app.id, options);

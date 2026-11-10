@@ -9,6 +9,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -75,8 +76,40 @@ export type Service = Resource<
     uid: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ServiceLookup
 >;
+
+/**
+ * Props for {@link Service.lookup}: find a service this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface ServiceLookup {
+  /**
+   * Service id (the `{service}` segment of
+   * `projects/{project}/locations/{lo
+   * cation}/namespaces/{namespace}/services/{service}`). Must be 1-63
+   * characters and match `[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?`.
+   */
+  serviceId: string;
+  /**
+   * Parent namespace. Full name
+   * `projects/{project}/locations/{location}/namespaces/{namespace}` or the
+   * namespace id (combined with `location`).
+   */
+  namespace: string;
+  /**
+   * Location of the service (e.g. `us-central1`). Used when `namespace` is
+   * a bare id. `US-CENTRAL1` is accepted and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Service Directory service — a named registration that holds
@@ -112,6 +145,19 @@ export type Service = Resource<
  * const { service } = yield* resolve();
  * ```
  *
+ * ### Looking up an existing service
+ * `Service.lookup` references a service Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared service.
+ *
+ * **Example:** Reference an existing service
+ * ```typescript
+ * const service = GCP.ServiceDirectory.Service.lookup({
+ *   serviceId: "my-service",
+ *   namespace: "my-namespace",
+ * });
+ * ```
+ *
  * @resource
  * @category ServiceDirectory
  */
@@ -120,7 +166,7 @@ export const Service = Resource<Service>("GCP.ServiceDirectory.Service");
 export class ServiceNotResolved extends Data.TaggedError(
   "GCP.ServiceDirectory.ServiceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -217,7 +263,7 @@ const toAttrs = (service: servicedirectory.Service, project: string, region: str
 const getByName = (name: string) =>
   servicedirectory
     .getProjectsLocationsNamespacesServices({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const hasAlchemyAnnotation = (annotations: Record<string, string | undefined> | null | undefined) =>
   Object.keys(annotations ?? {}).some((key) => key.startsWith("alchemy-"));
@@ -289,6 +335,20 @@ export const ServiceProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ serviceId, namespace, location }) {
+      const env = yield* GcpEnvironment.current;
+      const name = namespace
+        ? resourceName(
+            resolveParent(env.project, namespace, location, env.region).parent,
+            serviceId,
+          )
+        : undefined;
+      if (name === undefined) return undefined;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -395,7 +455,7 @@ export const ServiceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ServiceNotResolved({ name });
+        return yield* new ServiceNotResolved({ resourceName: name });
       }
 
       const observedAnnotations = tagRecord(current.annotations);

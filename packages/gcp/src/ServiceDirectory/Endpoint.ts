@@ -9,6 +9,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   ALCHEMY_LABEL_PREFIX,
   createInternalLabels,
@@ -106,8 +107,47 @@ export type Endpoint = Resource<
     uid: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  EndpointLookup
 >;
+
+/**
+ * Props for {@link Endpoint.lookup}: find an endpoint this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface EndpointLookup {
+  /**
+   * Endpoint id (the `{endpoint}` segment of
+   * `.../services/{service}/endpoints/{endpoint}`). Must be 1-63 characters
+   * and match `[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?`.
+   */
+  endpointId: string;
+  /**
+   * Parent Service Directory service. Full name
+   * `projects/{project}/location
+   * s/{location}/namespaces/{namespace}/services/{service}` or the service
+   * id (combined with `namespace`).
+   */
+  service: string;
+  /**
+   * Parent namespace. Full name
+   * `projects/{project}/locations/{location}/namespaces/{namespace}` or the
+   * namespace id (combined with `location`). Used when `service` is a bare
+   * id.
+   */
+  namespace?: string;
+  /**
+   * Location of the endpoint (e.g. `us-central1`). Used when `service` is a
+   * bare id. `US-CENTRAL1` is accepted and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Service Directory endpoint — an address/port registration on a
@@ -146,6 +186,19 @@ export type Endpoint = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing endpoint
+ * `Endpoint.lookup` references an endpoint Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared endpoint.
+ *
+ * **Example:** Reference an existing endpoint
+ * ```typescript
+ * const endpoint = GCP.ServiceDirectory.Endpoint.lookup({
+ *   endpointId: "my-endpoint",
+ *   service: "my-service",
+ * });
+ * ```
+ *
  * @resource
  * @category ServiceDirectory
  */
@@ -154,7 +207,7 @@ export const Endpoint = Resource<Endpoint>("GCP.ServiceDirectory.Endpoint");
 export class EndpointNotResolved extends Data.TaggedError(
   "GCP.ServiceDirectory.EndpointNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class EndpointParentMissing extends Data.TaggedError(
@@ -294,7 +347,7 @@ const toAttrs = (endpoint: servicedirectory.Endpoint, project: string, region: s
 const getByName = (name: string) =>
   servicedirectory
     .getProjectsLocationsNamespacesServicesEndpoints({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const deleteByName = (name: string) =>
   servicedirectory.deleteProjectsLocationsNamespacesServicesEndpoints({ name }).pipe(
@@ -456,6 +509,16 @@ export const EndpointProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({ endpointId, service, namespace, location }) {
+      const env = yield* GcpEnvironment.current;
+      const parent = resolveParent(env.project, service ?? "", namespace, location, env.region);
+      const name = parent !== undefined ? resourceName(parent.parent, endpointId) : undefined;
+      if (name === undefined) return undefined;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const endpointId = yield* toId(id, olds?.endpointId, output?.endpointId);
@@ -559,7 +622,7 @@ export const EndpointProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new EndpointNotResolved({ name });
+        return yield* new EndpointNotResolved({ resourceName: name });
       }
 
       const observedAnnotations = tagRecord(current.annotations);

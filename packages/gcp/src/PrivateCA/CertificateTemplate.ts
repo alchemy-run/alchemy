@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -215,8 +216,34 @@ export type CertificateTemplate = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  CertificateTemplateLookup
 >;
+
+/**
+ * Props for {@link CertificateTemplate.lookup}: find a certificate template
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface CertificateTemplateLookup {
+  /**
+   * Template id (the `{certificateTemplate}` segment of
+   * `projects/{project}/
+   * locations/{location}/certificateTemplates/{certificateTemplate}`). Must
+   * match `[a-zA-Z0-9_-]{1,63}`.
+   */
+  certificateTemplateId: string;
+  /**
+   * Location of the template (`us-central1`, …). `US-CENTRAL1` is accepted
+   * and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Certificate Authority Service certificate template — reusable issuance
@@ -282,6 +309,19 @@ export type CertificateTemplate = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing certificate template
+ * `CertificateTemplate.lookup` references a certificate template Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared certificate template.
+ *
+ * **Example:** Reference an existing certificate template
+ * ```typescript
+ * const certificateTemplate = GCP.PrivateCA.CertificateTemplate.lookup({
+ *   certificateTemplateId: "my-certificate-template",
+ * });
+ * ```
+ *
  * @resource
  * @category PrivateCA
  */
@@ -292,13 +332,13 @@ export const CertificateTemplate = Resource<CertificateTemplate>(
 export class CertificateTemplateNotResolved extends Data.TaggedError(
   "GCP.PrivateCA.CertificateTemplateNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class CertificateTemplateStillExists extends Data.TaggedError(
   "GCP.PrivateCA.CertificateTemplateStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -497,7 +537,7 @@ const desiredBody = (
 const getByName = (name: string) =>
   privateca
     .getProjectsLocationsCertificateTemplates({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /**
  * Wait for a Certificate Authority Service operation; CA creation and
@@ -523,7 +563,7 @@ const waitUntilExists = (name: string) =>
     Effect.flatMap((template) =>
       template
         ? Effect.succeed(template)
-        : Effect.fail(new CertificateTemplateNotResolved({ name })),
+        : Effect.fail(new CertificateTemplateNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.PrivateCA.CertificateTemplateNotResolved",
@@ -537,7 +577,7 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((template) =>
       template === undefined
         ? Effect.void
-        : Effect.fail(new CertificateTemplateStillExists({ name })),
+        : Effect.fail(new CertificateTemplateStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.PrivateCA.CertificateTemplateStillExists",
@@ -585,6 +625,15 @@ export const CertificateTemplateProvider = () =>
       if (!replace) return undefined;
       return { action: "replace" as const };
     }),
+
+    lookup: Effect.fn(function* ({ certificateTemplateId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation ?? env.region);
+      const name = resourceName(env.project, location, certificateTemplateId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -637,7 +686,7 @@ export const CertificateTemplateProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -646,7 +695,7 @@ export const CertificateTemplateProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CertificateTemplateNotResolved({ name });
+        return yield* new CertificateTemplateNotResolved({ resourceName: name });
       }
 
       const observed = toAttrs(current, env.project);
@@ -706,7 +755,7 @@ export const CertificateTemplateProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

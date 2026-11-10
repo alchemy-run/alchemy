@@ -1,0 +1,132 @@
+---
+title: Sandboxes
+description: Boat sandboxes — machine sizes, auto-stop, stop and resume, labels — declared as a long-lived dev box or created per task from a Worker or Function.
+---
+
+import StateMachine from "../../../../components/diagrams/StateMachine.astro";
+
+A **sandbox** is a Linux machine: Ubuntu with Docker, Node.js, Bun and Python, and `sudo` that needs no password. It comes in four sizes: `small` (2 vCPUs, 4 GB), `default`, `large` and `xlarge`, the last on Boat's $100 plan and up. A sandbox starts in under a second, runs for its `autoStop`, then stops and keeps its disk.
+
+## A sandbox stops, keeps its disk, and resumes
+
+Stopping saves the disk, and resuming brings the files back:
+
+<StateMachine
+  states={[
+    { id: "ready", label: "ready", type: "running", col: 0, row: 0, start: true, tone: "accent" },
+    { id: "archived", label: "archived", type: "stopped · disk saved", col: 1, row: 0 },
+    { id: "deleted", label: "deleted", col: 2, row: 0, end: true },
+  ]}
+  transitions={[
+    { from: "ready", to: "archived", label: "autoStop, stop()", bend: 0.4 },
+    { from: "archived", to: "ready", label: "resume()", bend: 0.4 },
+    { from: "archived", to: "deleted", label: "delete, or 14 days" },
+  ]}
+  caption="A sandbox runs until its auto-stop timer or stop(), then Boat saves its disk and stops it. resume() starts it again with its files; after 14 days stopped, Boat deletes the saved disk."
+/>
+
+Processes don't survive a stop: a resumed sandbox has your files, and nothing running.
+
+## Declare a sandbox
+
+A sandbox in the Stack is one that outlives requests: a dev box, an agent's home, a preview environment.
+
+```typescript title="src/DevBox.ts"
+import * as Boat from "@alchemy.run/boat";
+
+export const DevBox = Boat.Sandbox("DevBox", {
+  type: "large",
+  autoStop: "60 minutes",
+  setupScript: "git clone https://github.com/alchemy-run/alchemy ~/alchemy",
+});
+```
+
+`setupScript` runs once, in the background, after the sandbox starts; `setupStatus` says how it went. `autoStop: false` never stops it. Changing the name, subdomain or `autoStop` updates the sandbox in place. A new `type`, `env`, `environment`, `setupScript`, `labels`, or a new or rebuilt `snapshot`, replaces it, and the old sandbox's disk goes with it.
+
+## Keep the account's secrets out of untrusted code
+
+A sandbox gets your account's default environment, with its variables, secret files and credentials, unless you say otherwise. For a sandbox that runs someone else's code, pass `noEnv`:
+
+```typescript
+export const Untrusted = Boat.Sandbox("Untrusted", { noEnv: true, env: { TASK: "lint" } });
+```
+
+It gets only its own `env`, and it can't act on your account or other sandboxes. See [Environments & secrets](/boat/security/environments) for sandboxes that should get some secrets and not others.
+
+## Create sandboxes while your app runs
+
+For a sandbox per user or per task, bind `CreateSandbox` in a Worker or Function, and create sandboxes while it runs:
+
+```typescript title="src/Api.ts"
+const sandboxes = yield* Boat.CreateSandbox();
+// in fetch:
+const sandbox = yield* Effect.acquireRelease(
+  sandboxes.create({ type: "small", noEnv: true, autoStop: "10 minutes" }),
+  (sandbox) => Effect.ignore(sandbox.delete()),
+);
+```
+
+Provide `Boat.CreateSandboxHttp`. `create` takes Boat's own parameters (`type`, `env`, `environment`, `noEnv`, `setupScript`, `labels`, `from`), and `autoStop`.
+
+## Find a sandbox again by its labels
+
+Labels mark a sandbox when it's created. Find it by them on the next request, and resume it with its files:
+
+```typescript
+const [existing] = yield* sandboxes.list({ labels: { user } });
+const sandbox = existing
+  ? yield* sandboxes.connect(existing.id)
+  : yield* sandboxes.create({ type: "small", autoStop: "10 minutes", labels: { user } });
+yield* sandbox.resume({ autoStop: "10 minutes" });
+```
+
+Sandboxes a binding creates also carry `alchemy.stack`, `alchemy.stage` and `alchemy.id`. They aren't deleted when the Stack is destroyed, so list them by those labels to clean up.
+
+## Run commands
+
+`exec` runs to completion and returns `{ exitCode, stdout, stderr }`. A non-zero exit is returned, not failed. A string runs in a shell, an array runs its arguments as given:
+
+```typescript
+const test = yield* sandbox.exec("npm test", { cwd: "/home/user/app" });
+const version = yield* sandbox.exec(["node", "--version"]);
+const sorted = yield* sandbox.exec("sort", { stdin: "b\na\n", env: { LC_ALL: "C" } });
+```
+
+Boat stops a command after 30 seconds unless you pass a `timeout`, up to 10 minutes; one that runs past it fails with `ExecTimedOut`. For anything longer, or a server, start it in the background and read its output as it comes:
+
+```typescript
+const server = yield* sandbox.start("npm run dev", { cwd: "/home/user/app" });
+yield* server.output.pipe(
+  Stream.take(5),
+  Stream.runForEach((chunk) => Effect.log(new TextDecoder().decode(chunk.data))),
+);
+```
+
+A background command keeps running after the request ends; `sandbox.processes.attach(server.processId)` picks it up again.
+
+## Read and write files
+
+Paths are relative to `/home/user`. Boat reaches files under `/home/user` and `/tmp`:
+
+```typescript
+yield* sandbox.files.write("app/config.json", JSON.stringify(config));
+const log = yield* sandbox.files.readText("/tmp/build.log");
+const entries = yield* sandbox.files.list("app");
+```
+
+A missing path fails with `FileNotFound`. Writing creates the parent directories.
+
+## Drive a declared sandbox from a Worker
+
+Bind `ConnectSandbox` to reach a sandbox the Stack declares, from a Worker or Function:
+
+```typescript
+const devBox = yield* Boat.ConnectSandbox(DevBox);
+// in fetch:
+yield* devBox.resume({ autoStop: "30 minutes" });
+const result = yield* devBox.exec("git pull && npm test", { cwd: "/home/user/alchemy" });
+```
+
+Provide `Boat.ConnectSandboxHttp`. A call into a stopped sandbox fails with `SandboxNotRunning`, so resume it first. Resuming one that's running does nothing.
+
+To run your own server in a sandbox, see [Programs](/boat/sandboxes/programs).

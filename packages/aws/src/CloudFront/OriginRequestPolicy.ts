@@ -3,8 +3,22 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import { single } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
+
+export class OriginRequestPolicyConflict extends Data.TaggedError("OriginRequestPolicyConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class OriginRequestPolicyUnexpectedResponse extends Data.TaggedError(
+  "OriginRequestPolicyUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface OriginRequestPolicyProps {
   /**
@@ -65,8 +79,23 @@ export interface OriginRequestPolicy extends Resource<
     queryStringsConfig: cloudfront.OriginRequestPolicyQueryStringsConfig;
   },
   never,
-  Providers
+  Providers,
+  OriginRequestPolicyLookup
 > {}
+
+/**
+ * Props for {@link OriginRequestPolicy.lookup}: find an origin request policy this stack doesn't
+ * manage, custom or AWS managed.
+ */
+export type OriginRequestPolicyLookup =
+  | {
+      /** The id of the existing policy. */
+      originRequestPolicyId: string;
+    }
+  | {
+      /** The policy's name, including AWS managed policies such as `Managed-AllViewer`. */
+      name: string;
+    };
 
 /**
  * A CloudFront origin request policy.
@@ -89,6 +118,17 @@ export interface OriginRequestPolicy extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing origin request policy
+ * `OriginRequestPolicy.lookup` references an origin request policy Alchemy doesn't manage (created in the
+ * console or by another stack), found by `originRequestPolicyId` or `name`, AWS managed policies included. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Use an AWS managed policy
+ * ```typescript
+ * const policy = AWS.CloudFront.OriginRequestPolicy.lookup({ name: "Managed-AllViewer" });
+ * const originRequestPolicyId = policy.originRequestPolicyId;
+ * ```
+ *
  * @resource
  */
 export const OriginRequestPolicy = Resource<OriginRequestPolicy>(
@@ -102,7 +142,7 @@ export const OriginRequestPolicyProvider = () =>
       const getById = Effect.fn(function* (id: string) {
         const config = yield* cloudfront
           .getOriginRequestPolicyConfig({ Id: id })
-          .pipe(Effect.catchTag("NoSuchOriginRequestPolicy", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchOriginRequestPolicy", () => Effect.undefined));
         if (!config?.OriginRequestPolicyConfig) return undefined;
         return { config: config.OriginRequestPolicyConfig, etag: config.ETag };
       });
@@ -154,6 +194,26 @@ export const OriginRequestPolicyProvider = () =>
           if ((yield* createName(id, olds ?? {})) !== (yield* createName(id, news))) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* (props) {
+          const id =
+            "originRequestPolicyId" in props
+              ? props.originRequestPolicyId
+              : (yield* single(
+                  "AWS.CloudFront.OriginRequestPolicy",
+                  props.name,
+                  (
+                    (yield* cloudfront.listOriginRequestPolicies({})).OriginRequestPolicyList
+                      ?.Items ?? []
+                  ).filter(
+                    (item) =>
+                      item.OriginRequestPolicy?.OriginRequestPolicyConfig?.Name === props.name,
+                  ),
+                  (item) => item.OriginRequestPolicy?.Id,
+                ))?.OriginRequestPolicy?.Id;
+          if (id === undefined) return undefined;
+          const found = yield* getById(id);
+          return found ? toAttrs(id, found.config, found.etag) : undefined;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           if (output?.originRequestPolicyId) {
@@ -234,18 +294,18 @@ export const OriginRequestPolicyProvider = () =>
                             Location: undefined,
                           })
                         : Effect.fail(
-                            new Error(
-                              `Origin request policy '${name}' already exists but could not be recovered`,
-                            ),
+                            new OriginRequestPolicyConflict({
+                              message: `Origin request policy '${name}' already exists but could not be recovered`,
+                            }),
                           ),
                     ),
                   ),
                 ),
               );
             if (!created.OriginRequestPolicy?.Id) {
-              return yield* Effect.fail(
-                new Error("createOriginRequestPolicy returned no identifier"),
-              );
+              return yield* new OriginRequestPolicyUnexpectedResponse({
+                message: "createOriginRequestPolicy returned no identifier",
+              });
             }
             yield* session.note(created.OriginRequestPolicy.Id);
             return toAttrs(
@@ -263,9 +323,9 @@ export const OriginRequestPolicyProvider = () =>
             OriginRequestPolicyConfig: buildConfig(observed.config.Name, news),
           });
           if (!updated.OriginRequestPolicy?.Id) {
-            return yield* Effect.fail(
-              new Error("updateOriginRequestPolicy returned no identifier"),
-            );
+            return yield* new OriginRequestPolicyUnexpectedResponse({
+              message: "updateOriginRequestPolicy returned no identifier",
+            });
           }
           yield* session.note(observed.id);
           return toAttrs(

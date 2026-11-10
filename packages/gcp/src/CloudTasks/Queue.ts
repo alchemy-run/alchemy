@@ -7,6 +7,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 
 const DEFAULT_STATE = "RUNNING" as const;
@@ -119,8 +120,31 @@ export type Queue = Resource<
     purgeTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  QueueLookup
 >;
+
+/**
+ * Props for {@link Queue.lookup}: find a queue this stack doesn't manage by
+ * its identifiers, in the ambient project unless `project` names another.
+ */
+export interface QueueLookup {
+  /**
+   * Queue id (the `{queue}` segment of
+   * `projects/{project}/locations/{location}/queues/{queue}`).
+   */
+  queueId: string;
+  /**
+   * Location of the queue (e.g. `us-central1`). `US-CENTRAL1` is accepted
+   * and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Google Cloud Tasks queue.
@@ -164,13 +188,23 @@ export type Queue = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing queue
+ * `Queue.lookup` references a queue Alchemy doesn't manage (created in the
+ * console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared queue.
+ *
+ * **Example:** Reference an existing queue
+ * ```typescript
+ * const queue = GCP.CloudTasks.Queue.lookup({ queueId: "my-queue" });
+ * ```
+ *
  * @resource
  * @category CloudTasks
  */
 export const Queue = Resource<Queue>("GCP.CloudTasks.Queue");
 
 export class QueueNotResolved extends Data.TaggedError("GCP.CloudTasks.QueueNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -307,7 +341,7 @@ const toAttrs = (queue: cloudtasks.Queue, project: string): Queue["Attributes"] 
 const getByName = (name: string) =>
   cloudtasks
     .getProjectsLocationsQueues({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const sameHttpTarget = (left: cloudtasks.HttpTarget, right: cloudtasks.HttpTarget | undefined) => {
   const normalize = (target: cloudtasks.HttpTarget | undefined) => {
@@ -338,6 +372,15 @@ export const QueueProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ queueId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, queueId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -391,7 +434,7 @@ export const QueueProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new QueueNotResolved({ name });
+        return yield* new QueueNotResolved({ resourceName: name });
       }
 
       const mask: string[] = [];

@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_PARTITION_COUNT,
@@ -140,8 +141,33 @@ export type AdminTopic = Resource<
     reservationConfig: pubsublite.ReservationConfig | undefined;
   },
   never,
-  Providers
+  Providers,
+  AdminTopicLookup
 >;
+
+/**
+ * Props for {@link AdminTopic.lookup}: find an admin topic this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface AdminTopicLookup {
+  /**
+   * Topic id (the `{topic}` segment of
+   * `projects/{project}/locations/{location}/topics/{topic}`).
+   */
+  topicId: string;
+  /**
+   * Zone (`us-central1-a`) or region (`us-central1`). Zonal topics can
+   * provision their own partition capacity. Regional topics must attach a
+   * reservation.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Pub/Sub Lite topic — a zonal or regional partitioned log.
@@ -182,6 +208,17 @@ export type AdminTopic = Resource<
  *   location: "us-central1",
  *   reservationConfig: { throughputReservation: reservation.name },
  * });
+ * ```
+ *
+ * ### Looking up an existing admin topic
+ * `AdminTopic.lookup` references an admin topic Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * admin topic.
+ *
+ * **Example:** Reference an existing admin topic
+ * ```typescript
+ * const adminTopic = GCP.PubSubLite.AdminTopic.lookup({ topicId: "my-topic" });
  * ```
  *
  * @resource
@@ -260,6 +297,20 @@ export const AdminTopicProvider = () =>
       });
     }),
 
+    lookup: Effect.fn(function* ({ topicId, location }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getTopic(
+        resourceName(
+          env.project,
+          normalizeLocation(location, DEFAULT_ZONE),
+          TOPIC_COLLECTION,
+          topicId,
+        ),
+      );
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const topicId = yield* toResourceId(id, olds?.topicId, output?.topicId);
@@ -310,7 +361,7 @@ export const AdminTopicProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observedName = current.name ?? name;

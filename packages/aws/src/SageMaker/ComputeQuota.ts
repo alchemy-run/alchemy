@@ -11,6 +11,18 @@ import * as Schedule from "effect/Schedule";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 
+export class ComputeQuotaInvalidProps extends Data.TaggedError("ComputeQuotaInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class ComputeQuotaUnexpectedResponse extends Data.TaggedError(
+  "ComputeQuotaUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export interface ComputeQuotaProps {
   /**
    * Name of the compute allocation. Maximum 63 characters, alphanumeric and
@@ -108,8 +120,18 @@ export interface ComputeQuota extends Resource<
     queueName: string;
   },
   never,
-  Providers
+  Providers,
+  ComputeQuotaLookup
 > {}
+
+/**
+ * Props for {@link ComputeQuota.lookup}: find a compute quota this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ComputeQuotaLookup {
+  /** The compute quota id of the existing compute quota. */
+  computeQuotaId: string;
+}
 
 /**
  * A SageMaker HyperPod compute allocation (task governance) — reserves
@@ -130,6 +152,16 @@ export interface ComputeQuota extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing compute quota
+ * `ComputeQuota.lookup` references a compute quota Alchemy doesn't manage (created in the
+ * console or by another stack), found by `computeQuotaId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing compute quota
+ * ```typescript
+ * const existing = AWS.SageMaker.ComputeQuota.lookup({ computeQuotaId: "my-compute-quota" });
+ * ```
+ *
  * @resource
  */
 export const ComputeQuota = Resource<ComputeQuota>("AWS.SageMaker.ComputeQuota");
@@ -140,7 +172,7 @@ const createQuotaName = (id: string, props: { name?: string | undefined }) =>
 const describeQuotaOrUndefined = (quotaId: string) =>
   sagemaker
     .describeComputeQuota({ ComputeQuotaId: quotaId })
-    .pipe(Effect.catchTag("ResourceNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFound", () => Effect.undefined));
 
 /**
  * Look a compute allocation up by exact name — used when state was lost
@@ -157,7 +189,7 @@ const findQuotaByName = Effect.fn(function* (name: string) {
 const fetchQuotaTags = Effect.fn(function* (arn: string) {
   const response = yield* sagemaker
     .listTags({ ResourceArn: arn })
-    .pipe(Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("AccessDeniedException", () => Effect.undefined));
   return Object.fromEntries(
     (response?.Tags ?? []).flatMap((tag) =>
       tag.Key !== undefined ? [[tag.Key, tag.Value ?? ""]] : [],
@@ -282,6 +314,15 @@ export const ComputeQuotaProvider = () =>
               ];
             });
           }),
+        lookup: Effect.fn(function* ({ computeQuotaId: quotaId }) {
+          if (quotaId === undefined) return undefined;
+          const described = yield* describeQuotaOrUndefined(quotaId);
+          if (!described || described.Status === "Deleting" || described.Status === "Deleted") {
+            return undefined;
+          }
+          const attrs = toAttrs(described);
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const quotaId =
             output?.computeQuotaId ??
@@ -307,7 +348,9 @@ export const ComputeQuotaProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(new Error("SageMaker ComputeQuota requires props"));
+            return yield* new ComputeQuotaInvalidProps({
+              message: "SageMaker ComputeQuota requires props",
+            });
           }
           const name = yield* createQuotaName(id, news);
           const internalTags = yield* createInternalTags(id);
@@ -341,10 +384,12 @@ export const ComputeQuotaProvider = () =>
                   Value,
                 })),
               })
-              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             quotaId = created?.ComputeQuotaId ?? (yield* findQuotaByName(name))?.ComputeQuotaId;
             if (quotaId === undefined) {
-              return yield* Effect.fail(new Error(`failed to create compute quota ${name}`));
+              return yield* new ComputeQuotaUnexpectedResponse({
+                message: `failed to create compute quota ${name}`,
+              });
             }
             yield* session.note(`Creating compute quota ${name}...`);
             yield* waitForQuota(quotaId, "Ready");
@@ -379,7 +424,9 @@ export const ComputeQuotaProvider = () =>
 
           described = yield* describeQuotaOrUndefined(quotaId);
           if (described === undefined) {
-            return yield* Effect.fail(new Error(`failed to read reconciled compute quota ${name}`));
+            return yield* new ComputeQuotaUnexpectedResponse({
+              message: `failed to read reconciled compute quota ${name}`,
+            });
           }
           const attrs = toAttrs(described);
 

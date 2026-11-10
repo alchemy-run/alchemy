@@ -5,9 +5,22 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class EndpointConfigInvalidProps extends Data.TaggedError("EndpointConfigInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class EndpointConfigUnexpectedResponse extends Data.TaggedError(
+  "EndpointConfigUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface EndpointConfigProps {
   /**
@@ -79,8 +92,18 @@ export interface EndpointConfig extends Resource<
     endpointConfigArn: string;
   },
   never,
-  Providers
+  Providers,
+  EndpointConfigLookup
 > {}
+
+/**
+ * Props for {@link EndpointConfig.lookup}: find an endpoint config this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface EndpointConfigLookup {
+  /** The endpoint config name of the existing endpoint config. */
+  endpointConfigName: string;
+}
 
 /**
  * An Amazon SageMaker EndpointConfig — the deployment recipe that maps one
@@ -118,6 +141,16 @@ export interface EndpointConfig extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing endpoint config
+ * `EndpointConfig.lookup` references an endpoint config Alchemy doesn't manage (created in the
+ * console or by another stack), found by `endpointConfigName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing endpoint config
+ * ```typescript
+ * const existing = AWS.SageMaker.EndpointConfig.lookup({ endpointConfigName: "my-endpoint-config" });
+ * ```
+ *
  * @resource
  */
 export const EndpointConfig = Resource<EndpointConfig>("AWS.SageMaker.EndpointConfig");
@@ -130,7 +163,7 @@ const createConfigName = (id: string, props: { endpointConfigName?: string | und
 const fetchConfigTags = Effect.fn(function* (arn: string) {
   const response = yield* sagemaker
     .listTags({ ResourceArn: arn })
-    .pipe(Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("AccessDeniedException", () => Effect.undefined));
   return Object.fromEntries(
     (response?.Tags ?? []).flatMap((tag) =>
       tag.Key !== undefined ? [[tag.Key, tag.Value ?? ""]] : [],
@@ -141,7 +174,7 @@ const fetchConfigTags = Effect.fn(function* (arn: string) {
 const readEndpointConfig = Effect.fn(function* (name: string) {
   const described = yield* sagemaker
     .describeEndpointConfig({ EndpointConfigName: name })
-    .pipe(Effect.catchTag("EndpointConfigNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("EndpointConfigNotFound", () => Effect.undefined));
   if (!described) return undefined;
   return {
     endpointConfigName: described.EndpointConfigName,
@@ -174,6 +207,11 @@ export const EndpointConfigProvider = () =>
                 : [],
             );
           }),
+        lookup: Effect.fn(function* ({ endpointConfigName: name }) {
+          const attrs = yield* readEndpointConfig(name);
+          if (!attrs) return undefined;
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.endpointConfigName ?? (yield* createConfigName(id, olds ?? {}));
           const attrs = yield* readEndpointConfig(name);
@@ -207,7 +245,9 @@ export const EndpointConfigProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(new Error("SageMaker EndpointConfig requires props"));
+            return yield* new EndpointConfigInvalidProps({
+              message: "SageMaker EndpointConfig requires props",
+            });
           }
           const name = output?.endpointConfigName ?? (yield* createConfigName(id, news));
           const internalTags = yield* createInternalTags(id);
@@ -238,9 +278,9 @@ export const EndpointConfigProvider = () =>
               .pipe(Effect.catchTag("EndpointConfigAlreadyExists", () => Effect.void));
             attrs = yield* readEndpointConfig(name);
             if (attrs === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created endpoint config ${name}`),
-              );
+              return yield* new EndpointConfigUnexpectedResponse({
+                message: `failed to read created endpoint config ${name}`,
+              });
             }
           }
 

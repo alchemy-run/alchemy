@@ -334,10 +334,10 @@ export const itemHasOwnership = (item: CatalogItem) =>
 
 export const getCatalogItem = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : recommendationengine
         .getProjectsLocationsCatalogsCatalogItems({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const userTags = (tags: readonly string[] | undefined) =>
   (tags ?? []).filter((tag) => !tag.includes("[alc ") && !tag.includes("[alchemy "));

@@ -3,8 +3,24 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import { single } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
+
+export class ResponseHeadersPolicyConflict extends Data.TaggedError(
+  "ResponseHeadersPolicyConflict",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class ResponseHeadersPolicyUnexpectedResponse extends Data.TaggedError(
+  "ResponseHeadersPolicyUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ResponseHeadersPolicyProps {
   /**
@@ -84,8 +100,23 @@ export interface ResponseHeadersPolicy extends Resource<
     removeHeadersConfig: cloudfront.ResponseHeadersPolicyRemoveHeadersConfig | undefined;
   },
   never,
-  Providers
+  Providers,
+  ResponseHeadersPolicyLookup
 > {}
+
+/**
+ * Props for {@link ResponseHeadersPolicy.lookup}: find a response headers policy this stack doesn't
+ * manage, custom or AWS managed.
+ */
+export type ResponseHeadersPolicyLookup =
+  | {
+      /** The id of the existing policy. */
+      responseHeadersPolicyId: string;
+    }
+  | {
+      /** The policy's name, including AWS managed policies such as `Managed-SecurityHeadersPolicy`. */
+      name: string;
+    };
 
 /**
  * A CloudFront response headers policy.
@@ -121,6 +152,17 @@ export interface ResponseHeadersPolicy extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing response headers policy
+ * `ResponseHeadersPolicy.lookup` references a response headers policy Alchemy doesn't manage (created in the
+ * console or by another stack), found by `responseHeadersPolicyId` or `name`, AWS managed policies included. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Use an AWS managed policy
+ * ```typescript
+ * const policy = AWS.CloudFront.ResponseHeadersPolicy.lookup({ name: "Managed-SecurityHeadersPolicy" });
+ * const responseHeadersPolicyId = policy.responseHeadersPolicyId;
+ * ```
+ *
  * @resource
  */
 export const ResponseHeadersPolicy = Resource<ResponseHeadersPolicy>(
@@ -134,7 +176,7 @@ export const ResponseHeadersPolicyProvider = () =>
       const getById = Effect.fn(function* (id: string) {
         const config = yield* cloudfront
           .getResponseHeadersPolicyConfig({ Id: id })
-          .pipe(Effect.catchTag("NoSuchResponseHeadersPolicy", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchResponseHeadersPolicy", () => Effect.undefined));
         if (!config?.ResponseHeadersPolicyConfig) return undefined;
         return {
           config: config.ResponseHeadersPolicyConfig,
@@ -193,6 +235,26 @@ export const ResponseHeadersPolicyProvider = () =>
           if ((yield* createName(id, olds ?? {})) !== (yield* createName(id, news))) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* (props) {
+          const id =
+            "responseHeadersPolicyId" in props
+              ? props.responseHeadersPolicyId
+              : (yield* single(
+                  "AWS.CloudFront.ResponseHeadersPolicy",
+                  props.name,
+                  (
+                    (yield* cloudfront.listResponseHeadersPolicies({})).ResponseHeadersPolicyList
+                      ?.Items ?? []
+                  ).filter(
+                    (item) =>
+                      item.ResponseHeadersPolicy?.ResponseHeadersPolicyConfig?.Name === props.name,
+                  ),
+                  (item) => item.ResponseHeadersPolicy?.Id,
+                ))?.ResponseHeadersPolicy?.Id;
+          if (id === undefined) return undefined;
+          const found = yield* getById(id);
+          return found ? toAttrs(id, found.config, found.etag) : undefined;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           if (output?.responseHeadersPolicyId) {
@@ -270,18 +332,18 @@ export const ResponseHeadersPolicyProvider = () =>
                             Location: undefined,
                           })
                         : Effect.fail(
-                            new Error(
-                              `Response headers policy '${name}' already exists but could not be recovered`,
-                            ),
+                            new ResponseHeadersPolicyConflict({
+                              message: `Response headers policy '${name}' already exists but could not be recovered`,
+                            }),
                           ),
                     ),
                   ),
                 ),
               );
             if (!created.ResponseHeadersPolicy?.Id) {
-              return yield* Effect.fail(
-                new Error("createResponseHeadersPolicy returned no identifier"),
-              );
+              return yield* new ResponseHeadersPolicyUnexpectedResponse({
+                message: "createResponseHeadersPolicy returned no identifier",
+              });
             }
             yield* session.note(created.ResponseHeadersPolicy.Id);
             return toAttrs(
@@ -299,9 +361,9 @@ export const ResponseHeadersPolicyProvider = () =>
             ResponseHeadersPolicyConfig: buildConfig(observed.config.Name, news),
           });
           if (!updated.ResponseHeadersPolicy?.Id) {
-            return yield* Effect.fail(
-              new Error("updateResponseHeadersPolicy returned no identifier"),
-            );
+            return yield* new ResponseHeadersPolicyUnexpectedResponse({
+              message: "updateResponseHeadersPolicy returned no identifier",
+            });
           }
           yield* session.note(observed.id);
           return toAttrs(

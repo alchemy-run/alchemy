@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -152,8 +153,36 @@ export type RestorePlansRestore = Resource<
     completeTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RestorePlansRestoreLookup
 >;
+
+/**
+ * Props for {@link RestorePlansRestore.lookup}: find a restore plans
+ * restore this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface RestorePlansRestoreLookup {
+  /**
+   * Restore id (the `{restore}` segment).
+   */
+  restoreId: string;
+  /**
+   * Region used when `restorePlan` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent RestorePlan. Full name
+   * `projects/{project}/locations/{location}/restorePlans/{restorePlan}` or
+   * the plan id (combined with `location`).
+   */
+  restorePlan: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Backup for GKE restore — a request to restore a Backup into the
@@ -193,6 +222,20 @@ export type RestorePlansRestore = Resource<
  *   backup: backup.name,
  *   description: "app-only rollback v2",
  *   labels: { env: "prod", team: "platform" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing restore plans restore
+ * `RestorePlansRestore.lookup` references a restore plans restore Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared restore plans restore.
+ *
+ * **Example:** Reference an existing restore plans restore
+ * ```typescript
+ * const restorePlansRestore = GCP.GKEBackup.RestorePlansRestore.lookup({
+ *   restoreId: "my-restore",
+ *   restorePlan: "my-restore-plan",
  * });
  * ```
  *
@@ -287,7 +330,7 @@ const toAttrs = (item: gkebackup.Restore, project: string, region: string) => {
 const getByName = (name: string) =>
   gkebackup
     .getProjectsLocationsRestorePlansRestores({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string) =>
   listAtNested(project, "restorePlans/-", (parent) =>
@@ -339,6 +382,16 @@ export const RestorePlansRestoreProvider = () =>
           !previousBackup.endsWith(`/${news.backup}`),
       });
     }),
+
+    lookup: Effect.fn(function* ({ restoreId, location: lookupLocation, restorePlan }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const plan = expandParent(restorePlan ?? "", env.project, location, "restorePlans");
+      const name = resourceName(plan, restoreId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -393,7 +446,7 @@ export const RestorePlansRestoreProvider = () =>
               labels: desiredLabels,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -401,7 +454,7 @@ export const RestorePlansRestoreProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -440,7 +493,7 @@ export const RestorePlansRestoreProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForDeleteOperation(operation);

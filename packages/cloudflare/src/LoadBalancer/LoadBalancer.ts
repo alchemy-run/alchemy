@@ -359,7 +359,7 @@ type ObservedLoadBalancer =
 const getLoadBalancer = (zoneId: string, loadBalancerId: string) =>
   loadBalancers
     .getLoadBalancer({ zoneId, loadBalancerId })
-    .pipe(Effect.catchTag("LoadBalancerNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("LoadBalancerNotFound", () => Effect.undefined));
 
 /**
  * Find a load balancer by exact hostname within a zone.

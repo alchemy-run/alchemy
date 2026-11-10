@@ -70,7 +70,7 @@ export interface CompatRepoStub {
     RuntimeContext
   >;
   readonly listRefs: (
-    prefix?: string | undefined,
+    prefix?: string,
   ) => Effect.Effect<RefsPage, { readonly _tag: string }, RuntimeContext>;
   readonly readCommitLog: (input: {
     readonly ref?: string | undefined;

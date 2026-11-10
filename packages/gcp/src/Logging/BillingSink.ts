@@ -123,8 +123,27 @@ export type BillingSink = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  BillingSinkLookup
 >;
+
+/**
+ * Props for {@link BillingSink.lookup}: find a billing sink this stack
+ * doesn't manage by its identifiers.
+ */
+export interface BillingSinkLookup {
+  /**
+   * Sink id (the `{sink}` segment of
+   * `billingAccounts/{billingAccount}/sinks/{sink}`). Limited to 100
+   * characters: letters, digits, underscores, hyphens, periods; first
+   * character must be alphanumeric.
+   */
+  sinkId: string;
+  /**
+   * Billing account id (`XXXXXX-XXXXXX-XXXXXX` or `billingAccounts/{id}`).
+   */
+  billingAccountId?: string;
+}
 
 /**
  * A Cloud Logging sink that routes billing-account log entries to a
@@ -175,13 +194,24 @@ export type BillingSink = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing billing sink
+ * `BillingSink.lookup` references a billing sink Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * billing sink.
+ *
+ * **Example:** Reference an existing billing sink
+ * ```typescript
+ * const billingSink = GCP.Logging.BillingSink.lookup({ sinkId: "my-sink" });
+ * ```
+ *
  * @resource
  * @category Logging
  */
 export const BillingSink = Resource<BillingSink>("GCP.Logging.BillingSink");
 
 export class BillingSinkNotResolved extends Data.TaggedError("GCP.Logging.BillingSinkNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (billingAccountId: string, sinkId: string) =>
@@ -253,7 +283,7 @@ const toAttrs = (sink: logging.LogSink, billingAccountId: string) => {
 const getByName = (name: string) =>
   logging
     .getBillingAccountsSinks({ sinkName: name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toCreateBody = (
   sinkId: string,
@@ -285,6 +315,15 @@ export const BillingSinkProvider = () =>
         billingAccountIdOf(news.billingAccountId) !== billingAccountIdOf(previousAccount);
       if (!idChanged && !accountChanged) return undefined;
       return { action: "replace" as const, deleteFirst: false };
+    }),
+
+    lookup: Effect.fn(function* ({ sinkId, billingAccountId: lookupBillingAccountId }) {
+      const billingAccountId = yield* resolveBillingAccountId(lookupBillingAccountId, undefined);
+      const name = resourceName(billingAccountId, sinkId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      const attrs = toAttrs(existing, billingAccountId);
+      return attrs;
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
@@ -346,7 +385,7 @@ export const BillingSinkProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new BillingSinkNotResolved({ name });
+        return yield* new BillingSinkNotResolved({ resourceName: name });
       }
 
       const desiredDisabled = news.disabled === true;

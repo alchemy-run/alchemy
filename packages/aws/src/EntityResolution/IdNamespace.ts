@@ -67,8 +67,18 @@ export interface IdNamespace extends Resource<
     idNamespaceArn: string;
   },
   never,
-  Providers
+  Providers,
+  IdNamespaceLookup
 > {}
+
+/**
+ * Props for {@link IdNamespace.lookup}: find an id namespace this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface IdNamespaceLookup {
+  /** The id namespace name of the existing id namespace. */
+  idNamespaceName: string;
+}
 
 /**
  * An AWS Entity Resolution ID namespace — a wrapper around an input dataset
@@ -113,6 +123,16 @@ export interface IdNamespace extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing id namespace
+ * `IdNamespace.lookup` references an id namespace Alchemy doesn't manage (created in the
+ * console or by another stack), found by `idNamespaceName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing id namespace
+ * ```typescript
+ * const existing = AWS.EntityResolution.IdNamespace.lookup({ idNamespaceName: "my-id-namespace" });
+ * ```
+ *
  * @resource
  */
 export const IdNamespace = Resource<IdNamespace>("AWS.EntityResolution.IdNamespace");
@@ -132,11 +152,21 @@ export const IdNamespaceProvider = () =>
       const getByName = Effect.fn(function* (idNamespaceName: string) {
         return yield* entityresolution
           .getIdNamespace({ idNamespaceName })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       return {
         stables: ["idNamespaceName", "idNamespaceArn"],
+
+        lookup: Effect.fn(function* ({ idNamespaceName: name }) {
+          const namespace = yield* getByName(name);
+          if (namespace === undefined) return undefined;
+          const attrs = {
+            idNamespaceName: namespace.idNamespaceName,
+            idNamespaceArn: namespace.idNamespaceArn,
+          };
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.idNamespaceName ?? (yield* createName(id, olds ?? {}));

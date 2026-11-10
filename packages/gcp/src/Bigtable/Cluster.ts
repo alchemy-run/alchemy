@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   clusterLocation,
@@ -150,8 +151,34 @@ export type Cluster = Resource<
     state: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ClusterLookup
 >;
+
+/**
+ * Props for {@link Cluster.lookup}: find a cluster this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface ClusterLookup {
+  /**
+   * Cluster id (the `{cluster}` segment of
+   * `projects/{project}/instances/{instance}/clusters/{cluster}`). Must be
+   * 6-30 characters and match `[a-z][-a-z0-9]*`.
+   */
+  clusterId: string;
+  /**
+   * Parent instance id (the `{instance}` segment of
+   * `projects/{project}/instances/{instance}`). Full resource names are
+   * accepted and reduced to the last path segment.
+   */
+  instance: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Bigtable cluster — a resizable group of nodes in one zone
@@ -208,22 +235,35 @@ export type Cluster = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing cluster
+ * `Cluster.lookup` references a cluster Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared cluster.
+ *
+ * **Example:** Reference an existing cluster
+ * ```typescript
+ * const cluster = GCP.Bigtable.Cluster.lookup({
+ *   clusterId: "my-cluster",
+ *   instance: "my-instance",
+ * });
+ * ```
+ *
  * @resource
  * @category Bigtable
  */
 export const Cluster = Resource<Cluster>("GCP.Bigtable.Cluster");
 
 export class ClusterNotResolved extends Data.TaggedError("GCP.Bigtable.ClusterNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ClusterNotReady extends Data.TaggedError("GCP.Bigtable.ClusterNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class ClusterStillExists extends Data.TaggedError("GCP.Bigtable.ClusterStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const instanceIdOf = (value: string) => lastSegment(value);
@@ -310,7 +350,7 @@ const toAttrs = (cluster: bigtable.Cluster, project: string) => {
 const getByName = (name: string) =>
   bigtable
     .getProjectsInstancesClusters({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const isBusy = (state: string | undefined) =>
   state === "CREATING" ||
@@ -321,7 +361,9 @@ const isBusy = (state: string | undefined) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((cluster) =>
-      cluster ? Effect.succeed(cluster) : Effect.fail(new ClusterNotResolved({ name })),
+      cluster
+        ? Effect.succeed(cluster)
+        : Effect.fail(new ClusterNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Bigtable.ClusterNotResolved",
@@ -334,13 +376,13 @@ const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (cluster): cluster is bigtable.Cluster => cluster !== undefined,
-      () => new ClusterNotResolved({ name }),
+      () => new ClusterNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (cluster) => !isBusy(cluster.state),
       (cluster) =>
         new ClusterNotReady({
-          name,
+          resourceName: name,
           state: cluster.state ?? "STATE_NOT_KNOWN",
         }),
     ),
@@ -356,7 +398,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((cluster) =>
-      cluster === undefined ? Effect.void : Effect.fail(new ClusterStillExists({ name })),
+      cluster === undefined
+        ? Effect.void
+        : Effect.fail(new ClusterStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Bigtable.ClusterStillExists",
@@ -426,6 +470,16 @@ export const ClusterProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({ clusterId, instance }) {
+      const env = yield* GcpEnvironment.current;
+      const instanceId = instanceIdOf(instance ?? "");
+      if (instanceId.length === 0) return undefined;
+      const name = clusterName(env.project, instanceId, clusterId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const instanceId = instanceIdOf(
@@ -489,7 +543,7 @@ export const ClusterProvider = () =>
             clusterId,
             body: toCreateBody(news, env.project, zone, storage),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }

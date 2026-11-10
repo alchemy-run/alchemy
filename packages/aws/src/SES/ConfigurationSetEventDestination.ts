@@ -6,6 +6,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
+import { plainJson } from "../internal/Observe.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -82,6 +83,17 @@ export interface ConfigurationSetEventDestination extends Resource<
   {
     configurationSetName: string;
     eventDestinationName: string;
+    /**
+     * Enabled state, matching event types and destination, as observed.
+     * Lets `alchemy drift` detect out-of-band changes.
+     */
+    configuration?: {
+      enabled: boolean;
+      matchingEventTypes: string[];
+      snsTopicArn?: string;
+      eventBusArn?: string;
+      cloudWatchDimensionConfigurations?: unknown;
+    };
   },
   never,
   Providers
@@ -168,6 +180,19 @@ const isInSync = (
   );
 };
 
+/**
+ * The destination settings `read` and `reconcile` both report, so a
+ * converged destination reads unchanged.
+ */
+const observeDestination = (destination: sesv2Types.EventDestination) =>
+  plainJson({
+    enabled: destination.Enabled ?? false,
+    matchingEventTypes: [...(destination.MatchingEventTypes ?? [])].sort(),
+    snsTopicArn: destination.SnsDestination?.TopicArn,
+    eventBusArn: destination.EventBridgeDestination?.EventBusArn,
+    cloudWatchDimensionConfigurations: destination.CloudWatchDestination?.DimensionConfigurations,
+  });
+
 export const ConfigurationSetEventDestinationProvider = () =>
   Provider.effect(
     ConfigurationSetEventDestination,
@@ -238,7 +263,11 @@ export const ConfigurationSetEventDestinationProvider = () =>
           const name = output?.eventDestinationName ?? (yield* createName(id, olds ?? {}));
           const found = yield* findDestination(configurationSetName, name);
           if (!found) return undefined;
-          return { configurationSetName, eventDestinationName: name };
+          return {
+            configurationSetName,
+            eventDestinationName: name,
+            configuration: observeDestination(found),
+          };
         }),
 
         diff: Effect.fn(function* ({ id, news, olds }) {
@@ -291,7 +320,12 @@ export const ConfigurationSetEventDestinationProvider = () =>
           }
 
           yield* session.note(`${configurationSetName}/${name}`);
-          return { configurationSetName, eventDestinationName: name };
+          const final = yield* findDestination(configurationSetName, name);
+          return {
+            configurationSetName,
+            eventDestinationName: name,
+            configuration: final && observeDestination(final),
+          };
         }),
 
         delete: Effect.fn(function* ({ output }) {

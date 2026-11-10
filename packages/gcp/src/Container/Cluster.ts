@@ -16,6 +16,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -316,8 +317,35 @@ export type Cluster = Resource<
     createTime: string | undefined;
   },
   KubernetesObjectBinding,
-  Providers
+  Providers,
+  ClusterLookup
 >;
+
+/**
+ * Props for {@link Cluster.lookup}: find a cluster this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface ClusterLookup {
+  /**
+   * Cluster id (the `{cluster}` segment of
+   * `projects/{project}/locations/{location}/clusters/{cluster}`). Must be
+   * 1-40 characters, start with a letter, and match
+   * `[a-z]([a-z0-9-]*[a-z0-9])?`.
+   */
+  clusterId: string;
+  /**
+   * Zone or region (`us-central1-a`, `us-central1`, …). Autopilot clusters
+   * must be regional. `US-CENTRAL1-A` is accepted and normalized to
+   * `us-central1-a`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Google Kubernetes Engine cluster.
@@ -429,17 +457,27 @@ export type Cluster = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing cluster
+ * `Cluster.lookup` references a cluster Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared cluster.
+ *
+ * **Example:** Reference an existing cluster
+ * ```typescript
+ * const cluster = GCP.Container.Cluster.lookup({ clusterId: "my-cluster" });
+ * ```
+ *
  * @resource
  * @category Container
  */
 export const Cluster = Resource<Cluster>("GCP.Container.Cluster");
 
 export class ClusterNotResolved extends Data.TaggedError("GCP.Container.ClusterNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ClusterNotReady extends Data.TaggedError("GCP.Container.ClusterNotReady")<{
-  name: string;
+  resourceName: string;
   status: string;
 }> {}
 
@@ -451,13 +489,13 @@ export class ClusterOperationFailed extends Data.TaggedError(
 }> {}
 
 export class ClusterStillExists extends Data.TaggedError("GCP.Container.ClusterStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ClusterDeletionProtected extends Data.TaggedError(
   "GCP.Container.ClusterDeletionProtected",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -626,7 +664,7 @@ const getKubernetesTransport = (
 const getByName = (name: string) =>
   container
     .getProjectsLocationsClusters({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const operationResourceName = (
   project: string,
@@ -684,7 +722,7 @@ const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (cluster): cluster is container.Cluster => cluster !== undefined,
-      () => new ClusterNotResolved({ name }),
+      () => new ClusterNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Container.ClusterNotResolved",
@@ -697,7 +735,7 @@ const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (cluster): cluster is container.Cluster => cluster !== undefined,
-      () => new ClusterNotResolved({ name }),
+      () => new ClusterNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (cluster) => (cluster.status ?? "STATUS_UNSPECIFIED") !== "ERROR",
@@ -714,7 +752,7 @@ const waitUntilReady = (name: string) =>
       },
       (cluster) =>
         new ClusterNotReady({
-          name,
+          resourceName: name,
           status: cluster.status ?? "STATUS_UNSPECIFIED",
         }),
     ),
@@ -729,7 +767,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((cluster) =>
-      cluster === undefined ? Effect.void : Effect.fail(new ClusterStillExists({ name })),
+      cluster === undefined
+        ? Effect.void
+        : Effect.fail(new ClusterStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Container.ClusterStillExists",
@@ -752,7 +792,7 @@ const waitUntilSettled = (name: string) =>
       },
       (cluster) =>
         new ClusterNotReady({
-          name,
+          resourceName: name,
           status: cluster?.status ?? "STATUS_UNSPECIFIED",
         }),
     ),
@@ -770,7 +810,7 @@ const ensureDefaultPoolRemoved = (project: string, location: string, clusterName
         name: `${clusterName}/nodePools/${DEFAULT_POOL_NAME}`,
       })
       .pipe(
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
         Effect.retry({
           while: (error) => error._tag === "Conflict",
           times: 8,
@@ -961,7 +1001,7 @@ export const ClusterProvider = () =>
       // delete-side guard is the backstop there.)
       if (olds?.deletionProtection === true) {
         return yield* new ClusterDeletionProtected({
-          name: output?.name ?? previousId ?? nextId ?? "",
+          resourceName: output?.name ?? previousId ?? nextId ?? "",
         });
       }
       return {
@@ -970,6 +1010,15 @@ export const ClusterProvider = () =>
           previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ clusterId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = resourceName(env.project, location, clusterId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, []);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -1029,7 +1078,7 @@ export const ClusterProvider = () =>
                 cluster: toCreateBody(news, clusterId, desiredLabels, autopilot, env.project),
               },
             })
-            .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
           if (created !== undefined) {
             yield* waitForOperation(env.project, location, created);
           }
@@ -1038,7 +1087,7 @@ export const ClusterProvider = () =>
         // cluster") and leaves the cluster in ERROR; delete it and try again.
         const removeFailed = Effect.gen(function* () {
           const operation = yield* container.deleteProjectsLocationsClusters({ name }).pipe(
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
             Effect.retry({
               while: (error) => error._tag === "Conflict",
               times: 8,
@@ -1066,7 +1115,7 @@ export const ClusterProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ClusterNotResolved({ name });
+        return yield* new ClusterNotResolved({ resourceName: name });
       }
 
       let live = current;
@@ -1256,7 +1305,7 @@ export const ClusterProvider = () =>
 
     delete: Effect.fn(function* ({ olds, output, force }) {
       if (olds.deletionProtection === true && force !== true) {
-        return yield* new ClusterDeletionProtected({ name: output.name });
+        return yield* new ClusterDeletionProtected({ resourceName: output.name });
       }
       if ((output.kubernetesObjects ?? []).length > 0) {
         yield* deleteObjects({
@@ -1270,7 +1319,7 @@ export const ClusterProvider = () =>
       const operation = yield* container
         .deleteProjectsLocationsClusters({ name: output.name })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) =>
               error._tag === "Conflict" ||

@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -88,8 +89,32 @@ export type KmsConfig = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  KmsConfigLookup
 >;
+
+/**
+ * Props for {@link KmsConfig.lookup}: find a kms config this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface KmsConfigLookup {
+  /**
+   * KMS config id (the `{kmsConfig}` segment of
+   * `projects/{project}/locations/{location}/kmsConfigs/{kmsConfig}`).
+   */
+  kmsConfigId: string;
+  /**
+   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud NetApp Volumes CMEK configuration that encrypts volumes with a
@@ -126,6 +151,19 @@ export type KmsConfig = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing kms config
+ * `KmsConfig.lookup` references a kms config Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * kms config.
+ *
+ * **Example:** Reference an existing kms config
+ * ```typescript
+ * const kmsConfig = GCP.NetApp.KmsConfig.lookup({
+ *   kmsConfigId: "my-kms-config",
+ * });
+ * ```
+ *
  * @resource
  * @category NetApp
  */
@@ -156,7 +194,7 @@ const toAttrs = (item: netapp.KmsConfig, project: string, region: string) => {
 const getByName = (name: string) =>
   netapp
     .getProjectsLocationsKmsConfigs({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string) =>
   listAtLocation(project, (parent) =>
@@ -189,6 +227,15 @@ export const KmsConfigProvider = () =>
         extra: previousKey !== undefined && news.cryptoKeyName !== previousKey,
       });
     }),
+
+    lookup: Effect.fn(function* ({ kmsConfigId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, kmsConfigId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -241,7 +288,7 @@ export const KmsConfigProvider = () =>
               labels: desiredLabels,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -249,7 +296,7 @@ export const KmsConfigProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       current = yield* waitUntilReady(
@@ -295,7 +342,7 @@ export const KmsConfigProvider = () =>
           times: 8,
           schedule: Schedule.spaced("2 seconds"),
         }),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       );
       if (operation !== undefined) {
         yield* waitForDeleteOperation(operation);

@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -98,8 +99,33 @@ export type InterceptDeployment = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  InterceptDeploymentLookup
 >;
+
+/**
+ * Props for {@link InterceptDeployment.lookup}: find an intercept
+ * deployment this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface InterceptDeploymentLookup {
+  /**
+   * Deployment id (the `{interceptDeployment}` segment of
+   * `projects/{project
+   * }/locations/{location}/interceptDeployments/{interceptDeployment}`).
+   */
+  interceptDeploymentId: string;
+  /**
+   * Zone of the deployment (`us-central1-a`, …). `US-CENTRAL1-A` is
+   * accepted and normalized to `us-central1-a`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A zonal intercept deployment — a GENEVE backend (typically an
@@ -122,6 +148,19 @@ export type InterceptDeployment = Resource<
  *     description: "us-central1-a interceptors",
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing intercept deployment
+ * `InterceptDeployment.lookup` references an intercept deployment Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared intercept deployment.
+ *
+ * **Example:** Reference an existing intercept deployment
+ * ```typescript
+ * const interceptDeployment = GCP.NetworkSecurity.InterceptDeployment.lookup({
+ *   interceptDeploymentId: "my-intercept-deployment",
+ * });
  * ```
  *
  * @resource
@@ -160,7 +199,7 @@ const toAttrs = (deployment: networksecurity.InterceptDeployment, project: strin
 const getByName = (name: string) =>
   networksecurity
     .getProjectsLocationsInterceptDeployments({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const InterceptDeploymentProvider = () =>
   Provider.succeed(InterceptDeployment, {
@@ -201,6 +240,15 @@ export const InterceptDeploymentProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ interceptDeploymentId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, DEFAULT_ZONE);
+      const name = resourceName(env.project, location, interceptDeploymentId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -270,7 +318,7 @@ export const InterceptDeploymentProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -313,7 +361,7 @@ export const InterceptDeploymentProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

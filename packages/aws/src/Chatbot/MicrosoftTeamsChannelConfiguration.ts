@@ -181,7 +181,7 @@ export const MicrosoftTeamsChannelConfigurationProvider = () =>
           Effect.map((r) => r.ChannelConfiguration),
           // Typed via the distilled chatbot patch — the wire error is a
           // ResourceNotFoundException outside the Smithy model's union.
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
 
       const observedTags = (arn: string) =>

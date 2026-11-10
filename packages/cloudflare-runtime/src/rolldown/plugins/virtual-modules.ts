@@ -11,7 +11,6 @@ import type { UnenvApi } from "./nodejs-compat.ts";
 // The export-types module is the one virtual module that is imported by
 // specifier (both from the Worker entry and, in dev, by the module runner), so
 // the filter has to match it before it has been resolved to its `\0` id.
-// oxlint-disable-next-line no-control-regex
 const VIRTUAL_MODULE_REGEXP = /^\0?distilled:.*$/;
 
 export const WORKER_ENTRY_PREFIX = "\0distilled:worker-entry:" as const;

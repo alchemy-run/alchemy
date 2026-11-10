@@ -1,3 +1,5 @@
+import type { BuildCacheOptions } from "@alchemy.run/docker/BuildCache";
+import type { InlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";
 import { Unowned } from "alchemy/AdoptPolicy";
@@ -6,7 +8,7 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import { Platform, type Main, type PlatformProps, type PlatformServices } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
-import { Resource, type ResourceBinding } from "alchemy/Resource";
+import { type LookupMethod, Resource, type ResourceBinding } from "alchemy/Resource";
 import {
   createContainerRuntimeContext,
   type HostRuntimeContext,
@@ -21,7 +23,12 @@ import type { Scope } from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { destroyHostImageRepository, makeImageSource } from "../ArtifactRegistry/ImageSource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import { retryActAs, type AppliedIamGrant, type GcpHostBinding } from "../Host.ts";
+import {
+  retryActAs,
+  serviceAccountUniqueId,
+  type AppliedIamGrant,
+  type GcpHostBinding,
+} from "../Host.ts";
 import {
   alchemyRuntimeEnv,
   isManagedServiceAccount,
@@ -30,6 +37,7 @@ import {
   releaseHostIdentity,
   resolveHostIdentity,
 } from "../HostRuntime.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -215,10 +223,35 @@ export type WorkerPoolProps = PlatformProps & {
    */
   env?: Record<string, any>;
   /**
-   * Bundler configuration for `main`.
+   * Bundler configuration for `main`, and the image build's layer `cache`.
    */
-  build?: Bundle.BundleConfig;
+  build?: Bundle.BundleConfig & BuildCacheOptions;
+  /**
+   * Environment image for `main`: a Dockerfile path, or inline content
+   * (`{ content }`), the bundled program is layered on top of. Use it to
+   * install packages the bundle keeps external. Without `main`, with
+   * {@link context}, the Dockerfile that builds the whole image.
+   * @default a bun base image
+   */
+  dockerfile?: string | InlineDockerfile;
+  /**
+   * A Docker build context the pool's image is built from as it is, with
+   * its `Dockerfile` (or {@link dockerfile}), and pushed to Artifact
+   * Registry. The image's own `CMD` runs. Set this or {@link main}.
+   */
+  context?: string;
 };
+
+/** The image a pool's `main` program or `context` build makes. */
+const imageSourceOf = (props: WorkerPoolProps, handler = props.handler) =>
+  props.main !== undefined
+    ? {
+        main: props.main,
+        handler,
+        build: props.build,
+        dockerfile: props.dockerfile,
+      }
+    : { context: props.context, dockerfile: props.dockerfile };
 
 export type WorkerPool = Resource<
   "GCP.Run.WorkerPool",
@@ -276,8 +309,34 @@ export type WorkerPool = Resource<
     codeHash: string | undefined;
   },
   GcpHostBinding,
-  Providers
+  Providers,
+  WorkerPoolLookup
 >;
+
+/**
+ * Props for {@link WorkerPool.lookup}: find a worker pool this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface WorkerPoolLookup {
+  /**
+   * Worker pool id (the `{workerPool}` segment of
+   * `projects/{project}/locations/{location}/workerPools/{workerPool}`).
+   * Must begin with a letter, not end with a hyphen, and be fewer than 50
+   * characters.
+   */
+  workerPoolId: string;
+  /**
+   * Region (`us-central1`, `europe-west1`, …). `US-CENTRAL1` is accepted
+   * and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 export type WorkerPoolRuntimeContext = HostRuntimeContext;
 export type WorkerPoolServices = Credentials | GcpEnvironment | ServerHost;
@@ -333,6 +392,15 @@ export type WorkerPoolShape =
  * const live = yield* getWorkerPool();
  * ```
  *
+ * ### Worker Pool from a Dockerfile
+ * **Example:** Build a directory's Dockerfile and run its image
+ * ```typescript
+ * const workers = yield* GCP.Run.WorkerPool("Workers", {
+ *   context: "./worker",
+ *   scaling: { manualInstanceCount: 1 },
+ * });
+ * ```
+ *
  * ### Effect-native Worker Pool with bindings
  * **Example:** Pull workers with Memorystore
  * ```typescript
@@ -348,6 +416,19 @@ export type WorkerPoolShape =
  * ) {}
  * ```
  *
+ * ### Looking up an existing worker pool
+ * `WorkerPool.lookup` references a worker pool Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * worker pool.
+ *
+ * **Example:** Reference an existing worker pool
+ * ```typescript
+ * const workerPool = GCP.Run.WorkerPool.lookup({
+ *   workerPoolId: "my-worker-pool",
+ * });
+ * ```
+ *
  * @resource
  * @category Run
  */
@@ -356,29 +437,30 @@ export const WorkerPool: Platform<
   WorkerPoolServices,
   WorkerPoolShape,
   WorkerPoolRuntimeContext
-> = Platform("GCP.Run.WorkerPool", {
+> &
+  LookupMethod<WorkerPool> = Platform("GCP.Run.WorkerPool", {
   createRuntimeContext: createContainerRuntimeContext("GCP.Run.WorkerPool") as (
     id: string,
   ) => WorkerPoolRuntimeContext,
 });
 
 export class WorkerPoolNotResolved extends Data.TaggedError("GCP.Run.WorkerPoolNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class WorkerPoolNotReady extends Data.TaggedError("GCP.Run.WorkerPoolNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
   message: string;
 }> {}
 
 export class WorkerPoolReconciling extends Data.TaggedError("GCP.Run.WorkerPoolReconciling")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class WorkerPoolStillExists extends Data.TaggedError("GCP.Run.WorkerPoolStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -684,7 +766,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   cloudrun
     .getProjectsLocationsWorkerPools({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /** Waits on a Cloud Run long-running operation (revisions roll out in minutes). */
 const waitForOperation = (
@@ -736,13 +818,13 @@ const waitUntilReady = (name: string) =>
     Effect.filterOrFail(
       (pool): pool is cloudrun.GoogleCloudRunV2WorkerPool =>
         pool !== undefined && pool.deleteTime === undefined,
-      () => new WorkerPoolNotResolved({ name }),
+      () => new WorkerPoolNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (pool) => (pool.terminalCondition?.state ?? "") !== "CONDITION_FAILED",
       (pool) =>
         new WorkerPoolNotReady({
-          name,
+          resourceName: name,
           state: pool.terminalCondition?.state ?? "",
           message: pool.terminalCondition?.message ?? "revision failed",
         }),
@@ -751,7 +833,7 @@ const waitUntilReady = (name: string) =>
       (pool) => !isPendingPool(pool),
       (pool) =>
         new WorkerPoolReconciling({
-          name,
+          resourceName: name,
           state: pool.terminalCondition?.state || "reconciling",
         }),
     ),
@@ -767,7 +849,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((pool) =>
-      pool === undefined ? Effect.void : Effect.fail(new WorkerPoolStillExists({ name })),
+      pool === undefined
+        ? Effect.void
+        : Effect.fail(new WorkerPoolStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Run.WorkerPoolStillExists",
@@ -827,10 +911,10 @@ export const WorkerPoolProvider = () =>
       }
       // A code-only change leaves the props untouched; hash the bundled
       // program (and bootstrap) so it still surfaces as an update.
-      if (output !== undefined && news.main !== undefined) {
+      if (output !== undefined && (news.main !== undefined || news.context !== undefined)) {
         const images = yield* makeImageSource;
         const hash = yield* images.hash({
-          source: { main: news.main, handler: news.handler, build: news.build },
+          source: imageSourceOf(news),
           isExternal: news.isExternal,
           bootstrap: bootstrapFor(news),
         });
@@ -840,6 +924,23 @@ export const WorkerPoolProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ workerPoolId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, workerPoolId);
+      const existing = yield* getByName(name);
+      if (existing === undefined || existing.deleteTime !== undefined) {
+        return undefined;
+      }
+      const attrs = toAttrs(existing, env.project, env.region);
+      // The id AWS roles trust the runtime's Google ID tokens by.
+      const uniqueId =
+        attrs.serviceAccount === undefined
+          ? undefined
+          : yield* serviceAccountUniqueId(attrs.serviceAccount);
+      return { ...attrs, serviceAccountUniqueId: uniqueId };
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -896,16 +997,12 @@ export const WorkerPoolProvider = () =>
       });
       template.serviceAccount = identity.serviceAccount;
       let codeHash: string | undefined;
-      if (news.main !== undefined) {
+      if (news.main !== undefined || news.context !== undefined) {
         const images = yield* makeImageSource;
         const image = yield* images
           .resolve({
             id,
-            source: {
-              main: news.main,
-              handler: news.handler ?? "default",
-              build: news.build,
-            },
+            source: imageSourceOf(news, news.handler ?? "default"),
             repositoryName: rfc1035(`${workerPoolId}-src`),
             location,
             isExternal: news.isExternal,
@@ -951,7 +1048,7 @@ export const WorkerPoolProvider = () =>
           })
           .pipe(
             retryActAs,
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
             Effect.onError(() => identity.cleanup),
           );
         if (created !== undefined) {
@@ -961,7 +1058,7 @@ export const WorkerPoolProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new WorkerPoolNotResolved({ name });
+        return yield* new WorkerPoolNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -1027,7 +1124,7 @@ export const WorkerPoolProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new WorkerPoolNotResolved({ name });
+        return yield* new WorkerPoolNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region, {
@@ -1046,7 +1143,7 @@ export const WorkerPoolProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

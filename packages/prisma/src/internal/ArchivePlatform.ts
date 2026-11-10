@@ -4,6 +4,7 @@ import { posix } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { createGzip } from "node:zlib";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { verifiedFileChunks, type VerifiedFile } from "./ArtifactFile.ts";
 
@@ -46,6 +47,17 @@ export const closeDirectoryHandle = async (handle: CloseableDirectoryHandle) => 
     // Node's already-closed rejection and Bun's equivalent synchronous error.
   }
 };
+
+export class ArchivePlatformError extends Data.TaggedError("ArchivePlatformError")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+const toArchivePlatformError = (error: unknown) =>
+  new ArchivePlatformError({
+    message: error instanceof Error ? error.message : String(error),
+    cause: error,
+  });
 
 const entryLimitError = (maxEntries: number) =>
   new Error(
@@ -119,7 +131,7 @@ export const readDirectoryEntriesSecure = (options: {
         observedEntries,
       };
     },
-    catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+    catch: toArchivePlatformError,
   });
 
 export const writeCompressedArchiveSecure = (
@@ -153,7 +165,7 @@ export const writeCompressedArchiveSecure = (
         { signal },
       );
     },
-    catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+    catch: toArchivePlatformError,
   });
 
 export const isArchivedRegularFile = (

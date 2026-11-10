@@ -115,6 +115,13 @@ export type BranchProps = {
    * one-way conversion on first deploy: the old tool's applied history is
    * copied into Alchemy's table and the old table is left frozen. No
    * baselining required.
+   *
+   * History is forward-only and linear. A new file must sort after every
+   * applied one, or the deploy fails with `NonLinearMigrationHistoryError`;
+   * an edited or deleted applied file fails with
+   * `RewrittenMigrationHistoryError`. Renaming an applied file without
+   * changing its contents keeps it applied. See
+   * [Migrations](https://alchemy.run/sql/effect-sql/migrations#change-migration-history-safely).
    */
   migrations?: MigrationsInput;
   /**
@@ -177,8 +184,20 @@ export type Branch = Resource<
     importHashes: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  BranchLookup
 >;
+
+/**
+ * Props for {@link Branch.lookup}: find a branch this stack
+ * doesn't manage by its project and id.
+ */
+export interface BranchLookup {
+  /** Neon project id. */
+  projectId: string;
+  /** Branch id, e.g. `"br-quiet-dawn-12345678"`. */
+  branchId: string;
+}
 
 /**
  * A branch of a Neon project.
@@ -236,6 +255,20 @@ export type Branch = Resource<
  * ```
  *
  * @see https://neon.tech/docs/manage/branches/
+ *
+ * ### Looking up an existing branch
+ * `Branch.lookup` references a branch Alchemy doesn't manage (created in
+ * the Neon Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Connect to an existing branch
+ * ```typescript
+ * const preview = Neon.Branch.lookup({
+ *   projectId: "plain-wave-12345678",
+ *   branchId: "br-quiet-dawn-12345678",
+ * });
+ * const url = preview.connectionUri;
+ * ```
  *
  * @resource
  * @product Branch
@@ -337,14 +370,22 @@ export const BranchProvider = () =>
       }
       return undefined;
     }),
-    read: Effect.fn(function* ({ id, output, olds }) {
+    lookup: Effect.fn(function* ({ projectId, branchId }) {
+      const found = yield* getProjectBranch({ project_id: projectId, branch_id: branchId }).pipe(
+        Effect.map(({ branch }) => branch),
+        Effect.catchTag("NotFound", () => Effect.undefined),
+      );
+      return found === undefined ? undefined : yield* hydrateBranch(projectId, found);
+    }),
+
+    read: Effect.fn(function* ({ id, output, olds, previous }) {
       if (output?.branchId) {
         return yield* getProjectBranch({
           project_id: output.projectId,
           branch_id: output.branchId,
         }).pipe(
           Effect.flatMap(({ branch }) => hydrateBranch(output.projectId, branch, output)),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       }
       if (!olds?.project) return undefined;
@@ -365,6 +406,8 @@ export const BranchProvider = () =>
       const match = matches[0];
       if (!match) return undefined;
       const attrs = yield* hydrateBranch(projectId, match);
+      // The generation a replacement is replacing is ours.
+      if (attrs && attrs.branchId === previous?.branchId) return attrs;
       return attrs && Unowned(attrs);
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -397,7 +440,7 @@ export const BranchProvider = () =>
               branch_id: output.branchId,
             }).pipe(
               Effect.map(({ branch }) => branch),
-              Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+              Effect.catchTag("NotFound", () => Effect.undefined),
             )
           : undefined;
       if (!observed) {
@@ -652,7 +695,7 @@ const hydrateBranch = (
     return attributes;
   }).pipe(
     // A branch/database/endpoint can disappear mid-enumeration — skip it.
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const rootDir = Effect.sync(() => process.cwd());

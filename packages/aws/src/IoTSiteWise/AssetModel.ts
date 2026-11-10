@@ -12,6 +12,16 @@ import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { fetchSiteWiseTags, matchesDesired, syncSiteWiseTags } from "./internal.ts";
 
+export class AssetModelInvalidProps extends Data.TaggedError("AssetModelInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class AssetModelUnexpectedResponse extends Data.TaggedError("AssetModelUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type AssetModelType = sitewise.AssetModelType;
 export type AssetModelState = sitewise.AssetModelState;
 export type AssetModelPropertyDefinition = sitewise.AssetModelPropertyDefinition;
@@ -87,8 +97,23 @@ export interface AssetModel extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  AssetModelLookup
 > {}
+
+/**
+ * Props for {@link AssetModel.lookup}: find an asset model this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type AssetModelLookup =
+  | {
+      /** The id of the existing asset model. */
+      assetModelId: string;
+    }
+  | {
+      /** The name of the existing asset model. */
+      assetModelName: string;
+    };
 
 /**
  * An AWS IoT SiteWise asset model — a standardized definition of
@@ -138,6 +163,16 @@ export interface AssetModel extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing asset model
+ * `AssetModel.lookup` references an asset model Alchemy doesn't manage (created in the
+ * console or by another stack), found by `assetModelId` or `assetModelName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing asset model
+ * ```typescript
+ * const turbines = AWS.IoTSiteWise.AssetModel.lookup({ assetModelName: "turbine" });
+ * ```
+ *
  * @resource
  */
 export const AssetModel = Resource<AssetModel>("AWS.IoTSiteWise.AssetModel");
@@ -155,7 +190,7 @@ interface AssetModelState_ {
 const readAssetModelById = Effect.fn(function* (assetModelId: string) {
   const described = yield* sitewise
     .describeAssetModel({ assetModelId, excludeProperties: false })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!described || described.assetModelStatus.state === "DELETING") {
     return undefined;
   }
@@ -232,7 +267,7 @@ const waitForAssetModelState = (assetModelId: string, target: "ACTIVE" | "DELETE
     Effect.gen(function* () {
       const described = yield* sitewise
         .describeAssetModel({ assetModelId, excludeProperties: true })
-        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       if (target === "DELETED") {
         if (described === undefined) return;
         return yield* new AssetModelNotReady({
@@ -289,6 +324,13 @@ export const AssetModelProvider = () =>
             );
             return hydrated.flatMap((state) => (state === undefined ? [] : [state.attrs]));
           }),
+        lookup: Effect.fn(function* (props) {
+          const state =
+            "assetModelId" in props
+              ? yield* readAssetModelById(props.assetModelId)
+              : yield* findAssetModelByName(props.assetModelName);
+          return state?.attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const state = output?.assetModelId
             ? yield* readAssetModelById(output.assetModelId)
@@ -308,7 +350,9 @@ export const AssetModelProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(new Error("IoT SiteWise AssetModel requires props"));
+            return yield* new AssetModelInvalidProps({
+              message: "IoT SiteWise AssetModel requires props",
+            });
           }
           const name = yield* createAssetModelName(id, news);
           const internalTags = yield* createInternalTags(id);
@@ -336,7 +380,9 @@ export const AssetModelProvider = () =>
             yield* waitForAssetModelState(created.assetModelId, "ACTIVE");
             state = yield* readAssetModelById(created.assetModelId);
             if (state === undefined) {
-              return yield* Effect.fail(new Error(`failed to read created asset model ${name}`));
+              return yield* new AssetModelUnexpectedResponse({
+                message: `failed to read created asset model ${name}`,
+              });
             }
           }
 
@@ -391,7 +437,9 @@ export const AssetModelProvider = () =>
 
           const final = yield* readAssetModelById(state.attrs.assetModelId);
           if (!final) {
-            return yield* Effect.fail(new Error(`failed to read reconciled asset model ${name}`));
+            return yield* new AssetModelUnexpectedResponse({
+              message: `failed to read reconciled asset model ${name}`,
+            });
           }
           return final.attrs;
         }),

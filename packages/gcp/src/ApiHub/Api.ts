@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   ApihubNotResolved,
@@ -130,8 +131,30 @@ export type Api = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ApiLookup
 >;
+
+/**
+ * Props for {@link Api.lookup}: find an api this stack doesn't manage by
+ * its identifiers, in the ambient project unless `project` names another.
+ */
+export interface ApiLookup {
+  /**
+   * API id (the `{api}` segment of
+   * `projects/{project}/locations/{location}/apis/{api}`).
+   */
+  apiId: string;
+  /**
+   * Location (`us-central1`, …). Must match the ApiHub instance location.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An API resource in API Hub. Versions, specs, and operations hang off it.
@@ -157,6 +180,16 @@ export type Api = Resource<
  *   displayName: "pets",
  *   owner: { email: "apihub@example.com", displayName: "platform" },
  * });
+ * ```
+ *
+ * ### Looking up an existing api
+ * `Api.lookup` references an api Alchemy doesn't manage (created in the
+ * console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared api.
+ *
+ * **Example:** Reference an existing api
+ * ```typescript
+ * const api = GCP.ApiHub.Api.lookup({ apiId: "my-api" });
  * ```
  *
  * @resource
@@ -201,10 +234,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : apihub
         .getProjectsLocationsApis({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const bodyOf = (
   news: ApiProps,
@@ -245,6 +278,15 @@ export const ApiProvider = () =>
         ),
       });
     }),
+
+    lookup: Effect.fn(function* ({ apiId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, apiId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -291,7 +333,7 @@ export const ApiProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ApihubNotResolved({ name });
+        return yield* new ApihubNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

@@ -111,12 +111,12 @@ export interface DevContext extends SourceContext {
     readonly assets: PluginWorker["assets"] | undefined;
     /**
      * The Worker's other runtime settings (crons, Workflows, tail consumers,
-     * Cache API, `request.cf`, zone, Access), spread whole into the runtime
+     * Cache API, `request.cf`, Access), spread whole into the runtime
      * Worker.
      */
     readonly options: Pick<
       PluginWorker,
-      "workflows" | "crons" | "tails" | "streamingTails" | "cache" | "cf" | "zone" | "access"
+      "workflows" | "crons" | "tails" | "streamingTails" | "cache" | "cf" | "access"
     >;
   };
   readonly runtimeContext: CloudflareVitePluginOptions["context"];
@@ -191,6 +191,15 @@ export interface MemoOptions {
 export interface AstroSourceOptions {
   /** Astro project root. Defaults to the process working directory. */
   readonly rootDir?: string;
+  /**
+   * The user's own Worker entry (the user-entry seam): a module that wraps
+   * the Astro handler — imported from
+   * `@alchemy.run/frontend-frameworks/astro/entrypoints/server` — and adds
+   * exports of its own (Durable Object classes, a `scheduled` handler). A
+   * path resolves against the root; a bare specifier resolves as a package
+   * import. When unset, the vendored Astro server entrypoint is deployed.
+   */
+  readonly main?: string;
   /** Rebuild-scope configuration (see {@link MemoOptions}). */
   readonly memo?: MemoOptions & {
     /**
@@ -489,7 +498,7 @@ const listFiles = (
           const rel = relative === "" ? entry : `${relative}/${entry}`;
           const stat = yield* fs
             .stat(path.join(cwd, rel))
-            .pipe(Effect.catchTag("PlatformError", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("PlatformError", () => Effect.undefined));
           if (stat === undefined) continue;
           if (stat.type === "Directory") {
             if (
@@ -560,11 +569,14 @@ const hashDirectory = (
  * The `input` hash: root tree + workspace trees + this package's
  * version. Mirrors alchemy's `hashViteInput` recipe (workspace hashes
  * are `${relativePath}:${hash}`, sorted) with the provider version as
- * extra material so integration upgrades bust the memo.
+ * extra material so integration upgrades bust the memo. A custom Worker
+ * entry (`main`) is build-affecting material too; it is only mixed in when
+ * set, so the default hash is unchanged.
  */
 const hashAstroInput = (
   rootDir: string,
   memo: AstroSourceOptions["memo"],
+  main: string | undefined,
   additionalWorkspaces: Effect.Effect<Iterable<string>, PlatformError, SourceServices>,
 ): Effect.Effect<
   { hash: string; workspaces: Array<string> | undefined },
@@ -573,7 +585,7 @@ const hashAstroInput = (
 > =>
   Effect.gen(function* () {
     const path = yield* Path.Path;
-    const salt = `${PROVIDER}@${packageVersion}`;
+    const salt = [`${PROVIDER}@${packageVersion}`, ...(main === undefined ? [] : [`main:${main}`])];
     // Normalize workspace directories to a root-relative, `/`-separated
     // form so the hash label is identical whether the workspace came
     // from the build (absolute) or from persisted state (relative) —
@@ -598,7 +610,7 @@ const hashAstroInput = (
         ],
         { concurrency: "unbounded" },
       );
-      const hash = yield* sha256Object([salt, root, ...workspaces.sort()]);
+      const hash = yield* sha256Object([...salt, root, ...workspaces.sort()]);
       return { hash, workspaces: undefined };
     }
     const [root, workspaces] = yield* Effect.all([hashRoot, additionalWorkspaces], {
@@ -625,7 +637,7 @@ const hashAstroInput = (
       (cwd) => hashWorkspaceDirectory(cwd),
       { concurrency: "unbounded" },
     );
-    const hash = yield* sha256Object([salt, root, ...workspaceHashes.sort()]);
+    const hash = yield* sha256Object([...salt, root, ...workspaceHashes.sort()]);
     return { hash, workspaces: relativeWorkspaces };
   });
 
@@ -641,7 +653,7 @@ const MAX_ASSET_COUNT = 20_000;
 
 const maybeReadString = (file: string): Effect.Effect<string | undefined, never, SourceServices> =>
   Effect.flatMap(FileSystem.FileSystem, (fs) =>
-    fs.readFileString(file).pipe(Effect.catchTag("PlatformError", () => Effect.succeed(undefined))),
+    fs.readFileString(file).pipe(Effect.catchTag("PlatformError", () => Effect.undefined)),
   );
 
 const readClientAssets = (
@@ -731,10 +743,13 @@ export const applyWorkerEnvToProcess = (
   Effect.sync(() => {
     for (const [key, value] of Object.entries(env ?? {})) {
       if (typeof value === "string") {
+        // oxlint-disable-next-line effecttsgo/process-env-in-effect -- exports Worker env into process.env for the build, not config reading
         process.env[key] = value;
       } else if (Redacted.isRedacted(value) && typeof Redacted.value(value) === "string") {
+        // oxlint-disable-next-line effecttsgo/process-env-in-effect -- exports Worker env into process.env for the build, not config reading
         process.env[key] = Redacted.value(value) as string;
       } else if (typeof value === "number" || typeof value === "boolean") {
+        // oxlint-disable-next-line effecttsgo/process-env-in-effect -- exports Worker env into process.env for the build, not config reading
         process.env[key] = String(value);
       }
     }
@@ -771,6 +786,7 @@ const assetConfigFromProps = (
  */
 export interface AstroBuildChildConfig {
   readonly rootDir: string;
+  readonly main: string | undefined;
   readonly compatibilityDate: string;
   readonly compatibilityFlags: Array<string>;
   readonly env: Record<string, string>;
@@ -788,6 +804,7 @@ export const buildInChild = (config: AstroBuildChildConfig) =>
     // config loading and integrations read env at build time).
     yield* Effect.sync(() => {
       for (const [key, value] of Object.entries(config.env)) {
+        // oxlint-disable-next-line effecttsgo/process-env-in-effect -- exports Worker env into the child's process.env, not config reading
         process.env[key] = value;
       }
     });
@@ -797,6 +814,7 @@ export const buildInChild = (config: AstroBuildChildConfig) =>
           root: config.rootDir,
           target: cloudflareTarget({
             worker: {
+              ...(config.main === undefined ? {} : { main: config.main }),
               compatibilityDate: config.compatibilityDate,
               compatibilityFlags: config.compatibilityFlags,
             },
@@ -828,7 +846,7 @@ const makeAstroSourceProvider = (options: AstroSourceOptions): SourceProvider =>
           // it constructs the Cloudflare deploy target directly (as a value)
           // rather than resolving the default specifier.
           target: cloudflareTarget({
-            worker: vite,
+            worker: options.main === undefined ? vite : { ...vite, main: options.main },
             sessionKVBindingName: options.sessionKVBindingName,
             sessions: options.sessions,
             sessionDevKV: options.sessionDevKV,
@@ -855,6 +873,7 @@ const makeAstroSourceProvider = (options: AstroSourceOptions): SourceProvider =>
           framework: "astro",
           config: {
             rootDir,
+            main: options.main,
             compatibilityDate: ctx.compatibility.date,
             compatibilityFlags: ctx.compatibility.flags,
             env: resolveBuildEnv(ctx.env),
@@ -879,8 +898,13 @@ const makeAstroSourceProvider = (options: AstroSourceOptions): SourceProvider =>
                   path.resolve(rootDir, output.clientDirectory),
                   assetConfigFromProps(ctx.assets),
                 )
-              : Effect.succeed(undefined),
-            hashAstroInput(rootDir, options.memo, Effect.succeed(output.externalWorkspaces ?? [])),
+              : Effect.undefined,
+            hashAstroInput(
+              rootDir,
+              options.memo,
+              options.main,
+              Effect.succeed(output.externalWorkspaces ?? []),
+            ),
           ],
           { concurrency: "unbounded" },
         );
@@ -915,6 +939,7 @@ const makeAstroSourceProvider = (options: AstroSourceOptions): SourceProvider =>
         const { hash, workspaces } = yield* hashAstroInput(
           rootDir,
           options.memo,
+          options.main,
           Effect.succeed(previous?.additionalWorkspaces ?? []),
         );
         return { input: hash, additionalWorkspaces: workspaces };

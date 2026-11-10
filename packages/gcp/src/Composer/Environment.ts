@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -166,8 +167,34 @@ export type Environment = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  EnvironmentLookup
 >;
+
+/**
+ * Props for {@link Environment.lookup}: find an environment this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface EnvironmentLookup {
+  /**
+   * Environment id (the `{environment}` segment of
+   * `projects/{project}/locations/{location}/environments/{environment}`).
+   * Must start with a lowercase letter, be 1-63 characters, and match
+   * `[a-z]([-a-z0-9]*[a-z0-9])?`.
+   */
+  environmentId: string;
+  /**
+   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Composer environment (Managed Apache Airflow).
@@ -233,6 +260,19 @@ export type Environment = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing environment
+ * `Environment.lookup` references an environment Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * environment.
+ *
+ * **Example:** Reference an existing environment
+ * ```typescript
+ * const environment = GCP.Composer.Environment.lookup({
+ *   environmentId: "my-environment",
+ * });
+ * ```
+ *
  * @resource
  * @category Composer
  */
@@ -241,23 +281,23 @@ export const Environment = Resource<Environment>("GCP.Composer.Environment");
 export class EnvironmentNotResolved extends Data.TaggedError(
   "GCP.Composer.EnvironmentNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class EnvironmentNotReady extends Data.TaggedError("GCP.Composer.EnvironmentNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class EnvironmentFailed extends Data.TaggedError("GCP.Composer.EnvironmentFailed")<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
 export class EnvironmentStillExists extends Data.TaggedError(
   "GCP.Composer.EnvironmentStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -490,7 +530,7 @@ const isPlaceholder = (environment: composer.Environment) => {
 const getByName = (name: string) =>
   composer
     .getProjectsLocationsEnvironments({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 // Environment creates run 20-30 minutes, deletes 10-20.
 const waitForOperation = (operation: composer.Operation) =>
@@ -503,13 +543,13 @@ const waitUntilRunning = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (environment): environment is composer.Environment => environment !== undefined,
-      () => new EnvironmentNotResolved({ name }),
+      () => new EnvironmentNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (environment) => environment.state !== "ERROR",
       (environment) =>
         new EnvironmentFailed({
-          name,
+          resourceName: name,
           state: environment.state,
         }),
     ),
@@ -517,7 +557,7 @@ const waitUntilRunning = (name: string) =>
       (environment) => environment.state === "RUNNING",
       (environment) =>
         new EnvironmentNotReady({
-          name,
+          resourceName: name,
           state: environment.state ?? "STATE_UNSPECIFIED",
         }),
     ),
@@ -533,7 +573,9 @@ const waitUntilRunning = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((environment) =>
-      environment === undefined ? Effect.void : Effect.fail(new EnvironmentStillExists({ name })),
+      environment === undefined
+        ? Effect.void
+        : Effect.fail(new EnvironmentStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Composer.EnvironmentStillExists",
@@ -842,6 +884,15 @@ export const EnvironmentProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({ environmentId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, environmentId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const environmentId = yield* toId(id, olds?.environmentId, output?.environmentId);
@@ -887,7 +938,7 @@ export const EnvironmentProvider = () =>
               storageConfig: news.storageConfig,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           // ALREADY_EXISTS (6): a concurrent create won the race.
           yield* waitForOperation(created).pipe(
@@ -900,12 +951,12 @@ export const EnvironmentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new EnvironmentNotResolved({ name });
+        return yield* new EnvironmentNotResolved({ resourceName: name });
       }
 
       if (current.state === "ERROR") {
         return yield* new EnvironmentFailed({
-          name,
+          resourceName: name,
           state: current.state,
         });
       }
@@ -944,7 +995,7 @@ export const EnvironmentProvider = () =>
       const operation = yield* composer
         .deleteProjectsLocationsEnvironments({ name: output.name })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

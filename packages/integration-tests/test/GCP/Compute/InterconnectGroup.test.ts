@@ -6,6 +6,7 @@ import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -61,6 +62,12 @@ test.provider.skipIf(!runLifecycle)(
             intent: { topologyCapability: "NO_SLA" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.InterconnectGroup.lookup({
+          interconnectGroupName: created.interconnectGroupName,
+        }),
+        created,
       );
 
       expect(created.interconnectGroupName).toEqual(expect.any(String));

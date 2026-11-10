@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -188,8 +189,33 @@ export type ConnectivityTest = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ConnectivityTestLookup
 >;
+
+/**
+ * Props for {@link ConnectivityTest.lookup}: find a connectivity test this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface ConnectivityTestLookup {
+  /**
+   * Test id (the `{test}` segment of
+   * `projects/{project}/locations/global/connectivityTests/{test}`). Must
+   * be 1-40 characters, start with a letter, and end with a letter or
+   * number.
+   */
+  testId: string;
+  /**
+   * Location. Must be `global`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Network Management Connectivity Test (reachability analysis).
@@ -223,6 +249,19 @@ export type ConnectivityTest = Resource<
  *   protocol: "TCP",
  *   roundTrip: true,
  *   description: "public dns path",
+ * });
+ * ```
+ *
+ * ### Looking up an existing connectivity test
+ * `ConnectivityTest.lookup` references a connectivity test Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * connectivity test.
+ *
+ * **Example:** Reference an existing connectivity test
+ * ```typescript
+ * const connectivityTest = GCP.NetworkManagement.ConnectivityTest.lookup({
+ *   testId: "my-test",
  * });
  * ```
  *
@@ -323,7 +362,7 @@ const toAttrs = (test: networkmanagement.ConnectivityTest, project: string) => {
 const getByName = (name: string) =>
   networkmanagement
     .getProjectsLocationsGlobalConnectivityTests({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const ConnectivityTestProvider = () =>
   Provider.succeed(ConnectivityTest, {
@@ -351,6 +390,15 @@ export const ConnectivityTestProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ testId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, DEFAULT_GLOBAL);
+      const name = resourceName(env.project, location, testId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -430,7 +478,7 @@ export const ConnectivityTestProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -499,7 +547,7 @@ export const ConnectivityTestProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

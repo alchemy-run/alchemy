@@ -95,13 +95,13 @@ export const CollectionsEnginesConversation = Resource<CollectionsEnginesConvers
 export class CollectionsEnginesConversationNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsEnginesConversationNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const getByName = (name: string) =>
   discoveryengine
     .getProjectsLocationsCollectionsEnginesConversations({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toAttrs = (
   conversation: discoveryengine.GoogleCloudDiscoveryengineV1Conversation,
@@ -170,13 +170,13 @@ export const CollectionsEnginesConversationProvider = () =>
               messages: news.messages,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = created ?? undefined;
       }
 
       if (current === undefined) {
         return yield* new CollectionsEnginesConversationNotResolved({
-          name: fallbackName,
+          resourceName: fallbackName,
         });
       }
 

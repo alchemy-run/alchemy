@@ -77,8 +77,27 @@ export type ZoneTransferPeer = Resource<
   ZoneTransferPeerProps,
   ZoneTransferPeerAttributes,
   never,
-  Providers
+  Providers,
+  ZoneTransferPeerLookup
 >;
+
+/**
+ * Props for {@link ZoneTransferPeer.lookup}: find a zone-transfer peer this
+ * stack doesn't manage, by its id or its name.
+ */
+export type ZoneTransferPeerLookup =
+  | {
+      /**
+       * The id of the existing peer.
+       */
+      peerId: string;
+    }
+  | {
+      /**
+       * The name of the existing peer.
+       */
+      name: string;
+    };
 
 /**
  * A Secondary DNS zone-transfer peer
@@ -110,6 +129,22 @@ export type ZoneTransferPeer = Resource<
  *   ip: "192.0.2.53",
  *   tsigId: tsig.tsigId,
  *   ixfrEnable: true,
+ * });
+ * ```
+ *
+ * ### Looking up an existing peer
+ * `ZoneTransferPeer.lookup` references a peer Alchemy doesn't manage
+ * (created in the dashboard or by another stack), found by `peerId` or
+ * `name`. It is read during plan/deploy and never created, updated or
+ * deleted.
+ *
+ * **Example:** Transfer a zone to an existing peer
+ * ```typescript
+ * const secondary = Cloudflare.DNS.ZoneTransferPeer.lookup({ name: "secondary" });
+ * yield* Cloudflare.DNS.ZoneTransferOutgoing("Outgoing", {
+ *   zoneId: zone.zoneId,
+ *   name: zone.name,
+ *   peers: [secondary.peerId],
  * });
  * ```
  *
@@ -156,6 +191,14 @@ export const ZoneTransferPeerProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed =
+        "peerId" in props
+          ? yield* getPeer(accountId, props.peerId)
+          : yield* findByName(accountId, props.name);
+      return observed ? toAttributes(observed, accountId) : undefined;
+    }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
@@ -172,7 +215,7 @@ export const ZoneTransferPeerProvider = () =>
       return match ? Unowned(toAttributes(match, acct)) : undefined;
     }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* createPeerName(id, news.name);
       // Inputs are resolved to concrete values by Plan.
@@ -241,7 +284,7 @@ const undef = <T>(v: T | null | undefined): T | undefined => (v == null ? undefi
 const getPeer = (accountId: string, peerId: string) =>
   dns
     .getZoneTransferPeer({ accountId, peerId })
-    .pipe(Effect.catchTag("PeerNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("PeerNotFound", () => Effect.undefined));
 
 /**
  * Find a peer by exact name. Names are not unique on Cloudflare's side;

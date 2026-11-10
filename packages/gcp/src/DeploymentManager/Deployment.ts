@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -129,8 +130,31 @@ export type Deployment = Resource<
     deletePolicy: string;
   },
   never,
-  Providers
+  Providers,
+  DeploymentLookup
 >;
+
+/**
+ * Props for {@link Deployment.lookup}: find a deployment this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface DeploymentLookup {
+  /**
+   * Deployment name.
+   */
+  deploymentId: string;
+  /**
+   * Policy for deleting resources when the deployment is destroyed
+   * (`DELETE` or `ABANDON`).
+   */
+  deletePolicy?: deploymentmanager.DeleteDeploymentsDeletePolicyEnum | (string & {});
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Google Cloud Deployment Manager deployment — a configuration that
@@ -197,6 +221,19 @@ export type Deployment = Resource<
  *   description: "pubsub topic for orders (prod)",
  *   labels: { env: "prod", team: "platform" },
  *   target: existingTarget,
+ * });
+ * ```
+ *
+ * ### Looking up an existing deployment
+ * `Deployment.lookup` references a deployment Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * deployment.
+ *
+ * **Example:** Reference an existing deployment
+ * ```typescript
+ * const deployment = GCP.DeploymentManager.Deployment.lookup({
+ *   deploymentId: "my-deployment",
  * });
  * ```
  *
@@ -274,6 +311,13 @@ export const DeploymentProvider = () =>
       });
     }),
 
+    lookup: Effect.fn(function* ({ deploymentId, deletePolicy }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getDeployment(env.project, deploymentId);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, deletePolicy ?? DEFAULT_DELETE_POLICY);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const deploymentId = yield* toPhysicalId(id, olds?.deploymentId, output?.deploymentId);
@@ -327,7 +371,7 @@ export const DeploymentProvider = () =>
               target,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(env.project, created);
         }
@@ -335,7 +379,7 @@ export const DeploymentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name: deploymentId });
+        return yield* new ResourceNotResolved({ resourceName: deploymentId });
       }
 
       const name = current.name ?? deploymentId;
@@ -383,7 +427,7 @@ export const DeploymentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, deletePolicy);
@@ -407,7 +451,7 @@ export const DeploymentProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(env.project, operation, { notFoundOk: true });

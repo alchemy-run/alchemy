@@ -5,6 +5,7 @@ import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { withNetworkSlot } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -38,6 +39,7 @@ test.provider(
           });
         }),
       );
+      yield* expectFound(GCP.Compute.Network.lookup({ networkName: created.networkName }), created);
 
       expect(created.networkName).toEqual(expect.any(String));
       expect(created.networkId).toEqual(expect.any(String));

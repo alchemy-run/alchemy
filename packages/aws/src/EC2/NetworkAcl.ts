@@ -3,14 +3,21 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, diffTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { nameTagFilter, single } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import type { VpcId } from "./Vpc.ts";
+
+export class NetworkAclUnexpectedResponse extends Data.TaggedError("NetworkAclUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type NetworkAclId<ID extends string = string> = `acl-${ID}`;
 export const NetworkAclId = <ID extends string>(id: ID): ID & NetworkAclId<ID> =>
@@ -95,8 +102,28 @@ export interface NetworkAcl extends Resource<
     }>;
   },
   never,
-  Providers
+  Providers,
+  NetworkAclLookup
 > {}
+
+/**
+ * Props for {@link NetworkAcl.lookup}: find a network ACL this stack
+ * doesn't manage, in the ambient account and region.
+ */
+export type NetworkAclLookup =
+  | {
+      /** The ACL's id. */
+      networkAclId: string;
+    }
+  | {
+      /** The value of its `Name` tag; fails when several match. */
+      name: string;
+    }
+  | {
+      /** The VPC whose default network ACL to find. */
+      vpcId: string;
+      isDefault: true;
+    };
 /**
  * A network ACL — a stateless firewall that controls inbound and outbound
  * traffic at the *subnet* level, evaluated as an ordered list of numbered
@@ -150,6 +177,18 @@ export interface NetworkAcl extends Resource<
  * rule set by adding more `NetworkAclEntry` resources with increasing
  * `ruleNumber`s.
  *
+ * ### Looking up an existing network ACL
+ * `NetworkAcl.lookup` references a network ACL Alchemy doesn't manage (created in the
+ * console or by another stack), found by `networkAclId`, its `Name` tag, or
+`{ vpcId, isDefault: true }` for a VPC's default ACL. It is read during plan/deploy
+ * and never created, updated or deleted. A lookup by `name` fails with
+ * `AmbiguousLookupError` when several match.
+ *
+ * **Example:** Add an entry to a VPC's default network ACL
+ * ```typescript
+ * const acl = AWS.EC2.NetworkAcl.lookup({ vpcId, isDefault: true });
+ * ```
+ *
  * @resource
  */
 export const NetworkAcl = Resource<NetworkAcl>("AWS.EC2.NetworkAcl");
@@ -172,7 +211,11 @@ export const NetworkAclProvider = () =>
           Effect.flatMap((acl) =>
             acl
               ? Effect.succeed(acl)
-              : Effect.fail(new Error(`Network ACL ${networkAclId} not found`)),
+              : Effect.fail(
+                  new NetworkAclUnexpectedResponse({
+                    message: `Network ACL ${networkAclId} not found`,
+                  }),
+                ),
           ),
         );
 
@@ -215,6 +258,39 @@ export const NetworkAclProvider = () =>
 
       return {
         stables: ["networkAclId", "networkAclArn", "ownerId", "isDefault"],
+
+        lookup: Effect.fn(function* (props) {
+          const found = yield* ec2
+            .describeNetworkAcls(
+              "networkAclId" in props
+                ? { NetworkAclIds: [props.networkAclId] }
+                : "name" in props
+                  ? { Filters: [nameTagFilter(props.name)] }
+                  : {
+                      Filters: [
+                        { Name: "vpc-id", Values: [props.vpcId] },
+                        { Name: "default", Values: ["true"] },
+                      ],
+                    },
+            )
+            .pipe(
+              Effect.catchTag("InvalidNetworkAclID.NotFound", () =>
+                Effect.succeed({ NetworkAcls: [] }),
+              ),
+            );
+          const match = yield* single(
+            "AWS.EC2.NetworkAcl",
+            "networkAclId" in props
+              ? props.networkAclId
+              : "name" in props
+                ? `Name=${props.name}`
+                : `default ACL of ${props.vpcId}`,
+            found.NetworkAcls ?? [],
+            (x) => x.NetworkAclId,
+          );
+          if (!match?.NetworkAclId) return undefined;
+          return yield* toAttrs(match);
+        }),
 
         read: Effect.fn(function* ({ output }) {
           if (!output) return undefined;

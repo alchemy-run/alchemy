@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -298,8 +299,35 @@ export type Connection = Resource<
     configuration: ConnectorConfiguration | undefined;
   },
   never,
-  Providers
+  Providers,
+  ConnectionLookup
 >;
+
+/**
+ * Props for {@link Connection.lookup}: find a connection this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface ConnectionLookup {
+  /**
+   * Connection id (the `{connection}` segment of
+   * `projects/{project}/locations/{location}/connections/{connection}`).
+   * Must contain only letters, numbers, and underscores, start with a
+   * letter or underscore, and be at most 64 characters.
+   */
+  connectionId: string;
+  /**
+   * BigQuery connection location (`us-central1`, `US`, `EU`,
+   * `aws-us-east-1`, …). Regional ids are lowercased; multi-regions `US` /
+   * `EU` stay uppercase.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A BigQuery Connection to an external data source.
@@ -355,6 +383,19 @@ export type Connection = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing connection
+ * `Connection.lookup` references a connection Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * connection.
+ *
+ * **Example:** Reference an existing connection
+ * ```typescript
+ * const connection = GCP.BigQueryConnection.Connection.lookup({
+ *   connectionId: "my-connection",
+ * });
+ * ```
+ *
  * @resource
  * @category BigQueryConnection
  */
@@ -363,7 +404,7 @@ export const Connection = Resource<Connection>("GCP.BigQueryConnection.Connectio
 export class ConnectionNotResolved extends Data.TaggedError(
   "GCP.BigQueryConnection.ConnectionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -735,7 +776,7 @@ const toCreateBody = (
 const getByName = (name: string) =>
   bigqueryconnection
     .getProjectsLocationsConnections({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwnedAt = (parent: string, project: string) =>
   bigqueryconnection.listProjectsLocationsConnections
@@ -794,6 +835,15 @@ export const ConnectionProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({ connectionId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, connectionId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const connectionId = yield* toId(id, olds?.connectionId, output?.connectionId);
@@ -848,7 +898,7 @@ export const ConnectionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ConnectionNotResolved({ name });
+        return yield* new ConnectionNotResolved({ resourceName: name });
       }
 
       const updateMask: string[] = [];
@@ -944,7 +994,7 @@ export const ConnectionProvider = () =>
             updateMask: updateMask.join(","),
             body,
           })
-          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
         if (patched === undefined) {
           const created = yield* bigqueryconnection
             .createProjectsLocationsConnections({
@@ -960,7 +1010,7 @@ export const ConnectionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ConnectionNotResolved({ name });
+        return yield* new ConnectionNotResolved({ resourceName: name });
       }
 
       const latest = (yield* getByName(current.name ?? name)) ?? current;

@@ -187,7 +187,7 @@ export const WatermarkProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, output, olds }) {
+    read: Effect.fn(function* ({ id, output, olds, previous }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
 
@@ -201,7 +201,10 @@ export const WatermarkProvider = () =>
       // name is the best identity we have.
       const name = yield* watermarkName(id, olds?.name);
       const match = yield* findByName(acct, name);
-      return match ? toAttributes(match, acct) : undefined;
+      // A replacement reuses the name: the watermark it is replacing is not
+      // the replacement.
+      if (!match || match.uid === previous?.watermarkId) return undefined;
+      return toAttributes(match, acct);
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -269,7 +272,7 @@ export const WatermarkProvider = () =>
 const getWatermark = (accountId: string, watermarkId: string) =>
   stream
     .getWatermark({ accountId, identifier: watermarkId })
-    .pipe(Effect.catchTag("WatermarkNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("WatermarkNotFound", () => Effect.undefined));
 
 /**
  * Find a watermark by exact name. Names are not unique — if several

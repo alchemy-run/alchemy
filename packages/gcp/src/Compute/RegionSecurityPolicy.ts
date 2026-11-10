@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -141,8 +142,31 @@ export type RegionSecurityPolicy = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RegionSecurityPolicyLookup
 >;
+
+/**
+ * Props for {@link RegionSecurityPolicy.lookup}: find a region security
+ * policy this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface RegionSecurityPolicyLookup {
+  /**
+   * Policy name (RFC1035, 1-63 characters).
+   */
+  securityPolicyName: string;
+  /**
+   * Region the policy lives in (e.g. `us-central1`). `US-CENTRAL1` is
+   * accepted and normalized to `us-central1`.
+   */
+  region?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A regional Cloud Armor security policy that filters HTTP(S) requests
@@ -172,6 +196,19 @@ export type RegionSecurityPolicy = Resource<
  *       },
  *     },
  *   ],
+ * });
+ * ```
+ *
+ * ### Looking up an existing region security policy
+ * `RegionSecurityPolicy.lookup` references a region security policy Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared region security policy.
+ *
+ * **Example:** Reference an existing region security policy
+ * ```typescript
+ * const regionSecurityPolicy = GCP.Compute.RegionSecurityPolicy.lookup({
+ *   securityPolicyName: "my-security-policy",
  * });
  * ```
  *
@@ -365,7 +402,7 @@ const toAttrs = (policy: compute.SecurityPolicy, project: string) => ({
 const getByName = (project: string, region: string, securityPolicy: string) =>
   compute
     .getRegionSecurityPolicies({ project, region, securityPolicy })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, region: string, securityPolicyName: string) =>
   getByName(project, region, securityPolicyName).pipe(
@@ -550,6 +587,14 @@ export const RegionSecurityPolicyProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ securityPolicyName, region: lookupRegion }) {
+      const env = yield* GcpEnvironment.current;
+      const region = normalizeRegion(lookupRegion, env.region);
+      const existing = yield* getByName(env.project, region, securityPolicyName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

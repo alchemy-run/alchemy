@@ -86,8 +86,35 @@ export type BillingBucketsView = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  BillingBucketsViewLookup
 >;
+
+/**
+ * Props for {@link BillingBucketsView.lookup}: find a billing buckets view
+ * this stack doesn't manage by its identifiers.
+ */
+export interface BillingBucketsViewLookup {
+  /**
+   * View id (the `{view}` segment of
+   * `billingAccounts/{billingAccount}/locat
+   * ions/{location}/buckets/{bucket}/views/{view}`). Limited to 100
+   * characters: letters, digits, underscores, and hyphens.
+   */
+  viewId: string;
+  /**
+   * Location of the parent bucket.
+   */
+  location?: string;
+  /**
+   * Bucket id that owns this view.
+   */
+  bucketId: string;
+  /**
+   * Billing account id (`XXXXXX-XXXXXX-XXXXXX` or `billingAccounts/{id}`).
+   */
+  billingAccountId?: string;
+}
 
 /**
  * A Cloud Logging view over log entries in a billing-account log bucket.
@@ -130,6 +157,20 @@ export type BillingBucketsView = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing billing buckets view
+ * `BillingBucketsView.lookup` references a billing buckets view Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared billing buckets view.
+ *
+ * **Example:** Reference an existing billing buckets view
+ * ```typescript
+ * const billingBucketsView = GCP.Logging.BillingBucketsView.lookup({
+ *   viewId: "my-view",
+ *   bucketId: "my-bucket",
+ * });
+ * ```
+ *
  * @resource
  * @category Logging
  */
@@ -138,7 +179,7 @@ export const BillingBucketsView = Resource<BillingBucketsView>("GCP.Logging.Bill
 export class BillingBucketsViewNotResolved extends Data.TaggedError(
   "GCP.Logging.BillingBucketsViewNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (
@@ -191,7 +232,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   logging
     .getBillingAccountsLocationsBucketsViews({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const BillingBucketsViewProvider = () =>
   Provider.succeed(BillingBucketsView, {
@@ -218,6 +259,22 @@ export const BillingBucketsViewProvider = () =>
         return undefined;
       }
       return { action: "replace" as const, deleteFirst: false };
+    }),
+
+    lookup: Effect.fn(function* ({
+      viewId,
+      location: lookupLocation,
+      bucketId: lookupBucketId,
+      billingAccountId: lookupBillingAccountId,
+    }) {
+      const billingAccountId = yield* resolveBillingAccountId(lookupBillingAccountId, undefined);
+      const location = lookupLocation ?? DEFAULT_LOCATION;
+      const bucketId = lookupBucketId ?? "";
+      const name = resourceName(billingAccountId, location, bucketId, viewId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      const attrs = toAttrs(existing, billingAccountId, location, bucketId);
+      return attrs;
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
@@ -304,7 +361,7 @@ export const BillingBucketsViewProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new BillingBucketsViewNotResolved({ name });
+        return yield* new BillingBucketsViewNotResolved({ resourceName: name });
       }
 
       const filterChanged = (current.filter ?? "") !== (news.filter ?? "");

@@ -210,7 +210,7 @@ export const WebhookProvider = () =>
         // leaking / failing.
         const created = yield* realtimeKit
           .createWebhookWebhook({ accountId, appId, ...desired })
-          .pipe(Effect.catchTag("RealtimeKitWebhookExists", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("RealtimeKitWebhookExists", () => Effect.undefined));
         if (created) {
           return toAttributes(created.data, accountId, appId);
         }
@@ -312,7 +312,7 @@ type ObservedWebhook = realtimeKit.GetWebhookByIdWebhookResponse["data"];
 const getWebhook = (accountId: string, appId: string, webhookId: string) =>
   realtimeKit.getWebhookByIdWebhook({ accountId, appId, webhookId }).pipe(
     Effect.map((res) => res.data),
-    Effect.catchTag("RealtimeKitWebhookNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RealtimeKitWebhookNotFound", () => Effect.undefined),
   );
 
 /**
@@ -329,7 +329,7 @@ const findByName = (accountId: string, appId: string, name: string) =>
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
         .at(0),
     ),
-    Effect.catchTag("RealtimeKitWebhookNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RealtimeKitWebhookNotFound", () => Effect.undefined),
   );
 
 const createWebhookName = (id: string, name: string | undefined) =>

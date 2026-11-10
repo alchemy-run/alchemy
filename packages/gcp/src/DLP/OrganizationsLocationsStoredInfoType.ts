@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -94,8 +95,37 @@ export type OrganizationsLocationsStoredInfoType = Resource<
     pendingVersions: StoredInfoTypeVersion[];
   },
   never,
-  Providers
+  Providers,
+  OrganizationsLocationsStoredInfoTypeLookup
 >;
+
+/**
+ * Props for {@link OrganizationsLocationsStoredInfoType.lookup}: find an
+ * organizations locations stored info type this stack doesn't manage by its
+ * identifiers, in the ambient project unless `project` names another.
+ */
+export interface OrganizationsLocationsStoredInfoTypeLookup {
+  /**
+   * Stored infoType id (the `{storedInfoType}` segment of
+   * `organizations/{or
+   * ganization}/locations/{location}/storedInfoTypes/{storedInfoType}`).
+   * Letters, digits, hyphens, and underscores; max 100 characters.
+   */
+  storedInfoTypeId: string;
+  /**
+   * Parent organization (`organizations/{organization}` or the numeric id).
+   */
+  organization?: string;
+  /**
+   * Processing location (`us-central1`, `global`, `us`, …).
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An organization-scoped Sensitive Data Protection stored infoType
@@ -118,6 +148,20 @@ export type OrganizationsLocationsStoredInfoType = Resource<
  *     },
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing organizations locations stored info type
+ * `OrganizationsLocationsStoredInfoType.lookup` references an organizations
+ * locations stored info type Alchemy doesn't manage (created in the console
+ * or by another stack). It is read during plan/deploy, never created,
+ * updated or deleted, and binds like a declared organizations locations
+ * stored info type.
+ *
+ * **Example:** Reference an existing organizations locations stored info type
+ * ```typescript
+ * const organizationsLocationsStoredInfoType = GCP.DLP.OrganizationsLocationsStoredInfoType.lookup({
+ *   storedInfoTypeId: "my-stored-info-type",
+ * });
  * ```
  *
  * @resource
@@ -165,10 +209,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dlp
         .getOrganizationsLocationsStoredInfoTypes({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, organization: string, project: string) =>
   dlp.listOrganizationsLocationsStoredInfoTypes.pages({ parent, pageSize: 100 }).pipe(
@@ -208,6 +252,20 @@ export const OrganizationsLocationsStoredInfoTypeProvider = () =>
         replaceOn(previousLocation, nextLocation)
       );
     }),
+
+    lookup: Effect.fn(function* ({
+      storedInfoTypeId,
+      organization: lookupOrganization,
+      location: lookupLocation,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const organization = yield* resolveOrganization(lookupOrganization, undefined);
+      const location = normalizeLocation(lookupLocation);
+      const name = resourceName(organization, location, storedInfoTypeId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, organization, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -271,7 +329,7 @@ export const OrganizationsLocationsStoredInfoTypeProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DlpNotResolved({ name });
+        return yield* new DlpNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

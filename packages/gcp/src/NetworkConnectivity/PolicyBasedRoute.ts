@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   hasAlchemyLabels,
@@ -187,8 +188,29 @@ export type PolicyBasedRoute = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  PolicyBasedRouteLookup
 >;
+
+/**
+ * Props for {@link PolicyBasedRoute.lookup}: find a policy based route this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface PolicyBasedRouteLookup {
+  /**
+   * Policy-based route id (the `{policyBasedRoute}` segment of
+   * `projects/{pr
+   * oject}/locations/global/policyBasedRoutes/{policyBasedRoute}`). Must be
+   * 1-63 characters and match `[a-z]([a-z0-9-]*[a-z0-9])?`.
+   */
+  policyBasedRouteId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A VPC policy-based route.
@@ -242,6 +264,19 @@ export type PolicyBasedRoute = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing policy based route
+ * `PolicyBasedRoute.lookup` references a policy based route Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * policy based route.
+ *
+ * **Example:** Reference an existing policy based route
+ * ```typescript
+ * const policyBasedRoute = GCP.NetworkConnectivity.PolicyBasedRoute.lookup({
+ *   policyBasedRouteId: "my-policy-based-route",
+ * });
+ * ```
+ *
  * @resource
  * @category NetworkConnectivity
  */
@@ -252,13 +287,13 @@ export const PolicyBasedRoute = Resource<PolicyBasedRoute>(
 export class PolicyBasedRouteNotResolved extends Data.TaggedError(
   "GCP.NetworkConnectivity.PolicyBasedRouteNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class PolicyBasedRouteStillExists extends Data.TaggedError(
   "GCP.NetworkConnectivity.PolicyBasedRouteStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -480,12 +515,14 @@ const toBody = (
 const getByName = (name: string) =>
   networkconnectivity
     .getProjectsLocationsGlobalPolicyBasedRoutes({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((route) =>
-      route ? Effect.succeed(route) : Effect.fail(new PolicyBasedRouteNotResolved({ name })),
+      route
+        ? Effect.succeed(route)
+        : Effect.fail(new PolicyBasedRouteNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkConnectivity.PolicyBasedRouteNotResolved",
@@ -497,7 +534,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((route) =>
-      route === undefined ? Effect.void : Effect.fail(new PolicyBasedRouteStillExists({ name })),
+      route === undefined
+        ? Effect.void
+        : Effect.fail(new PolicyBasedRouteStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkConnectivity.PolicyBasedRouteStillExists",
@@ -516,7 +555,7 @@ const removeRoute = (name: string) =>
           times: 8,
           schedule: Schedule.spaced("2 seconds"),
         }),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       );
     if (operation !== undefined) {
       yield* waitForOperation(operation, { notFoundOk: true });
@@ -646,6 +685,14 @@ export const PolicyBasedRouteProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ policyBasedRouteId }) {
+      const env = yield* GcpEnvironment.current;
+      const name = resourceName(env.project, policyBasedRouteId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const policyBasedRouteId = yield* toId(
@@ -699,7 +746,7 @@ export const PolicyBasedRouteProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -708,7 +755,7 @@ export const PolicyBasedRouteProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new PolicyBasedRouteNotResolved({ name });
+        return yield* new PolicyBasedRouteNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project);

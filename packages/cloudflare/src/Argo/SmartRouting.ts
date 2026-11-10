@@ -122,8 +122,8 @@ export const SmartRoutingProvider = () =>
             // tag (code 1015); skip them. Zones deleted out-of-band
             // surface InvalidObjectIdentifier.
             Effect.catchTags({
-              NotAuthorized: () => Effect.succeed(undefined),
-              InvalidObjectIdentifier: () => Effect.succeed(undefined),
+              NotAuthorized: () => Effect.undefined,
+              InvalidObjectIdentifier: () => Effect.undefined,
             }),
           ),
         { concurrency: 10 },
@@ -148,10 +148,10 @@ export const SmartRoutingProvider = () =>
       const observed = yield* argo.getSmartRouting({ zoneId }).pipe(
         // Zone deleted out-of-band — the setting is gone with it.
         Effect.catchTags({
-          InvalidObjectIdentifier: () => Effect.succeed(undefined),
+          InvalidObjectIdentifier: () => Effect.undefined,
           // Argo subscription removed out-of-band — the setting is no
           // longer visible or manageable on the zone.
-          NotAuthorized: () => Effect.succeed(undefined),
+          NotAuthorized: () => Effect.undefined,
         }),
       );
       if (observed === undefined) return undefined;
@@ -195,8 +195,8 @@ export const SmartRoutingProvider = () =>
       // removed out-of-band, the setting is no longer ours to restore.
       const observed = yield* argo.getSmartRouting({ zoneId }).pipe(
         Effect.catchTags({
-          InvalidObjectIdentifier: () => Effect.succeed(undefined),
-          NotAuthorized: () => Effect.succeed(undefined),
+          InvalidObjectIdentifier: () => Effect.undefined,
+          NotAuthorized: () => Effect.undefined,
         }),
       );
       if (observed === undefined) return;

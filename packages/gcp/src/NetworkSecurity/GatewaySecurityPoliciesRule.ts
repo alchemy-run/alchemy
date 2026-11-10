@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -124,8 +125,40 @@ export type GatewaySecurityPoliciesRule = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  GatewaySecurityPoliciesRuleLookup
 >;
+
+/**
+ * Props for {@link GatewaySecurityPoliciesRule.lookup}: find a gateway
+ * security policies rule this stack doesn't manage by its identifiers, in
+ * the ambient project unless `project` names another.
+ */
+export interface GatewaySecurityPoliciesRuleLookup {
+  /**
+   * Rule id (the `{rule}` segment of
+   * `.../gatewaySecurityPolicies/{gatewaySecurityPolicy}/rules/{rule}`).
+   * Must be 4-63 characters matching `[a-z]([a-z0-9-]{0,61}[a-z0-9])?`.
+   */
+  gatewaySecurityPolicyRuleId: string;
+  /**
+   * Region of the parent policy. Inferred from `gatewaySecurityPolicy` when
+   * that value is a full resource name.
+   */
+  location?: string;
+  /**
+   * Parent GatewaySecurityPolicy resource name
+   * (`projects/{project}/location
+   * s/{location}/gatewaySecurityPolicies/{gatewaySecurityPolicy}`) or the
+   * policy id.
+   */
+  gatewaySecurityPolicy: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A GatewaySecurityPolicyRule nested under a GatewaySecurityPolicy.
@@ -156,6 +189,20 @@ export type GatewaySecurityPoliciesRule = Resource<
  *   enabled: true,
  *   sessionMatcher: "host() == 'blocked.example.com'",
  *   description: "block listed host",
+ * });
+ * ```
+ *
+ * ### Looking up an existing gateway security policies rule
+ * `GatewaySecurityPoliciesRule.lookup` references a gateway security
+ * policies rule Alchemy doesn't manage (created in the console or by
+ * another stack). It is read during plan/deploy, never created, updated or
+ * deleted, and binds like a declared gateway security policies rule.
+ *
+ * **Example:** Reference an existing gateway security policies rule
+ * ```typescript
+ * const gatewaySecurityPoliciesRule = GCP.NetworkSecurity.GatewaySecurityPoliciesRule.lookup({
+ *   gatewaySecurityPolicyRuleId: "my-gateway-security-policy-rule",
+ *   gatewaySecurityPolicy: "my-gateway-security-policy",
  * });
  * ```
  *
@@ -215,7 +262,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   networksecurity
     .getProjectsLocationsGatewaySecurityPoliciesRules({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const GatewaySecurityPoliciesRuleProvider = () =>
   Provider.succeed(GatewaySecurityPoliciesRule, {
@@ -251,6 +298,26 @@ export const GatewaySecurityPoliciesRuleProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({
+      gatewaySecurityPolicyRuleId,
+      location: lookupLocation,
+      gatewaySecurityPolicy,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(
+        lookupLocation ??
+          (gatewaySecurityPolicy
+            ? locationFromParent(gatewaySecurityPolicy, env.region)
+            : undefined),
+        env.region,
+      );
+      const parent = parentPolicyName(env.project, location, gatewaySecurityPolicy ?? "");
+      const name = resourceNameOf(parent, gatewaySecurityPolicyRuleId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -353,7 +420,7 @@ export const GatewaySecurityPoliciesRuleProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -362,7 +429,7 @@ export const GatewaySecurityPoliciesRuleProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new NetworksecurityNotResolved({ name });
+        return yield* new NetworksecurityNotResolved({ resourceName: name });
       }
 
       const descriptionChanged = (current.description ?? "") !== desiredDescription;
@@ -418,7 +485,7 @@ export const GatewaySecurityPoliciesRuleProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

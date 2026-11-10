@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -154,8 +155,33 @@ export type ConnectionProfile = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ConnectionProfileLookup
 >;
+
+/**
+ * Props for {@link ConnectionProfile.lookup}: find a connection profile
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface ConnectionProfileLookup {
+  /**
+   * Connection profile id (the `{connectionProfile}` segment of
+   * `projects/{p
+   * roject}/locations/{location}/connectionProfiles/{connectionProfile}`).
+   */
+  connectionProfileId: string;
+  /**
+   * Region (`us-central1`, …). `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Database Migration Service connection profile: credentials and
@@ -193,6 +219,19 @@ export type ConnectionProfile = Resource<
  *       rootPassword: process.env.MYSQL_ROOT_PASSWORD,
  *     },
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing connection profile
+ * `ConnectionProfile.lookup` references a connection profile Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared connection profile.
+ *
+ * **Example:** Reference an existing connection profile
+ * ```typescript
+ * const connectionProfile = GCP.DataMigration.ConnectionProfile.lookup({
+ *   connectionProfileId: "my-connection-profile",
  * });
  * ```
  *
@@ -378,10 +417,10 @@ const toAttrs = (profile: dm.ConnectionProfile, project: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dm
         .getProjectsLocationsConnectionProfiles({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string, region: string) =>
   dm.listProjectsLocationsConnectionProfiles
@@ -459,6 +498,15 @@ export const ConnectionProfileProvider = () =>
       });
     }),
 
+    lookup: Effect.fn(function* ({ connectionProfileId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, connectionProfileId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const connectionProfileId = yield* toPhysicalId(
@@ -521,7 +569,7 @@ export const ConnectionProfileProvider = () =>
             validateOnly: news.validateOnly,
             body,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -529,7 +577,7 @@ export const ConnectionProfileProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -625,7 +673,7 @@ export const ConnectionProfileProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

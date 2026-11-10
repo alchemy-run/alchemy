@@ -322,7 +322,7 @@ type ObservedLockdown = firewall.GetLockdownResponse;
 const getLockdown = (zoneId: string, lockdownId: string) =>
   firewall.getLockdown({ zoneId, lockDownsId: lockdownId }).pipe(
     Effect.map((rule): ObservedLockdown | undefined => rule),
-    Effect.catchTag("LockdownNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("LockdownNotFound", () => Effect.undefined),
   );
 
 /**

@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitGlobalOperation } from "./operations.ts";
@@ -89,8 +90,26 @@ export type BackendBucket = Resource<
     id: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  BackendBucketLookup
 >;
+
+/**
+ * Props for {@link BackendBucket.lookup}: find a backend bucket this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface BackendBucketLookup {
+  /**
+   * Name of the backend bucket.
+   */
+  name: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A global Compute Engine backend bucket that fronts a Cloud Storage
@@ -124,6 +143,17 @@ export type BackendBucket = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing backend bucket
+ * `BackendBucket.lookup` references a backend bucket Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * backend bucket.
+ *
+ * **Example:** Reference an existing backend bucket
+ * ```typescript
+ * const backendBucket = GCP.Compute.BackendBucket.lookup({ name: "my-name" });
+ * ```
+ *
  * @resource
  * @category Compute
  */
@@ -132,7 +162,7 @@ export const BackendBucket = Resource<BackendBucket>("GCP.Compute.BackendBucket"
 export class BackendBucketNotResolved extends Data.TaggedError(
   "GCP.Compute.BackendBucketNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const rfc1035 = (name: string): string => {
@@ -227,7 +257,7 @@ const sameCdnPolicy = (
 const getByName = (project: string, name: string) =>
   compute
     .getBackendBuckets({ project, backendBucket: name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, name: string) =>
   getByName(project, name).pipe(
@@ -259,6 +289,13 @@ export const BackendBucketProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ name }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(env.project, name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -310,7 +347,7 @@ export const BackendBucketProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (inserted !== undefined) {
           current = yield* awaitResource(env.project, name);
@@ -320,7 +357,7 @@ export const BackendBucketProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new BackendBucketNotResolved({ name });
+        return yield* new BackendBucketNotResolved({ resourceName: name });
       }
 
       const observedDescription = current.description ?? "";
@@ -360,7 +397,7 @@ export const BackendBucketProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new BackendBucketNotResolved({ name });
+        return yield* new BackendBucketNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project);

@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -120,8 +121,33 @@ export type Binding = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  BindingLookup
 >;
+
+/**
+ * Props for {@link Binding.lookup}: find a binding this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface BindingLookup {
+  /**
+   * Binding id (the `{binding}` segment of
+   * `projects/{project}/locations/{location}/bindings/{binding}`). Must be
+   * 4-63 characters matching `^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$`.
+   */
+  bindingId: string;
+  /**
+   * Location of the binding (`us-central1`, `global`, …). Multi-region `us`
+   * and `eu` are not supported.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Agent Registry binding connecting a source agent to a target
@@ -169,13 +195,25 @@ export type Binding = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing binding
+ * `Binding.lookup` references a binding Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared binding.
+ *
+ * **Example:** Reference an existing binding
+ * ```typescript
+ * const binding = GCP.AgentRegistry.Binding.lookup({
+ *   bindingId: "my-binding",
+ * });
+ * ```
+ *
  * @resource
  * @category AgentRegistry
  */
 export const Binding = Resource<Binding>("GCP.AgentRegistry.Binding");
 
 export class BindingNotResolved extends Data.TaggedError("GCP.AgentRegistry.BindingNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const COLLECTION = "bindings";
@@ -236,10 +274,10 @@ const toAttrs = (item: registry.Binding, project: string, location: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : registry
         .getProjectsLocationsBindings({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const displayNameOf = (news: BindingProps, bindingId: string) =>
   (news.displayName ?? bindingId).slice(0, MAX_DISPLAY_NAME_LENGTH);
@@ -266,6 +304,15 @@ export const BindingProvider = () =>
           (previousTarget !== undefined && previousTarget !== news.targetIdentifier),
       });
     }),
+
+    lookup: Effect.fn(function* ({ bindingId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, COLLECTION, bindingId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, location);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -315,7 +362,7 @@ export const BindingProvider = () =>
               authProviderBinding,
             },
           }),
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           // ALREADY_EXISTS (code 6): a concurrent create won the race.
           yield* waitForOperation(created).pipe(
@@ -329,7 +376,7 @@ export const BindingProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new BindingNotResolved({ name });
+        return yield* new BindingNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;
@@ -376,7 +423,7 @@ export const BindingProvider = () =>
       if (!output.name) return;
       const deleted = yield* retryTransient(
         registry.deleteProjectsLocationsBindings({ name: output.name }),
-      ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      ).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (deleted !== undefined) {
         yield* waitForDeleteOperation(deleted);
       }

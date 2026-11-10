@@ -5,7 +5,7 @@ import {
   type VolumeInstance,
   type VolumeState,
 } from "@distilled.cloud/railway";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { Unowned, stripUnowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -132,8 +132,22 @@ export type Volume = Resource<
     createdAt: string;
   },
   never,
-  Providers
+  Providers,
+  VolumeLookup
 >;
+
+/**
+ * Props for {@link Volume.lookup}: find a volume this stack
+ * doesn't manage by its project, environment and id.
+ */
+export interface VolumeLookup {
+  /** Railway project id. */
+  projectId: string;
+  /** Railway environment id. */
+  environmentId: string;
+  /** Railway volume id. */
+  volumeId: string;
+}
 
 const resolveVolumeProps = (
   props: VolumeProps | Effect.Effect<VolumeProps, never, Providers>,
@@ -300,6 +314,20 @@ const VolumeResource = Resource<Volume>("Railway.Volume");
  * });
  * ```
  *
+ * ### Looking up an existing volume
+ * `Volume.lookup` references a volume Alchemy doesn't manage (created in
+ * the Railway dashboard or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted.
+ *
+ * **Example:** Reference an existing volume
+ * ```typescript
+ * const data = Railway.Volume.lookup({
+ *   projectId: "a1b2c3d4-…",
+ *   environmentId: "e5f6a7b8-…",
+ *   volumeId: "c9d0e1f2-…",
+ * });
+ * ```
+ *
  * @resource
  * @product Volume
  */
@@ -310,7 +338,7 @@ export const Volume: typeof VolumeResource = Object.assign(
 );
 
 export class VolumeNotCreated extends Data.TaggedError("Railway.VolumeNotCreated")<{
-  name: string;
+  resourceName: string;
   projectId: string;
 }> {}
 
@@ -387,7 +415,7 @@ const readVolumeInstance = Query.fn((id: string) => volumeFields(Railway.volumeI
 const getByInstanceId = (volumeInstanceId: string) =>
   readVolumeInstance(volumeInstanceId).pipe(
     Effect.map((instance): CloudInstance | undefined => (isGone(instance) ? undefined : instance)),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 const listVolumeInstances = (environmentId: string, projectId: string) =>
@@ -448,7 +476,7 @@ const assertAttachTarget = Effect.fn(function* (input: {
   );
   if (others.length > 0) {
     return yield* new MultipleVolumes({
-      name: input.name,
+      resourceName: input.name,
       paths: others.map((row) => row.mountPath),
       volumeIds: others.map((row) => row.volumeId),
     });
@@ -596,6 +624,54 @@ const volumeCreate = Query.fn((input: VolumeCreateInput) => {
 
 const volumeDelete = Query.fn((volumeId: string) => Railway.volumeDelete({ volumeId }));
 
+/**
+ * Observe a Volume from its last known attributes or its props. `lookup`
+ * passes the ids it was given as a partial `output`, as a refresh would.
+ */
+const readVolumeAttributes = Effect.fn(function* ({
+  id,
+  olds,
+  output,
+}: {
+  id: string;
+  olds?: VolumeProps;
+  output?: Partial<Volume["Attributes"]>;
+}) {
+  const projectId =
+    output?.projectId ?? (olds !== undefined ? projectIdOf(olds.project) : undefined);
+  const environmentId =
+    output?.environmentId ??
+    (olds !== undefined
+      ? (environmentIdOf(olds.environment) ?? environmentIdOf(olds.project))
+      : undefined);
+  const name = yield* resolveName(id, output?.name);
+
+  const byInstance =
+    output?.volumeInstanceId !== undefined && output.volumeInstanceId.length > 0
+      ? yield* getByInstanceId(output.volumeInstanceId)
+      : undefined;
+  const found =
+    byInstance ??
+    (projectId !== undefined && environmentId !== undefined
+      ? ((output?.volumeId !== undefined
+          ? yield* findInEnvironment(
+              environmentId,
+              projectId,
+              (instance) => instance.volumeId === output.volumeId,
+            )
+          : undefined) ??
+        (yield* findInEnvironment(
+          environmentId,
+          projectId,
+          (instance) => instance.volume.name === name,
+        )))
+      : undefined);
+  if (found === undefined) return undefined;
+  const attrs = toAttrs(found, { name });
+  if (output !== undefined) return attrs;
+  return matchesAlchemyPhysicalName(found.volume.name) ? attrs : Unowned(attrs);
+});
+
 export const VolumeProvider = () =>
   Provider.succeed(Volume, {
     stables: ["volumeId", "volumeInstanceId", "projectId", "environmentId", "createdAt"],
@@ -615,41 +691,19 @@ export const VolumeProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
-      const projectId =
-        output?.projectId ?? (olds !== undefined ? projectIdOf(olds.project) : undefined);
-      const environmentId =
-        output?.environmentId ??
-        (olds !== undefined
-          ? (environmentIdOf(olds.environment) ?? environmentIdOf(olds.project))
-          : undefined);
-      const name = yield* resolveName(id, output?.name);
+    lookup: ({ projectId, environmentId, volumeId }) =>
+      // The ids find it; an empty name only stops `read` deriving a physical
+      // name, which needs a deploy's resource context. Railway answers an id
+      // it doesn't know with Not Authorized, so that is a miss too.
+      readVolumeAttributes({
+        id: volumeId,
+        output: { projectId, environmentId, volumeId, name: "" },
+      }).pipe(
+        Effect.map((attrs) => (attrs === undefined ? undefined : stripUnowned(attrs))),
+        Effect.catchTag("RailwayForbidden", () => Effect.undefined),
+      ),
 
-      const byInstance =
-        output?.volumeInstanceId !== undefined && output.volumeInstanceId.length > 0
-          ? yield* getByInstanceId(output.volumeInstanceId)
-          : undefined;
-      const found =
-        byInstance ??
-        (projectId !== undefined && environmentId !== undefined
-          ? ((output?.volumeId !== undefined
-              ? yield* findInEnvironment(
-                  environmentId,
-                  projectId,
-                  (instance) => instance.volumeId === output.volumeId,
-                )
-              : undefined) ??
-            (yield* findInEnvironment(
-              environmentId,
-              projectId,
-              (instance) => instance.volume.name === name,
-            )))
-          : undefined);
-      if (found === undefined) return undefined;
-      const attrs = toAttrs(found, { name });
-      if (output !== undefined) return attrs;
-      return matchesAlchemyPhysicalName(found.volume.name) ? attrs : Unowned(attrs);
-    }),
+    read: readVolumeAttributes,
 
     list: Effect.fn(function* () {
       const projects = yield* ownedProjects();
@@ -759,7 +813,7 @@ export const VolumeProvider = () =>
           }
 
           if (current === undefined || isGone(current)) {
-            return yield* new VolumeNotCreated({ name, projectId });
+            return yield* new VolumeNotCreated({ resourceName: name, projectId });
           }
 
           if (current.volume.name !== name) {
@@ -799,7 +853,7 @@ export const VolumeProvider = () =>
       );
 
       if (current === undefined || isGone(current)) {
-        return yield* new VolumeNotCreated({ name, projectId });
+        return yield* new VolumeNotCreated({ resourceName: name, projectId });
       }
 
       return toAttrs(current, { name });

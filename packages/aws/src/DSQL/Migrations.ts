@@ -9,6 +9,7 @@ import {
   type StampedMigrationsState,
   withPgClient,
 } from "@alchemy.run/sql/Migrations";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
@@ -77,7 +78,7 @@ export const makeDsqlMigrationExecutor = (
         if (row?.status === "completed") return;
         if (row?.status === "failed") {
           return yield* new MigrationError({
-            message: `DSQL index job ${job} failed: ${row.details}. Drop the invalid index and repair the migration progress before retrying.`,
+            message: `DSQL index job ${job} failed: ${row.details as string}. Drop the invalid index and repair the migration progress before retrying.`,
           });
         }
         if (!row)
@@ -120,7 +121,7 @@ export const makeDsqlMigrationExecutor = (
         }
         if (state.hash !== record.hash) {
           return yield* new MigrationError({
-            message: `DSQL migration ${record.name} changed after it started. Restore the original file (SHA256 ${state.hash}); actual SHA256: ${record.hash}.`,
+            message: `DSQL migration ${record.name} changed after it started. Restore the original file (SHA256 ${state.hash as string}); actual SHA256: ${record.hash}.`,
           });
         }
         const nextStatement = Number(state.next_statement);
@@ -142,7 +143,7 @@ export const makeDsqlMigrationExecutor = (
         }
         for (let index = Number(state.next_statement); index < statements.length; index++) {
           if (state.status === "waiting" && state.job_id) {
-            yield* waitForJob(String(state.job_id));
+            yield* waitForJob(state.job_id as string);
           } else {
             yield* query(
               `UPDATE ${progress} SET status = 'running', job_id = NULL WHERE name = $1`,
@@ -184,7 +185,7 @@ export const makeDsqlMigrationExecutor = (
                 `UPDATE ${progress} SET status = 'waiting', job_id = $2 WHERE name = $1`,
                 [record.name, job],
               );
-              yield* waitForJob(String(job));
+              yield* waitForJob(job as string);
             }
           }
           yield* query(
@@ -216,7 +217,8 @@ export const withDsqlMigrationLock = <A, E, R>(
   use: Effect.Effect<A, E, R>,
 ) =>
   Effect.gen(function* () {
-    const owner = crypto.randomUUID();
+    const random = yield* SecureRandom.SecureRandom;
+    const owner = yield* random.uuidV4();
     yield* executor.query(
       `CREATE TABLE IF NOT EXISTS "__alchemy_dsql_migration_lock" (id integer PRIMARY KEY, owner uuid NOT NULL)`,
     );

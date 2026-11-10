@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -69,8 +70,27 @@ export type Target = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  TargetLookup
 >;
+
+/**
+ * Props for {@link Target.lookup}: find a target this stack doesn't manage
+ * by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface TargetLookup {
+  /**
+   * Target project id (the `{targetProject}` segment of
+   * `projects/{project}/locations/global/targetProjects/{targetProject}`).
+   */
+  targetProjectId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A VM Migration target project: the Compute Engine project clones and
@@ -93,6 +113,18 @@ export type Target = Resource<
  * const target = yield* GCP.VMMigration.Target("Prod", {
  *   project: "prod-compute",
  *   description: "production landing zone",
+ * });
+ * ```
+ *
+ * ### Looking up an existing target
+ * `Target.lookup` references a target Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared target.
+ *
+ * **Example:** Reference an existing target
+ * ```typescript
+ * const target = GCP.VMMigration.Target.lookup({
+ *   targetProjectId: "my-target-project",
  * });
  * ```
  *
@@ -122,10 +154,10 @@ const toAttrs = (target: vm.TargetProject, hostProject: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : vm
         .getProjectsLocationsTargetProjects({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string) =>
   vm.listProjectsLocationsTargetProjects
@@ -154,6 +186,14 @@ export const TargetProvider = () =>
         nextLocation: GLOBAL_LOCATION,
       });
     }),
+
+    lookup: Effect.fn(function* ({ targetProjectId }) {
+      const env = yield* GcpEnvironment.current;
+      const name = resourceName(env.project, targetProjectId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -202,7 +242,7 @@ export const TargetProvider = () =>
               description,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           // ALREADY_EXISTS (6): a concurrent create won the race.
           yield* waitForOperation(created).pipe(
@@ -215,7 +255,7 @@ export const TargetProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const descriptionChanged = (current.description ?? "") !== description;
@@ -246,7 +286,7 @@ export const TargetProvider = () =>
           times: 8,
           schedule: Schedule.spaced("2 seconds"),
         }),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       );
       if (operation !== undefined) {
         // NOT_FOUND (5): already gone.

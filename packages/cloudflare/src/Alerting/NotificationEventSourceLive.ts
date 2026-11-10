@@ -108,12 +108,10 @@ const handleDelivery = <Req>(
     }
 
     const body = yield* Effect.promise(() => request.text());
-    let payload: Record<string, unknown>;
-    try {
-      payload = JSON.parse(body);
-    } catch {
-      return new Response("invalid payload", { status: 400 });
-    }
+    const payload = yield* Effect.try({
+      try: (): Record<string, unknown> | undefined => JSON.parse(body),
+      catch: () => undefined,
+    }).pipe(Effect.orElseSucceed(() => undefined));
     if (typeof payload !== "object" || payload === null) {
       return new Response("invalid payload", { status: 400 });
     }

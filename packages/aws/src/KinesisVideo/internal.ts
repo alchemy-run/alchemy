@@ -156,7 +156,7 @@ export const waitForStreamGone = Effect.fn("AWS.KinesisVideo.waitForStreamGone")
   const info = yield* untilConverged(
     kv.describeStream({ StreamName: streamName }).pipe(
       Effect.map((r) => r.StreamInfo),
-      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
     ),
     (i) => i === undefined,
     // full purge can take noticeably longer than activation (~90s bound)
@@ -180,7 +180,7 @@ export const waitForChannelGone = Effect.fn("AWS.KinesisVideo.waitForChannelGone
   const info = yield* untilConverged(
     kv.describeSignalingChannel({ ChannelName: channelName }).pipe(
       Effect.map((r) => r.ChannelInfo),
-      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+      Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
     ),
     (i) => i === undefined,
     45,

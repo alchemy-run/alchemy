@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   configIdOf,
@@ -130,8 +131,33 @@ export type InstancesInstancePartition = Resource<
     referencingBackups: string[];
   },
   never,
-  Providers
+  Providers,
+  InstancesInstancePartitionLookup
 >;
+
+/**
+ * Props for {@link InstancesInstancePartition.lookup}: find an instances
+ * instance partition this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface InstancesInstancePartitionLookup {
+  /**
+   * Instance partition id (the `{partition}` segment of
+   * `.../instancePartitions/{partition}`). Must match
+   * `^[a-z][-a-z0-9]*[a-z0-9]$` (2–64 characters).
+   */
+  instancePartitionId: string;
+  /**
+   * Parent instance id or full name
+   * (`projects/{project}/instances/{instance}`).
+   */
+  instance: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Spanner instance partition for geo-partitioned data placement.
@@ -170,6 +196,20 @@ export type InstancesInstancePartition = Resource<
  * );
  * ```
  *
+ * ### Looking up an existing instances instance partition
+ * `InstancesInstancePartition.lookup` references an instances instance
+ * partition Alchemy doesn't manage (created in the console or by another
+ * stack). It is read during plan/deploy, never created, updated or deleted,
+ * and binds like a declared instances instance partition.
+ *
+ * **Example:** Reference an existing instances instance partition
+ * ```typescript
+ * const instancesInstancePartition = GCP.Spanner.InstancesInstancePartition.lookup({
+ *   instancePartitionId: "my-instance-partition",
+ *   instance: "my-instance",
+ * });
+ * ```
+ *
  * @resource
  * @category Spanner
  */
@@ -180,20 +220,20 @@ export const InstancesInstancePartition = Resource<InstancesInstancePartition>(
 export class InstancePartitionNotResolved extends Data.TaggedError(
   "GCP.Spanner.InstancePartitionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class InstancePartitionNotReady extends Data.TaggedError(
   "GCP.Spanner.InstancePartitionNotReady",
 )<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class InstancePartitionStillExists extends Data.TaggedError(
   "GCP.Spanner.InstancePartitionStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toId = (id: string, instancePartitionId: string | undefined, existing?: string) =>
@@ -253,14 +293,14 @@ const toAttrs = (
 const getByName = (name: string) =>
   spanner
     .getProjectsInstancesInstancePartitions({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((partition) =>
       partition
         ? Effect.succeed(partition)
-        : Effect.fail(new InstancePartitionNotResolved({ name })),
+        : Effect.fail(new InstancePartitionNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Spanner.InstancePartitionNotResolved",
@@ -273,13 +313,13 @@ const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (partition): partition is spanner.InstancePartition => partition !== undefined,
-      () => new InstancePartitionNotResolved({ name }),
+      () => new InstancePartitionNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (partition) => (partition.state ?? "STATE_UNSPECIFIED") === "READY",
       (partition) =>
         new InstancePartitionNotReady({
-          name,
+          resourceName: name,
           state: partition.state ?? "STATE_UNSPECIFIED",
         }),
     ),
@@ -297,7 +337,7 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((partition) =>
       partition === undefined
         ? Effect.void
-        : Effect.fail(new InstancePartitionStillExists({ name })),
+        : Effect.fail(new InstancePartitionStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Spanner.InstancePartitionStillExists",
@@ -355,6 +395,16 @@ export const InstancesInstancePartitionProvider = () =>
           previousConfig !== nextConfig || (previousId !== undefined && nextId === previousId),
       };
     }),
+
+    lookup: Effect.fn(function* ({ instancePartitionId, instance }) {
+      const env = yield* GcpEnvironment.current;
+      const instanceId = instanceIdOf(instance ?? "");
+      if (instanceId.length === 0) return undefined;
+      const name = instancePartitionName(env.project, instanceId, instancePartitionId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -434,7 +484,7 @@ export const InstancesInstancePartitionProvider = () =>
               ),
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }

@@ -139,7 +139,8 @@ export interface ReadWriteClient extends Client {}
 const asString = (value: unknown): string => {
   if (typeof value === "string") return value;
   if (value == null) return "";
-  return String(value);
+  // RESP scalars (integers, bigints, booleans) coerce to their text form.
+  return String(value as number | bigint | boolean);
 };
 
 const asNullableString = (value: unknown): string | null => {

@@ -38,8 +38,8 @@ const Snapshot = S.StructWithRest(
     version: S.optional(S.String),
     dialect: S.optional(S.String),
     id: S.optional(S.String),
-    prevIds: S.optional(S.Array(S.String)),
-    ddl: S.optional(S.Array(DdlEntry)),
+    prevIds: S.String.pipe(S.Array, S.optional),
+    ddl: DdlEntry.pipe(S.Array, S.optional),
   }),
   [S.Record(S.String, S.Unknown)],
 );
@@ -61,7 +61,7 @@ type Hint =
   | { type: "rename"; kind: string; from: ReadonlyArray<string>; to: ReadonlyArray<string> }
   | { type: "create"; kind: string; entity: ReadonlyArray<string> };
 
-type GenerateOptions = {
+type GenerateOptions = SchemaGenerateOptions & {
   dialect: string;
   schema: string;
   out: string;
@@ -103,7 +103,7 @@ class DrizzleKitLoadFailed extends Data.TaggedError("DrizzleKitLoadFailed")<{
   readonly cause: unknown;
 }> {
   override get message() {
-    return `Failed to load ${this.module} (is drizzle-kit installed?): ${this.cause}`;
+    return `Failed to load ${this.module} (is drizzle-kit installed?): ${this.cause instanceof Error ? this.cause.message : String(this.cause)}`;
   }
 }
 
@@ -121,7 +121,7 @@ class SchemaImportFailed extends Data.TaggedError("SchemaImportFailed")<{
   readonly cause: unknown;
 }> {
   override get message() {
-    return `Failed to import schema at ${this.schema}: ${this.cause}`;
+    return `Failed to import schema at ${this.schema}: ${this.cause instanceof Error ? this.cause.message : String(this.cause)}`;
   }
 }
 
@@ -161,6 +161,28 @@ class UndecidedSchemaChange extends Data.TaggedError("UndecidedSchemaChange")<{
   }
 }
 
+/**
+ * Options passed through to `drizzle-kit generate`, matching the fields of
+ * the same name in `drizzle.config.ts`. `dialect`, `schema` and `out` come
+ * from {@link SchemaProps}.
+ */
+export type SchemaGenerateOptions = {
+  /**
+   * Separate statements with `--> statement-breakpoint` markers. Set to
+   * `false` to match migrations generated with `breakpoints: false`.
+   *
+   * @default true
+   */
+  breakpoints?: boolean;
+  /**
+   * Generate even when migrations from parallel branches conflict, writing
+   * a merge migration. Not supported for postgres.
+   *
+   * @default false
+   */
+  ignoreConflicts?: boolean;
+};
+
 export type SchemaProps = {
   /**
    * Path to the schema module, relative to the current working directory.
@@ -187,6 +209,12 @@ export type SchemaProps = {
    * @default "postgres"
    */
   dialect?: Dialect;
+  /**
+   * Options passed through to `drizzle-kit generate`.
+   *
+   * @example { breakpoints: false }
+   */
+  generate?: SchemaGenerateOptions;
 };
 
 export type Schema = Resource<
@@ -266,7 +294,11 @@ const exitTrap = Semaphore.makeUnsafe(1);
 const callDrizzleKit = <A>(command: string, run: () => Promise<A>) =>
   Effect.acquireUseRelease(
     Effect.sync(() => {
-      const trap = { exit: process.exit, exited: false };
+      // Saved only to restore `process.exit` verbatim, never called unbound.
+      // Read through `Reflect.get`: whether `typescript/unbound-method`
+      // flags `process.exit` depends on which `process` typing the linter's
+      // program resolves, which unrelated files change.
+      const trap = { exit: Reflect.get(process, "exit") as typeof process.exit, exited: false };
       process.exit = () => {
         trap.exited = true;
         throw new Error("drizzle-kit exited");
@@ -293,7 +325,7 @@ const callDrizzleKit = <A>(command: string, run: () => Promise<A>) =>
       Effect.sync(() => {
         process.exit = trap.exit;
       }),
-  ).pipe(exitTrap.withPermit);
+  ).pipe((effect) => exitTrap.withPermit(effect));
 
 // A `drizzle-kit/cli` command as an Effect, failing on a thrown or reported error.
 const command = <K extends keyof Commands>(name: K) =>
@@ -469,6 +501,7 @@ export const SchemaProvider = () =>
         // questions (columns of a renamed table), so ask until none are left.
         const result = yield* Effect.gen(function* () {
           const result = yield* drizzleKit.generate({
+            ...props.generate,
             dialect: cliDialect(props),
             schema: schemaGlob(props),
             out,
@@ -508,7 +541,7 @@ export const SchemaProvider = () =>
           effect.pipe(
             Effect.scoped,
             Artifacts.cached(
-              `detectDrift:${cliDialect(props)}:${resolveSchema(props)}:${resolveOut(props)}`,
+              `detectDrift:${cliDialect(props)}:${resolveSchema(props)}:${resolveOut(props)}:${JSON.stringify(props.generate ?? {})}`,
             ),
           ),
       );
@@ -523,6 +556,7 @@ export const SchemaProvider = () =>
         if (changed) {
           yield* fs.makeDirectory(out, { recursive: true });
           const result = yield* drizzleKit.generate({
+            ...props.generate,
             dialect: cliDialect(props),
             schema: schemaGlob(props),
             out,

@@ -4,7 +4,7 @@ import { RpcSession, type RpcCompatible, type RpcTransport } from "capnweb";
  * A platform-agnostic interface for a server-side WebSocket.
  */
 export interface ServerWebSocketLike {
-  send: (message: string) => any | Promise<any>;
+  send: (message: string) => any;
   close: (code?: number, reason?: string) => void;
 }
 
@@ -32,7 +32,7 @@ function makeWebSocketRpcTransport(ws: ServerWebSocketLike) {
   let receiveQueue: Array<string> = [];
   let receiveResolver: ((value: string) => void) | undefined;
   let receiveRejecter: ((reason: unknown) => void) | undefined;
-  let error: unknown | undefined;
+  let error: unknown;
   return {
     transport: {
       send: async (message: string) => await ws.send(message),

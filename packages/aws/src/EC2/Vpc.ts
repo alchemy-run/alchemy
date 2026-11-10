@@ -1,5 +1,6 @@
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as ec2 from "@distilled.cloud/aws/ec2";
+import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved, somePropsAreDifferent } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import type { ScopedPlanStatusSession } from "alchemy/Report";
@@ -9,6 +10,7 @@ import {
   createInternalTags,
   createTagsList,
   diffTags,
+  hasAlchemyTags,
 } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -17,8 +19,14 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { nameTagFilter, single } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
+
+export class VpcUnexpectedResponse extends Data.TaggedError("VpcUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type VpcId = `vpc-${string}`;
 export const VpcId = <const S extends string>(value: S): S & VpcId => value as S & VpcId;
@@ -167,10 +175,41 @@ export interface Vpc extends Resource<
      * The tags currently assigned to the VPC, including alchemy auto-tags.
      */
     tags?: Record<string, string>;
+
+    /**
+     * Whether DNS resolution is enabled, as observed. Lets `alchemy drift`
+     * detect out-of-band changes.
+     */
+    enableDnsSupport?: boolean;
+
+    /**
+     * Whether instances get public DNS hostnames, as observed. Lets
+     * `alchemy drift` detect out-of-band changes.
+     */
+    enableDnsHostnames?: boolean;
   },
   never,
-  Providers
+  Providers,
+  VpcLookup
 > {}
+
+/**
+ * Props for {@link Vpc.lookup}: find a VPC this stack doesn't manage, in
+ * the ambient account and region.
+ */
+export type VpcLookup =
+  | {
+      /** The VPC's id. */
+      vpcId: string;
+    }
+  | {
+      /** The value of its `Name` tag; fails when several match. */
+      name: string;
+    }
+  | {
+      /** The account's default VPC in the region. */
+      isDefault: true;
+    };
 /**
  * An Amazon VPC (Virtual Private Cloud) — an isolated virtual network that is
  * the root of any custom AWS networking topology. Subnets, route tables,
@@ -305,6 +344,28 @@ export interface Vpc extends Resource<
  * `alchemy::stage`, `alchemy::id`), which brand the VPC as managed by your
  * stack. The `Name` tag is what surfaces in the EC2 console.
  *
+ * ### Looking up an existing VPC
+ * `Vpc.lookup` references a VPC Alchemy doesn't manage (created in the
+ * console or by another stack), found by `vpcId`, its `Name` tag, or `isDefault: true` for the
+region's default VPC. It is read during plan/deploy
+ * and never created, updated or deleted. A lookup by `name` fails with
+ * `AmbiguousLookupError` when several match.
+ *
+ * **Example:** Put a subnet in an existing VPC
+ * ```typescript
+ * const vpc = AWS.EC2.Vpc.lookup({ name: "shared" });
+ *
+ * const subnet = yield* AWS.EC2.Subnet("App", {
+ *   vpcId: vpc.vpcId,
+ *   cidrBlock: "10.0.8.0/24",
+ * });
+ * ```
+ *
+ * **Example:** Use the default VPC
+ * ```typescript
+ * const vpc = AWS.EC2.Vpc.lookup({ isDefault: true });
+ * ```
+ *
  * @resource
  */
 export const Vpc = Resource<Vpc>("AWS.EC2.VPC");
@@ -381,8 +442,65 @@ export const VpcProvider = () =>
           .pipe(Stream.runHead, Effect.map(Option.getOrUndefined));
       });
 
+      const readDnsAttributes = Effect.fn(function* (vpcId: string) {
+        const [support, hostnames] = yield* Effect.all(
+          [
+            ec2.describeVpcAttribute({ VpcId: vpcId, Attribute: "enableDnsSupport" }),
+            ec2.describeVpcAttribute({ VpcId: vpcId, Attribute: "enableDnsHostnames" }),
+          ],
+          { concurrency: "unbounded" },
+        );
+        return {
+          enableDnsSupport: support.EnableDnsSupport?.Value ?? true,
+          enableDnsHostnames: hostnames.EnableDnsHostnames?.Value ?? false,
+        };
+      });
+
       return {
         stables: ["vpcId", "vpcArn", "ownerId", "isDefault"],
+        lookup: Effect.fn(function* (props) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const found = yield* ec2
+            .describeVpcs(
+              "vpcId" in props
+                ? { VpcIds: [props.vpcId] }
+                : "name" in props
+                  ? { Filters: [nameTagFilter(props.name)] }
+                  : { Filters: [{ Name: "isDefault", Values: ["true"] }] },
+            )
+            .pipe(Effect.catchTag("InvalidVpcID.NotFound", () => Effect.succeed({ Vpcs: [] })));
+          const match = yield* single(
+            "AWS.EC2.Vpc",
+            "vpcId" in props
+              ? props.vpcId
+              : "name" in props
+                ? `Name=${props.name}`
+                : "isDefault=true",
+            found.Vpcs ?? [],
+            (x) => x.VpcId,
+          );
+          if (!match?.VpcId) return undefined;
+          return {
+            ...vpcToAttributes(match, region, accountId, tagsFromVpc(match)),
+            ...(yield* readDnsAttributes(match.VpcId)),
+          };
+        }),
+        read: Effect.fn(function* ({ id, instanceId, output }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const vpc = output?.vpcId
+            ? (yield* ec2
+                .describeVpcs({ VpcIds: [output.vpcId] })
+                .pipe(Effect.catchTag("InvalidVpcID.NotFound", () => Effect.succeed({ Vpcs: [] }))))
+                .Vpcs?.[0]
+            : yield* findVpcByInstanceTags(id, instanceId);
+          if (!vpc?.VpcId) return undefined;
+          const tags = tagsFromVpc(vpc);
+          const attrs = {
+            ...vpcToAttributes(vpc, region, accountId, tags),
+            ...(yield* readDnsAttributes(vpc.VpcId)),
+          };
+          return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
+        }),
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return;
           if (
@@ -523,10 +641,16 @@ export const VpcProvider = () =>
           const final = yield* ec2.describeVpcs({ VpcIds: [vpcId] });
           const finalVpc = final.Vpcs?.[0];
           if (!finalVpc) {
-            return yield* Effect.fail(new Error(`VPC ${vpcId} disappeared during reconcile`));
+            return yield* new VpcUnexpectedResponse({
+              message: `VPC ${vpcId} disappeared during reconcile`,
+            });
           }
 
-          return vpcToAttributes(finalVpc, region, accountId, desiredTags);
+          return {
+            ...vpcToAttributes(finalVpc, region, accountId, desiredTags),
+            enableDnsSupport: desiredDnsSupport,
+            enableDnsHostnames: desiredDnsHostnames,
+          };
         }),
 
         list: () =>
@@ -615,7 +739,7 @@ const waitForVpcAvailable = (vpcId: string, session?: ScopedPlanStatusSession) =
     const vpc = result.Vpcs?.[0];
 
     if (!vpc) {
-      return yield* Effect.fail(new Error(`VPC ${vpcId} not found`));
+      return yield* new VpcUnexpectedResponse({ message: `VPC ${vpcId} not found` });
     }
 
     if (vpc.State === "available") {

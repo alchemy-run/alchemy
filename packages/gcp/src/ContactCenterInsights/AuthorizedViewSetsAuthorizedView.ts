@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -16,7 +17,6 @@ import {
   locationOf,
   locationParent,
   MAX_VIEW_DISPLAY_NAME_LENGTH,
-  normalizeLocation,
   ownedByAlchemy,
   parentOf,
   parseOwnership,
@@ -77,8 +77,33 @@ export type AuthorizedViewSetsAuthorizedView = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AuthorizedViewSetsAuthorizedViewLookup
 >;
+
+/**
+ * Props for {@link AuthorizedViewSetsAuthorizedView.lookup}: find an
+ * authorized view sets authorized view this stack doesn't manage by its
+ * identifiers, in the ambient project unless `project` names another.
+ */
+export interface AuthorizedViewSetsAuthorizedViewLookup {
+  /**
+   * AuthorizedView id (the `{authorized_view}` segment). Must match
+   * `^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$`.
+   */
+  authorizedViewId: string;
+  /**
+   * Parent AuthorizedViewSet resource name
+   * (`projects/{project}/locations/{l
+   * ocation}/authorizedViewSets/{authorized_view_set}`).
+   */
+  parent: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Contact Center AI Insights AuthorizedView, a filtered view of
@@ -101,6 +126,20 @@ export type AuthorizedViewSetsAuthorizedView = Resource<
  * );
  * ```
  *
+ * ### Looking up an existing authorized view sets authorized view
+ * `AuthorizedViewSetsAuthorizedView.lookup` references an authorized view
+ * sets authorized view Alchemy doesn't manage (created in the console or by
+ * another stack). It is read during plan/deploy, never created, updated or
+ * deleted, and binds like a declared authorized view sets authorized view.
+ *
+ * **Example:** Reference an existing authorized view sets authorized view
+ * ```typescript
+ * const authorizedViewSetsAuthorizedView = GCP.ContactCenterInsights.AuthorizedViewSetsAuthorizedView.lookup({
+ *   authorizedViewId: "my-authorized-view",
+ *   parent: "my-parent",
+ * });
+ * ```
+ *
  * @resource
  * @category ContactCenterInsights
  */
@@ -111,7 +150,7 @@ export const AuthorizedViewSetsAuthorizedView = Resource<AuthorizedViewSetsAutho
 export class AuthorizedViewSetsAuthorizedViewNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.AuthorizedViewSetsAuthorizedViewNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (parent: string, authorizedViewId: string) =>
@@ -135,10 +174,10 @@ const toAttrs = (view: cci.GoogleCloudContactcenterinsightsV1AuthorizedView, pro
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cci
         .getProjectsLocationsAuthorizedViewSetsAuthorizedViews({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAtParent = (parent: string, project: string) =>
   cci.listProjectsLocationsAuthorizedViewSetsAuthorizedViews.pages({ parent, pageSize: 100 }).pipe(
@@ -170,6 +209,14 @@ export const AuthorizedViewSetsAuthorizedViewProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ authorizedViewId, parent }) {
+      const env = yield* GcpEnvironment.current;
+      const name = parent !== undefined ? resourceName(parent, authorizedViewId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -227,7 +274,7 @@ export const AuthorizedViewSetsAuthorizedViewProvider = () =>
 
       if (current === undefined) {
         return yield* new AuthorizedViewSetsAuthorizedViewNotResolved({
-          name,
+          resourceName: name,
         });
       }
 

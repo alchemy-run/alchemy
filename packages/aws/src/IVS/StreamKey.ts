@@ -42,8 +42,23 @@ export interface StreamKey extends Resource<
     value: Redacted.Redacted<string> | undefined;
   },
   never,
-  Providers
+  Providers,
+  StreamKeyLookup
 > {}
+
+/**
+ * Props for {@link StreamKey.lookup}: find a stream key this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type StreamKeyLookup =
+  | {
+      /** The ARN of the existing stream key. */
+      streamKeyArn: string;
+    }
+  | {
+      /** The channel whose stream key to find. */
+      channelArn: string;
+    };
 
 /**
  * An Amazon IVS stream key — the secret credential broadcast software
@@ -63,6 +78,16 @@ export interface StreamKey extends Resource<
  * const streamKey = yield* IVS.StreamKey("LiveKey", {
  *   channelArn: channel.channelArn,
  * });
+ * ```
+ *
+ * ### Looking up an existing stream key
+ * `StreamKey.lookup` references a stream key Alchemy doesn't manage (created in the
+ * console or by another stack), found by `streamKeyArn` or the `channelArn` it belongs to. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing stream key
+ * ```typescript
+ * const key = AWS.IVS.StreamKey.lookup({ channelArn });
  * ```
  *
  * @resource
@@ -97,7 +122,7 @@ export const StreamKeyProvider = () =>
       const getByArn = Effect.fn(function* (arn: string) {
         const response = yield* ivs.getStreamKey({ arn }).pipe(
           retryWhileThrottled,
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
         return response?.streamKey;
       });
@@ -110,7 +135,7 @@ export const StreamKeyProvider = () =>
       const findByChannel = Effect.fn(function* (channelArn: string) {
         const page = yield* ivs.listStreamKeys({ channelArn }).pipe(
           retryWhileThrottled,
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
         const arn = page?.streamKeys.find((s) => s.arn !== undefined)?.arn;
         return arn === undefined ? undefined : yield* getByArn(arn);
@@ -119,6 +144,13 @@ export const StreamKeyProvider = () =>
       return {
         stables: ["streamKeyArn", "channelArn"],
 
+        lookup: Effect.fn(function* (props) {
+          const streamKey =
+            "streamKeyArn" in props
+              ? yield* getByArn(props.streamKeyArn)
+              : yield* findByChannel(props.channelArn);
+          return streamKey === undefined ? undefined : yield* toAttrs(streamKey);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const streamKey = output?.streamKeyArn
             ? yield* getByArn(output.streamKeyArn)
@@ -140,7 +172,7 @@ export const StreamKeyProvider = () =>
           ) {
             const response = yield* ivs.getChannel({ arn: olds.channelArn }).pipe(
               retryWhileThrottled,
-              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
             );
             const channelTags = toTagRecord(response?.channel?.tags);
             const channelId = channelTags["alchemy::id"];

@@ -175,7 +175,7 @@ export const SettingsProvider = () =>
             Effect.map((observed) => toAttributes(zoneId, observed, observed)),
             // Zones the scoped token can't read (partial / restricted)
             // reject with the typed `Forbidden` error; skip them.
-            Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
+            Effect.catchTag("Forbidden", () => Effect.undefined),
           ),
         { concurrency: 10 },
       );

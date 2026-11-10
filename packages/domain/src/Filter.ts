@@ -153,8 +153,8 @@ const FieldJson: Schema.Codec<unknown> = Schema.Union([
 const OperatorsJson = Schema.Struct({
   equals: Schema.optionalKey(Operand),
   not: Schema.optionalKey(Operand),
-  in: Schema.optionalKey(Schema.Array(Operand)),
-  notIn: Schema.optionalKey(Schema.Array(Operand)),
+  in: Operand.pipe(Schema.Array, Schema.optionalKey),
+  notIn: Operand.pipe(Schema.Array, Schema.optionalKey),
   lt: Schema.optionalKey(Operand),
   lte: Schema.optionalKey(Operand),
   gt: Schema.optionalKey(Operand),
@@ -176,8 +176,8 @@ const OperatorsJson = Schema.Struct({
  */
 export const FilterJson: Schema.Codec<unknown> = Schema.StructWithRest(
   Schema.Struct({
-    AND: Schema.optionalKey(Schema.Array(Schema.suspend(() => FilterJson))),
-    OR: Schema.optionalKey(Schema.Array(Schema.suspend(() => FilterJson))),
+    AND: Schema.suspend(() => FilterJson).pipe(Schema.Array, Schema.optionalKey),
+    OR: Schema.suspend(() => FilterJson).pipe(Schema.Array, Schema.optionalKey),
     NOT: Schema.optionalKey(Schema.suspend(() => FilterJson)),
   }),
   [Schema.Record(Schema.String, FieldJson)],

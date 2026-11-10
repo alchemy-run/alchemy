@@ -59,8 +59,23 @@ export interface Datastore extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DatastoreLookup
 > {}
+
+/**
+ * Props for {@link Datastore.lookup}: find a datastore this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type DatastoreLookup =
+  | {
+      /** The id of the existing datastore. */
+      datastoreId: string;
+    }
+  | {
+      /** The name of the existing datastore. */
+      datastoreName: string;
+    };
 
 /**
  * An AWS HealthImaging data store — a HIPAA-eligible store for DICOM P10
@@ -90,6 +105,16 @@ export interface Datastore extends Resource<
  * const datastore = yield* Datastore("Imaging", {});
  * // startDICOMImportJob and image-set APIs address the store by id
  * const id = datastore.datastoreId;
+ * ```
+ *
+ * ### Looking up an existing datastore
+ * `Datastore.lookup` references a datastore Alchemy doesn't manage (created in the
+ * console or by another stack), found by `datastoreId` or `datastoreName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing datastore
+ * ```typescript
+ * const existing = AWS.MedicalImaging.Datastore.lookup({ datastoreName: "analytics" });
  * ```
  *
  * @resource
@@ -155,7 +180,7 @@ export const DatastoreProvider = () =>
       const getById = Effect.fn(function* (datastoreId: string) {
         const response = yield* medicalimaging
           .getDatastore({ datastoreId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         const properties = response?.datastoreProperties;
         if (properties === undefined) return undefined;
         if (properties.datastoreStatus === "DELETED" || properties.datastoreStatus === "DELETING") {
@@ -266,6 +291,14 @@ export const DatastoreProvider = () =>
           // tags → default update
         }),
 
+        lookup: Effect.fn(function* (props) {
+          const found = yield* observe(
+            "datastoreId" in props ? props.datastoreId : undefined,
+            "datastoreName" in props ? props.datastoreName : "",
+          );
+          if (found === undefined) return undefined;
+          return yield* toAttrs(found);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.datastoreName ?? (yield* toName(id, olds ?? {}));
           const properties = yield* observe(output?.datastoreId, name);
@@ -296,7 +329,7 @@ export const DatastoreProvider = () =>
                 losslessStorageFormat: props.losslessStorageFormat,
                 tags: desiredTags,
               })
-              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             observed =
               created !== undefined ? yield* getById(created.datastoreId) : yield* findByName(name);
           }
@@ -338,7 +371,7 @@ export const DatastoreProvider = () =>
           // once the retry budget is exhausted.
           const observed = yield* medicalimaging
             .getDatastore({ datastoreId: output.datastoreId })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           const status = observed?.datastoreProperties.datastoreStatus;
           if (status === undefined || status === "DELETING" || status === "DELETED") {
             return;
@@ -362,7 +395,7 @@ export const DatastoreProvider = () =>
                 (summary) =>
                   getById(summary.datastoreId).pipe(
                     Effect.flatMap((properties) =>
-                      properties === undefined ? Effect.succeed(undefined) : toAttrs(properties),
+                      properties === undefined ? Effect.undefined : toAttrs(properties),
                     ),
                   ),
                 { concurrency: 4 },

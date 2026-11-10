@@ -217,7 +217,7 @@ export class Context extends RpcTarget {
     rollbackOptions?: WorkflowStepRollbackOptions,
   ): Promise<unknown>;
 
-  async do<T>(name: string, ...rest: Array<unknown>): Promise<unknown | void | undefined> {
+  async do<T>(name: string, ...rest: Array<unknown>): Promise<unknown> {
     let closure: (ctx: WorkflowStepContext) => Promise<T>;
     let stepConfig: WorkflowStepConfig;
     let rollbackOptions: WorkflowStepRollbackOptions | undefined;
@@ -482,7 +482,7 @@ export class Context extends RpcTarget {
 
     const doWrapper = async (
       doWrapperClosure: (ctx: WorkflowStepContext) => Promise<unknown>,
-    ): Promise<unknown | void | undefined> => {
+    ): Promise<unknown> => {
       const stepState = ((await this.#state.storage.get(stepStateKey)) as StepState) ?? {
         attemptedCount: 0,
       };
@@ -566,7 +566,7 @@ export class Context extends RpcTarget {
           // if we reach here, means that we can try to delete the timeout from the PQ
           // because we managed to wait in the same lifetime
           // @ts-expect-error priorityQueue is initiated in init
-          await this.#engine.priorityQueue.remove({
+          this.#engine.priorityQueue.remove({
             hash: priorityQueueHash,
             type: "timeout",
           });

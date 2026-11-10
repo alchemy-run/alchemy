@@ -253,7 +253,7 @@ const toAttributes = (live: rbin.GetRuleResponse): Rule["Attributes"] => ({
 const readRule = (identifier: string) =>
   rbin
     .getRule({ Identifier: identifier })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
 /** Observed tags on the rule itself (empty on a NotFound race). */
 const readRuleTags = (ruleArn: string) =>

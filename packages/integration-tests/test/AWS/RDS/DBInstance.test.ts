@@ -32,6 +32,7 @@ import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { driftOf } from "../drift.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -275,6 +276,13 @@ lifecycle(3, process.env.AWS_TEST_RDS_DBINSTANCE)(
         .deploy(program("updated"))
         .pipe(Effect.provideService(HttpClient.HttpClient, client));
       expect(updated.endpointPort).toBe(5434);
+      // #2688: drift observes autoMinorVersionUpgrade.
+      const observedInstance = (yield* rds.describeDBInstances({
+        DBInstanceIdentifier: updated.dbInstanceIdentifier,
+      })).DBInstances![0]!;
+      expect((yield* driftOf(stack, "ListInstance"))?.attr?.autoMinorVersionUpgrade).toBe(
+        observedInstance.AutoMinorVersionUpgrade,
+      );
       expect(requests.filter((request) => request.port !== null)).toEqual([]);
       expect(requests.filter((request) => request.securityGroups.length > 0)).toEqual([]);
       const cluster = (yield* rds.describeDBClusters({

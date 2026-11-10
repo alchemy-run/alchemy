@@ -33,17 +33,18 @@ export const foldkitBuildMetadataReader = (
   const plugin = plugins.find((plugin) => plugin.name === "foldkit:build");
   if (plugin === undefined) return undefined;
   if (main !== undefined) {
-    throw new BundleError({
+    throw BundleError.make({
       message:
         "Foldkit ssr.build generates the Worker fetch handler and cannot be combined with main. Remove main or disable ssr.build for a custom Worker entry.",
     });
   }
   if (typeof plugin.api?.getBuildMetadata !== "function") {
-    throw new BundleError({
+    throw BundleError.make({
       message:
         "Foldkit's build plugin does not expose getBuildMetadata(). Upgrade @foldkit/vite-plugin to 0.25.0 or newer.",
     });
   }
+  // oxlint-disable-next-line effecttsgo/schema-sync -- read inside Vite's build callback; a throw is caught by its tryPromise
   return () => Schema.decodeUnknownSync(FoldkitBuildMetadata)(plugin.api.getBuildMetadata());
 };
 

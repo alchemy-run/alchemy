@@ -14,6 +14,8 @@ import { Region, type RegionName } from "@distilled.cloud/aws/Region";
 import * as SigV4 from "@distilled.cloud/aws/SigV4";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import { Self } from "alchemy/Self";
+import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import type { HttpClient } from "effect/http/HttpClient";
@@ -52,6 +54,11 @@ import {
   ensureAssociation,
   ensurePodRole,
 } from "./internal/podIdentity.ts";
+
+export class KubernetesAdapterNotReady extends Data.TaggedError("KubernetesAdapterNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 declare module "@alchemy.run/kubernetes/Connection" {
   interface AuthRegistry {
@@ -124,7 +131,8 @@ type EksAdapterDeps =
   | Region
   | AWSEnvironment
   | FileSystem.FileSystem
-  | Path.Path;
+  | Path.Path
+  | SecureRandom.SecureRandom;
 
 /** Mint an EKS SigV4 bearer token (STS `GetCallerIdentity` presign). */
 const mintEksToken = Effect.fn(function* (clusterName: string, region: string) {
@@ -239,6 +247,7 @@ import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Credentials from "@distilled.cloud/aws/Credentials";
 import * as Effect from "effect/Effect";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
@@ -257,6 +266,7 @@ const layer = makeEntrypointLayer(tag, entrypoint);
 const platform = Layer.mergeAll(
   BunServices.layer,
   FetchHttpClient.layer,
+  SecureRandom.layerWebCrypto,
   Logger.layer([Logger.consolePretty()]),
 );
 
@@ -336,6 +346,7 @@ import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Credentials from "@distilled.cloud/aws/Credentials";
 import * as Effect from "effect/Effect";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
@@ -350,6 +361,7 @@ const layer = makeEntrypointLayer(tag, entrypoint);
 const platform = Layer.mergeAll(
   BunServices.layer,
   FetchHttpClient.layer,
+  SecureRandom.layerWebCrypto,
   Logger.layer([Logger.consolePretty()]),
 );
 
@@ -439,7 +451,7 @@ export const EksKubernetesAdapter = () =>
         region?: string | undefined;
       }) {
         const described = yield* eks.describeCluster({ name: auth.clusterName }).pipe(
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           withAws(auth.region),
         );
         const cluster = described?.cluster;
@@ -462,12 +474,11 @@ export const EksKubernetesAdapter = () =>
         const endpoint = cluster.endpoint;
         const certificateAuthorityData = cluster.certificateAuthority?.data;
         if (!endpoint || !certificateAuthorityData) {
-          return yield* Effect.fail(
-            new Error(
+          return yield* new KubernetesAdapterNotReady({
+            message:
               `EKS cluster '${auth.clusterName}' has no endpoint or ` +
-                "certificate authority data yet (still creating?)",
-            ),
-          );
+              "certificate authority data yet (still creating?)",
+          });
         }
         return yield* makeEksTransport({
           clusterName: auth.clusterName,
@@ -545,7 +556,7 @@ export const EksKubernetesAdapter = () =>
           // invalid state` mid-teardown).
           if (auth !== undefined && typeof state?.associationId === "string") {
             const cluster = yield* describeLiveCluster(auth).pipe(
-              Effect.catchTag("Kubernetes.ClusterNotFoundError", () => Effect.succeed(undefined)),
+              Effect.catchTag("Kubernetes.ClusterNotFoundError", () => Effect.undefined),
             );
             if (cluster) {
               yield* deleteAssociation({
@@ -641,7 +652,7 @@ export const EksKubernetesAdapter = () =>
         // default to an internet-facing NLB so the returned `url` is
         // actually reachable.
         const cluster = yield* describeLiveCluster(auth).pipe(
-          Effect.catchTag("Kubernetes.ClusterNotFoundError", () => Effect.succeed(undefined)),
+          Effect.catchTag("Kubernetes.ClusterNotFoundError", () => Effect.undefined),
         );
         return {
           loadBalancerClass: cluster?.kubernetesNetworkConfig?.elasticLoadBalancing?.enabled

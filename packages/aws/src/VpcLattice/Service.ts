@@ -6,12 +6,20 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "alchemy/Tags";
 import { toWireSeconds } from "alchemy/Util/Duration";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { retryOnConflict, waitUntilAbsent, waitUntilStable } from "./internal.ts";
 import type { ServiceNetworkAuthType } from "./ServiceNetwork.ts";
+
+export class VpcLatticeServiceUnexpectedResponse extends Data.TaggedError(
+  "VpcLatticeServiceUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ServiceProps {
   /**
@@ -79,8 +87,18 @@ export interface Service extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ServiceLookup
 > {}
+
+/**
+ * Props for {@link Service.lookup}: find a service this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ServiceLookup {
+  /** The id of the existing service. */
+  serviceId: string;
+}
 
 /**
  * An Amazon VPC Lattice service — an independently deployable unit of software
@@ -103,6 +121,16 @@ export interface Service extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing service
+ * `Service.lookup` references a service Alchemy doesn't manage (created in the
+ * console or by another stack), found by `serviceId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing service
+ * ```typescript
+ * const existing = AWS.VpcLattice.Service.lookup({ serviceId: "..." });
+ * ```
+ *
  * @resource
  */
 export const Service = Resource<Service>("AWS.VpcLattice.Service");
@@ -120,7 +148,7 @@ export const ServiceProvider = () =>
       const observe = (serviceIdentifier: string) =>
         vpclattice
           .getService({ serviceIdentifier })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       const findByName = (name: string) =>
         vpclattice.listServices.pages({}).pipe(
@@ -130,9 +158,7 @@ export const ServiceProvider = () =>
               .flatMap((page) => page.items ?? [])
               .find((s) => s.name === name),
           ),
-          Effect.flatMap((summary) =>
-            summary?.id ? observe(summary.id) : Effect.succeed(undefined),
-          ),
+          Effect.flatMap((summary) => (summary?.id ? observe(summary.id) : Effect.undefined)),
         );
 
       const syncTags = Effect.fn(function* (arn: string, desiredTags: Record<string, string>) {
@@ -165,6 +191,23 @@ export const ServiceProvider = () =>
           if ((olds?.customDomainName ?? undefined) !== news.customDomainName) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ serviceId }) {
+          const service = yield* observe(serviceId);
+          if (!service?.arn || !service.id) return undefined;
+          const listed = yield* vpclattice.listTagsForResource({
+            resourceArn: service.arn,
+          });
+          const attrs = {
+            serviceId: service.id,
+            serviceArn: service.arn,
+            name: service.name!,
+            status: service.status ?? "UNKNOWN",
+            dnsName: service.dnsEntry?.domainName,
+            authType: (service.authType as ServiceNetworkAuthType) ?? "NONE",
+            tags: tagRecord(listed.tags),
+          };
+          return attrs;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const service = output?.serviceId
@@ -209,7 +252,9 @@ export const ServiceProvider = () =>
               })
               .pipe(Effect.catchTag("ConflictException", () => findByName(name)));
             if (!created?.arn || !created.id) {
-              return yield* Effect.fail(new Error(`Failed to create service ${name}`));
+              return yield* new VpcLatticeServiceUnexpectedResponse({
+                message: `Failed to create service ${name}`,
+              });
             }
             serviceId = created.id;
             serviceArn = created.arn;

@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -268,8 +269,33 @@ export type Pipeline = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  PipelineLookup
 >;
+
+/**
+ * Props for {@link Pipeline.lookup}: find a pipeline this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface PipelineLookup {
+  /**
+   * Pipeline id (the `{pipeline}` segment of
+   * `projects/{project}/locations/{location}/pipelines/{pipeline}`). Must
+   * match `[a-z]([a-z0-9-]*[a-z0-9])?` and be 1-63 characters.
+   */
+  pipelineId: string;
+  /**
+   * Eventarc Advanced location (`us-central1`, `us-east4`, …).
+   * `US-CENTRAL1` is accepted and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Eventarc Advanced pipeline that delivers matched enrollment
@@ -316,6 +342,16 @@ export type Pipeline = Resource<
  *   retryPolicy: { maxAttempts: 8 },
  *   labels: { env: "prod", role: "pipeline" },
  * });
+ * ```
+ *
+ * ### Looking up an existing pipeline
+ * `Pipeline.lookup` references a pipeline Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared pipeline.
+ *
+ * **Example:** Reference an existing pipeline
+ * ```typescript
+ * const pipeline = GCP.Eventarc.Pipeline.lookup({ pipelineId: "my-pipeline" });
  * ```
  *
  * @resource
@@ -462,7 +498,7 @@ const toAttrs = (pipeline: eventarc.Pipeline, project: string, region: string) =
 const getByName = (name: string) =>
   eventarc
     .getProjectsLocationsPipelines({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const PipelineProvider = () =>
   Provider.succeed(Pipeline, {
@@ -486,6 +522,15 @@ export const PipelineProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ pipelineId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, COLLECTION, pipelineId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -557,7 +602,7 @@ export const PipelineProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -614,7 +659,7 @@ export const PipelineProvider = () =>
               name: output.name,
               allowMissing: true,
             })
-            .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
           if (operation !== undefined) {
             yield* waitForOperation(operation, { notFoundOk: true });
           }

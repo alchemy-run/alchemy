@@ -1,11 +1,23 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Alchemy from "alchemy";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Redacted from "effect/Redacted";
 import { Logs, Metrics, Traces } from "./Datasets.ts";
 import { IngestToken } from "./IngestToken.ts";
+
+class UpstreamFetchError extends Data.TaggedError("UpstreamFetchError")<{
+  message: string;
+  cause: unknown;
+}> {}
+
+const upstreamFetchError = (cause: unknown) =>
+  new UpstreamFetchError({
+    message: cause instanceof Error ? cause.message : String(cause),
+    cause,
+  });
 
 /**
  * Public ingest relay used by both:
@@ -75,13 +87,14 @@ export default class Ingester extends Cloudflare.Worker<Ingester>()(
         if (otlp) {
           const tokenRaw = yield* tokenValue.pipe(Effect.map(Redacted.value));
           const token = Redacted.isRedacted(tokenRaw)
-            ? Redacted.value(tokenRaw)
+            ? String(Redacted.value(tokenRaw))
             : (tokenRaw as string);
 
           const body = yield* request.arrayBuffer;
 
           const response = yield* Effect.tryPromise({
             try: () =>
+              // oxlint-disable-next-line effecttsgo/global-fetch-in-effect -- raw Web Request/Response relay passed straight to HttpServerResponse.fromWeb
               fetch(otlp.endpoint, {
                 method: "POST",
                 headers: {
@@ -91,7 +104,7 @@ export default class Ingester extends Cloudflare.Worker<Ingester>()(
                 },
                 body,
               }),
-            catch: (e) => (e instanceof Error ? e : new Error(String(e))),
+            catch: upstreamFetchError,
           });
 
           return HttpServerResponse.fromWeb(response);
@@ -122,6 +135,7 @@ export default class Ingester extends Cloudflare.Worker<Ingester>()(
 
         const upstream = yield* Effect.tryPromise({
           try: () =>
+            // oxlint-disable-next-line effecttsgo/global-fetch-in-effect -- raw Web Request/Response reverse proxy (cf cache opts, redirect: "manual", fromWeb passthrough)
             fetch(target, {
               method: raw.method,
               headers,
@@ -132,7 +146,7 @@ export default class Ingester extends Cloudflare.Worker<Ingester>()(
                   ({ cf: { cacheTtl: 3600, cacheEverything: true } } as any)
                 : {}),
             }),
-          catch: (e) => (e instanceof Error ? e : new Error(String(e))),
+          catch: upstreamFetchError,
         });
 
         return HttpServerResponse.fromWeb(upstream);

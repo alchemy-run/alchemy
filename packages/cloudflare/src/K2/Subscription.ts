@@ -133,7 +133,7 @@ export const SubscriptionProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, output, olds }) {
+    read: Effect.fn(function* ({ id, output, olds, previous }) {
       const streamId = output?.streamId ?? streamIdOf(olds?.stream);
       if (!streamId) return undefined;
       if (output?.subscriptionId) {
@@ -144,7 +144,10 @@ export const SubscriptionProvider = () =>
       const match = yield* findSubscriptionByName(streamId, name);
       if (match) {
         const attrs = toAttributes(match, streamId);
-        return olds?.name !== undefined ? Unowned(attrs) : attrs;
+        // The generation a replacement is replacing is ours.
+        return olds?.name !== undefined && attrs.subscriptionId !== previous?.subscriptionId
+          ? Unowned(attrs)
+          : attrs;
       }
       return undefined;
     }),
@@ -229,9 +232,7 @@ const streamIdOf = (stream: unknown): string | undefined =>
 const getSubscription = (streamId: string, subscriptionId: string) =>
   k2.getSubscription({ streamId, subscriptionId }).pipe(
     Effect.map((s): ObservedSubscription | undefined => s),
-    Effect.catchTag(["K2SubscriptionNotFound", "K2StreamNotFound"], () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag(["K2SubscriptionNotFound", "K2StreamNotFound"], () => Effect.undefined),
   );
 
 /** `listSubscriptions` filters by name server-side (at most one match). */
@@ -240,7 +241,7 @@ const findSubscriptionByName = (streamId: string, name: string) =>
     Effect.map((subs): ObservedSubscription | undefined =>
       subs.find((s) => s.name.toLowerCase() === name.toLowerCase()),
     ),
-    Effect.catchTag("K2StreamNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("K2StreamNotFound", () => Effect.undefined),
   );
 
 const toAttributes = (

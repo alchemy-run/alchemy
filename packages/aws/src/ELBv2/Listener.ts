@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
+import { plainJson } from "../internal/Observe.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import {
@@ -99,10 +100,40 @@ export interface Listener extends Resource<
      * attributes are left out so AWS defaults never register as drift.
      */
     attributes?: Record<string, string>;
+    /**
+     * Default actions, default certificate, TLS/ALPN policy, mutual TLS and
+     * (when `certificates` is declared) the SNI certificates, as observed.
+     * Lets `alchemy drift` detect out-of-band changes.
+     */
+    configuration?: {
+      defaultActions: unknown[];
+      certificateArn?: string;
+      sslPolicy?: string;
+      alpnPolicy?: string[];
+      mutualAuthentication?: unknown;
+      sniCertificateArns?: string[];
+    };
   },
   never,
-  Providers
+  Providers,
+  ListenerLookup
 > {}
+
+/**
+ * Props for {@link Listener.lookup}: find a listener this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type ListenerLookup =
+  | {
+      /** The ARN of the existing listener. */
+      listenerArn: string;
+    }
+  | {
+      /** The load balancer the listener belongs to. */
+      loadBalancerArn: string;
+      /** The port the listener accepts connections on. */
+      port: number;
+    };
 
 /**
  * An ELBv2 (Application/Network) Load Balancer listener. A listener checks for
@@ -191,6 +222,18 @@ export interface Listener extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing listener
+ * `Listener.lookup` references a listener Alchemy doesn't manage (created in the
+ * console or by another stack), found by `listenerArn`, or the `loadBalancerArn`
+and `port` it listens on. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Add a rule to an existing listener
+ * ```typescript
+ * const https = AWS.ELBv2.Listener.lookup({ loadBalancerArn, port: 443 });
+ * const listenerArn = https.listenerArn;
+ * ```
+ *
  * @resource
  */
 export const Listener = Resource<Listener>("AWS.ELBv2.Listener");
@@ -252,6 +295,38 @@ const readListenerAttributes = Effect.fn(function* (
   return observedAttributes(declared, observed.Attributes);
 });
 
+/**
+ * The configuration `read` and `reconcile` both report, so a converged
+ * listener reads unchanged.
+ */
+const observeListenerConfiguration = (
+  listener: elbv2.Listener,
+  sniCertificateArns: string[] | undefined,
+): NonNullable<Listener["Attributes"]["configuration"]> =>
+  plainJson({
+    defaultActions: [...(listener.DefaultActions ?? [])].sort(
+      (a, b) => (a.Order ?? 0) - (b.Order ?? 0),
+    ),
+    certificateArn: listener.Certificates?.[0]?.CertificateArn,
+    sslPolicy: listener.SslPolicy,
+    alpnPolicy: listener.AlpnPolicy?.length ? listener.AlpnPolicy : undefined,
+    mutualAuthentication: listener.MutualAuthentication,
+    sniCertificateArns: sniCertificateArns && [...sniCertificateArns].sort(),
+  });
+
+// The non-default certificates on a listener; only observed when the props
+// declare the full `certificates` list.
+const readSniCertificates = Effect.fn(function* (
+  listenerArn: string,
+  props: ListenerProps | undefined,
+) {
+  if (props?.certificates === undefined) return undefined;
+  const observed = yield* elbv2.describeListenerCertificates({ ListenerArn: listenerArn });
+  return (observed.Certificates ?? []).flatMap((c) =>
+    !c.IsDefault && c.CertificateArn ? [c.CertificateArn] : [],
+  );
+});
+
 export const ListenerProvider = () =>
   Provider.succeed(Listener, {
     stables: ["listenerArn", "loadBalancerArn"],
@@ -261,6 +336,35 @@ export const ListenerProvider = () =>
         return { action: "replace" } as const;
       }
     }),
+    lookup: Effect.fn(function* (props) {
+      const described = yield* elbv2
+        .describeListeners(
+          "listenerArn" in props
+            ? { ListenerArns: [props.listenerArn] }
+            : { LoadBalancerArn: props.loadBalancerArn },
+        )
+        .pipe(
+          Effect.catchTag(
+            ["ListenerNotFoundException", "LoadBalancerNotFoundException"],
+            () => Effect.undefined,
+          ),
+        );
+      const listener = (described?.Listeners ?? []).find(
+        (l) => "listenerArn" in props || l.Port === props.port,
+      );
+      if (!listener?.ListenerArn) return undefined;
+      const attributes = yield* readListenerAttributes(listener.ListenerArn, undefined);
+      const sni = yield* readSniCertificates(listener.ListenerArn, undefined);
+      return {
+        listenerArn: listener.ListenerArn as ListenerArn,
+        loadBalancerArn: listener.LoadBalancerArn as LoadBalancerArn,
+        targetGroupArn: defaultForwardTargetGroup(listener.DefaultActions),
+        port: listener.Port!,
+        protocol: listener.Protocol!,
+        attributes,
+        configuration: observeListenerConfiguration(listener, sni),
+      };
+    }),
     read: Effect.fn(function* ({ olds, output }) {
       if (!output) {
         return undefined;
@@ -269,7 +373,7 @@ export const ListenerProvider = () =>
         .describeListeners({
           ListenerArns: [output.listenerArn],
         })
-        .pipe(Effect.catchTag("ListenerNotFoundException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("ListenerNotFoundException", () => Effect.undefined));
       const listener = described?.Listeners?.[0];
       if (!listener?.ListenerArn) {
         return undefined;
@@ -280,6 +384,12 @@ export const ListenerProvider = () =>
       if (attributes === null) {
         return undefined;
       }
+      const sni = yield* readSniCertificates(output.listenerArn, olds).pipe(
+        Effect.catchTag("ListenerNotFoundException", () => Effect.succeed(null)),
+      );
+      if (sni === null) {
+        return undefined;
+      }
       return {
         listenerArn: listener.ListenerArn as ListenerArn,
         loadBalancerArn: listener.LoadBalancerArn as LoadBalancerArn,
@@ -287,6 +397,7 @@ export const ListenerProvider = () =>
         port: listener.Port!,
         protocol: listener.Protocol!,
         attributes,
+        configuration: observeListenerConfiguration(listener, sni),
       };
     }),
     // Listeners belong to a load balancer; describeListeners requires a
@@ -347,7 +458,7 @@ export const ListenerProvider = () =>
           .describeListeners({
             ListenerArns: [output.listenerArn],
           })
-          .pipe(Effect.catchTag("ListenerNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ListenerNotFoundException", () => Effect.undefined));
         listener = described?.Listeners?.[0];
       }
       if (!listener?.ListenerArn) {
@@ -357,8 +468,8 @@ export const ListenerProvider = () =>
           })
           .pipe(
             Effect.catchTags({
-              LoadBalancerNotFoundException: () => Effect.succeed(undefined),
-              ListenerNotFoundException: () => Effect.succeed(undefined),
+              LoadBalancerNotFoundException: () => Effect.undefined,
+              ListenerNotFoundException: () => Effect.undefined,
             }),
           );
         listener = listed?.Listeners?.find((l) => l.Port === news.port);
@@ -422,7 +533,7 @@ export const ListenerProvider = () =>
         const desiredSni = new Set(certs.slice(1));
         const observedCerts = yield* elbv2
           .describeListenerCertificates({ ListenerArn: listenerArn })
-          .pipe(Effect.catchTag("ListenerNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ListenerNotFoundException", () => Effect.undefined));
         const observedSni = (observedCerts?.Certificates ?? [])
           .filter((c) => !c.IsDefault && c.CertificateArn)
           .map((c) => c.CertificateArn!);
@@ -450,6 +561,10 @@ export const ListenerProvider = () =>
         port: listener.Port ?? news.port,
         protocol: listener.Protocol ?? desiredProtocol,
         attributes,
+        configuration: observeListenerConfiguration(
+          listener,
+          news.certificates === undefined ? undefined : certs.slice(1),
+        ),
       };
     }),
     delete: Effect.fn(function* ({ output }) {

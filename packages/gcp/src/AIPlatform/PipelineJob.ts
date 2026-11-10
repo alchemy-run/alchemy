@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { listLocations } from "./names.ts";
@@ -125,8 +126,30 @@ export type PipelineJob = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  PipelineJobLookup
 >;
+
+/**
+ * Props for {@link PipelineJob.lookup}: find a pipeline job this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface PipelineJobLookup {
+  /**
+   * Job id. Less than 128 characters, matching `/[a-z0-9-]+/`.
+   */
+  pipelineJobId: string;
+  /**
+   * Vertex AI location.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Vertex AI PipelineJob — a compiled Kubeflow pipeline that runs
@@ -145,6 +168,19 @@ export type PipelineJob = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing pipeline job
+ * `PipelineJob.lookup` references a pipeline job Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * pipeline job.
+ *
+ * **Example:** Reference an existing pipeline job
+ * ```typescript
+ * const pipelineJob = GCP.AIPlatform.PipelineJob.lookup({
+ *   pipelineJobId: "my-pipeline-job",
+ * });
+ * ```
+ *
  * @resource
  * @category AIPlatform
  */
@@ -153,7 +189,7 @@ export const PipelineJob = Resource<PipelineJob>("GCP.AIPlatform.PipelineJob");
 export class PipelineJobNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.PipelineJobNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, id: string) =>
@@ -182,7 +218,7 @@ const toAttrs = (job: aiplatform.GoogleCloudAiplatformV1PipelineJob, project: st
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsPipelineJobs({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const TERMINAL_STATES = new Set([
   "PIPELINE_STATE_SUCCEEDED",
@@ -191,7 +227,7 @@ const TERMINAL_STATES = new Set([
 ]);
 
 class PipelineJobNotTerminal extends Data.TaggedError("GCP.AIPlatform.PipelineJobNotTerminal")<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
@@ -217,7 +253,7 @@ const cancelUntilTerminal = (name: string) =>
       Effect.flatMap((current) =>
         current === undefined || TERMINAL_STATES.has(current.state ?? "")
           ? Effect.void
-          : Effect.fail(new PipelineJobNotTerminal({ name, state: current.state })),
+          : Effect.fail(new PipelineJobNotTerminal({ resourceName: name, state: current.state })),
       ),
       Effect.retry({
         while: (error) => error._tag === "GCP.AIPlatform.PipelineJobNotTerminal",
@@ -231,7 +267,7 @@ const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (job) => job === undefined,
-      () => new AiPlatformStillExists({ name }),
+      () => new AiPlatformStillExists({ resourceName: name }),
     ),
     Effect.asVoid,
     Effect.retry({
@@ -267,6 +303,15 @@ export const PipelineJobProvider = () =>
           previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ pipelineJobId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, pipelineJobId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -344,7 +389,7 @@ export const PipelineJobProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new PipelineJobNotResolved({ name });
+        return yield* new PipelineJobNotResolved({ resourceName: name });
       }
       return toAttrs(current, env.project);
     }),
@@ -353,7 +398,7 @@ export const PipelineJobProvider = () =>
       yield* cancelUntilTerminal(output.name);
       const operation = yield* aiplatform
         .deleteProjectsLocationsPipelineJobs({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

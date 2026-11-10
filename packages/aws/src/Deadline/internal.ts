@@ -33,7 +33,7 @@ export const deadlineArnOf = Effect.gen(function* () {
 export const fetchDeadlineTags = Effect.fn(function* (arn: string) {
   const response = yield* deadline
     .listTagsForResource({ resourceArn: arn })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   return Object.fromEntries(
     Object.entries(response?.tags ?? {}).filter(
       (entry): entry is [string, string] => entry[1] !== undefined,

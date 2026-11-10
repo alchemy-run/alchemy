@@ -97,8 +97,20 @@ export type Certificate = Resource<
     source: CertificateSource;
   },
   never,
-  Providers
+  Providers,
+  CertificateLookup
 >;
+
+/**
+ * Props for {@link Certificate.lookup}: find a certificate this stack
+ * doesn't manage by its App and hostname.
+ */
+export interface CertificateLookup {
+  /** Fly App name the certificate is attached to. */
+  appName: string;
+  /** Hostname the certificate covers. */
+  hostname: string;
+}
 
 /**
  * A Fly.Certificate covers a hostname on an {@link App}. Default
@@ -174,6 +186,20 @@ export type Certificate = Resource<
  *   fullchain: pem,
  *   privateKey: Redacted.make(key),
  * });
+ * ```
+ *
+ * ### Looking up an existing certificate
+ * `Certificate.lookup` references a certificate Alchemy doesn't manage
+ * (added with `fly certs add` or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted.
+ *
+ * **Example:** Read the DNS records Fly expects
+ * ```typescript
+ * const cert = Fly.Certificate.lookup({
+ *   appName: "my-site",
+ *   hostname: "www.example.com",
+ * });
+ * const target = cert.dnsRequirements;
  * ```
  *
  * @resource
@@ -314,7 +340,7 @@ const toAttrsFromSummary = (
 const getByHostname = (appName: string, hostname: string) =>
   machines
     .getAppCertificate({ app_name: appName, hostname })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAppCertificates = (appName: string) =>
   Effect.gen(function* () {
@@ -372,7 +398,7 @@ const createAcme = (appName: string, hostname: string) =>
       app_name: appName,
       hostname,
     })
-    .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
 
 const createCustom = (appName: string, hostname: string, fullchain: string, privateKey: string) =>
   machines
@@ -382,7 +408,7 @@ const createCustom = (appName: string, hostname: string, fullchain: string, priv
       fullchain,
       private_key: privateKey,
     })
-    .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
 
 const replaceCustom = (appName: string, hostname: string, fullchain: string, privateKey: string) =>
   Effect.gen(function* () {
@@ -421,6 +447,11 @@ export const CertificateProvider = () =>
         };
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ appName, hostname }) {
+      const found = yield* getByHostname(appName, hostname);
+      return found === undefined ? undefined : toAttrs(appName, found, hostname);
     }),
 
     read: Effect.fn(function* ({ olds, output }) {
@@ -524,7 +555,7 @@ export const CertificateProvider = () =>
             app_name: appName,
             hostname,
           })
-          .pipe(Effect.catchTag(["NotFound", "BadRequest"], () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag(["NotFound", "BadRequest"], () => Effect.undefined));
         if (checked !== undefined) {
           current = checked;
         }

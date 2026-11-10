@@ -128,7 +128,7 @@ export const ProductsSfdcInstancesSfdcChannel = Resource<ProductsSfdcInstancesSf
 export class ProductsSfdcInstancesSfdcChannelNotResolved extends Data.TaggedError(
   "GCP.Integrations.ProductsSfdcInstancesSfdcChannelNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const expandInstance = (value: string, project: string, location: string, product: string) =>
@@ -165,10 +165,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : integrations
         .getProjectsLocationsProductsSfdcInstancesSfdcChannels({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string, region: string) =>
   integrations.listProjectsLocationsProductsSfdcInstancesSfdcChannels
@@ -190,7 +190,7 @@ const findOwned = (parent: string, id: string) =>
       Stream.filterEffect((channel) => ownedByAlchemy(id, channel.description)),
       Stream.runHead,
       Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      Effect.catchTag("NotFound", () => Effect.undefined),
     );
 
 const listOwnedChannels = (project: string, location: string, product: string) =>
@@ -307,7 +307,7 @@ export const ProductsSfdcInstancesSfdcChannelProvider = () =>
 
       if (current === undefined) {
         return yield* new ProductsSfdcInstancesSfdcChannelNotResolved({
-          name,
+          resourceName: name,
         });
       }
 

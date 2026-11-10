@@ -1,10 +1,16 @@
 import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { App } from "../App.ts";
 import type { Bucket } from "../Bucket.ts";
 import type { Database } from "../Database.ts";
 import type { Project } from "../Project.ts";
+
+export class RefsOperationFailed extends Data.TaggedError("RefsOperationFailed")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type InputObject<T extends object> = {
   [Key in keyof T]: Input<T[Key]>;
@@ -27,7 +33,7 @@ export const concreteIdsChanged = (oldId: string | undefined, newId: string | un
 const resolveId = (label: string, value: unknown) =>
   typeof value === "string"
     ? Effect.succeed(value)
-    : Effect.fail(new Error(`Unable to resolve Prisma ${label}.`));
+    : Effect.fail(new RefsOperationFailed({ message: `Unable to resolve Prisma ${label}.` }));
 
 export const unresolvedProjectIdOf = (project: string | Project | undefined) =>
   concreteIdOf(typeof project === "string" ? project : (project?.projectId as unknown));

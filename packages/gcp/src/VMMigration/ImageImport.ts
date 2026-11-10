@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -96,8 +97,32 @@ export type ImageImport = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ImageImportLookup
 >;
+
+/**
+ * Props for {@link ImageImport.lookup}: find an image import this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface ImageImportLookup {
+  /**
+   * Image import id (the `{imageImport}` segment of
+   * `projects/{project}/locations/{location}/imageImports/{imageImport}`).
+   */
+  imageImportId: string;
+  /**
+   * Region (`us-central1`, …). `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A VM Migration image import from a Cloud Storage file into a Compute
@@ -129,6 +154,19 @@ export type ImageImport = Resource<
  *     machineImageName: "imported-machine",
  *     targetProject: target.name,
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing image import
+ * `ImageImport.lookup` references an image import Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * image import.
+ *
+ * **Example:** Reference an existing image import
+ * ```typescript
+ * const imageImport = GCP.VMMigration.ImageImport.lookup({
+ *   imageImportId: "my-image-import",
  * });
  * ```
  *
@@ -203,10 +241,10 @@ const stampTarget = <T extends { labels?: vm.StringMap; description?: string }>(
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : vm
         .getProjectsLocationsImageImports({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string, region: string) =>
   vm.listProjectsLocationsImageImports
@@ -263,6 +301,15 @@ export const ImageImportProvider = () =>
       });
     }),
 
+    lookup: Effect.fn(function* ({ imageImportId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, imageImportId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const imageImportId = yield* toPhysicalId(
@@ -314,7 +361,7 @@ export const ImageImportProvider = () =>
               encryption: news.encryption,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           // ALREADY_EXISTS (6): a concurrent create won the race.
           yield* waitForOperation(created).pipe(
@@ -327,7 +374,7 @@ export const ImageImportProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region);
@@ -340,7 +387,7 @@ export const ImageImportProvider = () =>
           times: 8,
           schedule: Schedule.spaced("2 seconds"),
         }),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       );
       if (operation !== undefined) {
         // NOT_FOUND (5): already gone.

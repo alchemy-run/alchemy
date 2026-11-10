@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   instanceIdOf,
@@ -76,8 +77,38 @@ export type InstancesTablesSchemaBundle = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  InstancesTablesSchemaBundleLookup
 >;
+
+/**
+ * Props for {@link InstancesTablesSchemaBundle.lookup}: find an instances
+ * tables schema bundle this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface InstancesTablesSchemaBundleLookup {
+  /**
+   * Schema bundle id (the `{schema_bundle}` segment of
+   * `.../tables/{table}/schemaBundles/{schema_bundle}`).
+   */
+  schemaBundleId: string;
+  /**
+   * Parent instance. Full name `projects/{project}/instances/{instance}` or
+   * the instance id.
+   */
+  instance: string;
+  /**
+   * Parent table. Full name
+   * `projects/{project}/instances/{instance}/tables/{table}` or the table
+   * id.
+   */
+  table: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Bigtable schema bundle — a named FileDescriptorSet used to
@@ -102,6 +133,21 @@ export type InstancesTablesSchemaBundle = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing instances tables schema bundle
+ * `InstancesTablesSchemaBundle.lookup` references an instances tables
+ * schema bundle Alchemy doesn't manage (created in the console or by
+ * another stack). It is read during plan/deploy, never created, updated or
+ * deleted, and binds like a declared instances tables schema bundle.
+ *
+ * **Example:** Reference an existing instances tables schema bundle
+ * ```typescript
+ * const instancesTablesSchemaBundle = GCP.Bigtable.InstancesTablesSchemaBundle.lookup({
+ *   schemaBundleId: "my-schema-bundle",
+ *   instance: "my-instance",
+ *   table: "my-table",
+ * });
+ * ```
+ *
  * @resource
  * @category Bigtable
  */
@@ -112,13 +158,13 @@ export const InstancesTablesSchemaBundle = Resource<InstancesTablesSchemaBundle>
 export class SchemaBundleNotResolved extends Data.TaggedError(
   "GCP.Bigtable.SchemaBundleNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class SchemaBundleStillExists extends Data.TaggedError(
   "GCP.Bigtable.SchemaBundleStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toId = (id: string, schemaBundleId: string | undefined, existing?: string) =>
@@ -146,12 +192,14 @@ const toAttrs = (bundle: bigtable.SchemaBundle, project: string) => {
 const getByName = (name: string) =>
   bigtable
     .getProjectsInstancesTablesSchemaBundles({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((bundle) =>
-      bundle ? Effect.succeed(bundle) : Effect.fail(new SchemaBundleNotResolved({ name })),
+      bundle
+        ? Effect.succeed(bundle)
+        : Effect.fail(new SchemaBundleNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Bigtable.SchemaBundleNotResolved",
@@ -163,7 +211,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((bundle) =>
-      bundle === undefined ? Effect.void : Effect.fail(new SchemaBundleStillExists({ name })),
+      bundle === undefined
+        ? Effect.void
+        : Effect.fail(new SchemaBundleStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Bigtable.SchemaBundleStillExists",
@@ -195,6 +245,18 @@ export const InstancesTablesSchemaBundleProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ schemaBundleId, instance, table }) {
+      const env = yield* GcpEnvironment.current;
+      const name =
+        instance && table
+          ? `${tableNameOf(env.project, instance, table)}/schemaBundles/${schemaBundleId}`
+          : undefined;
+      if (name === undefined) return undefined;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -254,7 +316,7 @@ export const InstancesTablesSchemaBundleProvider = () =>
             schemaBundleId,
             body: { protoSchema },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }
@@ -279,7 +341,7 @@ export const InstancesTablesSchemaBundleProvider = () =>
         yield* waitForOperation(patched);
         current = yield* getByName(name);
         if (current === undefined) {
-          return yield* new SchemaBundleNotResolved({ name });
+          return yield* new SchemaBundleNotResolved({ resourceName: name });
         }
       }
 

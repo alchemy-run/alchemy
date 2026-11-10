@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   VmwareengineNotResolved,
@@ -115,8 +116,32 @@ export type Datastore = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DatastoreLookup
 >;
+
+/**
+ * Props for {@link Datastore.lookup}: find a datastore this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface DatastoreLookup {
+  /**
+   * Datastore id (the `{datastore}` segment of
+   * `projects/{project}/locations/{location}/datastores/{datastore}`).
+   */
+  datastoreId: string;
+  /**
+   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * normalized.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Google Cloud VMware Engine NFS datastore.
@@ -150,6 +175,18 @@ export type Datastore = Resource<
  *       fileShare: "vol1",
  *     },
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing datastore
+ * `Datastore.lookup` references a datastore Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared datastore.
+ *
+ * **Example:** Reference an existing datastore
+ * ```typescript
+ * const datastore = GCP.VMwareEngine.Datastore.lookup({
+ *   datastoreId: "my-datastore",
  * });
  * ```
  *
@@ -208,7 +245,7 @@ const toAttrs = (item: vmwareengine.Datastore, project: string, region: string) 
 const getByName = (name: string) =>
   vmwareengine
     .getProjectsLocationsDatastores({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const DatastoreProvider = () =>
   Provider.succeed(Datastore, {
@@ -230,6 +267,15 @@ export const DatastoreProvider = () =>
         extra: !sameJson(news.nfsDatastore, olds?.nfsDatastore),
       });
     }),
+
+    lookup: Effect.fn(function* ({ datastoreId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, datastoreId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -296,7 +342,7 @@ export const DatastoreProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -305,7 +351,7 @@ export const DatastoreProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new VmwareengineNotResolved({ name });
+        return yield* new VmwareengineNotResolved({ resourceName: name });
       }
 
       current = yield* waitUntilReady(
@@ -355,7 +401,7 @@ export const DatastoreProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

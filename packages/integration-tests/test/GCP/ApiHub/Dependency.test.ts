@@ -6,6 +6,7 @@ import * as apihub from "@distilled.cloud/gcp/apihub_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -104,6 +105,13 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { consumerOp, supplierOp, dependency };
         }),
+      );
+      yield* expectFound(
+        GCP.ApiHub.Dependency.lookup({
+          dependencyId: created.dependency.dependencyId,
+          location: created.dependency.location,
+        }),
+        created.dependency,
       );
 
       expect(created.dependency.name).toContain("/dependencies/");

@@ -5,10 +5,23 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class ReplicationInstanceNotReady extends Data.TaggedError("ReplicationInstanceNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class ReplicationInstanceUnexpectedResponse extends Data.TaggedError(
+  "ReplicationInstanceUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ReplicationInstanceProps {
   /**
@@ -106,8 +119,18 @@ export interface ReplicationInstance extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ReplicationInstanceLookup
 > {}
+
+/**
+ * Props for {@link ReplicationInstance.lookup}: find a replication instance this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ReplicationInstanceLookup {
+  /** The replication instance identifier of the existing replication instance. */
+  replicationInstanceIdentifier: string;
+}
 
 /**
  * A DMS replication instance — the managed compute that runs migration and
@@ -123,6 +146,16 @@ export interface ReplicationInstance extends Resource<
  *   replicationSubnetGroupIdentifier: subnetGroup.replicationSubnetGroupIdentifier,
  *   publiclyAccessible: false,
  * });
+ * ```
+ *
+ * ### Looking up an existing replication instance
+ * `ReplicationInstance.lookup` references a replication instance Alchemy doesn't manage (created in the
+ * console or by another stack), found by `replicationInstanceIdentifier`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing replication instance
+ * ```typescript
+ * const existing = AWS.DMS.ReplicationInstance.lookup({ replicationInstanceIdentifier: "my-replication-instance" });
  * ```
  *
  * @resource
@@ -155,7 +188,7 @@ export const ReplicationInstanceProvider = () =>
           .describeReplicationInstances({
             Filters: [{ Name: "replication-instance-id", Values: [identifier] }],
           })
-          .pipe(Effect.catchTag("ResourceNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundFault", () => Effect.undefined));
         return response?.ReplicationInstances?.[0];
       });
 
@@ -173,13 +206,17 @@ export const ReplicationInstanceProvider = () =>
         return yield* findInstance(identifier).pipe(
           Effect.flatMap((instance) => {
             if (!instance?.ReplicationInstanceArn) {
-              return Effect.fail(new Error(`DMS replication instance '${identifier}' not found`));
+              return Effect.fail(
+                new ReplicationInstanceNotReady({
+                  message: `DMS replication instance '${identifier}' not found`,
+                }),
+              );
             }
             if (instance.ReplicationInstanceStatus !== "available") {
               return Effect.fail(
-                new Error(
-                  `DMS replication instance '${identifier}' not available (status: ${instance.ReplicationInstanceStatus})`,
-                ),
+                new ReplicationInstanceNotReady({
+                  message: `DMS replication instance '${identifier}' not available (status: ${instance.ReplicationInstanceStatus})`,
+                }),
               );
             }
             return Effect.succeed(instance);
@@ -191,9 +228,9 @@ export const ReplicationInstanceProvider = () =>
       const toAttrs = Effect.fn(function* (instance: dms.ReplicationInstance) {
         const identifier = instance.ReplicationInstanceIdentifier;
         if (!identifier || !instance.ReplicationInstanceArn) {
-          return yield* Effect.fail(
-            new Error(`DMS replication instance '${identifier}' is missing its identifier or ARN`),
-          );
+          return yield* new ReplicationInstanceUnexpectedResponse({
+            message: `DMS replication instance '${identifier}' is missing its identifier or ARN`,
+          });
         }
         return {
           replicationInstanceIdentifier: identifier,
@@ -242,6 +279,13 @@ export const ReplicationInstanceProvider = () =>
           if ((news.networkType ?? undefined) !== (olds?.networkType ?? undefined)) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ replicationInstanceIdentifier: name }) {
+          const instance = yield* findInstance(name);
+          if (!instance?.ReplicationInstanceArn) return undefined;
+          const attrs = yield* toAttrs(instance);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
@@ -380,11 +424,9 @@ export const ReplicationInstanceProvider = () =>
                   }),
                 );
             }
-            return yield* Effect.fail(
-              new Error(
-                `DMS replication instance '${output.replicationInstanceIdentifier}' still exists (status: ${instance.ReplicationInstanceStatus})`,
-              ),
-            );
+            return yield* new ReplicationInstanceNotReady({
+              message: `DMS replication instance '${output.replicationInstanceIdentifier}' still exists (status: ${instance.ReplicationInstanceStatus})`,
+            });
           }).pipe(
             Effect.retry({
               schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(60)]),

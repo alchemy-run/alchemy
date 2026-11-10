@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   expandParent,
@@ -106,8 +107,40 @@ export type SchemaRegistriesSubjectsVersion = Resource<
     references: SchemaReference[];
   },
   never,
-  Providers
+  Providers,
+  SchemaRegistriesSubjectsVersionLookup
 >;
+
+/**
+ * Props for {@link SchemaRegistriesSubjectsVersion.lookup}: find a schema
+ * registries subjects version this stack doesn't manage by its identifiers,
+ * in the ambient project unless `project` names another.
+ */
+export interface SchemaRegistriesSubjectsVersionLookup {
+  /**
+   * Subject name.
+   */
+  subject: string;
+  /**
+   * Region used when `schemaRegistry` is a bare id.
+   */
+  location?: string;
+  /**
+   * Version number.
+   */
+  version?: number;
+  /**
+   * Parent schema registry. Full name
+   * `projects/{project}/locations/{location}/schemaRegistries/{id}` or the
+   * registry id (combined with `location`).
+   */
+  schemaRegistry: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A schema version under a subject in a Managed Kafka schema registry
@@ -134,6 +167,20 @@ export type SchemaRegistriesSubjectsVersion = Resource<
  * );
  * ```
  *
+ * ### Looking up an existing schema registries subjects version
+ * `SchemaRegistriesSubjectsVersion.lookup` references a schema registries
+ * subjects version Alchemy doesn't manage (created in the console or by
+ * another stack). It is read during plan/deploy, never created, updated or
+ * deleted, and binds like a declared schema registries subjects version.
+ *
+ * **Example:** Reference an existing schema registries subjects version
+ * ```typescript
+ * const schemaRegistriesSubjectsVersion = GCP.ManagedKafka.SchemaRegistriesSubjectsVersion.lookup({
+ *   subject: "my-subject",
+ *   schemaRegistry: "my-schema-registry",
+ * });
+ * ```
+ *
  * @resource
  * @category ManagedKafka
  */
@@ -144,7 +191,7 @@ export const SchemaRegistriesSubjectsVersion = Resource<SchemaRegistriesSubjects
 export class SchemaRegistriesSubjectsVersionNotResolved extends Data.TaggedError(
   "GCP.ManagedKafka.SchemaRegistriesSubjectsVersionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const registryOf = (value: string, project: string, location: string) =>
@@ -214,6 +261,32 @@ export const SchemaRegistriesSubjectsVersionProvider = () =>
         extra: schemaChanged,
       });
     }),
+
+    lookup: Effect.fn(function* ({
+      subject,
+      location: lookupLocation,
+      version: lookupVersion,
+      schemaRegistry: lookupSchemaRegistry,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const schemaRegistry =
+        lookupSchemaRegistry !== undefined
+          ? registryOf(lookupSchemaRegistry, env.project, location)
+          : "";
+      const version = lookupVersion ?? "latest";
+      const name =
+        schemaRegistry.length > 0
+          ? versionName(subjectParent(schemaRegistry, subject), version)
+          : "";
+      const existing = yield* getSchemaVersion(name);
+      if (existing === undefined) return undefined;
+      const resolvedName = versionName(
+        subjectParent(schemaRegistry, existing.subject ?? subject),
+        existing.version ?? version,
+      );
+      return toAttrs(existing, schemaRegistry, env.project, location, resolvedName);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -341,7 +414,7 @@ export const SchemaRegistriesSubjectsVersionProvider = () =>
                 references: news.references,
               },
             })
-            .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined))),
+            .pipe(Effect.catchTag("Conflict", () => Effect.undefined)),
         );
         const lookedUp = yield* kafka
           .lookupVersionProjectsLocationsSchemaRegistriesSubjects({
@@ -353,7 +426,7 @@ export const SchemaRegistriesSubjectsVersionProvider = () =>
               references: news.references,
             },
           })
-          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
         current =
           lookedUp ?? (yield* getSchemaVersion(versionName(parent, news.version ?? "latest")));
         void created;
@@ -361,7 +434,7 @@ export const SchemaRegistriesSubjectsVersionProvider = () =>
 
       if (current === undefined) {
         return yield* new SchemaRegistriesSubjectsVersionNotResolved({
-          name,
+          resourceName: name,
         });
       }
 

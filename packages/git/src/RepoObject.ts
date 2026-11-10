@@ -29,6 +29,8 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import type * as cf from "@cloudflare/workers-types";
 import type { HttpEffect } from "alchemy/Http";
 import { RuntimeContext } from "alchemy/RuntimeContext";
+import * as Clock from "effect/Clock";
+import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -686,9 +688,7 @@ export interface GitRepoShape {
   readonly updateRepoMeta: (
     patch: RepoMetaPatch,
   ) => Effect.Effect<RepoMetaData, RepoAuthError | RefNotFound, RuntimeContext>;
-  readonly listRefs: (
-    prefix?: string | undefined,
-  ) => Effect.Effect<RefsPage, RepoAuthError, RuntimeContext>;
+  readonly listRefs: (prefix?: string) => Effect.Effect<RefsPage, RepoAuthError, RuntimeContext>;
   readonly getRef: (
     name: string,
   ) => Effect.Effect<RefData, RepoAuthError | RefNotFound, RuntimeContext>;
@@ -1261,7 +1261,7 @@ export const ingestStoreOf = (store: ObjectStore): IngestStore => ({
       .pipe(
         Effect.flatMap((meta) =>
           meta === undefined
-            ? Effect.succeed(undefined)
+            ? Effect.undefined
             : store.readContent(oid).pipe(Effect.map((content) => ({ type: meta.type, content }))),
         ),
       ),
@@ -1677,7 +1677,7 @@ export const ingestPackFrom = (
         // ── phase 1 (producer): read parts as they arrive, dispatch each ──
         // Wall-clock phase split (Date.now advances across awaits; the
         // platform's cpuTime is the CPU attribution): `PushStats.phases`.
-        const pumpStarted = Date.now();
+        const pumpStarted = yield* Clock.currentTimeMillis;
         let regionCalls = 0;
         // Each part's identity arrives after its upload; joined before
         // the multipart upload is completed, never on the scan path.
@@ -1811,8 +1811,8 @@ export const ingestPackFrom = (
               resync: index > 0,
               partNumber: Math.floor(at / partBytes) + 1,
             });
-            console.log(
-              `[pump] chunk ${index + 1} read at +${Date.now() - pumpStarted}ms (${chunk.length} bytes)`,
+            yield* Effect.log(
+              `[pump] chunk ${index + 1} read at +${(yield* Clock.currentTimeMillis) - pumpStarted}ms (${chunk.length} bytes)`,
             );
             chunks.push({ index, base, payload: chunk, fiber });
             index += 1;
@@ -1860,10 +1860,11 @@ export const ingestPackFrom = (
             count: entries.length + unresolved.length,
           };
         };
-        const trace =
-          process.env.GIT_PUMP_DEBUG === "1"
-            ? (...args: Array<unknown>) => console.log("[pump]", ...args)
-            : () => {};
+        const pumpDebug =
+          (yield* Config.String("GIT_PUMP_DEBUG").pipe(Effect.orElseSucceed(() => undefined))) ===
+          "1";
+        const trace = (...args: Array<unknown>) =>
+          pumpDebug ? Effect.log("[pump]", ...args) : Effect.void;
         // The consumer is the forked side: hash fibers are children of THIS
         // fiber (a child's children die with it), so the producer runs here
         // and the consumer settles results as they land.
@@ -1881,15 +1882,18 @@ export const ingestPackFrom = (
         const speculate = (start: number) =>
           Effect.gen(function* () {
             const head = bytesFrom(start, Math.min(start + 32, availableEnd()));
-            let need = start + 64;
-            try {
-              const h = decodeTypeSize(head, 0);
-              // zlib's worst case is ~0.1% + a few bytes; deltas carry an
-              // offset varint before their stream.
-              need = start + h.next + Math.ceil(h.size * 1.001) + 80;
-            } catch {
+            let need = yield* Effect.try({
+              try: () => {
+                const h = decodeTypeSize(head, 0);
+                // zlib's worst case is ~0.1% + a few bytes; deltas carry an
+                // offset varint before their stream.
+                return start + h.next + Math.ceil(h.size * 1.001) + 80;
+              },
+              catch: (error) => PackIngestError.make({ reason: String(error) }),
+            }).pipe(
               // Header cut by the received edge: wait for more below.
-            }
+              Effect.orElseSucceed(() => start + 64),
+            );
             while (true) {
               const end = Math.min(need, availableEnd());
               const bytes = bytesFrom(start, end);
@@ -1916,12 +1920,14 @@ export const ingestPackFrom = (
             if (k >= chunks.length) break;
             const current = chunks[k]!;
             const result = yield* Fiber.join(current.fiber);
-            console.log(`[pump] chunk ${k + 1} settled at +${Date.now() - pumpStarted}ms`);
+            yield* Effect.log(
+              `[pump] chunk ${k + 1} settled at +${(yield* Clock.currentTimeMillis) - pumpStarted}ms`,
+            );
             if (result.part !== undefined) {
               parts.push(result.part.pipe(Effect.mapError(asIngest)));
             }
             const chunkEnd = current.base + current.payload.length;
-            trace(
+            yield* trace(
               `chunk ${k} base=${current.base} len=${current.payload.length} first=${result.firstOffset} consumedTo=${result.consumedTo} count=${result.count} prevEnd=${prevEnd} staged=${staged}`,
             );
             const sequential = () =>
@@ -1975,7 +1981,7 @@ export const ingestPackFrom = (
               continue;
             }
             if (result.firstOffset > prevEnd) {
-              trace(`  region [${prevEnd}, ${result.firstOffset})`);
+              yield* trace(`  region [${prevEnd}, ${result.firstOffset})`);
               regionCalls += 1;
               const region = bytesFrom(prevEnd, Math.min(result.firstOffset + 64, chunkEnd));
               const scanned = yield* hasher
@@ -1988,11 +1994,11 @@ export const ingestPackFrom = (
               const ends =
                 scanned.entries.some((e) => e.dataOffset + e.span === result.firstOffset) ||
                 scanned.unresolved.some((u) => u.dataOffset + u.span === result.firstOffset);
-              trace(
+              yield* trace(
                 `  region scan count=${scanned.count} consumedTo=${scanned.consumedTo} ends=${ends}`,
               );
               if (!ends) {
-                trace(`  → sequential fallback`);
+                yield* trace(`  → sequential fallback`);
                 const again = yield* sequential();
                 staged += yield* stageResult(again.bytes, again.base, again.r);
                 prevEnd = again.r.consumedTo;
@@ -2025,8 +2031,10 @@ export const ingestPackFrom = (
         });
         const consumer = yield* Effect.forkChild(consume);
         yield* produce;
-        console.log(`[pump] body ended at +${Date.now() - pumpStarted}ms`);
-        phases.upload = Date.now() - pumpStarted;
+        yield* Effect.log(
+          `[pump] body ended at +${(yield* Clock.currentTimeMillis) - pumpStarted}ms`,
+        );
+        phases.upload = (yield* Clock.currentTimeMillis) - pumpStarted;
         let { staged, prevEnd } = yield* Fiber.join(consumer);
         // The tail: chunks too small to hold two whole entries report no
         // boundary, so entries after the last settled boundary may remain.
@@ -2050,7 +2058,7 @@ export const ingestPackFrom = (
           }
         }
         const consumedTo = prevEnd;
-        phases.scan = Date.now() - pumpStarted;
+        phases.scan = (yield* Clock.currentTimeMillis) - pumpStarted;
         phases.chunks = chunks.length;
         phases.regions = regionCalls;
         if (staged !== count) {
@@ -2083,7 +2091,7 @@ export const ingestPackFrom = (
         }
         // Cross-part and thin deltas: bases are in the retained payloads
         // (or in the live store). Fixpoint for chains.
-        const deltasStarted = Date.now();
+        const deltasStarted = yield* Clock.currentTimeMillis;
         phases.unresolved = unresolved.length;
         // The resolved pack (DESIGN §22.13): every delta-resolved blob's
         // fresh zlib, `typeSize header + zdata` per entry, one object; rows
@@ -2109,7 +2117,7 @@ export const ingestPackFrom = (
             }
             resolvedBlobs.length = 0;
             const bytes = concatBytes(pieces);
-            const writeStarted = Date.now();
+            const writeStarted = yield* Clock.currentTimeMillis;
             const writing = yield* Effect.forkDetach(
               spill.blobs.put(key, bytes).pipe(
                 Effect.mapError((error) =>
@@ -2246,8 +2254,9 @@ export const ingestPackFrom = (
             current.items.push(r);
             current.bytes += delta.length;
           }
-          const resolved = yield* Effect.all(
-            batches.map((batch) =>
+          const resolved = yield* Effect.forEach(
+            batches,
+            (batch) =>
               hasher
                 .resolveDeltas(batch.bases, batch.jobs, {
                   maxObjectSize: MAX_OBJECT_SIZE,
@@ -2262,7 +2271,6 @@ export const ingestPackFrom = (
                   Effect.mapError(asIngest),
                   Effect.map((results) => ({ batch, results })),
                 ),
-            ),
             { concurrency: hasher.concurrency ?? HASH_CONCURRENCY },
           );
           for (const { batch, results } of resolved) {
@@ -2294,7 +2302,7 @@ export const ingestPackFrom = (
           }
           pending = next;
         }
-        phases.deltas = Date.now() - deltasStarted;
+        phases.deltas = (yield* Clock.currentTimeMillis) - deltasStarted;
         const late = yield* writeResolvedPack("-r2");
         yield* flush();
         for (const pending of [early, late]) {
@@ -2302,7 +2310,7 @@ export const ingestPackFrom = (
           yield* Fiber.join(pending.writing);
           phases.resolvedPack = Math.max(
             phases.resolvedPack ?? 0,
-            Date.now() - pending.writeStarted,
+            (yield* Clock.currentTimeMillis) - pending.writeStarted,
           );
         }
         // Settle the spill: every part was written by its hasher; complete
@@ -2532,14 +2540,10 @@ export const ingestPack = (
 
     for (let i = 0; i < count; i++) {
       const entryStart = offset;
-      let header;
-      try {
-        header = decodeTypeSize(pack, offset);
-      } catch (error) {
-        return yield* PackIngestError.make({
-          reason: `entry ${i}: ${String(error)}`,
-        });
-      }
+      const header = yield* Effect.try({
+        try: () => decodeTypeSize(pack, offset),
+        catch: (error) => PackIngestError.make({ reason: `entry ${i}: ${String(error)}` }),
+      });
       if (!isDeltaType(header.type)) {
         if (header.size > MAX_OBJECT_SIZE) {
           return yield* PackIngestError.make({ reason: "object too large" });
@@ -2578,14 +2582,10 @@ export const ingestPack = (
         let baseOffset: number | undefined;
         let baseOid: Oid | undefined;
         if (header.type === 6) {
-          let decoded;
-          try {
-            decoded = decodeOfsDeltaOffset(pack, header.next);
-          } catch (error) {
-            return yield* PackIngestError.make({
-              reason: `entry ${i}: ${String(error)}`,
-            });
-          }
+          const decoded = yield* Effect.try({
+            try: () => decodeOfsDeltaOffset(pack, header.next),
+            catch: (error) => PackIngestError.make({ reason: `entry ${i}: ${String(error)}` }),
+          });
           baseOffset = entryStart - decoded.value;
           if (baseOffset < 12) {
             return yield* PackIngestError.make({
@@ -2798,7 +2798,10 @@ export const gunzipIfNeeded = (
       )
         .arrayBuffer()
         .then((buffer) => new Uint8Array(buffer)),
-    catch: (error) => PackIngestError.make({ reason: `gzip decompression failed: ${error}` }),
+    catch: (error) =>
+      PackIngestError.make({
+        reason: `gzip decompression failed: ${error instanceof Error ? error.message : String(error)}`,
+      }),
   });
 };
 
@@ -3063,7 +3066,7 @@ export const GitRepoLive = GitRepo.make(
 
       const listAllRefs = (
         repoId: string,
-        prefix?: string | undefined,
+        prefix?: string,
       ): Effect.Effect<Array<RefData>, StoreError> =>
         Effect.gen(function* () {
           const rows =
@@ -3486,7 +3489,7 @@ export const GitRepoLive = GitRepo.make(
 
       // ── bootstrap (create / fork / import) ───────────────────────────────
       const seedConfig = Effect.fn(function* (input: InitRepoInput, status: RepoStatus) {
-        const createdAt = Date.now();
+        const createdAt = yield* Clock.currentTimeMillis;
         yield* setConfig("repo_id", input.repoId);
         yield* setConfig("owner", input.owner.toLowerCase());
         yield* setConfig("name", input.name.toLowerCase());
@@ -3777,7 +3780,7 @@ export const GitRepoLive = GitRepo.make(
              (SELECT push_id FROM pushes WHERE state = 'committed')`,
         );
         yield* sql.run(`DELETE FROM pushes WHERE state = 'committed'`);
-        const cutoff = Date.now() - STAGING_TTL_MS;
+        const cutoff = (yield* Clock.currentTimeMillis) - STAGING_TTL_MS;
         yield* sql.run(
           `DELETE FROM objects WHERE staged_push IN
              (SELECT push_id FROM pushes WHERE state = 'staging' AND started_at < ?)`,
@@ -3802,7 +3805,7 @@ export const GitRepoLive = GitRepo.make(
           pendingRaw === undefined || pendingRaw === ""
             ? undefined
             : (JSON.parse(pendingRaw) as { keys: Array<string>; at: number });
-        if (pending !== undefined && Date.now() - pending.at > 60_000) {
+        if (pending !== undefined && (yield* Clock.currentTimeMillis) - pending.at > 60_000) {
           yield* blobs.delete(pending.keys).pipe(Effect.ignore);
           yield* setConfig("packs_pending_delete", "");
         }
@@ -3820,17 +3823,19 @@ export const GitRepoLive = GitRepo.make(
         });
         if (merge.pendingDelete.length > 0) {
           const carried =
-            pending !== undefined && !(Date.now() - pending.at > 60_000) ? pending.keys : [];
+            pending !== undefined && !((yield* Clock.currentTimeMillis) - pending.at > 60_000)
+              ? pending.keys
+              : [];
           yield* setConfig(
             "packs_pending_delete",
             JSON.stringify({
               keys: [...carried, ...merge.pendingDelete],
-              at: Date.now(),
+              at: yield* Clock.currentTimeMillis,
             }),
           );
         }
         if (outcome.more || merge.more) {
-          yield* armAlarmAt(Date.now() + 1_000);
+          yield* armAlarmAt((yield* Clock.currentTimeMillis) + 1_000);
           return;
         }
         yield* sql.run(`DELETE FROM jobs WHERE kind = 'compact'`);
@@ -3956,7 +3961,7 @@ export const GitRepoLive = GitRepo.make(
               yield* sql.run(
                 `UPDATE jobs SET state = 'failed', detail = ?, updated_at = ? WHERE kind = 'import'`,
                 JSON.stringify({ ...detail, error: outcome.failure.reason }),
-                Date.now(),
+                yield* Clock.currentTimeMillis,
               );
               // Give the empty repo back rather than wedging in 'importing'.
               yield* setConfig("status", "ready");
@@ -3967,9 +3972,9 @@ export const GitRepoLive = GitRepo.make(
             yield* sql.run(
               `UPDATE jobs SET detail = ?, updated_at = ? WHERE kind = 'import'`,
               JSON.stringify({ ...detail, attempts: attempts + 1 }),
-              Date.now(),
+              yield* Clock.currentTimeMillis,
             );
-            yield* armAlarmAt(Date.now() + 15_000);
+            yield* armAlarmAt((yield* Clock.currentTimeMillis) + 15_000);
             return;
           }
           const result = outcome.success;
@@ -3980,10 +3985,10 @@ export const GitRepoLive = GitRepo.make(
           yield* sql.run(
             `INSERT INTO pushes (push_id, started_at, state) VALUES (?, ?, 'staging')`,
             pushId,
-            Date.now(),
+            yield* Clock.currentTimeMillis,
           );
           yield* upsertJob("gc", null);
-          yield* armAlarmAt(Date.now() + STAGING_TTL_MS);
+          yield* armAlarmAt((yield* Clock.currentTimeMillis) + STAGING_TTL_MS);
           let graph: Array<{
             oid: string;
             tree: string;
@@ -4076,7 +4081,7 @@ export const GitRepoLive = GitRepo.make(
               yield* sql.run(
                 `UPDATE jobs SET state = 'failed', detail = ?, updated_at = ? WHERE kind = 'fork'`,
                 JSON.stringify({ ...detail, error: applied.failure.reason }),
-                Date.now(),
+                yield* Clock.currentTimeMillis,
               );
               yield* setConfig("status", "ready");
               yield* refreshSummary;
@@ -4086,9 +4091,9 @@ export const GitRepoLive = GitRepo.make(
             yield* sql.run(
               `UPDATE jobs SET detail = ?, updated_at = ? WHERE kind = 'fork'`,
               JSON.stringify({ ...detail, attempts }),
-              Date.now(),
+              yield* Clock.currentTimeMillis,
             );
-            yield* armAlarmAt(Date.now() + 15_000);
+            yield* armAlarmAt((yield* Clock.currentTimeMillis) + 15_000);
             return;
           }
           yield* setConfig("status", "ready");
@@ -4121,7 +4126,9 @@ export const GitRepoLive = GitRepo.make(
           ),
         });
         if (outcome._tag === "continue") {
-          yield* armAlarmAt(Date.now() + (outcome.forkPinned ? 60_000 : 5_000));
+          yield* armAlarmAt(
+            (yield* Clock.currentTimeMillis) + (outcome.forkPinned ? 60_000 : 5_000),
+          );
           return false;
         }
         yield* state.storage.deleteAlarm();
@@ -4135,21 +4142,21 @@ export const GitRepoLive = GitRepo.make(
         startImport: Effect.fn(function* (input: StartImportInput) {
           const result = yield* bootstrap(input, "importing");
           yield* upsertJob("import", JSON.stringify({ source: input.source }));
-          yield* armAlarmAt(Date.now());
+          yield* armAlarmAt(yield* Clock.currentTimeMillis);
           return result;
         }),
 
         startFork: Effect.fn(function* (input: StartForkInput) {
           const result = yield* bootstrap(input, "forking");
           yield* upsertJob("fork", JSON.stringify({ parentRepoId: input.parentRepoId }));
-          yield* armAlarmAt(Date.now());
+          yield* armAlarmAt(yield* Clock.currentTimeMillis);
           return result;
         }),
 
         startCompact: Effect.fn(function* () {
           yield* requireMeta;
           yield* upsertJob("compact", null);
-          yield* armAlarmAt(Date.now());
+          yield* armAlarmAt(yield* Clock.currentTimeMillis);
         }),
 
         startPurge: Effect.fn(function* () {
@@ -4160,7 +4167,7 @@ export const GitRepoLive = GitRepo.make(
           yield* blobs.delete(headKey(meta.repoId)).pipe(Effect.ignore);
           yield* refreshSummary;
           yield* upsertJob("purge", null);
-          yield* armAlarmAt(Date.now());
+          yield* armAlarmAt(yield* Clock.currentTimeMillis);
         }),
 
         getRepoMeta: Effect.fn(function* () {
@@ -4207,7 +4214,7 @@ export const GitRepoLive = GitRepo.make(
           return result;
         }),
 
-        listRefs: Effect.fn(function* (prefix?: string | undefined) {
+        listRefs: Effect.fn(function* (prefix?: string) {
           const meta = yield* requireMeta;
           const refs = yield* listAllRefs(meta.repoId, prefix);
           const headRef = `refs/heads/${meta.defaultBranch}`;
@@ -4310,7 +4317,7 @@ export const GitRepoLive = GitRepo.make(
           yield* sql.run(
             `INSERT INTO pushes (push_id, started_at, state) VALUES (?, ?, 'staging')`,
             pushId,
-            Date.now(),
+            yield* Clock.currentTimeMillis,
           );
           return { _tag: "ok", pushId } as const;
         }),
@@ -4858,7 +4865,7 @@ export const GitRepoLive = GitRepo.make(
           if (duplicate !== undefined) {
             return yield* PullExists.make({ number: duplicate.number });
           }
-          const now = Date.now();
+          const now = yield* Clock.currentTimeMillis;
           // Allocate the number and insert the row in ONE transaction —
           // the DO's input/output gates make the counter race-free.
           const number = yield* sql.transactionSync((raw) => {
@@ -5044,7 +5051,7 @@ export const GitRepoLive = GitRepo.make(
             title,
             body,
             state,
-            Date.now(),
+            yield* Clock.currentTimeMillis,
             input.number,
           );
           return rowToPull(yield* loadPull(input.number));
@@ -5097,7 +5104,7 @@ export const GitRepoLive = GitRepo.make(
           if (cmp.mergeBase === headTip) {
             return yield* NothingToMerge.make({ number: input.number });
           }
-          const now = Date.now();
+          const now = yield* Clock.currentTimeMillis;
 
           // ── fast-forward: base is an ancestor of head ──────────────────
           if (cmp.mergeBase === baseTip) {
@@ -5230,7 +5237,7 @@ export const GitRepoLive = GitRepo.make(
           // a lost CAS below — or a crash before finalize — cannot leak the
           // staged objects; a committed push's row is ignored by the GC.
           yield* upsertJob("gc", null);
-          yield* armAlarmAt(Date.now() + STAGING_TTL_MS);
+          yield* armAlarmAt((yield* Clock.currentTimeMillis) + STAGING_TTL_MS);
 
           const graph = yield* computeGraphRows([
             {
@@ -5376,7 +5383,7 @@ export const GitRepoLive = GitRepo.make(
               Effect.gen(function* () {
                 yield* Effect.logError("repo alarm failed", cause);
                 // Best-effort retry — never let the alarm defect.
-                yield* armAlarmAt(Date.now() + 30_000).pipe(Effect.ignore);
+                yield* armAlarmAt((yield* Clock.currentTimeMillis) + 30_000).pipe(Effect.ignore);
               }),
             ),
             Effect.asVoid,

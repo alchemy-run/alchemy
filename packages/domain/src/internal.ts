@@ -1,41 +1,31 @@
 import * as Cause from "effect/Cause";
-import * as Context from "effect/Context";
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
-import { Scope } from "effect/Scope";
+import type * as Schema from "effect/Schema";
+import * as SchemaAST from "effect/SchemaAST";
+import { DefinitionError, UndeclaredDecision } from "./DefinitionError.ts";
+
+export { DefinitionError } from "./DefinitionError.ts";
+
+const tags = new WeakMap<object, string>();
 
 /**
- * Capture the services `R` for later use, minus the `Scope`: a captured
- * construction-time scope must never replace the scope of a later request or
- * event (finalizers would attach to the wrong lifetime, and on workerd the
- * work would be pinned to another request's I/O context).
+ * The `_tag` a rejection class declares: the literal its schema gives
+ * `_tag`, so any tagged error class can be a rejection.
  *
  * @internal
  */
-export const captureContext = <R = never>(): Effect.Effect<
-  Context.Context<Exclude<R, Scope>>,
-  never,
-  R
-> =>
-  Effect.map(
-    Effect.context<R>(),
-    (context) => Context.omit(Scope)(context) as Context.Context<Exclude<R, Scope>>,
-  );
-
-/**
- * A domain definition error (duplicate tag, missing `keyOf`, …), raised while
- * the kernel is built, or when a handler returns something its declaration
- * does not allow.
- */
-export class DefinitionError extends Data.TaggedError("DefinitionError")<{
-  readonly message: string;
-}> {
-  constructor(message: string) {
-    super({ message });
-  }
-}
+export const rejectionTag = (rejection: Schema.Top): string => {
+  const cached = tags.get(rejection);
+  if (cached !== undefined) return cached;
+  const encoded = SchemaAST.toEncoded(rejection.ast);
+  const tag = SchemaAST.isObjects(encoded)
+    ? encoded.propertySignatures.find((property) => property.name === "_tag")?.type
+    : undefined;
+  const value = tag && SchemaAST.isLiteral(tag) ? String(tag.literal) : "";
+  tags.set(rejection, value);
+  return value;
+};
 
 /** What `decide` returned, once its Effect (if any) ran. @internal */
 export type Settled =
@@ -75,18 +65,23 @@ export const judge = (
   command: {
     readonly tag: string;
     readonly events: ReadonlyArray<{ readonly tag: string }>;
-    readonly rejects: ReadonlyArray<{ readonly tag: string }>;
+    readonly rejects: ReadonlyArray<Schema.Top>;
   },
   decision: unknown,
 ): Judged => {
   if (!Array.isArray(decision)) {
     const rejection = decision as { readonly _tag: string };
-    if (!command.rejects.some((r) => r.tag === rejection?._tag)) {
+    if (!command.rejects.some((r) => rejectionTag(r) === rejection?._tag)) {
       return {
         _tag: "Undeclared",
-        error: new DefinitionError(
-          `${aggregateName}.decide.${command.tag} returned '${rejection?._tag}', which ${command.tag} does not declare in rejects`,
-        ),
+        error: new DefinitionError({
+          reason: new UndeclaredDecision({
+            aggregate: aggregateName,
+            command: command.tag,
+            returned: String(rejection?._tag),
+            list: "rejects",
+          }),
+        }),
       };
     }
     return { _tag: "Rejected", rejection };
@@ -95,9 +90,14 @@ export const judge = (
     if (!command.events.some((e) => e.tag === event._tag)) {
       return {
         _tag: "Undeclared",
-        error: new DefinitionError(
-          `${aggregateName}.decide.${command.tag} returned '${event._tag}', which ${command.tag} does not declare in events`,
-        ),
+        error: new DefinitionError({
+          reason: new UndeclaredDecision({
+            aggregate: aggregateName,
+            command: command.tag,
+            returned: event._tag,
+            list: "events",
+          }),
+        }),
       };
     }
   }

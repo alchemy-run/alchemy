@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   instanceIdOf,
@@ -103,8 +104,38 @@ export type InstancesTablesAuthorizedView = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  InstancesTablesAuthorizedViewLookup
 >;
+
+/**
+ * Props for {@link InstancesTablesAuthorizedView.lookup}: find an instances
+ * tables authorized view this stack doesn't manage by its identifiers, in
+ * the ambient project unless `project` names another.
+ */
+export interface InstancesTablesAuthorizedViewLookup {
+  /**
+   * Authorized view id (the `{authorized_view}` segment of
+   * `.../tables/{table}/authorizedViews/{authorized_view}`).
+   */
+  authorizedViewId: string;
+  /**
+   * Parent instance. Full name `projects/{project}/instances/{instance}` or
+   * the instance id.
+   */
+  instance: string;
+  /**
+   * Parent table. Full name
+   * `projects/{project}/instances/{instance}/tables/{table}` or the table
+   * id.
+   */
+  table: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Bigtable authorized view — a named subset of a table used for
@@ -133,6 +164,21 @@ export type InstancesTablesAuthorizedView = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing instances tables authorized view
+ * `InstancesTablesAuthorizedView.lookup` references an instances tables
+ * authorized view Alchemy doesn't manage (created in the console or by
+ * another stack). It is read during plan/deploy, never created, updated or
+ * deleted, and binds like a declared instances tables authorized view.
+ *
+ * **Example:** Reference an existing instances tables authorized view
+ * ```typescript
+ * const instancesTablesAuthorizedView = GCP.Bigtable.InstancesTablesAuthorizedView.lookup({
+ *   authorizedViewId: "my-authorized-view",
+ *   instance: "my-instance",
+ *   table: "my-table",
+ * });
+ * ```
+ *
  * @resource
  * @category Bigtable
  */
@@ -143,13 +189,13 @@ export const InstancesTablesAuthorizedView = Resource<InstancesTablesAuthorizedV
 export class AuthorizedViewNotResolved extends Data.TaggedError(
   "GCP.Bigtable.AuthorizedViewNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class AuthorizedViewStillExists extends Data.TaggedError(
   "GCP.Bigtable.AuthorizedViewStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toId = (id: string, authorizedViewId: string | undefined, existing?: string) =>
@@ -213,12 +259,14 @@ const toAttrs = (view: bigtable.AuthorizedView, project: string) => {
 const getByName = (name: string) =>
   bigtable
     .getProjectsInstancesTablesAuthorizedViews({ name, view: "FULL" })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((view) =>
-      view ? Effect.succeed(view) : Effect.fail(new AuthorizedViewNotResolved({ name })),
+      view
+        ? Effect.succeed(view)
+        : Effect.fail(new AuthorizedViewNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Bigtable.AuthorizedViewNotResolved",
@@ -230,7 +278,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((view) =>
-      view === undefined ? Effect.void : Effect.fail(new AuthorizedViewStillExists({ name })),
+      view === undefined
+        ? Effect.void
+        : Effect.fail(new AuthorizedViewStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Bigtable.AuthorizedViewStillExists",
@@ -273,6 +323,18 @@ export const InstancesTablesAuthorizedViewProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ authorizedViewId, instance, table }) {
+      const env = yield* GcpEnvironment.current;
+      const name =
+        instance && table
+          ? `${tableNameOf(env.project, instance, table)}/authorizedViews/${authorizedViewId}`
+          : undefined;
+      if (name === undefined) return undefined;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -336,7 +398,7 @@ export const InstancesTablesAuthorizedViewProvider = () =>
               deletionProtection: desiredProtection,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }
@@ -374,7 +436,7 @@ export const InstancesTablesAuthorizedViewProvider = () =>
         yield* waitForOperation(patched);
         current = yield* getByName(name);
         if (current === undefined) {
-          return yield* new AuthorizedViewNotResolved({ name });
+          return yield* new AuthorizedViewNotResolved({ resourceName: name });
         }
       }
 

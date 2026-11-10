@@ -9,6 +9,7 @@ import * as ProviderLayer from "alchemy/Local/ProviderLayer";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { sha256Object } from "alchemy/Util/sha256";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
@@ -42,6 +43,26 @@ import {
 } from "./internal/Refs.ts";
 import { tailDeploymentLogs } from "./PrismaLogs.ts";
 import type { Providers } from "./Providers.ts";
+
+export class DeploymentConflict extends Data.TaggedError("DeploymentConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class DeploymentInvalidProps extends Data.TaggedError("DeploymentInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class DeploymentOperationFailed extends Data.TaggedError("DeploymentOperationFailed")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class DeploymentUnexpectedResponse extends Data.TaggedError("DeploymentUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export const MAX_DEPLOYMENT_ARTIFACT_BYTES = 768 * 1024 * 1024;
 
@@ -243,7 +264,7 @@ const listAppDeployments = (appId: string) =>
 
 const findDeployment = (appId: string, foundryVersionId: string | undefined) =>
   foundryVersionId === undefined
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : listAppDeployments(appId).pipe(
         Effect.flatMap((deployments) => {
           const matches = deployments.filter(
@@ -251,9 +272,9 @@ const findDeployment = (appId: string, foundryVersionId: string | undefined) =>
           );
           return matches.length > 1
             ? Effect.fail(
-                new Error(
-                  `Prisma returned multiple deployments with Foundry version ID '${foundryVersionId}' for App '${appId}'; refusing an ambiguous recovery match.`,
-                ),
+                new DeploymentConflict({
+                  message: `Prisma returned multiple deployments with Foundry version ID '${foundryVersionId}' for App '${appId}'; refusing an ambiguous recovery match.`,
+                }),
               )
             : Effect.succeed(matches[0]);
         }),
@@ -279,31 +300,44 @@ const attrsFrom = (
   createdAt: deployment.createdAt,
 });
 
+export class InvalidArtifactUploadUrlError extends Data.TaggedError(
+  "InvalidArtifactUploadUrlError",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export interface ReadUploadArtifactInput {
   artifact?: string | Uint8Array;
   artifactPath?: string;
   output?: "bytes" | "file";
 }
 
+type ReadUploadArtifactError = Effect.Error<ReturnType<typeof readUploadArtifactInternal>>;
+
 export function readUploadArtifact(
   input: ReadUploadArtifactInput & { readonly output: "file" },
-): Effect.Effect<ArtifactFile | undefined, Error, Path.Path>;
+): Effect.Effect<ArtifactFile | undefined, ReadUploadArtifactError, Path.Path>;
 export function readUploadArtifact(
   input: ReadUploadArtifactInput & { readonly output?: "bytes" },
-): Effect.Effect<Uint8Array | undefined, Error, Path.Path>;
+): Effect.Effect<Uint8Array | undefined, ReadUploadArtifactError, Path.Path>;
 export function readUploadArtifact(
   input: ReadUploadArtifactInput,
-): Effect.Effect<Uint8Array | ArtifactFile | undefined, Error, Path.Path>;
+): Effect.Effect<Uint8Array | ArtifactFile | undefined, ReadUploadArtifactError, Path.Path>;
 export function readUploadArtifact(input: ReadUploadArtifactInput) {
   return readUploadArtifactInternal(input);
 }
 
 const readUploadArtifactInternal = Effect.fn(function* (input: ReadUploadArtifactInput) {
   if (input.artifact !== undefined && input.artifactPath !== undefined) {
-    return yield* Effect.fail(new Error("artifact and artifactPath are mutually exclusive."));
+    return yield* new DeploymentInvalidProps({
+      message: "artifact and artifactPath are mutually exclusive.",
+    });
   }
   if (input.output === "file" && input.artifact !== undefined) {
-    return yield* Effect.fail(new Error("File-backed artifact output requires artifactPath."));
+    return yield* new DeploymentInvalidProps({
+      message: "File-backed artifact output requires artifactPath.",
+    });
   }
   if (input.artifactPath !== undefined) {
     const path = yield* Path.Path;
@@ -329,20 +363,28 @@ export const validateDeploymentArtifactBytes = (
   maxBytes = MAX_DEPLOYMENT_ARTIFACT_BYTES,
 ) =>
   !Number.isSafeInteger(maxBytes) || maxBytes <= 0
-    ? Effect.fail(new Error("Artifact maxBytes must be a positive safe integer."))
+    ? Effect.fail(
+        new DeploymentInvalidProps({
+          message: "Artifact maxBytes must be a positive safe integer.",
+        }),
+      )
     : maxBytes > MAX_DEPLOYMENT_ARTIFACT_BYTES
       ? Effect.fail(
-          new Error(
-            `Artifact maxBytes must not exceed the hard limit of ${MAX_DEPLOYMENT_ARTIFACT_BYTES}.`,
-          ),
+          new DeploymentInvalidProps({
+            message: `Artifact maxBytes must not exceed the hard limit of ${MAX_DEPLOYMENT_ARTIFACT_BYTES}.`,
+          }),
         )
       : artifact.byteLength === 0
-        ? Effect.fail(new Error("Prisma deployment artifact must be non-empty."))
+        ? Effect.fail(
+            new DeploymentInvalidProps({
+              message: "Prisma deployment artifact must be non-empty.",
+            }),
+          )
         : artifact.byteLength > maxBytes
           ? Effect.fail(
-              new Error(
-                `Prisma deployment artifact exceeds the ${maxBytes} byte upload safety limit.`,
-              ),
+              new DeploymentInvalidProps({
+                message: `Prisma deployment artifact exceeds the ${maxBytes} byte upload safety limit.`,
+              }),
             )
           : Effect.succeed(artifact);
 
@@ -417,11 +459,9 @@ export const uploadArtifact = (
     if (artifact instanceof Uint8Array) {
       yield* validateDeploymentArtifactBytes(artifact);
     } else if (artifact.size <= 0 || artifact.size > MAX_DEPLOYMENT_ARTIFACT_BYTES) {
-      return yield* Effect.fail(
-        new Error(
-          `Prisma deployment artifact exceeds the ${MAX_DEPLOYMENT_ARTIFACT_BYTES} byte upload safety limit.`,
-        ),
-      );
+      return yield* new DeploymentInvalidProps({
+        message: `Prisma deployment artifact exceeds the ${MAX_DEPLOYMENT_ARTIFACT_BYTES} byte upload safety limit.`,
+      });
     }
     yield* Effect.try({
       try: () => {
@@ -434,7 +474,11 @@ export const uploadArtifact = (
           throw new Error("invalid upload URL");
         }
       },
-      catch: () => new Error("Prisma artifact upload URL must be credential-free HTTPS."),
+      catch: (cause) =>
+        new InvalidArtifactUploadUrlError({
+          message: "Prisma artifact upload URL must be credential-free HTTPS.",
+          cause,
+        }),
     });
     yield* executeArtifactUpload(uploadUrl, artifact, contentType);
   });
@@ -523,7 +567,7 @@ const ProviderLive = () =>
               : yield* resolveAppId(olds.app);
           const savedDeployment = output?.deploymentId
             ? yield* observeDeployment(output.deploymentId).pipe(
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("NotFound", () => Effect.undefined),
               )
             : undefined;
           const listed = savedDeployment
@@ -544,22 +588,24 @@ const ProviderLive = () =>
               news.portMapping.http < 1 ||
               news.portMapping.http > 65_535)
           ) {
-            return yield* Effect.fail(
-              new Error("portMapping.http must be an integer between 1 and 65535."),
-            );
+            return yield* new DeploymentInvalidProps({
+              message: "portMapping.http must be an integer between 1 and 65535.",
+            });
           }
           if (!(news.skipCodeUpload ?? false) && news.artifactPath === undefined) {
-            return yield* Effect.fail(
-              new Error("Prisma.Deployment requires artifactPath or skipCodeUpload: true."),
-            );
+            return yield* new DeploymentInvalidProps({
+              message: "Prisma.Deployment requires artifactPath or skipCodeUpload: true.",
+            });
           }
           if ((news.skipCodeUpload ?? false) && news.artifactPath !== undefined) {
-            return yield* Effect.fail(
-              new Error("skipCodeUpload cannot be combined with artifactPath."),
-            );
+            return yield* new DeploymentInvalidProps({
+              message: "skipCodeUpload cannot be combined with artifactPath.",
+            });
           }
           if ((news.promote ?? false) && news.start === false) {
-            return yield* Effect.fail(new Error("promote cannot be combined with start: false."));
+            return yield* new DeploymentInvalidProps({
+              message: "promote cannot be combined with start: false.",
+            });
           }
           const artifact = yield* readUploadArtifact({
             artifactPath: news.artifactPath,
@@ -582,21 +628,19 @@ const ProviderLive = () =>
             : output?.deploymentId;
           let deployment: ObservedDeployment | undefined = deploymentId
             ? yield* observeDeployment(deploymentId).pipe(
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("NotFound", () => Effect.undefined),
               )
             : undefined;
           if (deployment) {
             yield* ensureDeploymentMembership(appId, deployment);
             if (deployment.status === "failed") {
-              return yield* Effect.fail(
-                new Error(
-                  `Prisma deployment '${deployment.id}' is in terminal status 'failed' and must be replaced before reconcile; refusing to restart it or change the stable deploymentId during an update.`,
-                ),
-              );
+              return yield* new DeploymentOperationFailed({
+                message: `Prisma deployment '${deployment.id}' is in terminal status 'failed' and must be replaced before reconcile; refusing to restart it or change the stable deploymentId during an update.`,
+              });
             }
           }
           let createdDeploymentId: string | undefined;
-          const cleanupCreatedDeploymentOnFailure = (failedDeploymentId: string, error: unknown) =>
+          const cleanupCreatedDeploymentOnFailure = <E>(failedDeploymentId: string, error: E) =>
             createdDeploymentId === failedDeploymentId
               ? destroyDeployment(failedDeploymentId).pipe(
                   Effect.mapError((cleanupError) =>
@@ -627,7 +671,9 @@ const ProviderLive = () =>
             if (artifact !== undefined && !created.uploadUrl) {
               return yield* cleanupCreatedDeploymentOnFailure(
                 created.id,
-                new Error("Prisma deployment creation did not return an upload URL."),
+                new DeploymentOperationFailed({
+                  message: "Prisma deployment creation did not return an upload URL.",
+                }),
               );
             }
             if (created.uploadUrl && artifact !== undefined) {
@@ -651,9 +697,9 @@ const ProviderLive = () =>
             );
           }
           if (!deployment) {
-            return yield* Effect.fail(
-              new Error("Prisma deployment could not be resolved after creation."),
-            );
+            return yield* new DeploymentUnexpectedResponse({
+              message: "Prisma deployment could not be resolved after creation.",
+            });
           }
 
           let appEndpointDomain = output?.appEndpointDomain;
@@ -700,7 +746,7 @@ const ProviderLive = () =>
         delete: Effect.fn(function* ({ output }) {
           if (isPrismaDevId(output.deploymentId)) return;
           const deployment = yield* observeDeployment(output.deploymentId).pipe(
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           );
           if (!deployment) return;
           yield* ensureDeploymentMembership(output.appId, deployment);

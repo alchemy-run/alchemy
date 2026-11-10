@@ -177,5 +177,5 @@ const decodeValue = (value: unknown, type: string): unknown => {
   if (type === "json") {
     return typeof value === "string" ? JSON.parse(value) : value;
   }
-  return typeof value === "string" ? value : String(value);
+  return typeof value === "string" ? value : JSON.stringify(value);
 };

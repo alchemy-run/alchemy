@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -102,8 +103,33 @@ export type Channel = Resource<
     satisfiesPzs: boolean | undefined;
   },
   never,
-  Providers
+  Providers,
+  ChannelLookup
 >;
+
+/**
+ * Props for {@link Channel.lookup}: find a channel this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface ChannelLookup {
+  /**
+   * Channel id (the `{channel}` segment of
+   * `projects/{project}/locations/{location}/channels/{channel}`). Must
+   * match `[a-z]([a-z0-9-]*[a-z0-9])?` and be 1-63 characters.
+   */
+  channelId: string;
+  /**
+   * Eventarc location (`us-central1`, `us-east1`, …). `US-CENTRAL1` is
+   * accepted and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Eventarc channel representing a subscriber's intent to receive
@@ -148,17 +174,27 @@ export type Channel = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing channel
+ * `Channel.lookup` references a channel Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared channel.
+ *
+ * **Example:** Reference an existing channel
+ * ```typescript
+ * const channel = GCP.Eventarc.Channel.lookup({ channelId: "my-channel" });
+ * ```
+ *
  * @resource
  * @category Eventarc
  */
 export const Channel = Resource<Channel>("GCP.Eventarc.Channel");
 
 export class ChannelNotResolved extends Data.TaggedError("GCP.Eventarc.ChannelNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ChannelStillExists extends Data.TaggedError("GCP.Eventarc.ChannelStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -256,12 +292,14 @@ const toAttrs = (channel: eventarc.Channel, project: string, region: string) => 
 const getByName = (name: string) =>
   eventarc
     .getProjectsLocationsChannels({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((channel) =>
-      channel ? Effect.succeed(channel) : Effect.fail(new ChannelNotResolved({ name })),
+      channel
+        ? Effect.succeed(channel)
+        : Effect.fail(new ChannelNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Eventarc.ChannelNotResolved",
@@ -273,7 +311,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((channel) =>
-      channel === undefined ? Effect.void : Effect.fail(new ChannelStillExists({ name })),
+      channel === undefined
+        ? Effect.void
+        : Effect.fail(new ChannelStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Eventarc.ChannelStillExists",
@@ -317,6 +357,15 @@ export const ChannelProvider = () =>
           previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ channelId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, channelId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -378,7 +427,7 @@ export const ChannelProvider = () =>
               cryptoKeyName: desiredCryptoKey,
             }),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -386,7 +435,7 @@ export const ChannelProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ChannelNotResolved({ name });
+        return yield* new ChannelNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -424,7 +473,7 @@ export const ChannelProvider = () =>
         .deleteProjectsLocationsChannels({
           name: output.name,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

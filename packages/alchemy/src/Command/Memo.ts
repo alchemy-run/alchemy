@@ -229,7 +229,7 @@ const Memo = Effect.gen(function* () {
                 lockfile ? path.relative(options.cwd, lockfile) : undefined,
               ),
             )
-          : Effect.succeed(undefined),
+          : Effect.undefined,
       ],
       { concurrency: "unbounded" },
     );

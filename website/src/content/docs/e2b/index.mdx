@@ -1,0 +1,95 @@
+---
+title: E2B
+description: Run sandboxes for agents on E2B with Alchemy. Declare templates, warm snapshots, volumes and secrets in TypeScript, and create sandboxes from any Worker or Function.
+---
+
+import HubMap from "../../../components/HubMap.astro";
+
+E2B runs sandboxes: Linux microVMs that start in well under a second from a template you build, run untrusted code (an agent's commands, a user's script) with no route into your systems, and can be paused, resumed, snapshotted and forked. Declare templates, snapshots, volumes and secrets in your Stack, and create sandboxes from any Worker or Function.
+
+**New to E2B?** Start with [What is E2B?](/e2b/what-is-e2b).
+
+## A quick example
+
+A template and a snapshot of it are built once, at deploy: the image with the tools, then a sandbox from it with a repository cloned:
+
+```typescript title="src/Sandbox.ts"
+import * as Dockerfile from "@alchemy.run/docker/Dockerfile";
+import * as E2B from "@alchemy.run/e2b";
+
+export const MyTemplate = E2B.Template("MyTemplate", {
+  dockerfile: Dockerfile.inline`
+    FROM node:22-bookworm
+    RUN apt-get update && apt-get install -y git
+  `,
+});
+
+export const Warm = E2B.Snapshot("Warm", {
+  template: MyTemplate,
+  run: ["git clone --depth 1 https://github.com/sindresorhus/is repo"],
+});
+```
+
+A Worker starts a sandbox from `Warm` on each request, with the repository already there, runs the command it was sent, and kills the sandbox when the request ends:
+
+```typescript title="src/Api.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as E2B from "@alchemy.run/e2b";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Warm } from "./Sandbox.ts";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const sandboxes = yield* E2B.CreateSandbox(Warm);
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const sandbox = yield* Effect.acquireRelease(sandboxes.create({ timeout: 120 }), (sandbox) =>
+          Effect.ignore(sandbox.kill()),
+        );
+        const result = yield* sandbox.exec(yield* request.text, { cwd: "/home/user/repo" });
+        return yield* HttpServerResponse.json(result);
+      }).pipe(Effect.scoped, Effect.orDie),
+    };
+  }).pipe(Effect.provide(E2B.CreateSandboxHttp)),
+) {}
+```
+
+And the Stack deploys them:
+
+```typescript title="alchemy.run.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as E2B from "@alchemy.run/e2b";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import Api from "./src/Api.ts";
+import { Warm } from "./src/Sandbox.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Layer.mergeAll(Cloudflare.providers(), E2B.providers()),
+    state: Cloudflare.state(),
+  },
+  Effect.gen(function* () {
+    const warm = yield* Warm;
+    const api = yield* Api;
+    return { snapshot: warm.templateId, url: api.url.as<string>() };
+  }),
+);
+```
+
+## Where to start
+
+**Want to build?** Start with [Setup](/e2b/setup) to sign in to E2B, then the [tutorial](/e2b/tutorial/part-1), which builds a code-running API one step at a time.
+
+**Looking for something specific?** Every section of these docs is listed below, and every resource is in the generated [API reference](/providers).
+
+## The docs
+
+<HubMap />

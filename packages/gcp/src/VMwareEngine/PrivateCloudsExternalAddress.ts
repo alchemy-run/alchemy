@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_ZONE,
@@ -95,8 +96,38 @@ export type PrivateCloudsExternalAddress = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  PrivateCloudsExternalAddressLookup
 >;
+
+/**
+ * Props for {@link PrivateCloudsExternalAddress.lookup}: find a private
+ * clouds external address this stack doesn't manage by its identifiers, in
+ * the ambient project unless `project` names another.
+ */
+export interface PrivateCloudsExternalAddressLookup {
+  /**
+   * External address id (the `{externalAddress}` segment of
+   * `.../privateClouds/{privateCloud}/externalAddresses/{externalAddress}`).
+   */
+  externalAddressId: string;
+  /**
+   * Location of the parent private cloud. Inferred from `privateCloud` when
+   * that value is a full resource name.
+   */
+  location?: string;
+  /**
+   * Parent PrivateCloud resource name
+   * (`projects/{project}/locations/{location}/privateClouds/{privateCloud}`)
+   * or the cloud id.
+   */
+  privateCloud: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An allocated external IP address mapped to a workload VM inside a
@@ -119,6 +150,20 @@ export type PrivateCloudsExternalAddress = Resource<
  *     description: "web vip",
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing private clouds external address
+ * `PrivateCloudsExternalAddress.lookup` references a private clouds
+ * external address Alchemy doesn't manage (created in the console or by
+ * another stack). It is read during plan/deploy, never created, updated or
+ * deleted, and binds like a declared private clouds external address.
+ *
+ * **Example:** Reference an existing private clouds external address
+ * ```typescript
+ * const privateCloudsExternalAddress = GCP.VMwareEngine.PrivateCloudsExternalAddress.lookup({
+ *   externalAddressId: "my-external-address",
+ *   privateCloud: "my-private-cloud",
+ * });
  * ```
  *
  * @resource
@@ -157,7 +202,7 @@ const toAttrs = (item: vmwareengine.ExternalAddress, project: string) => {
 const getByName = (name: string) =>
   vmwareengine
     .getProjectsLocationsPrivateCloudsExternalAddresses({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const PrivateCloudsExternalAddressProvider = () =>
   Provider.succeed(PrivateCloudsExternalAddress, {
@@ -188,6 +233,19 @@ export const PrivateCloudsExternalAddressProvider = () =>
         nextParent: news.privateCloud,
       });
     }),
+
+    lookup: Effect.fn(function* ({ externalAddressId, location: lookupLocation, privateCloud }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(
+        lookupLocation ?? (privateCloud ? locationFromName(privateCloud, DEFAULT_ZONE) : undefined),
+        DEFAULT_ZONE,
+      );
+      const parent = parentCloudName(env.project, location, privateCloud ?? "");
+      const name = resourceNameOf(parent, externalAddressId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -281,7 +339,7 @@ export const PrivateCloudsExternalAddressProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -290,7 +348,7 @@ export const PrivateCloudsExternalAddressProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new VmwareengineNotResolved({ name });
+        return yield* new VmwareengineNotResolved({ resourceName: name });
       }
 
       current = yield* waitUntilReady(
@@ -338,7 +396,7 @@ export const PrivateCloudsExternalAddressProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

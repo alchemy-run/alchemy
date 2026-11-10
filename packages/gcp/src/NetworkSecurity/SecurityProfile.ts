@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -184,8 +185,34 @@ export type SecurityProfile = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SecurityProfileLookup
 >;
+
+/**
+ * Props for {@link SecurityProfile.lookup}: find a security profile this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface SecurityProfileLookup {
+  /**
+   * SecurityProfile id (the `{securityProfile}` segment of
+   * `projects/{projec
+   * t}/locations/{location}/securityProfiles/{securityProfile}`). Must be
+   * 1-63 characters, letters, numbers, hyphens, and underscores, and must
+   * not start with a number.
+   */
+  securityProfileId: string;
+  /**
+   * Location. Security profiles live in `global`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Network Security SecurityProfile — the behavior for one ProfileType
@@ -232,6 +259,19 @@ export type SecurityProfile = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing security profile
+ * `SecurityProfile.lookup` references a security profile Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * security profile.
+ *
+ * **Example:** Reference an existing security profile
+ * ```typescript
+ * const securityProfile = GCP.NetworkSecurity.SecurityProfile.lookup({
+ *   securityProfileId: "my-security-profile",
+ * });
+ * ```
+ *
  * @resource
  * @category NetworkSecurity
  */
@@ -240,13 +280,13 @@ export const SecurityProfile = Resource<SecurityProfile>("GCP.NetworkSecurity.Se
 export class SecurityProfileNotResolved extends Data.TaggedError(
   "GCP.NetworkSecurity.SecurityProfileNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class SecurityProfileStillExists extends Data.TaggedError(
   "GCP.NetworkSecurity.SecurityProfileStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const typeOf = (
@@ -342,12 +382,14 @@ const toAttrs = (profile: networksecurity.SecurityProfile, project: string) => {
 const getByName = (name: string) =>
   networksecurity
     .getProjectsLocationsSecurityProfiles({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((profile) =>
-      profile ? Effect.succeed(profile) : Effect.fail(new SecurityProfileNotResolved({ name })),
+      profile
+        ? Effect.succeed(profile)
+        : Effect.fail(new SecurityProfileNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.SecurityProfileNotResolved",
@@ -359,7 +401,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((profile) =>
-      profile === undefined ? Effect.void : Effect.fail(new SecurityProfileStillExists({ name })),
+      profile === undefined
+        ? Effect.void
+        : Effect.fail(new SecurityProfileStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.SecurityProfileStillExists",
@@ -467,6 +511,15 @@ export const SecurityProfileProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ securityProfileId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = resourceName(env.project, location, COLLECTION, securityProfileId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const securityProfileId = yield* toId(
@@ -521,7 +574,7 @@ export const SecurityProfileProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -530,7 +583,7 @@ export const SecurityProfileProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SecurityProfileNotResolved({ name });
+        return yield* new SecurityProfileNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -594,7 +647,7 @@ export const SecurityProfileProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

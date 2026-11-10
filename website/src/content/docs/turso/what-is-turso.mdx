@@ -1,0 +1,97 @@
+---
+title: What is Turso?
+description: The concepts behind Turso — organizations, groups, locations, SQLite databases, tokens, connections, migrations, copies and a database per tenant — and how @alchemy.run/turso models each of them.
+---
+
+import Tree from "../../../components/diagrams/Tree.astro";
+
+
+Turso hosts SQLite databases for you. Each database is a whole SQLite file, run by Turso and reached over the network, and making one is so cheap that you can have thousands: one per customer, one per pull request, one per user.
+
+Take one small app: a Worker with a database of its own, plus a database per customer. An organization holds a group in one location. The group holds the app's database and one database per tenant, and Workers reach them with tokens.
+
+<Tree
+  nodes={[
+    { id: "org", label: "acme", type: "organization", icon: "brand:turso" },
+    { id: "us", label: "default", type: "group · aws-us-east-1", parent: "org", dashed: true, icon: "map-pin" },
+    { id: "app", label: "app", type: "database", parent: "us", tone: "accent", icon: "database" },
+    { id: "a", label: "tenant-a", type: "database", parent: "us", icon: "database" },
+    { id: "b", label: "tenant-b", type: "database", parent: "us", icon: "database" },
+    { id: "eu", label: "eu", type: "group · aws-eu-west-1", parent: "org", dashed: true, icon: "map-pin" },
+    { id: "c", label: "tenant-c", type: "database", parent: "eu", icon: "database" },
+  ]}
+  caption="An organization holds groups, and a group decides where its databases run. Every database in a group shares its location, so a tenant that must stay in Europe gets a database in a European group. A Worker holding the default group's token reaches every database in it."
+/>
+
+## Organizations
+
+An **organization** holds your groups, databases, members and bill. Alchemy deploys into the organization your profile names. Leave it blank and Alchemy uses your token's organization, which works when the token is scoped to one or you belong to only one.
+
+Connect it once, in [Setup](/turso/setup). Members and settings can be declared too. See [Team & organization](/turso/organization).
+
+## Groups and locations
+
+Every database belongs to a **group**, and the group decides where its databases run: its **location**, like `aws-us-east-1`. Databases in a group share its location, its version of SQLite and its extensions.
+
+```typescript title="src/group.ts"
+export const Group = Turso.Group("Group", { location: "aws-us-east-1" });
+```
+
+See [Groups](/turso/groups).
+
+## Databases
+
+A **database** is a SQLite database with its own URL. It can start empty, or as a copy of another database at any recent point in time.
+
+```typescript title="src/db.ts"
+export const Db = Effect.gen(function* () {
+  const group = yield* Group;
+  return yield* Turso.Database("Db", { group: group.name, migrations: "./migrations" });
+});
+```
+
+Each deploy applies the migrations it hasn't run yet. See [Create & configure](/turso/databases) and [Migrations](/turso/migrations).
+
+## Tokens
+
+Two kinds of token reach Turso. A **database token** lets an app run SQL on a database, or every database in a group, read-write or read-only, until it expires. An **API token** lets an app manage databases: create them, copy them and delete them.
+
+A database token can't be cancelled on its own before it expires, so give tokens an expiry, and keep them out of logs.
+
+See [Tokens](/turso/tokens).
+
+## Connections
+
+A Worker reaches a database with a binding that hands it the URL and a token. Give the connection to Effect SQL or Drizzle, and query:
+
+```typescript title="src/worker.ts"
+const conn = yield* Turso.Connect(Db);
+const db = yield* Drizzle.LibSQL(conn);
+```
+
+See [Connections](/turso/connections).
+
+## A database per tenant
+
+Because databases are cheap, each customer can have their own, so one tenant's data never sits next to another's. A Worker can create, query and delete databases in a group while it runs:
+
+```typescript title="src/worker.ts"
+const tenants = yield* Turso.ManageDatabases(Tenants);
+const acme = yield* tenants.create("acme");
+```
+
+See [Database per tenant](/turso/database-per-tenant).
+
+## Copies for previews
+
+A database can start as a copy of another, data included. Give each pull request a copy of your staging database, with its own migrations on top, and delete it with the preview.
+
+See [Preview databases](/turso/preview-databases).
+
+## How @alchemy.run/turso models these concepts
+
+Each of these concepts is something your Stack declares.
+
+Your API token picks the organization, and `Turso.providers()` deploys into it. Groups, databases and tokens are declarations, and migrations run on deploy. Bindings give a Worker a connection to one database, or the right to manage every database in a group.
+
+Next, build one: the [tutorial](/turso/tutorial/part-1) puts these ideas to work, one step at a time. Or read the concepts in depth, starting with [Groups](/turso/groups).

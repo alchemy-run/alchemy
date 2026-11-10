@@ -88,8 +88,21 @@ export type Taxonomy = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  TaxonomyLookup
 >;
+
+/**
+ * Props for {@link Taxonomy.lookup}: find a taxonomy this stack doesn't
+ * manage by its identifiers.
+ */
+export interface TaxonomyLookup {
+  /**
+   * Full resource name of the taxonomy
+   * (`projects/{project}/locations/{location}/taxonomies/{id}`).
+   */
+  name: string;
+}
 
 /**
  * A Data Catalog taxonomy — a hierarchy of policy tags used to classify
@@ -125,6 +138,18 @@ export type Taxonomy = Resource<
  *   displayName: "PII",
  *   description: "sensitivity classes v2",
  *   activatedPolicyTypes: ["FINE_GRAINED_ACCESS_CONTROL"],
+ * });
+ * ```
+ *
+ * ### Looking up an existing taxonomy
+ * `Taxonomy.lookup` references a taxonomy Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared taxonomy.
+ *
+ * **Example:** Reference an existing taxonomy
+ * ```typescript
+ * const taxonomy = GCP.DataCatalog.Taxonomy.lookup({
+ *   name: "projects/my-project/locations/us/taxonomies/1234567890",
  * });
  * ```
  *
@@ -205,6 +230,13 @@ export const TaxonomyProvider = () =>
       });
     }),
 
+    lookup: Effect.fn(function* ({ name }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(olds?.location ?? output?.location, env.region);
@@ -242,13 +274,13 @@ export const TaxonomyProvider = () =>
               activatedPolicyTypes,
             },
           }),
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = created ?? (yield* observe(id, undefined, env.project, location));
       }
 
       if (current === undefined) {
         return yield* new DatacatalogNotResolved({
-          name: output?.name ?? `${parent}/taxonomies`,
+          resourceName: output?.name ?? `${parent}/taxonomies`,
         });
       }
 

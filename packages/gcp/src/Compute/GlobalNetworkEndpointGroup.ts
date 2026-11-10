@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -102,8 +103,26 @@ export type GlobalNetworkEndpointGroup = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  GlobalNetworkEndpointGroupLookup
 >;
+
+/**
+ * Props for {@link GlobalNetworkEndpointGroup.lookup}: find a global
+ * network endpoint group this stack doesn't manage by its identifiers, in
+ * the ambient project unless `project` names another.
+ */
+export interface GlobalNetworkEndpointGroupLookup {
+  /**
+   * NEG name (RFC1035, 1–63 characters).
+   */
+  networkEndpointGroupName: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A global Compute Engine internet network endpoint group.
@@ -143,6 +162,19 @@ export type GlobalNetworkEndpointGroup = Resource<
  *   networkEndpointType: "INTERNET_IP_PORT",
  *   defaultPort: 443,
  *   networkEndpoints: [{ ipAddress: "203.0.113.10", port: 443 }],
+ * });
+ * ```
+ *
+ * ### Looking up an existing global network endpoint group
+ * `GlobalNetworkEndpointGroup.lookup` references a global network endpoint
+ * group Alchemy doesn't manage (created in the console or by another
+ * stack). It is read during plan/deploy, never created, updated or deleted,
+ * and binds like a declared global network endpoint group.
+ *
+ * **Example:** Reference an existing global network endpoint group
+ * ```typescript
+ * const globalNetworkEndpointGroup = GCP.Compute.GlobalNetworkEndpointGroup.lookup({
+ *   networkEndpointGroupName: "my-network-endpoint-group",
  * });
  * ```
  *
@@ -243,7 +275,7 @@ const endpointKey = (endpoint: {
 const getByName = (project: string, networkEndpointGroup: string) =>
   compute
     .getGlobalNetworkEndpointGroups({ project, networkEndpointGroup })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, networkEndpointGroupName: string) =>
   getByName(project, networkEndpointGroupName).pipe(
@@ -354,7 +386,14 @@ export const GlobalNetworkEndpointGroupProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ networkEndpointGroupName }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(env.project, networkEndpointGroupName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const networkEndpointGroupName = yield* toPhysicalName(
         id,
@@ -366,7 +405,9 @@ export const GlobalNetworkEndpointGroupProvider = () =>
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseDescription(existing.description);
-      return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, labels))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "networkEndpointGroupName");
     }),
 
     list: () =>
@@ -410,7 +451,7 @@ export const GlobalNetworkEndpointGroupProvider = () =>
             body: desired,
           }),
           { ignoreAlreadyExists: true },
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = yield* awaitResource(env.project, networkEndpointGroupName);
       }
 
@@ -466,7 +507,7 @@ export const GlobalNetworkEndpointGroupProvider = () =>
           networkEndpointGroup: output.networkEndpointGroupName,
         }),
         { ignoreNotFound: true },
-      ).pipe(Effect.catchTag(["NotFound", "Conflict"], () => Effect.succeed(undefined)));
+      ).pipe(Effect.catchTag(["NotFound", "Conflict"], () => Effect.undefined));
       yield* waitUntilGone(project, output.networkEndpointGroupName);
     }),
   });

@@ -4,11 +4,19 @@ import type { Input } from "alchemy/Input";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import type { AutoScalingGroup as AutoScalingGroupResource } from "./AutoScalingGroup.ts";
+
+export class ScheduledActionUnexpectedResponse extends Data.TaggedError(
+  "ScheduledActionUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type ScheduledActionName = string;
 
@@ -171,7 +179,7 @@ export const ScheduledActionProvider = () =>
             // `ValidationError: AutoScalingGroup ... not found` (typed
             // `AutoScalingGroupNotFound` via the auto-scaling patch); treat it
             // as "action gone" so refresh/read converge instead of failing.
-            Effect.catchTag("AutoScalingGroupNotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("AutoScalingGroupNotFound", () => Effect.undefined),
           );
 
       const toAttributes = (
@@ -252,8 +260,14 @@ export const ScheduledActionProvider = () =>
             AutoScalingGroupName: autoScalingGroupName,
             ScheduledActionName: scheduledActionName,
             Recurrence: news.recurrence,
-            StartTime: news.startTime ? new Date(news.startTime) : undefined,
-            EndTime: news.endTime ? new Date(news.endTime) : undefined,
+            StartTime: news.startTime
+              ? // oxlint-disable-next-line effecttsgo/global-date-in-effect -- `new Date` reads timezone-less date-times as local time; `DateTime.makeUnsafe` would read them as UTC
+                new Date(news.startTime)
+              : undefined,
+            EndTime: news.endTime
+              ? // oxlint-disable-next-line effecttsgo/global-date-in-effect -- `new Date` reads timezone-less date-times as local time; `DateTime.makeUnsafe` would read them as UTC
+                new Date(news.endTime)
+              : undefined,
             TimeZone: news.timeZone,
             MinSize: news.minSize,
             MaxSize: news.maxSize,
@@ -268,9 +282,9 @@ export const ScheduledActionProvider = () =>
               action
                 ? Effect.succeed(action)
                 : Effect.fail(
-                    new Error(
-                      `Scheduled action '${scheduledActionName}' was not readable after reconcile`,
-                    ),
+                    new ScheduledActionUnexpectedResponse({
+                      message: `Scheduled action '${scheduledActionName}' was not readable after reconcile`,
+                    }),
                   ),
             ),
           );

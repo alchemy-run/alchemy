@@ -13,6 +13,18 @@ import * as Schedule from "effect/Schedule";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 
+export class SageMakerClusterInvalidProps extends Data.TaggedError("SageMakerClusterInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class SageMakerClusterUnexpectedResponse extends Data.TaggedError(
+  "SageMakerClusterUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type ClusterStatus = sagemaker.ClusterStatus;
 
 /**
@@ -170,8 +182,18 @@ export interface Cluster extends Resource<
     instanceGroups: Record<string, ClusterInstanceGroupRef>;
   },
   never,
-  Providers
+  Providers,
+  ClusterLookup
 > {}
+
+/**
+ * Props for {@link Cluster.lookup}: find a cluster this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ClusterLookup {
+  /** The cluster name of the existing cluster. */
+  clusterName: string;
+}
 
 const ClusterResource = Resource<Cluster>("AWS.SageMaker.Cluster");
 
@@ -345,6 +367,16 @@ export type ClusterOf<Groups> = Omit<Cluster, "instanceGroups"> & {
  * });
  * ```
  *
+ * ### Looking up an existing cluster
+ * `Cluster.lookup` references a cluster Alchemy doesn't manage (created in the
+ * console or by another stack), found by `clusterName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing cluster
+ * ```typescript
+ * const existing = AWS.SageMaker.Cluster.lookup({ clusterName: "my-cluster" });
+ * ```
+ *
  * @resource
  */
 export const Cluster: {
@@ -364,12 +396,12 @@ const createClusterName = (id: string, props: { clusterName?: string | undefined
 const describeClusterOrUndefined = (name: string) =>
   sagemaker
     .describeCluster({ ClusterName: name })
-    .pipe(Effect.catchTag("ResourceNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFound", () => Effect.undefined));
 
 const fetchClusterTags = Effect.fn(function* (arn: string) {
   const response = yield* sagemaker
     .listTags({ ResourceArn: arn })
-    .pipe(Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("AccessDeniedException", () => Effect.undefined));
   return Object.fromEntries(
     (response?.Tags ?? []).flatMap((tag) =>
       tag.Key !== undefined ? [[tag.Key, tag.Value ?? ""]] : [],
@@ -481,7 +513,7 @@ const waitForCluster = (name: string, target: "InService" | "Gone") =>
         // full wait budget on a delete that can never finish.
         const nodes = yield* sagemaker
           .listClusterNodes({ ClusterName: name })
-          .pipe(Effect.catchTag("ResourceNotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFound", () => Effect.undefined));
         const blocked = (nodes?.ClusterNodeSummaries ?? []).find((node) =>
           node.InstanceStatus?.Message?.includes("does not have permission to perform"),
         );
@@ -578,6 +610,14 @@ export const ClusterProvider = () =>
                 : [],
             );
           }),
+        lookup: Effect.fn(function* ({ clusterName: name }) {
+          const described = yield* describeClusterOrUndefined(name);
+          if (!described || described.ClusterStatus === "Deleting") {
+            return undefined;
+          }
+          const attrs = toAttrs(described);
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.clusterName ?? (yield* createClusterName(id, olds ?? {}));
           const described = yield* describeClusterOrUndefined(name);
@@ -604,7 +644,9 @@ export const ClusterProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(new Error("SageMaker HyperPod Cluster requires props"));
+            return yield* new SageMakerClusterInvalidProps({
+              message: "SageMaker HyperPod Cluster requires props",
+            });
           }
           const name = output?.clusterName ?? (yield* createClusterName(id, news));
           const internalTags = yield* createInternalTags(id);
@@ -696,9 +738,9 @@ export const ClusterProvider = () =>
           yield* waitForCluster(name, "InService");
           described = yield* describeClusterOrUndefined(name);
           if (described === undefined) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled HyperPod cluster ${name}`),
-            );
+            return yield* new SageMakerClusterUnexpectedResponse({
+              message: `failed to read reconciled HyperPod cluster ${name}`,
+            });
           }
           const attrs = toAttrs(described);
 

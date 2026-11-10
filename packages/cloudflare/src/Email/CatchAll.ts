@@ -154,7 +154,7 @@ export const CatchAllProvider = () =>
             Effect.map((observed) => toAttributes(zoneId, observed, observedInitial(observed))),
             // Zones without Email Routing enabled (or that the token can no
             // longer see) reject the route; skip them.
-            Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
+            Effect.catchTag("Forbidden", () => Effect.undefined),
           ),
         { concurrency: 10 },
       );
@@ -181,7 +181,7 @@ export const CatchAllProvider = () =>
       const observed = yield* emailRouting.getRuleCatchAll({ zoneId }).pipe(
         // Zone deleted out-of-band (or the token can no longer see it) —
         // the catch-all rule is gone with it.
-        Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
+        Effect.catchTag("Forbidden", () => Effect.undefined),
       );
       if (observed === undefined) return undefined;
       // The catch-all rule is a singleton that always exists once Email
@@ -233,7 +233,7 @@ export const CatchAllProvider = () =>
       // Observe — if the zone itself is gone, so is the catch-all rule.
       const observed = yield* emailRouting
         .getRuleCatchAll({ zoneId })
-        .pipe(Effect.catchTag("Forbidden", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("Forbidden", () => Effect.undefined));
       if (observed === undefined) return;
       // Restore the pre-management state; skip the call when it already
       // matches (idempotent re-delete after a crashed run).

@@ -19,13 +19,13 @@ export const MAX_DISPLAY_NAME_LENGTH = 63;
 export class ResourceNotResolved extends Data.TaggedError(
   "GCP.MigrationCenter.ResourceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ResourceStillExists extends Data.TaggedError(
   "GCP.MigrationCenter.ResourceStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {
@@ -214,7 +214,7 @@ export const waitUntilExists = <A, E extends { readonly _tag: string }, R>(
   get.pipe(
     Effect.filterOrFail(
       (value): value is NonNullable<A> => value != null,
-      () => new ResourceNotResolved({ name }),
+      () => new ResourceNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.MigrationCenter.ResourceNotResolved",
@@ -230,7 +230,7 @@ export const waitUntilGone = <A, E extends { readonly _tag: string }, R>(
   get.pipe(
     Effect.filterOrFail(
       (value) => value === undefined,
-      () => new ResourceStillExists({ name }),
+      () => new ResourceStillExists({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.MigrationCenter.ResourceStillExists",

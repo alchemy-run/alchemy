@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitRegionOperation } from "./operations.ts";
@@ -115,8 +116,31 @@ export type RegionSslCertificate = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RegionSslCertificateLookup
 >;
+
+/**
+ * Props for {@link RegionSslCertificate.lookup}: find a region ssl
+ * certificate this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface RegionSslCertificateLookup {
+  /**
+   * Certificate name (RFC1035, 1-63 chars).
+   */
+  sslCertificateName: string;
+  /**
+   * Region the certificate lives in (e.g. `us-central1`). `US-CENTRAL1` is
+   * accepted and normalized to `us-central1`.
+   */
+  region?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A regional Compute Engine SSL certificate for HTTPS load balancing.
@@ -146,6 +170,19 @@ export type RegionSslCertificate = Resource<
  *   description: "prod frontend",
  *   certificate: pemCertificate,
  *   privateKey: pemPrivateKey,
+ * });
+ * ```
+ *
+ * ### Looking up an existing region ssl certificate
+ * `RegionSslCertificate.lookup` references a region ssl certificate Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared region ssl certificate.
+ *
+ * **Example:** Reference an existing region ssl certificate
+ * ```typescript
+ * const regionSslCertificate = GCP.Compute.RegionSslCertificate.lookup({
+ *   sslCertificateName: "my-ssl-certificate",
  * });
  * ```
  *
@@ -320,7 +357,7 @@ const toAttrs = (cert: compute.SslCertificate, project: string) => {
 const getByName = (project: string, region: string, sslCertificate: string) =>
   compute
     .getRegionSslCertificates({ project, region, sslCertificate })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, region: string, sslCertificateName: string) =>
   getByName(project, region, sslCertificateName).pipe(
@@ -413,6 +450,14 @@ export const RegionSslCertificateProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ sslCertificateName, region: lookupRegion }) {
+      const env = yield* GcpEnvironment.current;
+      const region = normalizeRegion(lookupRegion, env.region);
+      const existing = yield* getByName(env.project, region, sslCertificateName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const sslCertificateName = yield* toName(
@@ -474,7 +519,7 @@ export const RegionSslCertificateProvider = () =>
                 ignore: ["RESOURCE_ALREADY_EXISTS"],
               }),
             ),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         current =
           created !== undefined
@@ -507,7 +552,7 @@ export const RegionSslCertificateProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitRegionOperation(env.project, region, operation).pipe(

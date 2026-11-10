@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   hasAlchemyLabels,
@@ -195,8 +196,27 @@ export type BackendService = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  BackendServiceLookup
 >;
+
+/**
+ * Props for {@link BackendService.lookup}: find a backend service this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface BackendServiceLookup {
+  /**
+   * Name of the backend service. Must be 1-63 characters and match
+   * `[a-z]([-a-z0-9]*[a-z0-9])?`.
+   */
+  name: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A global Compute Engine backend service. Backend services define how
@@ -237,6 +257,19 @@ export type BackendService = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing backend service
+ * `BackendService.lookup` references a backend service Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * backend service.
+ *
+ * **Example:** Reference an existing backend service
+ * ```typescript
+ * const backendService = GCP.Compute.BackendService.lookup({
+ *   name: "my-name",
+ * });
+ * ```
+ *
  * @resource
  * @category Compute
  */
@@ -245,7 +278,7 @@ export const BackendService = Resource<BackendService>("GCP.Compute.BackendServi
 export class BackendServiceNotResolved extends Data.TaggedError(
   "GCP.Compute.BackendServiceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const rfc1035 = (name: string): string => {
@@ -394,7 +427,7 @@ const sameLogConfig = (
 const getByName = (project: string, name: string) =>
   compute
     .getBackendServices({ project, backendService: name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, name: string) =>
   getByName(project, name).pipe(
@@ -435,6 +468,13 @@ export const BackendServiceProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ name }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(env.project, name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -520,7 +560,7 @@ export const BackendServiceProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         current =
           inserted !== undefined
@@ -529,7 +569,7 @@ export const BackendServiceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new BackendServiceNotResolved({ name });
+        return yield* new BackendServiceNotResolved({ resourceName: name });
       }
 
       const timeoutChanged = (current.timeoutSec ?? DEFAULT_TIMEOUT_SEC) !== timeoutSec;
@@ -613,7 +653,7 @@ export const BackendServiceProvider = () =>
           .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* awaitResource(env.project, name);
         if (current === undefined) {
-          return yield* new BackendServiceNotResolved({ name });
+          return yield* new BackendServiceNotResolved({ resourceName: name });
         }
       }
 
@@ -628,6 +668,13 @@ export const BackendServiceProvider = () =>
           backendService: output.name,
         })
         .pipe(
+          // Compute rejects the delete while another operation is still in
+          // flight on the backend service (a just-applied update).
+          Effect.retry({
+            while: (error) => error._tag === "ResourceNotReady",
+            times: 20,
+            schedule: Schedule.spaced("10 seconds"),
+          }),
           Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
           Effect.catchTag("NotFound", () => Effect.void),
         );

@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -103,8 +104,34 @@ export type Application = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ApplicationLookup
 >;
+
+/**
+ * Props for {@link Application.lookup}: find an application this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface ApplicationLookup {
+  /**
+   * Application id (the `{application}` segment of
+   * `projects/{project}/locations/{location}/applications/{application}`).
+   * Must be lowercase letters, numbers, or hyphens (RFC1035, 63 chars).
+   */
+  applicationId: string;
+  /**
+   * Region (`us-central1`, …) or `global`. `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`. Regional applications use `scope.type =
+   * REGIONAL`; global applications use `scope.type = GLOBAL`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An App Hub application — the governance boundary for services and
@@ -151,6 +178,19 @@ export type Application = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing application
+ * `Application.lookup` references an application Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * application.
+ *
+ * **Example:** Reference an existing application
+ * ```typescript
+ * const application = GCP.AppHub.Application.lookup({
+ *   applicationId: "my-application",
+ * });
+ * ```
+ *
  * @resource
  * @category AppHub
  */
@@ -181,10 +221,10 @@ const toAttrs = (item: apphub.Application, project: string, region: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : apphub
         .getProjectsLocationsApplications({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string, region: string) =>
   listAtLocations(project, region, (parent) =>
@@ -219,6 +259,15 @@ export const ApplicationProvider = () =>
           previousScope !== undefined && nextScope !== undefined && previousScope !== nextScope,
       });
     }),
+
+    lookup: Effect.fn(function* ({ applicationId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, applicationId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -272,7 +321,7 @@ export const ApplicationProvider = () =>
               scope,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -280,7 +329,7 @@ export const ApplicationProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       current = yield* waitUntilReady(
@@ -327,7 +376,7 @@ export const ApplicationProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

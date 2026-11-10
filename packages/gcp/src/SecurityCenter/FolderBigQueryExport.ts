@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -89,8 +90,32 @@ export type FolderBigQueryExport = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  FolderBigQueryExportLookup
 >;
+
+/**
+ * Props for {@link FolderBigQueryExport.lookup}: find a folder big query
+ * export this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface FolderBigQueryExportLookup {
+  /**
+   * Export id (the `{export}` segment of
+   * `folders/{folder}/bigQueryExports/{export}`). Letters, digits, and
+   * hyphens; max 63 characters.
+   */
+  exportId: string;
+  /**
+   * Parent folder (`folders/{folder}` or the numeric id).
+   */
+  folder?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A folder-scoped Security Command Center BigQuery export.
@@ -119,6 +144,19 @@ export type FolderBigQueryExport = Resource<
  *   folder: "folders/123456789",
  *   exportId: "active-findings",
  *   dataset: "projects/my-project/datasets/scc",
+ * });
+ * ```
+ *
+ * ### Looking up an existing folder big query export
+ * `FolderBigQueryExport.lookup` references a folder big query export
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared folder big query export.
+ *
+ * **Example:** Reference an existing folder big query export
+ * ```typescript
+ * const folderBigQueryExport = GCP.SecurityCenter.FolderBigQueryExport.lookup({
+ *   exportId: "my-export",
  * });
  * ```
  *
@@ -157,10 +195,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : scc
         .getFoldersBigQueryExports({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const FolderBigQueryExportProvider = () =>
   Provider.succeed(FolderBigQueryExport, {
@@ -176,6 +214,15 @@ export const FolderBigQueryExportProvider = () =>
         )
       );
     }),
+
+    lookup: Effect.fn(function* ({ exportId, folder: lookupFolder }) {
+      const env = yield* GcpEnvironment.current;
+      const folder = yield* resolveFolder(lookupFolder, undefined);
+      const name = resourceName(folder, exportId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, folder, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -227,7 +274,7 @@ export const FolderBigQueryExportProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SecuritycenterNotResolved({ name });
+        return yield* new SecuritycenterNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

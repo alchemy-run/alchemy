@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   destGroupNameOf,
@@ -65,8 +66,34 @@ export type IapDestGroup = Resource<
     fqdns: string[];
   },
   never,
-  Providers
+  Providers,
+  IapDestGroupLookup
 >;
+
+/**
+ * Props for {@link IapDestGroup.lookup}: find an iap dest group this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface IapDestGroupLookup {
+  /**
+   * Destination group id (the `{dest_group}` segment of
+   * `projects/{project}/
+   * iap_tunnel/locations/{location}/destGroups/{dest_group}`). Must be 4-63
+   * characters of lowercase letters and dashes.
+   */
+  destGroupId: string;
+  /**
+   * Region of the destination group (`us-central1`, …). `US-CENTRAL1` is
+   * accepted and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Identity-Aware Proxy TCP-forwarding tunnel destination group.
@@ -103,13 +130,26 @@ export type IapDestGroup = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing iap dest group
+ * `IapDestGroup.lookup` references an iap dest group Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * iap dest group.
+ *
+ * **Example:** Reference an existing iap dest group
+ * ```typescript
+ * const iapDestGroup = GCP.IAP.IapDestGroup.lookup({
+ *   destGroupId: "my-dest-group",
+ * });
+ * ```
+ *
  * @resource
  * @category IAP
  */
 export const IapDestGroup = Resource<IapDestGroup>("GCP.IAP.IapDestGroup");
 
 export class IapDestGroupNotResolved extends Data.TaggedError("GCP.IAP.IapDestGroupNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (group: iap.TunnelDestGroup, project: string, region: string) => {
@@ -140,6 +180,15 @@ export const IapDestGroupProvider = () =>
           news.location !== undefined ? normalizeLocation(news.location, env.region) : undefined,
       });
     }),
+
+    lookup: Effect.fn(function* ({ destGroupId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = destGroupNameOf(env.project, location, destGroupId);
+      const existing = yield* getDestGroup(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -176,7 +225,7 @@ export const IapDestGroupProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new IapDestGroupNotResolved({ name });
+        return yield* new IapDestGroupNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

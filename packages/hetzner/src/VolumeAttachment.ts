@@ -169,7 +169,7 @@ const serverIdOf = (value: unknown): number | undefined => {
 const getById = (id: number) =>
   Hetzner.volumes.getVolume({ id }).pipe(
     Effect.map(({ volume }) => volume),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const toAttrs = (
@@ -190,7 +190,7 @@ const waitUntilServer = (volumeId: number, serverId: number | null) =>
     Effect.flatMap((volume) => {
       if (volume === undefined) {
         return serverId === null
-          ? Effect.succeed(undefined)
+          ? Effect.undefined
           : Effect.fail(
               new AttachmentPending({
                 volumeId,
@@ -226,9 +226,10 @@ const detach = (volumeId: number) =>
   Hetzner.volumeActions.detachVolume({ id: volumeId }).pipe(
     Effect.tap(({ action }) =>
       waitForAction(action).pipe(
-        // Volume detach can outlive the action poll under load; observe
-        // the Volume's `server` field instead of failing the reconcile.
-        Effect.catchTag("ActionTimeout", () => Effect.void),
+        // Volume detach can outlive the action poll under load, and a
+        // concurrent Server delete can fail the action while it detaches
+        // the Volume itself. Callers observe the Volume's `server` field.
+        Effect.catchTag(["ActionTimeout", "ActionFailed"], () => Effect.void),
       ),
     ),
     Effect.catchTag(["NotFound", "UnprocessableEntity"], () => Effect.void),
@@ -238,7 +239,7 @@ const attach = (volumeId: number, serverId: number, automount: boolean) =>
   Hetzner.volumeActions
     .attachVolume({
       id: volumeId,
-      server: serverId,
+      assignee: { id: serverId, type: "server" },
       automount,
     })
     .pipe(

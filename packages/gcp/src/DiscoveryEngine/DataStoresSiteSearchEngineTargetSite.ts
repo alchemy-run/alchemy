@@ -1,5 +1,5 @@
 import * as discoveryengine from "@distilled.cloud/gcp/discoveryengine_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import { expandDataStore, matchesUriPattern, parseResourceName } from "./internal.ts";
 import { waitForOperation } from "./operations.ts";
@@ -68,8 +69,32 @@ export type DataStoresSiteSearchEngineTargetSite = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DataStoresSiteSearchEngineTargetSiteLookup
 >;
+
+/**
+ * Props for {@link DataStoresSiteSearchEngineTargetSite.lookup}: find a
+ * data stores site search engine target site this stack doesn't manage by
+ * its identifiers, in the ambient project unless `project` names another.
+ */
+export interface DataStoresSiteSearchEngineTargetSiteLookup {
+  /**
+   * Identifies the target site within the data store.
+   */
+  providedUriPattern: string;
+  /**
+   * Parent Data Store resource name
+   * `projects/{project}/locations/{location}/dataStores/{dataStore}`. The
+   * data store must use `PUBLIC_WEBSITE` content.
+   */
+  dataStore: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Vertex AI Search TargetSite under a Data Store site search engine.
@@ -105,6 +130,21 @@ export type DataStoresSiteSearchEngineTargetSite = Resource<
  * );
  * ```
  *
+ * ### Looking up an existing data stores site search engine target site
+ * `DataStoresSiteSearchEngineTargetSite.lookup` references a data stores
+ * site search engine target site Alchemy doesn't manage (created in the
+ * console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared data stores site
+ * search engine target site.
+ *
+ * **Example:** Reference an existing data stores site search engine target site
+ * ```typescript
+ * const dataStoresSiteSearchEngineTargetSite = GCP.DiscoveryEngine.DataStoresSiteSearchEngineTargetSite.lookup({
+ *   providedUriPattern: "my-provided-uri-pattern",
+ *   dataStore: "my-data-store",
+ * });
+ * ```
+ *
  * @resource
  * @category DiscoveryEngine
  */
@@ -115,7 +155,7 @@ export const DataStoresSiteSearchEngineTargetSite = Resource<DataStoresSiteSearc
 export class DataStoresSiteSearchEngineTargetSiteNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.DataStoresSiteSearchEngineTargetSiteNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const siteSearchEngine = (dataStore: string) => `${dataStore}/siteSearchEngine`;
@@ -145,10 +185,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : discoveryengine
         .getProjectsLocationsDataStoresSiteSearchEngineTargetSites({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAtParent = (parent: string) =>
   discoveryengine.listProjectsLocationsDataStoresSiteSearchEngineTargetSites
@@ -210,7 +250,22 @@ export const DataStoresSiteSearchEngineTargetSiteProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ olds, output }) {
+    lookup: Effect.fn(function* ({ providedUriPattern, dataStore }) {
+      const env = yield* GcpEnvironment.current;
+      const parent = dataStore ? expandDataStore(dataStore, env.project, "global") : undefined;
+      const existing =
+        providedUriPattern === undefined
+          ? undefined
+          : yield* findByPattern(
+              providedUriPattern,
+              parent ? siteSearchEngine(parent) : undefined,
+              undefined,
+            );
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, providedUriPattern);
+    }, inLookupProject),
+
+    read: Effect.fn(function* ({ olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const parent = olds?.dataStore
         ? expandDataStore(olds.dataStore, env.project, output?.location ?? "global")
@@ -223,7 +278,7 @@ export const DataStoresSiteSearchEngineTargetSiteProvider = () =>
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, uri);
       // No labels field: without prior state it may not be ours.
-      return output !== undefined ? attrs : Unowned(attrs);
+      return output !== undefined ? attrs : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     reconcile: Effect.fn(function* ({ news, output }) {
@@ -246,7 +301,7 @@ export const DataStoresSiteSearchEngineTargetSiteProvider = () =>
               type,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -255,7 +310,7 @@ export const DataStoresSiteSearchEngineTargetSiteProvider = () =>
 
       if (current === undefined) {
         return yield* new DataStoresSiteSearchEngineTargetSiteNotResolved({
-          name: output?.name ?? `${engine}/targetSites`,
+          resourceName: output?.name ?? `${engine}/targetSites`,
         });
       }
 
@@ -286,7 +341,7 @@ export const DataStoresSiteSearchEngineTargetSiteProvider = () =>
         .deleteProjectsLocationsDataStoresSiteSearchEngineTargetSites({
           name: output.name,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

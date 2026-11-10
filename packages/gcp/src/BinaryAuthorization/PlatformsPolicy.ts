@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   createOwnership,
@@ -77,8 +78,31 @@ export type PlatformsPolicy = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  PlatformsPolicyLookup
 >;
+
+/**
+ * Props for {@link PlatformsPolicy.lookup}: find a platforms policy this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface PlatformsPolicyLookup {
+  /**
+   * Policy id (the `{policy}` segment of
+   * `projects/{project}/platforms/{platform}/policies/{policy}`).
+   */
+  policyId: string;
+  /**
+   * Platform this policy applies to (`gke` or `cloudRun`).
+   */
+  platform?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Binary Authorization platform policy. Platform policies apply to a
@@ -133,6 +157,19 @@ export type PlatformsPolicy = Resource<
  * );
  * ```
  *
+ * ### Looking up an existing platforms policy
+ * `PlatformsPolicy.lookup` references a platforms policy Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * platforms policy.
+ *
+ * **Example:** Reference an existing platforms policy
+ * ```typescript
+ * const platformsPolicy = GCP.BinaryAuthorization.PlatformsPolicy.lookup({
+ *   policyId: "my-policy",
+ * });
+ * ```
+ *
  * @resource
  * @category BinaryAuthorization
  */
@@ -183,6 +220,15 @@ export const PlatformsPolicyProvider = () =>
       });
     }),
 
+    lookup: Effect.fn(function* ({ policyId, platform: lookupPlatform }) {
+      const env = yield* GcpEnvironment.current;
+      const platform = lookupPlatform ?? DEFAULT_PLATFORM;
+      const name = policyName(env.project, platform, policyId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const policyId = yield* toPhysicalId(id, olds?.policyId, output?.policyId, "policy");
@@ -227,7 +273,7 @@ export const PlatformsPolicyProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const descriptionChanged = !sameText(current.description, desiredDescription);

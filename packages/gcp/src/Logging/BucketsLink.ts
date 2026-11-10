@@ -1,5 +1,5 @@
 import * as logging from "@distilled.cloud/gcp/logging_v2";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { listProjectBuckets, waitForDeleteOperation, waitForOperation } from "./operations.ts";
@@ -78,8 +79,39 @@ export type BucketsLink = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  BucketsLinkLookup
 >;
+
+/**
+ * Props for {@link BucketsLink.lookup}: find a buckets link this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface BucketsLinkLookup {
+  /**
+   * Link id (the `{link}` segment of `.../buckets/{bucket}/links/{link}`).
+   * Also used as the BigQuery dataset id, so it may contain only letters,
+   * digits, and underscores and must start with a letter.
+   */
+  linkId: string;
+  /**
+   * Bucket location used when `bucket` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent analytics-enabled log bucket. Full name
+   * `projects/{project}/locations/{location}/buckets/{bucket}` or the
+   * bucket id (combined with `location`). A bucket may have at most one
+   * link.
+   */
+  bucket: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Logging link that creates a BigQuery dataset over an
@@ -114,22 +146,36 @@ export type BucketsLink = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing buckets link
+ * `BucketsLink.lookup` references a buckets link Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * buckets link.
+ *
+ * **Example:** Reference an existing buckets link
+ * ```typescript
+ * const bucketsLink = GCP.Logging.BucketsLink.lookup({
+ *   linkId: "my-link",
+ *   bucket: "my-bucket",
+ * });
+ * ```
+ *
  * @resource
  * @category Logging
  */
 export const BucketsLink = Resource<BucketsLink>("GCP.Logging.BucketsLink");
 
 export class BucketsLinkNotResolved extends Data.TaggedError("GCP.Logging.BucketsLinkNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class BucketsLinkFailed extends Data.TaggedError("GCP.Logging.BucketsLinkFailed")<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
 export class BucketsLinkStillExists extends Data.TaggedError("GCP.Logging.BucketsLinkStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const parseLinkName = (name: string) => {
@@ -218,25 +264,25 @@ const isValidLinkName = (name: string) =>
 
 const getByName = (name: string) =>
   !isValidLinkName(name)
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : logging
         .getProjectsLocationsBucketsLinks({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilActive = (name: string) =>
   Effect.gen(function* () {
     const link = yield* getByName(name);
     if (isDeleted(link)) {
-      return yield* new BucketsLinkNotResolved({ name });
+      return yield* new BucketsLinkNotResolved({ resourceName: name });
     }
     if (link.lifecycleState === "FAILED") {
       return yield* new BucketsLinkFailed({
-        name,
+        resourceName: name,
         state: link.lifecycleState,
       });
     }
     if (isPending(link.lifecycleState)) {
-      return yield* new BucketsLinkNotResolved({ name });
+      return yield* new BucketsLinkNotResolved({ resourceName: name });
     }
     return link;
   }).pipe(
@@ -248,7 +294,7 @@ const waitUntilActive = (name: string) =>
     Effect.catchTag("GCP.Logging.BucketsLinkNotResolved", () =>
       Effect.fail(
         new BucketsLinkFailed({
-          name,
+          resourceName: name,
           state: "PENDING",
         }),
       ),
@@ -258,7 +304,9 @@ const waitUntilActive = (name: string) =>
 const waitUntilDeleted = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((link) =>
-      isDeleted(link) ? Effect.void : Effect.fail(new BucketsLinkStillExists({ name })),
+      isDeleted(link)
+        ? Effect.void
+        : Effect.fail(new BucketsLinkStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Logging.BucketsLinkStillExists",
@@ -289,7 +337,17 @@ export const BucketsLinkProvider = () =>
       return { action: "replace" as const, deleteFirst: true };
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ linkId, location: lookupLocation, bucket }) {
+      const env = yield* GcpEnvironment.current;
+      const location = lookupLocation ?? DEFAULT_LOCATION;
+      const parent = parseBucket(bucket ?? "", env.project, location);
+      const name = resourceName(parent.project, parent.location, parent.bucketId, linkId);
+      const existing = yield* getByName(name);
+      if (isDeleted(existing)) return undefined;
+      return toAttrs(existing, parent.project, parent.location, parent.bucketId);
+    }, inLookupProject),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const location = olds?.location ?? output?.location ?? DEFAULT_LOCATION;
       const parent = parseBucket(olds?.bucket ?? output?.bucket ?? "", env.project, location);
@@ -300,7 +358,9 @@ export const BucketsLinkProvider = () =>
       if (isDeleted(existing)) return undefined;
       const attrs = toAttrs(existing, parent.project, parent.location, parent.bucketId);
       const { labels } = parseDescription(existing.description);
-      return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, labels))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>
@@ -344,7 +404,7 @@ export const BucketsLinkProvider = () =>
       const parent = parseBucket(news.bucket, env.project, location);
       if (parent.bucketId.length === 0) {
         return yield* new BucketsLinkNotResolved({
-          name: parent.name,
+          resourceName: parent.name,
         });
       }
       const linkId = yield* toId(id, news.linkId, output?.linkId);
@@ -366,7 +426,7 @@ export const BucketsLinkProvider = () =>
             linkId,
             body: { description: desiredDescription },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -374,7 +434,7 @@ export const BucketsLinkProvider = () =>
       }
 
       if (isDeleted(current)) {
-        return yield* new BucketsLinkNotResolved({ name });
+        return yield* new BucketsLinkNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, parent.project, parent.location, parent.bucketId);

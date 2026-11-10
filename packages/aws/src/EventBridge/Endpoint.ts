@@ -219,8 +219,28 @@ export interface Endpoint extends Resource<
     eventBusArns: string[];
   },
   never,
-  Providers
+  Providers,
+  EndpointLookup
 > {}
+
+/**
+ * Props for {@link Endpoint.lookup}: find an endpoint this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface EndpointLookup {
+  /** The name of the existing endpoint. *
+   * ### Looking up an existing endpoint
+   * `Endpoint.lookup` references an endpoint Alchemy doesn't manage (created in the
+   * console or by another stack), found by `endpointName`. It is read during
+   * plan/deploy and never created, updated or deleted.
+   *
+   * **Example:** Reference an existing endpoint
+   * ```typescript
+   * const existing = AWS.EventBridge.Endpoint.lookup({ endpointName: "..." });
+   * ```
+   */
+  endpointName: string;
+}
 export const Endpoint = Resource<Endpoint>("AWS.EventBridge.Endpoint");
 
 type EndpointAttrs = Endpoint["Attributes"];
@@ -252,7 +272,7 @@ export const EndpointProvider = () =>
       const describe = (name: string) =>
         eventbridge
           .describeEndpoint({ Name: name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       /**
        * Poll until the endpoint leaves CREATING/UPDATING. Endpoints settle in
@@ -354,6 +374,13 @@ export const EndpointProvider = () =>
           if (oldName !== newName) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ endpointName: name }) {
+          const described = yield* describe(name);
+          if (!described?.Name || !described.Arn) {
+            return undefined;
+          }
+          return toAttrs(described);
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           // Endpoints don't support tags; the deterministic physical name is

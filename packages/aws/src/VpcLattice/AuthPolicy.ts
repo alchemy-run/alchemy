@@ -95,7 +95,7 @@ export const AuthPolicyProvider = () =>
       const observe = (resourceIdentifier: string) =>
         vpclattice.getAuthPolicy({ resourceIdentifier }).pipe(
           Effect.map((response) => (response.policy === undefined ? undefined : response)),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
 
       const toDesired = (policy: PolicyDocument | string) =>

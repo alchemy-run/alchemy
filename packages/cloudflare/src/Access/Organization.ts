@@ -465,9 +465,7 @@ const observe = Effect.fn(function* () {
       const typed = org;
       return typed && typed.authDomain ? typed : undefined;
     }),
-    Effect.catchTag("OrganizationNotFound", () =>
-      Effect.succeed<zeroTrust.ListOrganizationsResponse | undefined>(undefined),
-    ),
+    Effect.catchTag("OrganizationNotFound", () => Effect.undefined),
   );
 });
 

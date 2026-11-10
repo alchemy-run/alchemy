@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   collectionParent,
@@ -142,8 +143,34 @@ export type CollectionsEngine = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  CollectionsEngineLookup
 >;
+
+/**
+ * Props for {@link CollectionsEngine.lookup}: find a collections engine
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface CollectionsEngineLookup {
+  /**
+   * Engine id (the `{engine}` segment of the resource name).
+   */
+  engineId: string;
+  /**
+   * Location (`global`, `us`, `eu`, …).
+   */
+  location?: string;
+  /**
+   * Collection id.
+   */
+  collectionId?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Discovery Engine Engine under a collection — serves Search,
@@ -176,6 +203,19 @@ export type CollectionsEngine = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing collections engine
+ * `CollectionsEngine.lookup` references a collections engine Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared collections engine.
+ *
+ * **Example:** Reference an existing collections engine
+ * ```typescript
+ * const collectionsEngine = GCP.DiscoveryEngine.CollectionsEngine.lookup({
+ *   engineId: "my-engine",
+ * });
+ * ```
+ *
  * @resource
  * @category DiscoveryEngine
  */
@@ -186,13 +226,13 @@ export const CollectionsEngine = Resource<CollectionsEngine>(
 export class CollectionsEngineNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsEngineNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class CollectionsEngineStillExists extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsEngineStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, collectionId: string, engineId: string) =>
@@ -211,7 +251,7 @@ const idsOf = (values: readonly string[] | undefined) => (values ?? []).map(data
 const getByName = (name: string) =>
   discoveryengine
     .getProjectsLocationsCollectionsEngines({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toAttrs = (engine: discoveryengine.GoogleCloudDiscoveryengineV1Engine, project: string) => {
   const name = engine.name ?? "";
@@ -236,7 +276,9 @@ const toAttrs = (engine: discoveryengine.GoogleCloudDiscoveryengineV1Engine, pro
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((engine) =>
-      engine ? Effect.succeed(engine) : Effect.fail(new CollectionsEngineNotResolved({ name })),
+      engine
+        ? Effect.succeed(engine)
+        : Effect.fail(new CollectionsEngineNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.DiscoveryEngine.CollectionsEngineNotResolved",
@@ -248,7 +290,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((engine) =>
-      engine === undefined ? Effect.void : Effect.fail(new CollectionsEngineStillExists({ name })),
+      engine === undefined
+        ? Effect.void
+        : Effect.fail(new CollectionsEngineStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.DiscoveryEngine.CollectionsEngineStillExists",
@@ -311,6 +355,21 @@ export const CollectionsEngineProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({
+      engineId,
+      location: lookupLocation,
+      collectionId: lookupCollectionId,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const collectionId = normalizeCollection(lookupCollectionId);
+      const existing = yield* getByName(
+        resourceName(env.project, location, collectionId, engineId),
+      );
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const engineId = yield* toResourceId(id, olds?.engineId, output?.engineId);
@@ -363,7 +422,7 @@ export const CollectionsEngineProvider = () =>
               appType: news.appType,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -371,7 +430,7 @@ export const CollectionsEngineProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CollectionsEngineNotResolved({ name: fallbackName });
+        return yield* new CollectionsEngineNotResolved({ resourceName: fallbackName });
       }
 
       const name = current.name ?? fallbackName;
@@ -427,7 +486,7 @@ export const CollectionsEngineProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

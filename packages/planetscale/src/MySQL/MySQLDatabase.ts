@@ -180,11 +180,108 @@ export type MySQLDatabase = Resource<
   MySQLDatabaseProps,
   MySQLDatabaseAttributes,
   never,
-  Providers
+  Providers,
+  MySQLDatabaseLookup
 >;
 
-/** @resource */
+/**
+ * Props for {@link MySQLDatabase.lookup}: find a MySQL database this
+ * stack doesn't manage by its name, in the credentialed organization.
+ */
+export interface MySQLDatabaseLookup {
+  /** Database name. */
+  name: string;
+}
+
+/**
+ * A PlanetScale MySQL (Vitess) database.
+ *
+ * ### Looking up an existing MySQL database
+ * `MySQLDatabase.lookup` references a MySQL database Alchemy doesn't manage (created in
+ * the PlanetScale dashboard or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted.
+ *
+ * **Example:** Branch an existing database
+ * ```typescript
+ * const db = Planetscale.MySQLDatabase.lookup({ name: "app" });
+ * const preview = yield* Planetscale.MySQLBranch("Preview", {
+ *   database: db,
+ *   isProduction: false,
+ * });
+ * ```
+ *
+ * @resource
+ */
 export const MySQLDatabase = Resource<MySQLDatabase>("Planetscale.MySQLDatabase");
+
+/** Observe a database by name; `read` and `lookup` share it. */
+const readMySQLDatabase = Effect.fn(function* ({
+  id,
+  output,
+  olds,
+}: {
+  id: string;
+  output?: MySQLDatabase["Attributes"];
+  olds?: Partial<MySQLDatabaseProps>;
+}) {
+  const { organization } = yield* yield* Credentials;
+  const databaseName = output?.name ?? (yield* createDatabaseName(id, olds?.name));
+  return yield* planetscale
+    .getDatabase({
+      organization,
+      database: databaseName,
+    })
+    .pipe(
+      Effect.flatMap(
+        Effect.fn(function* (data) {
+          if (data.kind !== "mysql") {
+            return yield* new PlanetscaleConflict({
+              message:
+                `Planetscale database "${data.name}" has kind "${data.kind}" but this resource ` +
+                `is a MySQLDatabase. Use Planetscale.${data.kind === "postgresql" ? "PostgresDatabase" : data.kind}() instead, ` +
+                `or delete the existing database and retry.`,
+            });
+          }
+          // Observe the default keyspace's live replica configuration
+          // so adopted databases diff against reality.
+          const replicas = yield* observeDefaultKeyspaceReplicas(
+            organization,
+            data.name,
+            data.default_branch ?? "main",
+          );
+          return {
+            id: data.id,
+            name: data.name,
+            organization,
+            state: data.state,
+            defaultBranch: data.default_branch ?? "main",
+            replicas,
+            plan: data.plan ?? "hobby",
+            createdAt: data.created_at,
+            updatedAt: data.updated_at,
+            htmlUrl: data.html_url,
+            region: { slug: data.region.slug },
+            migrationsDir: output?.migrationsDir ?? (olds && migrationsInputOf(olds))?.dir,
+            migrationsTable: output?.migrationsTable ?? (olds && migrationsInputOf(olds))?.table,
+            migrationsHashes: output?.migrationsHashes ?? {},
+            importHashes: output?.importHashes ?? {},
+            clusterSize: output?.clusterSize ?? "",
+            requireApprovalForDeploy: data.require_approval_for_deploy ?? false,
+            restrictBranchRegion: data.restrict_branch_region ?? false,
+            insightsRawQueries: data.insights_raw_queries ?? false,
+            productionBranchWebConsole: data.production_branch_web_console ?? false,
+            deletionProtection: data.deletion_protected ?? false,
+            automaticMigrations: data.automatic_migrations ?? false,
+            migrationFramework: data.migration_framework ?? undefined,
+            migrationTableName: data.migration_table_name ?? undefined,
+            allowDataBranching: data.allow_data_branching ?? false,
+            allowForeignKeyConstraints: data.foreign_keys_enabled ?? false,
+          };
+        }),
+      ),
+      Effect.catchTag("NotFound", () => Effect.undefined),
+    );
+});
 
 export const MySQLDatabaseProvider = () =>
   Provider.succeed(MySQLDatabase, {
@@ -246,66 +343,9 @@ export const MySQLDatabaseProvider = () =>
       return stables ? ({ action: "noop", stables } as const) : undefined;
     }),
 
-    read: Effect.fn(function* ({ id, output, olds }) {
-      const { organization } = yield* yield* Credentials;
-      const databaseName = output?.name ?? (yield* createDatabaseName(id, olds?.name));
-      return yield* planetscale
-        .getDatabase({
-          organization,
-          database: databaseName,
-        })
-        .pipe(
-          Effect.flatMap(
-            Effect.fn(function* (data) {
-              if (data.kind !== "mysql") {
-                return yield* new PlanetscaleConflict({
-                  message:
-                    `Planetscale database "${data.name}" has kind "${data.kind}" but this resource ` +
-                    `is a MySQLDatabase. Use Planetscale.${data.kind === "postgresql" ? "PostgresDatabase" : data.kind}() instead, ` +
-                    `or delete the existing database and retry.`,
-                });
-              }
-              // Observe the default keyspace's live replica configuration
-              // so adopted databases diff against reality.
-              const replicas = yield* observeDefaultKeyspaceReplicas(
-                organization,
-                data.name,
-                data.default_branch ?? "main",
-              );
-              return {
-                id: data.id,
-                name: data.name,
-                organization,
-                state: data.state,
-                defaultBranch: data.default_branch ?? "main",
-                replicas,
-                plan: data.plan ?? "hobby",
-                createdAt: data.created_at,
-                updatedAt: data.updated_at,
-                htmlUrl: data.html_url,
-                region: { slug: data.region.slug },
-                migrationsDir: output?.migrationsDir ?? (olds && migrationsInputOf(olds))?.dir,
-                migrationsTable:
-                  output?.migrationsTable ?? (olds && migrationsInputOf(olds))?.table,
-                migrationsHashes: output?.migrationsHashes ?? {},
-                importHashes: output?.importHashes ?? {},
-                clusterSize: output?.clusterSize ?? "",
-                requireApprovalForDeploy: data.require_approval_for_deploy ?? false,
-                restrictBranchRegion: data.restrict_branch_region ?? false,
-                insightsRawQueries: data.insights_raw_queries ?? false,
-                productionBranchWebConsole: data.production_branch_web_console ?? false,
-                deletionProtection: data.deletion_protected ?? false,
-                automaticMigrations: data.automatic_migrations ?? false,
-                migrationFramework: data.migration_framework ?? undefined,
-                migrationTableName: data.migration_table_name ?? undefined,
-                allowDataBranching: data.allow_data_branching ?? false,
-                allowForeignKeyConstraints: data.foreign_keys_enabled ?? false,
-              };
-            }),
-          ),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-        );
-    }),
+    lookup: ({ name }) => readMySQLDatabase({ id: name, olds: { name } }),
+
+    read: readMySQLDatabase,
 
     reconcile: Effect.fn(function* ({ id, news, output, session }) {
       const { organization } = yield* yield* Credentials;
@@ -327,7 +367,7 @@ export const MySQLDatabaseProvider = () =>
           organization,
           database: observedName,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
       // Ensure — if missing, create.
       if (!observed) {

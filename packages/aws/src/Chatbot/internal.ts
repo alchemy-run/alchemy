@@ -1,6 +1,6 @@
 import type * as chatbot from "@distilled.cloud/aws/chatbot";
+import type { ProviderError } from "@distilled.cloud/aws/Credentials";
 import { Region, type RegionName } from "@distilled.cloud/aws/Region";
-import type { SourceError } from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 
@@ -35,13 +35,13 @@ const CHATBOT_HOME_REGION: RegionName = "us-east-2";
  */
 export const inChatbotRegion = <A, E, R>(
   effect: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E | SourceError, R> =>
+): Effect.Effect<A, E | ProviderError, R> =>
   Effect.gen(function* () {
     const ambient = yield* Effect.serviceOption(Region);
     // No region configured falls back to the home region too.
     const region = Option.isSome(ambient)
       ? yield* ambient.value.pipe(
-          Effect.catchTag("Alchemy::AWS::MissingRegion", () => Effect.succeed(undefined)),
+          Effect.catchTag("Alchemy::AWS::MissingRegion", () => Effect.undefined),
         )
       : undefined;
     return region !== undefined && CHATBOT_REGIONS.has(region)

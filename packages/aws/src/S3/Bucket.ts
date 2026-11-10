@@ -346,8 +346,19 @@ export interface Bucket extends Resource<
      */
     policyStatements?: PolicyStatement[];
   },
-  Providers
+  Providers,
+  BucketLookup
 > {}
+
+/**
+ * Props for {@link Bucket.lookup}: find a bucket this stack doesn't manage,
+ * owned by the ambient account, by its name. The bucket may live in any
+ * region; the lookup reports the one it is in.
+ */
+export interface BucketLookup {
+  /** The name of the existing bucket. */
+  bucketName: string;
+}
 
 /**
  * An S3 bucket for storing objects in AWS.
@@ -557,6 +568,20 @@ export interface Bucket extends Resource<
  * );
  * ```
  *
+ * ### Looking up an existing bucket
+ * `Bucket.lookup` references a bucket Alchemy doesn't manage (created in the
+ * console or by another stack), found by `bucketName` among the buckets the
+ * ambient account owns. It is read during plan/deploy and never created,
+ * updated or deleted, and binds like a declared bucket.
+ *
+ * **Example:** Read objects from an existing bucket
+ * ```typescript
+ * const uploads = AWS.S3.Bucket.lookup({ bucketName: "acme-uploads" });
+ *
+ * // init
+ * const getObject = yield* AWS.S3.GetObject(uploads);
+ * ```
+ *
  * @resource
  */
 export const Bucket = Resource<Bucket>("AWS.S3.Bucket");
@@ -644,8 +669,9 @@ export const BucketProvider = () =>
             yield* Effect.logInfo(
               `S3 Bucket delete: aborting ${inProgress.length} in-progress multipart upload(s) in ${bucketName}`,
             );
-            yield* Effect.all(
-              inProgress.map((u) =>
+            yield* Effect.forEach(
+              inProgress,
+              (u) =>
                 s3
                   .abortMultipartUpload({
                     Bucket: bucketName,
@@ -655,7 +681,6 @@ export const BucketProvider = () =>
                   // Already aborted/completed concurrently — a race, not a
                   // failure.
                   .pipe(Effect.catchTag("NoSuchUpload", () => Effect.void)),
-              ),
               { concurrency: 8 },
             );
           }
@@ -851,7 +876,7 @@ export const BucketProvider = () =>
       const readBucketPolicy = (bucketName: string) =>
         s3.getBucketPolicy({ Bucket: bucketName }).pipe(
           Effect.map((r): unknown => (r.Policy === undefined ? undefined : parsePolicy(r.Policy))),
-          Effect.catchTag("NoSuchBucketPolicy", () => Effect.succeed<unknown>(undefined)),
+          Effect.catchTag("NoSuchBucketPolicy", () => Effect.undefined),
         );
 
       const syncBucketPolicy = Effect.fn(function* ({
@@ -1290,9 +1315,7 @@ export const BucketProvider = () =>
       const readPublicAccessBlock = (bucketName: string) =>
         s3.getPublicAccessBlock({ Bucket: bucketName }).pipe(
           Effect.map((r) => r.PublicAccessBlockConfiguration),
-          Effect.catchTag("NoSuchPublicAccessBlockConfiguration", () =>
-            Effect.succeed<s3.PublicAccessBlockConfiguration | undefined>(undefined),
-          ),
+          Effect.catchTag("NoSuchPublicAccessBlockConfiguration", () => Effect.undefined),
         );
 
       const projectPublicAccessBlock = (
@@ -1434,9 +1457,7 @@ export const BucketProvider = () =>
       const readBucketOwnershipControls = (bucketName: string) =>
         s3.getBucketOwnershipControls({ Bucket: bucketName }).pipe(
           Effect.map((r) => r.OwnershipControls?.Rules?.[0]?.ObjectOwnership),
-          Effect.catchTag("OwnershipControlsNotFoundError", () =>
-            Effect.succeed<string | undefined>(undefined),
-          ),
+          Effect.catchTag("OwnershipControlsNotFoundError", () => Effect.undefined),
         );
 
       const syncBucketOwnershipControls = Effect.fn(function* ({
@@ -1727,9 +1748,7 @@ export const BucketProvider = () =>
           })
           .pipe(
             Effect.map((r) => r.IntelligentTieringConfiguration),
-            Effect.catchTag("NoSuchConfiguration", () =>
-              Effect.succeed<s3.IntelligentTieringConfiguration | undefined>(undefined),
-            ),
+            Effect.catchTag("NoSuchConfiguration", () => Effect.undefined),
           );
 
       // The declared configurations, observed per id (the per-id read is
@@ -1858,7 +1877,7 @@ export const BucketProvider = () =>
       ) {
         const owner = yield* notificationOwner(bucketName);
         const managed = <A, E, R>(isManaged: boolean, read: () => Effect.Effect<A, E, R>) =>
-          isManaged ? read() : Effect.succeed(undefined);
+          isManaged ? read() : Effect.undefined;
         return yield* Effect.all(
           {
             tags: readBucketTags(bucketName),
@@ -1952,6 +1971,27 @@ export const BucketProvider = () =>
               ),
             );
           }),
+        lookup: Effect.fn(function* ({ bucketName }) {
+          const { accountId } = yield* AWSEnvironment.current;
+          const location = yield* s3
+            .getBucketLocation({ Bucket: bucketName, ExpectedBucketOwner: accountId })
+            .pipe(Effect.catchTag("NoSuchBucket", () => Effect.undefined));
+          if (!location) return undefined;
+          // S3 reports us-east-1 as no constraint and eu-west-1 by its legacy
+          // `EU` alias.
+          const constraint: string | undefined = location.LocationConstraint;
+          const region = (
+            !constraint ? "us-east-1" : constraint === "EU" ? "eu-west-1" : constraint
+          ) as RegionID;
+          return {
+            bucketName,
+            bucketArn: `arn:aws:s3:::${bucketName}` as const,
+            bucketDomainName: `${bucketName}.s3.amazonaws.com` as const,
+            bucketRegionalDomainName: `${bucketName}.s3.${region}.amazonaws.com` as const,
+            region,
+            accountId,
+          };
+        }),
         read: Effect.fn(function* ({ id, fqn, instanceId, olds, output }) {
           const bucketName = output?.bucketName ?? (yield* createBucketName(id, olds ?? {}));
           const { accountId, region } = yield* AWSEnvironment.current;
@@ -2010,7 +2050,7 @@ export const BucketProvider = () =>
           }
           if (output) {
             const observed = yield* readBucketEncryption(output.bucketName).pipe(
-              Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)),
+              Effect.catchTag("NoSuchBucket", () => Effect.undefined),
             );
             if (
               encryptionFingerprint(observed) !==
@@ -2031,7 +2071,7 @@ export const BucketProvider = () =>
                 .getBucketNotificationConfiguration({
                   Bucket: output.bucketName,
                 })
-                .pipe(Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)));
+                .pipe(Effect.catchTag("NoSuchBucket", () => Effect.undefined));
               const tags: Record<string, string> = notifications
                 ? yield* fetchBucketTags(output.bucketName)
                 : {};
@@ -2390,11 +2430,13 @@ export const syncBucketEncryption = Effect.fn(function* (
     Bucket: bucket,
     ServerSideEncryptionConfiguration: { Rules: [desired] },
   });
+  // Encryption reads stay stale for well over 8s after a write, notably on a
+  // re-created bucket name or right after a bucket-policy change.
   const observed = yield* readBucketEncryption(bucket).pipe(
     Effect.repeat({
       until: matches,
-      schedule: Schedule.spaced("1 second"),
-      times: 8,
+      schedule: Schedule.spaced("2 seconds"),
+      times: 15,
     }),
   );
   if (!matches(observed)) {

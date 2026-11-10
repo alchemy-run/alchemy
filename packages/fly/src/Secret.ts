@@ -54,8 +54,20 @@ export type Secret = Resource<
     updatedAt: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SecretLookup
 >;
+
+/**
+ * Props for {@link Secret.lookup}: find a secret this stack doesn't
+ * manage by its App and name.
+ */
+export interface SecretLookup {
+  /** Fly App name the secret belongs to. */
+  appName: string;
+  /** Secret name (case-sensitive). */
+  name: string;
+}
 
 const resolveSecretProps = (
   props: SecretProps | Effect.Effect<SecretProps, never, Providers>,
@@ -196,6 +208,17 @@ const SecretResource = Resource<Secret>("Fly.Secret");
  * );
  * ```
  *
+ * ### Looking up an existing secret
+ * `Secret.lookup` references a secret Alchemy doesn't manage (set with
+ * `fly secrets set` or by another stack). It is read during plan/deploy,
+ * never set or unset. Its value is never read; `digest` changes when the
+ * value does.
+ *
+ * **Example:** Reference an existing secret
+ * ```typescript
+ * const token = Fly.Secret.lookup({ appName: "my-site", name: "API_TOKEN" });
+ * ```
+ *
  * @resource
  * @product Secret
  */
@@ -207,7 +230,7 @@ export const Secret: typeof SecretResource = Object.assign(
 
 export class SecretNotCreated extends Data.TaggedError("Fly.SecretNotCreated")<{
   appName: string;
-  name: string;
+  secretName: string;
 }> {}
 
 export class SecretAppRequired extends Data.TaggedError("Fly.SecretAppRequired")<{
@@ -251,7 +274,7 @@ const getByName = (appName: string, secretName: string) =>
       secret_name: secretName,
       show_secrets: false,
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listSecrets = (appName: string) =>
   machines
@@ -293,6 +316,11 @@ export const SecretProvider = () =>
         };
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ appName, name }) {
+      const found = yield* getByName(appName, name);
+      return found === undefined ? undefined : toAttrs(appName, found, name);
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
@@ -360,7 +388,7 @@ export const SecretProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SecretNotCreated({ appName, name });
+        return yield* new SecretNotCreated({ appName, secretName: name });
       }
 
       // Sync — skip if we just created. Prefer observed digest vs hash of

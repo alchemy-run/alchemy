@@ -127,8 +127,18 @@ export type BillingMeter = Resource<
     livemode: boolean;
   },
   never,
-  Providers
+  Providers,
+  BillingMeterLookup
 >;
+
+/**
+ * Props for {@link BillingMeter.lookup}: find a billing meter this stack
+ * doesn't manage by its id.
+ */
+export interface BillingMeterLookup {
+  /** Stripe billing meter id, e.g. `"mtr_61A2b3C4d5E6f7G8h"`. */
+  id: string;
+}
 
 /**
  * A Stripe Billing Meter — how usage events are aggregated over a billing
@@ -189,6 +199,16 @@ export type BillingMeter = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing billing meter
+ * `BillingMeter.lookup` references a billing meter Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing billing meter
+ * ```typescript
+ * const ref = Stripe.BillingMeter.lookup({ id: "mtr_61A2b3C4d5E6f7G8h" });
+ * ```
+ *
  * @resource
  * @product Billing
  */
@@ -245,7 +265,7 @@ const toAttrs = (meter: StripeBillingMeter): BillingMeterAttributes => ({
 const isMissingMeter = isMissingStripeResource;
 
 const getById = (id: string) =>
-  GetBillingMeter({ id }).pipe(Effect.catchIf(isMissingMeter, () => Effect.succeed(undefined)));
+  GetBillingMeter({ id }).pipe(Effect.catchIf(isMissingMeter, () => Effect.undefined));
 
 const listByStatus = Effect.fn(function* (status: BillingMeterStatus) {
   const meters: StripeBillingMeter[] = [];
@@ -330,6 +350,11 @@ export const BillingMeterProvider = () =>
         return { action: "replace" } as const;
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing);
     }),
 
     read: Effect.fn(function* ({ output }) {

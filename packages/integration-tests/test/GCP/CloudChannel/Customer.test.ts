@@ -3,6 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as cloudchannel from "@distilled.cloud/gcp/cloudchannel_v1";
 import * as Effect from "effect/Effect";
+import { expectFound } from "../lookup.ts";
 import {
   logLevel,
   probeAccountName,
@@ -69,6 +70,14 @@ test.provider.skipIf(!runLifecycle)(
             orgDisplayName: "Acme Corp",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.CloudChannel.Customer.lookup({
+          domain: created.domain as string,
+          parent: created.parent,
+          customerId: created.customerId,
+        }),
+        created,
       );
 
       expect(created.name.startsWith(`${probeAccountName}/customers/`)).toEqual(true);

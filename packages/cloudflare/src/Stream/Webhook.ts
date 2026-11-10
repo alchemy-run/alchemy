@@ -153,9 +153,7 @@ export const WebhookProvider = () =>
  * (`WebhookNotFound`, Cloudflare error code 10003) to `undefined`.
  */
 const getWebhook = (accountId: string) =>
-  stream
-    .getWebhook({ accountId })
-    .pipe(Effect.catchTag("WebhookNotFound", () => Effect.succeed(undefined)));
+  stream.getWebhook({ accountId }).pipe(Effect.catchTag("WebhookNotFound", () => Effect.undefined));
 
 const toAttributes = (
   webhook: stream.GetWebhookResponse | stream.PutWebhookResponse,

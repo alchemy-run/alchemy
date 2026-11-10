@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitZoneOperation } from "./operations.ts";
@@ -89,8 +90,30 @@ export type ZoneVmExtensionPolicy = Resource<
     creationTimestamp: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ZoneVmExtensionPolicyLookup
 >;
+
+/**
+ * Props for {@link ZoneVmExtensionPolicy.lookup}: find a zone vm extension
+ * policy this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface ZoneVmExtensionPolicyLookup {
+  /**
+   * Policy name (RFC1035, 1-63 characters).
+   */
+  vmExtensionPolicyName: string;
+  /**
+   * Zone the policy lives in (e.g. `us-central1-a`).
+   */
+  zone?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A zonal Compute Engine VM extension policy.
@@ -128,6 +151,19 @@ export type ZoneVmExtensionPolicy = Resource<
  *   instanceSelectors: [
  *     { labelSelector: { inclusionLabels: { role: "app" } } },
  *   ],
+ * });
+ * ```
+ *
+ * ### Looking up an existing zone vm extension policy
+ * `ZoneVmExtensionPolicy.lookup` references a zone vm extension policy
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared zone vm extension policy.
+ *
+ * **Example:** Reference an existing zone vm extension policy
+ * ```typescript
+ * const zoneVmExtensionPolicy = GCP.Compute.ZoneVmExtensionPolicy.lookup({
+ *   vmExtensionPolicyName: "my-vm-extension-policy",
  * });
  * ```
  *
@@ -258,7 +294,7 @@ const toAttrs = (
 const getByName = (project: string, zone: string, vmExtensionPolicy: string) =>
   compute
     .getZoneVmExtensionPolicies({ project, zone, vmExtensionPolicy })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitPolicyReady = (project: string, zone: string, vmExtensionPolicyName: string) =>
   getByName(project, zone, vmExtensionPolicyName).pipe(
@@ -328,6 +364,14 @@ export const ZoneVmExtensionPolicyProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ vmExtensionPolicyName, zone: lookupZone }) {
+      const env = yield* GcpEnvironment.current;
+      const zone = normalizeZone(lookupZone);
+      const existing = yield* getByName(env.project, zone, vmExtensionPolicyName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, zone);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -403,7 +447,7 @@ export const ZoneVmExtensionPolicyProvider = () =>
             zone,
             body: desired,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (inserted !== undefined) {
           yield* waitZoneOperation(env.project, zone, inserted, {
             ignore: ["RESOURCE_ALREADY_EXISTS"],
@@ -465,7 +509,7 @@ export const ZoneVmExtensionPolicyProvider = () =>
           vmExtensionPolicy: output.vmExtensionPolicyName,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

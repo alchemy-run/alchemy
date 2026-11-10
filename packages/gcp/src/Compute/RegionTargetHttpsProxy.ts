@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitRegionOperation } from "./operations.ts";
@@ -103,8 +104,31 @@ export type RegionTargetHttpsProxy = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RegionTargetHttpsProxyLookup
 >;
+
+/**
+ * Props for {@link RegionTargetHttpsProxy.lookup}: find a region target
+ * https proxy this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface RegionTargetHttpsProxyLookup {
+  /**
+   * TargetHttpsProxy name (RFC1035, 1-63 characters).
+   */
+  targetHttpsProxyName: string;
+  /**
+   * Region the proxy lives in (e.g. `us-central1`). `US-CENTRAL1` is
+   * accepted and normalized to `us-central1`.
+   */
+  region?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A regional Compute Engine target HTTPS proxy.
@@ -139,6 +163,19 @@ export type RegionTargetHttpsProxy = Resource<
  *   region: "us-central1",
  *   urlMap: map.urlMapName,
  *   sslCertificates: [cert.sslCertificateName],
+ * });
+ * ```
+ *
+ * ### Looking up an existing region target https proxy
+ * `RegionTargetHttpsProxy.lookup` references a region target https proxy
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared region target https proxy.
+ *
+ * **Example:** Reference an existing region target https proxy
+ * ```typescript
+ * const regionTargetHttpsProxy = GCP.Compute.RegionTargetHttpsProxy.lookup({
+ *   targetHttpsProxyName: "my-target-https-proxy",
  * });
  * ```
  *
@@ -258,7 +295,7 @@ const toAttrs = (proxy: compute.TargetHttpsProxy, project: string) => {
 const getByName = (project: string, region: string, targetHttpsProxy: string) =>
   compute
     .getRegionTargetHttpsProxies({ project, region, targetHttpsProxy })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const RegionTargetHttpsProxyProvider = () =>
   Provider.succeed(RegionTargetHttpsProxy, {
@@ -287,7 +324,15 @@ export const RegionTargetHttpsProxyProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ targetHttpsProxyName, region: lookupRegion }) {
+      const env = yield* GcpEnvironment.current;
+      const region = normalizeRegion(lookupRegion, env.region);
+      const existing = yield* getByName(env.project, region, targetHttpsProxyName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const targetHttpsProxyName = yield* toName(
         id,
@@ -299,7 +344,9 @@ export const RegionTargetHttpsProxyProvider = () =>
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseDescription(existing.description);
-      return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, labels))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "targetHttpsProxyName");
     }),
 
     list: () =>
@@ -379,7 +426,7 @@ export const RegionTargetHttpsProxyProvider = () =>
                 ignore: ["RESOURCE_ALREADY_EXISTS"],
               }),
             ),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         current = yield* getByName(env.project, region, targetHttpsProxyName);
       }
@@ -495,7 +542,7 @@ export const RegionTargetHttpsProxyProvider = () =>
           region,
           targetHttpsProxy: output.targetHttpsProxyName,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitRegionOperation(env.project, region, operation).pipe(
           Effect.catchTag("NotFound", () => Effect.void),

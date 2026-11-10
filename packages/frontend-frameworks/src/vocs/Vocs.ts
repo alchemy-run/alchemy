@@ -327,6 +327,7 @@ export const make = (
           // vocs's CLI (like waku's) runs with NODE_ENV set before loading
           // anything; waku's environmentsPlugin bakes it into `define`.
           yield* Effect.sync(() => {
+            // oxlint-disable-next-line effecttsgo/process-env-in-effect -- sets NODE_ENV for vocs/waku, not config reading
             process.env.NODE_ENV = INITIAL_NODE_ENV ?? "production";
           });
           const collector = yield* FrameworkCore.makeBuildOutputCollector({
@@ -382,6 +383,7 @@ export const make = (
           const project = yield* loadProject(root);
           const configPath = yield* findConfig(root);
           yield* Effect.sync(() => {
+            // oxlint-disable-next-line effecttsgo/process-env-in-effect -- sets NODE_ENV for vocs/waku, not config reading
             process.env.NODE_ENV = INITIAL_NODE_ENV ?? "development";
           });
           const port = devOptions?.port ?? options.port;

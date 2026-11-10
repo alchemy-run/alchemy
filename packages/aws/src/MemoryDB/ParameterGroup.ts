@@ -5,11 +5,19 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { readMemoryDbTags } from "./internal.ts";
+
+export class MemoryDBParameterGroupUnexpectedResponse extends Data.TaggedError(
+  "MemoryDBParameterGroupUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ParameterGroupProps {
   /**
@@ -58,8 +66,18 @@ export interface ParameterGroup extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ParameterGroupLookup
 > {}
+
+/**
+ * Props for {@link ParameterGroup.lookup}: find a parameter group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ParameterGroupLookup {
+  /** The parameter group name of the existing parameter group. */
+  parameterGroupName: string;
+}
 
 /**
  * A MemoryDB parameter group — a named collection of engine parameter
@@ -83,6 +101,16 @@ export interface ParameterGroup extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing parameter group
+ * `ParameterGroup.lookup` references a parameter group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `parameterGroupName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing parameter group
+ * ```typescript
+ * const existing = AWS.MemoryDB.ParameterGroup.lookup({ parameterGroupName: "my-parameter-group" });
+ * ```
+ *
  * @resource
  */
 export const ParameterGroup = Resource<ParameterGroup>("AWS.MemoryDB.ParameterGroup");
@@ -99,7 +127,7 @@ export const ParameterGroupProvider = () =>
       const readGroup = Effect.fn(function* (name: string) {
         const response = yield* memorydb
           .describeParameterGroups({ ParameterGroupName: name })
-          .pipe(Effect.catchTag("ParameterGroupNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ParameterGroupNotFoundFault", () => Effect.undefined));
         return response?.ParameterGroups?.[0];
       });
 
@@ -122,9 +150,9 @@ export const ParameterGroupProvider = () =>
 
       const toAttrs = Effect.fn(function* (group: memorydb.ParameterGroup) {
         if (!group.Name || !group.ARN) {
-          return yield* Effect.fail(
-            new Error(`Parameter group '${group.Name}' is missing its ARN`),
-          );
+          return yield* new MemoryDBParameterGroupUnexpectedResponse({
+            message: `Parameter group '${group.Name}' is missing its ARN`,
+          });
         }
         return {
           parameterGroupName: group.Name,
@@ -152,6 +180,13 @@ export const ParameterGroupProvider = () =>
           if ((n.description ?? undefined) !== (o.description ?? undefined)) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ parameterGroupName: name }) {
+          const group = yield* readGroup(name);
+          if (!group?.ARN) return undefined;
+          const attrs = yield* toAttrs(group);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
@@ -188,9 +223,9 @@ export const ParameterGroupProvider = () =>
             observed = yield* readGroup(name);
           }
           if (observed === undefined) {
-            return yield* Effect.fail(
-              new Error(`Parameter group '${name}' not found after create`),
-            );
+            return yield* new MemoryDBParameterGroupUnexpectedResponse({
+              message: `Parameter group '${name}' not found after create`,
+            });
           }
 
           // 3. Sync parameters — diff desired values against OBSERVED cloud

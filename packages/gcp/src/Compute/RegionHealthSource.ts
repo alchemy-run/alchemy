@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -93,8 +94,31 @@ export type RegionHealthSource = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RegionHealthSourceLookup
 >;
+
+/**
+ * Props for {@link RegionHealthSource.lookup}: find a region health source
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface RegionHealthSourceLookup {
+  /**
+   * Source name (RFC1035, 1-63 characters).
+   */
+  sourceName: string;
+  /**
+   * Region the source lives in. `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  region?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A regional Compute Engine health source.
@@ -128,6 +152,19 @@ export type RegionHealthSource = Resource<
  *   sources: [backend.selfLink],
  *   healthAggregationPolicy: policy.selfLink,
  *   description: "internal backends",
+ * });
+ * ```
+ *
+ * ### Looking up an existing region health source
+ * `RegionHealthSource.lookup` references a region health source Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared region health source.
+ *
+ * **Example:** Reference an existing region health source
+ * ```typescript
+ * const regionHealthSource = GCP.Compute.RegionHealthSource.lookup({
+ *   sourceName: "my-source",
  * });
  * ```
  *
@@ -186,7 +223,7 @@ const toAttrs = (
 const getByName = (project: string, region: string, name: string) =>
   compute
     .getRegionHealthSources({ project, region, healthSource: name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, region: string, sourceName: string) =>
   getByName(project, region, sourceName).pipe(
@@ -234,6 +271,14 @@ export const RegionHealthSourceProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ sourceName, region: lookupRegion }) {
+      const env = yield* GcpEnvironment.current;
+      const region = normalizeRegion(lookupRegion, env.region);
+      const existing = yield* getByName(env.project, region, sourceName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -301,7 +346,7 @@ export const RegionHealthSourceProvider = () =>
             },
           }),
           { ignoreAlreadyExists: true },
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = yield* awaitResource(env.project, region, sourceName);
       }
 
@@ -357,6 +402,6 @@ export const RegionHealthSourceProvider = () =>
           healthSource: output.sourceName,
         }),
         { ignoreNotFound: true },
-      ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      ).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
     }),
   });

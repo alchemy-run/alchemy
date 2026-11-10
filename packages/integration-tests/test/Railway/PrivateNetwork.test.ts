@@ -187,7 +187,7 @@ test.provider(
           .pipe(Effect.result);
         expect(rejected).toMatchObject({
           _tag: "Failure",
-          failure: { _tag: "Railway.PrivateNetworkNameUnsupported", name },
+          failure: { _tag: "Railway.PrivateNetworkNameUnsupported", resourceName: name },
         });
       }
 
@@ -281,7 +281,7 @@ test.provider.skipIf(!process.env.RAILWAY_TEST_PRIVATE_NETWORK_DISABLE)(
           .pipe(Effect.result);
         expect(rejected).toMatchObject({
           _tag: "Failure",
-          failure: { _tag: "Railway.PrivateNetworkNameUnsupported", name },
+          failure: { _tag: "Railway.PrivateNetworkNameUnsupported", resourceName: name },
         });
       }
       expect((yield* readConfig(environmentId)).etag).toBe(disabled.etag);

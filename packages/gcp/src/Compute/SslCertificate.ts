@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitGlobalOperation } from "./operations.ts";
@@ -106,8 +107,26 @@ export type SslCertificate = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SslCertificateLookup
 >;
+
+/**
+ * Props for {@link SslCertificate.lookup}: find a ssl certificate this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface SslCertificateLookup {
+  /**
+   * Certificate name (RFC1035, 1-63 chars).
+   */
+  sslCertificateName: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A global Compute Engine SSL certificate for HTTPS / SSL load balancing.
@@ -143,6 +162,19 @@ export type SslCertificate = Resource<
  * const cert = yield* GCP.Compute.SslCertificate("Frontend", {
  *   type: "MANAGED",
  *   managed: { domains: ["www.example.com"] },
+ * });
+ * ```
+ *
+ * ### Looking up an existing ssl certificate
+ * `SslCertificate.lookup` references a ssl certificate Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * ssl certificate.
+ *
+ * **Example:** Reference an existing ssl certificate
+ * ```typescript
+ * const sslCertificate = GCP.Compute.SslCertificate.lookup({
+ *   sslCertificateName: "my-ssl-certificate",
  * });
  * ```
  *
@@ -303,7 +335,7 @@ const toAttrs = (cert: compute.SslCertificate, project: string) => {
 const getByName = (project: string, sslCertificate: string) =>
   compute
     .getSslCertificates({ project, sslCertificate })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, sslCertificateName: string) =>
   getByName(project, sslCertificateName).pipe(
@@ -394,6 +426,13 @@ export const SslCertificateProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ sslCertificateName }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(env.project, sslCertificateName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const sslCertificateName = yield* toName(
@@ -441,7 +480,7 @@ export const SslCertificateProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         current =
           created !== undefined
@@ -469,7 +508,7 @@ export const SslCertificateProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitGlobalOperation(env.project, operation).pipe(

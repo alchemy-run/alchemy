@@ -231,7 +231,7 @@ type ObservedEntry = emailSecurity.GetSettingImpersonationRegistryResponse;
 const getEntry = (accountId: string, impersonationRegistryId: string) =>
   emailSecurity.getSettingImpersonationRegistry({ accountId, impersonationRegistryId }).pipe(
     Effect.map((entry): ObservedEntry | undefined => entry),
-    Effect.catchTag("ImpersonationRegistryEntryNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("ImpersonationRegistryEntryNotFound", () => Effect.undefined),
   );
 
 /**

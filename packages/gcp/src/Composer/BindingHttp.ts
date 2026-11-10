@@ -43,7 +43,7 @@ export const makeNamedHttpBinding = <Resource extends NamedResource, I, A, E>(op
       return Effect.fn(`${options.tag}(${resource.LogicalId})`)(function* (request?: object) {
         const resourceName = yield* name;
         return yield* run({
-          ...(request ?? {}),
+          ...request,
           [nameKey]: resourceName,
         } as I);
       });

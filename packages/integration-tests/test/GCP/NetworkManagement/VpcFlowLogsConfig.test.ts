@@ -6,6 +6,7 @@ import * as networkmanagement from "@distilled.cloud/gcp/networkmanagement_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { withNetworkSlot } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -68,6 +69,13 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { network, logs };
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkManagement.VpcFlowLogsConfig.lookup({
+          vpcFlowLogsConfigId: created.logs.vpcFlowLogsConfigId,
+          location: created.logs.location,
+        }),
+        created.logs,
       );
 
       expect(created.logs.name).toContain("/vpcFlowLogsConfigs/");

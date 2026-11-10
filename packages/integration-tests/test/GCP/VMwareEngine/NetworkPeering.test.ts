@@ -6,6 +6,7 @@ import * as vmwareengine from "@distilled.cloud/gcp/vmwareengine_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -71,6 +72,20 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { ven, peering };
         }),
+      );
+      yield* expectFound(
+        GCP.VMwareEngine.NetworkPeering.lookup({
+          networkPeeringId: created.peering.networkPeeringId,
+        }),
+        created.peering,
+      );
+      yield* expectFound(
+        GCP.VMwareEngine.VmwareEngineNetwork.lookup({
+          vmwareEngineNetworkId: created.ven.vmwareEngineNetworkId,
+          type: created.ven.type,
+          location: created.ven.location,
+        }),
+        created.ven,
       );
 
       expect(created.peering.name).toContain("/networkPeerings/");

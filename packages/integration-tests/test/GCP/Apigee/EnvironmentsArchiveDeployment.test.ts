@@ -6,6 +6,7 @@ import * as apigee from "@distilled.cloud/gcp/apigee_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -72,6 +73,14 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { environment, archive };
         }),
+      );
+      yield* expectFound(
+        GCP.Apigee.EnvironmentsArchiveDeployment.lookup({
+          archiveDeploymentId: created.archive.archiveDeploymentId,
+          organization: created.archive.organizationId,
+          environment: created.archive.environmentId,
+        }),
+        created.archive,
       );
 
       expect(created.archive.archiveDeploymentId).toEqual(expect.any(String));

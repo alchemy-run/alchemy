@@ -135,8 +135,18 @@ export interface PromotionCode extends Resource<
     restrictions: PromotionCodeRestrictions;
   },
   never,
-  Providers
+  Providers,
+  PromotionCodeLookup
 > {}
+
+/**
+ * Props for {@link PromotionCode.lookup}: find a promotion code this stack
+ * doesn't manage by its id.
+ */
+export interface PromotionCodeLookup {
+  /** Stripe promotion code id, e.g. `"promo_1A2b3C4d5E6f7G8h"`. */
+  id: string;
+}
 
 /**
  * A Stripe Promotion Code — a customer-redeemable code for an underlying
@@ -187,6 +197,16 @@ export interface PromotionCode extends Resource<
  *   coupon: "25OFF",
  *   code: "WELCOME25",
  * });
+ * ```
+ *
+ * ### Looking up an existing promotion code
+ * `PromotionCode.lookup` references a promotion code Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing promotion code
+ * ```typescript
+ * const ref = Stripe.PromotionCode.lookup({ id: "promo_1A2b3C4d5E6f7G8h" });
  * ```
  *
  * @resource
@@ -300,11 +320,21 @@ const toCode = (id: string, code: string | undefined, existing?: string) =>
 
 const isResourceMissing = isMissingStripeResource;
 
+/**
+ * Reads ask for the API version whose promotion codes carry `promotion`.
+ * An account's default version can predate it, and then `promotion.coupon`
+ * is missing from every read.
+ */
+const atPromotionApiVersion = withRequestOptions({ apiVersion: "2025-09-30.clover" });
+
 const getById = (promotionCode: string) =>
   GetPromotionCode({
     promotion_code: promotionCode,
     expand: ["promotion.coupon"],
-  }).pipe(Effect.catchIf(isResourceMissing, () => Effect.succeed(undefined)));
+  }).pipe(
+    atPromotionApiVersion,
+    Effect.catchIf(isResourceMissing, () => Effect.undefined),
+  );
 
 const findByCode = (code: string) =>
   Effect.gen(function* () {
@@ -315,13 +345,13 @@ const findByCode = (code: string) =>
           active: true,
           limit: LIST_PAGE_SIZE,
           expand: ["data.promotion.coupon"],
-        }),
+        }).pipe(atPromotionApiVersion),
         GetPromotionCodes({
           code,
           active: false,
           limit: LIST_PAGE_SIZE,
           expand: ["data.promotion.coupon"],
-        }),
+        }).pipe(atPromotionApiVersion),
       ],
       { concurrency: 2 },
     );
@@ -340,7 +370,7 @@ const listByActive = Effect.fn(function* (active: boolean) {
       limit: LIST_PAGE_SIZE,
       expand: ["data.promotion.coupon"],
       ...(startingAfter !== undefined ? { starting_after: startingAfter } : {}),
-    });
+    }).pipe(atPromotionApiVersion);
     items.push(...result.data);
     if (!result.has_more || result.data.length === 0) break;
     startingAfter = result.data[result.data.length - 1]?.id;
@@ -449,6 +479,11 @@ export const PromotionCodeProvider = () =>
         return { action: "update" } as const;
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing);
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {

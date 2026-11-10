@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   parentOf,
@@ -111,8 +112,30 @@ export type CollectionsDataStoresServingConfig = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  CollectionsDataStoresServingConfigLookup
 >;
+
+/**
+ * Props for {@link CollectionsDataStoresServingConfig.lookup}: find a
+ * collections data stores serving config this stack doesn't manage by its
+ * identifiers, in the ambient project unless `project` names another.
+ */
+export interface CollectionsDataStoresServingConfigLookup {
+  /**
+   * Serving config id (4-63 characters, `[a-zA-Z0-9_]`).
+   */
+  servingConfigId: string;
+  /**
+   * Parent data store resource name.
+   */
+  dataStore: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Discovery Engine serving config on a collection data store.
@@ -135,6 +158,21 @@ export type CollectionsDataStoresServingConfig = Resource<
  * );
  * ```
  *
+ * ### Looking up an existing collections data stores serving config
+ * `CollectionsDataStoresServingConfig.lookup` references a collections data
+ * stores serving config Alchemy doesn't manage (created in the console or
+ * by another stack). It is read during plan/deploy, never created, updated
+ * or deleted, and binds like a declared collections data stores serving
+ * config.
+ *
+ * **Example:** Reference an existing collections data stores serving config
+ * ```typescript
+ * const collectionsDataStoresServingConfig = GCP.DiscoveryEngine.CollectionsDataStoresServingConfig.lookup({
+ *   servingConfigId: "my-serving-config",
+ *   dataStore: "my-data-store",
+ * });
+ * ```
+ *
  * @resource
  * @category DiscoveryEngine
  */
@@ -145,7 +183,7 @@ export const CollectionsDataStoresServingConfig = Resource<CollectionsDataStores
 export class CollectionsDataStoresServingConfigNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsDataStoresServingConfigNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (
@@ -194,10 +232,10 @@ const toBody = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : discoveryengine
         .getProjectsLocationsCollectionsDataStoresServingConfigs({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const CollectionsDataStoresServingConfigProvider = () =>
   Provider.succeed(CollectionsDataStoresServingConfig, {
@@ -234,6 +272,15 @@ export const CollectionsDataStoresServingConfigProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ servingConfigId, dataStore }) {
+      const env = yield* GcpEnvironment.current;
+      const name = dataStore !== undefined ? resourceName(dataStore, servingConfigId) : undefined;
+      if (name === undefined) return undefined;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -281,7 +328,7 @@ export const CollectionsDataStoresServingConfigProvider = () =>
 
       if (current === undefined) {
         return yield* new CollectionsDataStoresServingConfigNotResolved({
-          name,
+          resourceName: name,
         });
       }
 

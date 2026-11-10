@@ -83,7 +83,7 @@ export const AnnotationProvider = () =>
           // (deleted out-of-band, or never created) as "no observed state".
           const observed = output?.id
             ? yield* get({ id: output.id }).pipe(
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("NotFound", () => Effect.undefined),
               )
             : undefined;
 
@@ -113,7 +113,7 @@ export const AnnotationProvider = () =>
               id: current.id ?? output.id,
               time: current.time ?? output.time,
             })),
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           );
         }),
       };

@@ -138,7 +138,7 @@ export class AmbiguousBucketAccessKeyError extends Data.TaggedError(
   "AmbiguousBucketAccessKeyError",
 )<{
   bucketId: string;
-  name: string;
+  resourceName: string;
   count: number;
   message: string;
 }> {}
@@ -175,7 +175,7 @@ const uniqueKeyNamed = (bucketId: string, expectedName: string) =>
         ? Effect.fail(
             new AmbiguousBucketAccessKeyError({
               bucketId,
-              name: expectedName,
+              resourceName: expectedName,
               count: matches.length,
               message: `Prisma bucket '${bucketId}' has ${matches.length} keys named '${expectedName}'; refusing to select one arbitrarily`,
             }),

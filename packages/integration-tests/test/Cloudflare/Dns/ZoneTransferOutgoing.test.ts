@@ -8,6 +8,7 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -90,7 +91,7 @@ test.provider.skipIf(!outgoingEntitled)(
       const { outgoing, peer } = yield* stack.deploy(
         Effect.gen(function* () {
           const peer = yield* Cloudflare.DNS.ZoneTransferPeer("OutgoingPeer", {
-            name: "alchemy-dnszt-outgoing-peer",
+            name: testName("alchemy-dnszt-outgoing-peer"),
             ip: "192.0.2.53",
             port: 53,
           });
@@ -112,7 +113,7 @@ test.provider.skipIf(!outgoingEntitled)(
       const disabled = yield* stack.deploy(
         Effect.gen(function* () {
           const peer = yield* Cloudflare.DNS.ZoneTransferPeer("OutgoingPeer", {
-            name: "alchemy-dnszt-outgoing-peer",
+            name: testName("alchemy-dnszt-outgoing-peer"),
             ip: "192.0.2.53",
             port: 53,
           });

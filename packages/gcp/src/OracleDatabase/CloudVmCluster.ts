@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -200,8 +201,30 @@ export type CloudVmCluster = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  CloudVmClusterLookup
 >;
+
+/**
+ * Props for {@link CloudVmCluster.lookup}: find a cloud vm cluster this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface CloudVmClusterLookup {
+  /**
+   * VM Cluster id.
+   */
+  cloudVmClusterId: string;
+  /**
+   * Region.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Oracle Exadata VM Cluster on Google Cloud.
@@ -229,13 +252,26 @@ export type CloudVmCluster = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing cloud vm cluster
+ * `CloudVmCluster.lookup` references a cloud vm cluster Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * cloud vm cluster.
+ *
+ * **Example:** Reference an existing cloud vm cluster
+ * ```typescript
+ * const cloudVmCluster = GCP.OracleDatabase.CloudVmCluster.lookup({
+ *   cloudVmClusterId: "my-cloud-vm-cluster",
+ * });
+ * ```
+ *
  * @resource
  * @category OracleDatabase
  */
 export const CloudVmCluster = Resource<CloudVmCluster>("GCP.OracleDatabase.CloudVmCluster");
 
 const mergedProperties = (news: CloudVmClusterProps): CloudVmClusterPropertiesInput => ({
-  ...(news.properties ?? {}),
+  ...news.properties,
   licenseType: news.licenseType ?? news.properties?.licenseType,
   cpuCoreCount: news.cpuCoreCount ?? news.properties?.cpuCoreCount,
   giVersion: news.giVersion ?? news.properties?.giVersion,
@@ -352,7 +388,7 @@ const toAttrs = (cluster: oracle.CloudVmCluster, project: string) => {
 
 const getByName = (name: string) =>
   retryQuota(oracle.getProjectsLocationsCloudVmClusters({ name })).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const listClusters = (project: string, region: string) => {
@@ -393,6 +429,15 @@ export const CloudVmClusterProvider = () =>
           nextInfra !== previousInfra || nextNetwork !== previousNetwork || nextOdb !== previousOdb,
       });
     }),
+
+    lookup: Effect.fn(function* ({ cloudVmClusterId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation ?? env.region);
+      const name = resourceNameOf(env.project, location, COLLECTION, cloudVmClusterId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -444,7 +489,7 @@ export const CloudVmClusterProvider = () =>
           })
           .pipe(
             retryQuota,
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -453,7 +498,7 @@ export const CloudVmClusterProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new OracleDatabaseNotResolved({ name });
+        return yield* new OracleDatabaseNotResolved({ resourceName: name });
       }
 
       const ready = yield* waitUntilReady(
@@ -473,7 +518,7 @@ export const CloudVmClusterProvider = () =>
         })
         .pipe(
           retryConflict,
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

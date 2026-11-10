@@ -41,7 +41,7 @@ export const makeSqlInstanceHttpBinding = <
         request?: Omit<I, "instance" | "project">,
       ) {
         return yield* run({
-          ...(request ?? {}),
+          ...request,
           instance: yield* instanceName,
           project: yield* project,
         } as I);
@@ -86,7 +86,7 @@ export const makeSqlUserHttpBinding = <
       ) {
         const resolvedHost = request?.host ?? (yield* host);
         return yield* run({
-          ...(request ?? {}),
+          ...request,
           name: yield* userName,
           instance: yield* instance,
           project: yield* project,

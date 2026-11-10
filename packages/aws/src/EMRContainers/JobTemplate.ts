@@ -180,8 +180,23 @@ export interface JobTemplate extends Resource<
     jobTemplateArn: string;
   },
   {},
-  Providers
+  Providers,
+  JobTemplateLookup
 > {}
+
+/**
+ * Props for {@link JobTemplate.lookup}: find a job template this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type JobTemplateLookup =
+  | {
+      /** The id of the existing job template. */
+      jobTemplateId: string;
+    }
+  | {
+      /** The name of the existing job template. */
+      jobTemplateName: string;
+    };
 
 export class JobTemplateConsistencyError extends Data.TaggedError("JobTemplateConsistencyError")<{
   readonly jobTemplateId: string;
@@ -238,6 +253,16 @@ export class JobTemplateConsistencyError extends Data.TaggedError("JobTemplateCo
  * // StartJobRun with jobTemplateId + jobTemplateParameters: { EntryPoint: "s3://..." }
  * ```
  *
+ * ### Looking up an existing job template
+ * `JobTemplate.lookup` references a job template Alchemy doesn't manage (created in the
+ * console or by another stack), found by `jobTemplateId` or `jobTemplateName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing job template
+ * ```typescript
+ * const existing = AWS.EMRContainers.JobTemplate.lookup({ jobTemplateName: "analytics" });
+ * ```
+ *
  * @resource
  */
 export const JobTemplate = Resource<JobTemplate>("AWS.EMRContainers.JobTemplate");
@@ -275,7 +300,7 @@ export const JobTemplateProvider = () =>
           Effect.catchTag(
             ["ResourceNotFoundException", "ValidationException"],
             // a malformed/unknown id is "not present", same as not-found
-            () => Effect.succeed(undefined),
+            () => Effect.undefined,
           ),
         );
       });
@@ -327,6 +352,14 @@ export const JobTemplateProvider = () =>
               .map(toAttributes);
           }),
 
+        lookup: Effect.fn(function* (props) {
+          const found = yield* observe(
+            "jobTemplateId" in props ? props.jobTemplateId : undefined,
+            "jobTemplateName" in props ? props.jobTemplateName : "",
+          );
+          if (found?.id === undefined || found.arn === undefined) return undefined;
+          return toAttributes(found);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.jobTemplateName ?? (yield* createName(id, olds ?? {}));
           const jt = yield* observe(output?.jobTemplateId, name);

@@ -24,6 +24,7 @@ import * as Exit from "effect/Exit";
 import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
 import type * as Scope from "effect/Scope";
+import { childProcessLogger } from "./ChildOutput.ts";
 import { devChildUrlMarker, type DevChildPayload } from "./DevChild.ts";
 import type { FrameworkDevServer } from "./Framework.ts";
 
@@ -62,7 +63,7 @@ const program = Effect.scoped(
     // this fiber and the enclosing scope closes the dev server.
     return yield* Effect.never;
   }),
-).pipe(Effect.provide(NodeServices.layer));
+).pipe(Effect.provide([NodeServices.layer, childProcessLogger]));
 
 const controller = new AbortController();
 process.once("SIGTERM", () => controller.abort());

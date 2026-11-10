@@ -1,6 +1,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import * as Alchemy from "alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -15,10 +16,36 @@ import * as pathe from "pathe";
 // they deploy the REAL cloud resources even in dev — only the Worker is
 // emulated locally, and its `vpc_service` binding proxies to the real
 // service through the remote-binding bridge.
-const { test } = Test.make({
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
   dev: true,
 });
+
+// The service the dev worker looks up belongs to another stack, as a
+// lookup's target always should: a lookup of a service this stack manages
+// fails the deploy.
+const LookupTargetStack = Alchemy.Stack(
+  "VpcServiceLocalLookupTarget",
+  { providers: Cloudflare.providers(), state: Cloudflare.state() },
+  Effect.gen(function* () {
+    const tunnel = yield* Cloudflare.Tunnel.Tunnel("LookupVpcTunnel", {
+      ingress: [{ service: "http://localhost:8080" }],
+      adopt: true,
+    });
+    const svc = yield* Cloudflare.VpcService.VpcService("LookupVpcSvc", {
+      httpPort: 8080,
+      host: {
+        hostname: "localhost",
+        resolverNetwork: { tunnelId: tunnel.tunnelId },
+      },
+      adopt: true,
+    });
+    return { serviceId: svc.serviceId.as<string>() };
+  }),
+);
+
+const lookupTarget = beforeAll(deploy(LookupTargetStack));
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(LookupTargetStack));
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
@@ -49,8 +76,8 @@ const getJsonReady = (url: string) =>
   }).pipe(Effect.orDie);
 
 /**
- * The dev worker binds a real VPC service two ways — the managed resource
- * and a `lookup` data source — through the remote-binding bridge (there is
+ * The dev worker binds real VPC services two ways — a managed resource and
+ * a lookup of another stack's service — through the remote-binding bridge (there is
  * nothing to emulate locally; before this the binding was rejected as
  * unsupported in local mode). Pins that the worker boots with `vpc_service`
  * bindings and both surface as Fetchers, and that a fetch round-trips
@@ -81,6 +108,7 @@ test.provider(
       const svc = yield* stack.deploy(tunnelAndService);
       // Mode-agnostic provider: a real cloud id even in dev, never `dev:`.
       expect(svc.serviceId).not.toMatch(/^dev:/);
+      const { serviceId: lookupServiceId } = yield* lookupTarget;
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
@@ -89,8 +117,8 @@ test.provider(
             main: pathe.resolve(import.meta.dirname, "fixtures/vpc-local-worker.ts"),
             env: {
               VPC: managed,
-              VPC_LOOKUP: Cloudflare.VpcService.lookup({
-                serviceId: svc.serviceId,
+              VPC_LOOKUP: Cloudflare.VpcService.VpcService.lookup({
+                serviceId: lookupServiceId,
               }),
             },
           });

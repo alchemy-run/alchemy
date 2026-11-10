@@ -8,7 +8,7 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { emailRoutingScoped } from "./scope.ts";
+import { EMAIL_ROUTING_ZONE, emailRoutingScoped } from "./scope.ts";
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
@@ -63,28 +63,75 @@ describe.sequential.skipIf(!emailRoutingScoped)(
     // `listAllZones` and reads the singleton in each. Assert the result is
     // non-empty and contains the standing test zone. Capture-and-restore the
     // zone's `enabled` state so the run leaves no residue.
-    test.provider("list enumerates email routing across all zones", (stack) =>
-      Effect.gen(function* () {
-        const zoneId = yield* resolveZoneId;
+    test.provider(
+      "list enumerates email routing across all zones",
+      (stack) =>
+        Effect.gen(function* () {
+          const zoneId = yield* resolveZoneId;
 
-        yield* stack.destroy();
+          yield* stack.destroy();
 
-        // Capture the pre-test enabled state to restore at the end.
-        const before = yield* getEmailRouting(zoneId);
+          // Capture the pre-test enabled state to restore at the end.
+          const before = yield* getEmailRouting(zoneId);
 
-        const provider = yield* Provider.findProvider(Cloudflare.Email.Routing);
-        const all = yield* provider.list();
+          const provider = yield* Provider.findProvider(Cloudflare.Email.Routing);
+          const all = yield* provider.list();
 
-        expect(all.length).toBeGreaterThan(0);
-        const entry = all.find((r) => r.zoneId === zoneId);
-        expect(entry).toBeDefined();
-        expect(entry!.name).toEqual(zoneName);
+          expect(all.length).toBeGreaterThan(0);
+          const entry = all.find((r) => r.zoneId === zoneId);
+          expect(entry).toBeDefined();
+          expect(entry!.name).toEqual(zoneName);
 
-        // Restore the captured state.
-        yield* setEnabled(zoneId, before.enabled);
+          // Restore the captured state.
+          yield* setEnabled(zoneId, before.enabled);
 
-        yield* stack.destroy();
-      }).pipe(logLevel),
+          yield* stack.destroy();
+        }).pipe(logLevel),
+      { exclusive: EMAIL_ROUTING_ZONE },
+    );
+
+    // Subaddressing is a zone setting beside `enabled`: deploy it on, then
+    // off, checking the live setting each time. Destroying the stack
+    // disables routing on the zone, so capture-and-restore both settings.
+    test.provider(
+      "subaddressing converges in place",
+      (stack) =>
+        Effect.gen(function* () {
+          const zoneId = yield* resolveZoneId;
+          yield* stack.destroy();
+          const before = yield* getEmailRouting(zoneId);
+
+          const routing = (subaddressing?: boolean) =>
+            Effect.gen(function* () {
+              return yield* Cloudflare.Email.Routing("Routing", { zone: zoneId, subaddressing });
+            });
+
+          const on = yield* stack.deploy(routing(true));
+          expect(on.subaddressing).toEqual(true);
+          expect((yield* getEmailRouting(zoneId)).supportSubaddress).toEqual(true);
+
+          // Unchanged, or omitted (keep the zone's setting), plans no update.
+          expect((yield* stack.plan(routing(true))).resources.Routing?.action).toBe("noop");
+          expect((yield* stack.plan(routing())).resources.Routing?.action).toBe("noop");
+          expect((yield* stack.plan(routing(false))).resources.Routing?.action).toBe("update");
+
+          const off = yield* stack.deploy(routing(false));
+          expect(off.subaddressing).toEqual(false);
+          expect((yield* getEmailRouting(zoneId)).supportSubaddress).toEqual(false);
+
+          yield* stack.destroy();
+          yield* setEnabled(zoneId, before.enabled);
+          yield* emailRouting
+            .edit({ zoneId, supportSubaddress: before.supportSubaddress ?? false })
+            .pipe(
+              Effect.retry({
+                while: (e) => e._tag === "Forbidden",
+                schedule: forbiddenRetrySchedule,
+                times: 8,
+              }),
+            );
+        }).pipe(logLevel),
+      { exclusive: EMAIL_ROUTING_ZONE },
     );
   },
 );

@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   deleteReferenceImage,
@@ -87,8 +88,36 @@ export type ProductsReferenceImage = Resource<
     boundingPolys: BoundingPoly[];
   },
   never,
-  Providers
+  Providers,
+  ProductsReferenceImageLookup
 >;
+
+/**
+ * Props for {@link ProductsReferenceImage.lookup}: find a products
+ * reference image this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface ProductsReferenceImageLookup {
+  /**
+   * Product Search location used when `parent` is a bare product id.
+   */
+  location?: string;
+  /**
+   * Parent product resource name
+   * `projects/{project}/locations/{location}/products/{product}` or a
+   * product id (combined with `location`).
+   */
+  parent: string;
+  /**
+   * Reference image id. At most 128 characters; cannot contain `/`.
+   */
+  referenceImageId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Vision Product Search reference image attached to a product.
@@ -131,6 +160,20 @@ export type ProductsReferenceImage = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing products reference image
+ * `ProductsReferenceImage.lookup` references a products reference image
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared products reference image.
+ *
+ * **Example:** Reference an existing products reference image
+ * ```typescript
+ * const productsReferenceImage = GCP.Vision.ProductsReferenceImage.lookup({
+ *   parent: "my-parent",
+ *   referenceImageId: "my-reference-image",
+ * });
+ * ```
+ *
  * @resource
  * @category Vision
  */
@@ -141,7 +184,7 @@ export const ProductsReferenceImage = Resource<ProductsReferenceImage>(
 export class ProductsReferenceImageNotResolved extends Data.TaggedError(
   "GCP.Vision.ProductsReferenceImageNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toParent = (project: string, location: string, parent: string) =>
@@ -197,6 +240,20 @@ export const ProductsReferenceImageProvider = () =>
       });
     }),
 
+    lookup: Effect.fn(function* ({
+      location: lookupLocation,
+      parent: lookupParent,
+      referenceImageId,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const parent = toParent(env.project, location, lookupParent ?? "");
+      const name = referenceImageNameOf(parent, referenceImageId);
+      const existing = yield* getReferenceImage(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ olds, output }) {
       const env = yield* GcpEnvironment.current;
       const location = normalizeLocation(olds?.location ?? output?.location);
@@ -240,7 +297,7 @@ export const ProductsReferenceImageProvider = () =>
 
       if (current === undefined) {
         return yield* new ProductsReferenceImageNotResolved({
-          name: name || referenceImageNameOf(parent, referenceImageId),
+          resourceName: name || referenceImageNameOf(parent, referenceImageId),
         });
       }
 

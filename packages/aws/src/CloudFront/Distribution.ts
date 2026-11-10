@@ -26,6 +26,18 @@ import {
 } from "./ManagedPolicies.ts";
 import { OriginAccessControl } from "./OriginAccessControl.ts";
 
+export class DistributionConflict extends Data.TaggedError("DistributionConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class DistributionUnexpectedResponse extends Data.TaggedError(
+  "DistributionUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 const CLOUDFRONT_HOSTED_ZONE_ID = "Z2FDTNDATAQYW2" as const;
 
 class DistributionFunctionAssociationPending extends Data.TaggedError(
@@ -536,8 +548,18 @@ export interface Distribution extends Resource<
     tags: Record<string, string>;
   },
   DistributionBinding,
-  Providers
+  Providers,
+  DistributionLookup
 > {}
+
+/**
+ * Props for {@link Distribution.lookup}: find a distribution this stack doesn't
+ * manage, in the ambient account.
+ */
+export interface DistributionLookup {
+  /** The id of the existing distribution. */
+  distributionId: string;
+}
 
 const DistributionResource = Resource<Distribution>("AWS.CloudFront.Distribution");
 
@@ -781,6 +803,17 @@ const withWebFunctionOrigins = (
  * To purge at runtime from a Lambda Function, bind
  * `CloudFront.CreateInvalidation(distribution)` instead.
  *
+ * ### Looking up an existing distribution
+ * `Distribution.lookup` references a distribution Alchemy doesn't manage (created in the
+ * console or by another stack), found by `distributionId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Point a DNS record at an existing distribution
+ * ```typescript
+ * const cdn = AWS.CloudFront.Distribution.lookup({ distributionId: "E2ABCDEF123456" });
+ * const domainName = cdn.domainName;
+ * ```
+ *
  * @resource
  */
 export const Distribution: typeof DistributionResource = Object.assign(
@@ -838,7 +871,7 @@ export const DistributionProvider = () =>
         );
         const distribution = yield* cloudfront.getDistribution({ Id: distributionId }).pipe(
           Effect.map((response) => response.Distribution),
-          Effect.catchTag("NoSuchDistribution", () => Effect.succeed(undefined)),
+          Effect.catchTag("NoSuchDistribution", () => Effect.undefined),
         );
 
         if (!distribution?.Id) {
@@ -889,7 +922,7 @@ export const DistributionProvider = () =>
               .getDistributionConfig({
                 Id: item.Id,
               })
-              .pipe(Effect.catchTag("NoSuchDistribution", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("NoSuchDistribution", () => Effect.undefined));
 
             if (config?.DistributionConfig?.CallerReference === callerReference) {
               yield* Effect.logInfo(
@@ -984,6 +1017,16 @@ export const DistributionProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        lookup: Effect.fn(function* ({ distributionId }) {
+          const current = yield* getCurrent(distributionId);
+          if (!current) return undefined;
+          return toAttrs(
+            current.distribution,
+            current.etag,
+            current.tags,
+            yield* resolveUrl(current.distribution),
+          );
+        }),
         read: Effect.fn(function* ({ instanceId, output }) {
           // Without cached attributes, fall back to the deterministic
           // caller reference (= instanceId). A create interrupted during
@@ -1046,7 +1089,7 @@ export const DistributionProvider = () =>
                               | Distribution["Attributes"]
                               | undefined,
                         )
-                      : Effect.succeed(undefined),
+                      : Effect.undefined,
                   ),
                 ),
               { concurrency: 10 },
@@ -1148,11 +1191,9 @@ export const DistributionProvider = () =>
                       );
                       const recovered = yield* getByCallerReference(callerReference);
                       if (!recovered?.distribution.Id) {
-                        return yield* Effect.fail(
-                          new Error(
-                            `CloudFront distribution with caller reference '${callerReference}' already exists but could not be recovered`,
-                          ),
-                        );
+                        return yield* new DistributionConflict({
+                          message: `CloudFront distribution with caller reference '${callerReference}' already exists but could not be recovered`,
+                        });
                       }
                       return {
                         distributionId: recovered.distribution.Id,
@@ -1187,7 +1228,9 @@ export const DistributionProvider = () =>
               );
 
             if (!created.distributionId) {
-              return yield* Effect.fail(new Error("createDistribution returned no distribution"));
+              return yield* new DistributionUnexpectedResponse({
+                message: "createDistribution returned no distribution",
+              });
             }
 
             yield* Effect.logInfo(
@@ -1250,7 +1293,9 @@ export const DistributionProvider = () =>
             );
 
           if (!updated.Distribution?.Id) {
-            return yield* Effect.fail(new Error("updateDistribution returned no distribution"));
+            return yield* new DistributionUnexpectedResponse({
+              message: "updateDistribution returned no distribution",
+            });
           }
 
           // Sync tags — diff observed cloud tags against desired and apply

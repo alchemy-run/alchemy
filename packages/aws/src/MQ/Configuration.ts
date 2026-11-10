@@ -5,9 +5,17 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
 import { syncMqTags, toTagRecord } from "./internal.ts";
+
+export class ConfigurationUnexpectedResponse extends Data.TaggedError(
+  "ConfigurationUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ConfigurationProps {
   /**
@@ -69,8 +77,23 @@ export interface Configuration extends Resource<
     engineVersion: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ConfigurationLookup
 > {}
+
+/**
+ * Props for {@link Configuration.lookup}: find a broker configuration this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type ConfigurationLookup =
+  | {
+      /** The id of the existing configuration. */
+      configurationId: string;
+    }
+  | {
+      /** The name of the existing configuration. */
+      configurationName: string;
+    };
 
 /**
  * An Amazon MQ broker configuration — a versioned document (ActiveMQ XML or
@@ -118,6 +141,18 @@ export interface Configuration extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing broker configuration
+ * `Configuration.lookup` references a broker configuration Alchemy doesn't manage (created in the
+ * console or by another stack), found by `configurationId` or
+`configurationName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Apply an existing configuration to a broker
+ * ```typescript
+ * const config = AWS.MQ.Configuration.lookup({ configurationName: "tuned" });
+ * const configurationId = config.configurationId;
+ * ```
+ *
  * @resource
  */
 export const Configuration = Resource<Configuration>("AWS.MQ.Configuration");
@@ -141,7 +176,7 @@ export const ConfigurationProvider = () =>
       const readConfiguration = Effect.fn(function* (configurationId: string) {
         return yield* mq
           .describeConfiguration({ ConfigurationId: configurationId })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
       });
 
       /** Enumerate all configurations (listConfigurations is not paginated). */
@@ -201,6 +236,14 @@ export const ConfigurationProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* (props) {
+          const config =
+            "configurationId" in props
+              ? yield* readConfiguration(props.configurationId)
+              : yield* findByName(props.configurationName);
+          return config === undefined ? undefined : toAttrs(config);
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const config = output?.configurationId
             ? yield* readConfiguration(output.configurationId)
@@ -236,9 +279,9 @@ export const ConfigurationProvider = () =>
             });
             observed = yield* readConfiguration(created.Id!);
             if (observed === undefined) {
-              return yield* Effect.fail(
-                new Error(`MQ configuration '${name}' disappeared immediately after create`),
-              );
+              return yield* new ConfigurationUnexpectedResponse({
+                message: `MQ configuration '${name}' disappeared immediately after create`,
+              });
             }
           }
 
@@ -271,9 +314,9 @@ export const ConfigurationProvider = () =>
           // 4. Re-read for the fresh latest revision + tags.
           const final = yield* readConfiguration(configurationId);
           if (final === undefined) {
-            return yield* Effect.fail(
-              new Error(`MQ configuration '${name}' disappeared while reconciling`),
-            );
+            return yield* new ConfigurationUnexpectedResponse({
+              message: `MQ configuration '${name}' disappeared while reconciling`,
+            });
           }
           yield* session.note(name);
           return toAttrs(final);

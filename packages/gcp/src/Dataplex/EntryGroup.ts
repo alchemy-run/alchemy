@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -87,8 +88,34 @@ export type EntryGroup = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  EntryGroupLookup
 >;
+
+/**
+ * Props for {@link EntryGroup.lookup}: find an entry group this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface EntryGroupLookup {
+  /**
+   * Entry group id (the `{entryGroup}` segment of
+   * `projects/{project}/locations/{location}/entryGroups/{entryGroup}`).
+   * Must be 1-63 characters, start with a letter, and match
+   * `[a-z]([a-z0-9-]*[a-z0-9])?`.
+   */
+  entryGroupId: string;
+  /**
+   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Dataplex Universal Catalog Entry Group — a logical grouping of
@@ -123,6 +150,19 @@ export type EntryGroup = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing entry group
+ * `EntryGroup.lookup` references an entry group Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * entry group.
+ *
+ * **Example:** Reference an existing entry group
+ * ```typescript
+ * const entryGroup = GCP.Dataplex.EntryGroup.lookup({
+ *   entryGroupId: "my-entry-group",
+ * });
+ * ```
+ *
  * @resource
  * @category Dataplex
  */
@@ -152,7 +192,7 @@ const toAttrs = (group: dataplex.GoogleCloudDataplexV1EntryGroup, project: strin
 
 const getByName = (name: string) =>
   retryQuota(dataplex.getProjectsLocationsEntryGroups({ name })).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const listGroups = (project: string, region: string) => {
@@ -187,6 +227,15 @@ export const EntryGroupProvider = () =>
         ),
       });
     }),
+
+    lookup: Effect.fn(function* ({ entryGroupId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, entryGroupId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -241,7 +290,7 @@ export const EntryGroupProvider = () =>
           })
           .pipe(
             retryQuota,
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -250,7 +299,7 @@ export const EntryGroupProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DataplexNotResolved({ name });
+        return yield* new DataplexNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -297,7 +346,7 @@ export const EntryGroupProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

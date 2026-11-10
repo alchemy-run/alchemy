@@ -275,7 +275,7 @@ export const ConfigurationProvider = () =>
           // A tunnel with no configuration yet surfaces as the tagged
           // `TunnelConfigurationNotFound` (code 1055) — swallow into "missing".
           const r = yield* getConfig({ accountId, tunnelId }).pipe(
-            Effect.catchTag("TunnelConfigurationNotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("TunnelConfigurationNotFound", () => Effect.undefined),
           );
           if (r === undefined) return undefined;
           return narrowConfig(r as Parameters<typeof narrowConfig>[0]);

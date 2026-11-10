@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -67,6 +68,13 @@ export type RepositoryProps = {
    * changing it replaces the repository.
    */
   kmsKeyName?: string;
+  /**
+   * The upstream a `REMOTE_REPOSITORY` proxies and caches, e.g.
+   * `{ dockerRepository: { publicRepository: "DOCKER_HUB" } }` to pull
+   * Docker Hub images through Artifact Registry. Immutable — changing it
+   * replaces the repository.
+   */
+  remoteRepositoryConfig?: artifactregistry.RemoteRepositoryConfig;
   /**
    * Docker repository config. Only applied when `format` is `DOCKER`.
    */
@@ -134,8 +142,34 @@ export type Repository = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RepositoryLookup
 >;
+
+/**
+ * Props for {@link Repository.lookup}: find a repository this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface RepositoryLookup {
+  /**
+   * Repository id (the `{repository}` segment of
+   * `projects/{project}/locations/{location}/repositories/{repository}`).
+   * Must be 2-63 characters, start with a letter, and match
+   * `[a-z]([a-z0-9-]*[a-z0-9])?`.
+   */
+  repositoryId: string;
+  /**
+   * Artifact Registry location (`us-central1`, `us`, `europe`, …).
+   * `US-CENTRAL1` is accepted and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Artifact Registry repository for Docker images, language packages, or
@@ -162,6 +196,19 @@ export type Repository = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing repository
+ * `Repository.lookup` references a repository Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * repository.
+ *
+ * **Example:** Reference an existing repository
+ * ```typescript
+ * const repository = GCP.ArtifactRegistry.Repository.lookup({
+ *   repositoryId: "my-repository",
+ * });
+ * ```
+ *
  * @resource
  * @category ArtifactRegistry
  */
@@ -170,13 +217,13 @@ export const Repository = Resource<Repository>("GCP.ArtifactRegistry.Repository"
 export class RepositoryNotResolved extends Data.TaggedError(
   "GCP.ArtifactRegistry.RepositoryNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class RepositoryStillExists extends Data.TaggedError(
   "GCP.ArtifactRegistry.RepositoryStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -256,7 +303,7 @@ const toAttrs = (repo: artifactregistry.Repository, project: string, region: str
 const getByName = (name: string) =>
   artifactregistry
     .getProjectsLocationsRepositories({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const mavenKey = (config: RepositoryProps["mavenConfig"] | undefined) =>
   `${config?.allowSnapshotOverwrites === true}:${(
@@ -270,7 +317,7 @@ const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (repo): repo is artifactregistry.Repository => repo !== undefined,
-      () => new RepositoryNotResolved({ name }),
+      () => new RepositoryNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.ArtifactRegistry.RepositoryNotResolved",
@@ -283,7 +330,7 @@ const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (repo) => repo === undefined,
-      () => new RepositoryStillExists({ name }),
+      () => new RepositoryStillExists({ resourceName: name }),
     ),
     Effect.asVoid,
     Effect.retry({
@@ -321,6 +368,10 @@ export const RepositoryProvider = () =>
       const previousKms = olds?.kmsKeyName ?? output?.kmsKeyName ?? "";
       const nextKms = news.kmsKeyName ?? previousKms;
       const mavenChanged = mavenKey(news.mavenConfig) !== mavenKey(olds?.mavenConfig);
+      const remoteChanged =
+        olds !== undefined &&
+        JSON.stringify(news.remoteRepositoryConfig ?? null) !==
+          JSON.stringify(olds.remoteRepositoryConfig ?? null);
 
       const replace =
         (previousId !== undefined && nextId !== undefined && nextId !== previousId) ||
@@ -328,7 +379,8 @@ export const RepositoryProvider = () =>
         previousFormat !== nextFormat ||
         previousMode !== nextMode ||
         previousKms !== nextKms ||
-        mavenChanged;
+        mavenChanged ||
+        remoteChanged;
 
       if (!replace) return undefined;
       return {
@@ -337,6 +389,15 @@ export const RepositoryProvider = () =>
           previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ repositoryId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, repositoryId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -397,13 +458,14 @@ export const RepositoryProvider = () =>
               description: news.description,
               labels: desiredLabels,
               kmsKeyName: news.kmsKeyName,
+              remoteRepositoryConfig: news.remoteRepositoryConfig,
               dockerConfig: desiredDocker,
               mavenConfig: desiredMaven,
               cleanupPolicies: news.cleanupPolicies,
               cleanupPolicyDryRun: desiredCleanupDryRun,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -411,7 +473,7 @@ export const RepositoryProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new RepositoryNotResolved({ name });
+        return yield* new RepositoryNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -460,7 +522,7 @@ export const RepositoryProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* artifactregistry
         .deleteProjectsLocationsRepositories({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForDeleteOperation(operation);
       }

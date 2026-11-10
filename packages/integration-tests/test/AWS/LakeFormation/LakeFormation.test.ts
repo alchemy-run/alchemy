@@ -6,6 +6,7 @@ import * as lf from "@distilled.cloud/aws/lakeformation";
 import * as sts from "@distilled.cloud/aws/sts";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
+import { driftOf, repairDrift, waitForDrift } from "../drift.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -96,6 +97,42 @@ describe.sequential(
           for (const admin of beforeAdmins) {
             expect(afterAdmins).toContain(admin);
           }
+        }),
+      { timeout: 180_000 },
+    );
+
+    // #2688: `read` must observe the live value of each managed setting,
+    // not carry the captured ones forward.
+    test.provider(
+      "DataLakeSettings drift detects and repairs an out-of-band managed setting",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          yield* stack.deploy(
+            AWS.LakeFormation.DataLakeSettings("DriftSettings", {
+              authorizedSessionTagValueList: ["alchemy-drift-declared"],
+            }),
+          );
+          expect((yield* driftOf(stack, "DriftSettings"))?.action).toBe("unchanged");
+
+          const current = (yield* lf.getDataLakeSettings({})).DataLakeSettings ?? {};
+          yield* lf.putDataLakeSettings({
+            DataLakeSettings: {
+              ...current,
+              AuthorizedSessionTagValueList: ["alchemy-drift-out-of-band"],
+            },
+          });
+          expect(
+            (yield* waitForDrift(stack, "DriftSettings", "drifted"))?.attr?.managedSettings
+              ?.authorizedSessionTagValueList,
+          ).toEqual(["alchemy-drift-out-of-band"]);
+
+          yield* repairDrift(stack);
+          expect((yield* driftOf(stack, "DriftSettings"))?.action).toBe("unchanged");
+          const restored = (yield* lf.getDataLakeSettings({})).DataLakeSettings ?? {};
+          expect(restored.AuthorizedSessionTagValueList).toEqual(["alchemy-drift-declared"]);
+
+          yield* stack.destroy();
         }),
       { timeout: 180_000 },
     );

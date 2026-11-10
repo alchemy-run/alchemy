@@ -192,10 +192,10 @@ export const waitForTxt = (
                 ),
             { concurrency: "unbounded" },
           ),
-          doh: Effect.all(
-            (options.resolvers ?? DEFAULT_RESOLVERS).map((resolver) =>
+          doh: Effect.forEach(
+            options.resolvers ?? DEFAULT_RESOLVERS,
+            (resolver) =>
               resolveTxt(resolver, fqdn).pipe(Effect.map((values) => values.includes(value))),
-            ),
             { concurrency: "unbounded" },
           ),
         },

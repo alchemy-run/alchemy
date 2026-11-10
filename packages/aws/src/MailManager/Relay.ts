@@ -4,10 +4,16 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { readMailManagerTags, sameShape, syncMailManagerTags } from "./internal.ts";
+
+export class RelayUnexpectedResponse extends Data.TaggedError("RelayUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface RelayProps {
   /**
@@ -50,8 +56,18 @@ export interface Relay extends Resource<
     relayName: string;
   },
   never,
-  Providers
+  Providers,
+  RelayLookup
 > {}
+
+/**
+ * Props for {@link Relay.lookup}: find a relay this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface RelayLookup {
+  /** The name of the existing relay. */
+  relayName: string;
+}
 
 /**
  * An SES Mail Manager relay — a downstream SMTP destination that rule-set
@@ -93,6 +109,16 @@ export interface Relay extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing relay
+ * `Relay.lookup` references a relay Alchemy doesn't manage (created in the
+ * console or by another stack), found by `relayName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing relay
+ * ```typescript
+ * const existing = AWS.MailManager.Relay.lookup({ relayName: "smarthost" });
+ * ```
+ *
  * @resource
  */
 export const Relay = Resource<Relay>("AWS.MailManager.Relay");
@@ -108,7 +134,7 @@ export const RelayProvider = () =>
       const getById = (relayId: string) =>
         mm
           .getRelay({ RelayId: relayId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       const findByName = (name: string) =>
         mm.listRelays.pages({}).pipe(
@@ -132,9 +158,9 @@ export const RelayProvider = () =>
 
       const toAttrs = Effect.fn(function* (relay: mm.GetRelayResponse) {
         if (relay.RelayArn === undefined || relay.RelayName === undefined) {
-          return yield* Effect.fail(
-            new Error(`Mail Manager relay '${relay.RelayId}' returned without ARN/name`),
-          );
+          return yield* new RelayUnexpectedResponse({
+            message: `Mail Manager relay '${relay.RelayId}' returned without ARN/name`,
+          });
         }
         return {
           relayId: relay.RelayId,
@@ -165,6 +191,10 @@ export const RelayProvider = () =>
             ),
           ),
 
+        lookup: Effect.fn(function* ({ relayName }) {
+          const found = yield* observe(undefined, relayName);
+          return found === undefined ? undefined : yield* toAttrs(found);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.relayName ?? (yield* createName(id, olds ?? {}));
           const relay = yield* observe(output, name);
@@ -196,16 +226,16 @@ export const RelayProvider = () =>
                 Authentication: news.authentication,
                 Tags: createTagsList(desiredTags),
               })
-              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             relay =
               created !== undefined
                 ? yield* getById(created.RelayId)
                 : yield* observe(undefined, name);
           }
           if (relay === undefined) {
-            return yield* Effect.fail(
-              new Error(`Mail Manager relay '${name}' not found after create`),
-            );
+            return yield* new RelayUnexpectedResponse({
+              message: `Mail Manager relay '${name}' not found after create`,
+            });
           }
 
           // 3. SYNC — diff OBSERVED state against desired; apply only the

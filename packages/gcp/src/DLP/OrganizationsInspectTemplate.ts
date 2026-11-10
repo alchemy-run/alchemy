@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -92,8 +93,32 @@ export type OrganizationsInspectTemplate = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  OrganizationsInspectTemplateLookup
 >;
+
+/**
+ * Props for {@link OrganizationsInspectTemplate.lookup}: find an
+ * organizations inspect template this stack doesn't manage by its
+ * identifiers, in the ambient project unless `project` names another.
+ */
+export interface OrganizationsInspectTemplateLookup {
+  /**
+   * Template id (the `{inspectTemplate}` segment of
+   * `organizations/{organization}/inspectTemplates/{inspectTemplate}`).
+   * Letters, digits, hyphens, and underscores; max 100 characters.
+   */
+  templateId: string;
+  /**
+   * Parent organization (`organizations/{organization}` or the numeric id).
+   */
+  organization?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An organization-scoped Sensitive Data Protection inspect template.
@@ -123,6 +148,19 @@ export type OrganizationsInspectTemplate = Resource<
  *   inspectConfig: {
  *     infoTypes: [{ name: "EMAIL_ADDRESS" }],
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing organizations inspect template
+ * `OrganizationsInspectTemplate.lookup` references an organizations inspect
+ * template Alchemy doesn't manage (created in the console or by another
+ * stack). It is read during plan/deploy, never created, updated or deleted,
+ * and binds like a declared organizations inspect template.
+ *
+ * **Example:** Reference an existing organizations inspect template
+ * ```typescript
+ * const organizationsInspectTemplate = GCP.DLP.OrganizationsInspectTemplate.lookup({
+ *   templateId: "my-template",
  * });
  * ```
  *
@@ -161,10 +199,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dlp
         .getOrganizationsInspectTemplates({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const OrganizationsInspectTemplateProvider = () =>
   Provider.succeed(OrganizationsInspectTemplate, {
@@ -177,6 +215,15 @@ export const OrganizationsInspectTemplateProvider = () =>
         replaceOn(olds?.organization ?? output?.organization, news.organization)
       );
     }),
+
+    lookup: Effect.fn(function* ({ templateId, organization: lookupOrganization }) {
+      const env = yield* GcpEnvironment.current;
+      const organization = yield* resolveOrganization(lookupOrganization, undefined);
+      const name = resourceName(organization, templateId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, organization, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -241,7 +288,7 @@ export const OrganizationsInspectTemplateProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DlpNotResolved({ name });
+        return yield* new DlpNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

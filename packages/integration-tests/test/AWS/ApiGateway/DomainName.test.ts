@@ -1,8 +1,10 @@
 import * as AWS from "@alchemy.run/aws";
 import { DomainName } from "@alchemy.run/aws/ApiGateway";
 import { expect } from "@alchemy.run/test";
+import * as ag from "@distilled.cloud/aws/api-gateway";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
+import { driftOf, repairDrift, waitForDrift } from "../drift.ts";
 import { assertDomainNameDeleted } from "./assertions.ts";
 import * as Test from "./Test.ts";
 
@@ -64,6 +66,21 @@ test.provider.skipIf(!!process.env.FAST || !domainName || !certificateArn)(
       const all = yield* provider.list();
 
       expect(all.some((d) => d.domainName === domain.domainName)).toBe(true);
+
+      // #2688: `read` must observe the TLS policy and certificates, or an
+      // out-of-band change reads as `unchanged`.
+      expect((yield* driftOf(stack, "ListDomain"))?.action).toBe("unchanged");
+      yield* ag.updateDomainName({
+        domainName: domain.domainName,
+        patchOperations: [{ op: "replace", path: "/securityPolicy", value: "TLS_1_0" }],
+      });
+      expect(
+        (yield* waitForDrift(stack, "ListDomain", "drifted"))?.attr?.configuration?.securityPolicy,
+      ).toBe("TLS_1_0");
+      yield* repairDrift(stack);
+      expect((yield* waitForDrift(stack, "ListDomain", "unchanged"))?.action).toBe("unchanged");
+      const restored = yield* ag.getDomainName({ domainName: domain.domainName });
+      expect(restored.securityPolicy).toBe("TLS_1_2");
 
       yield* stack.destroy();
       yield* assertDomainNameDeleted(domain.domainName);

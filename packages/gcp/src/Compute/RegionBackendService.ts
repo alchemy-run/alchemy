@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   hasAlchemyLabels,
@@ -221,8 +222,32 @@ export type RegionBackendService = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RegionBackendServiceLookup
 >;
+
+/**
+ * Props for {@link RegionBackendService.lookup}: find a region backend
+ * service this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface RegionBackendServiceLookup {
+  /**
+   * Name of the backend service. Must be 1-63 characters and match
+   * `[a-z]([-a-z0-9]*[a-z0-9])?`.
+   */
+  name: string;
+  /**
+   * Region the backend service lives in (e.g. `us-central1`). `US-CENTRAL1`
+   * is accepted and normalized to `us-central1`.
+   */
+  region?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A regional Compute Engine backend service. Backend services define how
@@ -266,6 +291,19 @@ export type RegionBackendService = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing region backend service
+ * `RegionBackendService.lookup` references a region backend service Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared region backend service.
+ *
+ * **Example:** Reference an existing region backend service
+ * ```typescript
+ * const regionBackendService = GCP.Compute.RegionBackendService.lookup({
+ *   name: "my-name",
+ * });
+ * ```
+ *
  * @resource
  * @category Compute
  */
@@ -276,14 +314,14 @@ export const RegionBackendService = Resource<RegionBackendService>(
 export class RegionBackendServiceNotResolved extends Data.TaggedError(
   "GCP.Compute.RegionBackendServiceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
   region: string;
 }> {}
 
 export class RegionBackendServiceStillExists extends Data.TaggedError(
   "GCP.Compute.RegionBackendServiceStillExists",
 )<{
-  name: string;
+  resourceName: string;
   region: string;
 }> {}
 
@@ -448,13 +486,13 @@ const sameLogConfig = (
 const getByName = (project: string, region: string, name: string) =>
   compute
     .getRegionBackendServices({ project, region, backendService: name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitPresent = (project: string, region: string, name: string) =>
   getByName(project, region, name).pipe(
     Effect.flatMap((service) =>
       service === undefined
-        ? Effect.fail(new RegionBackendServiceNotResolved({ name, region }))
+        ? Effect.fail(new RegionBackendServiceNotResolved({ resourceName: name, region }))
         : Effect.succeed(service),
     ),
     Effect.retry({
@@ -462,7 +500,7 @@ const waitPresent = (project: string, region: string, name: string) =>
       times: 8,
       schedule: Schedule.exponential("250 millis"),
     }),
-    Effect.catchTag("GCP.Compute.RegionBackendServiceNotResolved", () => Effect.succeed(undefined)),
+    Effect.catchTag("GCP.Compute.RegionBackendServiceNotResolved", () => Effect.undefined),
   );
 
 const waitGone = (project: string, region: string, name: string) =>
@@ -470,7 +508,7 @@ const waitGone = (project: string, region: string, name: string) =>
     Effect.flatMap((service) =>
       service === undefined
         ? Effect.void
-        : Effect.fail(new RegionBackendServiceStillExists({ name, region })),
+        : Effect.fail(new RegionBackendServiceStillExists({ resourceName: name, region })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Compute.RegionBackendServiceStillExists",
@@ -521,6 +559,14 @@ export const RegionBackendServiceProvider = () =>
         deleteFirst: samePhysicalName && (schemeChanged || networkChanged),
       };
     }),
+
+    lookup: Effect.fn(function* ({ name, region: lookupRegion }) {
+      const env = yield* GcpEnvironment.current;
+      const region = normalizeRegion(lookupRegion, env.region);
+      const existing = yield* getByName(env.project, region, name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -621,7 +667,7 @@ export const RegionBackendServiceProvider = () =>
             },
           })
           .pipe(
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
             Effect.flatMap((operation) =>
               operation === undefined
                 ? Effect.void
@@ -634,7 +680,7 @@ export const RegionBackendServiceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new RegionBackendServiceNotResolved({ name, region });
+        return yield* new RegionBackendServiceNotResolved({ resourceName: name, region });
       }
 
       const timeoutChanged = (current.timeoutSec ?? DEFAULT_TIMEOUT_SEC) !== timeoutSec;
@@ -743,7 +789,7 @@ export const RegionBackendServiceProvider = () =>
           backendService: output.name,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.flatMap((operation) =>
             operation === undefined
               ? Effect.void

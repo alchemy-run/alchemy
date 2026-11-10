@@ -1,6 +1,6 @@
 ---
 title: Federated identity
-description: How a Cloud Run service reaches AWS, and a Lambda reaches GCP, through workload identity federation instead of long-lived keys.
+description: How Cloud Run services and Fly Services reach AWS, and a Lambda reaches GCP, through workload identity federation instead of long-lived keys.
 ---
 
 A runtime on one cloud often needs a resource on the other: a Cloud Run
@@ -11,6 +11,9 @@ key or service account key to create, store, or rotate.
 
 You write the binding the same way as on a native runtime. Federation is
 what Alchemy picks for you.
+
+[Identity Federation](/infrastructure-as-effects/identity-federation)
+covers how federation works across every cloud.
 
 ## Call AWS from Cloud Run
 
@@ -66,6 +69,65 @@ trades it for the role's credentials with `AssumeRoleWithWebIdentity`.
 The credentials last an hour and are assumed again, with a fresh token,
 shortly before they expire.
 
+## Call AWS from a Fly Service
+
+A Fly Service runs on Fly Machines, and every Machine can mint an OIDC
+token signed by `https://oidc.fly.io/<org>`. Bind a bucket to it the same
+way:
+
+```typescript
+// src/api.ts
+import * as AWS from "@alchemy.run/aws";
+import * as Fly from "@alchemy.run/fly";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+export const Uploads = AWS.S3.Bucket("Uploads");
+
+export default class Api extends Fly.Service<Api>()(
+  "Api",
+  { main: import.meta.url, port: 3000 },
+  Effect.gen(function* () {
+    const putObject = yield* AWS.S3.PutObject(yield* Uploads);
+    return {
+      fetch: putObject({ Key: "hello.txt", Body: "hello" }).pipe(
+        Effect.as(HttpServerResponse.text("stored")),
+        Effect.orDie,
+      ),
+    };
+  }).pipe(Effect.provide(AWS.S3.PutObjectHttp)),
+) {}
+```
+
+The binding registers Fly's issuer for your organization as an IAM OIDC
+provider, and creates a role that trusts tokens from that one App. A
+token names its Machine as `<org>:<app>:<machine>`, so the trust policy
+matches every Machine of the App and nothing else:
+
+```json
+{
+  "Effect": "Allow",
+  "Principal": {
+    "Federated": "arn:aws:iam::123456789012:oidc-provider/oidc.fly.io/my-org"
+  },
+  "Action": "sts:AssumeRoleWithWebIdentity",
+  "Condition": {
+    "StringEquals": { "oidc.fly.io/my-org:aud": "sts.amazonaws.com" },
+    "StringLike": { "oidc.fly.io/my-org:sub": "my-org:api-app:*" }
+  }
+}
+```
+
+IAM keeps one provider per issuer in an account, so every stack in the
+account shares it. Destroying a stack leaves the provider in place.
+
+At runtime the Machine asks its `/.fly/api` socket for a token and
+trades it for the role's credentials. Tokens last 10 minutes; a fresh
+one is minted each time the credentials are assumed again. The socket
+answers only root, the default user in the images Alchemy builds.
+See [Fly federated identity](/fly/federated-identity) for the tokens
+themselves and the shared provider.
+
 ## Call GCP from a Lambda
 
 A Lambda runs as an IAM role. Bind a Pub/Sub topic to it:
@@ -108,13 +170,15 @@ before it expires.
 ## Which runtimes federate
 
 Lambda functions, ECS tasks and services, EC2 instances and launch
-templates, and App Runner services reach GCP this way. Cloud Run
-services, jobs, and worker pools and Cloud Functions reach AWS this
-way.
+templates, App Runner services, Batch jobs, EKS pods, and Fly Services
+reach GCP this way.
+Cloud Run services, jobs, and worker pools, Cloud Functions, and Fly
+Services reach AWS this way.
 
 Runtimes without an identity the other cloud can trust still get a key:
-a Cloudflare Worker, an EKS or GKE pod, and an AWS Batch job. The
-binding code is the same either way.
+a Cloudflare Worker, a Railway service, a Fly Sprite, and a GKE pod
+calling AWS. The key belongs to an identity that may do only what that
+one host needs. The binding code is the same either way.
 
 ## New grants take a few minutes
 

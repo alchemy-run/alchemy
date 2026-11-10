@@ -21,6 +21,7 @@ import type * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -172,6 +173,13 @@ export type InstanceProps = {
    * deploying machine needs no route to the instance. Bookkeeping lives in
    * Alchemy's `__alchemy_migrations` table; each migration commits with
    * its bookkeeping row.
+   *
+   * History is forward-only and linear. A new file must sort after every
+   * applied one, or the deploy fails with `NonLinearMigrationHistoryError`;
+   * an edited or deleted applied file fails with
+   * `RewrittenMigrationHistoryError`. Renaming an applied file without
+   * changing its contents keeps it applied. See
+   * [Migrations](https://alchemy.run/sql/effect-sql/migrations#change-migration-history-safely).
    */
   migrations?: MigrationsInput;
   /**
@@ -248,8 +256,39 @@ export type Instance = Resource<
     migrationsHashes: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  InstanceLookup
 >;
+
+/**
+ * Props for {@link Instance.lookup}: find an instance this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface InstanceLookup {
+  /**
+   * Instance id (the `{instance}` segment of
+   * `.../clusters/{cluster}/instances/{instance}`). Must match
+   * `[a-z]([a-z0-9-]{0,61}[a-z0-9])?`.
+   */
+  instanceId: string;
+  /**
+   * Parent cluster id or full resource name
+   * (`projects/{project}/locations/{location}/clusters/{cluster}`).
+   */
+  cluster: string;
+  /**
+   * Region of the parent cluster (`us-central1`, …). Ignored when `cluster`
+   * is a full resource name. `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An AlloyDB instance (compute attached to a cluster).
@@ -318,13 +357,26 @@ export type Instance = Resource<
  * `alloydb.instances.executeSql`. Set `migrationsDatabase` to target a
  * database other than `postgres`.
  *
+ * ### Looking up an existing instance
+ * `Instance.lookup` references an instance Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared instance.
+ *
+ * **Example:** Reference an existing instance
+ * ```typescript
+ * const instance = GCP.AlloyDB.Instance.lookup({
+ *   instanceId: "my-instance",
+ *   cluster: "my-cluster",
+ * });
+ * ```
+ *
  * @resource
  * @category AlloyDB
  */
 export const Instance = Resource<Instance>("GCP.AlloyDB.Instance");
 
 export class InstanceNotResolved extends Data.TaggedError("GCP.AlloyDB.InstanceNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class InstanceClusterMissing extends Data.TaggedError("GCP.AlloyDB.InstanceClusterMissing")<{
@@ -332,17 +384,17 @@ export class InstanceClusterMissing extends Data.TaggedError("GCP.AlloyDB.Instan
 }> {}
 
 export class InstanceNotReady extends Data.TaggedError("GCP.AlloyDB.InstanceNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class InstanceFailed extends Data.TaggedError("GCP.AlloyDB.InstanceFailed")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class InstanceStillExists extends Data.TaggedError("GCP.AlloyDB.InstanceStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string | undefined) => {
@@ -571,12 +623,14 @@ const isPlaceholder = (instance: alloydb.Instance) => {
 const getByName = (name: string) =>
   alloydb
     .getProjectsLocationsClustersInstances({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((instance) =>
-      instance ? Effect.succeed(instance) : Effect.fail(new InstanceNotResolved({ name })),
+      instance
+        ? Effect.succeed(instance)
+        : Effect.fail(new InstanceNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AlloyDB.InstanceNotResolved",
@@ -589,17 +643,17 @@ const waitUntilReady = (name: string) =>
   Effect.gen(function* () {
     const instance = yield* getByName(name);
     if (instance === undefined) {
-      return yield* new InstanceNotReady({ name, state: "MISSING" });
+      return yield* new InstanceNotReady({ resourceName: name, state: "MISSING" });
     }
     if (isFailed(instance.state)) {
       return yield* new InstanceFailed({
-        name,
+        resourceName: name,
         state: instance.state ?? "FAILED",
       });
     }
     if (!(isAvailable(instance.state) && instance.reconciling !== true)) {
       return yield* new InstanceNotReady({
-        name,
+        resourceName: name,
         state: instance.state ?? "STATE_UNSPECIFIED",
       });
     }
@@ -615,7 +669,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((instance) =>
-      instance === undefined ? Effect.void : Effect.fail(new InstanceStillExists({ name })),
+      instance === undefined
+        ? Effect.void
+        : Effect.fail(new InstanceStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AlloyDB.InstanceStillExists",
@@ -727,6 +783,17 @@ export const InstanceProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({ instanceId, cluster, location }) {
+      const env = yield* GcpEnvironment.current;
+      const ref = parseClusterRef(cluster, env.project, location ?? env.region);
+      if (ref.clusterId.length === 0) return undefined;
+      const existing = yield* getByName(
+        resourceName(ref.project, ref.location, ref.clusterId, instanceId),
+      );
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       if (output?.name) {
@@ -811,7 +878,7 @@ export const InstanceProvider = () =>
                 body,
               })
         ).pipe(
-          Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+          Effect.catchTag("Conflict", () => Effect.undefined),
           Effect.tap((created) =>
             created === undefined ? Effect.void : waitForOperation(created),
           ),
@@ -828,7 +895,7 @@ export const InstanceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new InstanceNotResolved({ name });
+        return yield* new InstanceNotResolved({ resourceName: name });
       }
 
       if (!isAvailable(current.state) || current.reconciling === true) {
@@ -991,7 +1058,7 @@ export const InstanceProvider = () =>
       const operation = yield* alloydb
         .deleteProjectsLocationsClustersInstances({ name: output.name })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 40,

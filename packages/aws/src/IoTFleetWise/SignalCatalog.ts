@@ -5,6 +5,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
@@ -17,6 +18,13 @@ import {
   syncFleetWiseTags,
   toFleetWiseTagList,
 } from "./internal.ts";
+
+export class SignalCatalogUnexpectedResponse extends Data.TaggedError(
+  "SignalCatalogUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface SignalCatalogProps {
   /**
@@ -53,8 +61,18 @@ export interface SignalCatalog extends Resource<
     signalCatalogArn: string;
   },
   never,
-  Providers
+  Providers,
+  SignalCatalogLookup
 > {}
+
+/**
+ * Props for {@link SignalCatalog.lookup}: find a signal catalog this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface SignalCatalogLookup {
+  /** The signal catalog name of the existing signal catalog. */
+  signalCatalogName: string;
+}
 
 /**
  * An AWS IoT FleetWise signal catalog — the account-wide collection of
@@ -99,6 +117,16 @@ export interface SignalCatalog extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing signal catalog
+ * `SignalCatalog.lookup` references a signal catalog Alchemy doesn't manage (created in the
+ * console or by another stack), found by `signalCatalogName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing signal catalog
+ * ```typescript
+ * const existing = AWS.IoTFleetWise.SignalCatalog.lookup({ signalCatalogName: "my-signal-catalog" });
+ * ```
+ *
  * @resource
  */
 export const SignalCatalog = Resource<SignalCatalog>("AWS.IoTFleetWise.SignalCatalog");
@@ -124,7 +152,7 @@ export const SignalCatalogProvider = () =>
       const readCatalog = Effect.fn(function* (name: string) {
         return yield* iotfleetwise.getSignalCatalog({ name }).pipe(
           inFleetWiseRegion,
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 
@@ -144,6 +172,16 @@ export const SignalCatalogProvider = () =>
           if ((yield* toName(id, olds)) !== (yield* toName(id, news))) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ signalCatalogName: name }) {
+          const found = yield* readCatalog(name);
+          if (found === undefined) return undefined;
+          const attrs = {
+            signalCatalogName: found.name,
+            signalCatalogArn: found.arn,
+          };
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
@@ -183,7 +221,11 @@ export const SignalCatalogProvider = () =>
             observed = yield* readCatalog(name).pipe(
               Effect.flatMap((catalog) =>
                 catalog === undefined
-                  ? Effect.fail(new Error(`Signal catalog '${name}' not found`))
+                  ? Effect.fail(
+                      new SignalCatalogUnexpectedResponse({
+                        message: `Signal catalog '${name}' not found`,
+                      }),
+                    )
                   : Effect.succeed(catalog),
               ),
               retryObservation,

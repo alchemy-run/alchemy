@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -106,8 +107,37 @@ export type DatasetsFhirStore = Resource<
     defaultSearchHandlingStrict: boolean;
   },
   never,
-  Providers
+  Providers,
+  DatasetsFhirStoreLookup
 >;
+
+/**
+ * Props for {@link DatasetsFhirStore.lookup}: find a datasets fhir store
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface DatasetsFhirStoreLookup {
+  /**
+   * FHIR store id. Must match letters, numbers, underscores, hyphens, and
+   * periods; 1-256 characters.
+   */
+  fhirStoreId: string;
+  /**
+   * Region used when `dataset` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent dataset. Full name
+   * `projects/{project}/locations/{location}/datasets/{dataset}` or the
+   * dataset id (combined with `location`).
+   */
+  dataset: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Healthcare FHIR store inside a dataset.
@@ -136,6 +166,20 @@ export type DatasetsFhirStore = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing datasets fhir store
+ * `DatasetsFhirStore.lookup` references a datasets fhir store Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared datasets fhir store.
+ *
+ * **Example:** Reference an existing datasets fhir store
+ * ```typescript
+ * const datasetsFhirStore = GCP.Healthcare.DatasetsFhirStore.lookup({
+ *   fhirStoreId: "my-fhir-store",
+ *   dataset: "my-dataset",
+ * });
+ * ```
+ *
  * @resource
  * @category Healthcare
  */
@@ -144,7 +188,7 @@ export const DatasetsFhirStore = Resource<DatasetsFhirStore>("GCP.Healthcare.Dat
 export class DatasetsFhirStoreNotResolved extends Data.TaggedError(
   "GCP.Healthcare.DatasetsFhirStoreNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const datasetOf = (dataset: string, project: string, location: string) =>
@@ -173,10 +217,10 @@ const toAttrs = (store: healthcare.FhirStore, project: string, region: string) =
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : healthcare
         .getProjectsLocationsDatasetsFhirStores({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const DatasetsFhirStoreProvider = () =>
   Provider.succeed(DatasetsFhirStore, {
@@ -214,6 +258,21 @@ export const DatasetsFhirStoreProvider = () =>
         extra,
       });
     }),
+
+    lookup: Effect.fn(function* ({
+      fhirStoreId,
+      location: lookupLocation,
+      dataset: lookupDataset,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const dataset =
+        lookupDataset !== undefined ? datasetOf(lookupDataset, env.project, location) : "";
+      const name = dataset.length > 0 ? resourceName(dataset, fhirStoreId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -280,7 +339,7 @@ export const DatasetsFhirStoreProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DatasetsFhirStoreNotResolved({ name });
+        return yield* new DatasetsFhirStoreNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

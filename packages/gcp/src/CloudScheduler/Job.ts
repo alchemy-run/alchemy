@@ -9,6 +9,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 
 const DEFAULT_TIME_ZONE = "UTC";
@@ -262,8 +263,32 @@ export type Job = Resource<
     satisfiesPzs: boolean | undefined;
   },
   never,
-  Providers
+  Providers,
+  JobLookup
 >;
+
+/**
+ * Props for {@link Job.lookup}: find a job this stack doesn't manage by its
+ * identifiers, in the ambient project unless `project` names another.
+ */
+export interface JobLookup {
+  /**
+   * Job id (the `{job}` segment of
+   * `projects/{project}/locations/{location}/jobs/{job}`). Must match
+   * `[A-Za-z0-9_-]{1,500}`.
+   */
+  jobId: string;
+  /**
+   * Cloud Scheduler location (`us-central1`, `us-east1`, …). `US-CENTRAL1`
+   * is accepted and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Scheduler job that invokes an HTTP, Pub/Sub, or App Engine
@@ -316,28 +341,38 @@ export type Job = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing job
+ * `Job.lookup` references a job Alchemy doesn't manage (created in the
+ * console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared job.
+ *
+ * **Example:** Reference an existing job
+ * ```typescript
+ * const job = GCP.CloudScheduler.Job.lookup({ jobId: "my-job" });
+ * ```
+ *
  * @resource
  * @category CloudScheduler
  */
 export const Job = Resource<Job>("GCP.CloudScheduler.Job");
 
 export class JobNotResolved extends Data.TaggedError("GCP.CloudScheduler.JobNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class SchedulerJobNotReady extends Data.TaggedError("GCP.CloudScheduler.JobNotReady")<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
 export class JobStateFailed extends Data.TaggedError("GCP.CloudScheduler.JobStateFailed")<{
-  name: string;
+  resourceName: string;
   state: string;
   message: string;
 }> {}
 
 export class JobTargetMissing extends Data.TaggedError("GCP.CloudScheduler.JobTargetMissing")<{
-  name: string;
+  resourceName: string;
   message: string;
 }> {}
 
@@ -424,7 +459,7 @@ const toAttrs = (job: scheduler.Job, project: string, region: string) => {
 const getByName = (name: string) =>
   scheduler
     .getProjectsLocationsJobs({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /** Poll until Cloud Scheduler reports the job in the desired ENABLED/PAUSED state. */
 const waitForJobState = (name: string, paused: boolean) =>
@@ -435,13 +470,13 @@ const waitForJobState = (name: string, paused: boolean) =>
       if (job?.state === "UPDATE_FAILED" || job?.state === "DISABLED") {
         return Effect.fail(
           new JobStateFailed({
-            name,
+            resourceName: name,
             state: job.state,
             message: job.status?.message ?? `job is ${job.state}`,
           }),
         );
       }
-      return Effect.fail(new SchedulerJobNotReady({ name, state: job?.state }));
+      return Effect.fail(new SchedulerJobNotReady({ resourceName: name, state: job?.state }));
     }),
     Effect.retry({
       while: (error) => error._tag === "GCP.CloudScheduler.JobNotReady",
@@ -590,7 +625,7 @@ const syncPaused = Effect.fn(function* (name: string, current: scheduler.Job, pa
           Effect.flatMap((job) =>
             job !== undefined && job.state === "PAUSED"
               ? Effect.succeed(job)
-              : new JobNotResolved({ name }),
+              : new JobNotResolved({ resourceName: name }),
           ),
         ),
       ),
@@ -606,7 +641,7 @@ const syncPaused = Effect.fn(function* (name: string, current: scheduler.Job, pa
           Effect.flatMap((job) =>
             job !== undefined && job.state === "ENABLED"
               ? Effect.succeed(job)
-              : new JobNotResolved({ name }),
+              : new JobNotResolved({ resourceName: name }),
           ),
         ),
       ),
@@ -637,6 +672,15 @@ export const JobProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ jobId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, jobId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const jobId = yield* toId(id, olds?.jobId, output?.jobId);
@@ -657,7 +701,7 @@ export const JobProvider = () =>
       const parent = parentOf(env.project, location);
       if (!hasTarget(news)) {
         return yield* new JobTargetMissing({
-          name,
+          resourceName: name,
           message: "Cloud Scheduler jobs require httpTarget, pubsubTarget, or appEngineHttpTarget",
         });
       }
@@ -704,7 +748,7 @@ export const JobProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new JobNotResolved({ name });
+        return yield* new JobNotResolved({ resourceName: name });
       }
 
       const mask: string[] = [];

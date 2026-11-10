@@ -109,8 +109,18 @@ export interface Product extends Resource<
     provisioningArtifactId: string;
   },
   never,
-  Providers
+  Providers,
+  ProductLookup
 > {}
+
+/**
+ * Props for {@link Product.lookup}: find a product this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ProductLookup {
+  /** The id of the existing product. */
+  productId: string;
+}
 
 /**
  * An AWS Service Catalog product — a CloudFormation-backed offering
@@ -154,6 +164,16 @@ export interface Product extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing product
+ * `Product.lookup` references a product Alchemy doesn't manage (created in the
+ * console or by another stack), found by `productId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing product
+ * ```typescript
+ * const existing = AWS.ServiceCatalog.Product.lookup({ productId: "..." });
+ * ```
+ *
  * @resource
  */
 export const Product = Resource<Product>("AWS.ServiceCatalog.Product");
@@ -174,7 +194,7 @@ export const ProductProvider = () =>
       const observe = Effect.fn(function* (selector: { Id: string } | { Name: string }) {
         return yield* servicecatalog
           .describeProductAsAdmin(selector)
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       const toAttributes = (described: servicecatalog.DescribeProductAsAdminOutput) => {
@@ -206,7 +226,7 @@ export const ProductProvider = () =>
                   d.ProductARN === undefined ||
                   d.ProductViewSummary?.Name === undefined
                 ) {
-                  return Effect.succeed(undefined);
+                  return Effect.undefined;
                 }
                 // Hydrate the artifact ID; a product can vanish between
                 // enumeration and hydration, so tolerate NotFound per item.
@@ -217,13 +237,21 @@ export const ProductProvider = () =>
                     productName: d.ProductViewSummary!.Name!,
                     provisioningArtifactId: r.ProvisioningArtifactDetails?.[0]?.Id ?? "",
                   })),
-                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
                 );
               },
               { concurrency: 5 },
             );
             return items.filter((item): item is Product["Attributes"] => item !== undefined);
           }),
+        lookup: Effect.fn(function* ({ productId }) {
+          const described = yield* observe({ Id: productId });
+          if (!described?.ProductViewDetail?.ProductViewSummary?.ProductId) {
+            return undefined;
+          }
+          const attrs = toAttributes(described);
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const described = output?.productId
             ? yield* observe({ Id: output.productId })

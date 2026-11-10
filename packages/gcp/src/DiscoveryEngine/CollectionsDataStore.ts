@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   collectionParent,
@@ -147,8 +148,34 @@ export type CollectionsDataStore = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  CollectionsDataStoreLookup
 >;
+
+/**
+ * Props for {@link CollectionsDataStore.lookup}: find a collections data
+ * store this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface CollectionsDataStoreLookup {
+  /**
+   * Data store id (the `{data_store}` segment).
+   */
+  dataStoreId: string;
+  /**
+   * Location (`global`, `us`, `eu`).
+   */
+  location?: string;
+  /**
+   * Collection id.
+   */
+  collection?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Discovery Engine data store under a collection.
@@ -183,6 +210,19 @@ export type CollectionsDataStore = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing collections data store
+ * `CollectionsDataStore.lookup` references a collections data store Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared collections data store.
+ *
+ * **Example:** Reference an existing collections data store
+ * ```typescript
+ * const collectionsDataStore = GCP.DiscoveryEngine.CollectionsDataStore.lookup({
+ *   dataStoreId: "my-data-store",
+ * });
+ * ```
+ *
  * @resource
  * @category DiscoveryEngine
  */
@@ -193,13 +233,13 @@ export const CollectionsDataStore = Resource<CollectionsDataStore>(
 export class CollectionsDataStoreNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsDataStoreNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class CollectionsDataStoreStillExists extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsDataStoreStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const verticalOf = (value: string | undefined) => value ?? "GENERIC";
@@ -229,15 +269,17 @@ const toAttrs = (store: discoveryengine.GoogleCloudDiscoveryengineV1DataStore, p
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : discoveryengine
         .getProjectsLocationsCollectionsDataStores({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((store) =>
-      store ? Effect.succeed(store) : Effect.fail(new CollectionsDataStoreNotResolved({ name })),
+      store
+        ? Effect.succeed(store)
+        : Effect.fail(new CollectionsDataStoreNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.DiscoveryEngine.CollectionsDataStoreNotResolved",
@@ -251,7 +293,7 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((store) =>
       store === undefined
         ? Effect.void
-        : Effect.fail(new CollectionsDataStoreStillExists({ name })),
+        : Effect.fail(new CollectionsDataStoreStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.DiscoveryEngine.CollectionsDataStoreStillExists",
@@ -311,6 +353,21 @@ export const CollectionsDataStoreProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({
+      dataStoreId,
+      location: lookupLocation,
+      collection: lookupCollection,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const collection = normalizeCollection(lookupCollection);
+      const existing = yield* getByName(
+        dataStoreName(env.project, location, collection, dataStoreId),
+      );
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const dataStoreId = yield* toResourceId(id, olds?.dataStoreId, output?.dataStoreId);
@@ -361,7 +418,7 @@ export const CollectionsDataStoreProvider = () =>
                   : undefined,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -369,7 +426,7 @@ export const CollectionsDataStoreProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CollectionsDataStoreNotResolved({ name });
+        return yield* new CollectionsDataStoreNotResolved({ resourceName: name });
       }
 
       const resource = current.name ?? name;
@@ -405,7 +462,7 @@ export const CollectionsDataStoreProvider = () =>
       if (existing === undefined) return;
       const operation = yield* discoveryengine
         .deleteProjectsLocationsCollectionsDataStores({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

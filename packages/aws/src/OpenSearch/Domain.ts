@@ -6,6 +6,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
 import { subsetDiffers } from "alchemy/Util/equal";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { PolicyDocument } from "../IAM/Policy.ts";
 import { normalizePolicyDocument, stringifyPolicyDocument } from "../IAM/Policy.ts";
@@ -17,6 +18,13 @@ import {
   readDomainTags,
   repeatUntilDomainState,
 } from "./internal.ts";
+
+export class OpenSearchDomainUnexpectedResponse extends Data.TaggedError(
+  "OpenSearchDomainUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface DomainClusterConfig {
   /**
@@ -257,8 +265,18 @@ export interface Domain extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DomainLookup
 > {}
+
+/**
+ * Props for {@link Domain.lookup}: find a domain this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DomainLookup {
+  /** The domain name of the existing domain. */
+  domainName: string;
+}
 
 /**
  * An Amazon OpenSearch Service domain — a managed OpenSearch/Elasticsearch
@@ -311,6 +329,16 @@ export interface Domain extends Resource<
  *     availabilityZoneCount: 2,
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing domain
+ * `Domain.lookup` references a domain Alchemy doesn't manage (created in the
+ * console or by another stack), found by `domainName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing domain
+ * ```typescript
+ * const existing = AWS.OpenSearch.Domain.lookup({ domainName: "my-domain" });
  * ```
  *
  * @resource
@@ -387,16 +415,16 @@ export const DomainProvider = () =>
       const readDomain = Effect.fn(function* (name: string) {
         return yield* opensearch.describeDomain({ DomainName: name }).pipe(
           Effect.map((response) => response.DomainStatus),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 
       const waitForActive = Effect.fn(function* (name: string) {
         const domain = yield* repeatUntilDomainState(readDomain(name), isDomainActive);
         if (domain === undefined) {
-          return yield* Effect.fail(
-            new Error(`OpenSearch domain '${name}' not found while waiting`),
-          );
+          return yield* new OpenSearchDomainUnexpectedResponse({
+            message: `OpenSearch domain '${name}' not found while waiting`,
+          });
         }
         return domain;
       });
@@ -440,6 +468,13 @@ export const DomainProvider = () =>
           if ((o.vpcOptions === undefined) !== (n.vpcOptions === undefined)) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ domainName: name }) {
+          const domain = yield* readDomain(name);
+          if (domain === undefined) return undefined;
+          const attrs = yield* toAttrs(domain);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
@@ -650,7 +685,7 @@ export const DomainProvider = () =>
                 (name) =>
                   opensearch.describeDomain({ DomainName: name }).pipe(
                     Effect.map((response) => response.DomainStatus),
-                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                    Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
                   ),
                 { concurrency: 4 },
               ),

@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -119,8 +120,30 @@ export type StoragePool = Resource<
     creationTimestamp: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  StoragePoolLookup
 >;
+
+/**
+ * Props for {@link StoragePool.lookup}: find a storage pool this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface StoragePoolLookup {
+  /**
+   * Storage pool name (RFC1035, 1-63 characters).
+   */
+  storagePoolName: string;
+  /**
+   * Zone the pool lives in (e.g. `us-central1-a`).
+   */
+  zone?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A zonal Compute Engine Hyperdisk storage pool.
@@ -149,6 +172,19 @@ export type StoragePool = Resource<
  *   zone: "us-central1-a",
  *   description: "shared hyperdisk capacity",
  *   poolProvisionedCapacityGb: 10240,
+ * });
+ * ```
+ *
+ * ### Looking up an existing storage pool
+ * `StoragePool.lookup` references a storage pool Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * storage pool.
+ *
+ * **Example:** Reference an existing storage pool
+ * ```typescript
+ * const storagePool = GCP.Compute.StoragePool.lookup({
+ *   storagePoolName: "my-storage-pool",
  * });
  * ```
  *
@@ -231,7 +267,7 @@ const toAttrs = (pool: compute.StoragePool, project: string): StoragePool["Attri
 const getByName = (project: string, zone: string, storagePool: string) =>
   compute
     .getStoragePools({ project, zone, storagePool })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitPoolReady = (project: string, zone: string, storagePoolName: string) =>
   getByName(project, zone, storagePoolName).pipe(
@@ -337,6 +373,14 @@ export const StoragePoolProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ storagePoolName, zone: lookupZone }) {
+      const env = yield* GcpEnvironment.current;
+      const zone = normalizeZone(lookupZone);
+      const existing = yield* getByName(env.project, zone, storagePoolName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const storagePoolName = yield* toName(id, olds?.storagePoolName, output?.storagePoolName);
@@ -405,7 +449,7 @@ export const StoragePoolProvider = () =>
               performanceProvisioningType: news.performanceProvisioningType,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (inserted !== undefined) {
           yield* waitZoneOperation(env.project, zone, inserted, {
             ignore: ["RESOURCE_ALREADY_EXISTS"],
@@ -498,7 +542,7 @@ export const StoragePoolProvider = () =>
           storagePool: output.storagePoolName,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

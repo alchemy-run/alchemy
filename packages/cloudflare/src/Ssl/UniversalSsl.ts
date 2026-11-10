@@ -135,7 +135,7 @@ export const UniversalSslProvider = () =>
               return { zoneId, enabled, initialEnabled: enabled };
             }),
             // Plan-gated or partial zones reject the route; skip them.
-            Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+            Effect.catchTag("InvalidRoute", () => Effect.undefined),
           ),
         { concurrency: 10 },
       );
@@ -160,7 +160,7 @@ export const UniversalSslProvider = () =>
       if (!zoneId) return undefined;
       const observed = yield* ssl.getUniversalSetting({ zoneId }).pipe(
         // Zone deleted out-of-band — the setting is gone with it.
-        Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+        Effect.catchTag("InvalidRoute", () => Effect.undefined),
       );
       if (observed === undefined) return undefined;
       const enabled = observedEnabled(observed);
@@ -202,7 +202,7 @@ export const UniversalSslProvider = () =>
       // Observe — if the zone itself is gone, so is the setting.
       const observed = yield* ssl
         .getUniversalSetting({ zoneId })
-        .pipe(Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("InvalidRoute", () => Effect.undefined));
       if (observed === undefined) return;
       // Restore the pre-management value; skip the call when it already
       // matches (idempotent re-delete after a crashed run).

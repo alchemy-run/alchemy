@@ -5,6 +5,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
@@ -15,6 +16,13 @@ import {
   syncFleetWiseTags,
   toFleetWiseTagList,
 } from "./internal.ts";
+
+export class IoTFleetWiseFleetUnexpectedResponse extends Data.TaggedError(
+  "IoTFleetWiseFleetUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface FleetProps {
   /**
@@ -50,8 +58,18 @@ export interface Fleet extends Resource<
     signalCatalogArn: string;
   },
   never,
-  Providers
+  Providers,
+  FleetLookup
 > {}
+
+/**
+ * Props for {@link Fleet.lookup}: find a fleet this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface FleetLookup {
+  /** The fleet id of the existing fleet. */
+  fleetId: string;
+}
 
 /**
  * An AWS IoT FleetWise fleet — a group of vehicles that campaigns can
@@ -69,6 +87,16 @@ export interface Fleet extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing fleet
+ * `Fleet.lookup` references a fleet Alchemy doesn't manage (created in the
+ * console or by another stack), found by `fleetId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing fleet
+ * ```typescript
+ * const existing = AWS.IoTFleetWise.Fleet.lookup({ fleetId: "my-fleet" });
+ * ```
+ *
  * @resource
  */
 export const Fleet = Resource<Fleet>("AWS.IoTFleetWise.Fleet");
@@ -83,7 +111,7 @@ export const FleetProvider = () =>
       const readFleet = Effect.fn(function* (fleetId: string) {
         return yield* iotfleetwise.getFleet({ fleetId }).pipe(
           inFleetWiseRegion,
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 
@@ -105,6 +133,13 @@ export const FleetProvider = () =>
           if (news.signalCatalogArn !== olds.signalCatalogArn) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ fleetId }) {
+          const found = yield* readFleet(fleetId);
+          if (found === undefined) return undefined;
+          const attrs = toAttrs(found);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
@@ -140,7 +175,11 @@ export const FleetProvider = () =>
             observed = yield* readFleet(fleetId).pipe(
               Effect.flatMap((fleet) =>
                 fleet === undefined
-                  ? Effect.fail(new Error(`Fleet '${fleetId}' not found`))
+                  ? Effect.fail(
+                      new IoTFleetWiseFleetUnexpectedResponse({
+                        message: `Fleet '${fleetId}' not found`,
+                      }),
+                    )
                   : Effect.succeed(fleet),
               ),
               retryObservation,

@@ -176,7 +176,7 @@ const waitForBaselineOperation = (operationIdentifier: string) =>
 const readEnabledBaseline = (enabledBaselineArn: string) =>
   controltower.getEnabledBaseline({ enabledBaselineIdentifier: enabledBaselineArn }).pipe(
     Effect.map((r) => r.enabledBaselineDetails),
-    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
   );
 
 // Find an enabled baseline by (baselineIdentifier, targetIdentifier) —
@@ -324,7 +324,7 @@ export const EnabledBaselineProvider = () =>
             controltower.disableBaseline({
               enabledBaselineIdentifier: output.enabledBaselineArn,
             }),
-          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           if (result !== undefined) {
             yield* session.note(`baseline operation ${result.operationIdentifier}`);
             yield* waitForBaselineOperation(result.operationIdentifier);

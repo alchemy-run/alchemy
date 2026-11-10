@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -105,8 +106,39 @@ export type ConnectionsGitRepositoryLink = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ConnectionsGitRepositoryLinkLookup
 >;
+
+/**
+ * Props for {@link ConnectionsGitRepositoryLink.lookup}: find a connections
+ * git repository link this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface ConnectionsGitRepositoryLinkLookup {
+  /**
+   * Git repository link id (the `{gitRepositoryLink}` segment of
+   * `{connection}/gitRepositoryLinks/{gitRepositoryLink}`). Unique within
+   * the connection.
+   */
+  gitRepositoryLinkId: string;
+  /**
+   * Parent Developer Connect connection. Full name
+   * `projects/{project}/locations/{location}/connections/{connection}` or
+   * the connection id (combined with `location`).
+   */
+  connection: string;
+  /**
+   * Region used when `connection` is a bare id. `US-CENTRAL1` is accepted
+   * and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Developer Connect git repository link — associates a remote Git
@@ -157,6 +189,20 @@ export type ConnectionsGitRepositoryLink = Resource<
  * ```typescript
  * const fetchReadToken = yield* GCP.DeveloperConnect.FetchReadToken(source);
  * const { token } = yield* fetchReadToken();
+ * ```
+ *
+ * ### Looking up an existing connections git repository link
+ * `ConnectionsGitRepositoryLink.lookup` references a connections git
+ * repository link Alchemy doesn't manage (created in the console or by
+ * another stack). It is read during plan/deploy, never created, updated or
+ * deleted, and binds like a declared connections git repository link.
+ *
+ * **Example:** Reference an existing connections git repository link
+ * ```typescript
+ * const connectionsGitRepositoryLink = GCP.DeveloperConnect.ConnectionsGitRepositoryLink.lookup({
+ *   gitRepositoryLinkId: "my-git-repository-link",
+ *   connection: "my-connection",
+ * });
  * ```
  *
  * @resource
@@ -246,7 +292,7 @@ const toAttrs = (item: developerconnect.GitRepositoryLink, project: string, regi
 const getByName = (name: string) =>
   developerconnect
     .getProjectsLocationsConnectionsGitRepositoryLinks({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listLinksAt = (parent: string) =>
   listLabeledPages(
@@ -338,6 +384,18 @@ export const ConnectionsGitRepositoryLinkProvider = () =>
       });
     }),
 
+    lookup: Effect.fn(function* ({ gitRepositoryLinkId, connection, location }) {
+      const env = yield* GcpEnvironment.current;
+      if (typeof connection !== "string" || connection.length === 0) {
+        return undefined;
+      }
+      const parent = resolveParent(env.project, connection, location, env.region);
+      const name = resourceName(parent.parent, gitRepositoryLinkId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       let name = output?.name;
@@ -406,7 +464,7 @@ export const ConnectionsGitRepositoryLinkProvider = () =>
               annotations: news.annotations,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -414,7 +472,7 @@ export const ConnectionsGitRepositoryLinkProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region);
@@ -425,7 +483,7 @@ export const ConnectionsGitRepositoryLinkProvider = () =>
       if (name === undefined || name.length === 0) return;
       const operation = yield* developerconnect
         .deleteProjectsLocationsConnectionsGitRepositoryLinks({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -137,8 +138,33 @@ export type OrganizationSink = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  OrganizationSinkLookup
 >;
+
+/**
+ * Props for {@link OrganizationSink.lookup}: find an organization sink this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface OrganizationSinkLookup {
+  /**
+   * Sink id (the `{sink}` segment of
+   * `organizations/{organization}/sinks/{sink}`). Limited to 100
+   * characters: letters, digits, underscores, hyphens, periods; first
+   * character must be alphanumeric.
+   */
+  sinkId: string;
+  /**
+   * Parent organization (`organizations/{organization}` or the numeric id).
+   */
+  organization?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Logging sink that routes organization log entries to a
@@ -189,6 +215,19 @@ export type OrganizationSink = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing organization sink
+ * `OrganizationSink.lookup` references an organization sink Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * organization sink.
+ *
+ * **Example:** Reference an existing organization sink
+ * ```typescript
+ * const organizationSink = GCP.Logging.OrganizationSink.lookup({
+ *   sinkId: "my-sink",
+ * });
+ * ```
+ *
  * @resource
  * @category Logging
  */
@@ -197,7 +236,7 @@ export const OrganizationSink = Resource<OrganizationSink>("GCP.Logging.Organiza
 export class OrganizationSinkNotResolved extends Data.TaggedError(
   "GCP.Logging.OrganizationSinkNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organization: string, sinkId: string) => `${organization}/sinks/${sinkId}`;
@@ -266,7 +305,7 @@ const toAttrs = (sink: logging.LogSink, organization: string, project: string) =
 const getByName = (name: string) =>
   logging
     .getOrganizationsSinks({ sinkName: name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toCreateBody = (
   sinkId: string,
@@ -301,6 +340,16 @@ export const OrganizationSinkProvider = () =>
       if (!idChanged && !orgChanged) return undefined;
       return { action: "replace" as const, deleteFirst: false };
     }),
+
+    lookup: Effect.fn(function* ({ sinkId, organization: lookupOrganization }) {
+      const env = yield* GcpEnvironment.current;
+      const organization = yield* resolveOrganization(lookupOrganization, undefined);
+      const name = resourceName(organization, sinkId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      const attrs = toAttrs(existing, organization, env.project);
+      return attrs;
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -360,7 +409,7 @@ export const OrganizationSinkProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new OrganizationSinkNotResolved({ name });
+        return yield* new OrganizationSinkNotResolved({ resourceName: name });
       }
 
       const desiredDisabled = news.disabled === true;

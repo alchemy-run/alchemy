@@ -98,8 +98,18 @@ export interface Collection extends Resource<
     dashboardEndpoint?: string;
   },
   {},
-  Providers
+  Providers,
+  CollectionLookup
 > {}
+
+/**
+ * Props for {@link Collection.lookup}: find a collection this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface CollectionLookup {
+  /** The collection name of the existing collection. */
+  collectionName: string;
+}
 
 /**
  * An Amazon OpenSearch Serverless collection — a group of OpenSearch indexes
@@ -154,6 +164,16 @@ export interface Collection extends Resource<
  *   type: "SEARCH",
  *   description: "application logs",
  * });
+ * ```
+ *
+ * ### Looking up an existing collection
+ * `Collection.lookup` references a collection Alchemy doesn't manage (created in the
+ * console or by another stack), found by `collectionName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing collection
+ * ```typescript
+ * const existing = AWS.OpenSearchServerless.Collection.lookup({ collectionName: "my-collection" });
  * ```
  *
  * @resource
@@ -224,6 +244,15 @@ export const CollectionProvider = () =>
               }));
           }),
 
+        lookup: Effect.fn(function* ({ collectionName: name }) {
+          const detail = yield* observeByName(name);
+          if (detail?.id === undefined || detail.arn === undefined) {
+            return undefined;
+          }
+          const attrs = toAttributes(detail);
+          return attrs;
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.collectionName ?? (yield* createName(id, olds ?? {}));
           const detail = yield* observeByName(name);
@@ -279,7 +308,7 @@ export const CollectionProvider = () =>
               .pipe(
                 Effect.map((r) => r.createCollectionDetail),
                 // a concurrent reconciler already created it — fall through
-                Effect.catchTag("ConflictException", () => Effect.succeed(undefined)),
+                Effect.catchTag("ConflictException", () => Effect.undefined),
               );
             const collectionId = created?.id ?? (yield* observeByName(name))?.id;
             if (collectionId === undefined) {

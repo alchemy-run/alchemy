@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -99,8 +100,34 @@ export type MirroringEndpointGroupAssociation = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  MirroringEndpointGroupAssociationLookup
 >;
+
+/**
+ * Props for {@link MirroringEndpointGroupAssociation.lookup}: find a
+ * mirroring endpoint group association this stack doesn't manage by its
+ * identifiers, in the ambient project unless `project` names another.
+ */
+export interface MirroringEndpointGroupAssociationLookup {
+  /**
+   * Association id (the `{mirroringEndpointGroupAssociation}` segment of
+   * `pr
+   * ojects/{project}/locations/{location}/mirroringEndpointGroupAssociations
+   * /{mirroringEndpointGroupAssociation}`).
+   */
+  mirroringEndpointGroupAssociationId: string;
+  /**
+   * Location of the association. Associations are global — always
+   * `"global"`. `GLOBAL` is accepted and normalized to `global`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Network Security Integration mirroring endpoint-group association —
@@ -142,6 +169,20 @@ export type MirroringEndpointGroupAssociation = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing mirroring endpoint group association
+ * `MirroringEndpointGroupAssociation.lookup` references a mirroring
+ * endpoint group association Alchemy doesn't manage (created in the console
+ * or by another stack). It is read during plan/deploy, never created,
+ * updated or deleted, and binds like a declared mirroring endpoint group
+ * association.
+ *
+ * **Example:** Reference an existing mirroring endpoint group association
+ * ```typescript
+ * const mirroringEndpointGroupAssociation = GCP.NetworkSecurity.MirroringEndpointGroupAssociation.lookup({
+ *   mirroringEndpointGroupAssociationId: "my-mirroring-endpoint-group-association",
+ * });
+ * ```
+ *
  * @resource
  * @category NetworkSecurity
  */
@@ -152,20 +193,20 @@ export const MirroringEndpointGroupAssociation = Resource<MirroringEndpointGroup
 export class MirroringEndpointGroupAssociationNotResolved extends Data.TaggedError(
   "GCP.NetworkSecurity.MirroringEndpointGroupAssociationNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class MirroringEndpointGroupAssociationFailed extends Data.TaggedError(
   "GCP.NetworkSecurity.MirroringEndpointGroupAssociationFailed",
 )<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
 export class MirroringEndpointGroupAssociationStillExists extends Data.TaggedError(
   "GCP.NetworkSecurity.MirroringEndpointGroupAssociationStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const isPendingState = (state: string | undefined) =>
@@ -209,26 +250,26 @@ const toAttrs = (
 const getByName = (name: string) =>
   networksecurity
     .getProjectsLocationsMirroringEndpointGroupAssociations({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (association): association is networksecurity.MirroringEndpointGroupAssociation =>
         association !== undefined,
-      () => new MirroringEndpointGroupAssociationNotResolved({ name }),
+      () => new MirroringEndpointGroupAssociationNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (association) => association.state !== "DELETE_FAILED",
       (association) =>
         new MirroringEndpointGroupAssociationFailed({
-          name,
+          resourceName: name,
           state: association.state,
         }),
     ),
     Effect.filterOrFail(
       (association) => !isPendingState(association.state),
-      () => new MirroringEndpointGroupAssociationNotResolved({ name }),
+      () => new MirroringEndpointGroupAssociationNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) =>
@@ -243,7 +284,7 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((association) =>
       association === undefined
         ? Effect.void
-        : Effect.fail(new MirroringEndpointGroupAssociationStillExists({ name })),
+        : Effect.fail(new MirroringEndpointGroupAssociationStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) =>
@@ -305,6 +346,23 @@ export const MirroringEndpointGroupAssociationProvider = () =>
       if (!replace) return undefined;
       return { action: "replace" as const };
     }),
+
+    lookup: Effect.fn(function* ({
+      mirroringEndpointGroupAssociationId,
+      location: lookupLocation,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = resourceName(
+        env.project,
+        location,
+        COLLECTION,
+        mirroringEndpointGroupAssociationId,
+      );
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -371,7 +429,7 @@ export const MirroringEndpointGroupAssociationProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -381,7 +439,7 @@ export const MirroringEndpointGroupAssociationProvider = () =>
 
       if (current === undefined) {
         return yield* new MirroringEndpointGroupAssociationNotResolved({
-          name,
+          resourceName: name,
         });
       }
 
@@ -417,7 +475,7 @@ export const MirroringEndpointGroupAssociationProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

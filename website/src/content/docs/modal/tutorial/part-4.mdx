@@ -1,0 +1,38 @@
+---
+title: "Part 4: Update the Image"
+description: Change the warm Modal image, redeploy, and see new sandboxes start from the new image while users keep their files.
+sidebar:
+  order: 4
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+## Add a command
+
+Install pnpm into the warm image:
+
+```diff lang="typescript"
+// src/Sandbox.ts
+export const Warm = Modal.Image("Warm", {
+  app: Coder,
+  from: Node,
+-  run: ["git clone --depth 1 https://github.com/sindresorhus/is /work"],
++  run: ["git clone --depth 1 https://github.com/sindresorhus/is /work", "npm install -g pnpm"],
+});
+```
+
+## Deploy the new base
+
+<PackageManagers run="alchemy deploy" />
+
+`run` changed, so Modal builds a new image: it runs the commands again in a fresh sandbox and saves the result. The Worker is unchanged and isn't redeployed.
+
+<PackageManagers script={`curl -X POST "$URL/users/ada/run" -d 'pnpm --version'`} />
+
+## Users keep their files
+
+A sandbox that's already running keeps the image it booted from, until its command exits. Every sandbox started after the deploy boots from the new `Warm`, and mounts the same user volume, so Ada's notes are still there, now next to pnpm.
+
+## Next
+
+[Part 5](/modal/tutorial/part-5) tests it.

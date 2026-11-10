@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -83,10 +84,6 @@ export type UnitKindProps = {
    */
   defaultRelease?: string;
   /**
-   * Default flag revisions applied to newly created units.
-   */
-  defaultFlagRevisions?: string[];
-  /**
    * Other unit kinds this kind depends on. Immutable — changing them
    * replaces the unit kind.
    */
@@ -127,8 +124,6 @@ export type UnitKind = Resource<
     saasId: string | undefined;
     /** Default release resource name. */
     defaultRelease: string | undefined;
-    /** Default flag revisions. */
-    defaultFlagRevisions: ReadonlyArray<string>;
     /** Declared dependencies. */
     dependencies: UnitKindDependency[];
     /** Input variable mappings. */
@@ -151,8 +146,32 @@ export type UnitKind = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  UnitKindLookup
 >;
+
+/**
+ * Props for {@link UnitKind.lookup}: find an unit kind this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface UnitKindLookup {
+  /**
+   * UnitKind id (the `{unitKind}` segment of
+   * `projects/{project}/locations/{location}/unitKinds/{unitKind}`).
+   */
+  unitKindId: string;
+  /**
+   * Region of the unit kind (`us-central1`, …). `US-CENTRAL1` is accepted
+   * and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An App Lifecycle Manager unit kind — the blueprint family that Units
@@ -186,6 +205,18 @@ export type UnitKind = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing unit kind
+ * `UnitKind.lookup` references an unit kind Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared unit kind.
+ *
+ * **Example:** Reference an existing unit kind
+ * ```typescript
+ * const unitKind = GCP.SaasServiceManagement.UnitKind.lookup({
+ *   unitKindId: "my-unit-kind",
+ * });
+ * ```
+ *
  * @resource
  * @category SaasServiceManagement
  */
@@ -214,7 +245,6 @@ const toAttrs = (item: saasservicemgmt.UnitKind, project: string) => {
     saas: item.saas,
     saasId: item.saas ? lastSegment(item.saas) : undefined,
     defaultRelease: item.defaultRelease,
-    defaultFlagRevisions: item.defaultFlagRevisions ?? [],
     dependencies: (item.dependencies ?? []).map((dependency) => ({
       unitKind: dependency.unitKind,
       alias: dependency.alias,
@@ -233,10 +263,10 @@ const toAttrs = (item: saasservicemgmt.UnitKind, project: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : saasservicemgmt
         .getProjectsLocationsUnitKinds({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string, location: string) =>
   collectPages(
@@ -284,6 +314,15 @@ export const UnitKindProvider = () =>
       });
     }),
 
+    lookup: Effect.fn(function* ({ unitKindId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation ?? env.region);
+      const name = resourceName(env.project, location, COLLECTION, unitKindId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const unitKindId = yield* toPhysicalId(id, olds?.unitKindId, output?.unitKindId, "ukind");
@@ -329,7 +368,6 @@ export const UnitKindProvider = () =>
             body: {
               saas,
               defaultRelease,
-              defaultFlagRevisions: news.defaultFlagRevisions,
               dependencies,
               inputVariableMappings: news.inputVariableMappings,
               outputVariableMappings: news.outputVariableMappings,
@@ -351,7 +389,7 @@ export const UnitKindProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -362,9 +400,6 @@ export const UnitKindProvider = () =>
         fingerprint(userAnnotations(current.annotations)) !== fingerprint(annotations);
       const defaultReleaseChanged =
         news.defaultRelease !== undefined && !sameRef(current.defaultRelease, defaultRelease);
-      const flagRevisionsChanged =
-        news.defaultFlagRevisions !== undefined &&
-        fingerprint(current.defaultFlagRevisions) !== fingerprint(news.defaultFlagRevisions);
       const inputChanged =
         news.inputVariableMappings !== undefined &&
         fingerprint(current.inputVariableMappings) !== fingerprint(news.inputVariableMappings);
@@ -375,7 +410,6 @@ export const UnitKindProvider = () =>
         labelsChanged && "labels",
         annotationsChanged && "annotations",
         defaultReleaseChanged && "defaultRelease",
-        flagRevisionsChanged && "defaultFlagRevisions",
         inputChanged && "inputVariableMappings",
         outputChanged && "outputVariableMappings",
       ]);
@@ -388,7 +422,6 @@ export const UnitKindProvider = () =>
             name: current.name ?? name,
             etag: current.etag,
             defaultRelease,
-            defaultFlagRevisions: news.defaultFlagRevisions,
             inputVariableMappings: news.inputVariableMappings,
             outputVariableMappings: news.outputVariableMappings,
             labels: desiredLabels,

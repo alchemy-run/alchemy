@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -147,8 +148,31 @@ export type ConnectCluster = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ConnectClusterLookup
 >;
+
+/**
+ * Props for {@link ConnectCluster.lookup}: find a connect cluster this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface ConnectClusterLookup {
+  /**
+   * Connect cluster id. Lowercase letters, digits, and hyphens; max 53
+   * characters (longer values are truncated).
+   */
+  connectClusterId: string;
+  /**
+   * Region (`us-central1`, …).
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Managed Service for Apache Kafka Connect cluster.
@@ -174,6 +198,19 @@ export type ConnectCluster = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing connect cluster
+ * `ConnectCluster.lookup` references a connect cluster Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * connect cluster.
+ *
+ * **Example:** Reference an existing connect cluster
+ * ```typescript
+ * const connectCluster = GCP.ManagedKafka.ConnectCluster.lookup({
+ *   connectClusterId: "my-connect-cluster",
+ * });
+ * ```
+ *
  * @resource
  * @category ManagedKafka
  */
@@ -182,7 +219,7 @@ export const ConnectCluster = Resource<ConnectCluster>("GCP.ManagedKafka.Connect
 export class ConnectClusterNotResolved extends Data.TaggedError(
   "GCP.ManagedKafka.ConnectClusterNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, connectClusterId: string) =>
@@ -259,6 +296,15 @@ export const ConnectClusterProvider = () =>
       });
     }),
 
+    lookup: Effect.fn(function* ({ connectClusterId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, connectClusterId);
+      const existing = yield* getConnectCluster(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const connectClusterId = yield* toPhysicalId(
@@ -322,7 +368,7 @@ export const ConnectClusterProvider = () =>
           })
           .pipe(
             retryCreateQuota,
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -331,7 +377,7 @@ export const ConnectClusterProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ConnectClusterNotResolved({ name });
+        return yield* new ConnectClusterNotResolved({ resourceName: name });
       }
 
       current = yield* waitUntilReady(getConnectCluster(name), name, (cluster) => cluster.state);
@@ -369,7 +415,7 @@ export const ConnectClusterProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
       return toAttrs(current, env.project);
     }),
@@ -377,7 +423,7 @@ export const ConnectClusterProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const op = yield* kafka
         .deleteProjectsLocationsConnectClusters({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (op !== undefined) {
         yield* waitForOperation(op, { notFoundOk: true });
       }

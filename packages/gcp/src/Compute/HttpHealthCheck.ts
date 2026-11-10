@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitGlobalOperation } from "./operations.ts";
@@ -103,8 +104,26 @@ export type HttpHealthCheck = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  HttpHealthCheckLookup
 >;
+
+/**
+ * Props for {@link HttpHealthCheck.lookup}: find a http health check this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface HttpHealthCheckLookup {
+  /**
+   * Health check name (RFC1035, 1-63 chars).
+   */
+  httpHealthCheckName: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A legacy global Compute Engine HTTP health check.
@@ -139,6 +158,19 @@ export type HttpHealthCheck = Resource<
  * });
  * const pool = yield* GCP.Compute.TargetPool("backends", {
  *   healthChecks: [check.httpHealthCheckName],
+ * });
+ * ```
+ *
+ * ### Looking up an existing http health check
+ * `HttpHealthCheck.lookup` references a http health check Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * http health check.
+ *
+ * **Example:** Reference an existing http health check
+ * ```typescript
+ * const httpHealthCheck = GCP.Compute.HttpHealthCheck.lookup({
+ *   httpHealthCheckName: "my-http-health-check",
  * });
  * ```
  *
@@ -286,7 +318,7 @@ const needsUpdate = (current: compute.HttpHealthCheck, desired: compute.HttpHeal
 const getByName = (project: string, httpHealthCheck: string) =>
   compute
     .getHttpHealthChecks({ project, httpHealthCheck })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, httpHealthCheckName: string) =>
   getByName(project, httpHealthCheckName).pipe(
@@ -316,6 +348,13 @@ export const HttpHealthCheckProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ httpHealthCheckName }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(env.project, httpHealthCheckName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -367,7 +406,7 @@ export const HttpHealthCheckProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         current = yield* awaitResource(env.project, httpHealthCheckName);
       }
@@ -408,7 +447,7 @@ export const HttpHealthCheckProvider = () =>
             schedule: Schedule.spaced("2 seconds"),
             times: 8,
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitGlobalOperation(env.project, operation).pipe(

@@ -155,7 +155,7 @@ const resolveName = (id: string, name?: string) =>
 const getImage = (identifier: string) =>
   microvms
     .getMicrovmImage({ imageIdentifier: identifier })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
 // Look an image up by its (name-only) identifier via the name filter, since
 // `getMicrovmImage` won't accept a name. Returns the full image or undefined.
@@ -614,7 +614,7 @@ const waitForDeleted = (imageArn: string, session: ScopedPlanStatusSession) =>
   Effect.gen(function* () {
     const image = yield* microvms
       .getMicrovmImage({ imageIdentifier: imageArn })
-      .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
     if (!image || image.state === "DELETED") return;
     if (image.state === "DELETE_FAILED") {
       return yield* new ImageFailed({ imageArn, state: image.state });

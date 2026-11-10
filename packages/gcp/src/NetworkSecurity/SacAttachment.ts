@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -86,8 +87,33 @@ export type SacAttachment = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SacAttachmentLookup
 >;
+
+/**
+ * Props for {@link SacAttachment.lookup}: find a sac attachment this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface SacAttachmentLookup {
+  /**
+   * Attachment id (the `{sacAttachment}` segment of
+   * `projects/{project}/loca
+   * tions/{location}/sacAttachments/{sacAttachment}`).
+   */
+  sacAttachmentId: string;
+  /**
+   * Region of the attachment (e.g. `us-central1`). `US-CENTRAL1` is
+   * accepted and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Secure Access Connect (SAC) attachment — binds an NCC Gateway to a
@@ -120,6 +146,19 @@ export type SacAttachment = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing sac attachment
+ * `SacAttachment.lookup` references a sac attachment Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * sac attachment.
+ *
+ * **Example:** Reference an existing sac attachment
+ * ```typescript
+ * const sacAttachment = GCP.NetworkSecurity.SacAttachment.lookup({
+ *   sacAttachmentId: "my-sac-attachment",
+ * });
+ * ```
+ *
  * @resource
  * @category NetworkSecurity
  */
@@ -128,13 +167,13 @@ export const SacAttachment = Resource<SacAttachment>("GCP.NetworkSecurity.SacAtt
 export class SacAttachmentNotResolved extends Data.TaggedError(
   "GCP.NetworkSecurity.SacAttachmentNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class SacAttachmentStillExists extends Data.TaggedError(
   "GCP.NetworkSecurity.SacAttachmentStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (attachment: networksecurity.SACAttachment, project: string, region: string) => {
@@ -157,13 +196,13 @@ const toAttrs = (attachment: networksecurity.SACAttachment, project: string, reg
 const getByName = (name: string) =>
   networksecurity
     .getProjectsLocationsSacAttachments({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (attachment): attachment is networksecurity.SACAttachment => attachment !== undefined,
-      () => new SacAttachmentNotResolved({ name }),
+      () => new SacAttachmentNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.SacAttachmentNotResolved",
@@ -175,7 +214,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((attachment) =>
-      attachment === undefined ? Effect.void : Effect.fail(new SacAttachmentStillExists({ name })),
+      attachment === undefined
+        ? Effect.void
+        : Effect.fail(new SacAttachmentStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.SacAttachmentStillExists",
@@ -241,6 +282,15 @@ export const SacAttachmentProvider = () =>
       return { action: "replace" as const };
     }),
 
+    lookup: Effect.fn(function* ({ sacAttachmentId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, COLLECTION, sacAttachmentId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const sacAttachmentId = yield* toId(
@@ -299,7 +349,7 @@ export const SacAttachmentProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -308,7 +358,7 @@ export const SacAttachmentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SacAttachmentNotResolved({ name });
+        return yield* new SacAttachmentNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region);
@@ -323,7 +373,7 @@ export const SacAttachmentProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

@@ -157,7 +157,7 @@ const credentialsOf = (
 /** `newAccount` with `onlyReturnExisting` — the account, or `undefined`. */
 const observeAccount = (credentials: AccountCredentials) =>
   acme.newAccount({ onlyReturnExisting: true }).pipe(
-    Effect.catchTag("AcmeAccountDoesNotExist", () => Effect.succeed(undefined)),
+    Effect.catchTag("AcmeAccountDoesNotExist", () => Effect.undefined),
     Effect.provide(accountLayer(credentials)),
   );
 
@@ -247,9 +247,7 @@ export const AccountProvider = () =>
       // Deactivation is permanent and idempotent: a deactivated account
       // answers `unauthorized`, a purged one `accountDoesNotExist`.
       yield* acme.updateAccount({ url: output.accountUrl, status: "deactivated" }).pipe(
-        Effect.catchTag(["AcmeAccountDoesNotExist", "AcmeUnauthorized"], () =>
-          Effect.succeed(undefined),
-        ),
+        Effect.catchTag(["AcmeAccountDoesNotExist", "AcmeUnauthorized"], () => Effect.undefined),
         Effect.provide(accountLayer(credentials)),
       );
     }),

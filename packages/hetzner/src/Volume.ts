@@ -20,6 +20,8 @@ import {
   createInternalLabels,
   diffLabels,
   hasAlchemyLabels,
+  isReplacedGeneration,
+  keepsName,
   labelSelector,
   stripInternalLabels,
   toLabels,
@@ -121,8 +123,18 @@ export type Volume = Resource<
     labels: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  VolumeLookup
 >;
+
+/**
+ * Props for {@link Volume.lookup}: find a volume this stack
+ * doesn't manage by its name.
+ */
+export interface VolumeLookup {
+  /** Volume name (unique in the project). */
+  name: string;
+}
 
 /**
  * A Hetzner Cloud Volume — a network block device that can be attached to
@@ -171,6 +183,16 @@ export type Volume = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing volume
+ * `Volume.lookup` references a volume Alchemy doesn't manage (created in
+ * the Hetzner Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing volume
+ * ```typescript
+ * const data = Hetzner.Volume.lookup({ name: "data" });
+ * ```
+ *
  * @resource
  * @product Volume
  */
@@ -188,7 +210,9 @@ class VolumeTimeout extends Data.TaggedError("VolumeTimeout")<{
   status: string;
 }> {}
 
-class VolumeNotCreated extends Data.TaggedError("Hetzner.VolumeNotCreated")<{ name: string }> {}
+class VolumeNotCreated extends Data.TaggedError("Hetzner.VolumeNotCreated")<{
+  resourceName: string;
+}> {}
 
 const asFormat = (format: string | null | undefined): VolumeFormat | undefined =>
   format === "ext4" || format === "xfs" ? format : undefined;
@@ -233,7 +257,7 @@ const createVolumeName = (id: string, name: string | undefined, existing?: strin
 const getById = (id: number) =>
   Hetzner.volumes.getVolume({ id }).pipe(
     Effect.map(({ volume }) => volume),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const getByName = (name: string) =>
@@ -298,6 +322,17 @@ const waitUntilGone = (volumeId: number) =>
     }),
   );
 
+/** Poll until the Volume is detached or gone. Bounded to ~30s. */
+const waitUntilDetached = (volumeId: number) =>
+  getById(volumeId).pipe(
+    Effect.map((volume) => volume === undefined || volume.server === null),
+    Effect.repeat({
+      schedule: Schedule.spaced(Duration.seconds(2)),
+      until: (detached) => detached,
+      times: 15,
+    }),
+  );
+
 const serverIdOf = (value: unknown): number | undefined => {
   if (value == null || typeof value !== "object") return undefined;
   const id = (value as { serverId?: unknown }).serverId;
@@ -320,20 +355,35 @@ export const VolumeProvider = () =>
       if (!isResolved(news)) return undefined;
       if (output !== undefined) {
         if (news.location !== undefined && news.location !== output.location) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
         if (news.format !== undefined && news.format !== output.format) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
         if (news.size < output.size) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
       }
       return undefined;
     }),
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ name }) {
+      const found = yield* getByName(name);
+      return found === undefined ? undefined : toAttrs(found);
+    }),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const found = yield* observe({ id, name: olds?.name ?? output?.name, outputId: output?.id });
       if (found === undefined) return undefined;
+      if (
+        isReplacedGeneration({
+          previousId: previous?.id,
+          foundId: found.id,
+          claimedName: olds?.name,
+          foundName: found.name,
+        })
+      ) {
+        return undefined;
+      }
       const attrs = toAttrs(found);
       const owned = yield* hasAlchemyLabels(id, tagRecord(found.labels));
       return owned ? attrs : Unowned(attrs);
@@ -367,7 +417,7 @@ export const VolumeProvider = () =>
             server: desiredServerId,
             automount: desiredServerId !== undefined ? news.automount : undefined,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           if (created.action) {
             yield* settleActions([created.action, ...created.next_actions]);
@@ -376,7 +426,7 @@ export const VolumeProvider = () =>
         } else {
           const hit = yield* getByName(name);
           if (hit === undefined) {
-            return yield* new VolumeNotCreated({ name });
+            return yield* new VolumeNotCreated({ resourceName: name });
           }
           current = yield* waitUntilAvailable(hit.id);
         }
@@ -417,7 +467,7 @@ export const VolumeProvider = () =>
         if (desiredServerId !== undefined) {
           const { action } = yield* Hetzner.volumeActions.attachVolume({
             id: current.id,
-            server: desiredServerId,
+            assignee: { id: desiredServerId, type: "server" },
             automount: news.automount,
           });
           yield* settleAction(action);
@@ -446,6 +496,9 @@ export const VolumeProvider = () =>
           // Server delete detaches the Volume first; treat that race as
           // already-detached.
           Effect.catchTag(["NotFound", "UnprocessableEntity"], () => Effect.void),
+          // The server's own delete can also fail our detach action while it
+          // detaches the Volume itself; wait for that detach to land.
+          Effect.catchTag("ActionFailed", () => waitUntilDetached(current.id)),
         );
       }
 

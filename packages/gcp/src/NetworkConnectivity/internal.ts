@@ -14,17 +14,17 @@ export const MAX_NAME_LENGTH = 63;
 export class NetworkConnectivityNotResolved extends Data.TaggedError(
   "GCP.NetworkConnectivity.NotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class NetworkConnectivityStillExists extends Data.TaggedError(
   "GCP.NetworkConnectivity.StillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class NetworkConnectivityFailed extends Data.TaggedError("GCP.NetworkConnectivity.Failed")<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
@@ -175,7 +175,7 @@ export const waitUntilPresent = <A, E, R>(
   get.pipe(
     Effect.filterOrFail(
       (value): value is A => value !== undefined,
-      () => new NetworkConnectivityNotResolved({ name }),
+      () => new NetworkConnectivityNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error instanceof NetworkConnectivityNotResolved,
@@ -191,7 +191,7 @@ export const waitUntilGone = <A, E, R>(
   get.pipe(
     Effect.filterOrFail(
       (value) => value === undefined,
-      () => new NetworkConnectivityStillExists({ name }),
+      () => new NetworkConnectivityStillExists({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error instanceof NetworkConnectivityStillExists,
@@ -219,15 +219,15 @@ export const waitUntilReady = <A extends { state?: string }, E, R>(
   get.pipe(
     Effect.filterOrFail(
       (value): value is A => value !== undefined,
-      () => new NetworkConnectivityNotResolved({ name }),
+      () => new NetworkConnectivityNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (value) => !FAILED_STATES.has(value.state ?? ""),
-      (value) => new NetworkConnectivityFailed({ name, state: value.state }),
+      (value) => new NetworkConnectivityFailed({ resourceName: name, state: value.state }),
     ),
     Effect.filterOrFail(
       (value) => !PENDING_STATES.has(value.state ?? ""),
-      () => new NetworkConnectivityNotResolved({ name }),
+      () => new NetworkConnectivityNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error instanceof NetworkConnectivityNotResolved,

@@ -151,6 +151,7 @@ export const ContainerPlatform: Platform<
         get: <T>(key: string) =>
           // Read straight from `process.env` — see `unpackEnvValue` for why
           // this must never resolve through `Config.String`.
+          // oxlint-disable-next-line effecttsgo/process-env-in-effect -- must read raw process.env, never Config (see unpackEnvValue)
           Effect.sync(() => unpackEnvValue<T>(process.env[key]) as T),
         run: ((effect: Effect.Effect<void, never, any>) =>
           Effect.sync(() => {
@@ -158,8 +159,9 @@ export const ContainerPlatform: Platform<
           })) as unknown as ProcessContext["run"],
         serve,
         exports: Effect.sync(() => ({
-          default: Effect.all(
-            runners.map((eff) =>
+          default: Effect.forEach(
+            runners,
+            (eff) =>
               Effect.forever(
                 eff.pipe(
                   // Log and ignore errors (daemon mode, it should just re-run)
@@ -169,7 +171,6 @@ export const ContainerPlatform: Platform<
                   // Effect.ignoreCause
                 ),
               ),
-            ),
             {
               concurrency: "unbounded",
             },

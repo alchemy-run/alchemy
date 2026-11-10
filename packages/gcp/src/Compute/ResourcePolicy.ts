@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitRegionOperation } from "./operations.ts";
@@ -103,8 +104,31 @@ export type ResourcePolicy = Resource<
     creationTimestamp: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ResourcePolicyLookup
 >;
+
+/**
+ * Props for {@link ResourcePolicy.lookup}: find a resource policy this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface ResourcePolicyLookup {
+  /**
+   * Resource policy name (RFC1035, 1-63 characters).
+   */
+  resourcePolicyName: string;
+  /**
+   * Region the policy lives in (e.g. `us-central1`). `US-CENTRAL1` is
+   * accepted and normalized to `us-central1`.
+   */
+  region?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A regional Compute Engine resource policy.
@@ -165,6 +189,19 @@ export type ResourcePolicy = Resource<
  *     vmStartSchedule: { schedule: "0 8 * * 1-5" },
  *     vmStopSchedule: { schedule: "0 18 * * 1-5" },
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing resource policy
+ * `ResourcePolicy.lookup` references a resource policy Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * resource policy.
+ *
+ * **Example:** Reference an existing resource policy
+ * ```typescript
+ * const resourcePolicy = GCP.Compute.ResourcePolicy.lookup({
+ *   resourcePolicyName: "my-resource-policy",
  * });
  * ```
  *
@@ -432,7 +469,7 @@ const immutablePolicyChanged = (
 const getByName = (project: string, region: string, resourcePolicy: string) =>
   compute
     .getResourcePolicies({ project, region, resourcePolicy })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitPolicyReady = (project: string, region: string, resourcePolicyName: string) =>
   getByName(project, region, resourcePolicyName).pipe(
@@ -514,7 +551,15 @@ export const ResourcePolicyProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ resourcePolicyName, region: lookupRegion }) {
+      const env = yield* GcpEnvironment.current;
+      const region = normalizeRegion(lookupRegion, env.region);
+      const existing = yield* getByName(env.project, region, resourcePolicyName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const resourcePolicyName = yield* toName(
         id,
@@ -526,7 +571,9 @@ export const ResourcePolicyProvider = () =>
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseDescription(existing.description);
-      return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, labels))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "resourcePolicyName");
     }),
 
     list: () =>
@@ -572,7 +619,7 @@ export const ResourcePolicyProvider = () =>
             region,
             body: desired,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (inserted !== undefined) {
           yield* waitRegionOperation(env.project, region, inserted, {
             ignore: ["RESOURCE_ALREADY_EXISTS"],
@@ -643,7 +690,7 @@ export const ResourcePolicyProvider = () =>
           resourcePolicy: output.resourcePolicyName,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

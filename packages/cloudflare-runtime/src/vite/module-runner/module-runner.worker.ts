@@ -160,7 +160,6 @@ export class ModuleRunnerDO extends DurableObject<Env> {
       // The entry failing to evaluate is reported to the user through the
       // request that triggered it; the dev server keeps its current export
       // types.
-      // oxlint-disable-next-line no-console
       console.error("Failed to determine the Worker entry's export types:", error);
       data = null;
     }
@@ -237,7 +236,6 @@ export class ModuleRunnerDO extends DurableObject<Env> {
             await fn(...Object.values(context));
             Object.seal(context[ssrModuleExportsKey]);
           } catch (error) {
-            // oxlint-disable-next-line no-console
             console.error(`[vite-plugin] Failed to evaluate inlined module "${module.id}":`, error);
             throw error;
           }

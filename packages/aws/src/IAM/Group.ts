@@ -47,8 +47,18 @@ export interface Group extends Resource<
     inlinePolicies: Record<string, PolicyDocument>;
   },
   never,
-  Providers
+  Providers,
+  GroupLookup
 > {}
+
+/**
+ * Props for {@link Group.lookup}: find an IAM group this stack doesn't
+ * manage, in the ambient account, by name.
+ */
+export interface GroupLookup {
+  /** The name of the existing group. */
+  groupName: string;
+}
 
 /**
  * An IAM group that can own managed and inline policies.
@@ -73,6 +83,20 @@ export interface Group extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing group
+ * `Group.lookup` references an IAM group Alchemy doesn't manage (created in the console or by another stack), found by `groupName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Add a new user to an existing group
+ * ```typescript
+ * const admins = AWS.IAM.Group.lookup({ groupName: "admins" });
+ *
+ * yield* AWS.IAM.GroupMembership("BobAdmins", {
+ *   groupName: admins.groupName,
+ *   userNames: [bob.userName],
+ * });
+ * ```
+ *
  * @resource
  */
 export const Group = Resource<Group>("AWS.IAM.Group");
@@ -91,22 +115,20 @@ export const GroupProvider = () =>
           Stream.runCollect,
           Effect.map((chunk) => Array.from(chunk)),
         );
-        const entries = yield* Effect.all(
-          policyNames.map((policyName) =>
-            iam
-              .getGroupPolicy({
-                GroupName: groupName,
-                PolicyName: policyName,
-              })
-              .pipe(
-                Effect.map(
-                  (response) => [policyName, parsePolicyDocument(response.PolicyDocument)] as const,
-                ),
-                Effect.catchTag("NoSuchEntityException", () =>
-                  Effect.succeed([policyName, undefined] as const),
-                ),
+        const entries = yield* Effect.forEach(policyNames, (policyName) =>
+          iam
+            .getGroupPolicy({
+              GroupName: groupName,
+              PolicyName: policyName,
+            })
+            .pipe(
+              Effect.map(
+                (response) => [policyName, parsePolicyDocument(response.PolicyDocument)] as const,
               ),
-          ),
+              Effect.catchTag("NoSuchEntityException", () =>
+                Effect.succeed([policyName, undefined] as const),
+              ),
+            ),
         );
         return Object.fromEntries(
           entries.filter((entry): entry is [string, PolicyDocument] => entry[1] !== undefined),
@@ -216,7 +238,7 @@ export const GroupProvider = () =>
                   // per-group hydration (e.g. a sibling test tearing its group
                   // down) — `NoSuchEntityException` here just means it's gone,
                   // so drop it rather than failing the whole enumeration.
-                  Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+                  Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
                 ),
               { concurrency: 10 },
             );
@@ -231,13 +253,35 @@ export const GroupProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        lookup: Effect.fn(function* ({ groupName }) {
+          const response = yield* iam
+            .getGroup({
+              GroupName: groupName,
+            })
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
+          if (!response?.Group?.Arn) {
+            return undefined;
+          }
+          const [managedPolicyArns, inlinePolicies] = yield* Effect.all([
+            readManagedPolicies(groupName),
+            readInlinePolicies(groupName),
+          ]);
+          return {
+            groupArn: response.Group.Arn,
+            groupName: response.Group.GroupName,
+            groupId: response.Group.GroupId,
+            path: response.Group.Path,
+            managedPolicyArns,
+            inlinePolicies,
+          };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const groupName = output?.groupName ?? (yield* toName(id, olds ?? ({} as GroupProps)));
           const response = yield* iam
             .getGroup({
               GroupName: groupName,
             })
-            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
           if (!response?.Group?.Arn) {
             return undefined;
           }
@@ -263,7 +307,7 @@ export const GroupProvider = () =>
           // ensure step below.
           let observed = yield* iam
             .getGroup({ GroupName: groupName })
-            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
 
           // Ensure — create the group when it is missing. A concurrent
           // peer reconciler may win the race, so tolerate

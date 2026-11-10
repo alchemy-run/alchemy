@@ -6,6 +6,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
 import {
@@ -18,6 +19,13 @@ import {
   type WafScope,
   withWafScope,
 } from "./internal.ts";
+
+export class WAFv2RuleGroupUnexpectedResponse extends Data.TaggedError(
+  "WAFv2RuleGroupUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface RuleGroupProps {
   /**
@@ -90,8 +98,24 @@ export interface RuleGroup extends Resource<
     capacity: number;
   },
   never,
-  Providers
+  Providers,
+  RuleGroupLookup
 > {}
+
+/**
+ * Props for {@link RuleGroup.lookup}: find a rule group this stack doesn't
+ * manage, in the ambient account, by name and scope.
+ */
+export interface RuleGroupLookup {
+  /** The name of the existing rule group. */
+  ruleGroupName: string;
+  /**
+   * `REGIONAL` for one in the ambient region, `CLOUDFRONT` for one that
+   * protects CloudFront distributions.
+   * @default "REGIONAL"
+   */
+  scope?: "REGIONAL" | "CLOUDFRONT";
+}
 
 /**
  * An AWS WAFv2 rule group — a reusable, capacity-bounded collection of rules
@@ -149,6 +173,17 @@ export interface RuleGroup extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing rule group
+ * `RuleGroup.lookup` references a rule group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `ruleGroupName` and `scope`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing rule group
+ * ```typescript
+ * const shared = AWS.WAFv2.RuleGroup.lookup({ ruleGroupName: "shared-rules" });
+ * const ruleGroupArn = shared.ruleGroupArn;
+ * ```
+ *
  * @resource
  */
 export const RuleGroup = Resource<RuleGroup>("AWS.WAFv2.RuleGroup");
@@ -187,9 +222,7 @@ export const RuleGroupProvider = () =>
             scope,
             wafv2
               .getRuleGroup({ Name: name, Scope: scope, Id: cachedId })
-              .pipe(
-                Effect.catchTag("WAFNonexistentItemException", () => Effect.succeed(undefined)),
-              ),
+              .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.undefined)),
           );
           if (byId?.RuleGroup) {
             return byId;
@@ -211,9 +244,7 @@ export const RuleGroupProvider = () =>
               scope,
               wafv2
                 .getRuleGroup({ Name: name, Scope: scope, Id: summary.Id })
-                .pipe(
-                  Effect.catchTag("WAFNonexistentItemException", () => Effect.succeed(undefined)),
-                ),
+                .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.undefined)),
             );
           }
           if (!listed.NextMarker || (listed.RuleGroups?.length ?? 0) === 0) {
@@ -249,13 +280,9 @@ export const RuleGroupProvider = () =>
                         Scope: scope,
                         Id: summary.Id,
                       })
-                      .pipe(
-                        Effect.catchTag("WAFNonexistentItemException", () =>
-                          Effect.succeed(undefined),
-                        ),
-                      ),
+                      .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.undefined)),
                   )
-                : Effect.succeed(undefined),
+                : Effect.undefined,
             { concurrency: 5 },
           );
           for (const detail of details) {
@@ -292,6 +319,11 @@ export const RuleGroupProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ ruleGroupName, scope = defaultScope }) {
+          const found = yield* findRuleGroup(scope, ruleGroupName, undefined);
+          return found?.RuleGroup ? toAttrs(found.RuleGroup, scope) : undefined;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
@@ -335,18 +367,16 @@ export const RuleGroupProvider = () =>
                     CustomResponseBodies: news.customResponseBodies,
                     Tags: createTagsList(desiredTags),
                   })
-                  .pipe(
-                    Effect.catchTag("WAFDuplicateItemException", () => Effect.succeed(undefined)),
-                  ),
+                  .pipe(Effect.catchTag("WAFDuplicateItemException", () => Effect.undefined)),
               ),
             );
             observed = yield* findRuleGroup(scope, name, undefined);
           }
 
           if (!observed?.RuleGroup) {
-            return yield* Effect.fail(
-              new Error(`Failed to observe RuleGroup '${name}' after create`),
-            );
+            return yield* new WAFv2RuleGroupUnexpectedResponse({
+              message: `Failed to observe RuleGroup '${name}' after create`,
+            });
           }
 
           const group = observed.RuleGroup;
@@ -413,9 +443,7 @@ export const RuleGroupProvider = () =>
                   Scope: scope,
                   Id: output.ruleGroupId,
                 })
-                .pipe(
-                  Effect.catchTag("WAFNonexistentItemException", () => Effect.succeed(undefined)),
-                ),
+                .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.undefined)),
             );
             if (!found?.RuleGroup || found.LockToken === undefined) {
               return;

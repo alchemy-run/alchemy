@@ -76,7 +76,50 @@ export interface OperationAttributes {
   lastUpdated: string;
 }
 
-export type Operation = Resource<TypeId, OperationProps, OperationAttributes, never, Providers>;
+export type Operation = Resource<
+  TypeId,
+  OperationProps,
+  OperationAttributes,
+  never,
+  Providers,
+  OperationLookup
+>;
+
+/**
+ * Props for {@link Operation.lookup}: find an operation this stack doesn't
+ * manage, by its id or by the `(method, host, endpoint)` tuple that
+ * identifies it.
+ */
+export type OperationLookup =
+  | {
+      /**
+       * The zone the existing operation belongs to.
+       */
+      zoneId: string;
+      /**
+       * The UUID of the existing operation.
+       */
+      operationId: string;
+    }
+  | {
+      /**
+       * The zone the existing operation belongs to.
+       */
+      zoneId: string;
+      /**
+       * The HTTP method of the existing operation.
+       */
+      method: OperationMethod;
+      /**
+       * The hostname of the existing operation.
+       */
+      host: string;
+      /**
+       * The endpoint path of the existing operation. Path parameters can use
+       * any name (`{id}`); Cloudflare stores them as `{var1}`, `{var2}`, ...
+       */
+      endpoint: string;
+    };
 
 /**
  * A Cloudflare API Shield operation — a registered API endpoint on a zone,
@@ -111,6 +154,27 @@ export type Operation = Resource<TypeId, OperationProps, OperationAttributes, ne
  *   method: "POST",
  *   host: "api.example.com",
  *   endpoint: "/api/v1/users",
+ * });
+ * ```
+ *
+ * ### Looking up an existing operation
+ * `Operation.lookup` references an operation Alchemy doesn't manage (saved
+ * from discovery, in the dashboard or by another stack), found by
+ * `operationId` or by its `method`, `host` and `endpoint`. It is read during
+ * plan/deploy and never created or deleted.
+ *
+ * **Example:** Override schema validation for a discovered endpoint
+ * ```typescript
+ * const getUser = Cloudflare.ApiShield.Operation.lookup({
+ *   zoneId: zone.zoneId,
+ *   method: "GET",
+ *   host: "api.example.com",
+ *   endpoint: "/api/v1/users/{id}",
+ * });
+ * yield* Cloudflare.SchemaValidation.OperationSetting("GetUserLog", {
+ *   zoneId: zone.zoneId,
+ *   operationId: getUser.operationId,
+ *   mitigationAction: "log",
  * });
  * ```
  *
@@ -182,6 +246,18 @@ export const OperationProvider = () =>
         return { action: "replace" } as const;
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* (props) {
+      const observed =
+        "operationId" in props
+          ? yield* getOperation(props.zoneId, props.operationId)
+          : yield* findByTuple(props.zoneId, {
+              method: props.method,
+              host: props.host,
+              endpoint: props.endpoint,
+            });
+      return observed ? toAttributes(observed, props.zoneId) : undefined;
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
@@ -268,7 +344,7 @@ export const normalizeEndpoint = (endpoint: string): string => {
 const getOperation = (zoneId: string, operationId: string) =>
   apiGateway.getOperation({ zoneId, operationId }).pipe(
     Effect.map((op): ObservedOperation | undefined => op),
-    Effect.catchTag("OperationNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("OperationNotFound", () => Effect.undefined),
   );
 
 /**

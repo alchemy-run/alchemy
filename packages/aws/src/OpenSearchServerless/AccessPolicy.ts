@@ -145,7 +145,7 @@ export const AccessPolicyProvider = () =>
           const name = output?.policyName ?? (yield* createName(id, olds ?? {}));
           const found = yield* aoss
             .getAccessPolicy({ type: ACCESS_POLICY_TYPE, name })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           if (found?.accessPolicyDetail === undefined) {
             return undefined;
           }
@@ -171,7 +171,7 @@ export const AccessPolicyProvider = () =>
           // 1. OBSERVE
           let detail = yield* aoss.getAccessPolicy({ type: ACCESS_POLICY_TYPE, name }).pipe(
             Effect.map((r) => r.accessPolicyDetail),
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           );
 
           // 2. ENSURE

@@ -153,7 +153,7 @@ export const AccountProvider = () =>
   Provider.succeed(Account, {
     stables: ["accountId", "type", "createdOn", "parentOrgId", "parentOrgName"],
 
-    diff: Effect.fn(function* ({ olds, news, output }) {
+    diff: Effect.fn(function* ({ olds, news = {}, output }) {
       if (!isResolved(news)) return undefined;
       // The account type cannot be changed after creation — Cloudflare
       // rejects it with `UpdateAccountTypeNotSupported`.
@@ -191,7 +191,7 @@ export const AccountProvider = () =>
       return observed ? toAttributes(observed) : undefined;
     }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news = {}, output }) {
       const name = news.name ?? (yield* createPhysicalName({ id, lowercase: true }));
 
       // 1. Observe — the account id cached on `output` is a hint, not a
@@ -265,7 +265,7 @@ type ObservedAccount =
 const getAccount = (accountId: string) =>
   accounts.getAccount({ accountId }).pipe(
     Effect.map((account): ObservedAccount | undefined => account),
-    Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+    Effect.catchTag("InvalidRoute", () => Effect.undefined),
   );
 
 const toAttributes = (account: ObservedAccount): AccountAttributes => ({

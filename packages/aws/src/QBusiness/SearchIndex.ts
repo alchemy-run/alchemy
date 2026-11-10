@@ -11,6 +11,20 @@ import * as Schedule from "effect/Schedule";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 
+export class QBusinessSearchIndexInvalidProps extends Data.TaggedError(
+  "QBusinessSearchIndexInvalidProps",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class QBusinessSearchIndexUnexpectedResponse extends Data.TaggedError(
+  "QBusinessSearchIndexUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type IndexStatus = qbusiness.IndexStatus;
 export type IndexType = qbusiness.IndexType;
 
@@ -86,8 +100,27 @@ export interface Index extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  IndexLookup
 > {}
+
+/**
+ * Props for {@link Index.lookup}: find an index this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type IndexLookup =
+  | {
+      /** The application the index belongs to. */
+      applicationId: string;
+      /** The id of the existing index. */
+      indexId: string;
+    }
+  | {
+      /** The application the index belongs to. */
+      applicationId: string;
+      /** The display name of the existing index. */
+      displayName: string;
+    };
 
 /**
  * An Amazon Q Business index — the document store that data sources sync
@@ -116,6 +149,16 @@ export interface Index extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing index
+ * `Index.lookup` references an index Alchemy doesn't manage (created in the
+ * console or by another stack), found by `applicationId` with `indexId` or `displayName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing index
+ * ```typescript
+ * const existing = AWS.QBusiness.Index.lookup({ applicationId, displayName: "main" });
+ * ```
+ *
  * @resource
  */
 export const Index = Resource<Index>("AWS.QBusiness.Index");
@@ -128,7 +171,7 @@ const createDisplayName = (id: string, props: { displayName?: string | undefined
 const fetchTags = Effect.fn(function* (arn: string) {
   const response = yield* qbusiness
     .listTagsForResource({ resourceARN: arn })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   return Object.fromEntries((response?.tags ?? []).map((tag) => [tag.key, tag.value]));
 });
 
@@ -140,7 +183,7 @@ interface IndexState {
 const readIndexById = Effect.fn(function* (applicationId: string, indexId: string) {
   const described = yield* qbusiness
     .getIndex({ applicationId, indexId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!described || described.status === "DELETING") return undefined;
   const arn = described.indexArn;
   if (arn === undefined) return undefined;
@@ -209,7 +252,7 @@ const waitForIndexStatus = (applicationId: string, indexId: string, target: "ACT
     Effect.gen(function* () {
       const described = yield* qbusiness
         .getIndex({ applicationId, indexId })
-        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       if (target === "DELETED") {
         if (described === undefined) return;
         return yield* new IndexNotReady({ indexId, status: described.status });
@@ -235,6 +278,13 @@ export const IndexProvider = () =>
         // without iterating every application — treated as a sub-resource per
         // the factory list() convention.
         list: () => Effect.succeed([]),
+        lookup: Effect.fn(function* (props) {
+          const state =
+            "indexId" in props
+              ? yield* readIndexById(props.applicationId, props.indexId)
+              : yield* findIndexByName(props.applicationId, props.displayName);
+          return state?.attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const applicationId = output?.applicationId ?? olds?.applicationId;
           if (applicationId === undefined) return undefined;
@@ -259,7 +309,9 @@ export const IndexProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(new Error("QBusiness Index requires props"));
+            return yield* new QBusinessSearchIndexInvalidProps({
+              message: "QBusiness Index requires props",
+            });
           }
           const applicationId = news.applicationId;
           const displayName = yield* createDisplayName(id, news);
@@ -286,15 +338,17 @@ export const IndexProvider = () =>
               })),
             });
             if (!created.indexId) {
-              return yield* Effect.fail(
-                new Error(`CreateIndex for '${displayName}' returned no indexId`),
-              );
+              return yield* new QBusinessSearchIndexUnexpectedResponse({
+                message: `CreateIndex for '${displayName}' returned no indexId`,
+              });
             }
             yield* session.note(`Creating index ${displayName} (${created.indexId})...`);
             yield* waitForIndexStatus(applicationId, created.indexId, "ACTIVE");
             state = yield* readIndexById(applicationId, created.indexId);
             if (state === undefined) {
-              return yield* Effect.fail(new Error(`failed to read created index ${displayName}`));
+              return yield* new QBusinessSearchIndexUnexpectedResponse({
+                message: `failed to read created index ${displayName}`,
+              });
             }
           }
 
@@ -342,7 +396,9 @@ export const IndexProvider = () =>
 
           const final = yield* readIndexById(applicationId, state.attrs.indexId);
           if (!final) {
-            return yield* Effect.fail(new Error(`failed to read reconciled index ${displayName}`));
+            return yield* new QBusinessSearchIndexUnexpectedResponse({
+              message: `failed to read reconciled index ${displayName}`,
+            });
           }
           return final.attrs;
         }),

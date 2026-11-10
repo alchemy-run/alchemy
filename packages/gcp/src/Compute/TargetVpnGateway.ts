@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -84,8 +85,31 @@ export type TargetVpnGateway = Resource<
     creationTimestamp: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  TargetVpnGatewayLookup
 >;
+
+/**
+ * Props for {@link TargetVpnGateway.lookup}: find a target vpn gateway this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface TargetVpnGatewayLookup {
+  /**
+   * Gateway name.
+   */
+  targetVpnGatewayName: string;
+  /**
+   * Region the Classic VPN gateway lives in. `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  region?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A regional Compute Engine Classic VPN gateway (`targetVpnGateway`).
@@ -114,6 +138,19 @@ export type TargetVpnGateway = Resource<
  *   network: "default",
  *   description: "classic vpn",
  *   labels: { env: "prod" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing target vpn gateway
+ * `TargetVpnGateway.lookup` references a target vpn gateway Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * target vpn gateway.
+ *
+ * **Example:** Reference an existing target vpn gateway
+ * ```typescript
+ * const targetVpnGateway = GCP.Compute.TargetVpnGateway.lookup({
+ *   targetVpnGatewayName: "my-target-vpn-gateway",
  * });
  * ```
  *
@@ -202,7 +239,7 @@ const toAttrs = (gateway: compute.TargetVpnGateway, project: string) => ({
 const getByName = (project: string, region: string, targetVpnGateway: string) =>
   compute
     .getTargetVpnGateways({ project, region, targetVpnGateway })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const requireGateway = (project: string, region: string, targetVpnGatewayName: string) =>
   Effect.gen(function* () {
@@ -300,7 +337,15 @@ export const TargetVpnGatewayProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ targetVpnGatewayName, region: lookupRegion }) {
+      const env = yield* GcpEnvironment.current;
+      const region = normalizeRegion(lookupRegion, env.region);
+      const existing = yield* getByName(env.project, region, targetVpnGatewayName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const targetVpnGatewayName = yield* toName(
         id,
@@ -311,7 +356,9 @@ export const TargetVpnGatewayProvider = () =>
       const existing = yield* getByName(env.project, region, targetVpnGatewayName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "targetVpnGatewayName");
     }),
 
     list: () =>

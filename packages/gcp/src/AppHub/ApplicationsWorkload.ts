@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -113,8 +114,36 @@ export type ApplicationsWorkload = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ApplicationsWorkloadLookup
 >;
+
+/**
+ * Props for {@link ApplicationsWorkload.lookup}: find an applications
+ * workload this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface ApplicationsWorkloadLookup {
+  /**
+   * Workload id (the `{workload}` segment). Must be RFC1035 (63 chars).
+   */
+  workloadId: string;
+  /**
+   * Region used when `application` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent Application. Full name
+   * `projects/{project}/locations/{location}/applications/{application}` or
+   * the application id (combined with `location`).
+   */
+  application: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An App Hub workload registered onto an Application. A workload is a
@@ -159,6 +188,20 @@ export type ApplicationsWorkload = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing applications workload
+ * `ApplicationsWorkload.lookup` references an applications workload Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared applications workload.
+ *
+ * **Example:** Reference an existing applications workload
+ * ```typescript
+ * const applicationsWorkload = GCP.AppHub.ApplicationsWorkload.lookup({
+ *   workloadId: "my-workload",
+ *   application: "my-application",
+ * });
+ * ```
+ *
  * @resource
  * @category AppHub
  */
@@ -194,10 +237,10 @@ const toAttrs = (item: apphub.Workload, project: string, region: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : apphub
         .getProjectsLocationsApplicationsWorkloads({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string, region: string) =>
   listNestedOwned(project, region, (application) =>
@@ -246,6 +289,20 @@ export const ApplicationsWorkloadProvider = () =>
           !news.discoveredWorkload.endsWith(`/${previousDiscovered}`),
       });
     }),
+
+    lookup: Effect.fn(function* ({
+      workloadId,
+      location: lookupLocation,
+      application: lookupApplication,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const application = expandApplication(lookupApplication ?? "", env.project, location);
+      const name = resourceName(application, workloadId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -300,7 +357,7 @@ export const ApplicationsWorkloadProvider = () =>
               attributes: news.attributes,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -308,7 +365,7 @@ export const ApplicationsWorkloadProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       current = yield* waitUntilReady(
@@ -355,7 +412,7 @@ export const ApplicationsWorkloadProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

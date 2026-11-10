@@ -5,6 +5,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
@@ -13,6 +14,13 @@ import {
   retryWhileMailManagerConflict,
   syncMailManagerTags,
 } from "./internal.ts";
+
+export class AddressListUnexpectedResponse extends Data.TaggedError(
+  "AddressListUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface AddressListProps {
   /**
@@ -41,8 +49,18 @@ export interface AddressList extends Resource<
     addressListName: string;
   },
   never,
-  Providers
+  Providers,
+  AddressListLookup
 > {}
+
+/**
+ * Props for {@link AddressList.lookup}: find an address list this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface AddressListLookup {
+  /** The name of the existing address list. */
+  addressListName: string;
+}
 
 /**
  * An SES Mail Manager address list — a named set of email addresses that
@@ -75,6 +93,16 @@ export interface AddressList extends Resource<
  * const { Addresses } = yield* listMembers({});
  * ```
  *
+ * ### Looking up an existing address list
+ * `AddressList.lookup` references an address list Alchemy doesn't manage (created in the
+ * console or by another stack), found by `addressListName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing address list
+ * ```typescript
+ * const existing = AWS.MailManager.AddressList.lookup({ addressListName: "blocked" });
+ * ```
+ *
  * @resource
  */
 export const AddressList = Resource<AddressList>("AWS.MailManager.AddressList");
@@ -90,7 +118,7 @@ export const AddressListProvider = () =>
       const getById = (addressListId: string) =>
         mm
           .getAddressList({ AddressListId: addressListId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       // Address lists have no name-keyed Get — enumerate and match. The
       // physical name is deterministic, so this recovers identity after a
@@ -141,6 +169,10 @@ export const AddressListProvider = () =>
             ),
           ),
 
+        lookup: Effect.fn(function* ({ addressListName }) {
+          const found = yield* observe(undefined, addressListName);
+          return found === undefined ? undefined : toAttrs(found);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.addressListName ?? (yield* createName(id, olds ?? {}));
           const list = yield* observe(output, name);
@@ -177,16 +209,16 @@ export const AddressListProvider = () =>
                 AddressListName: name,
                 Tags: createTagsList(desiredTags),
               })
-              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             list =
               created !== undefined
                 ? yield* getById(created.AddressListId)
                 : yield* observe(undefined, name);
           }
           if (list === undefined) {
-            return yield* Effect.fail(
-              new Error(`Mail Manager address list '${name}' not found after create`),
-            );
+            return yield* new AddressListUnexpectedResponse({
+              message: `Mail Manager address list '${name}' not found after create`,
+            });
           }
 
           // 3. SYNC TAGS — the only mutable aspect; diffed against observed

@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -61,8 +62,26 @@ export type Topic = Resource<
     state: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  TopicLookup
 >;
+
+/**
+ * Props for {@link Topic.lookup}: find a topic this stack doesn't manage by
+ * its identifiers, in the ambient project unless `project` names another.
+ */
+export interface TopicLookup {
+  /**
+   * Topic id (the `{topic}` segment of
+   * `projects/{project}/topics/{topic}`).
+   */
+  topicId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Google Cloud Pub/Sub topic.
@@ -113,17 +132,27 @@ export type Topic = Resource<
  * ### Destroying a Topic
  * **Example:** `alchemy destroy` deletes the topic after its subscriptions.
  *
+ * ### Looking up an existing topic
+ * `Topic.lookup` references a topic Alchemy doesn't manage (created in the
+ * console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared topic.
+ *
+ * **Example:** Reference an existing topic
+ * ```typescript
+ * const topic = GCP.PubSub.Topic.lookup({ topicId: "my-topic" });
+ * ```
+ *
  * @resource
  * @category PubSub
  */
 export const Topic = Resource<Topic>("GCP.PubSub.Topic");
 
 export class TopicStillExists extends Data.TaggedError("GCP.PubSub.TopicStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class TopicNotResolved extends Data.TaggedError("GCP.PubSub.TopicNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const topicIdOf = (name: string) => name.split("/").pop() ?? name;
@@ -157,7 +186,7 @@ const toAttrs = (topic: pubsub.Topic, project: string) => {
 const getByName = (name: string) =>
   pubsub
     .getProjectsTopics({ topic: name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 // Pub/Sub serves reads from replicas that lag writes: one successful GET
 // does not mean the next one (or a publish routed to it) sees the
@@ -171,7 +200,7 @@ const waitUntilPresent = (name: string) =>
       if (read > 0) yield* Effect.sleep("1 second");
       found = yield* getByName(name);
       if (found === undefined) {
-        return yield* new TopicNotResolved({ name });
+        return yield* new TopicNotResolved({ resourceName: name });
       }
     }
     return found!;
@@ -196,6 +225,14 @@ export const TopicProvider = () =>
       const next = yield* toId(id, news.topicId, output?.topicId);
       return next !== previous ? { action: "replace" as const, deleteFirst: false } : undefined;
     }),
+
+    lookup: Effect.fn(function* ({ topicId }) {
+      const env = yield* GcpEnvironment.current;
+      const name = resourceName(env.project, topicId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -247,13 +284,13 @@ export const TopicProvider = () =>
               messageRetentionDuration: news.messageRetentionDuration,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         // Block until Pub/Sub serves the topic, not just the create response.
         current = yield* waitUntilPresent(name);
       }
 
       if (current === undefined) {
-        return yield* new TopicNotResolved({ name });
+        return yield* new TopicNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -295,7 +332,7 @@ export const TopicProvider = () =>
       yield* getByName(output.name).pipe(
         Effect.filterOrFail(
           (existing) => existing === undefined,
-          () => new TopicStillExists({ name: output.name }),
+          () => new TopicStillExists({ resourceName: output.name }),
         ),
         Effect.retry({
           while: (error) => error._tag === "GCP.PubSub.TopicStillExists",

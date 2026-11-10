@@ -5,6 +5,7 @@ import * as storage from "@distilled.cloud/gcp/storage_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -41,6 +42,13 @@ test.provider(
           });
           return { bucket, folder };
         }),
+      );
+      yield* expectFound(
+        GCP.Storage.Folder.lookup({
+          folderName: created.folder.folderName,
+          bucketName: created.folder.bucketName,
+        }),
+        created.folder,
       );
 
       expect(created.folder.bucketName).toEqual(created.bucket.bucketName);

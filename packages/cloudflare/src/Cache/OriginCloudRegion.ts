@@ -257,7 +257,7 @@ const getMapping = (zoneId: string, ip: string) =>
     Effect.map((response): OriginCloudRegionAttributes | undefined =>
       toAttributes(zoneId, response),
     ),
-    Effect.catchTag("OriginCloudRegionNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("OriginCloudRegionNotFound", () => Effect.undefined),
   );
 
 const toAttributes = (

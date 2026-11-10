@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -91,8 +92,32 @@ export type SessionTemplate = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SessionTemplateLookup
 >;
+
+/**
+ * Props for {@link SessionTemplate.lookup}: find a session template this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface SessionTemplateLookup {
+  /**
+   * Template id (the `{template}` segment of
+   * `projects/{project}/locations/{location}/sessionTemplates/{template}`).
+   */
+  templateId: string;
+  /**
+   * Location (`us-central1`, …). `US-CENTRAL1` is accepted and normalized
+   * to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Dataproc serverless interactive session template.
@@ -117,6 +142,19 @@ export type SessionTemplate = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing session template
+ * `SessionTemplate.lookup` references a session template Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * session template.
+ *
+ * **Example:** Reference an existing session template
+ * ```typescript
+ * const sessionTemplate = GCP.Dataproc.SessionTemplate.lookup({
+ *   templateId: "my-template",
+ * });
+ * ```
+ *
  * @resource
  * @category Dataproc
  */
@@ -125,7 +163,7 @@ export const SessionTemplate = Resource<SessionTemplate>("GCP.Dataproc.SessionTe
 export class SessionTemplateNotResolved extends Data.TaggedError(
   "GCP.Dataproc.SessionTemplateNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, templateId: string) =>
@@ -176,7 +214,7 @@ const desiredBody = (
 const getByName = (name: string) =>
   dataproc
     .getProjectsLocationsSessionTemplates({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listLocation = (project: string, location: string) =>
   emptyOnMissing(
@@ -228,6 +266,15 @@ export const SessionTemplateProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ templateId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, templateId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, location);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -287,7 +334,7 @@ export const SessionTemplateProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SessionTemplateNotResolved({ name });
+        return yield* new SessionTemplateNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

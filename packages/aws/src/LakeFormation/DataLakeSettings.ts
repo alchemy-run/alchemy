@@ -102,6 +102,11 @@ export interface DataLakeSettings extends Resource<
     managedReadOnlyAdmins: string[];
     managedFields: ManagedField[];
     captured: lf.DataLakeSettings;
+    /**
+     * The live value of every field in `managedFields`, as observed. Lets
+     * `alchemy drift` detect out-of-band changes.
+     */
+    managedSettings?: Partial<Record<ManagedField, unknown>>;
   },
   {},
   Providers
@@ -180,6 +185,46 @@ const fingerprint = (s: lf.DataLakeSettings): string =>
     allowList: principalIds(s.ExternalDataFilteringAllowList).sort(),
     sessionTags: [...(s.AuthorizedSessionTagValueList ?? [])].sort(),
   });
+
+/**
+ * The live value of each managed field, normalized for comparison. `read`
+ * and `reconcile` share it so converged settings read unchanged.
+ */
+const observeManagedSettings = (
+  s: lf.DataLakeSettings,
+  fields: readonly ManagedField[],
+): Partial<Record<ManagedField, unknown>> => {
+  const defaults = (permissions: lf.PrincipalPermissions[] | undefined) =>
+    (permissions ?? [])
+      .map((p) => ({
+        principal: p.Principal?.DataLakePrincipalIdentifier,
+        permissions: [...(p.Permissions ?? [])].sort(),
+      }))
+      .sort((a, b) => (a.principal ?? "").localeCompare(b.principal ?? ""));
+  const value = (field: ManagedField): unknown => {
+    switch (field) {
+      case "createDatabaseDefaultPermissions":
+        return defaults(s.CreateDatabaseDefaultPermissions);
+      case "createTableDefaultPermissions":
+        return defaults(s.CreateTableDefaultPermissions);
+      case "parameters":
+        return Object.fromEntries(
+          Object.entries(s.Parameters ?? {}).filter(([, v]) => v !== undefined),
+        );
+      case "trustedResourceOwners":
+        return [...(s.TrustedResourceOwners ?? [])].sort();
+      case "allowExternalDataFiltering":
+        return s.AllowExternalDataFiltering ?? false;
+      case "allowFullTableExternalDataAccess":
+        return s.AllowFullTableExternalDataAccess ?? false;
+      case "externalDataFilteringAllowList":
+        return principalIds(s.ExternalDataFilteringAllowList).sort();
+      case "authorizedSessionTagValueList":
+        return [...(s.AuthorizedSessionTagValueList ?? [])].sort();
+    }
+  };
+  return Object.fromEntries(fields.map((field) => [field, value(field)]));
+};
 
 /** Plain JSON snapshot of the observed settings for capture-and-restore. */
 const snapshot = (s: lf.DataLakeSettings): lf.DataLakeSettings =>
@@ -329,6 +374,7 @@ export const DataLakeSettingsProvider = () =>
             managedReadOnlyAdmins: output?.managedReadOnlyAdmins ?? [],
             managedFields: output?.managedFields ?? [],
             captured: output?.captured ?? snapshot(observed),
+            managedSettings: observeManagedSettings(observed, output?.managedFields ?? []),
           };
         }),
 
@@ -400,6 +446,7 @@ export const DataLakeSettingsProvider = () =>
             managedReadOnlyAdmins,
             managedFields,
             captured,
+            managedSettings: observeManagedSettings(desired, managedFields),
           };
         }),
 

@@ -318,7 +318,7 @@ type ObservedIntegration = Pick<
 const getIntegration = (accountId: string, providerId: string) =>
   mcn.getCloudIntegration({ accountId, providerId }).pipe(
     Effect.map((integration): ObservedIntegration | undefined => integration),
-    Effect.catchTag("CloudIntegrationNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("CloudIntegrationNotFound", () => Effect.undefined),
   );
 
 /**

@@ -136,11 +136,11 @@ export type Index = Resource<
 export const Index = Resource<Index>("GCP.AIPlatform.Index");
 
 export class IndexNotResolved extends Data.TaggedError("GCP.AIPlatform.IndexNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class IndexStillExists extends Data.TaggedError("GCP.AIPlatform.IndexStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_UPDATE_METHOD = "STREAM_UPDATE";
@@ -167,7 +167,7 @@ const toAttrs = (index: aiplatform.GoogleCloudAiplatformV1Index, project: string
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsIndexes({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listPage = (parent: string, filter?: string) =>
   aiplatform.listProjectsLocationsIndexes.pages({ parent, pageSize: 100, filter }).pipe(
@@ -205,7 +205,7 @@ const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (index): index is aiplatform.GoogleCloudAiplatformV1Index => index !== undefined,
-      () => new IndexNotResolved({ name }),
+      () => new IndexNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.IndexNotResolved",
@@ -218,7 +218,7 @@ const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (index) => index === undefined,
-      () => new IndexStillExists({ name }),
+      () => new IndexStillExists({ resourceName: name }),
     ),
     Effect.asVoid,
     Effect.retry({
@@ -316,7 +316,7 @@ export const IndexProvider = () =>
               encryptionSpec: news.encryptionSpec,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const done = yield* waitForOperation(created);
           const name = resourceNameFromOperation(done);
@@ -332,7 +332,7 @@ export const IndexProvider = () =>
 
       if (current === undefined || current.name === undefined) {
         return yield* new IndexNotResolved({
-          name: output?.name ?? `${location}/indexes`,
+          resourceName: output?.name ?? `${location}/indexes`,
         });
       }
 
@@ -378,7 +378,7 @@ export const IndexProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

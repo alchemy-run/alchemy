@@ -161,8 +161,18 @@ export interface Crawler extends Resource<
     state: string | undefined;
   },
   {},
-  Providers
+  Providers,
+  CrawlerLookup
 > {}
+
+/**
+ * Props for {@link Crawler.lookup}: find a crawler this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface CrawlerLookup {
+  /** The name of the existing crawler. */
+  crawlerName: string;
+}
 
 /**
  * An AWS Glue crawler — connects to an S3 (or JDBC/DynamoDB/catalog) data
@@ -200,6 +210,16 @@ export interface Crawler extends Resource<
  *     deleteBehavior: "DEPRECATE_IN_DATABASE",
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing crawler
+ * `Crawler.lookup` references a crawler Alchemy doesn't manage (created in the
+ * console or by another stack), found by `crawlerName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing crawler
+ * ```typescript
+ * const existing = AWS.Glue.Crawler.lookup({ crawlerName: "..." });
  * ```
  *
  * @resource
@@ -246,7 +266,7 @@ export const CrawlerProvider = () =>
       const observe = Effect.fn(function* (name: string) {
         return yield* glue.getCrawler({ Name: name }).pipe(
           Effect.map((r) => r.Crawler),
-          Effect.catchTag("EntityNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("EntityNotFoundException", () => Effect.undefined),
         );
       });
 
@@ -268,6 +288,21 @@ export const CrawlerProvider = () =>
                 state: c.State,
               }));
           }),
+
+        lookup: Effect.fn(function* ({ crawlerName: name }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const crawler = yield* observe(name);
+          if (crawler?.Name === undefined) return undefined;
+          const arn = crawlerArn(region, accountId, crawler.Name);
+          const attrs = {
+            crawlerName: crawler.Name,
+            crawlerArn: arn,
+            role: crawler.Role ?? "",
+            databaseName: crawler.DatabaseName,
+            state: crawler.State,
+          };
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
@@ -370,6 +405,7 @@ export const CrawlerProvider = () =>
           // Crawler teardown first; the early returns only skip the
           // crawler steps so the log reap below still runs on a retried
           // delete whose crawler is already gone.
+          // oxlint-disable-next-line effecttsgo/nested-effect-gen-yield -- scopes the early returns
           yield* Effect.gen(function* () {
             let crawler = yield* observe(name);
             if (crawler === undefined) return;

@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -99,8 +100,39 @@ export type GlossariesCategory = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  GlossariesCategoryLookup
 >;
+
+/**
+ * Props for {@link GlossariesCategory.lookup}: find a glossaries category
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface GlossariesCategoryLookup {
+  /**
+   * Category id (the `{category}` segment of
+   * `.../glossaries/{glossary}/categories/{category}`). Must be 1-63
+   * characters, start with a letter, and match
+   * `[a-z]([a-z0-9-]*[a-z0-9])?`.
+   */
+  categoryId: string;
+  /**
+   * Parent Glossary. Full name
+   * `projects/{project}/locations/{location}/glossaries/{glossary}` or the
+   * glossary id (combined with `location`).
+   */
+  glossary: string;
+  /**
+   * Region used when `glossary` is a bare id.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Dataplex Glossary Category nested under a Glossary.
@@ -127,6 +159,20 @@ export type GlossariesCategory = Resource<
  *   glossary: glossary.name,
  *   description: "finance terms",
  *   labels: { env: "prod", team: "data" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing glossaries category
+ * `GlossariesCategory.lookup` references a glossaries category Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared glossaries category.
+ *
+ * **Example:** Reference an existing glossaries category
+ * ```typescript
+ * const glossariesCategory = GCP.Dataplex.GlossariesCategory.lookup({
+ *   categoryId: "my-category",
+ *   glossary: "my-glossary",
  * });
  * ```
  *
@@ -181,7 +227,7 @@ const toAttrs = (category: dataplex.GoogleCloudDataplexV1GlossaryCategory, proje
 
 const getByName = (name: string) =>
   retryQuota(dataplex.getProjectsLocationsGlossariesCategories({ name })).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const listCategoriesUnder = (parent: string, project: string) =>
@@ -217,6 +263,15 @@ export const GlossariesCategoryProvider = () =>
         nextParent: news.glossary ?? olds?.glossary ?? output?.glossary,
       });
     }),
+
+    lookup: Effect.fn(function* ({ categoryId, glossary, location }) {
+      const env = yield* GcpEnvironment.current;
+      const resolved = resolveParent(env.project, glossary ?? "", location, env.region);
+      const name = resourceName(resolved.parent, categoryId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -296,7 +351,7 @@ export const GlossariesCategoryProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DataplexNotResolved({ name });
+        return yield* new DataplexNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

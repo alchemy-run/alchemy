@@ -137,8 +137,18 @@ export interface Export extends Resource<
     exportArn: string;
   },
   never,
-  Providers
+  Providers,
+  ExportLookup
 > {}
+
+/**
+ * Props for {@link Export.lookup}: find a data export this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ExportLookup {
+  /** The name of the existing export. */
+  exportName: string;
+}
 
 /**
  * An AWS Billing and Cost Management data export (Data Exports / CUR 2.0) —
@@ -187,6 +197,17 @@ export interface Export extends Resource<
  *     s3Region: "us-west-2",
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing data export
+ * `Export.lookup` references a data export Alchemy doesn't manage (created in the
+ * console or by another stack), found by `exportName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing data export
+ * ```typescript
+ * const cur = AWS.BCMDataExports.Export.lookup({ exportName: "cur" });
+ * const exportArn = cur.exportArn;
  * ```
  *
  * @resource
@@ -294,7 +315,7 @@ export const ExportProvider = () =>
         for (const arn of arns) {
           const found = yield* bcm
             .getExport({ ExportArn: arn })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           if (found?.Export !== undefined) {
             return { exportArn: arn, export: found.Export };
           }
@@ -325,6 +346,10 @@ export const ExportProvider = () =>
               })),
             ),
           ),
+        lookup: Effect.fn(function* ({ exportName }) {
+          const live = yield* observe(exportName, undefined);
+          return live === undefined ? undefined : { exportName, exportArn: live.exportArn };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.exportName ?? (yield* createName(id, olds ?? {}));
           const live = yield* observe(name, output?.exportArn);

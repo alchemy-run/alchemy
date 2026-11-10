@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitForDeleteOperation } from "./operations.ts";
@@ -127,8 +128,34 @@ export type LogBucket = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  LogBucketLookup
 >;
+
+/**
+ * Props for {@link LogBucket.lookup}: find a log bucket this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface LogBucketLookup {
+  /**
+   * Bucket id (the `{bucket}` segment of
+   * `projects/{project}/locations/{location}/buckets/{bucket}`). Limited to
+   * 100 characters: letters, digits, underscores, hyphens, periods; first
+   * character must be alphanumeric.
+   */
+  bucketId: string;
+  /**
+   * Location that stores log entries. `global` leaves placement
+   * unspecified.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Logging log bucket that stores log entries in a location.
@@ -167,17 +194,28 @@ export type LogBucket = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing log bucket
+ * `LogBucket.lookup` references a log bucket Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * log bucket.
+ *
+ * **Example:** Reference an existing log bucket
+ * ```typescript
+ * const logBucket = GCP.Logging.LogBucket.lookup({ bucketId: "my-bucket" });
+ * ```
+ *
  * @resource
  * @category Logging
  */
 export const LogBucket = Resource<LogBucket>("GCP.Logging.LogBucket");
 
 export class LogBucketNotResolved extends Data.TaggedError("GCP.Logging.LogBucketNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class LogBucketFailed extends Data.TaggedError("GCP.Logging.LogBucketFailed")<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
@@ -304,7 +342,7 @@ const toAttrs = (bucket: logging.LogBucket, project: string, location: string) =
 const getByName = (name: string) =>
   logging
     .getProjectsLocationsBuckets({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const undelete = (name: string) =>
   logging
@@ -315,16 +353,16 @@ const waitUntilActive = (name: string) =>
   Effect.gen(function* () {
     const bucket = yield* getByName(name);
     if (bucket === undefined || isDeleted(bucket)) {
-      return yield* new LogBucketNotResolved({ name });
+      return yield* new LogBucketNotResolved({ resourceName: name });
     }
     if (bucket.lifecycleState === "FAILED") {
       return yield* new LogBucketFailed({
-        name,
+        resourceName: name,
         state: bucket.lifecycleState,
       });
     }
     if (isPending(bucket.lifecycleState)) {
-      return yield* new LogBucketNotResolved({ name });
+      return yield* new LogBucketNotResolved({ resourceName: name });
     }
     return bucket;
   }).pipe(
@@ -338,7 +376,9 @@ const waitUntilActive = (name: string) =>
 const waitUntilDeleted = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((bucket) =>
-      isDeleted(bucket) ? Effect.void : Effect.fail(new LogBucketNotResolved({ name })),
+      isDeleted(bucket)
+        ? Effect.void
+        : Effect.fail(new LogBucketNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Logging.LogBucketNotResolved",
@@ -383,6 +423,15 @@ export const LogBucketProvider = () =>
       if (!idChanged && !locationChanged) return undefined;
       return { action: "replace" as const, deleteFirst: false };
     }),
+
+    lookup: Effect.fn(function* ({ bucketId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = lookupLocation ?? DEFAULT_LOCATION;
+      const name = resourceName(env.project, location, bucketId);
+      const existing = yield* getByName(name);
+      if (isDeleted(existing)) return undefined;
+      return toAttrs(existing, env.project, location);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -448,7 +497,7 @@ export const LogBucketProvider = () =>
       }
 
       if (isDeleted(current)) {
-        return yield* new LogBucketNotResolved({ name });
+        return yield* new LogBucketNotResolved({ resourceName: name });
       }
 
       const desiredLocked = news.locked === true;
@@ -534,7 +583,7 @@ export const LogBucketProvider = () =>
         Effect.flatMap((bucket) => {
           if (isDeleted(bucket)) return Effect.void;
           if (bucket !== undefined && isPending(bucket.lifecycleState)) {
-            return Effect.fail(new LogBucketNotResolved({ name }));
+            return Effect.fail(new LogBucketNotResolved({ resourceName: name }));
           }
           return Effect.void;
         }),

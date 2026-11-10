@@ -30,10 +30,19 @@ export const resourceNameFromOperation = (
  */
 export const waitForOperation = (
   operation: aiplatform.GoogleLongrunningOperation,
-  options?: { notFoundOk?: boolean; alreadyExistsOk?: boolean },
+  options?: {
+    notFoundOk?: boolean;
+    alreadyExistsOk?: boolean;
+    /**
+     * Operation getter for a service that the v1 API does not serve, such as
+     * AgentService (v1beta1 only). Defaults to v1 `getProjectsLocationsOperations`.
+     */
+    get?: (name: string) => ReturnType<typeof aiplatform.getProjectsLocationsOperations>;
+  },
 ) =>
   Effect.gen(function* () {
-    const get = (name: string) => aiplatform.getProjectsLocationsOperations({ name });
+    const get =
+      options?.get ?? ((name: string) => aiplatform.getProjectsLocationsOperations({ name }));
     const finished = yield* waitForGcpOperation(operation, get, {
       budget: "30 minutes",
     }).pipe(
@@ -90,7 +99,8 @@ export const settlePendingCreates = (options: {
         Stream.flatMap((page) => Stream.fromIterable(page.operations ?? [])),
         Stream.filter((operation) => {
           const name = operation.name ?? "";
-          const type = String(operation.metadata?.["@type"] ?? "");
+          const rawType = operation.metadata?.["@type"];
+          const type = typeof rawType === "string" ? rawType : "";
           return (
             operation.done !== true &&
             name.includes(relative) &&

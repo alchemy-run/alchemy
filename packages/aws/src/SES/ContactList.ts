@@ -1,5 +1,5 @@
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -53,8 +53,18 @@ export interface ContactList extends Resource<
     contactListArn: string;
   },
   never,
-  Providers
+  Providers,
+  ContactListLookup
 > {}
+
+/**
+ * Props for {@link ContactList.lookup}: find a contact list this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ContactListLookup {
+  /** The name of the existing contact list. */
+  contactListName: string;
+}
 
 /**
  * An Amazon SES v2 contact list — a named audience of email contacts with
@@ -126,6 +136,17 @@ export interface ContactList extends Resource<
  * }
  * ```
  *
+ * ### Looking up an existing contact list
+ * `ContactList.lookup` references a contact list Alchemy doesn't manage (created in the
+ * console or by another stack), found by `contactListName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Add contacts to an existing list
+ * ```typescript
+ * const newsletter = AWS.SES.ContactList.lookup({ contactListName: "newsletter" });
+ * const contactListName = newsletter.contactListName;
+ * ```
+ *
  * @resource
  */
 export const ContactList = Resource<ContactList>("AWS.SES.ContactList");
@@ -169,7 +190,7 @@ export const ContactListProvider = () =>
       const getList = Effect.fn(function* (name: string) {
         return yield* sesv2
           .getContactList({ ContactListName: name })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
       });
 
       return ContactList.Provider.of({
@@ -192,7 +213,17 @@ export const ContactListProvider = () =>
             );
         }),
 
-        read: Effect.fn(function* ({ id, olds, output }) {
+        lookup: Effect.fn(function* ({ contactListName }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const found = yield* getList(contactListName);
+          if (!found) return undefined;
+          return {
+            contactListName,
+            contactListArn: contactListArnOf(region, accountId, contactListName),
+          };
+        }),
+
+        read: Effect.fn(function* ({ id, olds, output, previous }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const name = output?.contactListName ?? (yield* createName(id, olds ?? {}));
           const found = yield* getList(name);
@@ -202,7 +233,9 @@ export const ContactListProvider = () =>
             contactListArn: contactListArnOf(region, accountId, name),
           };
           const tags = toTagRecord(found.Tags);
-          return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, tags))
+            ? attrs
+            : unownedUnlessPrevious(attrs, previous, "contactListName");
         }),
 
         diff: Effect.fn(function* ({ id, news, olds }) {

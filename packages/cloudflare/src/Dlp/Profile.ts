@@ -82,7 +82,25 @@ export type ProfileAttributes = {
   entryIds: Record<string, string>;
 };
 
-export type Profile = Resource<TypeId, ProfileProps, ProfileAttributes, never, Providers>;
+export type Profile = Resource<
+  TypeId,
+  ProfileProps,
+  ProfileAttributes,
+  never,
+  Providers,
+  ProfileLookup
+>;
+
+/**
+ * Props for {@link Profile.lookup}: find a DLP custom profile this stack
+ * doesn't manage, by its id.
+ */
+export interface ProfileLookup {
+  /**
+   * The UUID of the existing custom profile.
+   */
+  profileId: string;
+}
 
 /**
  * A Cloudflare Zero Trust **DLP custom profile** — a named collection of
@@ -120,6 +138,23 @@ export type Profile = Resource<TypeId, ProfileProps, ProfileAttributes, never, P
  * });
  * ```
  *
+ * ### Looking up an existing profile
+ * `Profile.lookup` references a custom profile Alchemy doesn't manage
+ * (created in the dashboard or by another stack), found by `profileId`. It
+ * is read during plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Block uploads that match an existing profile
+ * ```typescript
+ * const cards = Cloudflare.Dlp.Profile.lookup({
+ *   profileId: "c2b7a6f0-2a04-4f0f-9f6e-3c1d5e8a9b10",
+ * });
+ * yield* Cloudflare.Gateway.Rule("BlockCardUploads", {
+ *   action: "block",
+ *   filters: ["http"],
+ *   traffic: Output.interpolate`any(dlp.profiles[*] in {"${cards.profileId}"})`,
+ * });
+ * ```
+ *
  * @see https://developers.cloudflare.com/cloudflare-one/policies/data-loss-prevention/dlp-profiles/
  *
  * @resource
@@ -138,6 +173,11 @@ export const ProfileProvider = () =>
   Provider.succeed(Profile, {
     stables: ["profileId", "accountId"],
 
+    lookup: Effect.fn(function* ({ profileId }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed = yield* observeProfile(accountId, profileId);
+      return observed ? toAttributes(observed, accountId) : undefined;
+    }),
     read: Effect.fn(function* ({ output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
@@ -150,7 +190,7 @@ export const ProfileProvider = () =>
       return observed ? toAttributes(observed, acct) : undefined;
     }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* createProfileName(id, news.name);
 
@@ -282,7 +322,7 @@ const narrowCustom = (
 const observeProfile = (accountId: string, profileId: string) =>
   zeroTrust.getDlpProfileCustom({ accountId, profileId }).pipe(
     Effect.map(narrowCustom),
-    Effect.catchTag("DlpProfileNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("DlpProfileNotFound", () => Effect.undefined),
   );
 
 const createProfileName = (id: string, name: string | undefined) =>

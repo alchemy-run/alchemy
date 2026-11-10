@@ -11,6 +11,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -257,8 +258,33 @@ export type Trigger = Resource<
     conditions: eventarc.StateConditionMap | undefined;
   },
   never,
-  Providers
+  Providers,
+  TriggerLookup
 >;
+
+/**
+ * Props for {@link Trigger.lookup}: find a trigger this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface TriggerLookup {
+  /**
+   * Trigger id (the `{trigger}` segment of
+   * `projects/{project}/locations/{location}/triggers/{trigger}`). Must
+   * match `[a-z]([a-z0-9-]*[a-z0-9])?` and be 1-63 characters.
+   */
+  triggerId: string;
+  /**
+   * Eventarc location (`us-central1`, `us-east1`, …). `US-CENTRAL1` is
+   * accepted and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Eventarc trigger that routes events matching a set of CloudEvents
@@ -331,22 +357,32 @@ export type Trigger = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing trigger
+ * `Trigger.lookup` references a trigger Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared trigger.
+ *
+ * **Example:** Reference an existing trigger
+ * ```typescript
+ * const trigger = GCP.Eventarc.Trigger.lookup({ triggerId: "my-trigger" });
+ * ```
+ *
  * @resource
  * @category Eventarc
  */
 export const Trigger = Resource<Trigger>("GCP.Eventarc.Trigger");
 
 export class TriggerNotHealthy extends Data.TaggedError("GCP.Eventarc.TriggerNotHealthy")<{
-  name: string;
+  resourceName: string;
   conditions: string;
 }> {}
 
 export class TriggerNotResolved extends Data.TaggedError("GCP.Eventarc.TriggerNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class TriggerStillExists extends Data.TaggedError("GCP.Eventarc.TriggerStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class TriggerServiceAccountMissing extends Data.TaggedError(
@@ -571,7 +607,7 @@ const toAttrs = (trigger: eventarc.Trigger, project: string, region: string) => 
 const getByName = (name: string) =>
   eventarc
     .getProjectsLocationsTriggers({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /**
  * Block until Eventarc reports every trigger condition healthy (`OK`), so
@@ -588,7 +624,7 @@ const waitUntilHealthy = (name: string) =>
         ? Effect.succeed(trigger)
         : Effect.fail(
             new TriggerNotHealthy({
-              name,
+              resourceName: name,
               conditions: failing
                 .map(([key, condition]) => `${key}: ${condition?.code} ${condition?.message ?? ""}`)
                 .join("; "),
@@ -605,7 +641,9 @@ const waitUntilHealthy = (name: string) =>
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((trigger) =>
-      trigger ? Effect.succeed(trigger) : Effect.fail(new TriggerNotResolved({ name })),
+      trigger
+        ? Effect.succeed(trigger)
+        : Effect.fail(new TriggerNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Eventarc.TriggerNotResolved",
@@ -617,7 +655,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((trigger) =>
-      trigger === undefined ? Effect.void : Effect.fail(new TriggerStillExists({ name })),
+      trigger === undefined
+        ? Effect.void
+        : Effect.fail(new TriggerStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Eventarc.TriggerStillExists",
@@ -699,6 +739,15 @@ export const TriggerProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({ triggerId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, triggerId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const triggerId = yield* toId(id, olds?.triggerId, output?.triggerId);
@@ -768,7 +817,7 @@ export const TriggerProvider = () =>
               retryPolicy: news.retryPolicy,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -776,7 +825,7 @@ export const TriggerProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new TriggerNotResolved({ name });
+        return yield* new TriggerNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -835,7 +884,7 @@ export const TriggerProvider = () =>
           name: output.name,
           allowMissing: true,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

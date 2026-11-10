@@ -262,7 +262,7 @@ type ObservedAllowPolicy = emailSecurity.GetSettingAllowPolicyResponse;
 const getPolicy = (accountId: string, policyId: string) =>
   emailSecurity.getSettingAllowPolicy({ accountId, policyId }).pipe(
     Effect.map((policy): ObservedAllowPolicy | undefined => policy),
-    Effect.catchTag("AllowPolicyNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("AllowPolicyNotFound", () => Effect.undefined),
   );
 
 /**

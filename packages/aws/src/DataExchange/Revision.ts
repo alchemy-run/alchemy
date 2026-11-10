@@ -105,7 +105,7 @@ export const RevisionProvider = () =>
       const getById = Effect.fn(function* (dataSetId: string, revisionId: string) {
         return yield* dataexchange
           .getRevision({ DataSetId: dataSetId, RevisionId: revisionId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       /**
@@ -124,7 +124,7 @@ export const RevisionProvider = () =>
           Stream.filter((entry) => entry !== undefined),
           Stream.runHead,
           Effect.map((head) => (head._tag === "Some" ? head.value : undefined)),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 

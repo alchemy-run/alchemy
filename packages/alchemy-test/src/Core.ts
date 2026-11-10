@@ -1,6 +1,6 @@
+import { stripVTControlCharacters } from "node:util";
 import { AdoptPolicy } from "alchemy/AdoptPolicy";
 import { AlchemyContext, AlchemyContextLive } from "alchemy/AlchemyContext";
-import { apply } from "alchemy/Apply";
 import { ArtifactStore, provideFreshArtifactStore } from "alchemy/Artifacts";
 import { AuthProviders } from "alchemy/Auth/AuthProvider";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
@@ -9,8 +9,8 @@ import { withProfileOverride } from "alchemy/Auth/Resolve";
 import { userStage } from "alchemy/Cli/commands/flags";
 import { LoggingCli } from "alchemy/Cli/LoggingCli";
 import * as Contributions from "alchemy/Contributions";
-import { deploy as _deploy } from "alchemy/Deploy";
-import { destroy as _destroy } from "alchemy/Destroy";
+import * as AlchemyDeploy from "alchemy/Deploy";
+import * as AlchemyDestroy from "alchemy/Destroy";
 import type { Input } from "alchemy/Input";
 import * as Interaction from "alchemy/Interaction";
 import * as RpcProviderProxy from "alchemy/Local/RpcProviderProxy";
@@ -30,8 +30,8 @@ import { Stage } from "alchemy/Stage";
 import * as State from "alchemy/State";
 import { TelemetryLive } from "alchemy/Telemetry/Layer";
 import { loadConfigProvider, StackConfigOverrides } from "alchemy/Util/ConfigProvider";
+import { kindOf, recordOf } from "alchemy/Util/LogRecord";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
-/** @effect-diagnostics anyUnknownInErrorContext:off */
 import * as Config from "effect/Config";
 import { ConfigProvider } from "effect/ConfigProvider";
 import * as Context from "effect/Context";
@@ -40,8 +40,10 @@ import * as Exit from "effect/Exit";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
+import type { Limit } from "./Model.ts";
 
 /**
  * Configuration shared by every test in a file. Pass to `Test.make(...)`.
@@ -53,6 +55,13 @@ export interface MakeOptions<ROut = any> {
   state?: Layer.Layer<State.State, never, StackServices>;
   /** Override the current profile; otherwise resolved from env or the built-in `default`. */
   profile?: string;
+  /**
+   * A counted lock every test and `beforeAll`/`afterAll` hook of this file
+   * holds, on top of its own `exclusive`. Files that pass the same label
+   * share its permits, so a suite caps its load on a rate-limited cloud API
+   * in one place while every test stays independently schedulable.
+   */
+  limit?: Limit;
   /**
    * Default stage for deploy/destroy. Defaults to `test_$USER` (or
    * `test_$USERNAME` on Windows, `test_unknown` if neither is set) so two
@@ -164,8 +173,9 @@ const sidecarOmitEnv = (options: MakeOptions): ReadonlyArray<string> =>
 
 /**
  * Default test stage: `ALCHEMY_TEST_STAGE`, then `test_$USER` (or
- * `test_$USERNAME` / `test_unknown`). Set an explicit test stage to isolate
- * concurrent worktrees that share a cloud account.
+ * `test_$USERNAME` / `test_unknown`). The runner sets ALCHEMY_TEST_STAGE to
+ * `test_$USER_<worktree>` in a linked git worktree, so concurrent worktrees
+ * sharing a cloud account stay isolated.
  * Matches the CLI's `live_$USER` / `dev_$USER` per-developer isolation.
  */
 export const defaultStage = (): string =>
@@ -394,6 +404,18 @@ const testServicesLayer =
         .map((services) => services.layer)
         .reduce((merged, layer) => Layer.merge(merged, layer));
 
+/**
+ * The stack's state store under the emulator: a store that reads the cloud
+ * environment (an AWS S3 store) gets the test services too, so its bucket
+ * lives in the emulator alongside the stack's resources instead of needing
+ * live credentials.
+ */
+const testStateLayer = <E, R>(state: Layer.Layer<State.State, E, R>) =>
+  testServicesLayer === undefined
+    ? state
+    : // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the layer overrides services the store would otherwise resolve itself
+      (state.pipe(Layer.provide(testServicesLayer)) as Layer.Layer<State.State, E, R>);
+
 const provideTestServices = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   // Test services override services already present in R.
   testServicesLayer === undefined
@@ -425,6 +447,84 @@ const alchemyLayer = Layer.mergeAll(
   Interaction.layerNonInteractive(),
   AlchemyContextLive,
 );
+
+/** Most lines one capture keeps; older ones are dropped first. */
+const RESOURCE_LOG_LIMIT = 5_000;
+
+/** The open {@link captureResourceLog} buffers, by resource fqn. */
+const resourceCaptures = new Map<string, Set<Array<string>>>();
+
+/**
+ * Copies each record tagged with a captured resource (`fqn`) into its open
+ * captures. Installed beside the runner's loggers, so it also sees the shared
+ * sidecar's records, which the spawner logs in whichever file started the
+ * sidecar rather than in the test that deployed the resource.
+ */
+const resourceRecorder = Logger.make<unknown, void>((options) => {
+  if (resourceCaptures.size === 0) return;
+  const record = recordOf(options);
+  const fqn = record.attributes.fqn;
+  const captures = typeof fqn === "string" ? resourceCaptures.get(fqn) : undefined;
+  if (captures === undefined || (record.kind !== "log" && record.kind !== "output")) return;
+  const line = stripVTControlCharacters(
+    record.kind === "log" ? record.data.message : record.data.text,
+  );
+  for (const lines of captures) {
+    lines.push(line);
+    if (lines.length > RESOURCE_LOG_LIMIT) lines.splice(0, lines.length - RESOURCE_LOG_LIMIT);
+  }
+});
+
+/**
+ * Start capturing what the resource `fqn` logs — its processes' output (a dev
+ * Worker's console, a Vite dev server) and alchemy's lines about it — whether
+ * its provider runs in the dev sidecar or in-process. Start it before the
+ * deploy; the returned effect reads every line since, without ANSI styling.
+ * The capture ends with the enclosing scope.
+ */
+export const captureResourceLog = (
+  fqn: string,
+): Effect.Effect<Effect.Effect<string>, never, Scope.Scope> =>
+  Effect.acquireRelease(
+    Effect.sync(() => {
+      const lines: Array<string> = [];
+      let captures = resourceCaptures.get(fqn);
+      if (captures === undefined) resourceCaptures.set(fqn, (captures = new Set()));
+      captures.add(lines);
+      return lines;
+    }),
+    (lines) =>
+      Effect.sync(() => {
+        const captures = resourceCaptures.get(fqn);
+        captures?.delete(lines);
+        if (captures?.size === 0) resourceCaptures.delete(fqn);
+      }),
+  ).pipe(Effect.map((lines) => Effect.sync(() => lines.join("\n"))));
+
+/**
+ * The runner's loggers, minus typed event records: deploys draw their
+ * progress through `AlchemyDeploy.applyAndRender` (the `LoggingCli` lines), so printing each
+ * event object too would only repeat it. `onEvent` subscribers installed
+ * inside still see every event. Adds the {@link resourceRecorder}.
+ */
+const withoutEventRecords = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  Effect.flatMap(Logger.CurrentLoggers, (loggers) =>
+    effect.pipe(
+      Effect.provideService(
+        Logger.CurrentLoggers,
+        new Set([
+          ...[...loggers]
+            .filter((logger) => logger !== resourceRecorder)
+            .map((logger) =>
+              Logger.make<unknown, void>((options) => {
+                if (kindOf(options) !== "event") logger.log(options);
+              }),
+            ),
+          resourceRecorder,
+        ]),
+      ),
+    ),
+  );
 
 /**
  * Build the per-test runtime and return a self-contained Effect.
@@ -460,6 +560,7 @@ export const toEffect = <A, ROut = any>(
     const body = sidecar ? sidecar.provide(effect) : effect;
     const locally = testDev ? provideTestServices(body) : body;
     return yield* locally.pipe(
+      withoutEventRecords,
       provideFreshArtifactStore,
       Effect.provideService(ConfigProvider, configProvider),
       Effect.provideService(StackConfigOverrides, { profile: options.profile }),
@@ -471,7 +572,7 @@ export const toEffect = <A, ROut = any>(
     // `AuthProviders` to read credentials, so AuthProviders must be provided
     // AFTER the state layer or the state layer's requirement is never
     // satisfied — which surfaces as `Service not found: AuthProviders`.
-    Effect.provide(options.state ?? State.localState()),
+    Effect.provide(testStateLayer(options.state ?? State.localState())),
     Effect.provideService(AuthProviders, {}),
     Effect.provide(Layer.provideMerge(alchemyLayer, platformLayer())),
   );
@@ -580,7 +681,7 @@ const deployStack = <A>(
   stack: TestEffect<CompiledStack<A>, Stage | AlchemyContext>,
   callOptions?: FilteredDeployCallOptions,
 ) =>
-  _deploy({
+  AlchemyDeploy.deploy({
     stack: stack as Effect.Effect<CompiledStack<A>, never, any>,
     stage: callOptions?.stage ?? resolveStage(options),
     dev: resolveDev(options),
@@ -610,7 +711,7 @@ export const destroy = <ROut>(
   stack: StackDefinition<ROut>,
   callOptions?: { stage?: string; scope?: Scope.Scope; include?: never; exclude?: never },
 ) =>
-  _destroy({
+  AlchemyDestroy.destroy({
     include: callOptions?.include,
     exclude: callOptions?.exclude,
     stack,
@@ -717,6 +818,10 @@ export const scratchStack = <ROut>(
   const pinToTestServices = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
     testDev ? provideTestServices(effect) : effect;
 
+  // TODO(unify stack builds): build scratch stacks through `Alchemist.plan` /
+  // `Alchemist.apply` instead of `makeStack` and the hand-built destroy layers
+  // below (which skip the stack's secrets and auth providers); see the TODO in
+  // `alchemy/src/EvalStack.ts`.
   const buildAndApply = (
     effect: Effect.Effect<any, any, any>,
     planOptions?: Plan.FilteredPlanOptions,
@@ -725,7 +830,7 @@ export const scratchStack = <ROut>(
       makeStack({ name: stackName, providers: options.providers, state: stateLayer } as any) as any,
       Effect.flatMap((compiled: any) =>
         Plan.make(compiled, planOptions ?? {}).pipe(
-          Effect.flatMap(apply),
+          Effect.flatMap(AlchemyDeploy.applyAndRender),
           pinToTestServices,
           Effect.provide(compiled.services),
         ),
@@ -763,7 +868,7 @@ export const scratchStack = <ROut>(
             new Plan.InvalidResourceSelection({ message: "Filtered destroy is not supported." }),
           )
         : (Plan.destroy({ name: stackName, stage }).pipe(
-            Effect.flatMap(apply),
+            Effect.flatMap(AlchemyDeploy.applyAndRender),
             Effect.asVoid,
             Effect.provide(
               stateLayer.pipe(

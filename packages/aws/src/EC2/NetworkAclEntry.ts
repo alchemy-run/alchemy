@@ -10,6 +10,13 @@ import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import type { NetworkAclId } from "./NetworkAcl.ts";
 
+export class NetworkAclEntryUnexpectedResponse extends Data.TaggedError(
+  "NetworkAclEntryUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export interface NetworkAclEntryProps {
   /**
    * The ID of the network ACL.
@@ -300,11 +307,9 @@ export const NetworkAclEntryProvider = () =>
             output.egress,
           );
           if (!entry) {
-            return yield* Effect.fail(
-              new Error(
-                `Network ACL Entry not found: ${output.networkAclId} rule ${output.ruleNumber} egress=${output.egress}`,
-              ),
-            );
+            return yield* new NetworkAclEntryUnexpectedResponse({
+              message: `Network ACL Entry not found: ${output.networkAclId} rule ${output.ruleNumber} egress=${output.egress}`,
+            });
           }
           return toAttrs(olds, entry);
         }),
@@ -383,7 +388,11 @@ export const NetworkAclEntryProvider = () =>
               schedule: Schedule.max([Schedule.exponential("500 millis"), Schedule.recurs(8)]),
             }),
             Effect.catchTag("EntryNotYetVisible", () =>
-              Effect.fail(new Error("Network ACL Entry not found after reconcile")),
+              Effect.fail(
+                new NetworkAclEntryUnexpectedResponse({
+                  message: "Network ACL Entry not found after reconcile",
+                }),
+              ),
             ),
           );
           return toAttrs(news, entry);

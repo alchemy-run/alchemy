@@ -170,7 +170,7 @@ const TERMINATION_SIGNAL_DISPATCH_TIMEOUT = Duration.millis(25);
 const parseExecutionTimeout = (
   props: CommandRunProps,
 ): Effect.Effect<Duration.Duration | undefined, CommandError> => {
-  if (props.timeout === undefined) return Effect.succeed(undefined);
+  if (props.timeout === undefined) return Effect.undefined;
   const decoded = Duration.fromInput(props.timeout);
   if (
     Option.isNone(decoded) ||

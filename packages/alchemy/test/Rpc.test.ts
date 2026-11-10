@@ -149,6 +149,25 @@ describe("Rpc fetch protocol", { tags: ["unit", "local"] }, () => {
     );
   });
 
+  describe("method lookup", () => {
+    it.effect("never dispatches Object.prototype members", () =>
+      Effect.gen(function* () {
+        const webHandler = HttpEffect.toWebHandler(safeHttpEffect(Rpc.serveRpc(shape, fallback)));
+        for (const name of ["constructor", "toString", "__proto__", "hasOwnProperty", "valueOf"]) {
+          const response = yield* Effect.promise(() =>
+            webHandler(
+              new Request(`http://rpc${Rpc.RPC_PATH_PREFIX}${name}`, {
+                method: "POST",
+                body: "[]",
+              }),
+            ),
+          );
+          expect(response.status).toBe(404);
+        }
+      }),
+    );
+  });
+
   describe("streaming methods (Stream)", () => {
     const collect = <T>(streamLike: any) =>
       Effect.gen(function* () {
@@ -364,4 +383,19 @@ describe("Rpc fetch protocol", { tags: ["unit", "local"] }, () => {
       { timeout: 60_000 },
     );
   });
+});
+
+describe("Rpc method addressing", { tags: ["unit", "local"] }, () => {
+  it.effect("reads the method from the pathname only", () =>
+    Effect.sync(() => {
+      const of = (url: string) => Rpc.rpcMethodOf({ url });
+      expect(of("https://worker/__rpc__/increment")).toBe("increment");
+      expect(of("/__rpc__/increment?x=1#top")).toBe("increment");
+      expect(of("/base/__rpc__/get%20all")).toBe("get all");
+      expect(of("/__rpc__/")).toBe("");
+      expect(of("https://worker/page?next=/__rpc__/increment")).toBeUndefined();
+      expect(of("https://worker/page#/__rpc__/increment")).toBeUndefined();
+      expect(of("https://worker/")).toBeUndefined();
+    }),
+  );
 });

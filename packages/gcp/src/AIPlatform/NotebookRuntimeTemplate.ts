@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { listLocations } from "./names.ts";
@@ -174,8 +175,31 @@ export type NotebookRuntimeTemplate = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  NotebookRuntimeTemplateLookup
 >;
+
+/**
+ * Props for {@link NotebookRuntimeTemplate.lookup}: find a notebook runtime
+ * template this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface NotebookRuntimeTemplateLookup {
+  /**
+   * Template id (the `{notebook_runtime_template}` segment).
+   */
+  notebookRuntimeTemplateId: string;
+  /**
+   * Vertex AI location. `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Vertex AI notebook runtime template — machine, disk, network, and
@@ -204,6 +228,19 @@ export type NotebookRuntimeTemplate = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing notebook runtime template
+ * `NotebookRuntimeTemplate.lookup` references a notebook runtime template
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared notebook runtime template.
+ *
+ * **Example:** Reference an existing notebook runtime template
+ * ```typescript
+ * const notebookRuntimeTemplate = GCP.AIPlatform.NotebookRuntimeTemplate.lookup({
+ *   notebookRuntimeTemplateId: "my-notebook-runtime-template",
+ * });
+ * ```
+ *
  * @resource
  * @category AIPlatform
  */
@@ -214,7 +251,7 @@ export const NotebookRuntimeTemplate = Resource<NotebookRuntimeTemplate>(
 export class NotebookRuntimeTemplateNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.NotebookRuntimeTemplateNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, id: string) =>
@@ -245,14 +282,14 @@ const toAttrs = (
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsNotebookRuntimeTemplates({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (template): template is aiplatform.GoogleCloudAiplatformV1NotebookRuntimeTemplate =>
         template !== undefined,
-      () => new AiPlatformNotResolved({ name }),
+      () => new AiPlatformNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.NotResolved",
@@ -265,7 +302,7 @@ const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (template) => template === undefined,
-      () => new AiPlatformStillExists({ name }),
+      () => new AiPlatformStillExists({ resourceName: name }),
     ),
     Effect.asVoid,
     Effect.retry({
@@ -314,6 +351,15 @@ export const NotebookRuntimeTemplateProvider = () =>
           previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ notebookRuntimeTemplateId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, notebookRuntimeTemplateId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -389,7 +435,7 @@ export const NotebookRuntimeTemplateProvider = () =>
               reservationAffinity: news.reservationAffinity,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }
@@ -398,7 +444,7 @@ export const NotebookRuntimeTemplateProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new NotebookRuntimeTemplateNotResolved({ name });
+        return yield* new NotebookRuntimeTemplateNotResolved({ resourceName: name });
       }
 
       const observedName = current.name ?? name;
@@ -435,7 +481,7 @@ export const NotebookRuntimeTemplateProvider = () =>
         .deleteProjectsLocationsNotebookRuntimeTemplates({
           name: output.name,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

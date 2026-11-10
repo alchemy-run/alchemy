@@ -171,7 +171,7 @@ export const ContactProvider = () =>
             ContactListName: contactListName,
             EmailAddress: emailAddress,
           })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
       });
 
       return Contact.Provider.of({

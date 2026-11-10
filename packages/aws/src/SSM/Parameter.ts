@@ -96,10 +96,32 @@ export interface Parameter extends Resource<
      * `kms:Decrypt` for `WithDecryption` reads.
      */
     keyArn: string | undefined;
+    /**
+     * The declared description, tier, allowed pattern and data type, and
+     * the tags, as observed. Lets `alchemy drift` detect out-of-band
+     * changes.
+     */
+    configuration?: {
+      description?: string;
+      tier?: string;
+      allowedPattern?: string;
+      dataType?: string;
+      tags: Record<string, string>;
+    };
   },
   never,
-  Providers
+  Providers,
+  ParameterLookup
 > {}
+
+/**
+ * Props for {@link Parameter.lookup}: find a parameter this stack doesn't
+ * manage, in the ambient account and region, by name.
+ */
+export interface ParameterLookup {
+  /** The parameter's name, e.g. `/prod/db/url`. */
+  parameterName: string;
+}
 
 /**
  * An AWS Systems Manager (SSM) Parameter Store parameter.
@@ -182,6 +204,19 @@ export interface Parameter extends Resource<
  * };
  * ```
  *
+ * ### Looking up an existing parameter
+ * `Parameter.lookup` references a parameter Alchemy doesn't manage (created in the
+ * console or by another stack), found by `parameterName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Read an existing parameter from a function
+ * ```typescript
+ * const dbUrl = AWS.SSM.Parameter.lookup({ parameterName: "/prod/db/url" });
+ *
+ * // init
+ * const getParameter = yield* AWS.SSM.GetParameter(dbUrl);
+ * ```
+ *
  * @resource
  */
 export const Parameter = Resource<Parameter>("AWS.SSM.Parameter");
@@ -241,7 +276,7 @@ export const ParameterProvider = () =>
       const resolveKeyArn = Effect.fn(function* (keyId: string | undefined) {
         return yield* kms.describeKey({ KeyId: keyId ?? "alias/aws/ssm" }).pipe(
           Effect.map((r) => r.KeyMetadata?.Arn),
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFoundException", () => Effect.undefined),
         );
       });
 
@@ -283,12 +318,43 @@ export const ParameterProvider = () =>
             );
           }),
 
+        lookup: Effect.fn(function* ({ parameterName }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const found = yield* ssm.getParameter({ Name: parameterName }).pipe(
+            Effect.map((r) => r.Parameter),
+            Effect.catchTag("ParameterNotFound", () => Effect.undefined),
+          );
+          if (!found) return undefined;
+          const type = (found.Type ?? "String") as ParameterType;
+          const meta = yield* describeByName(parameterName).pipe(
+            Effect.orElseSucceed(() => undefined),
+          );
+          const keyArn =
+            type === "SecureString"
+              ? yield* resolveKeyArn(meta?.KeyId).pipe(Effect.orElseSucceed(() => undefined))
+              : undefined;
+          return {
+            parameterName,
+            parameterArn: found.ARN ?? parameterArnOf(region, accountId, parameterName),
+            type,
+            version: found.Version ?? 1,
+            keyArn,
+            configuration: {
+              description: meta?.Description,
+              tier: meta?.Tier,
+              allowedPattern: meta?.AllowedPattern,
+              dataType: meta?.DataType ?? "text",
+              tags: {},
+            },
+          };
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const name = output?.parameterName ?? (yield* createName(id, olds ?? {}));
           const found = yield* ssm.getParameter({ Name: name }).pipe(
             Effect.map((r) => r.Parameter),
-            Effect.catchTag("ParameterNotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("ParameterNotFound", () => Effect.undefined),
           );
           if (!found) return undefined;
           const type = (found.Type ?? "String") as ParameterType;
@@ -297,16 +363,25 @@ export const ParameterProvider = () =>
             type === "SecureString"
               ? yield* resolveKeyArn(meta?.KeyId).pipe(Effect.orElseSucceed(() => undefined))
               : undefined;
+          const tags = yield* fetchObservedTags(name).pipe(
+            Effect.orElseSucceed(() => ({}) as Record<string, string>),
+          );
+          // Metadata reconcile only writes when declared is only observed
+          // when declared.
           const attrs = {
             parameterName: name,
             parameterArn: found.ARN ?? parameterArnOf(region, accountId, name),
             type,
             version: found.Version ?? 1,
             keyArn,
+            configuration: {
+              description: olds?.description === undefined ? undefined : meta?.Description,
+              tier: olds?.tier === undefined ? undefined : meta?.Tier,
+              allowedPattern: olds?.allowedPattern === undefined ? undefined : meta?.AllowedPattern,
+              dataType: olds?.dataType === undefined ? undefined : (meta?.DataType ?? "text"),
+              tags,
+            },
           };
-          const tags = yield* fetchObservedTags(name).pipe(
-            Effect.orElseSucceed(() => ({}) as Record<string, string>),
-          );
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
@@ -342,7 +417,7 @@ export const ParameterProvider = () =>
           //    out-of-band we fall through to create.
           const observed = yield* ssm.getParameter({ Name: name, WithDecryption: true }).pipe(
             Effect.map((r) => r.Parameter),
-            Effect.catchTag("ParameterNotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("ParameterNotFound", () => Effect.undefined),
           );
 
           let version: number | undefined;
@@ -466,6 +541,15 @@ export const ParameterProvider = () =>
             type: desiredType,
             version: version ?? 1,
             keyArn,
+            // Either already observed equal, or just written by the put
+            // above (DescribeParameters lags writes, so it is not re-read).
+            configuration: {
+              description: news.description,
+              tier: news.tier,
+              allowedPattern: news.allowedPattern,
+              dataType: news.dataType,
+              tags: desiredTags,
+            },
           };
         }),
 

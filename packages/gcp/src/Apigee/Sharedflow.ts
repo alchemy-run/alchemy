@@ -10,6 +10,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   createInternalLabels,
@@ -85,8 +86,32 @@ export type Sharedflow = Resource<
     lastModifiedAt: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SharedflowLookup
 >;
+
+/**
+ * Props for {@link Sharedflow.lookup}: find a sharedflow this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface SharedflowLookup {
+  /**
+   * Shared flow id (the `{sharedflow}` segment of
+   * `organizations/{org}/sharedflows/{sharedflow}`). Restrict characters to
+   * `A-Za-z0-9._-`.
+   */
+  sharedflowId: string;
+  /**
+   * Apigee organization id.
+   */
+  organization?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Apigee shared flow — a reusable sequence of policies that API
@@ -123,13 +148,26 @@ export type Sharedflow = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing sharedflow
+ * `Sharedflow.lookup` references a sharedflow Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * sharedflow.
+ *
+ * **Example:** Reference an existing sharedflow
+ * ```typescript
+ * const sharedflow = GCP.Apigee.Sharedflow.lookup({
+ *   sharedflowId: "my-sharedflow",
+ * });
+ * ```
+ *
  * @resource
  * @category Apigee
  */
 export const Sharedflow = Resource<Sharedflow>("GCP.Apigee.Sharedflow");
 
 export class SharedflowNotResolved extends Data.TaggedError("GCP.Apigee.SharedflowNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const sanitizeId = (name: string): string => {
@@ -248,12 +286,12 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsSharedflows({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 const getRevision = (name: string) =>
   apigee
     .getOrganizationsSharedflowsRevisions({ name, format: "bundle" })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 const descriptionFromBundle = (body: apigee.GoogleApiHttpBody | undefined) =>
   Effect.gen(function* () {
@@ -296,7 +334,7 @@ const importBundle = (input: { org: string; sharedflowId: string; space?: string
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((flow) =>
-      flow ? Effect.succeed(flow) : Effect.fail(new SharedflowNotResolved({ name })),
+      flow ? Effect.succeed(flow) : Effect.fail(new SharedflowNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Apigee.SharedflowNotResolved",
@@ -326,6 +364,16 @@ export const SharedflowProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ sharedflowId, organization }) {
+      const env = yield* GcpEnvironment.current;
+      const org = orgIdOf(organization, env.project);
+      const name = resourceName(org, sharedflowId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      const description = yield* observedDescription(org, existing);
+      return toAttrs(existing, org, description);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -391,7 +439,7 @@ export const SharedflowProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SharedflowNotResolved({ name });
+        return yield* new SharedflowNotResolved({ resourceName: name });
       }
 
       const observed = yield* observedDescription(org, current);

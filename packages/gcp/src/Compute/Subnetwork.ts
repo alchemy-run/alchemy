@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitRegionOperation } from "./operations.ts";
@@ -151,8 +152,31 @@ export type Subnetwork = Resource<
     fingerprint: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SubnetworkLookup
 >;
+
+/**
+ * Props for {@link Subnetwork.lookup}: find a subnetwork this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface SubnetworkLookup {
+  /**
+   * Subnetwork name (RFC1035, 1-63 chars).
+   */
+  subnetworkName: string;
+  /**
+   * Region of the subnetwork. `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  region?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Google Compute Engine VPC subnetwork (subnet).
@@ -198,6 +222,19 @@ export type Subnetwork = Resource<
  *   secondaryIpRanges: [
  *     { rangeName: "pods", ipCidrRange: "10.10.1.0/24" },
  *   ],
+ * });
+ * ```
+ *
+ * ### Looking up an existing subnetwork
+ * `Subnetwork.lookup` references a subnetwork Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * subnetwork.
+ *
+ * **Example:** Reference an existing subnetwork
+ * ```typescript
+ * const subnetwork = GCP.Compute.Subnetwork.lookup({
+ *   subnetworkName: "my-subnetwork",
  * });
  * ```
  *
@@ -375,7 +412,7 @@ const toAttrs = (subnetwork: compute.Subnetwork, project: string): Subnetwork["A
 const getByName = (project: string, region: string, subnetworkName: string) =>
   compute
     .getSubnetworks({ project, region, subnetwork: subnetworkName })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const requireSubnetwork = (project: string, region: string, subnetworkName: string) =>
   getByName(project, region, subnetworkName).pipe(
@@ -438,6 +475,14 @@ export const SubnetworkProvider = () =>
           nextName === previousName,
       };
     }),
+
+    lookup: Effect.fn(function* ({ subnetworkName, region: lookupRegion }) {
+      const env = yield* GcpEnvironment.current;
+      const region = normalizeRegion(lookupRegion, env.region);
+      const existing = yield* getByName(env.project, region, subnetworkName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

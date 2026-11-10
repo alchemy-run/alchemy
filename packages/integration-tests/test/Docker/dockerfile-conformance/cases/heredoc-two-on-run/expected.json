@@ -1,0 +1,36 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "alpine",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "RUN",
+          "line": 2,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "\u003c\u003cA cat - \u0026\u0026 \u003c\u003cB cat -"
+          },
+          "heredocs": [
+            {
+              "name": "A",
+              "content": "a\n",
+              "stripTabs": false,
+              "quoted": false
+            },
+            {
+              "name": "B",
+              "content": "b\n",
+              "stripTabs": false,
+              "quoted": false
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

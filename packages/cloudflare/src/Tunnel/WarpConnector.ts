@@ -52,8 +52,27 @@ export type WarpConnector = Resource<
   WarpConnectorProps,
   WarpConnectorAttributes,
   never,
-  Providers
+  Providers,
+  WarpConnectorLookup
 >;
+
+/**
+ * Props for {@link WarpConnector.lookup}: find a WARP Connector tunnel this
+ * stack doesn't manage, by its id or its name.
+ */
+export type WarpConnectorLookup =
+  | {
+      /**
+       * The UUID of the existing WARP Connector tunnel.
+       */
+      tunnelId: string;
+    }
+  | {
+      /**
+       * The name of the existing WARP Connector tunnel.
+       */
+      name: string;
+    };
 
 /**
  * A Cloudflare WARP Connector tunnel — a software site-to-site connector
@@ -90,6 +109,21 @@ export type WarpConnector = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing connector
+ * `WarpConnector.lookup` references a connector Alchemy doesn't manage
+ * (created in the dashboard or by another stack), found by `tunnelId` or
+ * `name`. It is read during plan/deploy and never created or deleted. Its
+ * `token` is read too.
+ *
+ * **Example:** Route a new network through an existing connector
+ * ```typescript
+ * const siteA = Cloudflare.Tunnel.WarpConnector.lookup({ name: "site-a-connector" });
+ * yield* Cloudflare.Tunnel.Route("SiteANetwork", {
+ *   tunnelId: siteA.tunnelId,
+ *   network: "10.9.0.0/16",
+ * });
+ * ```
+ *
  * @see https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/private-net/warp-connector/
  *
  * @resource
@@ -108,7 +142,7 @@ export const WarpConnectorProvider = () =>
   Provider.succeed(WarpConnector, {
     stables: ["tunnelId", "accountId", "createdAt"],
 
-    diff: Effect.fn(function* ({ olds, news, output }) {
+    diff: Effect.fn(function* ({ olds, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
@@ -119,6 +153,14 @@ export const WarpConnectorProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed =
+        "tunnelId" in props
+          ? yield* getConnector(accountId, props.tunnelId)
+          : yield* findByName(accountId, props.name);
+      return observed ? yield* toAttributes(observed, accountId) : undefined;
+    }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
@@ -173,7 +215,7 @@ export const WarpConnectorProvider = () =>
       return rows.flatMap((row) => (Option.isSome(row) ? [row.value] : []));
     }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* resolveName(id, news.name);
 
@@ -240,7 +282,7 @@ interface ObservedConnector {
 const getConnector = (accountId: string, tunnelId: string) =>
   zeroTrust.getTunnelWarpConnector({ accountId, tunnelId }).pipe(
     Effect.map((t): ObservedConnector | undefined => (t.deletedAt ? undefined : t)),
-    Effect.catchTag("TunnelNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("TunnelNotFound", () => Effect.undefined),
   );
 
 /**

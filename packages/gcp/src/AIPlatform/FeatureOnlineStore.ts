@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -129,8 +130,31 @@ export type FeatureOnlineStore = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  FeatureOnlineStoreLookup
 >;
+
+/**
+ * Props for {@link FeatureOnlineStore.lookup}: find a feature online store
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface FeatureOnlineStoreLookup {
+  /**
+   * Feature Online Store id. Valid characters `[a-z0-9_]`, must start with
+   * a letter, max 60.
+   */
+  featureOnlineStoreId: string;
+  /**
+   * Region.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Vertex AI Feature Online Store for low-latency feature and embedding
@@ -158,6 +182,19 @@ export type FeatureOnlineStore = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing feature online store
+ * `FeatureOnlineStore.lookup` references a feature online store Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared feature online store.
+ *
+ * **Example:** Reference an existing feature online store
+ * ```typescript
+ * const featureOnlineStore = GCP.AIPlatform.FeatureOnlineStore.lookup({
+ *   featureOnlineStoreId: "my-feature-online-store",
+ * });
+ * ```
+ *
  * @resource
  * @category AIPlatform
  */
@@ -166,13 +203,13 @@ export const FeatureOnlineStore = Resource<FeatureOnlineStore>("GCP.AIPlatform.F
 export class FeatureOnlineStoreNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.FeatureOnlineStoreNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class FeatureOnlineStoreStillExists extends Data.TaggedError(
   "GCP.AIPlatform.FeatureOnlineStoreStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, storeId: string) =>
@@ -248,12 +285,14 @@ const toAttrs = (store: aiplatform.GoogleCloudAiplatformV1FeatureOnlineStore, pr
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsFeatureOnlineStores({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((store) =>
-      store ? Effect.succeed(store) : Effect.fail(new FeatureOnlineStoreNotResolved({ name })),
+      store
+        ? Effect.succeed(store)
+        : Effect.fail(new FeatureOnlineStoreNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.FeatureOnlineStoreNotResolved",
@@ -265,7 +304,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((store) =>
-      store === undefined ? Effect.void : Effect.fail(new FeatureOnlineStoreStillExists({ name })),
+      store === undefined
+        ? Effect.void
+        : Effect.fail(new FeatureOnlineStoreStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.FeatureOnlineStoreStillExists",
@@ -283,11 +324,11 @@ const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (store): store is aiplatform.GoogleCloudAiplatformV1FeatureOnlineStore => store !== undefined,
-      () => new FeatureOnlineStoreNotResolved({ name }),
+      () => new FeatureOnlineStoreNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (store) => isReady(store.state),
-      () => new FeatureOnlineStoreNotResolved({ name }),
+      () => new FeatureOnlineStoreNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.FeatureOnlineStoreNotResolved",
@@ -333,6 +374,15 @@ export const FeatureOnlineStoreProvider = () =>
           previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ featureOnlineStoreId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, featureOnlineStoreId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -400,7 +450,7 @@ export const FeatureOnlineStoreProvider = () =>
               encryptionSpec: news.encryptionSpec,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -408,7 +458,7 @@ export const FeatureOnlineStoreProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new FeatureOnlineStoreNotResolved({ name });
+        return yield* new FeatureOnlineStoreNotResolved({ resourceName: name });
       }
 
       if (!isReady(current.state)) {
@@ -464,7 +514,7 @@ export const FeatureOnlineStoreProvider = () =>
           force: true,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

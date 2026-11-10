@@ -5,6 +5,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import { deterministicKmsId } from "./internal.ts";
 
@@ -43,8 +44,33 @@ export type KeyRing = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  KeyRingLookup
 >;
+
+/**
+ * Props for {@link KeyRing.lookup}: find a key ring this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface KeyRingLookup {
+  /**
+   * Key ring id (the `{keyRing}` segment of
+   * `projects/{project}/locations/{location}/keyRings/{keyRing}`). Must
+   * match `[a-zA-Z0-9_-]{1,63}`.
+   */
+  keyRingId: string;
+  /**
+   * Cloud KMS location (`us-central1`, `global`, `us`, …). `US-CENTRAL1` is
+   * accepted and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud KMS KeyRing — a location-scoped container for CryptoKeys.
@@ -72,13 +98,23 @@ export type KeyRing = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing key ring
+ * `KeyRing.lookup` references a key ring Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared key ring.
+ *
+ * **Example:** Reference an existing key ring
+ * ```typescript
+ * const keyRing = GCP.KMS.KeyRing.lookup({ keyRingId: "my-key-ring" });
+ * ```
+ *
  * @resource
  * @category KMS
  */
 export const KeyRing = Resource<KeyRing>("GCP.KMS.KeyRing");
 
 export class KeyRingNotResolved extends Data.TaggedError("GCP.KMS.KeyRingNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -127,7 +163,7 @@ const toAttrs = (keyRing: kms.KeyRing, project: string, region: string) => {
 const getByName = (name: string) =>
   kms
     .getProjectsLocationsKeyRings({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listKeyRingsAt = (parent: string) =>
   Effect.gen(function* () {
@@ -170,6 +206,15 @@ export const KeyRingProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ keyRingId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, keyRingId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -235,7 +280,7 @@ export const KeyRingProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new KeyRingNotResolved({ name });
+        return yield* new KeyRingNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region);

@@ -230,7 +230,7 @@ type ObservedTrustedDomain = emailSecurity.GetSettingTrustedDomainResponse;
 const getTrustedDomain = (accountId: string, trustedDomainId: string) =>
   emailSecurity.getSettingTrustedDomain({ accountId, trustedDomainId }).pipe(
     Effect.map((entry): ObservedTrustedDomain | undefined => entry),
-    Effect.catchTag("TrustedDomainNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("TrustedDomainNotFound", () => Effect.undefined),
   );
 
 /**

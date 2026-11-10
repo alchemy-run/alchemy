@@ -94,7 +94,7 @@ export const AgentsToolsVersion = Resource<AgentsToolsVersion>("GCP.Dialogflow.A
 export class AgentsToolsVersionNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsToolsVersionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (tool: string, versionId: string) => `${tool}/versions/${versionId}`;
@@ -121,10 +121,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dialogflow
         .getProjectsLocationsAgentsToolsVersions({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string) =>
   dialogflow.listProjectsLocationsAgentsToolsVersions.pages({ parent, pageSize: 100 }).pipe(
@@ -150,7 +150,7 @@ const findByDisplayName = (parent: string, displayName: string) =>
     Stream.filter((version) => version.displayName === displayName),
     Stream.runHead,
     Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 export const AgentsToolsVersionProvider = () =>
@@ -239,7 +239,7 @@ export const AgentsToolsVersionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AgentsToolsVersionNotResolved({ name });
+        return yield* new AgentsToolsVersionNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, tool);

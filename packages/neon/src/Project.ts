@@ -116,6 +116,13 @@ export type ProjectProps = {
    * one-way conversion on first deploy: the old tool's applied history is
    * copied into Alchemy's table and the old table is left frozen. No
    * baselining required.
+   *
+   * History is forward-only and linear. A new file must sort after every
+   * applied one, or the deploy fails with `NonLinearMigrationHistoryError`;
+   * an edited or deleted applied file fails with
+   * `RewrittenMigrationHistoryError`. Renaming an applied file without
+   * changing its contents keeps it applied. See
+   * [Migrations](https://alchemy.run/sql/effect-sql/migrations#change-migration-history-safely).
    */
   migrations?: MigrationsInput;
   /**
@@ -176,8 +183,18 @@ export type Project = Resource<
     importHashes: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ProjectLookup
 >;
+
+/**
+ * Props for {@link Project.lookup}: find a project this stack
+ * doesn't manage by its id.
+ */
+export interface ProjectLookup {
+  /** Neon project id, e.g. `"plain-wave-12345678"`. */
+  projectId: string;
+}
 
 type ProjectAttributes = Project["Attributes"];
 
@@ -226,6 +243,18 @@ type ProjectAttributes = Project["Attributes"];
  *
  * @see https://neon.tech/docs/manage/projects/
  *
+ * ### Looking up an existing project
+ * `Project.lookup` references a project Alchemy doesn't manage (created in
+ * the Neon Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ * Its connection URIs point at the default branch's first database.
+ *
+ * **Example:** Connect to an existing project
+ * ```typescript
+ * const db = Neon.Project.lookup({ projectId: "plain-wave-12345678" });
+ * const url = db.connectionUri;
+ * ```
+ *
  * @resource
  * @product Project
  */
@@ -245,7 +274,7 @@ export const ProjectProvider = () =>
           hydrateProjectAttributes(project).pipe(
             // A project can be deleted between the list call and
             // hydration — skip it rather than fail the whole enumeration.
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           ),
         { concurrency: 10 },
       );
@@ -296,11 +325,19 @@ export const ProjectProvider = () =>
       }
       return undefined;
     }),
+    lookup: Effect.fn(function* ({ projectId }) {
+      const found = yield* getProject({ project_id: projectId }).pipe(
+        Effect.map(({ project }) => project),
+        Effect.catchTag("NotFound", () => Effect.undefined),
+      );
+      return found === undefined ? undefined : yield* hydrateProjectAttributes(found);
+    }),
+
     read: Effect.fn(function* ({ id, output, olds, previous }) {
       if (output?.projectId) {
         return yield* getProject({ project_id: output.projectId }).pipe(
           Effect.flatMap(({ project }) => hydrateProjectAttributes(project, output)),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       }
       const name = yield* createProjectName(id, olds?.name);
@@ -340,7 +377,7 @@ export const ProjectProvider = () =>
       let observed: ObservedProject | undefined = output?.projectId
         ? yield* getProject({ project_id: output.projectId }).pipe(
             Effect.map(({ project }) => project),
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           )
         : undefined;
       if (!observed) {
@@ -470,7 +507,7 @@ export const ProjectProvider = () =>
     }),
   });
 
-const rootDir = Effect.sync(process.cwd);
+const rootDir = Effect.sync(() => process.cwd());
 
 const createProjectName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {
@@ -513,7 +550,11 @@ export class OperationFailed extends Data.TaggedError("NeonOperationFailed")<{
   operationId: string;
   action: string;
   status: string;
-}> {}
+}> {
+  override get message() {
+    return `Neon operation ${this.operationId} (${this.action}) ended ${this.status}`;
+  }
+}
 
 export class OperationPending extends Data.TaggedError("NeonOperationPending")<{
   operationId: string;

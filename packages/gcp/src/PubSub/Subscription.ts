@@ -17,7 +17,6 @@ import {
   hostServiceAccountEmail,
   hostServiceAccountId,
   projectNumber,
-  revokeHostIam,
 } from "../Host.ts";
 import {
   type GcpIamResourceKind,
@@ -25,6 +24,7 @@ import {
   revokeIamMembership,
   updateIamMembership,
 } from "../IamPolicy.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -299,8 +299,27 @@ export type Subscription = Resource<
     iamGrants?: SubscriptionIamGrant[];
   },
   never,
-  Providers
+  Providers,
+  SubscriptionLookup
 >;
+
+/**
+ * Props for {@link Subscription.lookup}: find a subscription this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface SubscriptionLookup {
+  /**
+   * Subscription id (the `{subscription}` segment of
+   * `projects/{project}/subscriptions/{subscription}`).
+   */
+  subscriptionId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Google Cloud Pub/Sub subscription.
@@ -381,6 +400,19 @@ export type Subscription = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing subscription
+ * `Subscription.lookup` references a subscription Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * subscription.
+ *
+ * **Example:** Reference an existing subscription
+ * ```typescript
+ * const subscription = GCP.PubSub.Subscription.lookup({
+ *   subscriptionId: "my-subscription",
+ * });
+ * ```
+ *
  * @resource
  * @category PubSub
  */
@@ -389,7 +421,7 @@ export const Subscription = Resource<Subscription>("GCP.PubSub.Subscription");
 export class SubscriptionNotResolved extends Data.TaggedError(
   "GCP.PubSub.SubscriptionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_ACK_DEADLINE_SECONDS = 10;
@@ -511,13 +543,13 @@ const toAttrs = (subscription: pubsub.Subscription, project: string) => {
 const getByName = (name: string) =>
   pubsub
     .getProjectsSubscriptions({ subscription: name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (existing) => existing === undefined,
-      () => new SubscriptionStillExists({ name }),
+      () => new SubscriptionStillExists({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.PubSub.SubscriptionStillExists",
@@ -529,7 +561,7 @@ const waitUntilGone = (name: string) =>
 
 export class SubscriptionStillExists extends Data.TaggedError(
   "GCP.PubSub.SubscriptionStillExists",
-)<{ name: string }> {}
+)<{ resourceName: string }> {}
 
 // Pub/Sub serves reads from replicas that lag writes: one successful GET
 // does not mean the next one (or a publish routed to it) sees the
@@ -543,7 +575,7 @@ const waitUntilPresent = (name: string) =>
       if (read > 0) yield* Effect.sleep("1 second");
       found = yield* getByName(name);
       if (found === undefined) {
-        return yield* new SubscriptionNotResolved({ name });
+        return yield* new SubscriptionNotResolved({ resourceName: name });
       }
     }
     return found!;
@@ -849,6 +881,14 @@ export const SubscriptionProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({ subscriptionId }) {
+      const env = yield* GcpEnvironment.current;
+      const name = resourceName(env.project, subscriptionId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return { ...toAttrs(existing, env.project), iamGrants: undefined };
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const subscriptionId = yield* toId(id, olds?.subscriptionId, output?.subscriptionId);
@@ -903,9 +943,7 @@ export const SubscriptionProvider = () =>
       let current =
         output !== undefined
           ? yield* waitUntilPresent(name).pipe(
-              Effect.catchTag("GCP.PubSub.SubscriptionNotResolved", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("GCP.PubSub.SubscriptionNotResolved", () => Effect.undefined),
             )
           : yield* getByName(name);
 
@@ -925,7 +963,7 @@ export const SubscriptionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SubscriptionNotResolved({ name });
+        return yield* new SubscriptionNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

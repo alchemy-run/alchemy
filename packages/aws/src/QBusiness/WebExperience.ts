@@ -9,6 +9,18 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { Providers } from "../Providers.ts";
 
+export class WebExperienceInvalidProps extends Data.TaggedError("WebExperienceInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class WebExperienceUnexpectedResponse extends Data.TaggedError(
+  "WebExperienceUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type WebExperienceStatus = qbusiness.WebExperienceStatus;
 
 export interface WebExperienceProps {
@@ -93,8 +105,20 @@ export interface WebExperience extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  WebExperienceLookup
 > {}
+
+/**
+ * Props for {@link WebExperience.lookup}: find a web experience this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface WebExperienceLookup {
+  /** The application the web experience belongs to. */
+  applicationId: string;
+  /** The id of the existing web experience. */
+  webExperienceId: string;
+}
 
 /**
  * An Amazon Q Business web experience — the hosted chat UI end users open
@@ -121,6 +145,16 @@ export interface WebExperience extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing web experience
+ * `WebExperience.lookup` references a web experience Alchemy doesn't manage (created in the
+ * console or by another stack), found by `applicationId` and `webExperienceId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing web experience
+ * ```typescript
+ * const chat = AWS.QBusiness.WebExperience.lookup({ applicationId, webExperienceId });
+ * ```
+ *
  * @resource
  */
 export const WebExperience = Resource<WebExperience>("AWS.QBusiness.WebExperience");
@@ -128,7 +162,7 @@ export const WebExperience = Resource<WebExperience>("AWS.QBusiness.WebExperienc
 const fetchTags = Effect.fn(function* (arn: string) {
   const response = yield* qbusiness
     .listTagsForResource({ resourceARN: arn })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   return Object.fromEntries((response?.tags ?? []).map((tag) => [tag.key, tag.value]));
 });
 
@@ -140,7 +174,7 @@ interface WebExperienceState {
 const readWebExperienceById = Effect.fn(function* (applicationId: string, webExperienceId: string) {
   const described = yield* qbusiness
     .getWebExperience({ applicationId, webExperienceId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!described || described.status === "DELETING") return undefined;
   const arn = described.webExperienceArn;
   if (arn === undefined) return undefined;
@@ -202,7 +236,7 @@ const waitForWebExperienceSettled = (
     Effect.gen(function* () {
       const described = yield* qbusiness
         .getWebExperience({ applicationId, webExperienceId })
-        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       if (target === "DELETED") {
         if (described === undefined) return;
         return yield* new WebExperienceNotReady({
@@ -236,6 +270,9 @@ export const WebExperienceProvider = () =>
         // without iterating every application — treated as a sub-resource per
         // the factory list() convention.
         list: () => Effect.succeed([]),
+        lookup: Effect.fn(function* ({ applicationId, webExperienceId }) {
+          return (yield* readWebExperienceById(applicationId, webExperienceId))?.attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const applicationId = output?.applicationId ?? olds?.applicationId;
           // Web experience summaries carry no display name, so there is no
@@ -260,7 +297,9 @@ export const WebExperienceProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(new Error("QBusiness WebExperience requires props"));
+            return yield* new WebExperienceInvalidProps({
+              message: "QBusiness WebExperience requires props",
+            });
           }
           const applicationId = news.applicationId;
           const internalTags = yield* createInternalTags(id);
@@ -291,17 +330,17 @@ export const WebExperienceProvider = () =>
               })),
             });
             if (!created.webExperienceId) {
-              return yield* Effect.fail(
-                new Error(`CreateWebExperience for '${id}' returned no webExperienceId`),
-              );
+              return yield* new WebExperienceUnexpectedResponse({
+                message: `CreateWebExperience for '${id}' returned no webExperienceId`,
+              });
             }
             yield* session.note(`Creating web experience (${created.webExperienceId})...`);
             yield* waitForWebExperienceSettled(applicationId, created.webExperienceId, "SETTLED");
             state = yield* readWebExperienceById(applicationId, created.webExperienceId);
             if (state === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created web experience for '${id}'`),
-              );
+              return yield* new WebExperienceUnexpectedResponse({
+                message: `failed to read created web experience for '${id}'`,
+              });
             }
           }
 
@@ -363,9 +402,9 @@ export const WebExperienceProvider = () =>
 
           const final = yield* readWebExperienceById(applicationId, state.attrs.webExperienceId);
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled web experience for '${id}'`),
-            );
+            return yield* new WebExperienceUnexpectedResponse({
+              message: `failed to read reconciled web experience for '${id}'`,
+            });
           }
           return final.attrs;
         }),

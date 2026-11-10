@@ -8,6 +8,7 @@ import {
 import {
   describeRewrittenHistory,
   MigrationError,
+  NonLinearMigrationHistoryError,
   RewrittenMigrationHistoryError,
   type MigrationApplyError,
   type MigrationDialect,
@@ -16,7 +17,7 @@ import {
   type SqlExecutor,
 } from "./Format.ts";
 import { classifyTable, tableColumns } from "./Introspect.ts";
-import { bookkeepingColumns, quoteIdentifier, sqlLiteral } from "./Utils.ts";
+import { bookkeepingColumns, quoteIdentifier, scalarText, sqlLiteral } from "./Utils.ts";
 
 export const ALCHEMY_DEFAULT_TABLE = "__alchemy_migrations";
 
@@ -242,8 +243,8 @@ const appliedHistory = (executor: SqlExecutor, table: string) =>
         for (const row of rows) {
           if (row.name === null || row.name === undefined) continue;
           byName.set(
-            String(row.name),
-            row.hash === null || row.hash === undefined ? undefined : String(row.hash),
+            scalarText(row.name),
+            row.hash === null || row.hash === undefined ? undefined : scalarText(row.hash),
           );
         }
         return byName;
@@ -262,6 +263,39 @@ const lookupApplied = (
   return undefined;
 };
 
+/**
+ * Carry applied rows over to files renamed with unchanged contents: the
+ * row takes the file's new name, so the file is applied, not run again.
+ * Each row pairs with at most one file of the same hash.
+ */
+const carryRenames = (options: {
+  executor: SqlExecutor;
+  table: string;
+  records: ReadonlyArray<MigrationRecord>;
+  applied: Map<string, string | undefined>;
+}) =>
+  Effect.gen(function* () {
+    const { executor, table, records, applied } = options;
+    const localNames = new Set(records.flatMap((record) => aliasesOf(record.name)));
+    const orphans = [...applied].filter(
+      ([name, hash]) => hash !== undefined && !localNames.has(name),
+    );
+    const updates: string[] = [];
+    for (const record of records) {
+      if (lookupApplied(applied, record.name)) continue;
+      const index = orphans.findIndex(([, hash]) => hash === record.hash);
+      if (index === -1) continue;
+      const [from] = orphans.splice(index, 1)[0];
+      const column = bookkeepingColumns(executor.dialect, "name");
+      updates.push(
+        `UPDATE ${quoteIdentifier(table, executor.dialect)} SET ${column} = ${sqlLiteral(record.name, executor.dialect)} WHERE ${column} = ${sqlLiteral(from, executor.dialect)};`,
+      );
+      applied.delete(from);
+      applied.set(record.name, record.hash);
+    }
+    if (updates.length > 0) yield* executor.batch(updates);
+  });
+
 const applyPending = (options: {
   executor: SqlExecutor;
   table: string;
@@ -273,9 +307,23 @@ const applyPending = (options: {
     for (const record of records) {
       if (lookupApplied(applied, record.name)) continue;
       const bookkeeping = insertSql(table, executor.dialect, record);
-      yield* executor.applyMigration
+      const send = executor.applyMigration
         ? executor.applyMigration(record, bookkeeping)
         : executor.batch([...record.statements, bookkeeping]);
+      // A batch can commit and still lose its reply. Its bookkeeping row says
+      // whether it landed, so a lost reply is not a failure and only a
+      // transient failure that did not land is resent (#1889).
+      yield* send.pipe(
+        Effect.catchTag(
+          "MigrationError",
+          Effect.fn(function* (error) {
+            const after = yield* appliedHistory(executor, table);
+            if (lookupApplied(after, record.name)) return;
+            if (!error.transient) return yield* error;
+            yield* send;
+          }),
+        ),
+      );
     }
   });
 
@@ -291,7 +339,11 @@ const applyPending = (options: {
  * while current records key them by `<dir>`, so both keys are honored.
  * An already-applied name whose local hash changed, or a recorded name
  * with no local file, is a hard {@link RewrittenMigrationHistoryError}
- * rather than a silent skip that would persist the new hashes.
+ * rather than a silent skip that would persist the new hashes. A file
+ * renamed with unchanged contents keeps its applied row. A pending file
+ * that sorts before an applied one is a
+ * {@link NonLinearMigrationHistoryError}: fresh databases would run the
+ * two in the opposite order.
  */
 export const applyAlchemyFormat = (options: {
   executor: SqlExecutor;
@@ -302,6 +354,7 @@ export const applyAlchemyFormat = (options: {
     const { executor, table, records } = options;
     yield* ensureTable({ executor, table, records });
     const applied = yield* appliedHistory(executor, table);
+    yield* carryRenames({ executor, table, records, applied });
     const localNames = new Set(records.flatMap((record) => aliasesOf(record.name)));
     const changed: string[] = [];
     const removed: string[] = [];
@@ -326,12 +379,32 @@ export const applyAlchemyFormat = (options: {
           "Add a new forward migration instead of editing or deleting already-applied files.",
       });
     }
+    // Records are in apply order, so a pending record before the newest
+    // applied one would run out of the order a fresh database uses.
+    let newest = records.length - 1;
+    while (newest >= 0 && !lookupApplied(applied, records[newest].name)) newest--;
+    const pending = records
+      .slice(0, Math.max(newest, 0))
+      .filter((record) => !lookupApplied(applied, record.name))
+      .map((record) => record.name);
+    if (pending.length > 0) {
+      const newestApplied = records[newest].name;
+      return yield* new NonLinearMigrationHistoryError({
+        pending,
+        newestApplied,
+        message:
+          `Pending migration ${pending.join(", ")} in "${table}" sorts before the ` +
+          `already-applied ${newestApplied}, so it would run in a different order here ` +
+          "than on a fresh database. Rename it to sort after the newest applied migration; " +
+          "databases that already applied it keep it applied under the new name.",
+      });
+    }
     yield* applyPending({ executor, table, records, applied });
   });
 
 /**
- * {@link applyAlchemyFormat} without the rewritten-history check: applied
- * names are skipped regardless of their hash. For runtime appliers (Durable
+ * {@link applyAlchemyFormat} without the history checks: applied names are
+ * skipped regardless of their hash or order. For runtime appliers (Durable
  * Object SQLite) where failing would take every instance down after a
  * deploy that already succeeded.
  */
@@ -344,5 +417,6 @@ export const applyPendingAlchemyFormat = (options: {
     const { executor, table, records } = options;
     yield* ensureTable({ executor, table, records });
     const applied = yield* appliedHistory(executor, table);
+    yield* carryRenames({ executor, table, records, applied });
     yield* applyPending({ executor, table, records, applied });
   });

@@ -6,7 +6,7 @@ import { deepEqual, isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
-import { Resource, type ResourceBinding } from "alchemy/Resource";
+import { type LookupMethod, Resource, type ResourceBinding } from "alchemy/Resource";
 import { type ServerHost } from "alchemy/Runtime/Process";
 import { packEnvValue } from "alchemy/RuntimeContext";
 import { tagRecord } from "alchemy/Tags";
@@ -15,7 +15,12 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
-import { retryActAs, type AppliedIamGrant, type GcpHostBinding } from "../Host.ts";
+import {
+  retryActAs,
+  serviceAccountUniqueId,
+  type AppliedIamGrant,
+  type GcpHostBinding,
+} from "../Host.ts";
 import { createGcpHostRuntimeContext, type GcpHostRuntimeContext } from "../HostContext.ts";
 import {
   alchemyRuntimeEnv,
@@ -23,6 +28,7 @@ import {
   releaseHostIdentity,
   resolveHostIdentity,
 } from "../HostRuntime.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -358,8 +364,32 @@ export type Function = Resource<
     codeHash: string | undefined;
   },
   GcpHostBinding,
-  Providers
+  Providers,
+  FunctionLookup
 >;
+
+/**
+ * Props for {@link Function.lookup}: find a function this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface FunctionLookup {
+  /**
+   * Function id (the `{function}` segment of
+   * `projects/{project}/locations/{location}/functions/{function}`).
+   */
+  functionId: string;
+  /**
+   * Region (`us-central1`, `europe-west1`, …). `US-CENTRAL1` is accepted
+   * and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 export type FunctionRuntimeContext = GcpHostRuntimeContext;
 export type FunctionServices = Credentials | GcpEnvironment | ServerHost;
@@ -477,32 +507,44 @@ export type FunctionShape = Main<FunctionServices>;
  * `buildConfig.source` and `entryPoint` are managed for you. The runtime
  * authenticates to GCP as the function's service account.
  *
+ * ### Looking up an existing function
+ * `Function.lookup` references a function Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared function.
+ *
+ * **Example:** Reference an existing function
+ * ```typescript
+ * const functionRef = GCP.CloudFunctions.Function.lookup({
+ *   functionId: "my-function",
+ * });
+ * ```
+ *
  * @resource
  * @category CloudFunctions
  */
-export const Function: Platform<Function, FunctionServices, FunctionShape, FunctionRuntimeContext> =
-  Platform("GCP.CloudFunctions.Function", {
-    createRuntimeContext: createGcpHostRuntimeContext("GCP.CloudFunctions.Function") as (
-      id: string,
-    ) => FunctionRuntimeContext,
-  });
+export const Function: Platform<Function, FunctionServices, FunctionShape, FunctionRuntimeContext> &
+  LookupMethod<Function> = Platform("GCP.CloudFunctions.Function", {
+  createRuntimeContext: createGcpHostRuntimeContext("GCP.CloudFunctions.Function") as (
+    id: string,
+  ) => FunctionRuntimeContext,
+});
 
 export class FunctionNotResolved extends Data.TaggedError(
   "GCP.CloudFunctions.FunctionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class FunctionStillExists extends Data.TaggedError(
   "GCP.CloudFunctions.FunctionStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class FunctionDeployFailed extends Data.TaggedError(
   "GCP.CloudFunctions.FunctionDeployFailed",
 )<{
-  name: string;
+  resourceName: string;
   state: string;
   message: string;
 }> {}
@@ -653,7 +695,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   cloudfunctions
     .getProjectsLocationsFunctions({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const failedMessage = (fn: cloudfunctions.Cloudfunctions_Function) =>
   fn.stateMessages
@@ -689,20 +731,20 @@ const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (fn): fn is cloudfunctions.Cloudfunctions_Function => fn !== undefined,
-      () => new FunctionNotResolved({ name }),
+      () => new FunctionNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (fn) => fn.state !== "FAILED",
       (fn) =>
         new FunctionDeployFailed({
-          name,
+          resourceName: name,
           state: fn.state ?? "FAILED",
           message: failedMessage(fn),
         }),
     ),
     Effect.filterOrFail(
       (fn) => fn.state === "ACTIVE" || fn.state === undefined,
-      () => new FunctionNotResolved({ name }),
+      () => new FunctionNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CloudFunctions.FunctionNotResolved",
@@ -714,7 +756,7 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((fn) =>
-      fn === undefined ? Effect.void : Effect.fail(new FunctionStillExists({ name })),
+      fn === undefined ? Effect.void : Effect.fail(new FunctionStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CloudFunctions.FunctionStillExists",
@@ -831,6 +873,21 @@ export const FunctionProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ functionId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, functionId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      const attrs = toAttrs(existing, env.project, env.region);
+      // The id AWS roles trust the runtime's Google ID tokens by.
+      const uniqueId =
+        attrs.serviceAccountEmail === undefined
+          ? undefined
+          : yield* serviceAccountUniqueId(attrs.serviceAccountEmail);
+      return { ...attrs, serviceAccountUniqueId: uniqueId };
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -964,7 +1021,7 @@ export const FunctionProvider = () =>
           })
           .pipe(
             retryActAs,
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
             Effect.onError(() => identity.cleanup),
           );
         if (created !== undefined) {
@@ -973,7 +1030,7 @@ export const FunctionProvider = () =>
         current = yield* waitUntilReady(name);
       }
       if (current === undefined) {
-        return yield* new FunctionNotResolved({ name });
+        return yield* new FunctionNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -1080,7 +1137,7 @@ export const FunctionProvider = () =>
         current = yield* waitUntilReady(name);
       }
       if (current === undefined) {
-        return yield* new FunctionNotResolved({ name });
+        return yield* new FunctionNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region, {
@@ -1093,7 +1150,7 @@ export const FunctionProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* cloudfunctions
         .deleteProjectsLocationsFunctions({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

@@ -7,6 +7,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   collectPages,
@@ -74,8 +75,33 @@ export type EndpointAttachment = Resource<
     connectionState: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  EndpointAttachmentLookup
 >;
+
+/**
+ * Props for {@link EndpointAttachment.lookup}: find an endpoint attachment
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface EndpointAttachmentLookup {
+  /**
+   * Endpoint attachment id (the `{endpoint_attachment}` segment of
+   * `organizations/{org}/endpointAttachments/{endpoint_attachment}`). Must
+   * start with a lowercase letter, be 2-32 characters of lowercase letters,
+   * numbers, or hyphens, and must not end with a hyphen.
+   */
+  endpointAttachmentId: string;
+  /**
+   * Apigee organization id or `organizations/{org}`.
+   */
+  organization?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Apigee endpoint attachment for southbound Private Service Connect.
@@ -94,6 +120,19 @@ export type EndpointAttachment = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing endpoint attachment
+ * `EndpointAttachment.lookup` references an endpoint attachment Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared endpoint attachment.
+ *
+ * **Example:** Reference an existing endpoint attachment
+ * ```typescript
+ * const endpointAttachment = GCP.Apigee.EndpointAttachment.lookup({
+ *   endpointAttachmentId: "my-endpoint-attachment",
+ * });
+ * ```
+ *
  * @resource
  * @category Apigee
  */
@@ -102,7 +141,7 @@ export const EndpointAttachment = Resource<EndpointAttachment>("GCP.Apigee.Endpo
 export class EndpointAttachmentNotResolved extends Data.TaggedError(
   "GCP.Apigee.EndpointAttachmentNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const normalizeLocation = (location: string | undefined, defaultLocation: string) =>
@@ -146,7 +185,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsEndpointAttachments({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 const isAlchemyId = (endpointAttachmentId: string) => endpointAttachmentId.startsWith("alc");
 
@@ -182,6 +221,15 @@ export const EndpointAttachmentProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ endpointAttachmentId, organization: lookupOrganization }) {
+      const env = yield* GcpEnvironment.current;
+      const organization = defaultOrgName(env.project, lookupOrganization);
+      const name = resourceName(organization, endpointAttachmentId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, organization, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -248,7 +296,7 @@ export const EndpointAttachmentProvider = () =>
               serviceAttachment: news.serviceAttachment,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (operation !== undefined) {
           yield* waitForOperation(operation);
         }
@@ -256,7 +304,7 @@ export const EndpointAttachmentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new EndpointAttachmentNotResolved({ name });
+        return yield* new EndpointAttachmentNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, organization, env.region);
@@ -265,9 +313,7 @@ export const EndpointAttachmentProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* apigee
         .deleteOrganizationsEndpointAttachments({ name: output.name })
-        .pipe(
-          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

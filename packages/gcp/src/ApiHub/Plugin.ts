@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   ApihubNotResolved,
@@ -139,8 +140,31 @@ export type Plugin = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  PluginLookup
 >;
+
+/**
+ * Props for {@link Plugin.lookup}: find a plugin this stack doesn't manage
+ * by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface PluginLookup {
+  /**
+   * Plugin id (the `{plugin}` segment of
+   * `projects/{project}/locations/{location}/plugins/{plugin}`).
+   */
+  pluginId: string;
+  /**
+   * Location of the API Hub instance (`us-central1`, …).
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An API Hub plugin — a user-owned or system-owned connector that
@@ -174,6 +198,16 @@ export type Plugin = Resource<
  *     },
  *   ],
  * });
+ * ```
+ *
+ * ### Looking up an existing plugin
+ * `Plugin.lookup` references a plugin Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared plugin.
+ *
+ * **Example:** Reference an existing plugin
+ * ```typescript
+ * const plugin = GCP.ApiHub.Plugin.lookup({ pluginId: "my-plugin" });
  * ```
  *
  * @resource
@@ -211,10 +245,10 @@ const toAttrs = (plugin: apihub.GoogleCloudApihubV1Plugin, project: string, regi
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : apihub
         .getProjectsLocationsPlugins({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string, region: string) =>
   apihub.listProjectsLocationsPlugins.pages({ parent, pageSize: 1000 }).pipe(
@@ -262,6 +296,15 @@ export const PluginProvider = () =>
         extra,
       });
     }),
+
+    lookup: Effect.fn(function* ({ pluginId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, pluginId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -314,7 +357,7 @@ export const PluginProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ApihubNotResolved({ name });
+        return yield* new ApihubNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;
@@ -342,7 +385,7 @@ export const PluginProvider = () =>
           times: 8,
           schedule: Schedule.spaced("2 seconds"),
         }),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       );
       if (operation !== undefined) {
         yield* waitForDeleteOperation(operation);

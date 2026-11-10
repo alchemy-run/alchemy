@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_ZONE,
@@ -107,8 +108,38 @@ export type PrivateCloudsLoggingServer = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  PrivateCloudsLoggingServerLookup
 >;
+
+/**
+ * Props for {@link PrivateCloudsLoggingServer.lookup}: find a private
+ * clouds logging server this stack doesn't manage by its identifiers, in
+ * the ambient project unless `project` names another.
+ */
+export interface PrivateCloudsLoggingServerLookup {
+  /**
+   * Logging server id (the `{loggingServer}` segment of
+   * `.../privateClouds/{privateCloud}/loggingServers/{loggingServer}`).
+   */
+  loggingServerId: string;
+  /**
+   * Location of the parent private cloud. Inferred from `privateCloud` when
+   * that value is a full resource name.
+   */
+  location?: string;
+  /**
+   * Parent PrivateCloud resource name
+   * (`projects/{project}/locations/{location}/privateClouds/{privateCloud}`)
+   * or the cloud id.
+   */
+  privateCloud: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A syslog destination that receives vCenter or ESXi logs from a VMware
@@ -133,6 +164,20 @@ export type PrivateCloudsLoggingServer = Resource<
  *     sourceType: "ESXI",
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing private clouds logging server
+ * `PrivateCloudsLoggingServer.lookup` references a private clouds logging
+ * server Alchemy doesn't manage (created in the console or by another
+ * stack). It is read during plan/deploy, never created, updated or deleted,
+ * and binds like a declared private clouds logging server.
+ *
+ * **Example:** Reference an existing private clouds logging server
+ * ```typescript
+ * const privateCloudsLoggingServer = GCP.VMwareEngine.PrivateCloudsLoggingServer.lookup({
+ *   loggingServerId: "my-logging-server",
+ *   privateCloud: "my-private-cloud",
+ * });
  * ```
  *
  * @resource
@@ -170,12 +215,12 @@ const toAttrs = (item: vmwareengine.LoggingServer, project: string) => {
 const getByName = (name: string) =>
   vmwareengine
     .getProjectsLocationsPrivateCloudsLoggingServers({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const getParentCloud = (name: string) =>
   vmwareengine
     .getProjectsLocationsPrivateClouds({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const PrivateCloudsLoggingServerProvider = () =>
   Provider.succeed(PrivateCloudsLoggingServer, {
@@ -206,6 +251,20 @@ export const PrivateCloudsLoggingServerProvider = () =>
         nextParent: news.privateCloud,
       });
     }),
+
+    lookup: Effect.fn(function* ({ loggingServerId, location: lookupLocation, privateCloud }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(
+        lookupLocation ?? (privateCloud ? locationFromName(privateCloud, DEFAULT_ZONE) : undefined),
+        DEFAULT_ZONE,
+      );
+      const parent = parentCloudName(env.project, location, privateCloud ?? "");
+      const name = resourceNameOf(parent, loggingServerId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      const attrs = toAttrs(existing, env.project);
+      return attrs;
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -302,7 +361,7 @@ export const PrivateCloudsLoggingServerProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -311,7 +370,7 @@ export const PrivateCloudsLoggingServerProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new VmwareengineNotResolved({ name });
+        return yield* new VmwareengineNotResolved({ resourceName: name });
       }
 
       const hostnameChanged = (current.hostname ?? "") !== news.hostname;
@@ -355,7 +414,7 @@ export const PrivateCloudsLoggingServerProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitRegionOperation } from "./operations.ts";
@@ -122,8 +123,31 @@ export type NodeTemplate = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  NodeTemplateLookup
 >;
+
+/**
+ * Props for {@link NodeTemplate.lookup}: find a node template this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface NodeTemplateLookup {
+  /**
+   * Template name (RFC1035, 1-63 characters).
+   */
+  nodeTemplateName: string;
+  /**
+   * Region the template lives in. `US-CENTRAL1` is accepted and normalized
+   * to `us-central1`.
+   */
+  region?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A regional Compute Engine sole-tenant node template.
@@ -149,6 +173,19 @@ export type NodeTemplate = Resource<
  * const template = yield* GCP.Compute.NodeTemplate("SoleTenant", {
  *   nodeTypeFlexibility: { cpus: "80", memory: "640GB" },
  *   cpuOvercommitType: "ENABLED",
+ * });
+ * ```
+ *
+ * ### Looking up an existing node template
+ * `NodeTemplate.lookup` references a node template Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * node template.
+ *
+ * **Example:** Reference an existing node template
+ * ```typescript
+ * const nodeTemplate = GCP.Compute.NodeTemplate.lookup({
+ *   nodeTemplateName: "my-node-template",
  * });
  * ```
  *
@@ -265,7 +302,7 @@ const toAttrs = (template: compute.NodeTemplate, project: string): NodeTemplate[
 const getByName = (project: string, region: string, nodeTemplate: string) =>
   compute
     .getNodeTemplates({ project, region, nodeTemplate })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, region: string, nodeTemplateName: string) =>
   getByName(project, region, nodeTemplateName).pipe(
@@ -354,7 +391,15 @@ export const NodeTemplateProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ nodeTemplateName, region: lookupRegion }) {
+      const env = yield* GcpEnvironment.current;
+      const region = normalizeRegion(lookupRegion, env.region);
+      const existing = yield* getByName(env.project, region, nodeTemplateName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const nodeTemplateName = yield* toName(id, olds?.nodeTemplateName, output?.nodeTemplateName);
       const region = normalizeRegion(olds?.region ?? output?.region, env.region);
@@ -362,7 +407,9 @@ export const NodeTemplateProvider = () =>
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseDescription(existing.description);
-      return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, labels))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "nodeTemplateName");
     }),
 
     list: () =>

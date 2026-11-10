@@ -14,16 +14,27 @@ export type Dashboard = Resource<
     /** Stable Axiom dashboard `uid` (used as the path identifier). */
     uid: string;
     id: string;
-    createdAt: string;
-    createdBy: string;
-    updatedAt: string;
-    updatedBy: string;
+    /** Axiom omits the audit fields on some dashboards. */
+    createdAt: string | undefined;
+    createdBy: string | undefined;
+    updatedAt: string | undefined;
+    updatedBy: string | undefined;
     /** The full dashboard document as returned by Axiom. */
     dashboard: Axiom.DashboardWriteResponse["dashboard"]["dashboard"];
   },
   never,
-  Providers
+  Providers,
+  DashboardLookup
 >;
+
+/**
+ * Props for {@link Dashboard.lookup}: find a dashboard this stack
+ * doesn't manage by its id.
+ */
+export interface DashboardLookup {
+  /** Axiom dashboard id. */
+  uid: string;
+}
 
 /**
  * An Axiom dashboard — a named, layout-driven collection of charts. Each
@@ -114,6 +125,16 @@ export type Dashboard = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing dashboard
+ * `Dashboard.lookup` references a dashboard Alchemy doesn't manage (created in
+ * the Axiom console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing dashboard
+ * ```typescript
+ * const ref = Axiom.Dashboard.lookup({ uid: "abc123" });
+ * ```
+ *
  * @resource
  * @product Dashboard
  */
@@ -132,19 +153,19 @@ export const DashboardProvider = () =>
       const toAttrsFromCreate = (envelope: Axiom.DashboardWriteResponse) => ({
         uid: envelope.dashboard.uid,
         id: envelope.dashboard.id,
-        createdAt: envelope.dashboard.createdAt,
-        createdBy: envelope.dashboard.createdBy,
-        updatedAt: envelope.dashboard.updatedAt,
-        updatedBy: envelope.dashboard.updatedBy,
+        createdAt: envelope.dashboard.createdAt ?? undefined,
+        createdBy: envelope.dashboard.createdBy ?? undefined,
+        updatedAt: envelope.dashboard.updatedAt ?? undefined,
+        updatedBy: envelope.dashboard.updatedBy ?? undefined,
         dashboard: envelope.dashboard.dashboard,
       });
       const toAttrsFromGet = (current: Axiom.DashboardResource) => ({
         uid: current.uid,
         id: current.id,
-        createdAt: current.createdAt,
-        createdBy: current.createdBy,
-        updatedAt: current.updatedAt,
-        updatedBy: current.updatedBy,
+        createdAt: current.createdAt ?? undefined,
+        createdBy: current.createdBy ?? undefined,
+        updatedAt: current.updatedAt ?? undefined,
+        updatedBy: current.updatedBy ?? undefined,
         dashboard: current.dashboard,
       });
 
@@ -157,7 +178,7 @@ export const DashboardProvider = () =>
           // by re-creating.
           const observed = output?.uid
             ? yield* get({ uid: output.uid }).pipe(
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("NotFound", () => Effect.undefined),
               )
             : undefined;
 
@@ -174,11 +195,18 @@ export const DashboardProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* del({ uid: output.uid }).pipe(Effect.catchTag("NotFound", () => Effect.void));
         }),
+        lookup: Effect.fn(function* ({ uid }) {
+          return yield* get({ uid }).pipe(
+            Effect.map(toAttrsFromGet),
+            Effect.catchTag("NotFound", () => Effect.undefined),
+          );
+        }),
+
         read: Effect.fn(function* ({ output }) {
           if (!output?.uid) return undefined;
           return yield* get({ uid: output.uid }).pipe(
             Effect.map(toAttrsFromGet),
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           );
         }),
         // Enumerate every dashboard visible to the caller. `GET /v2/dashboards`

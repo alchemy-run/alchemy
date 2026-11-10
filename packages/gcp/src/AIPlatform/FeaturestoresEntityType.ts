@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -91,8 +92,35 @@ export type FeaturestoresEntityType = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  FeaturestoresEntityTypeLookup
 >;
+
+/**
+ * Props for {@link FeaturestoresEntityType.lookup}: find a featurestores
+ * entity type this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface FeaturestoresEntityTypeLookup {
+  /**
+   * Entity type id. Valid characters `[a-z0-9_]`, must start with a letter,
+   * max 60.
+   */
+  entityTypeId: string;
+  /**
+   * Region used when `featurestore` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent Featurestore resource name or id.
+   */
+  featurestore: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Vertex AI Feature Store Entity Type — a class of objects (for
@@ -111,6 +139,20 @@ export type FeaturestoresEntityType = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing featurestores entity type
+ * `FeaturestoresEntityType.lookup` references a featurestores entity type
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared featurestores entity type.
+ *
+ * **Example:** Reference an existing featurestores entity type
+ * ```typescript
+ * const featurestoresEntityType = GCP.AIPlatform.FeaturestoresEntityType.lookup({
+ *   entityTypeId: "my-entity-type",
+ *   featurestore: "my-featurestore",
+ * });
+ * ```
+ *
  * @resource
  * @category AIPlatform
  */
@@ -121,13 +163,13 @@ export const FeaturestoresEntityType = Resource<FeaturestoresEntityType>(
 export class FeaturestoresEntityTypeNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.FeaturestoresEntityTypeNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class FeaturestoresEntityTypeStillExists extends Data.TaggedError(
   "GCP.AIPlatform.FeaturestoresEntityTypeStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const parentOf = (project: string, location: string, featurestore: string) =>
@@ -160,14 +202,14 @@ const toAttrs = (entity: aiplatform.GoogleCloudAiplatformV1EntityType, project: 
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsFeaturestoresEntityTypes({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((entity) =>
       entity
         ? Effect.succeed(entity)
-        : Effect.fail(new FeaturestoresEntityTypeNotResolved({ name })),
+        : Effect.fail(new FeaturestoresEntityTypeNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.FeaturestoresEntityTypeNotResolved",
@@ -181,7 +223,7 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((entity) =>
       entity === undefined
         ? Effect.void
-        : Effect.fail(new FeaturestoresEntityTypeStillExists({ name })),
+        : Effect.fail(new FeaturestoresEntityTypeStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.FeaturestoresEntityTypeStillExists",
@@ -230,6 +272,20 @@ export const FeaturestoresEntityTypeProvider = () =>
       if (!replace) return undefined;
       return { action: "replace" as const, deleteFirst: false };
     }),
+
+    lookup: Effect.fn(function* ({ entityTypeId, location: lookupLocation, featurestore }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      // A create interrupted before its parent resolved has nothing to find.
+      if (typeof featurestore !== "string") {
+        return undefined;
+      }
+      const parent = parentOf(env.project, location, featurestore ?? "");
+      const name = resourceName(parent, entityTypeId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -307,7 +363,7 @@ export const FeaturestoresEntityTypeProvider = () =>
               offlineStorageTtlDays: news.offlineStorageTtlDays,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -315,7 +371,7 @@ export const FeaturestoresEntityTypeProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new FeaturestoresEntityTypeNotResolved({ name });
+        return yield* new FeaturestoresEntityTypeNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -368,7 +424,7 @@ export const FeaturestoresEntityTypeProvider = () =>
           force: true,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

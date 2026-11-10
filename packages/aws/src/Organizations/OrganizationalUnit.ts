@@ -4,6 +4,7 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
 import {
@@ -13,6 +14,13 @@ import {
   retryOrganizations,
   updateResourceTags,
 } from "./common.ts";
+
+export class OrganizationalUnitUnexpectedResponse extends Data.TaggedError(
+  "OrganizationalUnitUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type OrganizationalUnitId = string;
 export type OrganizationalUnitArn = string;
@@ -58,8 +66,25 @@ export interface OrganizationalUnit extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  OrganizationalUnitLookup
 > {}
+
+/**
+ * Props for {@link OrganizationalUnit.lookup}: find an organizational unit this stack doesn't
+ * manage, in the ambient organization.
+ */
+export type OrganizationalUnitLookup =
+  | {
+      /** The id of the existing OU, e.g. `ou-ab12-cd34ef56`. */
+      ouId: string;
+    }
+  | {
+      /** The root or OU the OU sits under. */
+      parentId: string;
+      /** The name of the existing OU. */
+      name: string;
+    };
 
 /**
  * An AWS Organizations organizational unit.
@@ -69,6 +94,20 @@ export interface OrganizationalUnit extends Resource<
  * const workloads = yield* OrganizationalUnit("Workloads", {
  *   parentId: root.rootId,
  *   name: "workloads",
+ * });
+ * ```
+ *
+ * ### Looking up an existing organizational unit
+ * `OrganizationalUnit.lookup` references an organizational unit Alchemy doesn't manage (created in the
+ * console or by another stack), found by `ouId`, or `parentId` and `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Nest an OU under an existing one
+ * ```typescript
+ * const workloads = AWS.Organizations.OrganizationalUnit.lookup({ parentId: rootId, name: "Workloads" });
+ *
+ * yield* AWS.Organizations.OrganizationalUnit("Prod", {
+ *   parentId: workloads.ouId,
  * });
  * ```
  *
@@ -125,6 +164,14 @@ export const OrganizationalUnitProvider = () =>
               AccessDeniedException: () => Effect.succeed([] as OrganizationalUnit["Attributes"][]),
             }),
           ),
+        lookup: Effect.fn(function* (props) {
+          // An account outside any organization has no organizational units.
+          return yield* (
+            "ouId" in props
+              ? readOUById(props.ouId)
+              : readOUByParentAndName({ parentId: props.parentId, name: props.name })
+          ).pipe(Effect.catchTag("AWSOrganizationsNotInUseException", () => Effect.undefined));
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const state = output?.ouId
             ? yield* readOUById(output.ouId)
@@ -168,9 +215,9 @@ export const OrganizationalUnitProvider = () =>
               name,
             });
             if (!state) {
-              return yield* Effect.fail(
-                new Error(`organizational unit '${name}' not found after create`),
-              );
+              return yield* new OrganizationalUnitUnexpectedResponse({
+                message: `organizational unit '${name}' not found after create`,
+              });
             }
           }
 
@@ -196,9 +243,9 @@ export const OrganizationalUnitProvider = () =>
 
           const updated = yield* readOUById(state.ouId);
           if (!updated) {
-            return yield* Effect.fail(
-              new Error(`organizational unit '${state.ouId}' not found after reconcile`),
-            );
+            return yield* new OrganizationalUnitUnexpectedResponse({
+              message: `organizational unit '${state.ouId}' not found after reconcile`,
+            });
           }
 
           yield* session.note(updated.ouArn);
@@ -285,7 +332,7 @@ const readOUById = Effect.fn(function* (ouId: string) {
       })
       .pipe(
         Effect.map((response) => response.OrganizationalUnit),
-        Effect.catchTag("OrganizationalUnitNotFoundException", () => Effect.succeed(undefined)),
+        Effect.catchTag("OrganizationalUnitNotFoundException", () => Effect.undefined),
       ),
   );
 
@@ -295,7 +342,7 @@ const readOUById = Effect.fn(function* (ouId: string) {
 
   const [parentId, tags] = yield* Effect.all([
     readParentId(described.Id).pipe(
-      Effect.catchTag("ChildNotFoundException", () => Effect.succeed(undefined)),
+      Effect.catchTag("ChildNotFoundException", () => Effect.undefined),
     ),
     readResourceTags(described.Id).pipe(
       Effect.catchTag("TargetNotFoundException", () => Effect.succeed({})),

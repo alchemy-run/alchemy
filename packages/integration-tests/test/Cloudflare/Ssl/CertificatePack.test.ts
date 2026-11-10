@@ -5,13 +5,17 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as ssl from "@distilled.cloud/cloudflare/ssl";
 import * as workers from "@distilled.cloud/cloudflare/workers";
+import { adopt } from "alchemy/AdoptPolicy";
+import * as Drift from "alchemy/Drift";
 import * as Provider from "alchemy/Provider";
+import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -66,7 +70,7 @@ test.provider(
           zoneId,
           type: "advanced",
           certificateAuthority: "google",
-          hosts: [zoneName, `acm-probe.${zoneName}`],
+          hosts: [zoneName, `${testName("acm-probe")}.${zoneName}`],
           validationMethod: "txt",
           validityDays: 90,
         })
@@ -203,6 +207,87 @@ test.provider(
       "live",
     ],
     timeout: 120_000,
+  },
+);
+
+test.provider(
+  "drift ignores issuance progress on an unchanged pack",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const zoneId = yield* resolveZoneId(zoneName);
+      // Deterministic per-stage hostname on the standing test zone.
+      const hostname = `certdrift-${stack.stage.toLowerCase().replace(/[^a-z0-9-]/g, "-")}.${zoneName}`;
+
+      yield* stack.destroy();
+
+      // Ordering a pack needs the Advanced Certificate Manager add-on, which
+      // the testing zone lacks. A Worker custom domain makes Cloudflare
+      // order an `advanced` pack anyway, and that pack goes through the same
+      // issuance — so the stack adopts it while it is still being issued.
+      const worker = Cloudflare.Worker("CertDriftWorker", {
+        script: `export default { fetch() { return new Response("ok"); } };`,
+        workersDev: false,
+        domain: hostname,
+      });
+      yield* stack.deploy(worker);
+
+      const domain = yield* workers.listDomains
+        .items({ accountId, hostname })
+        .pipe(Stream.runHead, Effect.map(Option.getOrUndefined));
+      const ordered = yield* getPack(zoneId, domain!.certId);
+      expect(ordered).toBeDefined();
+
+      const pack = yield* stack.deploy(
+        Effect.gen(function* () {
+          yield* worker;
+          return yield* Cloudflare.Ssl.CertificatePack("DriftPack", {
+            zoneId,
+            certificateAuthority: ordered!.certificateAuthority as "google",
+            // Reversed, so the saved order differs from the declared one.
+            hosts: [...ordered!.hosts].reverse(),
+            validationMethod: ordered!.validationMethod as "txt",
+            validityDays: ordered!.validityDays as 90,
+            // The pack belongs to the custom domain; leave it to the Worker.
+          }).pipe(adopt(true), RemovalPolicy.retain());
+        }),
+      );
+      expect(pack.certificatePackId).toEqual(domain!.certId);
+
+      // Wait for issuance to move the pack on from where it was adopted:
+      // its status, issued certificate, or DCV records change.
+      const lifecycle = (p: ssl.GetCertificatePackResponse) =>
+        JSON.stringify([
+          p.status,
+          p.primaryCertificate,
+          p.validationRecords,
+          p.dcvDelegationRecords,
+        ]);
+      const adopted = yield* getPack(zoneId, pack.certificatePackId);
+      const issued = yield* getPack(zoneId, pack.certificatePackId).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("5 seconds"),
+          until: (p) => p !== undefined && lifecycle(p) !== lifecycle(adopted!),
+          times: 24,
+        }),
+      );
+      expect(lifecycle(issued!)).not.toEqual(lifecycle(adopted!));
+
+      // Nothing an operator controls changed, so drift reports nothing.
+      const drift = yield* Drift.detect(stack).pipe(Effect.provide(stack.state));
+      expect(drift.resources.DriftPack?.action).toBe("unchanged");
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:ssl",
+      "provider:cloudflare:worker",
+      "provider:cloudflare:zone",
+      "live",
+    ],
+    timeout: 240_000,
   },
 );
 

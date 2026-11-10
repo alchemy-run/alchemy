@@ -53,9 +53,9 @@ export const TransactWriteItemsHttp = Layer.effect(
         tablesRegion(sortedTables),
       );
 
-      return Effect.fn(`AWS.DynamoDB.TransactWriteItems(${sortedTables})`)(function* (
-        request: TransactWriteItemsRequest,
-      ) {
+      return Effect.fn(
+        `AWS.DynamoDB.TransactWriteItems(${sortedTables.map((table) => table.LogicalId).join(", ")})`,
+      )(function* (request: TransactWriteItemsRequest) {
         const transactItems = yield* Effect.forEach(request.TransactItems, (item) =>
           Effect.gen(function* () {
             if (item.ConditionCheck) {

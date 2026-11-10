@@ -11,6 +11,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -269,8 +270,29 @@ export type Instance = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  InstanceLookup
 >;
+
+/**
+ * Props for {@link Instance.lookup}: find an instance this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface InstanceLookup {
+  /**
+   * Cloud SQL instance id (the `{instance}` segment of
+   * `projects/{project}/instances/{instance}`). Must start with a letter,
+   * contain only lowercase letters, numbers, and hyphens, and not end with
+   * a hyphen (1–98 characters).
+   */
+  instanceName: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud SQL database instance.
@@ -349,6 +371,16 @@ export type Instance = Resource<
  *   },
  *   storageAutoResize: true,
  * });
+ * ```
+ *
+ * ### Looking up an existing instance
+ * `Instance.lookup` references an instance Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared instance.
+ *
+ * **Example:** Reference an existing instance
+ * ```typescript
+ * const instance = GCP.SQL.Instance.lookup({ instanceName: "my-instance" });
  * ```
  *
  * @resource
@@ -517,7 +549,7 @@ const toAttrs = (instance: sqladmin.DatabaseInstance, project: string, defaultRe
 const getByName = (project: string, instance: string) =>
   sqladmin
     .getInstances({ project, instance })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /**
  * Instance create, patch, and delete operations routinely run 5–15
@@ -528,11 +560,7 @@ const LONG_OPERATION_POLL = {
   schedule: Schedule.spaced("10 seconds"),
 };
 
-const waitForOperation = (
-  project: string,
-  operation: sqladmin.Operation,
-  options?: { notFoundOk?: boolean },
-) =>
+const waitForOperation = (project: string, operation: sqladmin.Operation) =>
   waitForSqlOperation(project, operation, {
     budget: "30 minutes",
     notFoundOk: true,
@@ -721,6 +749,13 @@ export const InstanceProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({ instanceName }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(env.project, instanceName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const instanceName = yield* toName(id, olds?.instanceName, output?.instanceName);
@@ -783,7 +818,7 @@ export const InstanceProvider = () =>
               desiredLabels,
             ),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(env.project, created);
         }
@@ -965,9 +1000,9 @@ export const InstanceProvider = () =>
             settingsVersion: existing.settings.settingsVersion,
             deletionProtectionEnabled: false,
           },
-        }).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
         if (patched !== undefined) {
-          yield* waitForOperation(env.project, patched, { notFoundOk: true });
+          yield* waitForOperation(env.project, patched);
         }
       }
 
@@ -977,7 +1012,7 @@ export const InstanceProvider = () =>
           instance: instanceName,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,
@@ -985,7 +1020,7 @@ export const InstanceProvider = () =>
           }),
         );
       if (operation !== undefined) {
-        yield* waitForOperation(env.project, operation, { notFoundOk: true });
+        yield* waitForOperation(env.project, operation);
       }
       yield* waitUntilGone(env.project, instanceName);
     }),

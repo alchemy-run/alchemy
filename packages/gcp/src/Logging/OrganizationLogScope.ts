@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -84,8 +85,36 @@ export type OrganizationLogScope = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  OrganizationLogScopeLookup
 >;
+
+/**
+ * Props for {@link OrganizationLogScope.lookup}: find an organization log
+ * scope this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface OrganizationLogScopeLookup {
+  /**
+   * Log scope id (the last segment of the resource name). Limited to 100
+   * characters: letters, digits, underscores, hyphens, periods; first
+   * character must be alphanumeric.
+   */
+  logScopeId: string;
+  /**
+   * Parent organization (`organizations/{organization}` or the numeric id).
+   */
+  organization?: string;
+  /**
+   * Location. Log scopes are only available in `global`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Logging log scope on an organization.
@@ -121,6 +150,19 @@ export type OrganizationLogScope = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing organization log scope
+ * `OrganizationLogScope.lookup` references an organization log scope
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared organization log scope.
+ *
+ * **Example:** Reference an existing organization log scope
+ * ```typescript
+ * const organizationLogScope = GCP.Logging.OrganizationLogScope.lookup({
+ *   logScopeId: "my-log-scope",
+ * });
+ * ```
+ *
  * @resource
  * @category Logging
  */
@@ -131,7 +173,7 @@ export const OrganizationLogScope = Resource<OrganizationLogScope>(
 export class OrganizationLogScopeNotResolved extends Data.TaggedError(
   "GCP.Logging.OrganizationLogScopeNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organization: string, location: string, logScopeId: string) =>
@@ -175,7 +217,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   logging
     .getOrganizationsLocationsLogScopes({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const OrganizationLogScopeProvider = () =>
   Provider.succeed(OrganizationLogScope, {
@@ -207,6 +249,21 @@ export const OrganizationLogScopeProvider = () =>
       if (!idChanged && !locationChanged && !orgChanged) return undefined;
       return { action: "replace" as const, deleteFirst: false };
     }),
+
+    lookup: Effect.fn(function* ({
+      logScopeId,
+      organization: lookupOrganization,
+      location: lookupLocation,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const organization = yield* resolveOrganization(lookupOrganization, undefined);
+      const location = lookupLocation ?? DEFAULT_LOCATION;
+      const name = resourceName(organization, location, logScopeId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      const attrs = toAttrs(existing, organization, env.project, location);
+      return attrs;
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -272,7 +329,7 @@ export const OrganizationLogScopeProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new OrganizationLogScopeNotResolved({ name });
+        return yield* new OrganizationLogScopeNotResolved({ resourceName: name });
       }
 
       const descriptionChanged = (current.description ?? "") !== desiredDescription;

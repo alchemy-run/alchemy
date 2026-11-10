@@ -12,6 +12,7 @@ import * as ProviderLayer from "alchemy/Local/ProviderLayer";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { destroyApp } from "./ComputeLifecycle.ts";
 import { ensureAppImmutableIdentity } from "./internal/AppIdentity.ts";
@@ -29,6 +30,26 @@ import {
 import type { Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 import type { PrismaRegionId } from "./Types.ts";
+
+export class AppConflict extends Data.TaggedError("AppConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class AppInvalidProps extends Data.TaggedError("AppInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class AppOperationFailed extends Data.TaggedError("AppOperationFailed")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class AppUnexpectedResponse extends Data.TaggedError("AppUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface AppProps {
   /**
@@ -106,8 +127,18 @@ export interface App extends Resource<
     logicalId: string | null;
   },
   never,
-  Providers
+  Providers,
+  AppLookup
 > {}
+
+/**
+ * Props for {@link App.lookup}: find an App this stack
+ * doesn't manage by its id.
+ */
+export interface AppLookup {
+  /** Prisma App (Compute service) id, `cps_…`. */
+  appId: string;
+}
 
 /**
  * A Prisma App, the long-lived application configuration that owns deployments.
@@ -132,6 +163,16 @@ export interface App extends Resource<
  *   project,
  *   branchId: preview.branchId,
  * });
+ * ```
+ *
+ * ### Looking up an existing App
+ * `App.lookup` references a App Alchemy doesn't manage (created in
+ * the Prisma Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing App
+ * ```typescript
+ * const api = Prisma.App.lookup({ appId: "cps_cmabc123def456ghi789jkl0" });
  * ```
  *
  * @resource
@@ -179,11 +220,9 @@ const findApp = Effect.fn(function* (
   if (!branch.resolved) return undefined;
   const matches = candidates.filter((app) => app.branchId === branch.id);
   if (matches.length > 1) {
-    return yield* Effect.fail(
-      new Error(
-        `Prisma returned multiple Apps named '${displayName}' on branch '${branch.id}' in project '${projectId}'; refusing an ambiguous ownership match.`,
-      ),
-    );
+    return yield* new AppConflict({
+      message: `Prisma returned multiple Apps named '${displayName}' on branch '${branch.id}' in project '${projectId}'; refusing an ambiguous ownership match.`,
+    });
   }
   return matches[0];
 });
@@ -199,11 +238,16 @@ const findAppByLogicalId = Effect.fn(function* (
   return apps.find((app) => app.logicalId === logicalId && app.branchId === branch.id);
 });
 
+export class PrismaAppLogicalIdTaken extends Data.TaggedError("PrismaAppLogicalIdTaken")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 const logicalIdTaken = (logicalId: string, branchId: string, projectId: string, cause: unknown) =>
-  new Error(
-    `Prisma App logical ID '${logicalId}' is already used by another App on branch '${branchId}' in project '${projectId}'. Logical IDs are unique per branch; choose a different logicalId or remove it from the other App.`,
-    { cause },
-  );
+  new PrismaAppLogicalIdTaken({
+    message: `Prisma App logical ID '${logicalId}' is already used by another App on branch '${branchId}' in project '${projectId}'. Logical IDs are unique per branch; choose a different logicalId or remove it from the other App.`,
+    cause,
+  });
 
 const attrsFrom = (app: ObservedApp): App["Attributes"] => ({
   appId: app.id,
@@ -232,14 +276,15 @@ const branchNeedsSync = Effect.fn(function* (projectId: string, app: ObservedApp
 const validateAppProps = (props: AppProps) =>
   Effect.gen(function* () {
     if (props.branchId !== undefined && props.branchGitName !== undefined) {
-      return yield* Effect.fail(new Error("branchId and branchGitName are mutually exclusive."));
+      return yield* new AppInvalidProps({
+        message: "branchId and branchGitName are mutually exclusive.",
+      });
     }
     if (props.branchId === null || props.branchGitName === null) {
-      return yield* Effect.fail(
-        new Error(
+      return yield* new AppInvalidProps({
+        message:
           "Prisma.App requires an attached branch because the Management API cannot create an unassigned App atomically. Omit both fields to use the project default branch, or provide branchId/branchGitName.",
-        ),
-      );
+      });
     }
   });
 
@@ -265,11 +310,9 @@ const ProviderLive = () =>
           if (isResolved(news.regionId) && news.regionId !== undefined) {
             const currentRegionId = output?.regionId ?? olds.regionId;
             if (currentRegionId !== undefined && news.regionId !== currentRegionId) {
-              return yield* Effect.fail(
-                new Error(
-                  `Prisma App region is immutable and the Management API cannot atomically move an App without deleting its serving endpoint first. Create a second App with a different display name in the target region, cut traffic over, then remove this App.`,
-                ),
-              );
+              return yield* new AppInvalidProps({
+                message: `Prisma App region is immutable and the Management API cannot atomically move an App without deleting its serving endpoint first. Create a second App with a different display name in the target region, cut traffic over, then remove this App.`,
+              });
             }
           }
           if (
@@ -311,6 +354,14 @@ const ProviderLive = () =>
             ? ({ action: "update" } as const)
             : undefined;
         }),
+        lookup: Effect.fn(function* ({ appId }) {
+          const app = yield* getService({ serviceId: appId }).pipe(
+            Effect.map((response) => response.data),
+            Effect.catchTag("NotFound", () => Effect.undefined),
+          );
+          return app ? attrsFrom(app) : undefined;
+        }),
+
         read: Effect.fn(function* ({ id, fqn, output, olds }) {
           const appId = isPrismaDevId(output?.appId) ? undefined : output?.appId;
           let provenOwned = false;
@@ -337,7 +388,7 @@ const ProviderLive = () =>
           const app = appId
             ? yield* getService({ serviceId: appId }).pipe(
                 Effect.map((response) => response.data),
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("NotFound", () => Effect.undefined),
               )
             : yield* findAppInProject;
           if (!app) return undefined;
@@ -351,19 +402,18 @@ const ProviderLive = () =>
           const logicalId = news.logicalId ?? fqn;
           const branch = yield* desiredBranchId(projectId, news);
           if (!branch.resolved) {
-            return yield* Effect.fail(
-              new Error(
+            return yield* new AppOperationFailed({
+              message:
                 news.branchGitName === undefined
                   ? `Prisma project '${projectId}' has no default branch to attach App '${displayName}'. Create or promote a default branch, or specify branchId/branchGitName.`
                   : `Prisma project '${projectId}' has no branch named '${news.branchGitName}' to attach App '${displayName}'.`,
-              ),
-            );
+            });
           }
           const appId = isPrismaDevId(output?.appId) ? undefined : output?.appId;
           let app: ObservedApp | undefined = appId
             ? yield* getService({ serviceId: appId }).pipe(
                 Effect.map((response) => response.data),
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("NotFound", () => Effect.undefined),
               )
             : undefined;
           if (!app) {
@@ -384,20 +434,16 @@ const ProviderLive = () =>
               Effect.catchTag("Conflict", (conflict) =>
                 Effect.gen(function* () {
                   if ((yield* findAppByLogicalId(projectId, logicalId, news)) !== undefined) {
-                    return yield* Effect.fail(
-                      logicalIdTaken(logicalId, branch.id, projectId, conflict),
-                    );
+                    return yield* logicalIdTaken(logicalId, branch.id, projectId, conflict);
                   }
                   const app = yield* findApp(projectId, displayName, news);
                   if (app && output?.appId !== undefined && app.id === output.appId) {
                     return { app, created: false };
                   }
-                  return yield* Effect.fail(
-                    new Error(
-                      `Prisma app '${displayName}' already exists on the requested branch but is not owned by this App resource. Import it with explicit adoption or choose a different display name.`,
-                      { cause: conflict },
-                    ),
-                  );
+                  return yield* new AppConflict({
+                    message: `Prisma app '${displayName}' already exists on the requested branch but is not owned by this App resource. Import it with explicit adoption or choose a different display name.`,
+                    cause: conflict,
+                  });
                 }),
               ),
             );
@@ -433,11 +479,9 @@ const ProviderLive = () =>
             );
           }
           if (app.name !== displayName || app.branchId !== branch.id) {
-            return yield* Effect.fail(
-              new Error(
-                `Prisma App '${app.id}' did not converge to display name '${displayName}' and branch '${branch.id ?? "null"}'. Refusing to persist mismatched App state.`,
-              ),
-            );
+            return yield* new AppUnexpectedResponse({
+              message: `Prisma App '${app.id}' did not converge to display name '${displayName}' and branch '${branch.id ?? "null"}'. Refusing to persist mismatched App state.`,
+            });
           }
           return attrsFrom(app);
         }),
@@ -445,15 +489,13 @@ const ProviderLive = () =>
           if (isPrismaDevId(output.appId)) return;
           const app = yield* getService({ serviceId: output.appId }).pipe(
             Effect.map((response) => response.data),
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           );
           if (!app) return;
           if (app.projectId !== output.projectId || app.region.id !== output.regionId) {
-            return yield* Effect.fail(
-              new Error(
-                `Prisma App '${app.id}' no longer matches its persisted immutable project and region identity. Refusing to delete a mismatched App.`,
-              ),
-            );
+            return yield* new AppConflict({
+              message: `Prisma App '${app.id}' no longer matches its persisted immutable project and region identity. Refusing to delete a mismatched App.`,
+            });
           }
           yield* destroyApp(output.appId);
         }),

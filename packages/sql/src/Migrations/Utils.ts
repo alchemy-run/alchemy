@@ -20,6 +20,17 @@ export const timestampPrefixMillis = (name: string): number | undefined => {
 };
 
 /**
+ * Stringify a scalar value a driver returned (or a bookkeeping parameter).
+ * Binary values (e.g. mysql `Buffer`s) decode as UTF-8.
+ */
+export const scalarText = (value: unknown): string =>
+  typeof value === "string"
+    ? value
+    : value instanceof Uint8Array
+      ? new TextDecoder().decode(value)
+      : String(value);
+
+/**
  * Render a parameter as a SQL literal. Only used for Alchemy's own
  * bookkeeping queries (names, hashes, millis, ISO dates) against executors
  * without native parameter support (the D1 HTTP API and the local workerd
@@ -31,7 +42,7 @@ export const sqlLiteral = (value: unknown, dialect?: MigrationDialect): string =
     return String(value);
   }
   if (typeof value === "boolean") return value ? "1" : "0";
-  const text = value instanceof Date ? value.toISOString() : String(value);
+  const text = value instanceof Date ? value.toISOString() : scalarText(value);
   // GoogleSQL escapes with backslashes; `''` is two adjacent literals.
   return dialect === "googlesql"
     ? `'${text.replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`
