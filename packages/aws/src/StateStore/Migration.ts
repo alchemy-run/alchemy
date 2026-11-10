@@ -149,7 +149,12 @@ const migrateStage = Effect.fn(function* (
       if (!fence.fenced) return heldInS3(stack, stage, fence.expiresAt);
       yield* s3(setStageAccess(legacy, stack, stage, "fenced"));
       yield* options.afterStep?.("fenced", { stack, stage }) ?? Effect.void;
-      const contents = yield* s3(readLegacyStage(legacy, stack, stage));
+      // Sealed as it is copied, so no plaintext secret reaches the table.
+      const contents = yield* migration.sealStage(
+        stack,
+        stage,
+        yield* s3(readLegacyStage(legacy, stack, stage)),
+      );
       yield* migration.commitStage(
         stack,
         stage,

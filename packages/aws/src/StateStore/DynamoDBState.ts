@@ -34,7 +34,7 @@ import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
 import { bucketEncryptionMatches, syncBucketEncryption } from "../S3/Bucket.ts";
-import { kmsKeyring, resolveStateKey, StateKmsKey } from "./Key.ts";
+import { customerKeyArn, kmsKeyring, resolveStateKey, StateKmsKey } from "./Key.ts";
 import {
   fenceLegacyStage,
   HELD_PREFIX,
@@ -388,6 +388,7 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
   // the store's own; it encrypts the table and overflow bucket at rest.
   const encryption = yield* Effect.serviceOption(StateEncryption);
   const kmsKey = yield* Effect.serviceOption(StateKmsKey);
+  if (Option.isSome(kmsKey)) yield* kmsKey.value.forStore(options.name);
   const storeKey = (table: string) =>
     Option.isSome(kmsKey)
       ? kmsKey.value.arn
@@ -478,7 +479,15 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
         [describeStateTable(table), stateBucketExists(bucket)],
         { concurrency: 2 },
       );
-      const keyArn = yield* storeKey(table);
+      // A table an earlier version created under a customer-managed key
+      // (its `kmsKeyId` option) keeps that key, unless a layer picks one.
+      const existingKey =
+        Option.isNone(kmsKey) &&
+        observed?.SSEDescription?.SSEType === "KMS" &&
+        observed.SSEDescription.KMSMasterKeyArn !== undefined
+          ? yield* customerKeyArn(observed.SSEDescription.KMSMasterKeyArn)
+          : undefined;
+      const keyArn = existingKey ?? (yield* storeKey(table));
       if (observed === undefined) {
         yield* Provisioning.deployMissing(
           { ...storeRef, label: `DynamoDB state table '${table}'` },
@@ -1425,6 +1434,29 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
               contents.output === undefined ? undefined : yield* codec.open(scope, contents.output),
           } satisfies StageContents;
         }),
+      sealStage: (stack, stage, contents) =>
+        Effect.gen(function* () {
+          const scope = { stack, stage };
+          const seal = (text: string, what: string) =>
+            codec.stale(text)
+              ? parse<unknown>(scope, text, what).pipe(
+                  Effect.flatMap((value) => codec.encode(scope, value)),
+                )
+              : Effect.succeed(text);
+          const records = yield* Effect.forEach(
+            Array.from(contents.records),
+            ([fqn, text]) =>
+              seal(text, `record '${fqn}'`).pipe(Effect.map((sealed) => [fqn, sealed] as const)),
+            { concurrency: 16 },
+          );
+          return {
+            records: new Map(records),
+            output:
+              contents.output === undefined
+                ? undefined
+                : yield* seal(contents.output, "stack output"),
+          } satisfies StageContents;
+        }),
       commitStage,
       markRolledBack,
       deleteStageItems: (stack, stage, lease) =>
@@ -1488,6 +1520,15 @@ export interface DynamoDBStateService extends StateService {
      * written for a version of alchemy from before sealing.
      */
     readonly openStage: (
+      stack: string,
+      stage: string,
+      contents: StageContents,
+    ) => Effect.Effect<StageContents, StateStoreError>;
+    /**
+     * The stage's contents with its secrets sealed as this store seals them,
+     * for a stage moving in from an S3 store that kept them in plaintext.
+     */
+    readonly sealStage: (
       stack: string,
       stage: string,
       contents: StageContents,

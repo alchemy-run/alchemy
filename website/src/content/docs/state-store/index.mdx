@@ -204,17 +204,23 @@ The credentials that deploy need DynamoDB access to the table, S3 access to the 
 
 ### Encryption
 
-The store has its own KMS key, `alias/alchemy-state`, created with the table. The table and the overflow bucket are encrypted at rest with it, and every secret in state is [encrypted](#encrypting-secrets) with it before it leaves your machine. Provide `AWS.stateEncryption()` to use a key of your own for both:
+The store has its own KMS key, `alias/alchemy-state` (`alias/alchemy-state-<name>` for a named store), created with the table. The table and the overflow bucket are encrypted at rest with it, and every secret in state is [encrypted](#encrypting-secrets) with it before it leaves your machine. Provide `AWS.stateEncryption()` to use a key of your own for both:
 
 ```typescript
 state: AWS.state().pipe(Layer.provide(AWS.stateEncryption({ kmsKeyId: "alias/my-state-key" }))),
 ```
 
-Any other `StateEncryption` layer works too; it encrypts the secrets, and the store's own key still encrypts the table and buckets.
+Any other `StateEncryption` layer works too; it encrypts the secrets, and the store's own key still encrypts the table and buckets. A table an earlier version created with `kmsKeyId` keeps that key: the store seals with it and creates no key of its own.
 
 A store created before encryption moves over on its own. The first deploy or plan outside CI creates the key, switches the table and bucket to it, and encrypts the secrets of each stage it loads. DynamoDB re-encrypts the table in the background without downtime. In CI the store only does this with `--yes`, so run `alchemy state bootstrap --backend aws` once, or deploy from your machine first.
 
-Once a stage's secrets are encrypted, versions of alchemy from before encryption fail to read the stage instead of reading the ciphertext as the secret. Upgrade every machine and CI job that deploys it. Copies of old plaintext stay in DynamoDB's point-in-time backups for up to 35 days, and in the overflow bucket's old object versions.
+Once a stage's secrets are encrypted, versions of alchemy from before encryption fail to read the stage instead of reading the ciphertext as the secret, and write nothing to it. A stage the new version hasn't deployed yet still works with the old one, so upgrade every machine and CI job that deploys a stage before you deploy it with the new version. Copies of old plaintext stay in DynamoDB's point-in-time backups for up to 35 days, and in the overflow bucket's old object versions.
+
+To go back to an older version, deploy every stage with encryption turned off first, so each decrypts its secrets:
+
+```typescript
+state: AWS.state().pipe(Layer.provide(AWS.stateEncryption({ disable: true }))),
+```
 
 ### Migrating from the S3 store
 
@@ -234,11 +240,11 @@ To go back to an older alchemy, move the stages back first:
 alchemy state migrate --rollback
 ```
 
-Roll back with the version you migrated with, before downgrading. State written by a newer version may use fields an older one can't read. The rollback decrypts secrets as it copies them, since older versions can't.
+Roll back with the version you migrated with, before downgrading. State written by a newer version may use fields an older one can't read. The migration encrypts secrets as it copies them into DynamoDB, and the rollback decrypts them as it copies them back, since older versions can't.
 
 ### Keeping state in S3
 
-`AWS.state({ backend: "s3" })` keeps using the S3 bucket. So does any config that passes `bucketName`, `prefix` or `encryption`, which only the S3 store takes. Bootstrap it with `--backend aws-s3`. The S3 store encrypts the same way, with SSE-KMS and the same key, shared by the S3 and DynamoDB stores of one name so stages stay readable when they move between them.
+`AWS.state({ backend: "s3" })` keeps using the S3 bucket. So does any config that passes `bucketName`, `prefix` or `encryption`, which only the S3 store takes. Bootstrap it with `--backend aws-s3`. The S3 store encrypts the same way, with SSE-KMS and the same key, shared by the S3 and DynamoDB stores of one name so stages stay readable when they move between them. An `encryption` that names a customer-managed key seals secrets with that key instead.
 
 ## Postgres state store
 
@@ -261,6 +267,8 @@ Alchemy.Stack(
 ```
 
 It is imported from `@alchemy.run/sql/PostgresState` rather than the `State` barrel because it depends on the optional `@effect/sql-pg` driver, which must stay out of bundled worker code. Install `@effect/sql-pg` to use it.
+
+The store records its format in an `alchemy_state_store` table and keeps records in a `data` column. The first run of a version with [secret encryption](#encrypting-secrets) renames the `value` column earlier versions used. Those versions then fail to query the store, so they can't deploy from state they would misread; upgrade every machine and CI job that uses the database together.
 
 ## State and lifecycle
 

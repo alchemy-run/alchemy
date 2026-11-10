@@ -15,7 +15,11 @@ export interface StateEncryptionOptions {
    * @default `alias/alchemy-state` (`alias/alchemy-state-<name>` with `name`), the AWS state store's own key, created on first use
    */
   readonly kmsKeyId?: string;
-  /** Use the key of the AWS state store of this name. */
+  /**
+   * Use the key of the AWS state store of this name. Provided to an AWS
+   * store, the layer uses that store's key unless this or `kmsKeyId` says
+   * otherwise; provided to any other store, the account's default store key.
+   */
   readonly name?: string;
   /**
    * Turn encryption off: write secrets in plaintext again, and decrypt each
@@ -126,16 +130,26 @@ const stateKmsKey = (options: StateEncryptionOptions) =>
     StateKmsKey,
     Effect.gen(function* () {
       const context = yield* Effect.context<KmsDeps>();
-      const arn = yield* resolveStateKey({
-        kmsKeyId: options.kmsKeyId,
-        name: options.name,
-        store: {
-          backend: "aws",
-          flags: { name: options.name },
-          label: "AWS state encryption",
-          configured: options.kmsKeyId !== undefined,
-        },
+      // The AWS store this layer is provided to, which names the key when
+      // the options don't.
+      const store: { name?: string } = {};
+      const arn = yield* Effect.suspend(() => {
+        const name = options.name ?? store.name;
+        return resolveStateKey({
+          kmsKeyId: options.kmsKeyId,
+          name,
+          store: {
+            backend: "aws",
+            flags: { name },
+            label: "AWS state encryption",
+            configured: options.kmsKeyId !== undefined,
+          },
+        });
       }).pipe(Effect.provideContext(context), Effect.mapError(toError), Effect.cached);
-      return { arn };
+      const forStore = (name: string | undefined) =>
+        Effect.sync(() => {
+          store.name ??= name;
+        });
+      return { arn, forStore };
     }).pipe(withoutSdkDebugLogs),
   );

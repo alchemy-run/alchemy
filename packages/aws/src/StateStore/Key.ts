@@ -19,6 +19,12 @@ export class StateKmsKey extends Context.Service<
   {
     /** The key's ARN, resolved (and for the store's own key, created) once. */
     readonly arn: Effect.Effect<string, StateStoreError>;
+    /**
+     * Name the AWS store this key serves. A layer given neither `kmsKeyId`
+     * nor `name` then uses that store's own key, `alias/alchemy-state-<name>`,
+     * instead of the account's default. Call it before {@link arn}.
+     */
+    readonly forStore: (name: string | undefined) => Effect.Effect<void>;
   }
 >()("AWS/StateKmsKey") {}
 
@@ -151,6 +157,19 @@ export const resolveStateKey = Effect.fn("AWS.state.resolveKey")(function* (opti
     },
     ensureStateKey(alias),
   );
+});
+
+/**
+ * The ARN of `keyId` when it is an enabled customer-managed key, which a
+ * store can seal secrets with; `undefined` for an AWS-managed key
+ * (`aws/dynamodb`, `aws/s3`), which only its service may use, or a key
+ * that is gone or disabled.
+ */
+export const customerKeyArn = Effect.fn("AWS.state.customerKey")(function* (keyId: string) {
+  const metadata = yield* describeKey(keyId);
+  return metadata?.KeyManager === "CUSTOMER" && metadata.KeyState === "Enabled"
+    ? metadata.Arn
+    : undefined;
 });
 
 /**

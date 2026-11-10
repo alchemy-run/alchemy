@@ -24,7 +24,7 @@ import * as Endpoint from "../Endpoint.ts";
 import { AWSEnvironment, providedOrDefault } from "../Environment.ts";
 import * as AwsRegion from "../Region.ts";
 import { syncBucketEncryption, type BucketEncryption } from "../S3/Bucket.ts";
-import { kmsKeyring, resolveStateKey, StateKmsKey } from "./Key.ts";
+import { customerKeyArn, kmsKeyring, resolveStateKey, StateKmsKey } from "./Key.ts";
 
 /** Maximum number of keys S3 accepts in a single DeleteObjects call. */
 const DELETE_BATCH_SIZE = 1000;
@@ -250,6 +250,7 @@ export const makeS3State = (options: S3StateOptions = {}) =>
     // The KMS key of the AWS.stateEncryption() provided to the store, or
     // else the store's own; it encrypts the bucket unless `encryption` does.
     const kmsKey = yield* Effect.serviceOption(StateKmsKey);
+    if (Option.isSome(kmsKey)) yield* kmsKey.value.forStore(options.name);
 
     const toError = (cause: unknown) =>
       new StateStoreError({
@@ -277,9 +278,17 @@ export const makeS3State = (options: S3StateOptions = {}) =>
           label: `S3 state bucket '${bucketName}'`,
           configured: options.bucketName !== undefined,
         };
+        // A bucket whose `encryption` names a customer-managed key seals
+        // secrets with that key too, unless a layer picks one.
+        const configuredKey =
+          Option.isNone(kmsKey) &&
+          options.encryption?.sseAlgorithm !== "AES256" &&
+          options.encryption?.kmsMasterKeyId !== undefined
+            ? yield* customerKeyArn(options.encryption.kmsMasterKeyId)
+            : undefined;
         const keyArn = Option.isSome(kmsKey)
           ? yield* kmsKey.value.arn
-          : yield* resolveStateKey({ name: options.name, store });
+          : (configuredKey ?? (yield* resolveStateKey({ name: options.name, store })));
         const ensure = ensureStateBucket(bucketName, region, {
           ...options,
           encryption: options.encryption ?? stateBucketEncryption(keyArn),
