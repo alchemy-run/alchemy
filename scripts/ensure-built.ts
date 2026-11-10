@@ -150,20 +150,16 @@ const emitDistilled = Effect.fn(function* (root: string) {
   );
   if (missing.length === 0) return;
   yield* Effect.logInfo(`Emitting distilled packages: ${missing.join(", ")}`);
-  // Windows caps a command line at 8191 characters: emit in batches. Each
-  // `tsrs -b` reuses what an earlier batch built (core and other references).
-  for (let start = 0; start < missing.length; start += 20) {
+  // Windows caps a command line at 8191 characters, so emit in batches of
+  // root-relative paths instead of one command naming every package.
+  const tsconfigs = missing.map((name) =>
+    path.join("submodules", "distilled", "packages", name, "tsconfig.json"),
+  );
+  for (let start = 0; start < tsconfigs.length; start += EMIT_BATCH_SIZE) {
     const exitCode = yield* spawner.exitCode(
       yield* platformCommand(
         "pnpm",
-        [
-          "exec",
-          "tsrs",
-          "-b",
-          ...missing
-            .slice(start, start + 20)
-            .map((name) => path.join(packagesDir, name, "tsconfig.json")),
-        ],
+        ["exec", "tsrs", "-b", ...tsconfigs.slice(start, start + EMIT_BATCH_SIZE)],
         { cwd: root, stdin: "inherit", stdout: "inherit", stderr: "inherit" },
       ),
     );
@@ -172,6 +168,9 @@ const emitDistilled = Effect.fn(function* (root: string) {
     }
   }
 });
+
+/** Packages per `tsrs -b` call: ~60 chars each keeps a batch far under Windows' limit. */
+const EMIT_BATCH_SIZE = 40;
 
 /** Where the last successful bundle of a distilled package is recorded. */
 const distilledStamp = (root: string, path: Path.Path, name: string) =>
