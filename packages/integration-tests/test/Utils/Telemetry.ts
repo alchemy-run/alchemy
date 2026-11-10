@@ -178,24 +178,33 @@ export const waitForRpcLink = Effect.fn(function* (collectorUrl: string, tag: st
     Effect.map(collectedSpans),
     Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
   );
-  const spans = yield* read.pipe(
+  // A caller that retried (a cold callee answered 503, IAM still
+  // propagating answered 403) has one span per attempt; the callee's span
+  // belongs to the attempt that reached it, and that caller span ends — and
+  // exports — after the callee's. So read until the link appears, not just
+  // until both names do.
+  const linkOf = (spans: ReadonlyArray<CollectedSpan>) => {
+    const callers = spans.filter((s) => s.name === `rpc-caller:${tag}`);
+    const callee = spans.find((s) => s.name === `rpc-callee:${tag}`);
+    return {
+      spans,
+      callers,
+      callee,
+      linked: {
+        found: callers.length > 0 && callee !== undefined,
+        sameTrace: callee !== undefined && callers.some((c) => c.traceId === callee.traceId),
+        belowCaller: callee !== undefined && callers.some((c) => descendsFrom(spans, callee, c)),
+      },
+    };
+  };
+  const { spans, callers, callee, linked } = yield* read.pipe(
+    Effect.map(linkOf),
     Effect.repeat({
       schedule: Schedule.spaced("3 seconds"),
-      until: (all) =>
-        all.some((s) => s.name === `rpc-caller:${tag}`) &&
-        all.some((s) => s.name === `rpc-callee:${tag}`),
-      times: 20,
+      until: (result) => result.linked.belowCaller,
+      times: 30,
     }),
   );
-  // A caller that retried (a cold callee answered 503) has one span per
-  // attempt; the callee's span belongs to the attempt that reached it.
-  const callers = spans.filter((s) => s.name === `rpc-caller:${tag}`);
-  const callee = spans.find((s) => s.name === `rpc-callee:${tag}`);
-  const linked = {
-    found: callers.length > 0 && callee !== undefined,
-    sameTrace: callee !== undefined && callers.some((c) => c.traceId === callee.traceId),
-    belowCaller: callee !== undefined && callers.some((c) => descendsFrom(spans, callee, c)),
-  };
   if (!linked.belowCaller) {
     // Shown when the assertion fails: the spans compared and the callee's parent.
     yield* Effect.logWarning(
