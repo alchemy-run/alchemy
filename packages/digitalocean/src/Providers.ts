@@ -5,11 +5,13 @@ import * as Provider from "alchemy/Provider";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import { DigitalOceanAuth } from "./AuthProvider.ts";
+import { Certificate, CertificateProvider } from "./Certificate.ts";
 import * as Credentials from "./Credentials.ts";
 import { Domain, DomainProvider } from "./Domain.ts";
 import { DomainRecord, DomainRecordProvider } from "./DomainRecord.ts";
 import { Droplet, DropletProvider } from "./Droplet.ts";
 import { Firewall, FirewallProvider } from "./Firewall.ts";
+import { LoadBalancer, LoadBalancerProvider } from "./LoadBalancer.ts";
 import { Project, ProjectProvider } from "./Project.ts";
 import { ProjectResources, ProjectResourcesProvider } from "./ProjectResources.ts";
 import { ReservedIp, ReservedIpProvider } from "./ReservedIp.ts";
@@ -70,6 +72,8 @@ export const providers = () =>
       Project,
       ProjectResources,
       Tag,
+      LoadBalancer,
+      Certificate,
       KeyPair,
     ]),
   ).pipe(
@@ -88,6 +92,8 @@ export const providers = () =>
         ProjectProvider(),
         ProjectResourcesProvider(),
         TagProvider(),
+        LoadBalancerProvider(),
+        CertificateProvider(),
         KeyPairProvider(),
       ),
     ),
