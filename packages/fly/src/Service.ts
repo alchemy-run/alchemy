@@ -1258,12 +1258,7 @@ const syncBoundSecrets = Effect.fn(function* (
     if (version !== undefined && Number.isSafeInteger(version)) versions.push(version);
   };
   if (Object.keys(writes).length > 0) {
-    const response = yield* machines.updateSecrets({
-      app_name: appName,
-      values: Object.fromEntries(
-        Object.entries(writes).map(([name, value]) => [name, Redacted.value(value)]),
-      ),
-    });
+    const response = yield* machines.updateSecrets({ app_name: appName, values: writes });
     accept(response.version ?? response.Version);
     const written = yield* listDigests;
     for (const envVar of Object.keys(hashes)) {
