@@ -132,6 +132,45 @@ describe(
       { timeout: 120_000 },
     );
 
+    // On EKS `isolated-sandbox` runs each pod in a Nitro Sandbox. kind has no
+    // Nitro, so a RuntimeClass of that name backed by runc stands in: the
+    // case pins that `runtimeClassName` reaches the applied pod template.
+    test.provider(
+      "runtimeClassName reaches the pod template",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          yield* stack.deploy(
+            Effect.gen(function* () {
+              yield* Kubernetes.Manifest("SandboxRuntimeClass", {
+                cluster: cluster.connection,
+                manifest: {
+                  apiVersion: "node.k8s.io/v1",
+                  kind: "RuntimeClass",
+                  metadata: { name: "isolated-sandbox" },
+                  handler: "runc",
+                },
+              });
+              return yield* Kubernetes.Deployment("Sandboxed", {
+                cluster: cluster.connection,
+                name: "sandboxed",
+                image,
+                port: 8080,
+                serviceType: "ClusterIP",
+                runtimeClassName: "isolated-sandbox",
+              });
+            }),
+          );
+
+          const { deployment } = yield* objectsOf("sandboxed");
+          expect(deployment.spec.template.spec.runtimeClassName).toBe("isolated-sandbox");
+
+          yield* stack.destroy();
+          expect((yield* objectsOf("sandboxed")).deployment).toBeUndefined();
+        }),
+      { timeout: 120_000 },
+    );
+
     test.provider(
       "destroy surfaces a 403 and leaves the objects in place",
       (stack) =>

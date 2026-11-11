@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   BiglakeNotResolved,
@@ -117,8 +118,36 @@ export type CatalogsDatabase = Resource<
     expireTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  CatalogsDatabaseLookup
 >;
+
+/**
+ * Props for {@link CatalogsDatabase.lookup}: find a catalogs database this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface CatalogsDatabaseLookup {
+  /**
+   * Database id (the `{database}` segment).
+   */
+  databaseId: string;
+  /**
+   * Location used when `catalog` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent catalog. Full name
+   * `projects/{project}/locations/{location}/catalogs/{catalog}` or the
+   * catalog id (combined with `location`).
+   */
+  catalog: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Hive database inside a BigLake Metastore catalog.
@@ -148,6 +177,20 @@ export type CatalogsDatabase = Resource<
  *   hiveOptions: {
  *     locationUri: "gs://my-bucket/sales",
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing catalogs database
+ * `CatalogsDatabase.lookup` references a catalogs database Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * catalogs database.
+ *
+ * **Example:** Reference an existing catalogs database
+ * ```typescript
+ * const catalogsDatabase = GCP.BigLake.CatalogsDatabase.lookup({
+ *   databaseId: "my-database",
+ *   catalog: "my-catalog",
  * });
  * ```
  *
@@ -234,6 +277,17 @@ export const CatalogsDatabaseProvider = () =>
         nextParent: catalogOf(news.catalog, env.project, location),
       });
     }),
+
+    lookup: Effect.fn(function* ({ databaseId, location: lookupLocation, catalog: lookupCatalog }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const catalog =
+        lookupCatalog !== undefined ? catalogOf(lookupCatalog, env.project, location) : "";
+      const name = catalog.length > 0 ? resourceName(catalog, databaseId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;

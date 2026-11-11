@@ -19,7 +19,9 @@ test.provider(
       const name = missingName(stack.stage);
       const { accountId, region } = yield* AWSEnvironment.current;
       yield* expectAllMissing(stack, {
-        "missing-account": AWS.Organizations.Account.lookup({ accountId: "000000000000" })
+        // Not 000000000000: that is the emulator's own account, which an
+        // organization another suite created already holds.
+        "missing-account": AWS.Organizations.Account.lookup({ accountId: "000000000001" })
           .accountId,
         "missing-organizational-unit": AWS.Organizations.OrganizationalUnit.lookup({
           ouId: "ou-aaaa-aaaaaaaa",

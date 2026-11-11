@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -220,8 +221,33 @@ export type GoldengateDeployment = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  GoldengateDeploymentLookup
 >;
+
+/**
+ * Props for {@link GoldengateDeployment.lookup}: find a goldengate
+ * deployment this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface GoldengateDeploymentLookup {
+  /**
+   * Deployment id (the `{goldengate_deployment}` segment of
+   * `projects/{proje
+   * ct}/locations/{location}/goldengateDeployments/{goldengate_deployment}`)
+   * .
+   */
+  goldengateDeploymentId: string;
+  /**
+   * Region (`us-central1`, `us-east4`, …).
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Oracle Database@Google Cloud GoldenGate deployment.
@@ -260,6 +286,19 @@ export type GoldengateDeployment = Resource<
  *     adminPasswordSecretVersion: secret.latestVersionName,
  *   },
  *   labels: { env: "prod" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing goldengate deployment
+ * `GoldengateDeployment.lookup` references a goldengate deployment Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared goldengate deployment.
+ *
+ * **Example:** Reference an existing goldengate deployment
+ * ```typescript
+ * const goldengateDeployment = GCP.OracleDatabase.GoldengateDeployment.lookup({
+ *   goldengateDeploymentId: "my-goldengate-deployment",
  * });
  * ```
  *
@@ -425,6 +464,15 @@ export const GoldengateDeploymentProvider = () =>
           previousSubnet !== nextSubnet,
       });
     }),
+
+    lookup: Effect.fn(function* ({ goldengateDeploymentId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation ?? env.region);
+      const name = resourceName(env.project, location, goldengateDeploymentId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

@@ -159,6 +159,61 @@ test.provider(
 );
 
 test.provider(
+  "passkeys: auto-prompt converges in place and an application allows it",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const domain = `${testName("alchemy-zt-passkeys")}.${zoneName}`;
+      const deploy = (loginPageAutoPrompt: boolean) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            yield* Cloudflare.Zone.Zone("TestZone", { name: zoneName }).pipe(adopt(true));
+            const passkeys = yield* Cloudflare.Access.IdentityProvider("Passkeys", {
+              type: "passkeys",
+              config: { loginPageAutoPrompt },
+            });
+            const app = yield* Cloudflare.Access.Application("PasskeysApp", {
+              type: "self_hosted",
+              domain,
+              allowedIdps: [passkeys.identityProviderId],
+            });
+            return { passkeys, app };
+          }),
+        );
+      const liveAutoPrompt = (identityProviderId: string) =>
+        getIdp(undefined, accountId, identityProviderId).pipe(
+          Effect.map(
+            (live) =>
+              (live.config as { loginPageAutoPrompt?: boolean | null }).loginPageAutoPrompt ??
+              false,
+          ),
+        );
+
+      const initial = yield* deploy(false);
+      expect(initial.passkeys.type).toEqual("passkeys");
+      expect(yield* liveAutoPrompt(initial.passkeys.identityProviderId)).toBe(false);
+
+      const liveApp = (yield* zeroTrust.getAccessApplicationForAccount({
+        accountId,
+        appId: initial.app.applicationId,
+      })) as unknown as { allowedIdps?: ReadonlyArray<string> | null };
+      expect(liveApp.allowedIdps ?? []).toEqual([initial.passkeys.identityProviderId]);
+
+      // Turning on the automatic browser prompt is an in-place update.
+      const updated = yield* deploy(true);
+      expect(updated.passkeys.identityProviderId).toEqual(initial.passkeys.identityProviderId);
+      expect(yield* liveAutoPrompt(updated.passkeys.identityProviderId)).toBe(true);
+
+      yield* stack.destroy();
+      yield* expectGone(undefined, accountId, initial.passkeys.identityProviderId);
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:access", "live"] },
+);
+
+test.provider(
   "a Redacted client secret stays out of state and a rotation updates in place",
   (stack) =>
     Effect.gen(function* () {
@@ -541,6 +596,9 @@ type Assert<T extends true> = T;
 // Valid shapes are accepted.
 type _OkOidc = Assert<Extends<{ type: "oidc"; config: typeof oidcConfig }, IdpProps>>;
 type _OkPin = Assert<Extends<{ type: "onetimepin" }, IdpProps>>;
+type _OkPasskeys = Assert<
+  Extends<{ type: "passkeys"; config: { loginPageAutoPrompt: boolean } }, IdpProps>
+>;
 type _OkSaml = Assert<
   Extends<
     {

@@ -5,6 +5,7 @@ import * as parametermanager from "@distilled.cloud/gcp/parametermanager_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -40,6 +41,14 @@ test.provider(
           });
           return { parameter, version };
         }),
+      );
+      yield* expectFound(
+        GCP.ParameterManager.ParametersVersion.lookup({
+          parameterVersionId: created.version.parameterVersionId,
+          location: created.version.location,
+          parameter: created.version.parameter,
+        }),
+        created.version,
       );
 
       expect(created.version.name).toContain("/versions/");

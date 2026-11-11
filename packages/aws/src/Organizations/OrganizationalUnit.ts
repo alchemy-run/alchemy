@@ -165,9 +165,12 @@ export const OrganizationalUnitProvider = () =>
             }),
           ),
         lookup: Effect.fn(function* (props) {
-          return "ouId" in props
-            ? yield* readOUById(props.ouId)
-            : yield* readOUByParentAndName({ parentId: props.parentId, name: props.name });
+          // An account outside any organization has no organizational units.
+          return yield* (
+            "ouId" in props
+              ? readOUById(props.ouId)
+              : readOUByParentAndName({ parentId: props.parentId, name: props.name })
+          ).pipe(Effect.catchTag("AWSOrganizationsNotInUseException", () => Effect.undefined));
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const state = output?.ouId

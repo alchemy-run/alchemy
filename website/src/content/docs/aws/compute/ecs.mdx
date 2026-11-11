@@ -75,6 +75,21 @@ Each binding adds its statement to the **task role**, the role the container run
 
 The image comes from one of three places: `image`, an image from any registry, copied into your account; `context`, your own Dockerfile, built with your local Docker; or `main`, your Effect program, bundled into a base image, `oven/bun:1` unless you set `image`. Images are built for the architecture the task runs on. Set `runtimePlatform: { cpuArchitecture: "ARM64" }` to run on Graviton, which costs less per vCPU.
 
+## Cache build layers
+
+Builds from `context` or `main` reuse the local BuildKit cache of the machine they run on. A fresh CI runner has none and rebuilds every step. Keep the layers in the task's ECR repository with `build.cache`:
+
+```typescript title="alchemy.run.ts"
+const api = yield* AWS.ECS.Service("Api", {
+  cluster,
+  context: "./api",
+  port: 8080,
+  build: { cache: true },
+});
+```
+
+Builds then import and export every stage's layers at the repository's `:buildcache` tag. The cache is off by default and never changes the image, so turning it on doesn't start a deployment. Other backends take BuildKit's cache backends, as in [Docker builds](/docker/build-and-push#cache-layers-in-a-registry).
+
 ## Run a job to completion
 
 A Task on its own runs until its process exits. Give it a `run` Effect instead of `fetch`:
@@ -158,3 +173,87 @@ capacityProviderStrategy: [
 ```
 
 A Spot task gets two minutes' notice before it's stopped, so keep its work resumable.
+
+## Isolate each task in its own VM
+
+Tasks that share an instance share its kernel. To run code you don't trust, like a tenant's container or an agent's generated code, give each task its own [Nitro Sandbox](/aws/compute/nitro-sandboxes): a lightweight VM that the Nitro hypervisor isolates from the instance and from every other task on it.
+
+Sandboxes don't run on Fargate. They run on **Managed Instances**, EC2 instances that ECS launches, patches and replaces for you. ECS needs two roles for them. The **infrastructure role** is the one ECS assumes to launch instances, and the **instance role** is the one the instances run as:
+
+```typescript title="alchemy.run.ts"
+const instanceRole = yield* AWS.IAM.Role("SandboxInstanceRole", {
+  assumeRolePolicyDocument: {
+    Version: "2012-10-17",
+    Statement: [{ Effect: "Allow", Principal: { Service: "ec2.amazonaws.com" }, Action: ["sts:AssumeRole"] }],
+  },
+  managedPolicyArns: ["arn:aws:iam::aws:policy/AmazonECSInstanceRolePolicyForManagedInstances"],
+});
+const instanceProfile = yield* AWS.IAM.InstanceProfile("SandboxInstanceProfile", {
+  roleName: instanceRole.roleName,
+});
+
+const infrastructureRole = yield* AWS.IAM.Role("SandboxInfrastructureRole", {
+  assumeRolePolicyDocument: {
+    Version: "2012-10-17",
+    Statement: [{ Effect: "Allow", Principal: { Service: "ecs.amazonaws.com" }, Action: ["sts:AssumeRole"] }],
+  },
+  managedPolicyArns: ["arn:aws:iam::aws:policy/AmazonECSInfrastructureRolePolicyForManagedInstances"],
+  inlinePolicies: {
+    PassInstanceRole: {
+      Version: "2012-10-17",
+      Statement: [{ Effect: "Allow", Action: ["iam:PassRole"], Resource: [instanceRole.roleArn] }],
+    },
+  },
+});
+```
+
+The managed policy only lets ECS pass roles named `ecsInstanceRole*`, so the inline statement lets it pass this one.
+
+Next, a capacity provider for the cluster. `nitroEnclavesEnabled` launches instances that can run sandboxes, and `instanceRequirements` limits ECS to instance types that support them:
+
+```typescript title="alchemy.run.ts"
+const capacity = yield* AWS.ECS.CapacityProvider("Sandboxes", {
+  cluster: cluster.clusterName,
+  managedInstancesProvider: {
+    infrastructureRoleArn: infrastructureRole.roleArn,
+    instanceLaunchTemplate: {
+      ec2InstanceProfileArn: instanceProfile.instanceProfileArn,
+      networkConfiguration: { subnets: network.privateSubnetIds },
+      nitroEnclavesEnabled: true,
+      instanceRequirements: {
+        vCpuCount: { min: 4 },
+        memoryMiB: { min: 8192 },
+        allowedInstanceTypes: ["m6i.xlarge", "m7i.xlarge", "c6i.xlarge", "c7i.xlarge"],
+      },
+    },
+  },
+});
+```
+
+Deploy waits until the capacity provider is `ACTIVE`. ECS launches instances only once tasks need them, and terminates them when you destroy the provider.
+
+Then set the isolation mode on the task definition, and run it on that capacity:
+
+```typescript title="alchemy.run.ts"
+const task = yield* AWS.ECS.TaskDefinition("Agent", {
+  requiresCompatibilities: ["MANAGED_INSTANCES"],
+  networkMode: "awsvpc",
+  cpu: 1024,
+  memory: 2048,
+  trustedExecutionConfiguration: { isolationMode: "ISOLATED_SANDBOX" },
+  containerDefinitions: [{ name: "agent", image: "ghcr.io/acme/agent:1", essential: true }],
+});
+
+yield* AWS.ECS.Service("Agent", {
+  cluster,
+  task,
+  desiredCount: 2,
+  capacityProviderStrategy: [{ capacityProvider: capacity.name, weight: 1 }],
+  vpcId: network.vpcId,
+  subnets: network.privateSubnetIds,
+});
+```
+
+Each running task reports `trustedExecutionSummary.isolationMode` as `ISOLATED_SANDBOX`. For `CONFIDENTIAL_SANDBOX`, where the instance can't read the task's memory either, add an `attestationPolicy` that names the containers allowed to run. See [Isolated or confidential](/aws/compute/nitro-sandboxes#isolated-or-confidential).
+
+Each task boots its own VM, so it starts slower than a shared one. An instance can hold many sandboxes: their vCPUs can add up to five times its own, and their memory must fit in its memory.

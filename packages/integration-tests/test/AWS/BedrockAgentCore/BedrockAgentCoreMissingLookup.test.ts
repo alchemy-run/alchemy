@@ -17,11 +17,14 @@ test.provider.skipIf(!process.env.AWS_TEST_AGENTCORE)(
     Effect.gen(function* () {
       yield* stack.destroy();
       const name = missingName(stack.stage);
+      // Browser and code interpreter ids are `<name>-<10 alphanumerics>`; an id
+      // of another shape is rejected as invalid rather than reported missing.
+      const toolId = `${name.replace(/[^a-zA-Z0-9]/g, "_").slice(0, 48)}-0000000000`;
       yield* expectAllMissing(stack, {
-        "missing-browser-custom": AWS.BedrockAgentCore.BrowserCustom.lookup({ browserId: name })
+        "missing-browser-custom": AWS.BedrockAgentCore.BrowserCustom.lookup({ browserId: toolId })
           .browserId,
         "missing-code-interpreter": AWS.BedrockAgentCore.CodeInterpreter.lookup({
-          codeInterpreterId: name,
+          codeInterpreterId: toolId,
         }).codeInterpreterId,
         "missing-gateway": AWS.BedrockAgentCore.Gateway.lookup({ gatewayId: name }).gatewayId,
         "missing-memory": AWS.BedrockAgentCore.Memory.lookup({ memoryId: name }).memoryId,

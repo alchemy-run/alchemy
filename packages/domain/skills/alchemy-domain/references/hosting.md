@@ -7,7 +7,7 @@ The server package hosts the model in a Cloudflare Worker. `DomainCloudflare.lay
 import { Bank, BankHandlers } from "@acme/domain/Bank.model";
 import { CustomerApi } from "@acme/domain/CustomerApi.api";
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -48,6 +48,32 @@ export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
 - Resources the adapters need, like a D1 database, are declared in the server package and bound through alchemy bindings (`Cloudflare.D1.QueryDatabase(db)` inside the adapter's Layer).
 - Webhooks and event sources, like a Stripe webhook, are yielded in the Worker's init and send commands into the model.
 - `alchemy dev` runs everything locally in workerd: Durable Objects, sagas and the foldkit app.
+
+## Hosting on Rivet or Effect Cluster
+
+Every platform is one Layer provided to the model: `DomainCloudflare.layerDurableObjects()`, `DomainRivet.layerDurableObjects(options)`, `DomainCluster.layerEntities(options)`. On Rivet and Effect Cluster, the Layer declares one class (or entity) that holds the whole model: each object is an instance named `<Model>.<Class>/<key>`, like `Bank.AccountAggregate/a-1`. In a caller the Layer deploys that class and reaches it through the gateway; the pool's nodes load the same Layer from `main`/`handler` and host the model.
+
+```ts
+// packages/server/src/BankLive.ts — provide BankLive wherever the Api is served
+export const BankLive = Bank.layer(BankHandlers).pipe(
+  Layer.provide(
+    DomainRivet.layerDurableObjects({
+      name: "Bank",
+      main: import.meta.url,
+      handler: "BankLive",
+      pool: Default,
+    }),
+    // on Effect Cluster: DomainCluster.layerEntities, with the same options
+  ),
+);
+```
+
+- `handler` names the export the nodes load: export the model's Layer.
+- Callers build the same model Layer, so they need the handlers' services too.
+- Neither platform holds WebSockets: serve Apis with `Domain.protocolHttp`.
+- A deploy that adds a view or projection doesn't wait for its backfill; the first call starts it.
+
+More: [Rivet](https://alchemy.run/domain/rivet), [Effect Cluster](https://alchemy.run/domain/effect-cluster).
 
 ## Calling the Api in process
 
@@ -138,7 +164,8 @@ More: [Observability](https://alchemy.run/domain/observability).
 - Never keep per-request objects (sockets, promises) across events in a Durable Object or Worker. Resolve services at init, and do I/O per request.
 - Handlers may require `RuntimeContext` (for bindings); every platform provides it when it runs them.
 - Models never share data. Two models that list the same aggregate each get their own instances: on Cloudflare, Durable Object classes named after the model (`Billing.AccountAggregate`). Two models with the same name on one platform fail.
-- Deploys keep data across Domain layout changes. Upgrading models that shared a class before Domain versions existed fails until one sets `legacyData: true` on its `layer`.
+- A Stack that deploys a model on Cloudflare registers `DomainCloudflare.providers()` next to `Cloudflare.providers()`; without it the deploy fails with no provider for `Cloudflare.Domain.Backfill`.
+- Deploys keep data from before Domain version 0 by renaming each class with `renamedFrom`. Upgrading models that shared a class fails with `DurableObjectRenameConflict` until all but one set `legacyData: false` on their `layer`.
 
 More: [Cloudflare: Know what runs where](https://alchemy.run/domain/cloudflare#know-what-runs-where), [Cloudflare: Host several models in one Worker](https://alchemy.run/domain/cloudflare#host-several-models-in-one-worker), [Cloudflare: Upgrade without losing data](https://alchemy.run/domain/cloudflare#upgrade-without-losing-data).
 

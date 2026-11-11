@@ -1,0 +1,72 @@
+---
+title: Rivet
+description: Build on Rivet with Alchemy. Declare Durable Objects and Durable Streams in TypeScript, run the control plane and its nodes on the cloud you choose or on Rivet Cloud, and call any instance by name from any runtime.
+---
+
+import HubMap from "../../../components/HubMap.astro";
+
+Rivet is an open-source platform for Actors: long-lived programs that each have a name and their own state, like one chat room, one game or one user's session. Rivet's engine stores each Actor's key-value and SQLite data, starts it on a node when it's called, puts it to sleep when it goes quiet, and sends every call for a name to the one Actor that owns it. You run the engine and its nodes on your own cloud, or use Rivet Cloud.
+
+In Alchemy, an Actor class is a `Rivet.DurableObject`, the same shape as a Cloudflare Durable Object, and the engine and its nodes are Layers in your Stack.
+
+**New to Rivet?** Start with [What is Rivet?](/rivet/what-is-rivet).
+
+## A quick example
+
+A Durable Object declares what each instance can do:
+
+```typescript title="src/room.ts"
+import * as Rivet from "@alchemy.run/rivet";
+import * as Effect from "effect/Effect";
+import { Default } from "./cluster.ts";
+
+export default class Room extends Rivet.DurableObject<Room>()(
+  "Room",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    return Effect.gen(function* () {
+      const state = yield* Rivet.DurableObjectState;
+      return {
+        join: () =>
+          state.storage.transaction(
+            Effect.gen(function* () {
+              const visitors = ((yield* state.storage.get<number>("visitors")) ?? 0) + 1;
+              yield* state.storage.put("visitors", visitors);
+              return visitors;
+            }),
+          ),
+      };
+    });
+  }).pipe(Effect.provide(Default)),
+) {}
+```
+
+`Default` is the pool of nodes it runs on, given the control plane it joins:
+
+```typescript title="src/cluster.ts"
+import * as RivetDocker from "@alchemy.run/rivet/Docker";
+import * as Layer from "effect/Layer";
+
+export const Cluster = RivetDocker.SwarmControlPlane("Rivet");
+
+export const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(Cluster));
+```
+
+And any runtime calls a room by its name:
+
+```typescript title="src/api.ts"
+const rooms = yield* Room;
+const visitors = yield* rooms.getByName("lobby").join();
+```
+
+Swap `RivetDocker` for `RivetAWS`, `RivetHetzner` or another cloud, and the room doesn't change.
+
+## Where to start
+
+**Want to build?** Install the provider in [Setup](/rivet/setup), then follow the [tutorial](/rivet/tutorial/part-1) from a visitor count on your machine to chat rooms on Hetzner.
+
+**Looking for something specific?** Every section of these docs is listed below, and every resource is in the generated [API reference](/providers).
+
+## The docs
+
+<HubMap />

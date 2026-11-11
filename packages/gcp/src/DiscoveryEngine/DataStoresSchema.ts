@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   expandDataStore,
@@ -61,8 +62,31 @@ export type DataStoresSchema = Resource<
     structSchema: Record<string, unknown> | undefined;
   },
   never,
-  Providers
+  Providers,
+  DataStoresSchemaLookup
 >;
+
+/**
+ * Props for {@link DataStoresSchema.lookup}: find a data stores schema this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface DataStoresSchemaLookup {
+  /**
+   * Schema id (RFC-1034, max 63 characters).
+   */
+  schemaId: string;
+  /**
+   * Parent Data Store resource name
+   * `projects/{project}/locations/{location}/dataStores/{dataStore}`.
+   */
+  dataStore: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Vertex AI Search Schema attached to a Data Store.
@@ -101,6 +125,20 @@ export type DataStoresSchema = Resource<
  *       price: { type: "number" },
  *     },
  *   }),
+ * });
+ * ```
+ *
+ * ### Looking up an existing data stores schema
+ * `DataStoresSchema.lookup` references a data stores schema Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * data stores schema.
+ *
+ * **Example:** Reference an existing data stores schema
+ * ```typescript
+ * const dataStoresSchema = GCP.DiscoveryEngine.DataStoresSchema.lookup({
+ *   schemaId: "my-schema",
+ *   dataStore: "my-data-store",
  * });
  * ```
  *
@@ -159,6 +197,15 @@ export const DataStoresSchemaProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ schemaId, dataStore }) {
+      const env = yield* GcpEnvironment.current;
+      const parent = dataStore ? expandDataStore(dataStore, env.project, "global") : undefined;
+      const name = parent ? resourceName(parent, schemaId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;

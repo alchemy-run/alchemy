@@ -1,0 +1,2 @@
+# Dockerfiles are test inputs, byte for byte: keep their CRLF line endings.
+* -text

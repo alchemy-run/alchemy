@@ -1681,7 +1681,8 @@ export const DBInstanceProvider = () =>
         return instance;
       });
 
-      // Storage optimization is online; provisioning retains its ten-minute budget.
+      // Storage optimization is online. A new instance routinely takes 10–15
+      // minutes to become available, so provisioning has a twenty-minute budget.
       const waitForInstance = Effect.fn(function* (instanceId: string) {
         return yield* observeReadiness(instanceId).pipe(
           Effect.flatMap((instance) =>
@@ -1696,7 +1697,7 @@ export const DBInstanceProvider = () =>
           ),
           Effect.retry({
             while: (error) => error._tag === "DBInstancePending",
-            schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]),
+            schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(120)]),
           }),
         );
       });
@@ -2464,7 +2465,24 @@ export const DBInstanceProvider = () =>
               SkipFinalSnapshot: skipFinalSnapshot,
               FinalDBSnapshotIdentifier: finalDBSnapshotIdentifier,
             })
-            .pipe(Effect.catchTag("DBInstanceNotFoundFault", () => Effect.void));
+            .pipe(
+              Effect.catchTags({
+                DBInstanceNotFoundFault: () => Effect.void,
+                // RDS rejects a delete of an instance that is already
+                // deleting: a destroy interrupted during the wait below and
+                // run again, or a delete started outside the stack. That
+                // delete is the one we want, so wait for it. Any other state
+                // is a real failure.
+                InvalidDBInstanceStateFault: (error) =>
+                  readInstance(output.dbInstanceIdentifier).pipe(
+                    Effect.flatMap((instance) =>
+                      instance === undefined || instance.DBInstanceStatus === "deleting"
+                        ? Effect.void
+                        : Effect.fail(error),
+                    ),
+                  ),
+              }),
+            );
           // Block until the instance is fully gone. RDS deletion is async; if we
           // return while it is still `deleting`, a dependent (e.g. a
           // DBSubnetGroup or VPC) is torn down next and AWS rejects it with

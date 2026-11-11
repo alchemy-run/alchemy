@@ -42,6 +42,11 @@ function providersSidebarEntry() {
       { label: "PlanetScale", link: "/planetscale" },
       { label: "Neon", link: "/neon" },
       { label: "Turso", link: "/turso" },
+      { label: "E2B", link: "/e2b" },
+      { label: "Daytona", link: "/daytona" },
+      { label: "Modal", link: "/modal" },
+      { label: "Archil", link: "/archil" },
+      { label: "Boat", link: "/boat" },
       { label: "Prisma", link: "/prisma" },
       { label: "Better Auth", link: "/better-auth" },
       { label: "Axiom", link: "/axiom" },
@@ -49,6 +54,8 @@ function providersSidebarEntry() {
       { label: "Stripe", link: "/stripe" },
       { label: "Docker", link: "/docker" },
       { label: "Kubernetes", link: "/kubernetes" },
+      { label: "Rivet", link: "/rivet" },
+      { label: "Effect Cluster", link: "/cluster" },
       { label: "SQL", link: "/sql" },
       { label: "Command", link: "/command" },
       { label: "ACME", link: "/acme" },
@@ -826,6 +833,7 @@ export default defineConfig({
                 { label: "EC2", link: "/aws/compute/ec2" },
                 { label: "HyperPod", link: "/aws/compute/hyperpod" },
                 { label: "Lambda MicroVMs", link: "/aws/compute/microvms" },
+                { label: "Nitro Sandboxes", link: "/aws/compute/nitro-sandboxes" },
               ],
             },
             {
@@ -1401,6 +1409,212 @@ export default defineConfig({
           ],
         },
         {
+          label: "E2B",
+          items: [
+            { label: "Overview", link: "/e2b" },
+            { label: "What is E2B?", link: "/e2b/what-is-e2b" },
+            { label: "Setup", link: "/e2b/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "e2b/tutorial" } }],
+            },
+            {
+              label: "Accounts & access",
+              items: [
+                { label: "Team & API keys", link: "/e2b/api-keys" },
+                { label: "Network & secrets", link: "/e2b/network-and-secrets" },
+              ],
+            },
+            {
+              label: "Sandboxes",
+              items: [
+                { label: "Templates", link: "/e2b/templates" },
+                { label: "Sandboxes", link: "/e2b/sandboxes" },
+                { label: "Snapshots & forks", link: "/e2b/snapshots" },
+                { label: "Template programs", link: "/e2b/programs" },
+              ],
+            },
+            {
+              label: "Storage",
+              items: [{ label: "Volumes", link: "/e2b/volumes" }],
+            },
+            {
+              label: "Events",
+              items: [{ label: "Lifecycle events", link: "/e2b/lifecycle-events" }],
+            },
+            providerResourcesEntry("E2B"),
+          ],
+        },
+        {
+          label: "Daytona",
+          items: [
+            { label: "Overview", link: "/daytona" },
+            { label: "What is Daytona?", link: "/daytona/what-is-daytona" },
+            { label: "Setup", link: "/daytona/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "daytona/tutorial" } }],
+            },
+            {
+              label: "Accounts & access",
+              items: [
+                { label: "Organizations & API keys", link: "/daytona/organizations-and-keys" },
+                { label: "Members & roles", link: "/daytona/organization/organization" },
+                { label: "Secrets", link: "/daytona/security/secrets" },
+              ],
+            },
+            {
+              label: "Sandboxes",
+              items: [
+                { label: "Sandboxes", link: "/daytona/sandboxes/sandboxes" },
+                { label: "Programs in a sandbox", link: "/daytona/sandboxes/programs" },
+                { label: "Snapshots", link: "/daytona/sandboxes/snapshots" },
+                { label: "Volumes", link: "/daytona/sandboxes/volumes" },
+                { label: "Toolbox", link: "/daytona/sandboxes/toolbox" },
+                { label: "Regions & runners", link: "/daytona/sandboxes/runners" },
+              ],
+            },
+            {
+              label: "Networking",
+              items: [{ label: "Network & previews", link: "/daytona/networking/network" }],
+            },
+            {
+              label: "Observability",
+              items: [
+                { label: "Telemetry, webhooks & audit", link: "/daytona/observability/telemetry" },
+              ],
+            },
+            providerResourcesEntry("Daytona"),
+          ],
+        },
+        {
+          label: "Modal",
+          items: [
+            { label: "Overview", link: "/modal" },
+            { label: "What is Modal?", link: "/modal/what-is-modal" },
+            { label: "Setup", link: "/modal/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "modal/tutorial" } }],
+            },
+            {
+              label: "Accounts & access",
+              items: [
+                { label: "Workspaces & tokens", link: "/modal/workspaces-and-tokens" },
+                { label: "Access control", link: "/modal/security/access-control" },
+                { label: "Secrets", link: "/modal/security/secrets" },
+              ],
+            },
+            {
+              label: "Compute",
+              items: [
+                { label: "Choosing a runtime", link: "/modal/compute/choosing-a-runtime" },
+                { label: "Functions", link: "/modal/services/functions" },
+                { label: "Web endpoints", link: "/modal/services/web-endpoints" },
+                { label: "Servers", link: "/modal/services/servers" },
+                { label: "Autoscaling", link: "/modal/services/autoscaling" },
+                { label: "Call Python functions", link: "/modal/services/calling-python" },
+                { label: "Operate services", link: "/modal/services/operating" },
+              ],
+            },
+            {
+              label: "Sandboxes",
+              items: [
+                { label: "Sandboxes", link: "/modal/sandboxes/sandboxes" },
+                { label: "Images", link: "/modal/sandboxes/images" },
+                { label: "Programs", link: "/modal/sandboxes/programs" },
+                { label: "Snapshots", link: "/modal/sandboxes/snapshots" },
+                { label: "Persistent sandboxes", link: "/modal/sandboxes/persistent" },
+              ],
+            },
+            {
+              label: "Storage",
+              items: [
+                { label: "Volumes", link: "/modal/storage/volumes" },
+                { label: "Dicts", link: "/modal/storage/dicts" },
+                { label: "Queues", link: "/modal/storage/queues" },
+              ],
+            },
+            {
+              label: "Networking",
+              items: [{ label: "Network & tunnels", link: "/modal/networking/network" }],
+            },
+            providerResourcesEntry("Modal"),
+          ],
+        },
+        {
+          label: "Archil",
+          items: [
+            { label: "Overview", link: "/archil" },
+            { label: "What is Archil?", link: "/archil/what-is-archil" },
+            { label: "Setup", link: "/archil/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "archil/tutorial" } }],
+            },
+            {
+              label: "Accounts & access",
+              items: [
+                { label: "Organization and keys", link: "/archil/organization-and-keys" },
+                { label: "Credentials and bindings", link: "/archil/security/credentials" },
+                { label: "Network", link: "/archil/security/network" },
+              ],
+            },
+            {
+              label: "Compute",
+              items: [
+                { label: "Choosing a runtime", link: "/archil/compute/choosing-a-runtime" },
+                { label: "Programs", link: "/archil/compute/programs" },
+                { label: "Sandboxes", link: "/archil/compute/sandboxes" },
+                { label: "Images", link: "/archil/compute/images" },
+              ],
+            },
+            {
+              label: "Storage",
+              items: [
+                { label: "Disks", link: "/archil/storage/disks" },
+                { label: "Mounting", link: "/archil/storage/mounting" },
+                { label: "Branches and checkpoints", link: "/archil/storage/branches" },
+                { label: "Your own bucket", link: "/archil/storage/your-own-bucket" },
+              ],
+            },
+            providerResourcesEntry("Archil"),
+          ],
+        },
+        {
+          label: "Boat",
+          items: [
+            { label: "Overview", link: "/boat" },
+            { label: "What is Boat?", link: "/boat/what-is-boat" },
+            { label: "Setup", link: "/boat/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "boat/tutorial" } }],
+            },
+            {
+              label: "Accounts & access",
+              items: [
+                { label: "Account & API keys", link: "/boat/account-and-keys" },
+                { label: "Credentials & bindings", link: "/boat/security/credentials" },
+                { label: "Environments & secrets", link: "/boat/security/environments" },
+                { label: "Credential profiles", link: "/boat/security/credential-profiles" },
+              ],
+            },
+            {
+              label: "Sandboxes",
+              items: [
+                { label: "Choosing a runtime", link: "/boat/sandboxes/choosing-a-runtime" },
+                { label: "Sandboxes", link: "/boat/sandboxes/sandboxes" },
+                { label: "Programs", link: "/boat/sandboxes/programs" },
+                { label: "Snapshots & forks", link: "/boat/sandboxes/snapshots" },
+                { label: "Ports & URLs", link: "/boat/sandboxes/ports" },
+                { label: "Lifecycle events", link: "/boat/sandboxes/lifecycle-events" },
+              ],
+            },
+            providerResourcesEntry("Boat"),
+          ],
+        },
+        {
           label: "Neon",
           items: [
             { label: "Overview", link: "/neon" },
@@ -1666,14 +1880,31 @@ export default defineConfig({
                 { label: "External System", link: "/domain/external-system" },
                 { label: "Api", link: "/domain/api" },
                 { label: "Annotations", link: "/domain/annotations" },
-                { label: "Story", link: "/domain/story" },
+              ],
+            },
+            {
+              label: "Platforms",
+              items: [
+                { label: "Cloudflare", link: "/domain/cloudflare" },
+                { label: "Rivet", link: "/domain/rivet" },
+                { label: "Effect Cluster", link: "/domain/effect-cluster" },
+                { label: "In memory", link: "/domain/in-memory" },
               ],
             },
             {
               label: "Testing",
               items: [
+                { label: "Story", link: "/domain/story" },
                 { label: "Testing a model", link: "/domain/testing-models" },
                 { label: "Testing an Api", link: "/domain/testing-apis" },
+              ],
+            },
+            {
+              label: "Clients",
+              items: [
+                { label: "Plain HTTP and OpenAPI", link: "/domain/http-api" },
+                { label: "CLI", link: "/domain/cli" },
+                { label: "Agents over MCP", link: "/domain/mcp" },
               ],
             },
             {
@@ -1685,10 +1916,6 @@ export default defineConfig({
               ],
             },
             {
-              label: "Agents",
-              items: [{ label: "MCP", link: "/domain/mcp" }],
-            },
-            {
               label: "Security",
               items: [
                 { label: "Sessions and middleware", link: "/domain/sessions" },
@@ -1697,20 +1924,16 @@ export default defineConfig({
               ],
             },
             {
-              label: "Consistency patterns",
+              label: "Patterns",
               items: [
                 { label: "Unique values", link: "/domain/unique-values" },
                 { label: "Deadlines", link: "/domain/deadlines" },
               ],
             },
             {
-              label: "Hosting",
+              label: "Operations",
               items: [
-                { label: "Cloudflare Durable Objects", link: "/domain/cloudflare" },
                 { label: "History at scale", link: "/domain/backfill" },
-                { label: "In memory", link: "/domain/in-memory" },
-                { label: "Plain HTTP and OpenAPI", link: "/domain/http-api" },
-                { label: "CLI", link: "/domain/cli" },
                 { label: "Observability", link: "/domain/observability" },
               ],
             },
@@ -1930,6 +2153,108 @@ export default defineConfig({
               ],
             },
             providerApiReferenceEntry("Kubernetes"),
+          ],
+        },
+        {
+          label: "Rivet",
+          items: [
+            { label: "Overview", link: "/rivet" },
+            { label: "What is Rivet?", link: "/rivet/what-is-rivet" },
+            { label: "Setup", link: "/rivet/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "rivet/tutorial" } }],
+            },
+            {
+              label: "Accounts & access",
+              items: [
+                { label: "Control planes and namespaces", link: "/rivet/namespaces" },
+                { label: "Tokens and networks", link: "/rivet/tokens-and-networks" },
+                { label: "Secrets", link: "/rivet/secrets" },
+              ],
+            },
+            {
+              label: "Building Actors",
+              items: [
+                { label: "Four ways to build Actors", link: "/rivet/actors" },
+                { label: "Durable Objects", link: "/rivet/durable-objects" },
+                { label: "Storage", link: "/rivet/storage" },
+                { label: "Concurrency", link: "/rivet/concurrency" },
+                { label: "Calling a Durable Object", link: "/rivet/calling" },
+                { label: "RivetKit Actors", link: "/rivet/rivetkit" },
+                { label: "RivetKit Effect Actors", link: "/rivet/rivetkit-effect" },
+                { label: "Rust Actors", link: "/rivet/rivetkit-rust" },
+              ],
+            },
+            {
+              label: "Rivet Services",
+              items: [{ label: "Durable Streams", link: "/rivet/durable-streams" }],
+            },
+            {
+              label: "Running Rivet",
+              items: [
+                { label: "Control Plane", link: "/rivet/control-planes" },
+                { label: "Pool", link: "/rivet/pools" },
+              ],
+            },
+            {
+              label: "Platforms",
+              items: [
+                { label: "Docker", link: "/rivet/docker" },
+                { label: "AWS", link: "/rivet/aws" },
+                { label: "GCP", link: "/rivet/gcp" },
+                { label: "Kubernetes", link: "/rivet/kubernetes" },
+                { label: "Fly", link: "/rivet/fly" },
+                { label: "Hetzner", link: "/rivet/hetzner" },
+                { label: "Railway", link: "/rivet/railway" },
+                { label: "Rivet Cloud", link: "/rivet/rivet-cloud" },
+              ],
+            },
+            providerApiReferenceEntry("Rivet"),
+          ],
+        },
+        {
+          label: "Effect Cluster",
+          items: [
+            { label: "Overview", link: "/cluster" },
+            { label: "What is Effect Cluster?", link: "/cluster/what-is-effect-cluster" },
+            { label: "Setup", link: "/cluster/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "cluster/tutorial" } }],
+            },
+            {
+              label: "Building",
+              items: [
+                { label: "Entities", link: "/cluster/entities" },
+                { label: "Calling an entity", link: "/cluster/calling" },
+                { label: "RPC middleware", link: "/cluster/middleware" },
+                { label: "Workflows", link: "/cluster/workflows" },
+                { label: "Singletons", link: "/cluster/singletons" },
+                { label: "Crons", link: "/cluster/crons" },
+                { label: "Existing programs", link: "/cluster/existing-programs" },
+              ],
+            },
+            {
+              label: "Running",
+              items: [
+                { label: "Databases", link: "/cluster/databases" },
+                { label: "Pools", link: "/cluster/pools" },
+              ],
+            },
+            {
+              label: "Platforms",
+              items: [
+                { label: "Docker", link: "/cluster/docker" },
+                { label: "AWS", link: "/cluster/aws" },
+                { label: "GCP", link: "/cluster/gcp" },
+                { label: "Kubernetes", link: "/cluster/kubernetes" },
+                { label: "Fly", link: "/cluster/fly" },
+                { label: "Hetzner", link: "/cluster/hetzner" },
+                { label: "Cloudflare", link: "/cluster/cloudflare" },
+              ],
+            },
+            providerApiReferenceEntry("Cluster"),
           ],
         },
         {

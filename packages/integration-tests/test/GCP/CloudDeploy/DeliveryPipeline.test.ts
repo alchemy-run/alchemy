@@ -6,6 +6,7 @@ import * as clouddeploy from "@distilled.cloud/gcp/clouddeploy_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -68,6 +69,20 @@ test.provider(
           });
           return { target, pipeline };
         }),
+      );
+      yield* expectFound(
+        GCP.CloudDeploy.DeliveryPipeline.lookup({
+          deliveryPipelineId: created.pipeline.deliveryPipelineId,
+          location: created.pipeline.location,
+        }),
+        created.pipeline,
+      );
+      yield* expectFound(
+        GCP.CloudDeploy.Target.lookup({
+          targetId: created.target.targetId,
+          location: created.target.location,
+        }),
+        created.target,
       );
 
       expect(created.pipeline.name).toContain("/deliveryPipelines/");

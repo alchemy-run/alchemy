@@ -258,6 +258,11 @@ export interface Definition<
  * if (page.cursor) yield* bank.AccountLedger({ account: accountId }, { after: page.cursor });
  * ```
  *
+ * **Example:** Every entry, as a Stream
+ * ```typescript
+ * const entries = yield* bank.AccountLedger.entries({ account: accountId }).pipe(Stream.runCollect);
+ * ```
+ *
  * Right after its own command, a client passes the command's receipt as
  * `atLeast`. The query finds the keys to wait on in that command's events,
  * waits until every read in `waitsFor` has handled them, then runs the handler.

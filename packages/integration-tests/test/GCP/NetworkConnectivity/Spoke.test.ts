@@ -5,6 +5,7 @@ import * as networkconnectivity from "@distilled.cloud/gcp/networkconnectivity_v
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { withNetworkSlot } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -46,6 +47,13 @@ test.provider.skipIf(!!process.env.FAST)(
           });
           return { network, hub, spoke };
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkConnectivity.Spoke.lookup({
+          spokeId: created.spoke.spokeId,
+          location: created.spoke.location,
+        }),
+        created.spoke,
       );
 
       expect(created.spoke.name).toContain("/spokes/");

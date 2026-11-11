@@ -1,0 +1,117 @@
+---
+title: Templates
+description: Build the images your sandboxes boot from, from a registry image, a Dockerfile, or another template.
+---
+
+import Timeline from "../../../components/diagrams/Timeline.astro";
+
+A **template** is the image a sandbox boots from. E2B builds it on its side, so deploys need no Docker. Then it boots the image once, runs its start command, waits for its ready command to pass, and snapshots the running microVM. Every sandbox from the template starts from that snapshot, already past the build and the start, so it's up in well under a second.
+
+## A template is built once, then snapshotted
+
+<Timeline
+  end={10}
+  lanes={[
+    { id: "build", label: "MyTemplate", type: "template" },
+    { id: "s1", label: "user-42", type: "sandbox" },
+    { id: "s2", label: "user-43", type: "sandbox" },
+  ]}
+  bars={[
+    { lane: "build", start: 0, end: 3, label: "build image" },
+    { lane: "build", start: 3, end: 5, label: "startCmd" },
+    { lane: "build", start: 5, end: 7, label: "snapshot", tone: "accent" },
+    { lane: "s1", start: 7.5, end: 10, label: "running" },
+    { lane: "s2", start: 8.5, end: 10, label: "running" },
+  ]}
+  marks={[{ at: 5, label: "readyCmd passes" }]}
+  caption="A deploy builds the template once and snapshots it when readyCmd passes. Sandboxes created later start from the snapshot, with the start command already running."
+/>
+
+## Build from a registry image
+
+```typescript title="src/Sandbox.ts"
+import * as E2B from "@alchemy.run/e2b";
+
+export const Python = E2B.Template("Python", { image: "python:3.12-slim" });
+```
+
+## Build from a Dockerfile
+
+```typescript title="src/Sandbox.ts"
+import * as Dockerfile from "@alchemy.run/docker/Dockerfile";
+import * as E2B from "@alchemy.run/e2b";
+
+export const MyTemplate = E2B.Template("MyTemplate", {
+  dockerfile: Dockerfile.inline`
+    FROM node:22-bookworm
+    RUN apt-get update && apt-get install -y git ripgrep
+    WORKDIR /work
+  `,
+});
+```
+
+Point `dockerfile` at a file instead to use its directory as the build context. `COPY` sources are uploaded once per content, so a deploy uploads only files that changed.
+
+E2B's builder runs one stage. A Dockerfile with several `FROM`s, `COPY --from`, `ADD <url>`, heredocs, `RUN --mount`, or `SHELL` fails at plan time with `UnsupportedDockerfile`, listing the lines, before anything is created. `EXPOSE`, `LABEL`, `VOLUME`, `HEALTHCHECK`, and `STOPSIGNAL` are ignored, and an `ARG` becomes an environment variable.
+
+## Build on another template
+
+```typescript
+export const Tools = E2B.Template("Tools", {
+  fromTemplate: "base",
+  run: ["pip install pandas numpy"],
+});
+```
+
+Building on a template reuses its cached layers.
+
+## Size the microVM
+
+```typescript
+export const Big = E2B.Template("Big", { image: "node:22-bookworm", cpuCount: 8, memoryMB: 16384 });
+```
+
+Every sandbox from the template gets these resources.
+
+## Start a process before the snapshot
+
+```typescript
+export const Preview = E2B.Template("Preview", {
+  image: "node:22-bookworm",
+  run: ["npm create vite@latest app -- --template react", "cd app && npm install"],
+  startCmd: "cd /home/user/app && npm run dev -- --host 0.0.0.0 --port 3000",
+  readyCmd: "curl -sf http://localhost:3000",
+});
+```
+
+E2B snapshots the template once `readyCmd` succeeds, so every sandbox starts with the dev server up. A Dockerfile's `CMD` does the same. To run your own Effect program this way, see [Template programs](/e2b/programs).
+
+## Pull a private base image
+
+```typescript
+export const Private = E2B.Template("Private", {
+  image: "ghcr.io/my-org/base:1",
+  registry: { username: "my-org", password: Config.Redacted("GHCR_TOKEN") },
+});
+```
+
+E2B uses the credentials to pull the base image only. ECR (`awsAccessKeyId`, `awsSecretAccessKey`, `awsRegion`) and Artifact Registry (`serviceAccountJson`) work the same way.
+
+## Build templates while your app runs
+
+```typescript
+const templates = yield* E2B.CreateTemplate();
+// in fetch:
+const template = yield* templates.getOrBuild({
+  name: `repo-${slug}`,
+  image: "node:22-bookworm",
+  files: [{ path: "/home/user/app/package.json", contents: packageJson }],
+  run: ["cd /home/user/app && npm install"],
+});
+```
+
+A runtime build takes E2B's own build inputs: a base `image` or `fromTemplate`, then `env`, `files` from memory, and `run` steps. `getOrBuild` builds only when no ready build of the same inputs exists. Delete runtime templates when you no longer need them: destroying the Worker does not.
+
+## A changed template is rebuilt
+
+A deploy starts a new build only when the inputs change; sandboxes already running keep the old build. Changing `name` replaces the template.

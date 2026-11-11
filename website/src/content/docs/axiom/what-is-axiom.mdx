@@ -3,32 +3,38 @@ title: What is Axiom?
 description: The concepts behind Axiom — organizations, datasets, OpenTelemetry ingest, API tokens, APL queries, monitors, notifiers, dashboards, views and annotations — and how @alchemy.run/axiom models each of them.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import Tree from "../../../components/diagrams/Tree.astro";
+
 
 Axiom stores the events your systems emit, logs, traces and metrics, and lets you query them fast and cheaply, however many there are. You send it OpenTelemetry, which Effect already produces, and query it with **APL**. On top of the data, **monitors** alert you, and **dashboards** show you what's happening.
 
 Take one setup: a Worker sending its traces and logs to Axiom, with a monitor that pages you on panics. The Worker sends telemetry with an ingest token. Axiom stores it in datasets. A monitor queries a dataset every minute and notifies Slack when it matches.
 
-<DAG
+<Tree
   nodes={[
-    { id: "worker", label: "Worker", type: "ingest token", col: 0, row: 0 },
-    { id: "traces", label: "app-traces", type: "Dataset", tone: "accent", col: 1, row: 0 },
-    { id: "dash", label: "app", type: "Dashboard", col: 2, row: 0 },
-    { id: "logs", label: "app-logs", type: "Dataset", tone: "accent", col: 1, row: 1 },
-    { id: "monitor", label: "panics", type: "Monitor", col: 2, row: 1 },
-    { id: "slack", label: "ops-slack", type: "Notifier", col: 3, row: 1 },
+    { id: "worker", label: "Worker", type: "ingest token", icon: "square-function" },
+    {
+      id: "org", label: "acme", type: "organization", icon: "brand:axiom", colGap: 3,
+      areas: ["traces dash", "logs monitor", "logs slack"],
+      phoneAreas: ["slack slack", "dash monitor", "traces logs"],
+    },
+    { id: "traces", label: "app-traces", type: "dataset", parent: "org", tone: "accent", icon: "database" },
+    { id: "logs", label: "app-logs", type: "dataset", parent: "org", tone: "accent", icon: "database" },
+    { id: "dash", label: "app", type: "dashboard", parent: "org", icon: "layout-dashboard" },
+    { id: "monitor", label: "panics", type: "monitor", parent: "org", icon: "bell" },
+    { id: "slack", label: "ops-slack", type: "notifier", parent: "org", icon: "send" },
   ]}
-  groups={[
-    { id: "org", label: "Organization acme", nodes: ["traces", "dash", "logs", "monitor", "slack"] },
+  areas={["worker org"]}
+  phoneAreas={["org", "worker"]}
+  colGap={3}
+  links={[
+    { from: "worker", to: "traces", label: "sends" },
+    { from: "worker", to: "logs", label: "sends" },
+    { from: "dash", to: "traces", label: "APL" },
+    { from: "monitor", to: "logs", label: "APL" },
+    { from: "monitor", to: "slack", label: "alerts" },
   ]}
-  edges={[
-    { from: "worker", to: "traces", label: "traces" },
-    { from: "worker", to: "logs", label: "logs" },
-    { from: "traces", to: "dash", label: "APL" },
-    { from: "logs", to: "monitor", label: "APL" },
-    { from: "monitor", to: "slack", label: "notifies" },
-  ]}
-  caption="Everything lives in an organization. Telemetry lands in datasets. Dashboards and monitors query them with APL, and a monitor alerts you through a notifier."
+  caption="Everything lives in an organization. A Worker with an ingest token sends its traces and logs to datasets. Dashboards and monitors query them with APL, and a monitor alerts you through a notifier."
 />
 
 ## Organizations and tokens

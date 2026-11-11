@@ -15,6 +15,7 @@ Examples create billable infrastructure. Follow each README's cleanup commands.
 | Cloudflare Durable Objects | SQLite per object | Drizzle | [cloudflare-durable-object-sql](./cloudflare-durable-object-sql) |
 | Cloudflare Workers | PlanetScale Postgres through Hyperdrive | Drizzle | [cloudflare-planetscale-postgres-drizzle](./cloudflare-planetscale-postgres-drizzle) |
 | Cloudflare Workers | Turso, one database per tenant | Drizzle | [cloudflare-turso-drizzle](./cloudflare-turso-drizzle) |
+| Cloudflare Workers | Modal sandboxes, a volume per user | — | [cloudflare-modal-sandbox](./cloudflare-modal-sandbox) |
 | Cloudflare Workers | Neon Postgres through Hyperdrive | Prisma ORM, TypeScript-first | [cloudflare-neon-prisma](./cloudflare-neon-prisma) |
 | Cloudflare Workers | Neon Postgres through Hyperdrive | Prisma ORM, PSL-first | [cloudflare-neon-prisma-psl](./cloudflare-neon-prisma-psl) |
 | Fly Service | Fly Managed Postgres | Drizzle | [fly-postgres](./fly-postgres) |

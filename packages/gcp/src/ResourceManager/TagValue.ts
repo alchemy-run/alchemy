@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import { waitForCreate, waitForOperation } from "./internal.ts";
 
@@ -60,8 +61,32 @@ export type TagValue = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  TagValueLookup
 >;
+
+/**
+ * Props for {@link TagValue.lookup}: find a tag value this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface TagValueLookup {
+  /**
+   * User-assigned short name, unique among TagValues of the same TagKey.
+   * 1–256 characters, beginning and ending with `[a-zA-Z0-9]`, with dashes,
+   * underscores, dots, and alphanumerics between.
+   */
+  shortName: string;
+  /**
+   * Parent TagKey resource name (`tagKeys/{tagKey}`).
+   */
+  parent: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Resource Manager TagValue — a child of a TagKey used to group
@@ -99,6 +124,19 @@ export type TagValue = Resource<
  *   parent: "tagKeys/123456789012",
  *   shortName: "prod",
  *   description: "production workloads",
+ * });
+ * ```
+ *
+ * ### Looking up an existing tag value
+ * `TagValue.lookup` references a tag value Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared tag value.
+ *
+ * **Example:** Reference an existing tag value
+ * ```typescript
+ * const tagValue = GCP.ResourceManager.TagValue.lookup({
+ *   shortName: "my-short",
+ *   parent: "my-parent",
  * });
  * ```
  *
@@ -271,6 +309,14 @@ export const TagValueProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ shortName, parent: lookupParent }) {
+      const env = yield* GcpEnvironment.current;
+      const parent = lookupParent !== undefined ? normalizeParent(lookupParent) : undefined;
+      const existing = yield* observe(undefined, parent, shortName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

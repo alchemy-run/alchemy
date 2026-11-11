@@ -6,6 +6,7 @@ import * as firestore from "@distilled.cloud/gcp/firestore_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -60,6 +61,10 @@ test.provider.skipIf(!!process.env.FAST)(
             type: "FIRESTORE_NATIVE",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Firestore.Database.lookup({ databaseId: created.databaseId }),
+        created,
       );
 
       expect(created.name).toContain("/databases/");

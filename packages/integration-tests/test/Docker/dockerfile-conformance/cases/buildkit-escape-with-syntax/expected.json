@@ -1,0 +1,16 @@
+{
+  "ok": true,
+  "directives": {
+    "escape": "`",
+    "syntax": "docker/dockerfile"
+  },
+  "stages": [
+    {
+      "line": 4,
+      "image": "image",
+      "name": null,
+      "flags": [],
+      "instructions": []
+    }
+  ]
+}

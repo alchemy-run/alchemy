@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
+import { Unowned, Unresolved } from "@/AdoptPolicy.ts";
 import {
   registerRpcErrorClasses,
   unwrapRpcHandlers,
@@ -58,6 +59,26 @@ const roundTrip = <T extends Record<string, any>>(handlers: T, streamKeys?: Arra
 
 describe("Local.RpcSerialization", { tags: ["unit", "local"] }, () => {
   describe("argument serialization", () => {
+    // A sidecar-hosted provider's `read` / `observe` answer: losing the brand
+    // made the engine adopt a foreign resource as its own.
+    it.effect("round-trips an Unowned result with its attributes", () =>
+      Effect.gen(function* () {
+        const handlers = {
+          observe: () => Effect.succeed(Unowned({ functionArn: "arn:fn", functionName: "fn" })),
+        };
+        const observed = yield* roundTrip(handlers).observe();
+        expect(Unowned.is(observed)).toBe(true);
+        expect({ ...observed }).toEqual({ functionArn: "arn:fn", functionName: "fn" });
+      }),
+    );
+
+    it.effect("round-trips an Unresolved result", () =>
+      Effect.gen(function* () {
+        const handlers = { observe: () => Effect.succeed<typeof Unresolved>(Unresolved) };
+        expect(yield* roundTrip(handlers).observe()).toBe(Unresolved);
+      }),
+    );
+
     it.effect("round-trips a top-level Redacted argument", () =>
       Effect.gen(function* () {
         const handlers = {

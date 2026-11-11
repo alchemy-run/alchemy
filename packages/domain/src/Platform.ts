@@ -634,7 +634,7 @@ export interface HostedModel {
   readonly id: object;
   /** The names of the model's sagas, which run on the workflow engine. */
   readonly sagas: ReadonlyArray<string>;
-  /** Whether this model keeps data it shared with other models before Domain version 0: `legacyData` on its `layer`. */
+  /** Whether this model takes over data it shared with other models before Domain version 0: `legacyData` on its `layer`. */
   readonly legacyData: boolean;
 }
 

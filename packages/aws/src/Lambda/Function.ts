@@ -781,6 +781,15 @@ export interface FunctionLookup {
   functionName: string;
 }
 
+/** The CloudWatch Logs live-tail stream behind `alchemy logs --tail` broke. */
+export class LambdaLiveTailError extends Data.TaggedError("LambdaLiveTailError")<{
+  cause: Error;
+}> {
+  override get message() {
+    return `Lambda live tail failed: ${this.cause.message}`;
+  }
+}
+
 /**
  * Lambda refused to publish a version or create the alias for a Function
  * with `alias`. Published versions are retained, so they count toward the
@@ -987,6 +996,18 @@ export const normalizeFunctionUrl = (
  * FROM public.ecr.aws/lambda/java:21
  * COPY target/function.jar ${LAMBDA_TASK_ROOT}/lib/
  * CMD ["com.example.Handler::handleRequest"]
+ * ```
+ *
+ * #### Cache build layers
+ * Image builds reuse the local BuildKit cache of the machine they run on. Set
+ * `cache: true` to keep every stage's layers at the function repository's
+ * `:buildcache` tag, so a fresh builder (a new CI runner) skips unchanged
+ * steps:
+ *
+ * ```typescript
+ * const func = yield* AWS.Lambda.Function("JavaFunction", {
+ *   image: { context: "./lambda", dockerfile: "Dockerfile", cache: true },
+ * });
  * ```
  *
  * ### Effect Functions
@@ -3459,6 +3480,7 @@ export const FunctionProvider = () =>
                 }
                 return Stream.empty;
               }),
+              Stream.mapError((cause) => new LambdaLiveTailError({ cause })),
             );
           });
 
