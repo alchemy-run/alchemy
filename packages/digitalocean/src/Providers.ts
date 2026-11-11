@@ -5,6 +5,8 @@ import { KeyPair, KeyPairProvider } from "alchemy/KeyPair";
 import * as Provider from "alchemy/Provider";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
+import * as ActionGateway from "./ActionGateway/index.ts";
+import * as Agents from "./Agents/index.ts";
 import { App, AppProvider } from "./App.ts";
 import { DigitalOceanAuth } from "./AuthProvider.ts";
 import { AutoscalePool, AutoscalePoolProvider } from "./AutoscalePool.ts";
@@ -128,6 +130,7 @@ export const providers = () =>
       GenAI.Agent,
       GenAI.AgentApiKey,
       GenAI.KnowledgeBase,
+      GenAI.Workspace,
       Security.Secret,
       Functions.Namespace,
       Functions.AccessKey,
@@ -137,6 +140,13 @@ export const providers = () =>
       Insights.AlertRule,
       Insights.Dashboard,
       VectorDB.Database,
+      DropletSnapshot,
+      VolumeSnapshot,
+      Agents.EnvironmentConfig,
+      Agents.Trigger,
+      Agents.Template,
+      ActionGateway.Toolbelt,
+      ActionGateway.McpServer,
     ]),
   ).pipe(
     Layer.provide(
@@ -187,6 +197,7 @@ export const providers = () =>
         GenAI.AgentProvider(),
         GenAI.AgentApiKeyProvider(),
         GenAI.KnowledgeBaseProvider(),
+        GenAI.WorkspaceProvider(),
         Security.SecretProvider(),
         Functions.NamespaceProvider(),
         Functions.AccessKeyProvider(),
@@ -196,6 +207,11 @@ export const providers = () =>
         Insights.AlertRuleProvider(),
         Insights.DashboardProvider(),
         VectorDB.DatabaseProvider(),
+        Agents.EnvironmentConfigProvider(),
+        Agents.TriggerProvider(),
+        Agents.TemplateProvider(),
+        ActionGateway.ToolbeltProvider(),
+        ActionGateway.McpServerProvider(),
       ),
     ),
     // Spaces' S3 API signs with Spaces keys, not the token.

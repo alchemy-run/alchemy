@@ -40,7 +40,45 @@ export type AgentProps = {
   temperature?: number;
   /** Most tokens per response. */
   maxTokens?: number;
+  /**
+   * Functions the agent can call: DigitalOcean Functions, described by
+   * name, purpose and JSON schemas. Added, changed and removed in place.
+   */
+  functions?: AgentFunction[];
+  /**
+   * Other agents this agent hands a conversation to, each when its
+   * condition holds. Added, changed and removed in place.
+   */
+  routes?: AgentRoute[];
+  /** Guardrails to apply, by UUID, in priority order. Updates in place. */
+  guardrails?: { guardrailId: string; priority?: number }[];
 };
+
+/** A function the agent can call. */
+export interface AgentFunction {
+  /** Name the model calls the function by. */
+  name: string;
+  /** What the function does; the model reads it to decide when to call. */
+  description: string;
+  /** The Functions namespace id (`fn-<uuid>`). */
+  namespaceId: string;
+  /** The function's name in the namespace (a `Functions.Action`'s `name`). */
+  function: string;
+  /** JSON Schema of the parameters. */
+  inputSchema?: Record<string, unknown>;
+  /** JSON Schema of the result. */
+  outputSchema?: Record<string, unknown>;
+}
+
+/** A hand-off to another agent. */
+export interface AgentRoute {
+  /** The agent to hand off to. */
+  agentId: string;
+  /** Route name. */
+  name: string;
+  /** When to hand off, in plain language. */
+  when: string;
+}
 
 export type Agent = Resource<
   "DigitalOcean.GenAI.Agent",
@@ -237,6 +275,94 @@ export const AgentProvider = () =>
         for (const kb of Arr.difference(attached, desired)) {
           yield* DO.detachGenaiKnowledgeBase({ agent_uuid: agent.uuid, knowledge_base_uuid: kb });
         }
+      }
+
+      // Functions, by the name the model calls them.
+      const observedFunctions = new Map(
+        (agent.functions ?? []).flatMap((fn) => (fn.name ? [[fn.name, fn] as const] : [])),
+      );
+      const desiredFunctions = news.functions ?? [];
+      for (const fn of desiredFunctions) {
+        const wire = {
+          function_name: fn.name,
+          description: fn.description,
+          faas_namespace: fn.namespaceId,
+          faas_name: fn.function,
+          input_schema: fn.inputSchema ?? { type: "object", properties: {} },
+          output_schema: fn.outputSchema ?? { type: "object", properties: {} },
+        };
+        const current = observedFunctions.get(fn.name);
+        if (current?.uuid === undefined) {
+          yield* DO.attachGenaiAgentFunction({ agent_uuid: agent.uuid, ...wire });
+        } else if (
+          current.description !== fn.description ||
+          current.faas_namespace !== fn.namespaceId ||
+          current.faas_name !== fn.function ||
+          JSON.stringify(current.input_schema ?? {}) !== JSON.stringify(wire.input_schema) ||
+          JSON.stringify(current.output_schema ?? {}) !== JSON.stringify(wire.output_schema)
+        ) {
+          yield* DO.updateGenaiAgentFunction({
+            agent_uuid: agent.uuid,
+            function_uuid: current.uuid,
+            ...wire,
+          });
+        }
+      }
+      for (const [fnName, fn] of observedFunctions) {
+        if (fn.uuid === undefined || desiredFunctions.some((d) => d.name === fnName)) continue;
+        yield* ignoreNotFound(
+          DO.detachGenaiAgentFunction({ agent_uuid: agent.uuid, function_uuid: fn.uuid }),
+        );
+      }
+
+      // Routes, by the child agent they hand off to.
+      const observedRoutes = new Map(
+        (agent.child_agents ?? []).map((child) => [child.uuid, child]),
+      );
+      const desiredRoutes = news.routes ?? [];
+      for (const route of desiredRoutes) {
+        const current = observedRoutes.get(route.agentId);
+        const wire = {
+          parent_agent_uuid: agent.uuid,
+          child_agent_uuid: route.agentId,
+          route_name: route.name,
+          if_case: route.when,
+        };
+        if (current === undefined) {
+          yield* DO.attachGenaiAgent(wire);
+        } else if (current.route_name !== route.name || current.if_case !== route.when) {
+          yield* DO.updateGenaiAttachedAgent({ ...wire, uuid: current.route_uuid });
+        }
+      }
+      for (const childId of observedRoutes.keys()) {
+        if (desiredRoutes.some((r) => r.agentId === childId)) continue;
+        yield* ignoreNotFound(
+          DO.detachGenaiAgent({ parent_agent_uuid: agent.uuid, child_agent_uuid: childId }),
+        );
+      }
+
+      // Guardrails, by UUID.
+      const attachedGuardrails = (agent.guardrails ?? []).flatMap((g) =>
+        g.guardrail_uuid && g.is_attached !== false ? [g.guardrail_uuid] : [],
+      );
+      const desiredGuardrails = news.guardrails ?? [];
+      const missingGuardrails = desiredGuardrails.filter(
+        (g) => !attachedGuardrails.includes(g.guardrailId),
+      );
+      if (missingGuardrails.length > 0) {
+        yield* DO.attachGenaiAgentGuardrails({
+          agent_uuid: agent.uuid,
+          guardrails: missingGuardrails.map((g, i) => ({
+            guardrail_uuid: g.guardrailId,
+            priority: g.priority ?? i + 1,
+          })),
+        });
+      }
+      for (const guardrailId of attachedGuardrails) {
+        if (desiredGuardrails.some((g) => g.guardrailId === guardrailId)) continue;
+        yield* ignoreNotFound(
+          DO.detachGenaiAgentGuardrail({ agent_uuid: agent.uuid, guardrail_uuid: guardrailId }),
+        );
       }
 
       const deployed = yield* pollUntil(observeById(agent.uuid), {

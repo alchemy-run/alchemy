@@ -72,6 +72,11 @@ export type KnowledgeBaseProps = {
   sources: KnowledgeBaseSource[];
   /** Tags. Updates in place. */
   tags?: string[];
+  /**
+   * Re-index every source on a schedule: the days of the week (0 is Sunday)
+   * and a UTC time, `"HH:MM"`. Updates in place.
+   */
+  indexingSchedule?: { days: number[]; time: string };
 };
 
 export type KnowledgeBase = Resource<
@@ -211,6 +216,38 @@ const listSources = (knowledgeBaseId: string) =>
     .items({ knowledge_base_uuid: knowledgeBaseId, per_page: 200 })
     .pipe(Stream.runCollect);
 
+// The knowledge base's indexing schedule, if any; the API keeps one per
+// knowledge base and returns NotFound when there is none.
+const syncSchedule = Effect.fn(function* (
+  knowledgeBaseId: string,
+  desired: KnowledgeBaseProps["indexingSchedule"],
+) {
+  const current = yield* noneIfNotFound(
+    DO.getGenaiScheduledIndexing({ knowledge_base_uuid: knowledgeBaseId }).pipe(
+      Effect.map((r) => r.indexing_info),
+    ),
+  ).pipe(
+    Effect.map((o) => Option.flatMapNullishOr(o, (info) => (info.deleted_at ? undefined : info))),
+  );
+  const same =
+    Option.isSome(current) &&
+    desired !== undefined &&
+    current.value.time === desired.time &&
+    JSON.stringify([...(current.value.days ?? [])].sort()) ===
+      JSON.stringify([...desired.days].sort());
+  if (same || (Option.isNone(current) && desired === undefined)) return;
+  if (Option.isSome(current) && current.value.uuid) {
+    yield* ignoreNotFound(DO.deleteGenaiScheduledIndexing({ uuid: current.value.uuid }));
+  }
+  if (desired !== undefined) {
+    yield* DO.createGenaiScheduledIndexing({
+      knowledge_base_uuid: knowledgeBaseId,
+      days: desired.days,
+      time: desired.time,
+    });
+  }
+});
+
 export const KnowledgeBaseProvider = () =>
   Provider.succeed(KnowledgeBase, {
     stables: ["knowledgeBaseId", "createdAt", "databaseId", "ownsDatabase"],
@@ -313,6 +350,8 @@ export const KnowledgeBaseProvider = () =>
           data_source_uuids: added,
         });
       }
+
+      yield* syncSchedule(kb.uuid, news.indexingSchedule);
 
       yield* pollUntil(databaseStatus(kb.uuid), {
         ...ONLINE_POLL,
