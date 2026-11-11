@@ -44,7 +44,6 @@ import { Request } from "./Request.ts";
 import type { ModuleRule } from "./Sources/Prebuilt.ts";
 import type { WorkerBuildOptions } from "./Sources/Rolldown.ts";
 import type { WorkerAccessConfig, WorkerAccessIdentity } from "./WorkerAccess.ts";
-import { bindWorkerAsyncBindings } from "./WorkerAsyncBindings.ts";
 import type { WorkerBinding, WorkerBindingResource } from "./WorkerBinding.ts";
 import { transformWorkerDomainProps } from "./WorkerDomainDns.ts";
 import { WorkerEnvironment, WorkerTypeId } from "./WorkerRuntime.ts";
@@ -3044,9 +3043,19 @@ export const Worker: ResourceClassLike<Worker> & {
   Platform(
     WorkerTypeId,
     {
-      // WorkerAsyncBindings imports isWorker; defer access until module initialization completes.
+      // Binding wiring is deploy-time only and its imports reach the local
+      // runtime, so load it on first use: a runtime bundle folds the guard and
+      // never reads `WorkerAsyncBindings` (#3227). The lazy import also defers
+      // its `isWorker` access until this module has initialized.
       // `props` is `undefined` for a bare tag whose `.make` Layer has not built yet.
-      onCreate: (resource, props) => bindWorkerAsyncBindings(resource as Worker, props ?? {}),
+      onCreate: (resource, props) =>
+        globalThis.__ALCHEMY_RUNTIME__
+          ? Effect.void
+          : Effect.promise(() => import("./WorkerAsyncBindings.ts")).pipe(
+              Effect.flatMap(({ bindWorkerAsyncBindings }) =>
+                bindWorkerAsyncBindings(resource as Worker, props ?? {}),
+              ),
+            ),
       createRuntimeContext: (id) => makeWorkerRuntimeContext(id),
       // Normalize `main` relative to the cwd, then let `domain.dns` naming a
       // non-Cloudflare DNS host compose Cloudflare for SaaS custom hostnames +
