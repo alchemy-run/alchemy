@@ -8,6 +8,7 @@ import * as Output from "alchemy/Output";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { expectDeleteRefused } from "../../expectDeleteRefused.ts";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -160,6 +161,20 @@ test.provider.skipIf(!!process.env.FAST)(
 
       // Destroy — the provider initiates termination (irreversible) and
       // waits for the cluster to leave the active states.
+      // Termination protection turned on outside the stack refuses the destroy:
+      // the provider never lifts it. Turn it off the same way, then destroy.
+      const setTerminationProtection = (enabled: boolean) =>
+        emr.setTerminationProtection({
+          JobFlowIds: [cluster.clusterId],
+          TerminationProtected: enabled,
+        });
+      yield* setTerminationProtection(true);
+      yield* expectDeleteRefused(stack, {
+        logicalId: "Spark",
+        tag: "EMRClusterTerminationProtected",
+      });
+      yield* setTerminationProtection(false);
+
       yield* stack.destroy();
       yield* assertClusterTerminating(cluster.clusterId);
     }),

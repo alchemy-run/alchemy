@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
+import { expectDeleteRefused } from "../../expectDeleteRefused.ts";
 import { interruptDestroy } from "../../interruptDestroy.ts";
 import NeptuneGraphTestFunctionLive, { FixtureGraph, NeptuneGraphTestFunction } from "./handler.ts";
 
@@ -177,6 +178,30 @@ test.provider.skipIf(!!process.env.FAST)(
       // ListGraphSnapshots binding: fresh graph has no snapshots.
       const snapshots = (yield* getJson("/snapshots")) as { graphSnapshots: unknown[] };
       expect(Array.isArray(snapshots.graphSnapshots)).toBe(true);
+
+      // Deletion protection turned on outside the stack refuses the destroy:
+      // the provider never lifts it. Turn it off the same way, then destroy.
+      const setDeletionProtection = (enabled: boolean) =>
+        neptunegraph
+          .updateGraph({ graphIdentifier: graph.graphId, deletionProtection: enabled })
+          .pipe(
+            Effect.andThen(
+              neptunegraph.getGraph({ graphIdentifier: graph.graphId }).pipe(
+                Effect.repeat({
+                  schedule: Schedule.spaced("5 seconds"),
+                  until: (observed) =>
+                    observed.status === "AVAILABLE" && observed.deletionProtection === enabled,
+                  times: 60,
+                }),
+              ),
+            ),
+          );
+      yield* setDeletionProtection(true);
+      yield* expectDeleteRefused(stack, {
+        logicalId: "FixtureGraph",
+        tag: "GraphDeletionProtected",
+      });
+      yield* setDeletionProtection(false);
 
       // Destroy immediately — the graph bills while it exists. The destroy is
       // interrupted once the graph is DELETING, so the next one has to finish
