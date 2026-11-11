@@ -64,9 +64,9 @@ export const Box = Archil.Sandbox("Box", {
 Bind an image, then create a sandbox per task. A mount's disk is a handle, such as one from `CreateDisk`:
 
 ```typescript
-export const Agent = Archil.Image("Agent", { image: "node:24-bookworm" });
+export const MyImage = Archil.Image("MyImage", { image: "node:24-bookworm" });
 
-const sandboxes = yield* Archil.CreateSandbox(Agent);
+const sandboxes = yield* Archil.CreateSandbox(MyImage);
 const sandbox = yield* sandboxes.create({
   name: "task-1",
   mounts: [{ disk: home, path: "/home/user" }],

@@ -313,8 +313,10 @@ test.provider(
 // https://github.com/alchemy-run/alchemy/issues/3117: a Task built from a
 // `context` subfolder must not plan an update when only the project lockfile
 // above that folder changes — Docker never receives it. A file inside the
-// context still does.
-test.provider(
+// context still does. This is the deploy diff: under the emulator
+// (`ALCHEMY_TEST_DEV=1`) the dev provider never builds in its diff, and its
+// file watcher rebuilds the image instead.
+test.provider.skipIf(process.env.ALCHEMY_TEST_DEV === "1")(
   "a lockfile outside the build context does not plan an update",
   (stack) =>
     Effect.gen(function* () {

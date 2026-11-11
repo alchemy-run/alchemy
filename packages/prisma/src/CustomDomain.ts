@@ -155,10 +155,16 @@ const normalizeHostname = (hostname: string) => hostname.trim().replace(/\.$/, "
 const sameHostname = (left: string, right: string) =>
   normalizeHostname(left) === normalizeHostname(right);
 
+export class PrismaCustomDomainAdoptionRequired extends Data.TaggedError(
+  "PrismaCustomDomainAdoptionRequired",
+)<{
+  readonly message: string;
+}> {}
+
 const adoptionRequiredError = (hostname: string, appId: string, detail: string) =>
-  new Error(
-    `Prisma custom domain '${hostname}' ${detail} on App '${appId}' but is not owned by this resource. Import it with explicit adoption instead of silently taking it over.`,
-  );
+  new PrismaCustomDomainAdoptionRequired({
+    message: `Prisma custom domain '${hostname}' ${detail} on App '${appId}' but is not owned by this resource. Import it with explicit adoption instead of silently taking it over.`,
+  });
 
 const appIdValue = (app: AppReference | undefined) => (typeof app === "string" ? app : app?.appId);
 
@@ -349,7 +355,7 @@ const ProviderLive = () =>
             });
           }
           if (domain && customDomainId === undefined) {
-            return yield* Effect.fail(adoptionRequiredError(hostname, appId, "already exists"));
+            return yield* adoptionRequiredError(hostname, appId, "already exists");
           }
           if (!domain) {
             yield* waitForAuthoritativeCname(hostname);

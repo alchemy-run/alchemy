@@ -58,10 +58,20 @@ export const flociProvidersUrl = () =>
   import.meta.resolve(`./Local${moduleExtension(import.meta.url)}`, import.meta.url);
 
 /** A diff decision produced by {@link DevWatchSpec.replaceOn}. */
-export interface DevReplaceDecision {
-  readonly action: "replace";
-  readonly deleteFirst?: boolean;
-}
+export type DevReplaceDecision =
+  | {
+      readonly action: "replace";
+      readonly deleteFirst?: boolean;
+    }
+  | {
+      /**
+       * An update whose `stables` narrow the provider's static list, for
+       * changes that move attributes downstream consumers read (a Lambda
+       * alias moving `qualifiedArn`).
+       */
+      readonly action: "update";
+      readonly stables: ReadonlyArray<string>;
+    };
 
 /**
  * The context handed to {@link DevWatchSpec.startWatch}. Runs inside the

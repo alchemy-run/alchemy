@@ -1,11 +1,11 @@
+import { makeDeferredClient } from "@alchemy.run/sql/DeferredClient";
 import type * as runtime from "@cloudflare/workers-types";
 import * as D1Client from "@effect/sql-d1/D1Client";
-import { makeExecutionMemo } from "alchemy/Runtime/ExecutionMemo";
-import { proxyChain } from "alchemy/Util/proxy-chain";
-import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Reactivity from "effect/reactivity/Reactivity";
 import * as Sql from "effect/sql/SqlClient";
+import * as Statement from "effect/sql/Statement";
 
 /**
  * A source of the raw Cloudflare `D1Database` binding. Structurally matches
@@ -27,8 +27,8 @@ export type D1Config = Omit<D1Client.D1ClientConfig, "db">;
  *
  * Accepts the client returned by `Cloudflare.D1.QueryDatabase(db)` — or its
  * `raw` effect directly — and returns a `D1Client` (which implements the
- * generic `SqlClient` interface) wrapped in a chainable Proxy, so it can be
- * resolved once at Worker init and used from any handler:
+ * generic `SqlClient` interface). Resolve it once at Construction phase and
+ * use it from any handler:
  *
  * ```typescript
  * import * as SQL from "@alchemy.run/cloudflare/D1/SQL";
@@ -41,27 +41,44 @@ export type D1Config = Omit<D1Client.D1ClientConfig, "db">;
  * });
  * ```
  *
- * The client build is deferred until the first query and memoized on the
- * current execution's `Scope` (via {@link makeExecutionMemo}), so the
- * `D1Client` (and its prepared-statement cache) is built at most once per
- * execution — a Worker `fetch`/`queue`/`scheduled` event, a Durable Object
- * call, or a Workflow run — and torn down when the event settles. Deploy /
- * plan-time invocations never touch D1.
+ * The client is a real `D1Client`: `` sql`...` ``, `sql.insert` and
+ * `sql.and` build and compile statements with `@effect/sql-d1`'s own code,
+ * without the binding. Running a statement resolves the binding. The
+ * `D1Client` over it (and its prepared-statement cache) is built at most
+ * once per execution — a Worker `fetch`/`queue`/`scheduled` event, a Durable
+ * Object call, or a Workflow run — and released when the event settles.
+ * Deploy / plan-time invocations never touch D1.
  *
  * @binding
  * @title SQL
  */
-export const D1 = <E = never, R = never>(database: D1DatabaseSource<E, R>, config?: D1Config) =>
-  Effect.map(
-    makeExecutionMemo(
-      Effect.gen(function* () {
-        const db = yield* Effect.isEffect(database) ? database : database.raw;
-        const d1Ctx = yield* Layer.build(D1Client.layer({ ...config, db }));
-        return Context.get(d1Ctx, D1Client.D1Client);
-      }),
+export const D1 = Effect.fn(function* <E = never, R = never>(
+  database: D1DatabaseSource<E, R>,
+  config?: D1Config,
+) {
+  const { client, connected } = yield* makeDeferredClient({
+    driver: "d1",
+    compiler: Statement.makeCompilerSqlite(config?.transformQueryNames),
+    transformRows: config?.transformResultNames
+      ? Statement.defaultTransforms(config.transformResultNames).array
+      : undefined,
+    spanAttributes: [...Object.entries(config?.spanAttributes ?? {}), ["db.system.name", "sqlite"]],
+    connect: Effect.flatMap(Effect.isEffect(database) ? database : database.raw, (db) =>
+      D1Client.make({ ...config, db }).pipe(
+        Effect.provideServiceEffect(Reactivity.Reactivity, Reactivity.make),
+      ),
     ),
-    (client) => proxyChain<D1Client.D1Client>(client),
-  );
+  });
+  const batch: D1Client.D1Client["batch"] = (statements) =>
+    Effect.flatMap(connected, (real) => real.batch(statements));
+  return Object.assign(client, {
+    [D1Client.TypeId]: D1Client.TypeId,
+    // The options known at Construction phase. The binding (`db`) resolves
+    // on the first statement of an execution.
+    config: { ...config } as D1Client.D1ClientConfig,
+    batch,
+  }) as D1Client.D1Client;
+});
 
 /**
  * Provide an `@effect/sql-d1` client as the `D1Client` and generic
@@ -74,8 +91,8 @@ export const D1 = <E = never, R = never>(database: D1DatabaseSource<E, R>, confi
  * const app = yield* makeApp.pipe(Effect.provide(SQL.D1Layer(d1)));
  * ```
  *
- * The layer itself builds synchronously at Worker init; the underlying
- * `D1Client` is created lazily per execution (see {@link D1}).
+ * The layer itself builds synchronously at Construction phase; the
+ * underlying `D1Client` is created lazily per execution (see {@link D1}).
  */
 export const D1Layer = <E = never, R = never>(
   database: D1DatabaseSource<E, R>,

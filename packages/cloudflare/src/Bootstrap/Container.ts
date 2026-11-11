@@ -48,7 +48,7 @@ export const bootstrapContainer = (
     Logger.layer([Logger.consolePretty()]),
   );
 
-  const program = resolveProgram("default", { telemetry: true }).pipe(
+  const program = resolveProgram("default").pipe(
     Effect.provide(
       entrypointLayer(entrypoint).pipe(
         Layer.provideMerge(stackConstant(options.stack.name, options.stack.stage)),

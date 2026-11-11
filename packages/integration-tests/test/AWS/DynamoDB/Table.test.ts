@@ -12,6 +12,7 @@ import { isResourceState, State, type ResourceState } from "alchemy/State";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { interruptDestroy } from "../../interruptDestroy.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -44,6 +45,38 @@ describe.skipIf(!!process.env.FAST)(
 
         yield* assertTableIsDeleted(table.tableName);
       }),
+    );
+
+    // A destroy interrupted while it waits for DynamoDB leaves the table
+    // DELETING and still in state, and the next destroy has to finish it.
+    test.provider(
+      "delete: a destroy interrupted mid-delete finishes on the next destroy",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          const table = yield* stack.deploy(
+            Effect.gen(function* () {
+              return yield* Table("InterruptedTable", {
+                partitionKey: "id",
+                attributes: { id: "S" },
+              });
+            }),
+          );
+
+          // A table is DELETING for a few seconds only, so poll quickly.
+          yield* interruptDestroy(stack, {
+            status: DynamoDB.describeTable({ TableName: table.tableName }).pipe(
+              Effect.map((response) => response.Table?.TableStatus),
+            ),
+            deleting: "DELETING",
+            spaced: "200 millis",
+            times: 150,
+          });
+          yield* stack.destroy();
+
+          yield* assertTableIsDeleted(table.tableName);
+        }),
     );
 
     test.provider(
