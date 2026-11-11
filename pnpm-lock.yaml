@@ -9351,6 +9351,9 @@ importers:
       '@distilled.cloud/digitalocean':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/digitalocean
+      '@distilled.cloud/s3':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/s3
     devDependencies:
       '@types/bun':
         specifier: 'catalog:'
@@ -10752,6 +10755,9 @@ importers:
       '@distilled.cloud/rivet':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/rivet
+      '@distilled.cloud/s3':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/s3
       '@distilled.cloud/stripe':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/stripe
@@ -11942,6 +11948,9 @@ importers:
       '@distilled.cloud/core':
         specifier: workspace:*
         version: link:../core
+      '@distilled.cloud/s3':
+        specifier: workspace:*
+        version: link:../s3
       effect:
         specifier: 4.1.0
         version: 4.1.0

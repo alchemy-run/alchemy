@@ -291,13 +291,15 @@ const toApiBody = (name: string, news: LoadBalancerProps) => ({
     news.healthCheck === undefined
       ? undefined
       : {
-          protocol: news.healthCheck.protocol,
-          port: news.healthCheck.port,
-          path: news.healthCheck.path,
-          check_interval_seconds: news.healthCheck.checkIntervalSeconds,
-          response_timeout_seconds: news.healthCheck.responseTimeoutSeconds,
-          unhealthy_threshold: news.healthCheck.unhealthyThreshold,
-          healthy_threshold: news.healthCheck.healthyThreshold,
+          // A health check object must be complete; DigitalOcean fills no
+          // defaults inside it.
+          protocol: news.healthCheck.protocol ?? "http",
+          port: news.healthCheck.port ?? 80,
+          path: news.healthCheck.path ?? "/",
+          check_interval_seconds: news.healthCheck.checkIntervalSeconds ?? 10,
+          response_timeout_seconds: news.healthCheck.responseTimeoutSeconds ?? 5,
+          unhealthy_threshold: news.healthCheck.unhealthyThreshold ?? 5,
+          healthy_threshold: news.healthCheck.healthyThreshold ?? 3,
         },
   sticky_sessions:
     news.stickySessions === undefined

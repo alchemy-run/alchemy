@@ -27,6 +27,7 @@
   "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
+    "./Spaces": "./src/Spaces/index.ts",
     "./*": "./src/*.ts",
     "./package.json": "./package.json"
   },
@@ -37,6 +38,12 @@
         "bun": "./src/index.ts",
         "worker": "./src/index.ts",
         "default": "./lib/index.js"
+      },
+      "./Spaces": {
+        "types": "./lib/Spaces/index.d.ts",
+        "bun": "./src/Spaces/index.ts",
+        "worker": "./src/Spaces/index.ts",
+        "default": "./lib/Spaces/index.js"
       },
       "./internal/*": null,
       "./*": {
@@ -55,7 +62,8 @@
   },
   "dependencies": {
     "@distilled.cloud/core": "workspace:*",
-    "@distilled.cloud/digitalocean": "workspace:*"
+    "@distilled.cloud/digitalocean": "workspace:*",
+    "@distilled.cloud/s3": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "catalog:",

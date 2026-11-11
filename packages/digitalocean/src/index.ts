@@ -17,3 +17,4 @@ export * from "./Tag.ts";
 export * from "./Volume.ts";
 export * from "./VolumeAttachment.ts";
 export * from "./Vpc.ts";
+export * as Spaces from "./Spaces/index.ts";

@@ -1,3 +1,4 @@
+import { layerS3Keys } from "@distilled.cloud/digitalocean/Spaces";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
 import { KeyPair, KeyPairProvider } from "alchemy/KeyPair";
@@ -16,6 +17,7 @@ import { Project, ProjectProvider } from "./Project.ts";
 import { ProjectResources, ProjectResourcesProvider } from "./ProjectResources.ts";
 import { ReservedIp, ReservedIpProvider } from "./ReservedIp.ts";
 import { ReservedIpAssignment, ReservedIpAssignmentProvider } from "./ReservedIpAssignment.ts";
+import * as Spaces from "./Spaces/index.ts";
 import { SshKey, SshKeyProvider } from "./SshKey.ts";
 import { Tag, TagProvider } from "./Tag.ts";
 import { Volume, VolumeProvider } from "./Volume.ts";
@@ -74,6 +76,9 @@ export const providers = () =>
       Tag,
       LoadBalancer,
       Certificate,
+      Spaces.Bucket,
+      Spaces.CdnEndpoint,
+      Spaces.Key,
       KeyPair,
     ]),
   ).pipe(
@@ -94,9 +99,14 @@ export const providers = () =>
         TagProvider(),
         LoadBalancerProvider(),
         CertificateProvider(),
+        Spaces.BucketProvider(),
+        Spaces.CdnEndpointProvider(),
+        Spaces.KeyProvider(),
         KeyPairProvider(),
       ),
     ),
+    // Spaces' S3 API signs with Spaces keys, not the token.
+    Layer.provideMerge(layerS3Keys()),
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(DigitalOceanAuth),
     Layer.provideMerge(ProfileStoreLive),
