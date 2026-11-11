@@ -40,7 +40,10 @@ describe(
       Effect.gen(function* () {
         const fixture = yield* makeAlarmScheduler;
         const register = () =>
-          fixture.register("broken", () => Effect.fail("unavailable"), { delay: "1 second" });
+          fixture.register("broken", () => Effect.fail("unavailable"), {
+            delay: "1 second",
+            maxAttempts: 8,
+          });
         const callback = yield* register();
         fixture.seal();
         yield* callback.schedule("a", { after: 0, payload: null });
@@ -72,7 +75,7 @@ describe(
                     payload: null,
                   });
                 }),
-              { delay: "1 second" },
+              { delay: "1 second", maxAttempts: 8 },
             );
             fixture.seal();
             yield* callback.schedule("0", { after: 0, payload: null });
@@ -99,7 +102,7 @@ describe(
                 yield* TestClock.adjust("10 seconds");
                 return yield* Effect.fail("still unavailable");
               }),
-            { delay: "1 second" },
+            { delay: "1 second", maxAttempts: 8 },
           );
           fixture.seal();
           yield* callback.schedule("a", { after: 0, payload: null });
@@ -112,7 +115,10 @@ describe(
       Effect.gen(function* () {
         const fixture = yield* makeAlarmScheduler;
         const register = () =>
-          fixture.register("broken", () => Effect.fail("unavailable"), { delay: "1 second" });
+          fixture.register("broken", () => Effect.fail("unavailable"), {
+            delay: "1 second",
+            maxAttempts: 8,
+          });
         const callback = yield* register();
         fixture.seal();
         yield* callback.schedule("a", { after: 0, payload: null });
@@ -285,7 +291,7 @@ describe(
         const target = yield* fixture.register(
           "target",
           (id: string) => Effect.sync(() => delivered.push(id)),
-          { delay: "1 second" },
+          { delay: "1 second", maxAttempts: 8 },
         );
         const source = yield* fixture.register(
           "source",
@@ -294,7 +300,7 @@ describe(
               yield* target.schedule("behind", { after: 0, payload: "behind", progress: 1 });
               yield* target.schedule("past", { after: 0, payload: "past", progress: 101 });
             }),
-          { delay: "1 second" },
+          { delay: "1 second", maxAttempts: 8 },
         );
         fixture.seal();
         yield* source.schedule("s", { after: 0, payload: null, progress: 100 });
@@ -419,7 +425,7 @@ describe(
                 });
                 return yield* Effect.fail("old attempt failed");
               }),
-            { delay: "1 second" },
+            { delay: "1 second", maxAttempts: 8 },
           );
           fixture.seal();
           yield* callback.schedule("a", { after: 0, payload: "initial" });
@@ -452,7 +458,7 @@ describe(
               yield* Deferred.await(release);
               return yield* Effect.fail("stale failure");
             }),
-          { delay: "1 second" },
+          { delay: "1 second", maxAttempts: 8 },
         );
         fixture.seal();
         yield* callback.schedule("a", {
@@ -484,7 +490,8 @@ describe(
         yield* callback.schedule("a", { after: 0, payload: null });
         fixture.restart();
         fixture.seal();
-        for (let i = 0; i < 8; i++) yield* fixture.fire;
+        // An unregistered callback uses the default policy: parked after 12.
+        for (let i = 0; i < 12; i++) yield* fixture.fire;
         expect((yield* callback.getStatus("a"))?.parked).toBe(true);
         expect(fixture.alarm! - (yield* Clock.currentTimeMillis)).toBe(3_600_000);
         fixture.restart();
