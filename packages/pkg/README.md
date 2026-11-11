@@ -80,6 +80,7 @@ const registry = yield* PkgRegistry("Pkg", {
   policy: {
     repos: ["alchemy-run/alchemy", "alchemy-run/distilled"],
     ttl: Duration.weeks(1),
+    keepLatest: ["main"],
     maxPackageSize: ByteSize.megabytes(100),
   },
   aliases: { "pkg.distilled.cloud": "@distilled.cloud" },
@@ -94,6 +95,7 @@ const registry = yield* PkgRegistry("Pkg", {
 | `github.apiUrl`         | `https://api.github.com` | GitHub API origin                                                                        |
 | `policy.repos`          | required                 | Repositories allowed to publish, as `owner/name`                                         |
 | `policy.ttl`            | one week                 | How long a publication lives                                                             |
+| `policy.keepLatest`     | `[]`                     | Branches whose latest push publication never expires, such as `["main"]`                 |
 | `policy.maxPackageSize` | unlimited                | Upper bound on a single tarball                                                          |
 | `aliases`               | `{}`                     | Hostname to package scope, so `pkg.distilled.cloud/core/<sha>` serves `@distilled.cloud/core` |
 | `cron`                  | `0 * * * *`              | Schedule of the expiry sweep                                                             |
@@ -124,6 +126,6 @@ The contract lives in `@alchemy.run/pkg/Protocol` as an Effect `HttpApi`. The Wo
 
 ## Cleanup
 
-The registry keeps one table: `tags(package, tag, sha256, expires_at, linked_prs)`. A tarball lives in R2 for as long as any row points at it.
+The registry keeps one table: `tags(package, tag, sha256, expires_at, linked_prs, head_of)`. A tarball lives in R2 for as long as any row points at it.
 
-Every publication of a tag refreshes `expires_at` to now plus `ttl`. Rows produced by pull request runs also record the pull request in `linked_prs`; a commit tag shared by several pull requests records all of them. The sweep re-checks rows that are about to expire: while any linked pull request is open the row is extended by `ttl`, and once they are all closed or merged the expiry is pinned to the latest close time plus `ttl`. Branch publications simply expire `ttl` after the push. The sweep then deletes expired rows, tarballs no row points at, and uploads older than a day that never got tagged.
+Every publication of a tag refreshes `expires_at` to now plus `ttl`. Rows produced by pull request runs also record the pull request in `linked_prs`; a commit tag shared by several pull requests records all of them. The sweep re-checks rows that are about to expire: while any linked pull request is open the row is extended by `ttl`, and once they are all closed or merged the expiry is pinned to the latest close time plus `ttl`. Branch publications expire `ttl` after the push, except on branches listed in `keepLatest`: there the latest push stays until the branch publishes again. The newer push clears the `head_of` mark on the rows it does not rewrite, such as the previous commit's tags, and those rows then expire `ttl` after that newer push. The sweep then deletes expired rows, tarballs no row points at, and uploads older than a day that never got tagged.
