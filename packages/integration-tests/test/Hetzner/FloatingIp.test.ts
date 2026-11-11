@@ -6,6 +6,7 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectDeleteRefused } from "../expectDeleteRefused.ts";
 import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
@@ -85,6 +86,35 @@ test.provider(
       expect(refetched.floating_ip.description).toEqual("alchemy floating ip update");
       expect(refetched.floating_ip.labels.env).toEqual("prod");
       expect(refetched.floating_ip.labels.role).toEqual("edge");
+
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Hetzner.FloatingIp("PublicIp", {
+            type: "ipv4",
+            homeLocation: "nbg1",
+            description: "alchemy floating ip update",
+            labels: { env: "prod", role: "edge" },
+            deleteProtection: true,
+          });
+        }),
+      );
+      // Deletion protection refuses the destroy: the provider never lifts it.
+      // Turn it off and deploy, then destroy.
+      yield* expectDeleteRefused(stack, {
+        logicalId: "PublicIp",
+        tag: "Hetzner.FloatingIpDeleteProtected",
+      });
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Hetzner.FloatingIp("PublicIp", {
+            type: "ipv4",
+            homeLocation: "nbg1",
+            description: "alchemy floating ip update",
+            labels: { env: "prod", role: "edge" },
+            deleteProtection: false,
+          });
+        }),
+      );
 
       yield* stack.destroy();
 

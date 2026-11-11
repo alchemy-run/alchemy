@@ -50,8 +50,8 @@ export type VolumeServer = { readonly serverId: number };
 
 /**
  * Deletion was refused because the volume has delete protection on, set
- * through `deleteProtection` or outside the stack. Turn it off and deploy (or
- * turn it off in the Hetzner Console) before deleting it.
+ * outside the stack. Turn it off in the Hetzner Console or API before
+ * deleting it.
  */
 export class VolumeDeleteProtected extends Data.TaggedError("Hetzner.VolumeDeleteProtected")<{
   readonly id: number;
@@ -497,7 +497,7 @@ export const VolumeProvider = () =>
         if (force !== true) {
           return yield* new VolumeDeleteProtected({
             id: current.id,
-            message: `Hetzner volume '${current.id}' has delete protection on. Set \`deleteProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+            message: `Hetzner volume '${current.id}' has delete protection on. Turn it off in the Hetzner Console or API before deleting it.`,
           });
         }
         const { action } = yield* Hetzner.volumeActions.changeVolumeProtection({
