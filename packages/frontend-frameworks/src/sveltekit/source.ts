@@ -20,6 +20,7 @@ import * as Redacted from "effect/Redacted";
 import {
   makeSourceModule,
   makeWorkerSource,
+  SourceProviderError,
   type AssetReadResult,
   type BundleFile,
   type BundleOutput,
@@ -150,7 +151,7 @@ export const makeSvelteKitSource = (options: SvelteKitSourceOptions): SourceProv
       }) satisfies SvelteKitBuildChildConfig,
     // The dev platform proxy serves kit's static directory to `ASSETS`.
     devAssetsBinding: true,
-    dev: (ctx, { rootDir, fail }) =>
+    dev: (ctx, { rootDir }) =>
       Effect.gen(function* () {
         const framework = yield* makeSvelteKit({
           root: rootDir,
@@ -170,9 +171,16 @@ export const makeSvelteKitSource = (options: SvelteKitSourceOptions): SourceProv
             workerd: ctx.worker.options.workerd,
           },
         });
-        const server = yield* framework
-          .dev({ root: rootDir, port: 0 })
-          .pipe(Effect.mapError((error) => fail(error.message, error.cause ?? error)));
+        const server = yield* framework.dev({ root: rootDir, port: 0 }).pipe(
+          Effect.mapError(
+            (error) =>
+              new SourceProviderError({
+                provider: PROVIDER,
+                message: error.message,
+                cause: error.cause ?? error,
+              }),
+          ),
+        );
         return {
           mode: "server",
           url: new URL(server.url),

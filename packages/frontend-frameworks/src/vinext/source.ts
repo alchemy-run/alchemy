@@ -413,16 +413,30 @@ export const makeVinextSourceProvider = (options: VinextSourceOptions): SourcePr
       }) satisfies VinextBuildChildConfig,
     // Dev runs the Worker in workerd with the Vite plugin's assets service.
     devAssetsBinding: true,
-    dev: (ctx, { rootDir, fail }) =>
+    dev: (ctx, { rootDir }) =>
       Effect.gen(function* () {
         // oxlint-disable-next-line effecttsgo/process-env-in-effect -- flags the vite plugin injection via process.env, not config reading
         process.env[ALCHEMY_CLOUDFLARE_VITE_INJECTED] = "1";
         const cachePlugin = yield* makeVinextCachePlugin(rootDir, "kv").pipe(
-          Effect.mapError((cause) => fail("Failed to load the vinext cache adapters", cause)),
+          Effect.mapError(
+            (cause) =>
+              new SourceProviderError({
+                provider: PROVIDER,
+                message: "Failed to load the vinext cache adapters",
+                cause: cause,
+              }),
+          ),
         );
         const vite = yield* Effect.promise(() => loadVite(rootDir));
         const port = yield* resolveViteDevPort(vite.version).pipe(
-          Effect.mapError((cause) => fail("Failed to allocate a vinext dev port", cause)),
+          Effect.mapError(
+            (cause) =>
+              new SourceProviderError({
+                provider: PROVIDER,
+                message: "Failed to allocate a vinext dev port",
+                cause: cause,
+              }),
+          ),
         );
         const pluginOptions = makeVinextPluginOptions({
           root: rootDir,
@@ -455,7 +469,11 @@ export const makeVinextSourceProvider = (options: VinextSourceOptions): SourcePr
           (devServer) => Effect.promise(() => devServer.close()),
         );
         const local = server.resolvedUrls?.local[0];
-        if (!local) return yield* fail("vinext dev server started without a local URL");
+        if (!local)
+          return yield* new SourceProviderError({
+            provider: PROVIDER,
+            message: "vinext dev server started without a local URL",
+          });
         return { mode: "server", url: new URL(local) } satisfies ServerDevHandle;
       }),
   });

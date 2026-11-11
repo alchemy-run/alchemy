@@ -25,7 +25,6 @@ import { hashInput, sha256, type MemoOptions } from "../core/InputHash.ts";
 import {
   assetsConfigOf,
   bundleOf,
-  PACKAGE_VERSION,
   readClientAssets,
   SourceProviderError,
   type AssetReadResult,
@@ -188,11 +187,6 @@ export const buildInChild = (config: NextjsBuildChildConfig) =>
 // The provider
 // ─────────────────────────────────────────────────────────────────────
 
-const fail = (message: string, cause?: unknown) =>
-  new SourceProviderError({ provider: PROVIDER, message, cause });
-
-const frameworkError = (cause: { readonly message: string }) => fail(cause.message, cause);
-
 export const makeNextjsSourceProvider = (options: NextjsSourceOptions): NextjsSourceProvider => {
   const rootDirOf = (path: Path.Path) => path.resolve(options.root ?? process.cwd());
 
@@ -211,13 +205,18 @@ export const makeNextjsSourceProvider = (options: NextjsSourceOptions): NextjsSo
     const configPath = yield* Runner.resolveConfigPath({
       appDir: rootDir,
       configPath: options.configPath,
-    }).pipe(Effect.mapError(frameworkError));
+    }).pipe(
+      Effect.mapError(
+        (cause) =>
+          new SourceProviderError({ provider: PROVIDER, message: cause.message, cause: cause }),
+      ),
+    );
     const config =
       configPath === undefined
         ? undefined
         : {
             path: path.relative(rootDir, configPath).replaceAll("\\", "/"),
-            hash: sha256(yield* fs.readFile(configPath)),
+            hash: yield* sha256(yield* fs.readFile(configPath)),
           };
     const runtimeDir =
       dotAlchemy === undefined ? undefined : path.relative(rootDir, path.resolve(dotAlchemy));
@@ -232,16 +231,13 @@ export const makeNextjsSourceProvider = (options: NextjsSourceOptions): NextjsSo
       outputDirs: insideRoot ? [...OUTPUT_DIRS, runtimeDir.replaceAll("\\", "/")] : OUTPUT_DIRS,
       memo: options.memo,
       workspaces,
-      salt: {
-        version: PACKAGE_VERSION,
-        options: {
-          config,
-          configPath: options.configPath,
-          cache: options.cache,
-          buildCommand: options.buildCommand,
-          skipNextBuild: options.skipNextBuild,
-          minify: options.minify,
-        },
+      options: {
+        config,
+        configPath: options.configPath,
+        cache: options.cache,
+        buildCommand: options.buildCommand,
+        skipNextBuild: options.skipNextBuild,
+        minify: options.minify,
       },
     });
   });
@@ -268,10 +264,18 @@ export const makeNextjsSourceProvider = (options: NextjsSourceOptions): NextjsSo
           minify: options.minify,
           debug: options.debug,
         } satisfies NextjsBuildChildConfig,
-      }).pipe(Effect.mapError(frameworkError));
-      const bundle = bundleOf(output.serverModules);
+      }).pipe(
+        Effect.mapError(
+          (cause) =>
+            new SourceProviderError({ provider: PROVIDER, message: cause.message, cause: cause }),
+        ),
+      );
+      const bundle = yield* bundleOf(output.serverModules);
       if (bundle === undefined) {
-        return yield* fail("The OpenNext build produced no server modules");
+        return yield* new SourceProviderError({
+          provider: PROVIDER,
+          message: "The OpenNext build produced no server modules",
+        });
       }
       const [assets, inputHash] = yield* Effect.all(
         [
@@ -280,7 +284,11 @@ export const makeNextjsSourceProvider = (options: NextjsSourceOptions): NextjsSo
                 path.resolve(rootDir, output.clientDirectory),
                 assetsConfigOf(ctx.assets),
               ).pipe(
-                Effect.catchTag("AssetLimitError", (error) => Effect.fail(fail(error.message))),
+                Effect.catchTag("AssetLimitError", (error) =>
+                  Effect.fail(
+                    new SourceProviderError({ provider: PROVIDER, message: error.message }),
+                  ),
+                ),
               )
             : Effect.undefined,
           input(rootDir, ctx.dotAlchemy, output.externalWorkspaces),
@@ -352,7 +360,10 @@ export const makeNextjsSourceProvider = (options: NextjsSourceOptions): NextjsSo
         },
       };
       const server = yield* withFramework(devOptions, (framework) => framework.dev({ root })).pipe(
-        Effect.mapError(frameworkError),
+        Effect.mapError(
+          (cause) =>
+            new SourceProviderError({ provider: PROVIDER, message: cause.message, cause: cause }),
+        ),
       );
       return {
         mode: "server",
@@ -373,7 +384,10 @@ const make = (options: unknown): Effect.Effect<NextjsSourceProvider, SourceProvi
   options !== undefined &&
   (typeof options !== "object" || options === null || Array.isArray(options))
     ? Effect.fail(
-        fail("Invalid source options: expected a plain JSON object (NextjsSourceOptions)"),
+        new SourceProviderError({
+          provider: PROVIDER,
+          message: "Invalid source options: expected a plain JSON object (NextjsSourceOptions)",
+        }),
       )
     : Effect.succeed(makeNextjsSourceProvider((options ?? {}) as NextjsSourceOptions));
 

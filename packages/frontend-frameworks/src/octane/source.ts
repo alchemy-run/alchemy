@@ -17,6 +17,7 @@ import * as Effect from "effect/Effect";
 import {
   makeSourceModule,
   makeWorkerSource,
+  SourceProviderError,
   type MemoOptions,
   type ServerDevHandle,
   type SourceProvider,
@@ -92,7 +93,7 @@ export const makeOctaneSource = (options: OctaneSourceOptions): SourceProvider =
         compatibilityDate: ctx.compatibility.date,
         compatibilityFlags: ctx.compatibility.flags,
       }) satisfies OctaneBuildChildConfig,
-    dev: (ctx, { rootDir, fail }) =>
+    dev: (ctx, { rootDir }) =>
       Effect.gen(function* () {
         // This module is Cloudflare-specific by contract, so it passes the
         // target factory directly instead of resolving it from the project.
@@ -102,9 +103,16 @@ export const makeOctaneSource = (options: OctaneSourceOptions): SourceProvider =
           compatibilityDate: ctx.compatibility.date,
           compatibilityFlags: ctx.compatibility.flags,
         });
-        const server = yield* framework
-          .dev({ root: rootDir, port: 0 })
-          .pipe(Effect.mapError((error) => fail(error.message, error.cause ?? error)));
+        const server = yield* framework.dev({ root: rootDir, port: 0 }).pipe(
+          Effect.mapError(
+            (error) =>
+              new SourceProviderError({
+                provider: PROVIDER,
+                message: error.message,
+                cause: error.cause ?? error,
+              }),
+          ),
+        );
         return {
           mode: "server",
           url: new URL(server.url),

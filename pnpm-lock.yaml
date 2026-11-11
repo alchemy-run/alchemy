@@ -576,6 +576,9 @@ catalogs:
     octane:
       specifier: 0.16.0
       version: 0.16.0
+    ohash:
+      specifier: ^2.0.11
+      version: 2.0.12
     oxfmt:
       specifier: ^0.74.0
       version: 0.74.0
@@ -9687,6 +9690,9 @@ importers:
       '@alchemy.run/cloudflare-runtime':
         specifier: workspace:*
         version: link:../cloudflare-runtime
+      '@alchemy.run/node-utils':
+        specifier: workspace:*
+        version: link:../node-utils
       '@alchemy.run/redis':
         specifier: workspace:*
         version: link:../redis
@@ -9702,6 +9708,9 @@ importers:
       esbuild:
         specifier: 'catalog:'
         version: 0.28.2
+      ohash:
+        specifier: 'catalog:'
+        version: 2.0.12
       rolldown:
         specifier: 1.2.16
         version: 1.2.16
@@ -11229,6 +11238,9 @@ importers:
       '@types/bun':
         specifier: 'catalog:'
         version: 1.4.3
+      effect:
+        specifier: 4.1.0
+        version: 4.1.0
       typescript:
         specifier: 'catalog:'
         version: 7.1.0-dev.20261105.1

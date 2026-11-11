@@ -30,6 +30,7 @@
   "sideEffects": false,
   "exports": {
     "./ignore": "./src/ignore.ts",
+    "./ignore-rules": "./src/ignore-rules.ts",
     "./register-oxc": "./src/loader/register.ts",
     "./watch-import": "./src/watch/import-watcher.ts",
     "./watch-import-bun": "./src/watch/bun-import-tracker.ts"
@@ -40,6 +41,11 @@
         "types": "./lib/ignore.d.ts",
         "bun": "./src/ignore.ts",
         "default": "./lib/ignore.js"
+      },
+      "./ignore-rules": {
+        "types": "./lib/ignore-rules.d.ts",
+        "bun": "./src/ignore-rules.ts",
+        "default": "./lib/ignore-rules.js"
       },
       "./register-oxc": {
         "types": "./lib/loader/register.d.ts",
@@ -70,6 +76,10 @@
   },
   "devDependencies": {
     "@types/bun": "catalog:",
+    "effect": "catalog:",
     "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "effect": "catalog:"
   }
 }

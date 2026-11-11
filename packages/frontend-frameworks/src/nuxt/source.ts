@@ -20,6 +20,7 @@ import * as Redacted from "effect/Redacted";
 import {
   makeSourceModule,
   makeWorkerSource,
+  SourceProviderError,
   type MemoOptions,
   type ServerDevHandle,
   type SourceProvider,
@@ -143,7 +144,7 @@ export const makeNuxtSource = (options: NuxtSourceOptions): SourceProvider =>
       }) satisfies NuxtBuildChildConfig,
     // The dev platform proxy serves the public directory to `ASSETS`.
     devAssetsBinding: true,
-    dev: (ctx, { rootDir, fail }) =>
+    dev: (ctx, { rootDir }) =>
       Effect.gen(function* () {
         const framework = yield* makeNuxt({
           root: rootDir,
@@ -166,9 +167,16 @@ export const makeNuxtSource = (options: NuxtSourceOptions): SourceProvider =>
             workerd: ctx.worker.options.workerd,
           },
         });
-        const server = yield* framework
-          .dev({ root: rootDir, port: 0 })
-          .pipe(Effect.mapError((error) => fail(error.message, error.cause ?? error)));
+        const server = yield* framework.dev({ root: rootDir, port: 0 }).pipe(
+          Effect.mapError(
+            (error) =>
+              new SourceProviderError({
+                provider: PROVIDER,
+                message: error.message,
+                cause: error.cause ?? error,
+              }),
+          ),
+        );
         return {
           mode: "server",
           url: new URL(server.url),

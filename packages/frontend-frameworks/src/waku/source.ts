@@ -4,7 +4,7 @@ import * as FrameworkCore from "../core/index.ts";
 import {
   makeSourceModule,
   makeWorkerSource,
-  withRootCwd,
+  SourceProviderError,
   type MemoOptions,
   type ServerDevHandle,
   type SourceProvider,
@@ -109,7 +109,8 @@ export const buildInChild = (config: WakuBuildChildConfig) =>
  * Waku assumes `process.cwd()` is the project root (its html-shell input and
  * rolldown's relative inputs resolve against it), like its CLI. The build
  * runs in a child rooted there; the dev server, whose inputs are live
- * objects, starts under the project cwd instead (see `withRootCwd`).
+ * objects, starts in-process and holds the project cwd only while it starts
+ * (see `withRootCwd` in `Waku.ts`).
  */
 export const makeWakuSourceProvider = (
   options: WakuSourceOptions,
@@ -148,7 +149,7 @@ export const makeWakuSourceProvider = (
     // Waku dev is a vite dev server with the cloudflare plugin embedded in
     // waku's plugin stack: the rsc environment runs in workerd against the
     // host-provided worker wiring.
-    dev: (ctx, { rootDir, fail }) =>
+    dev: (ctx, { rootDir }) =>
       Effect.gen(function* () {
         const queueConsumers = yield* ctx.worker.queueConsumers;
         const framework = integration.layer({
@@ -171,15 +172,18 @@ export const makeWakuSourceProvider = (
             context: ctx.runtimeContext,
           }),
         });
-        const server = yield* withRootCwd(
-          rootDir,
-          Effect.gen(function* () {
-            const framework = yield* FrameworkCore.Framework;
-            return yield* framework.dev({ root: rootDir });
-          }).pipe(Effect.provide(framework)),
-        ).pipe(
-          Effect.mapError((cause) =>
-            fail(`Failed to start the ${integration.framework} dev server`, cause),
+        const server = yield* Effect.gen(function* () {
+          const framework = yield* FrameworkCore.Framework;
+          return yield* framework.dev({ root: rootDir });
+        }).pipe(
+          Effect.provide(framework),
+          Effect.mapError(
+            (cause) =>
+              new SourceProviderError({
+                provider: integration.provider,
+                message: `Failed to start the ${integration.framework} dev server`,
+                cause: cause,
+              }),
           ),
         );
         return { mode: "server", url: new URL(server.url) } satisfies ServerDevHandle;

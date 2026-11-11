@@ -184,6 +184,8 @@ export const Vocs: {
           source: {
             provider: VOCS_SOURCE_PROVIDER,
             devMode: "server",
+            // The dev child runs in the project root, as Vocs expects.
+            rootDir: props?.rootDir,
             options: {
               rootDir: props?.rootDir,
               outDir: props?.outDir,

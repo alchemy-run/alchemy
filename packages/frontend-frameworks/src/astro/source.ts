@@ -20,6 +20,7 @@ import { hashInput, sha256Object, type MemoOptions } from "../core/InputHash.ts"
 import {
   makeSourceModule,
   makeWorkerSource,
+  SourceProviderError,
   type ServerDevHandle,
   type SourceProvider,
 } from "../core/WorkerSource.ts";
@@ -249,7 +250,7 @@ const hashPinnedWorkspaces = Effect.fn(function* (
         outputDirs: [],
         memo,
         workspaces: [],
-        salt: undefined,
+        options: undefined,
       });
       return `${path.relative(rootDir, dir).replaceAll("\\", "/")}:${hash}`;
     }),
@@ -295,7 +296,7 @@ const makeAstroSourceProvider = (options: AstroSourceOptions): SourceProvider =>
     requireServer: false,
     // Dev runs the Worker in workerd with the Vite plugin's assets service.
     devAssetsBinding: true,
-    dev: (ctx, { rootDir, fail }) =>
+    dev: (ctx, { rootDir }) =>
       Effect.gen(function* () {
         yield* applyWorkerEnvToProcess(ctx.env);
         const queueConsumers = yield* ctx.worker.queueConsumers;
@@ -331,18 +332,19 @@ const makeAstroSourceProvider = (options: AstroSourceOptions): SourceProvider =>
             }),
           ),
         );
-        const server = yield* astro
-          .dev({ root: rootDir, port: 0 })
-          .pipe(
-            Effect.mapError((cause) =>
-              fail(
-                cause instanceof Error && cause.message
-                  ? `Astro dev server failed to start: ${cause.message}`
-                  : "Astro dev server failed to start",
-                cause,
-              ),
-            ),
-          );
+        const server = yield* astro.dev({ root: rootDir, port: 0 }).pipe(
+          Effect.mapError(
+            (cause) =>
+              new SourceProviderError({
+                provider: PROVIDER,
+                message:
+                  cause instanceof Error && cause.message
+                    ? `Astro dev server failed to start: ${cause.message}`
+                    : "Astro dev server failed to start",
+                cause: cause,
+              }),
+          ),
+        );
         return { mode: "server", url: new URL(server.url) } satisfies ServerDevHandle;
       }),
   });
@@ -357,7 +359,7 @@ const makeAstroSourceProvider = (options: AstroSourceOptions): SourceProvider =>
       path.resolve(options.rootDir ?? process.cwd()),
       pinned,
     );
-    return sha256Object({ root: rootInput, workspaces });
+    return yield* sha256Object({ root: rootInput, workspaces });
   });
   return {
     ...source,

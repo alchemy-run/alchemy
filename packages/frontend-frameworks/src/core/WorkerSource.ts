@@ -1,4 +1,3 @@
-import { createRequire } from "node:module";
 import type {
   BindingHook,
   BindingServices,
@@ -9,6 +8,11 @@ import type {
   RuntimeServices,
   RuntimeWorker,
 } from "@alchemy.run/cloudflare-runtime/core";
+import {
+  listFileSystemDirectory,
+  parseIgnoreRules,
+  walkIgnoring,
+} from "@alchemy.run/node-utils/ignore-rules";
 import type * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -16,17 +20,9 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import type * as Scope from "effect/Scope";
-import * as Semaphore from "effect/Semaphore";
 import { resolveBuildEnv, runBuildChild } from "./BuildChild.ts";
 import type { BuildOutput } from "./BuildOutput.ts";
-import {
-  gitignoreRulesToGlobs,
-  hashInput,
-  listFiles,
-  sha256,
-  sha256Object,
-  type MemoOptions,
-} from "./InputHash.ts";
+import { hashInput, sha256, sha256Object, type MemoOptions } from "./InputHash.ts";
 
 export type { MemoOptions } from "./InputHash.ts";
 
@@ -138,11 +134,6 @@ export interface SourceProvider {
   ) => Effect.Effect<ServerDevHandle, SourceError, SourceRequirements | Scope.Scope>;
 }
 
-/** This package's version, salted into every input hash so an upgrade busts build memos. */
-export const PACKAGE_VERSION: string = (
-  createRequire(import.meta.url)("../../package.json") as { version: string }
-).version;
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Building blocks
 // ─────────────────────────────────────────────────────────────────────────────
@@ -191,10 +182,15 @@ export const readClientAssets = Effect.fn(function* (
     maybeReadString(path.join(directory, "_headers")),
     maybeReadString(path.join(directory, "_redirects")),
   ]);
-  // `.assetsignore` uses gitignore semantics, as in wrangler.
-  const files = yield* listFiles(directory, {
-    ignore: gitignoreRulesToGlobs([...SPECIAL_ASSET_FILES, ...(ignoreFile?.split("\n") ?? [])]),
-  });
+  // `.assetsignore` uses gitignore semantics, as in wrangler. Excluded
+  // directories are skipped without being read.
+  const files = (yield* walkIgnoring({
+    list: yield* listFileSystemDirectory(directory),
+    rules: parseIgnoreRules(
+      [...SPECIAL_ASSET_FILES, ...(ignoreFile?.split("\n") ?? [])],
+      "gitignore",
+    ),
+  })).flatMap((entry) => (entry.type === "Directory" ? [] : [entry.path]));
   if (files.length > MAX_ASSET_COUNT) {
     return yield* new AssetLimitError({
       message: `Too many assets in ${directory} (maximum is ${MAX_ASSET_COUNT}, found ${files.length})`,
@@ -212,7 +208,7 @@ export const readClientAssets = Effect.fn(function* (
         });
       }
       manifest.set(`/${relPath}`, {
-        hash: sha256(yield* fs.readFile(file)).slice(0, 32),
+        hash: (yield* sha256(yield* fs.readFile(file))).slice(0, 32),
         size: Number(stat.size),
       });
     }),
@@ -227,46 +223,22 @@ export const readClientAssets = Effect.fn(function* (
     manifest: sortedManifest,
     _headers,
     _redirects,
-    hash: sha256Object({ config, manifest: sortedManifest, _headers, _redirects }),
+    hash: yield* sha256Object({ config, manifest: sortedManifest, _headers, _redirects }),
   } satisfies AssetReadResult;
 });
 
 /** Map a build's server modules (entry first) onto alchemy's bundle shape. */
-export const bundleOf = (serverModules: BuildOutput["serverModules"]): BundleOutput | undefined => {
+export const bundleOf = Effect.fn(function* (
+  serverModules: BuildOutput["serverModules"],
+): Effect.fn.Return<BundleOutput | undefined> {
   if (serverModules === undefined || serverModules.length === 0) return undefined;
   const files = serverModules.map((module) => ({
     path: module.name.replaceAll("\\", "/"),
     content: module.content,
     hash: module.hash,
   })) as [BundleFile, ...Array<BundleFile>];
-  return { files, hash: sha256Object(files.map((file) => [file.path, file.hash])) };
-};
-
-const cwdLock = Semaphore.makeUnsafe(1);
-
-/**
- * Run `effect` with `process.cwd()` set to `rootDir`, serialized process-wide.
- * For dev servers of frameworks that resolve inputs against the cwd at
- * startup; builds run in a child process rooted there instead.
- */
-export const withRootCwd = <A, E, R>(
-  rootDir: string,
-  effect: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E, R> =>
-  Semaphore.withPermits(
-    cwdLock,
-    1,
-  )(
-    Effect.acquireUseRelease(
-      Effect.sync(() => {
-        const previous = process.cwd();
-        process.chdir(rootDir);
-        return previous;
-      }),
-      () => effect,
-      (previous) => Effect.sync(() => process.chdir(previous)),
-    ),
-  );
+  return { files, hash: yield* sha256Object(files.map((file) => [file.path, file.hash])) };
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The provider
@@ -299,16 +271,10 @@ export interface WorkerSourceSpec<Config> {
   readonly requireClient?: boolean | undefined;
   /** Dev runs the Worker in workerd with the Vite plugin's assets service. */
   readonly devAssetsBinding?: boolean | undefined;
-  /**
-   * Start the dev server. `fail(message, cause)` makes this source's
-   * `SourceProviderError` for framework errors.
-   */
+  /** Start the dev server, failing with this source's `SourceProviderError`. */
   readonly dev: (
     ctx: DevContext,
-    helpers: {
-      readonly rootDir: string;
-      readonly fail: (message: string, cause?: unknown) => SourceProviderError;
-    },
+    helpers: { readonly rootDir: string },
   ) => Effect.Effect<ServerDevHandle, SourceError, SourceRequirements | Scope.Scope>;
 }
 
@@ -320,15 +286,13 @@ export interface WorkerSourceSpec<Config> {
  */
 export const makeWorkerSource = <Config>(spec: WorkerSourceSpec<Config>): SourceProvider => {
   const rootDirOf = (path: Path.Path) => path.resolve(spec.rootDir ?? process.cwd());
-  const fail = (message: string, cause?: unknown) =>
-    new SourceProviderError({ provider: spec.provider, message, cause });
   const input = (rootDir: string, workspaces: Iterable<string>) =>
     hashInput({
       rootDir,
       outputDirs: spec.outputDirs,
       memo: spec.memo,
       workspaces,
-      salt: { version: PACKAGE_VERSION, options: spec.hashOptions },
+      options: spec.hashOptions,
     });
 
   return {
@@ -345,16 +309,34 @@ export const makeWorkerSource = <Config>(spec: WorkerSourceSpec<Config>): Source
         env: resolveBuildEnv(ctx.env),
         config: spec.buildConfig(ctx, rootDir),
         ...(spec.runtime ? { runtime: spec.runtime } : {}),
-      }).pipe(Effect.mapError((error) => fail(error.message, error.cause ?? error)));
-      const bundle = bundleOf(output.serverModules);
+      }).pipe(
+        Effect.mapError(
+          (error) =>
+            new SourceProviderError({
+              provider: spec.provider,
+              message: error.message,
+              cause: error.cause ?? error,
+            }),
+        ),
+      );
+      const bundle = yield* bundleOf(output.serverModules);
       if (bundle === undefined && (spec.requireServer ?? true)) {
-        return yield* fail(`${spec.displayName} build produced no server modules`);
+        return yield* new SourceProviderError({
+          provider: spec.provider,
+          message: `${spec.displayName} build produced no server modules`,
+        });
       }
       if (output.clientDirectory === undefined && spec.requireClient) {
-        return yield* fail(`${spec.displayName} build produced no client directory`);
+        return yield* new SourceProviderError({
+          provider: spec.provider,
+          message: `${spec.displayName} build produced no client directory`,
+        });
       }
       if (bundle === undefined && output.clientDirectory === undefined) {
-        return yield* fail(`${spec.displayName} build produced neither server modules nor assets`);
+        return yield* new SourceProviderError({
+          provider: spec.provider,
+          message: `${spec.displayName} build produced neither server modules nor assets`,
+        });
       }
       const [assets, inputHash] = yield* Effect.all(
         [
@@ -363,7 +345,11 @@ export const makeWorkerSource = <Config>(spec: WorkerSourceSpec<Config>): Source
                 path.resolve(rootDir, output.clientDirectory),
                 assetsConfigOf(ctx.assets),
               ).pipe(
-                Effect.catchTag("AssetLimitError", (error) => Effect.fail(fail(error.message))),
+                Effect.catchTag("AssetLimitError", (error) =>
+                  Effect.fail(
+                    new SourceProviderError({ provider: spec.provider, message: error.message }),
+                  ),
+                ),
               )
             : Effect.undefined,
           input(rootDir, output.externalWorkspaces),
@@ -394,7 +380,7 @@ export const makeWorkerSource = <Config>(spec: WorkerSourceSpec<Config>): Source
 
     dev: Effect.fn(function* (ctx) {
       const path = yield* Path.Path;
-      return yield* spec.dev(ctx, { rootDir: rootDirOf(path), fail });
+      return yield* spec.dev(ctx, { rootDir: rootDirOf(path) });
     }),
   };
 };

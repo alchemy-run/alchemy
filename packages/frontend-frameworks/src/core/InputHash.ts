@@ -1,8 +1,16 @@
-import * as NodeCrypto from "node:crypto";
+import {
+  combineIgnoreRules,
+  listFileSystemDirectory,
+  parseIgnoreRules,
+  walkIgnoring,
+  type IgnoreRules,
+} from "@alchemy.run/node-utils/ignore-rules";
+import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
+import { serialize } from "ohash";
 import { glob } from "tinyglobby";
 
 /**
@@ -23,57 +31,22 @@ export interface MemoOptions {
   readonly lockfile?: boolean | undefined;
 }
 
-export const sha256 = (input: string | Uint8Array): string =>
-  NodeCrypto.createHash("sha256").update(input).digest("hex");
+/** Lowercase hex sha256 of `input`. */
+export const sha256 = (input: string | Uint8Array): Effect.Effect<string> =>
+  Digest.Digest.use((digest) =>
+    digest.digestHex(
+      Digest.sha256,
+      typeof input === "string" ? new TextEncoder().encode(input) : input,
+    ),
+  ).pipe(Effect.provide(Digest.layerWebCrypto));
 
-const stableValue = (value: unknown): unknown => {
-  if (Array.isArray(value)) return value.map(stableValue);
-  if (value !== null && typeof value === "object" && value.constructor === Object) {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .filter(([, nested]) => nested !== undefined)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([key, nested]) => [key, stableValue(nested)]),
-    );
-  }
-  return value;
-};
+/** sha256 of `value` serialized with `ohash`, so key order never changes the hash. */
+export const sha256Object = (value: unknown): Effect.Effect<string> => sha256(serialize(value));
 
-/** sha256 over sorted-key JSON, so key order never changes the hash. */
-export const sha256Object = (value: unknown): string => sha256(JSON.stringify(stableValue(value)));
-
-/**
- * Gitignore rules as glob `ignore` patterns, the common cases only. A copy of
- * alchemy's `Util/gitignore-rules-to-globs.ts`; negated (`!`) rules are
- * skipped.
- */
-export const gitignoreRulesToGlobs = (rules: ReadonlyArray<string>): Array<string> =>
-  rules.flatMap((raw) => {
-    let rule = raw.trim().replaceAll("\\", "/");
-    if (rule.length === 0 || rule.startsWith("#") || rule.startsWith("!")) return [];
-    const dirOnly = rule.endsWith("/");
-    if (dirOnly) rule = rule.slice(0, -1);
-    const anchored = rule.startsWith("/");
-    if (anchored) rule = rule.slice(1);
-    if (rule.length === 0) return [];
-    if (anchored || rule.includes("/")) return dirOnly ? [`${rule}/**`] : [rule, `${rule}/**`];
-    return dirOnly ? [`**/${rule}/**`] : [`**/${rule}`, `**/${rule}/**`];
-  });
-
-/** Every file under `cwd` matched by `include` and not by `ignore`, as sorted posix paths. */
-export const listFiles = (
-  cwd: string,
-  options: { readonly include?: ReadonlyArray<string>; readonly ignore: ReadonlyArray<string> },
-) =>
-  Effect.promise(() =>
-    glob([...(options.include ?? ["**/*"])], {
-      cwd,
-      ignore: [...options.ignore],
-      onlyFiles: true,
-      expandDirectories: false,
-      dot: true,
-    }),
-  ).pipe(Effect.map((files) => files.sort()));
+/** This package's version, salted into every input hash so an upgrade busts build memos. */
+export const packageVersion: Effect.Effect<string> = Effect.promise(
+  () => import("../../package.json", { with: { type: "json" } }),
+).pipe(Effect.map((pkg) => pkg.default.version));
 
 const LOCKFILE_NAMES = [
   "bun.lock",
@@ -82,6 +55,8 @@ const LOCKFILE_NAMES = [
   "pnpm-lock.yaml",
   "yarn.lock",
 ];
+
+const isNotFound = (error: PlatformError) => error.reason._tag === "NotFound";
 
 /** The nearest of `filenames`, walking up from `startDir`. */
 export const findUp = Effect.fn(function* (startDir: string, filenames: ReadonlyArray<string>) {
@@ -99,38 +74,91 @@ export const findUp = Effect.fn(function* (startDir: string, filenames: Readonly
   }
 });
 
-/** `.gitignore` rules from `rootDir` up to the repo root (the first directory with `.git`), outermost first. */
-const readGitIgnoreRules = Effect.fn(function* (rootDir: string) {
+/**
+ * Each `.gitignore` from `rootDir` up to the repository root, anchored to its
+ * own directory, as alchemy's `Command/Memo.ts` reads them.
+ */
+const readGitIgnoreScopes = Effect.fn(function* (rootDir: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const chain: Array<Array<string>> = [];
+  const scopes: Array<IgnoreRules> = [];
   let dir = rootDir;
   for (;;) {
-    const gitignore = path.join(dir, ".gitignore");
-    if (yield* fs.exists(gitignore))
-      chain.unshift((yield* fs.readFileString(gitignore)).split("\n"));
-    if (yield* fs.exists(path.join(dir, ".git"))) break;
+    const content = yield* fs
+      .readFileString(path.join(dir, ".gitignore"))
+      .pipe(Effect.catchIf(isNotFound, () => Effect.undefined));
+    if (content !== undefined) {
+      scopes.unshift(
+        parseIgnoreRules(content, "gitignore", {
+          prefix: path.relative(dir, rootDir).replaceAll("\\", "/"),
+        }),
+      );
+    }
     const parent = path.dirname(dir);
-    if (parent === dir) break;
+    if (parent === dir || (yield* fs.exists(path.join(dir, ".git")))) break;
     dir = parent;
   }
-  return chain.flat();
+  return scopes;
+});
+
+/**
+ * Files under `rootDir` to hash, as sorted posix paths. Explicit `exclude`
+ * globs replace the gitignore rules; otherwise the tree is walked with them,
+ * never reading an excluded directory. `alwaysExclude` (gitignore syntax)
+ * applies either way.
+ */
+const listInputFiles = Effect.fn(function* (
+  rootDir: string,
+  memo: MemoOptions | undefined,
+  alwaysExclude: ReadonlyArray<string>,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const always = parseIgnoreRules(alwaysExclude, "gitignore");
+  if (memo?.exclude !== undefined || memo?.include !== undefined) {
+    const files = yield* Effect.promise(() =>
+      glob(memo.include ?? ["**/*"], {
+        cwd: rootDir,
+        ignore: memo.exclude ?? [],
+        onlyFiles: true,
+        expandDirectories: false,
+        dot: true,
+      }),
+    );
+    const gitignore =
+      memo.exclude === undefined
+        ? combineIgnoreRules("gitignore", yield* readGitIgnoreScopes(rootDir))
+        : undefined;
+    return files.filter((file) => !always.ignores(file) && !(gitignore?.ignores(file) ?? false));
+  }
+  const entries = yield* walkIgnoring({
+    list: yield* listFileSystemDirectory(rootDir),
+    rules: combineIgnoreRules("gitignore", [always, ...(yield* readGitIgnoreScopes(rootDir))]),
+  });
+  // Like tinyglobby, keep symlinks that resolve to files.
+  const files = yield* Effect.filter(
+    entries.filter((entry) => entry.type !== "Directory"),
+    (entry) =>
+      entry.type === "File"
+        ? Effect.succeed(true)
+        : fs.stat(path.join(rootDir, entry.path)).pipe(
+            Effect.map((info) => info.type === "File"),
+            Effect.orElseSucceed(() => false),
+          ),
+  );
+  return files.map((entry) => entry.path);
 });
 
 /** Content hash of one tree: sorted `relativePosixPath:sha256` pairs, never absolute paths. */
 const hashDirectory = Effect.fn(function* (
   rootDir: string,
   memo: MemoOptions | undefined,
-  /** Always excluded, whatever `memo` says. */
+  /** Always excluded (gitignore syntax), whatever `memo` says. */
   alwaysExclude: ReadonlyArray<string>,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const exclude = memo?.exclude ?? gitignoreRulesToGlobs(yield* readGitIgnoreRules(rootDir));
-  const files: Array<string> = yield* listFiles(rootDir, {
-    include: memo?.include,
-    ignore: [...alwaysExclude, ...exclude],
-  });
+  const files = yield* listInputFiles(rootDir, memo, alwaysExclude);
   if (memo?.lockfile ?? !(memo?.include || memo?.exclude)) {
     const lockfile = yield* findUp(rootDir, LOCKFILE_NAMES);
     if (lockfile !== undefined) {
@@ -140,17 +168,21 @@ const hashDirectory = Effect.fn(function* (
   }
   const hashes = yield* Effect.forEach(
     files.sort(),
-    (file): Effect.Effect<string, PlatformError> =>
-      Effect.map(fs.readFile(path.join(rootDir, file)), (content) => `${file}:${sha256(content)}`),
+    (file) =>
+      fs.readFile(path.join(rootDir, file)).pipe(
+        Effect.flatMap(sha256),
+        Effect.map((hash) => `${file}:${hash}`),
+      ),
     { concurrency: 16 },
   );
-  return sha256Object(hashes);
+  return yield* sha256Object(hashes);
 });
 
 /**
  * The `input` hash slot: the project tree, the workspaces it imports, the
- * lockfile, the integration's version, and its build-affecting options.
- * Deterministic for an unchanged tree and stable across `rootDir` moves.
+ * lockfile, this package's version, and the integration's build-affecting
+ * options. Deterministic for an unchanged tree and stable across `rootDir`
+ * moves.
  */
 export const hashInput = Effect.fn(function* (params: {
   readonly rootDir: string;
@@ -159,17 +191,17 @@ export const hashInput = Effect.fn(function* (params: {
   readonly memo: MemoOptions | undefined;
   /** Workspace directories, absolute or relative to the root. */
   readonly workspaces: Iterable<string>;
-  /** The integration's package version and build-affecting options. */
-  readonly salt: unknown;
+  /** The integration's build-affecting options. */
+  readonly options: unknown;
 }) {
   const path = yield* Path.Path;
   // Dependency trees, VCS metadata, alchemy's state and the framework's own
   // build output (hashing it would make every build bust its memo).
   const alwaysExclude = [
-    "**/node_modules/**",
-    "**/.git/**",
-    ".alchemy/**",
-    ...params.outputDirs.map((dir) => `${dir.replace(/^\.?\//, "").replace(/\/+$/, "")}/**`),
+    "node_modules/",
+    ".git/",
+    "/.alchemy/",
+    ...params.outputDirs.map((dir) => `/${dir.replace(/^\.?\//, "").replace(/\/+$/, "")}/`),
   ];
   const workspaces = Array.from(params.workspaces, (workspace) =>
     path.resolve(params.rootDir, workspace),
@@ -187,7 +219,12 @@ export const hashInput = Effect.fn(function* (params: {
     { concurrency: 4 },
   );
   return {
-    hash: sha256Object({ salt: params.salt, root, workspaces: workspaceHashes.sort() }),
+    hash: yield* sha256Object({
+      version: yield* packageVersion,
+      options: params.options,
+      root,
+      workspaces: workspaceHashes.sort(),
+    }),
     workspaces: workspaces.map((workspace) =>
       path.relative(params.rootDir, workspace).replaceAll("\\", "/"),
     ),

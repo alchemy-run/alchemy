@@ -492,11 +492,13 @@
   },
   "dependencies": {
     "@alchemy.run/cloudflare-runtime": "workspace:*",
+    "@alchemy.run/node-utils": "workspace:*",
     "@alchemy.run/redis": "workspace:*",
     "@distilled.cloud/aws": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
     "@effect/platform-node": "catalog:",
     "esbuild": "catalog:",
+    "ohash": "catalog:",
     "rolldown": "catalog:",
     "srvx": "catalog:",
     "tinyglobby": "catalog:"
