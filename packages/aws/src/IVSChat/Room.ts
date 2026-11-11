@@ -7,6 +7,7 @@ import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
+import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import {
   retryWhileHandlerPermissionPropagating,
@@ -93,6 +94,13 @@ export interface Room extends Resource<
      * Unique ID of the room.
      */
     roomId: string;
+    /**
+     * The WebSocket URL chat clients connect to with a token from
+     * `CreateChatToken`, passed as the connection's subprotocol:
+     * `wss://edge.ivschat.<region>.amazonaws.com` on AWS, and the
+     * emulator's messaging endpoint on the local emulator.
+     */
+    messagingEndpoint: string;
   },
   RoomBinding,
   Providers,
@@ -142,6 +150,22 @@ export interface RoomLookup {
  * const room = yield* IVSChat.Room("LiveChat", {
  *   loggingConfigurationIdentifiers: [logging.loggingConfigurationArn],
  * });
+ * ```
+ *
+ * ### Connecting Chat Clients
+ * **Example:** Mint a Token and Hand Out the Endpoint
+ * ```typescript
+ * // inside a Lambda Function's effect
+ * const room = yield* IVSChat.Room("LiveChat");
+ * const createChatToken = yield* IVSChat.CreateChatToken(room);
+ * const endpoint = yield* room.messagingEndpoint;
+ *
+ * // per request: the client opens `new WebSocket(url, token)`
+ * const { token } = yield* createChatToken({
+ *   userId: "viewer-1",
+ *   capabilities: ["SEND_MESSAGE"],
+ * });
+ * const url = yield* endpoint;
  * ```
  *
  * ### Message Review
@@ -233,6 +257,29 @@ type RoomState = {
   loggingConfigurationIdentifiers?: string[] | undefined;
 };
 
+/**
+ * The messaging WebSocket of a room's Region. The local emulator serves it at
+ * `edge.ivschat.<region>.localhost.floci.io` (public DNS resolves that name to
+ * 127.0.0.1) on its gateway port, or at `/_floci/ivschat/<region>` on an
+ * emulator that isn't on this machine.
+ */
+const messagingEndpointOf = Effect.fn(function* (roomArn: string) {
+  const region = roomArn.split(":")[3] ?? "";
+  const env = yield* AWSEnvironment.current;
+  if (env.endpoint !== undefined && (yield* AWSEnvironment.isLocalEmulator)) {
+    const endpoint = env.endpoint;
+    return yield* Effect.sync(() => {
+      const url = new URL(endpoint);
+      const scheme = url.protocol === "https:" ? "wss" : "ws";
+      const port = url.port ? `:${url.port}` : "";
+      return ["localhost", "127.0.0.1"].includes(url.hostname)
+        ? `${scheme}://edge.ivschat.${region}.localhost.floci.io${port}`
+        : `${scheme}://${url.host}/_floci/ivschat/${region}`;
+    });
+  }
+  return `wss://edge.ivschat.${region}.amazonaws.com${region.startsWith("cn-") ? ".cn" : ""}`;
+});
+
 export const RoomProvider = () =>
   Provider.effect(
     Room,
@@ -252,6 +299,7 @@ export const RoomProvider = () =>
           roomName: room.name,
           roomArn: room.arn,
           roomId: room.id,
+          messagingEndpoint: yield* messagingEndpointOf(room.arn),
         };
       });
 

@@ -51,6 +51,7 @@ export default IVSChatTestFunction.make(
     );
 
     const RoomArn = yield* room.roomArn;
+    const MessagingEndpoint = yield* room.messagingEndpoint;
 
     return {
       fetch: Effect.gen(function* () {
@@ -89,8 +90,8 @@ export default IVSChatTestFunction.make(
         if (request.method === "POST" && pathname === "/ws-info") {
           // The test drives the room's WebSocket messaging API directly to
           // exercise the message review handler; it needs the raw token
-          // (scoped to this test room, 30-minute session) and the regional
-          // edge endpoint.
+          // (scoped to this test room, 30-minute session) and the room's
+          // messaging endpoint.
           const result = yield* createChatToken({
             userId: TEST_USER_ID,
             capabilities: ["SEND_MESSAGE"],
@@ -103,11 +104,10 @@ export default IVSChatTestFunction.make(
               : Redacted.isRedacted(token)
                 ? Redacted.value(token)
                 : token;
-          const region = yield* Effect.sync(() => process.env.AWS_REGION);
           const roomArn = yield* RoomArn;
           return yield* HttpServerResponse.json({
             token: raw,
-            endpoint: `wss://edge.ivschat.${region}.amazonaws.com`,
+            endpoint: yield* MessagingEndpoint,
             roomArn,
           });
         }

@@ -221,7 +221,7 @@ describe(
           roomArn?: string;
         };
         expect(info.token).toBeTruthy();
-        expect(info.endpoint).toContain("wss://edge.ivschat.");
+        expect(info.endpoint).toMatch(/^wss?:\/\/edge\.ivschat\./);
         return info as { token: string; endpoint: string; roomArn: string };
       });
 
