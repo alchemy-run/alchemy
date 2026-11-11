@@ -80,9 +80,9 @@ export const MyImage = AWS.ECS.Task("MyImage", {
 });
 ```
 
-`isolation: "isolated"` puts every task started from it in its own Nitro Sandbox. The image needs no server and no code of yours: nothing runs in a sandbox until the Function runs a command there.
+`isolation: "isolated"` puts every task started from it in its own Nitro Sandbox. The image needs no server and no code of yours, and deploy pushes it to a repository in your account unchanged.
 
-Deploy copies a small agent into the image, with its own runtime under `/opt/alchemy/sandbox`, and pushes the result to a repository in your account. The agent answers the handle's calls, so any Linux image works, with or without Bun or Node.js installed.
+A small agent answers the handle's calls. It is an image of its own: when a sandbox starts, ECS mounts it read-only at `/opt/alchemy/sandbox`, with its own runtime, so any Linux image works, with or without Bun or Node.js installed.
 
 To install your own tools, build the image from a Dockerfile with `context` in place of `image`:
 
@@ -239,7 +239,7 @@ A sandbox has no public URL. To serve one to a browser, proxy through the Functi
 
 ## Start a process in every sandbox
 
-The agent takes the place of the image's own `ENTRYPOINT` and `CMD`, so a server the image would start by itself doesn't run. Set the Task's `command` to the process every sandbox should start with:
+A sandbox starts the image's own `ENTRYPOINT` and `CMD`, as the image's user, like any container. Set the Task's `command` to run something else in place of the `CMD`:
 
 ```typescript title="src/MyImage.ts"
 import * as AWS from "@alchemy.run/aws";
@@ -253,7 +253,7 @@ export const MyImage = AWS.ECS.Task("MyImage", {
 });
 ```
 
-The agent starts the command when the sandbox does and keeps answering the handle next to it. The sandbox keeps running after the command exits.
+The agent starts the process when the sandbox does and keeps answering the handle next to it. The sandbox keeps running after the process exits. A `CMD` that waits for a terminal, like this image's `python3`, exits at once, because a sandbox starts without one.
 
 ## Run a program of your own in each sandbox
 

@@ -247,15 +247,15 @@ export const CreateSandboxHttp = Layer.effect(
       // destroy never waits on a sandbox that is still running.
       const sandboxGroupId = Output.map(capacity.taskSecurityGroupId, (groupId) => groupId ?? "");
       // A Task with a program serves the sandbox agent on the program's
-      // port. A Task that is only an image gets the agent added to it, on
-      // the agent's own port.
+      // port. A Task that is only an image has the agent mounted into its
+      // container, on the agent's own port.
       const taskProps = task.Props as { main?: string; isExternal?: boolean } | undefined;
       const imageOnly = taskProps !== undefined && taskProps.main === undefined;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         if (taskProps?.main !== undefined && taskProps.isExternal === true) {
           return yield* Effect.die(
             new EcsSandboxTaskWithoutAgent({
-              message: `AWS.ECS.CreateSandbox cannot add a sandbox agent to '${task.LogicalId}': its main is a script with no Effect program. Give the Task an Effect program, or build it from an image or a context.`,
+              message: `AWS.ECS.CreateSandbox cannot run a sandbox agent in '${task.LogicalId}': its main is a script with no Effect program. Give the Task an Effect program, or build it from an image or a context.`,
             }),
           );
         }

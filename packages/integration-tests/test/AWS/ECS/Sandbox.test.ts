@@ -84,6 +84,30 @@ const describeTask = (cluster: string, taskArn: string) =>
     "EcsSandboxStack",
   );
 
+/** Where the sandbox agent is mounted in an image's container. */
+const AGENT_DIR = "/opt/alchemy/sandbox";
+const AGENT_CONTAINER = "alchemy-sandbox-agent";
+
+/**
+ * Reads the task definition a sandbox runs: the container of the Task's
+ * image, the container that brings the agent, and how many there are.
+ */
+const describeContainers = (taskDefinition: string | undefined) =>
+  Core.withProviders(
+    ecs.describeTaskDefinition({ taskDefinition: taskDefinition ?? "" }).pipe(
+      Effect.map((response) => {
+        const containers = response.taskDefinition?.containerDefinitions ?? [];
+        return {
+          count: containers.length,
+          container: containers.find((container) => container.name !== AGENT_CONTAINER),
+          agent: containers.find((container) => container.name === AGENT_CONTAINER),
+        };
+      }),
+    ),
+    testOptions,
+    "EcsSandboxStack",
+  );
+
 describe.sequential.skipIf(!!process.env.FAST)(
   "AWS.ECS.CreateSandbox",
   {
@@ -276,12 +300,37 @@ describe.sequential.skipIf(!!process.env.FAST)(
           (yield* describeTask(cluster, (yield* shared).taskArn))?.taskDefinitionArn,
         );
 
-        const result = yield* call<{ bun: number; python: string; served: string }>(
-          baseUrl,
-          `/image?${taskArnParam(taskArn)}`,
-        );
-        // The agent brings its own runtime, off the image's PATH.
+        // The container runs the image as it was pushed. The agent is an image
+        // of its own, which a container copies into a volume before the
+        // image's container starts.
+        const { count, container, agent } = yield* describeContainers(task?.taskDefinitionArn);
+        expect(count).toBe(2);
+        expect(container?.image).not.toContain(":agent-");
+        expect(agent?.image).toContain(":agent-");
+        expect(agent?.image?.split(":")[0]).toBe(container?.image?.split(":")[0]);
+        expect(agent?.essential).toBe(false);
+        expect(container?.dependsOn).toEqual([
+          { containerName: AGENT_CONTAINER, condition: "SUCCESS" },
+        ]);
+        expect(container?.mountPoints).toEqual([
+          { sourceVolume: AGENT_CONTAINER, containerPath: AGENT_DIR, readOnly: true },
+        ]);
+        // The agent starts what the image would have run: its `CMD`, read
+        // from the pushed image.
+        expect(container?.entryPoint?.[0]).toBe(`${AGENT_DIR}/ld-musl.so.1`);
+        expect(container?.command).toEqual(["python3"]);
+
+        const result = yield* call<{
+          bun: number;
+          mount: { exitCode: number; stderr: string };
+          python: string;
+          served: string;
+        }>(baseUrl, `/image?${taskArnParam(taskArn)}`);
+        // The agent brings its own runtime, off the image's PATH, on a mount
+        // the image cannot write to.
         expect(result.bun).not.toBe(0);
+        expect(result.mount.exitCode).not.toBe(0);
+        expect(result.mount.stderr).toContain("Read-only file system");
         expect(result.python).toBe("42\n");
         // A server the host started inside the sandbox, on a port of its own.
         expect(result.served).toBe("from 8080");
@@ -396,6 +445,40 @@ describe.sequential.skipIf(!!process.env.FAST)(
         );
         expect(task?.lastStatus).not.toBe("RUNNING");
         expect(task?.containers?.[0]?.exitCode ?? 0).toBe(0);
+      }).pipe(logLevel),
+      { timeout: 900_000 },
+    );
+
+    test(
+      "an image's sandbox runs the image's own process, as the image's user",
+      Effect.gen(function* () {
+        const { cluster } = yield* stack;
+        const { baseUrl } = yield* shared;
+        const sandbox = yield* create(baseUrl, "dockerfile", undefined, "dockerfile");
+        const target = `${taskArnParam(sandbox.taskArn)}&kind=dockerfile`;
+
+        yield* Effect.gen(function* () {
+          // The image's `ENTRYPOINT`, then the Task's `command` in place of
+          // its `CMD`, which listens on another port.
+          const task = yield* describeTask(cluster, sandbox.taskArn);
+          const { container } = yield* describeContainers(task?.taskDefinitionArn);
+          expect(container?.command).toEqual([
+            "python3",
+            "-m",
+            "http.server",
+            "8080",
+            "--directory",
+            "/srv",
+          ]);
+
+          // Nothing started the server but the sandbox itself.
+          const result = yield* call<{ served: string; user: string }>(
+            baseUrl,
+            `/served?${target}`,
+          );
+          expect(result.served).toBe("from the image");
+          expect(result.user).toBe("nobody\n");
+        }).pipe(Effect.ensuring(Effect.ignore(call(baseUrl, `/kill?${target}`))));
       }).pipe(logLevel),
       { timeout: 900_000 },
     );

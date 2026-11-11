@@ -9,7 +9,7 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import SandboxAgent from "./sandbox-agent.ts";
-import { SandboxImage } from "./sandbox-image.ts";
+import { SandboxDockerfile, SandboxImage } from "./sandbox-image.ts";
 
 /**
  * Infrastructure of the `AWS.ECS.CreateSandbox` suite. Each export declares a
@@ -64,8 +64,9 @@ const decoder = new TextDecoder();
  * The host of the suite's sandboxes: a Lambda Function with one route per
  * sandbox operation. The binding attaches it to the capacity's subnets.
  *
- * It creates sandboxes of two Tasks on one capacity provider: an Effect
- * program, and a plain image. `?kind=image` picks the image's sandboxes.
+ * It creates sandboxes of three Tasks on one capacity provider: an Effect
+ * program and two plain images. `?kind=image` picks the sandboxes of a public
+ * image, `?kind=dockerfile` those of an image built from a Dockerfile.
  */
 export default class SandboxHost extends AWS.Lambda.Function<SandboxHost>()(
   "EcsSandboxHost",
@@ -80,14 +81,16 @@ export default class SandboxHost extends AWS.Lambda.Function<SandboxHost>()(
     const capacity = yield* SandboxCapacity;
     const sandboxes = yield* AWS.ECS.CreateSandbox(capacity, SandboxAgent);
     const images = yield* AWS.ECS.CreateSandbox(capacity, SandboxImage);
+    const dockerfiles = yield* AWS.ECS.CreateSandbox(capacity, SandboxDockerfile);
 
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://host");
         const param = (name: string) => url.searchParams.get(name) ?? "";
-        const image = param("kind") === "image";
-        const pool = image ? images : sandboxes;
+        const kind = param("kind");
+        const image = kind === "image";
+        const pool = image ? images : kind === "dockerfile" ? dockerfiles : sandboxes;
 
         if (url.pathname === "/create") {
           const idle = url.searchParams.get("idle");
@@ -219,10 +222,12 @@ export default class SandboxHost extends AWS.Lambda.Function<SandboxHost>()(
           return yield* respond(
             Effect.gen(function* () {
               const sandbox = yield* images.connect(param("taskArn"));
-              // Nothing of the agent's is on the image's PATH.
+              // Nothing of the agent's is on the image's PATH, and the image
+              // cannot write to where the agent is mounted.
               const bun = yield* sandbox.exec("command -v bun");
+              const mount = yield* sandbox.exec("touch /opt/alchemy/sandbox/probe");
               const python = yield* sandbox.exec(["python3", "-c", "print(6 * 7)"]);
-              // The image runs no server, so the host starts one.
+              // The image's own process has exited, so the host starts a server.
               yield* sandbox.files.write("/srv/index.txt", "from 8080");
               const server = yield* sandbox.start([
                 "python3",
@@ -239,7 +244,24 @@ export default class SandboxHost extends AWS.Lambda.Function<SandboxHost>()(
                 Effect.flatMap((response) => response.text),
                 Effect.ensuring(Effect.ignore(server.kill("SIGKILL"))),
               );
-              return { bun: bun.exitCode, python: python.stdout, served };
+              return { bun: bun.exitCode, mount, python: python.stdout, served };
+            }),
+          );
+        }
+
+        if (url.pathname === "/served") {
+          return yield* respond(
+            Effect.gen(function* () {
+              const sandbox = yield* dockerfiles.connect(param("taskArn"));
+              // A server the sandbox started by itself: the host only calls it.
+              const port = yield* sandbox.getTcpPort(8080);
+              const served = yield* port.fetch(HttpClientRequest.get("/index.txt")).pipe(
+                Effect.timeout("3 seconds"),
+                Effect.retry({ schedule: Schedule.spaced("500 millis"), times: 10 }),
+                Effect.flatMap((response) => response.text),
+              );
+              const user = yield* sandbox.exec("id -un");
+              return { served, user: user.stdout };
             }),
           );
         }

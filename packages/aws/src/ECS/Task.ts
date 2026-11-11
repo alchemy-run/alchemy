@@ -21,7 +21,6 @@ import {
   type ServerHost,
 } from "alchemy/Runtime/Process";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
-import { SANDBOX_AGENT_PORT } from "alchemy/SandboxAgentClient";
 import { Stack } from "alchemy/Stack";
 import { createInternalTags, createTagsList, diffTags, hasTags } from "alchemy/Tags";
 import { moduleExtension } from "alchemy/Util/Node";
@@ -32,12 +31,15 @@ import type { Scope } from "effect/Scope";
 import * as Stream from "effect/Stream";
 import type { Credentials } from "../Credentials.ts";
 import {
+  IMAGE_AGENT_DIR,
+  imageAgentEntryPoint,
   makeBunBootstrap,
   makeImageSource,
   type BundledImageSource,
   type DockerfileImageSource,
   type ImageSourceLike,
   type RegistryImageSource,
+  type ResolvedImageAgent,
 } from "../ECR/ImageSource.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
@@ -87,8 +89,9 @@ export interface TaskBindingContract {
   /**
    * The task's runs are sandboxes (`AWS.ECS.CreateSandbox`). A task built
    * from an `image` or a `context` has no program to serve the sandbox
-   * agent, so the agent is added to its image and becomes the entrypoint.
-   * A task with a `main` serves the agent itself and ignores this.
+   * agent, so the agent is mounted into its container when a task starts
+   * and runs the image's own process. The image is not changed. A task
+   * with a `main` serves the agent itself and ignores this.
    */
   sandbox?: boolean;
 }
@@ -630,8 +633,8 @@ export const withMountInstall = (
     : ({ ...props, install: mountInstallLines(capabilities) } as TaskProps);
 
 /**
- * The sandbox agent's process entry, bundled into the image of a task that
- * has no program of its own.
+ * The sandbox agent's process entry, published as an image of its own beside
+ * the image of a task that has no program.
  */
 const sandboxAgentMain = new URL(
   `../Bootstrap/EcsSandbox${moduleExtension(import.meta.url)}`,
@@ -639,7 +642,7 @@ const sandboxAgentMain = new URL(
 ).href;
 
 /**
- * Whether a task's image gets the sandbox agent added: its runs are
+ * Whether a task's container gets the sandbox agent mounted: its runs are
  * sandboxes and it has no program (`main`) to serve the agent itself.
  */
 export const isImageSandbox = (
@@ -663,9 +666,7 @@ export const taskImageInput = (
     port: props.port,
     isExternal: props.isExternal,
     bootstrap: makeBunBootstrap(source.handler ?? "default"),
-    agent: isImageSandbox(props, bindings)
-      ? { main: sandboxAgentMain, port: SANDBOX_AGENT_PORT }
-      : undefined,
+    agent: isImageSandbox(props, bindings) ? { main: sandboxAgentMain } : undefined,
   };
 };
 
@@ -883,6 +884,55 @@ export const attachTaskBindings = Effect.fn(function* ({
   return { env, volumes, mountPoints };
 });
 
+/** The task volume the sandbox agent is copied into. */
+const SANDBOX_AGENT_VOLUME = "alchemy-sandbox-agent";
+
+/** The container that copies the sandbox agent into its volume, then exits. */
+const SANDBOX_AGENT_CONTAINER = "alchemy-sandbox-agent";
+
+/**
+ * Put the sandbox agent in front of a container whose image has no program
+ * of ours, without changing the image.
+ *
+ * The agent's own image runs first, as a container that copies the agent and
+ * its runtime into a task volume and exits. The primary container mounts that
+ * volume read-only and starts the agent as its entry point, with the image's
+ * own process as the agent's command, so what the image runs by itself still
+ * runs. As in any container definition, `command` replaces the image's `CMD`
+ * and `container.entryPoint` its `ENTRYPOINT`.
+ */
+const withSandboxAgent = (
+  primary: ecs.ContainerDefinition,
+  agent: ResolvedImageAgent,
+): ecs.ContainerDefinition[] => [
+  {
+    ...primary,
+    entryPoint: [...imageAgentEntryPoint],
+    command: [
+      ...(primary.entryPoint ?? agent.entryPoint),
+      // An entry point of the task's own drops the image's `CMD`, as Docker does.
+      ...(primary.command ?? (primary.entryPoint === undefined ? agent.command : [])),
+    ],
+    mountPoints: [
+      ...(primary.mountPoints ?? []),
+      { sourceVolume: SANDBOX_AGENT_VOLUME, containerPath: IMAGE_AGENT_DIR, readOnly: true },
+    ],
+    dependsOn: [
+      ...(primary.dependsOn ?? []),
+      { containerName: SANDBOX_AGENT_CONTAINER, condition: "SUCCESS" },
+    ],
+  },
+  {
+    name: SANDBOX_AGENT_CONTAINER,
+    image: agent.imageUri,
+    essential: false,
+    // The copy writes to a volume the container runtime owns.
+    user: "0",
+    mountPoints: [{ sourceVolume: SANDBOX_AGENT_VOLUME, containerPath: IMAGE_AGENT_DIR }],
+    logConfiguration: primary.logConfiguration,
+  },
+];
+
 /**
  * Register a new task definition revision from the shared
  * {@link TaskDefinitionConfig} surface.
@@ -898,6 +948,7 @@ export const registerTaskDefinitionRevision = Effect.fn(function* ({
   bindingVolumes = [],
   bindingMountPoints = [],
   fuse = false,
+  agent,
 }: {
   props: TaskDefinitionConfig;
   family: string;
@@ -912,6 +963,11 @@ export const registerTaskDefinitionRevision = Effect.fn(function* ({
   bindingMountPoints?: ecs.MountPoint[];
   /** Grant the primary container `/dev/fuse` and `SYS_ADMIN` (mount bindings). */
   fuse?: boolean;
+  /**
+   * The sandbox agent to mount into the primary container, for an image with
+   * no program of its own. See {@link withSandboxAgent}.
+   */
+  agent?: ResolvedImageAgent;
 }) {
   const { region } = yield* AWSEnvironment.current;
   const containerName = props.container?.name ?? family;
@@ -988,7 +1044,13 @@ export const registerTaskDefinitionRevision = Effect.fn(function* ({
     cpu: String(props.cpu ?? 256),
     memory: String(props.memory ?? 512),
     volumes:
-      bindingVolumes.length > 0 ? [...(props.volumes ?? []), ...bindingVolumes] : props.volumes,
+      bindingVolumes.length > 0 || agent !== undefined
+        ? [
+            ...(props.volumes ?? []),
+            ...bindingVolumes,
+            ...(agent !== undefined ? [{ name: SANDBOX_AGENT_VOLUME }] : []),
+          ]
+        : props.volumes,
     placementConstraints: props.placementConstraints,
     runtimePlatform: props.runtimePlatform,
     ephemeralStorage: props.ephemeralStorage,
@@ -1001,7 +1063,10 @@ export const registerTaskDefinitionRevision = Effect.fn(function* ({
       props.trustedExecutionConfiguration ??
       (props.isolation === "isolated" ? { isolationMode: "ISOLATED_SANDBOX" } : undefined),
     ...props.taskDefinition,
-    containerDefinitions: [primaryContainer, ...(props.sidecars ?? [])],
+    containerDefinitions:
+      agent === undefined
+        ? [primaryContainer, ...(props.sidecars ?? [])]
+        : [...withSandboxAgent(primaryContainer, agent), ...(props.sidecars ?? [])],
     tags: Object.entries(tags).map(([key, value]) => ({ key, value })),
   });
   const taskDefinition = response.taskDefinition;
@@ -1341,8 +1406,8 @@ export const TaskProvider = () =>
           // and surface drift as an update; without this a bootstrap or
           // code-only change would silently no-op until `--force`.
           if (output) {
-            // An image with no program carries the sandbox agent when a
-            // binding asks for it, so its hash waits for the bindings.
+            // An image with no program gets the sandbox agent beside it when
+            // a binding asks for it, so its hash waits for the bindings.
             const hash = isResolved(newBindings)
               ? yield* imageSource.hash(taskImageInput(news, newBindings))
               : (news as { main?: string }).main !== undefined
@@ -1483,6 +1548,7 @@ export const TaskProvider = () =>
             bindingVolumes,
             bindingMountPoints,
             fuse: mountCapabilities.some((c) => c.requires?.fuse),
+            agent: resolved.agent,
           });
 
           // Sync tags — task definition revisions carry tags at register

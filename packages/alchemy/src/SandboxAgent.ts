@@ -550,7 +550,7 @@ export const runSandboxAgent = Effect.fn(function* (command: ReadonlyArray<strin
   if (env.token === undefined || env.token === "") {
     if (command.length === 0) {
       return yield* new SandboxAgentNotStarted({
-        message: `This image runs a sandbox agent, which starts only for a sandbox (${SANDBOX_TOKEN_ENV} is not set), and the task has no command to run in its place.`,
+        message: `The sandbox agent starts only for a sandbox (${SANDBOX_TOKEN_ENV} is not set), and neither the image nor the task has a command to run in its place.`,
       });
     }
     const exitCode = yield* child;

@@ -181,14 +181,15 @@ export interface EcsSandboxes<Methods = {}> {
  * ### Sandboxes from an image
  * A Task with an `image` or a `context` and no `main` is a sandbox of that
  * image as it is: no Effect program, no server and no Alchemy code of yours
- * inside. The deploy copies a small agent and its own runtime into the image
- * under `/opt/alchemy/sandbox` and makes it the entrypoint, so the handle
+ * inside. The image is pushed to your account unchanged. A small agent that
+ * serves the handle is an image of its own: when a sandbox starts, ECS mounts
+ * it read-only at `/opt/alchemy/sandbox`, with its own runtime, so the handle
  * works on any Linux image, with or without Bun or Node.js installed.
  *
- * The agent replaces the image's own `ENTRYPOINT` and `CMD`. To run a process
- * in every sandbox, set the Task's `command`: the agent starts it and keeps
- * serving the handle. Commands given as a string, and terminals, need
- * `/bin/sh` in the image.
+ * The agent starts the image's own `ENTRYPOINT` and `CMD` and keeps serving
+ * the handle whether that process runs or exits. The Task's `command`
+ * replaces the `CMD`, as it does on any ECS task. Commands given as a string,
+ * and terminals, need `/bin/sh` in the image.
  *
  * **Example:** A sandbox from a public image
  * ```typescript
@@ -216,7 +217,7 @@ export interface EcsSandboxes<Methods = {}> {
  * });
  * ```
  *
- * **Example:** A server started in every sandbox
+ * **Example:** A command in place of the image's `CMD`
  * ```typescript
  * const MyImage = AWS.ECS.Task("MyImage", {
  *   image: "python:3.12-slim",

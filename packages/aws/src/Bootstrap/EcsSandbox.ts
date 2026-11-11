@@ -1,8 +1,9 @@
 /**
- * Process bootstrap for an `AWS.ECS.Task` built from an image that
- * `AWS.ECS.CreateSandbox` turns into sandboxes. The image has no program of
- * its own, so the generated entry imports this module and nothing else, and
- * the sandbox agent runs as the container's first process.
+ * Process bootstrap of the sandbox agent that `AWS.ECS.CreateSandbox` runs in
+ * a Task that is only an image. The agent is an image of its own: ECS mounts
+ * it into the Task's container when a task starts, so the Task's image is
+ * never changed. The generated entry imports this module and nothing else,
+ * and the agent runs as the container's first process.
  */
 import { BunServices } from "@effect/platform-bun";
 import { BunHttpServer } from "alchemy/Http";
@@ -14,8 +15,9 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 
 /**
- * Serve the sandbox agent on a Bun HTTP server and start the Task's
- * `command`, which arrives as this process's arguments.
+ * Serve the sandbox agent on a Bun HTTP server and start the image's own
+ * process: its `ENTRYPOINT` and `CMD`, or the Task's `command` in place of
+ * the `CMD`. It arrives as this process's arguments.
  */
 export const bootstrap = (): Promise<void> =>
   runProcess(
