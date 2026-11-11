@@ -38,6 +38,12 @@ const workerViteConfigs = [
     `import { foldkit } from "@foldkit/vite-plugin";
 import { defineConfig } from "vite";
 
+// Alchemy injects its own Cloudflare plugin and sets this flag before the
+// config loads, so a config guarding its own \`cloudflare()\` on it skips it.
+if (process.env.ALCHEMY_CLOUDFLARE_VITE_INJECTED !== "1") {
+  throw new Error("ALCHEMY_CLOUDFLARE_VITE_INJECTED is not set");
+}
+
 export default defineConfig({
   plugins: [foldkit({ ssr: { serverEntry: "/src/entry.server.ts" } })],
   optimizeDeps: { entries: ["src/entry.ts"] },
@@ -134,7 +140,12 @@ describe.concurrent(
                   rootDir,
                   main: "src/worker.ts",
                   assets: { runWorkerFirst: ["/api/*"] },
-                  env: { GREETING: "foldkit-worker-fixture" },
+                  env: {
+                    GREETING: "foldkit-worker-fixture",
+                    // workerd resolves a self-bound entrypoint before the
+                    // module loads, so dev must name it to the Vite plugin.
+                    SELF_GREETER: Cloudflare.WorkerEntrypoint("Greeter"),
+                  },
                   compatibility: { date: "2024-09-23", flags: ["nodejs_compat"] },
                   dev: { port: 0 },
                   memo: { include: memoInclude },
@@ -146,6 +157,10 @@ describe.concurrent(
             yield* expectUrlContains(`${site.url!}/api/hello`, "foldkit-worker-fixture", {
               timeout: "30 seconds",
               label: "foldkit dev worker api",
+            });
+            yield* expectUrlContains(`${site.url!}/api/self`, "hello self from Greeter", {
+              timeout: "15 seconds",
+              label: "foldkit dev self-bound entrypoint",
             });
             yield* expectUrlContains(`${site.url!}/counter/42`, "Foldkit Fixture", {
               timeout: "15 seconds",

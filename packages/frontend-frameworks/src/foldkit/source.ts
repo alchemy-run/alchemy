@@ -107,6 +107,7 @@ export const makeFoldkitSource = (
                 assets: ctx.worker.assets,
               },
               context: ctx.runtimeContext,
+              entrypoints: ctx.worker.entrypoints,
             },
             resolveBuildEnv(ctx.env),
           ),

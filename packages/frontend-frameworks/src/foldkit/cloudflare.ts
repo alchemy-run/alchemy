@@ -10,6 +10,7 @@ import cloudflareVitePlugin, {
 import type { Plugin } from "vite";
 import type { BuildOutput } from "../core/BuildOutput.ts";
 import { makeDeployTarget } from "../core/index.ts";
+import { ALCHEMY_CLOUDFLARE_VITE_INJECTED } from "../vinext/cloudflare.ts";
 import type { FoldkitTarget } from "./Foldkit.ts";
 
 export type { CloudflareVitePluginOptions } from "@alchemy.run/cloudflare-runtime/vite";
@@ -86,6 +87,9 @@ export const makeFoldkitCloudflareTarget = (
       external: ["cloudflare:"],
     },
     vitePlugins: ({ root }) => {
+      // Before Vite loads the app's config, so a config guarding its own
+      // `cloudflare()` on this flag skips it, as with `Website.Vite`.
+      process.env[ALCHEMY_CLOUDFLARE_VITE_INJECTED] = "1";
       // A fresh options object per build or dev server: the dev plugin
       // fills in its asset defaults on it.
       const pluginOptions: CloudflareVitePluginOptions = {
