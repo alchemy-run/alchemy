@@ -22,7 +22,10 @@
     "effect": "catalog:"
   },
   "devDependencies": {
+    "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
-    "vitest": "catalog:"
+    "oxc-parser": "catalog:",
+    "vitest": "catalog:",
+    "z3-solver": "catalog:"
   }
 }

@@ -82,6 +82,11 @@ export class Account extends Domain.Aggregate("Account", {
   id: AccountId,
   state: AccountState,
   initial: { _tag: "Unopened" },
+  invariants: {
+    NeverOverdrawn: (account) => account._tag !== "Open" || account.balance >= 0,
+    WithinDailyLimit: (account) =>
+      account._tag !== "Open" || account.today.withdrawn <= DAILY_LIMIT,
+  },
   commands: [
     OpenAccount,
     ChangeOwner,

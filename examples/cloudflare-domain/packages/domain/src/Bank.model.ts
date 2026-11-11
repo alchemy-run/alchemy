@@ -56,6 +56,30 @@ export class Bank extends Domain.Model("Bank", {
   streams: [AccountCard],
   sagas: [ExecuteTransfer],
   queries: [AccountLedger],
+  invariants: {
+    /** Every cent a transfer takes out of an account is paid into another, paid back, or recorded as stranded. */
+    TransfersLoseNoMoney: (bank) => {
+      const events = bank.Account.flatMap((account) => account.events);
+      const sum = (amounts: ReadonlyArray<number>) =>
+        amounts.reduce((total, amount) => total + amount, 0);
+      const taken = sum(
+        events.flatMap((event) => (event._tag === "TransferDebited" ? [event.amount] : [])),
+      );
+      const given = sum(
+        events.flatMap((event) =>
+          event._tag === "TransferCredited" ||
+          event._tag === "TransferRefunded" ||
+          event._tag === "RefundStranded"
+            ? [event.amount]
+            : [],
+        ),
+      );
+      return taken === given;
+    },
+    /** A transfer that may run has run: it completed or it failed. */
+    NoTransferLeftPending: (bank) =>
+      bank.Transfer.every((transfer) => transfer.state._tag !== "Pending"),
+  },
 }) {}
 
 /** Who may read each key: the `validate` of every guarded view and stream. */
