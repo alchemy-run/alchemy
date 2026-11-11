@@ -39,8 +39,10 @@ export interface ScheduleWriteOptions {
   deadLetterQueue?: Queue;
   /**
    * Customer managed KMS key that encrypts each schedule's target input.
-   * Every schedule the client writes uses it, and the generated role may
-   * decrypt with it.
+   * Every schedule the client writes uses it. The host is granted what
+   * Scheduler needs to encrypt as the caller (`kms:DescribeKey`,
+   * `kms:GenerateDataKey`, `kms:Decrypt`), and the generated role may
+   * decrypt with it to deliver. Scheduler supports symmetric keys only.
    * @default an AWS owned key
    */
   kmsKey?: Key;

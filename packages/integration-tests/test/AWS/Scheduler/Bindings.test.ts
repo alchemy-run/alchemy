@@ -33,6 +33,7 @@ let sinkQueueArn: string;
 let cronQueueUrl: string;
 let executionRoleArn: string;
 let deadLetterQueueArn: string;
+let inputKeyArn: string;
 
 class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly status: number;
@@ -179,6 +180,7 @@ describe(
                   cronQueueUrl?: string;
                   executionRoleArn?: string;
                   deadLetterQueueArn?: string;
+                  inputKeyArn?: string;
                 }>)
               : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
@@ -191,6 +193,7 @@ describe(
                     cronQueueUrl: string;
                     executionRoleArn: string;
                     deadLetterQueueArn: string;
+                    inputKeyArn: string;
                   },
                 )
               : Effect.fail(new Error("Function returned empty queue urls")),
@@ -205,6 +208,7 @@ describe(
         cronQueueUrl = info.cronQueueUrl;
         executionRoleArn = info.executionRoleArn;
         deadLetterQueueArn = info.deadLetterQueueArn;
+        inputKeyArn = info.inputKeyArn;
       }),
       { timeout: 240_000 },
     );
@@ -306,6 +310,39 @@ describe(
             const deleted = yield* send(HttpClientRequest.delete(`${baseUrl}/schedules/${name}`));
             expect(deleted.status).toBe(200);
           }),
+      );
+
+      test.provider(
+        "{ kmsKey } encrypts the input and the generated role can decrypt it to deliver",
+        (_stack) =>
+          Effect.gen(function* () {
+            const name = `${SCHEDULE_PREFIX}kms`;
+            const created = (yield* send(
+              HttpClientRequest.post(`${baseUrl}/kms-schedules/${name}`),
+            ).pipe(Effect.flatMap((r) => r.json))) as { error?: string; message?: string };
+            expect(created.message).toBeUndefined();
+
+            const observed = yield* scheduler.getSchedule({ Name: name });
+            expect(observed.KmsKeyArn).toBe(inputKeyArn);
+
+            // Out of band: the role the binding generated may decrypt.
+            const roleName = observed.Target!.RoleArn!.split("/").pop()!;
+            const policy = yield* iam.getRolePolicy({
+              RoleName: roleName,
+              PolicyName: "ScheduleTarget",
+            });
+            const document = decodeURIComponent(policy.PolicyDocument);
+            expect(document).toContain(inputKeyArn);
+            expect(document).toContain("kms:Decrypt");
+
+            // Scheduler decrypted the input as that role and delivered it.
+            const message = yield* receiveMatching(sinkQueueUrl, (body) => body.marker === name, {
+              times: 30,
+            });
+            expect(message.marker).toBe(name);
+            yield* waitUntilScheduleGone(name);
+          }),
+        { timeout: 150_000 },
       );
 
       test.provider("every() creates a recurring rate schedule", (_stack) =>

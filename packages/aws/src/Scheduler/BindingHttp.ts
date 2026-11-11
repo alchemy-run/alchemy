@@ -395,6 +395,17 @@ export const makeScheduleWriteHttpBinding = <
                 Action: [...options.actions],
                 Resource: [pattern],
               },
+              // Scheduler encrypts the input as the caller: it checks the key
+              // is symmetric, generates a data key and decrypts it.
+              ...(kmsKey
+                ? [
+                    {
+                      Effect: "Allow" as const,
+                      Action: ["kms:DescribeKey", "kms:GenerateDataKey", "kms:Decrypt"],
+                      Resource: [kmsKey.keyArn as Output.Output<string, never>],
+                    },
+                  ]
+                : []),
               // CRITICAL: without iam:PassRole on the execution role, the
               // write fails only at runtime with an AccessDenied.
               {

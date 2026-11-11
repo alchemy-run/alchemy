@@ -1,4 +1,5 @@
 import * as IAM from "@alchemy.run/aws/IAM";
+import * as KMS from "@alchemy.run/aws/KMS";
 import * as Lambda from "@alchemy.run/aws/Lambda";
 import * as Scheduler from "@alchemy.run/aws/Scheduler";
 import * as SQS from "@alchemy.run/aws/SQS";
@@ -78,6 +79,10 @@ export default SchedulerTestFunction.make(
     // may send to it.
     const deadLetterQueue = yield* SQS.Queue("SchedulerDeadLetterQueue");
     const scheduleWithDlq = yield* Scheduler.CreateSchedule(sinkQueue, { deadLetterQueue });
+    // A customer managed key encrypts the target input; the generated role
+    // may decrypt with it, so Scheduler can still deliver.
+    const inputKey = yield* KMS.Key("SchedulerInputKey", {});
+    const scheduleWithKey = yield* Scheduler.CreateSchedule(sinkQueue, { kmsKey: inputKey });
     const getSchedule = yield* Scheduler.GetSchedule();
     const deleteSchedule = yield* Scheduler.DeleteSchedule();
     const listSchedules = yield* Scheduler.ListSchedules();
@@ -141,6 +146,7 @@ export default SchedulerTestFunction.make(
     const sinkQueueArn = yield* sinkQueue.queueArn;
     const executionRoleArn = yield* executionRole.roleArn;
     const deadLetterQueueArn = yield* deadLetterQueue.queueArn;
+    const inputKeyArn = yield* inputKey.keyArn;
     const sinkQueueUrl = yield* sinkQueue.queueUrl;
     const cronQueueUrl = yield* cronQueue.queueUrl;
 
@@ -158,6 +164,7 @@ export default SchedulerTestFunction.make(
             cronQueueUrl: yield* cronQueueUrl,
             executionRoleArn: yield* executionRoleArn,
             deadLetterQueueArn: yield* deadLetterQueueArn,
+            inputKeyArn: yield* inputKeyArn,
           });
         }
 
@@ -234,6 +241,20 @@ export default SchedulerTestFunction.make(
           const fireAt = yield* Effect.sync(() => new Date(Date.now() + 3_600_000));
           const created = yield* scheduleWithDlq.at(fireAt, { name, payload: { marker: name } });
           return yield* HttpServerResponse.json({ scheduleArn: created.ScheduleArn });
+        }
+
+        // A one-shot schedule whose input is encrypted with the bound key.
+        if (request.method === "POST" && pathname.startsWith("/kms-schedules/")) {
+          const name = pathname.slice("/kms-schedules/".length);
+          const fireAt = yield* Effect.sync(() => new Date(Date.now() + 15_000));
+          return yield* scheduleWithKey.at(fireAt, { name, payload: { marker: name } }).pipe(
+            Effect.flatMap((created) =>
+              HttpServerResponse.json({ scheduleArn: created.ScheduleArn }),
+            ),
+            Effect.catch((e) =>
+              HttpServerResponse.json({ error: e._tag, message: String(e) }, { status: 424 }),
+            ),
+          );
         }
 
         // Recurring schedule through the `every` shortcut.
