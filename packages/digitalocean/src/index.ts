@@ -3,6 +3,8 @@ export * from "./Credentials.ts";
 export * from "./Droplet.ts";
 export * from "./Firewall.ts";
 export * from "./Providers.ts";
+export * from "./ReservedIp.ts";
+export * from "./ReservedIpAssignment.ts";
 export * from "./Slugs.ts";
 export * from "./SshKey.ts";
 export * from "./Volume.ts";

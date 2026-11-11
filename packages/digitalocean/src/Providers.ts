@@ -8,6 +8,8 @@ import { DigitalOceanAuth } from "./AuthProvider.ts";
 import * as Credentials from "./Credentials.ts";
 import { Droplet, DropletProvider } from "./Droplet.ts";
 import { Firewall, FirewallProvider } from "./Firewall.ts";
+import { ReservedIp, ReservedIpProvider } from "./ReservedIp.ts";
+import { ReservedIpAssignment, ReservedIpAssignmentProvider } from "./ReservedIpAssignment.ts";
 import { SshKey, SshKeyProvider } from "./SshKey.ts";
 import { Volume, VolumeProvider } from "./Volume.ts";
 import { VolumeAttachment, VolumeAttachmentProvider } from "./VolumeAttachment.ts";
@@ -49,7 +51,17 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 export const providers = () =>
   Layer.effect(
     Providers,
-    Provider.collection([Droplet, Firewall, SshKey, Volume, VolumeAttachment, Vpc, KeyPair]),
+    Provider.collection([
+      Droplet,
+      Firewall,
+      SshKey,
+      Volume,
+      VolumeAttachment,
+      Vpc,
+      ReservedIp,
+      ReservedIpAssignment,
+      KeyPair,
+    ]),
   ).pipe(
     Layer.provide(
       Layer.mergeAll(
@@ -59,6 +71,8 @@ export const providers = () =>
         VolumeProvider(),
         VolumeAttachmentProvider(),
         VpcProvider(),
+        ReservedIpProvider(),
+        ReservedIpAssignmentProvider(),
         KeyPairProvider(),
       ),
     ),
