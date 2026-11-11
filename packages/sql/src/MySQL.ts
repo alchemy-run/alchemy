@@ -146,7 +146,7 @@ export const MySQL = Effect.fn(function* <E = never, R = never>(config: MySQLCon
     [MysqlClient.TypeId]: MysqlClient.TypeId,
     // The options known at Construction phase. The URL resolves on connect.
     config: options,
-  }) satisfies MysqlClient.MysqlClient as MysqlClient.MysqlClient;
+  }) satisfies MysqlClient.MysqlClient as MysqlClient.MysqlClient & Sql.SqlClient;
 });
 
 /**
