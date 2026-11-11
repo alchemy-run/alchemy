@@ -253,18 +253,23 @@ describe.concurrent("Secret", () => {
         );
         const { reader } = deployed;
 
-        // The token is an App secret on the reader's App, not Machine env.
-        expect(Object.keys(reader.secrets ?? {})).toContain("FLY_API_TOKEN");
+        // The token is an App secret on the reader's App under the Service's
+        // scoped name, mapped back to FLY_API_TOKEN; it is not Machine env.
+        const tokenSecret = reader.secrets?.FLY_API_TOKEN?.name;
+        expect(tokenSecret).toMatch(/^ALCHEMY_[0-9A-F]{8}_FLY_API_TOKEN$/);
         const listed = yield* machines.listSecrets({
           app_name: reader.appName,
           show_secrets: false,
         });
-        expect((listed.secrets ?? []).map((secret) => secret.name)).toContain("FLY_API_TOKEN");
+        expect((listed.secrets ?? []).map((secret) => secret.name)).toContain(tokenSecret);
         const machine = yield* machines.getMachine({
           app_name: reader.appName,
           machine_id: reader.machineId,
         });
         expect(machine.config?.env?.FLY_API_TOKEN).toBeUndefined();
+        expect(machine.config?.processes?.[0]?.secrets).toEqual(
+          expect.arrayContaining([{ env_var: "FLY_API_TOKEN", name: tokenSecret }]),
+        );
 
         // The Machine still authenticates with it: it lists the Vault's secrets.
         const client = yield* HttpClient.HttpClient;

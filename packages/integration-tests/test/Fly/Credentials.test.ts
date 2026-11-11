@@ -15,7 +15,7 @@ const resolve = (env: Record<string, string>) =>
     Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromUnknown(env)),
   );
 
-describe("Fly CredentialsFromBoundEnv", { tags: ["unit", "local"] }, () => {
+describe("Fly CredentialsFromBoundEnv", { tags: ["unit", "provider:fly", "local"] }, () => {
   it.effect("reads the token bound as a Redacted value", () =>
     Effect.gen(function* () {
       const config = yield* resolve({ FLY_API_TOKEN: packEnvValue(Redacted.make(TOKEN)) });
