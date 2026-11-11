@@ -16,7 +16,7 @@
  * Every building block is `Domain.<Noun>(...)`, and its types live on the
  * same name: `Domain.Event.Any`, `Domain.Aggregate.StateOf<typeof Account>`.
  * Stories (given / when / then specifications) are in `@alchemy.run/domain/Story`;
- * the Cloudflare platform is in `@alchemy.run/cloudflare/Domain`.
+ * the Cloudflare platform is in `@alchemy.run/domain/Cloudflare`.
  */
 import * as AggregateModule from "./Aggregate.ts";
 import * as ApiModule from "./Api.ts";
@@ -188,10 +188,8 @@ export declare namespace Query {
   export type Page<Row> = QueryModule.Page<Row>;
   /** The page a paged query's handler is asked for. */
   export type PageRequest = QueryModule.PageRequest;
-  /** What `validate` sees besides the input. */
-  export type Request = QueryModule.Request;
-  /** How a query's Layer runs it: page size limits and span attributes. */
-  export type LayerOptions<I = unknown> = QueryModule.LayerOptions<I>;
+  /** How a query's Layer runs it: page size limits. */
+  export type LayerOptions = QueryModule.LayerOptions;
 }
 /** A question asked across keys, answered from a store a projection writes. See {@link QueryModule.make}. */
 export const Query = QueryModule.make;
@@ -220,7 +218,7 @@ export declare namespace ExternalSystem {
 export const ExternalSystem = ExternalSystemModule.make;
 
 export declare namespace Api {
-  /** What an Api may serve: commands, views, streams, queries, and aggregates with a `read` contract. */
+  /** What an Api may serve: commands, views, streams and queries. */
   export type Servable = ApiModule.Servable;
   /** What `Domain.Api` takes: the model, and the names of what of it the Api serves. */
   export type Options<
@@ -228,17 +226,14 @@ export declare namespace Api {
     C extends ReadonlyArray<ApiModule.CommandName<M>>,
     V extends ReadonlyArray<ApiModule.ViewName<M>>,
     S extends ReadonlyArray<ApiModule.StreamName<M>>,
-    A extends ReadonlyArray<ApiModule.AggregateName<M>>,
     Q extends ReadonlyArray<ApiModule.QueryName<M>> = ReadonlyArray<ApiModule.QueryName<M>>,
-  > = ApiModule.Options<M, C, V, S, A, Q>;
+  > = ApiModule.Options<M, C, V, S, Q>;
   /** The names of the commands a model holds: their tags. */
   export type CommandName<M extends ModelModule.Any> = ApiModule.CommandName<M>;
   /** The names of the views a model holds. */
   export type ViewName<M extends ModelModule.Any> = ApiModule.ViewName<M>;
   /** The names of the streams a model holds. */
   export type StreamName<M extends ModelModule.Any> = ApiModule.StreamName<M>;
-  /** The names of the aggregates a model holds. */
-  export type AggregateName<M extends ModelModule.Any> = ApiModule.AggregateName<M>;
   /** The names of the queries a model holds. */
   export type QueryName<M extends ModelModule.Any> = ApiModule.QueryName<M>;
   /** The typed client of an Api. */
@@ -250,8 +245,11 @@ export declare namespace Api {
   export type CommandOptions = ApiModule.CommandOptions;
   export type ViewClient<V extends ViewModule.Any> = ApiModule.ViewClient<V>;
   export type StreamClient<S extends StreamModule.Any> = ApiModule.StreamClient<S>;
-  export type AggregateClient<A extends AggregateModule.Any> = ApiModule.AggregateClient<A>;
   export type QueryClient<Q extends QueryModule.Any> = ApiModule.QueryClient<Q>;
+  /** A paged query's `pages` and `entries` Streams. */
+  export type PagedQueryClient<Q extends QueryModule.Any> = ApiModule.PagedQueryClient<Q>;
+  /** How a client asks a query: `atLeast`, `after`, `take` and the call's headers. */
+  export type QueryOptions = ApiModule.QueryOptions;
   /** Everything a query can fail with. */
   export type QueryError<Q extends QueryModule.Any> = ApiModule.QueryError<Q>;
   /** Everything a read can fail with. */

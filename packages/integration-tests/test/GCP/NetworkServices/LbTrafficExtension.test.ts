@@ -6,6 +6,7 @@ import * as networkservices from "@distilled.cloud/gcp/networkservices_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { defaultNetworkSelfLink } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -124,6 +125,13 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { extension };
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkServices.LbTrafficExtension.lookup({
+          lbTrafficExtensionId: created.extension.lbTrafficExtensionId,
+          location: created.extension.location,
+        }),
+        created.extension,
       );
 
       expect(created.extension.name).toContain("/lbTrafficExtensions/");

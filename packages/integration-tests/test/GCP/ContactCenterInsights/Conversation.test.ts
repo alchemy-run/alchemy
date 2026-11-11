@@ -6,6 +6,7 @@ import * as cci from "@distilled.cloud/gcp/contactcenterinsights_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { ChatTranscript } from "./transcript.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -61,6 +62,13 @@ test.provider(
             labels: { env: "test" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.ContactCenterInsights.Conversation.lookup({
+          conversationId: created.conversationId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.conversationId).toEqual(expect.any(String));

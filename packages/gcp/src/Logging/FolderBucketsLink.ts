@@ -62,8 +62,27 @@ export type FolderBucketsLink = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  FolderBucketsLinkLookup
 >;
+
+/**
+ * Props for {@link FolderBucketsLink.lookup}: find a folder buckets link
+ * this stack doesn't manage by its identifiers.
+ */
+export interface FolderBucketsLinkLookup {
+  /**
+   * Link id (also the BigQuery dataset id). Up to 100 characters: letters,
+   * digits, and underscores.
+   */
+  linkId: string;
+  /**
+   * Full resource name of the parent analytics-enabled log bucket
+   * (`{parent}/locations/{location}/buckets/{bucket}`). A bucket may
+   * contain only one link.
+   */
+  bucketName: string;
+}
 
 /**
  * A BigQuery linked dataset for an analytics-enabled folder log bucket.
@@ -83,6 +102,20 @@ export type FolderBucketsLink = Resource<
  * const link = yield* GCP.Logging.FolderBucketsLink("Bq", {
  *   bucketName: bucket.name,
  *   description: "log analytics dataset",
+ * });
+ * ```
+ *
+ * ### Looking up an existing folder buckets link
+ * `FolderBucketsLink.lookup` references a folder buckets link Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared folder buckets link.
+ *
+ * **Example:** Reference an existing folder buckets link
+ * ```typescript
+ * const folderBucketsLink = GCP.Logging.FolderBucketsLink.lookup({
+ *   linkId: "my-link",
+ *   bucketName: "my-bucket",
  * });
  * ```
  *
@@ -178,6 +211,14 @@ export const FolderBucketsLinkProvider = () =>
         return undefined;
       }
       return { action: "replace" as const, deleteFirst: true };
+    }),
+
+    lookup: Effect.fn(function* ({ linkId, bucketName }) {
+      if (bucketName === undefined) return undefined;
+      const name = resourceName(bucketName, linkId);
+      const existing = yield* getByName(name);
+      if (isDeleted(existing)) return undefined;
+      return toAttrs(existing, bucketName);
     }),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {

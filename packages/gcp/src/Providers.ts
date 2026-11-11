@@ -230,6 +230,7 @@ import {
 } from "./AndroidPublisher/MonetizationSubscriptionsBasePlansOffer.ts";
 import { ApisConfig, ApisConfigProvider } from "./ApiGateway/ApisConfig.ts";
 import { AnalyticsDatastore, AnalyticsDatastoreProvider } from "./Apigee/AnalyticsDatastore.ts";
+import { Api as ApigeeApi, ApiProvider as ApigeeApiProvider } from "./Apigee/Api.ts";
 import {
   ApimServiceExtension,
   ApimServiceExtensionProvider,
@@ -300,20 +301,30 @@ import {
   EnvironmentsTraceConfigOverride,
   EnvironmentsTraceConfigOverrideProvider,
 } from "./Apigee/EnvironmentsTraceConfigOverride.ts";
+import {
+  Instance as ApigeeInstance,
+  InstanceProvider as ApigeeInstanceProvider,
+} from "./Apigee/Instance.ts";
 import { InstancesAttachment, InstancesAttachmentProvider } from "./Apigee/InstancesAttachment.ts";
 import { InstancesNatAddress, InstancesNatAddressProvider } from "./Apigee/InstancesNatAddress.ts";
 import { Keyvaluemap, KeyvaluemapProvider } from "./Apigee/Keyvaluemap.ts";
 import { KeyvaluemapsEntry, KeyvaluemapsEntryProvider } from "./Apigee/KeyvaluemapsEntry.ts";
 import { Organization, OrganizationProvider } from "./Apigee/Organization.ts";
+import { Report as ApigeeReport, ReportProvider as ApigeeReportProvider } from "./Apigee/Report.ts";
 import { SecurityFeedback, SecurityFeedbackProvider } from "./Apigee/SecurityFeedback.ts";
 import {
   SecurityMonitoringCondition,
   SecurityMonitoringConditionProvider,
 } from "./Apigee/SecurityMonitoringCondition.ts";
+import {
+  SecurityProfile as ApigeeSecurityProfile,
+  SecurityProfileProvider as ApigeeSecurityProfileProvider,
+} from "./Apigee/SecurityProfile.ts";
 import { SecurityProfilesV2, SecurityProfilesV2Provider } from "./Apigee/SecurityProfilesV2.ts";
 import { Sharedflow, SharedflowProvider } from "./Apigee/Sharedflow.ts";
 import { SitesApicategory, SitesApicategoryProvider } from "./Apigee/SitesApicategory.ts";
 import { SitesApidoc, SitesApidocProvider } from "./Apigee/SitesApidoc.ts";
+import { Space as ApigeeSpace, SpaceProvider as ApigeeSpaceProvider } from "./Apigee/Space.ts";
 import { Api as ApihubApi, ApiProvider as ApihubApiProvider } from "./ApiHub/Api.ts";
 import { ApiHubInstance, ApiHubInstanceProvider } from "./ApiHub/ApiHubInstance.ts";
 import { ApisVersion, ApisVersionProvider } from "./ApiHub/ApisVersion.ts";
@@ -418,9 +429,6 @@ import {
   VolumesSnapshot as BaremetalsolutionVolumesSnapshot,
   VolumesSnapshotProvider as BaremetalsolutionVolumesSnapshotProvider,
 } from "./BareMetalSolution/VolumesSnapshot.ts";
-import { AppConnection, AppConnectionProvider } from "./BeyondCorp/AppConnection.ts";
-import { AppConnector, AppConnectorProvider } from "./BeyondCorp/AppConnector.ts";
-import { AppGateway, AppGatewayProvider } from "./BeyondCorp/AppGateway.ts";
 import { SecurityGateway, SecurityGatewayProvider } from "./BeyondCorp/SecurityGateway.ts";
 import {
   SecurityGatewaysApplication,
@@ -900,10 +908,6 @@ import {
 } from "./ContactCenterInsights/ConversationsFeedbackLabel.ts";
 import { Dashboard, DashboardProvider } from "./ContactCenterInsights/Dashboard.ts";
 import {
-  DashboardsChart,
-  DashboardsChartProvider,
-} from "./ContactCenterInsights/DashboardsChart.ts";
-import {
   DatasetsConversationsFeedbackLabel,
   DatasetsConversationsFeedbackLabelProvider,
 } from "./ContactCenterInsights/DatasetsConversationsFeedbackLabel.ts";
@@ -967,7 +971,6 @@ import {
   SynonymSetProvider as ContentwarehouseSynonymSetProvider,
 } from "./ContentWarehouse/SynonymSet.ts";
 import * as Credentials from "./Credentials.ts";
-import { TagTemplate, TagTemplateProvider } from "./DataCatalog/TagTemplate.ts";
 import {
   TaxonomiesPolicyTag,
   TaxonomiesPolicyTagProvider,
@@ -2435,6 +2438,10 @@ import {
 } from "./Storage/Object.ts";
 import { ObjectAccessControl, ObjectAccessControlProvider } from "./Storage/ObjectAccessControl.ts";
 import { PutObjectHttp } from "./Storage/PutObjectHttp.ts";
+import {
+  ReportConfig as StorageInsightsReportConfig,
+  ReportConfigProvider as StorageInsightsReportConfigProvider,
+} from "./StorageInsights/ReportConfig.ts";
 import { AgentPool, AgentPoolProvider } from "./StorageTransfer/AgentPool.ts";
 import { GetGoogleServiceAccountHttp } from "./StorageTransfer/GetGoogleServiceAccountHttp.ts";
 import { RunTransferJobHttp } from "./StorageTransfer/RunTransferJobHttp.ts";
@@ -2641,6 +2648,7 @@ const makeProviders = () =>
           Managed,
           ObjectAccessControl,
           StorageObject,
+          StorageInsightsReportConfig,
           AgentPool,
           TransferJob,
           Topic,
@@ -3093,7 +3101,6 @@ const makeProviders = () =>
           LakesEntity,
           LakesEntitiesPartition,
           MetadataFeed,
-          TagTemplate,
           Taxonomy,
           TaxonomiesPolicyTag,
           DataStoresBranchesDocument,
@@ -3132,7 +3139,6 @@ const makeProviders = () =>
           ConversationsAssessment,
           ConversationsFeedbackLabel,
           Dashboard,
-          DashboardsChart,
           DatasetsConversationsFeedbackLabel,
           IssueModel,
           IssueModelsIssue,
@@ -3452,9 +3458,6 @@ const makeProviders = () =>
           ClouddeployTarget,
           ConfigDeploymentGroup,
           ConfigPreview,
-          AppConnection,
-          AppConnector,
-          AppGateway,
           SecurityGateway,
           SecurityGatewaysApplication,
           ManagedKafkaCluster,
@@ -3561,6 +3564,11 @@ const makeProviders = () =>
           Sharedflow,
           SitesApicategory,
           SitesApidoc,
+          ApigeeApi,
+          ApigeeInstance,
+          ApigeeReport,
+          ApigeeSecurityProfile,
+          ApigeeSpace,
           Assignment,
           AndroidApp,
           SasportalCustomersDeploymentsDevice,
@@ -3647,6 +3655,7 @@ const makeProviders = () =>
             ManagedProvider(),
             ObjectAccessControlProvider(),
             StorageObjectProvider(),
+            StorageInsightsReportConfigProvider(),
             AgentPoolProvider(),
             TransferJobProvider(),
           ),
@@ -4088,7 +4097,7 @@ const makeProviders = () =>
             LakesEntitiesPartitionProvider(),
             MetadataFeedProvider(),
           ),
-          Layer.mergeAll(TagTemplateProvider(), TaxonomyProvider(), TaxonomiesPolicyTagProvider()),
+          Layer.mergeAll(TaxonomyProvider(), TaxonomiesPolicyTagProvider()),
           Layer.mergeAll(
             DataStoresBranchesDocumentProvider(),
             DataStoresControlProvider(),
@@ -4133,7 +4142,6 @@ const makeProviders = () =>
               ConversationsAssessmentProvider(),
               ConversationsFeedbackLabelProvider(),
               DashboardProvider(),
-              DashboardsChartProvider(),
               DatasetsConversationsFeedbackLabelProvider(),
               IssueModelProvider(),
               IssueModelsIssueProvider(),
@@ -4584,13 +4592,7 @@ const makeProviders = () =>
                 SchemaRegistriesSubjectsVersionProvider(),
                 SchemaRegistriesContextsSubjectsVersionProvider(),
               ),
-              Layer.mergeAll(
-                AppConnectionProvider(),
-                AppConnectorProvider(),
-                AppGatewayProvider(),
-                SecurityGatewayProvider(),
-                SecurityGatewaysApplicationProvider(),
-              ),
+              Layer.mergeAll(SecurityGatewayProvider(), SecurityGatewaysApplicationProvider()),
               Layer.mergeAll(
                 RepositoriesBranchRuleProvider(),
                 RepositoriesHookProvider(),
@@ -4690,6 +4692,13 @@ const makeProviders = () =>
                 SitesApidocProvider(),
                 AssignmentProvider(),
                 AndroidAppProvider(),
+              ),
+              Layer.mergeAll(
+                ApigeeApiProvider(),
+                ApigeeInstanceProvider(),
+                ApigeeReportProvider(),
+                ApigeeSecurityProfileProvider(),
+                ApigeeSpaceProvider(),
               ),
               Layer.mergeAll(
                 SasportalCustomersDeploymentsDeviceProvider(),

@@ -10,6 +10,7 @@ import { StateStoreError, type ResourceState, type StateService } from "alchemy/
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -62,6 +63,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
       const bucket = yield* stack.deploy(GCP.Storage.Bucket("StateBucket", { forceDestroy: true }));
+      yield* expectFound(GCP.Storage.Bucket.lookup({ bucketName: bucket.bucketName }), bucket);
       const state = yield* makeGcsState({ bucketName: bucket.bucketName, prefix: "test-state" });
       const stage = "round-trip";
 

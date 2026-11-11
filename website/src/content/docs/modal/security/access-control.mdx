@@ -1,0 +1,131 @@
+---
+title: Access control
+description: Separate workloads with environments, member roles and scoped tokens.
+---
+
+import Tree from "../../../../components/diagrams/Tree.astro";
+
+A Modal Function or Server calls Modal as its own container, over the API socket Modal gives every container. No token is stored in it. Every other host (a Worker, a Lambda, a Sandbox) gets its own scoped service user, and a binding grants it `viewer` or `contributor` on the bound resource's environment. Keep workloads apart with environments.
+
+## A binding reaches only its environment
+
+<Tree
+  nodes={[
+    { id: "ws", label: "acme", type: "workspace", icon: "brand:modal" },
+    { id: "prod", label: "Production", type: "environment", parent: "ws", icon: "folder" },
+    { id: "coder", label: "Coder", type: "app", parent: "prod", icon: "app-window" },
+    { id: "weights", label: "Weights", type: "Volume", parent: "prod", icon: "hard-drive" },
+    { id: "dev", label: "Dev", type: "environment", parent: "ws", side: true, tone: "muted", icon: "folder" },
+  ]}
+  scopes={[{ on: "prod", label: "Api's service user · contributor" }]}
+  caption="The Worker Api binds a Sandbox in Coder, so its service user is a contributor in Production and nothing else. It can't touch Dev."
+/>
+
+## Restrict an environment
+
+```typescript
+// src/Environments.ts
+import * as Modal from "@alchemy.run/modal";
+
+export const Production = Modal.Environment("Production", {
+  managed: true,
+  defaultMemberRole: "viewer",
+  roles: [{ userId: "us-1234", role: "contributor" }],
+  blockUnauthenticatedResources: true,
+});
+```
+
+Members not listed get `defaultMemberRole`.
+
+## Give CI its own identity
+
+```typescript
+// src/Identities.ts
+import * as Modal from "@alchemy.run/modal";
+import { Production } from "./Environments.ts";
+
+export const Deployer = Modal.ServiceUser("Deployer", {
+  environments: [{ environment: Production, role: "contributor" }],
+});
+```
+
+A scoped service user acts only in the environments you list. Its `tokenId` and `tokenSecret` are a `MODAL_TOKEN_ID` / `MODAL_TOKEN_SECRET` pair.
+
+## Bindings on the Starter plan
+
+Service users need Modal's Team or Enterprise plan. On Starter, a deploy that binds a Modal resource fails with `Modal.ServiceUsersNotAvailable`. Add `Modal.DeployerHostIdentity` to the Stack's providers to bind your own token into each host instead:
+
+```typescript
+// alchemy.run.ts
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Modal from "@alchemy.run/modal";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+export default Alchemy.Stack(
+  "App",
+  {
+    providers: Layer.mergeAll(Cloudflare.providers(), Modal.providers(), Modal.DeployerHostIdentity),
+  },
+  Effect.gen(function* () {
+    return {};
+  }),
+);
+```
+
+Hosts then act with your token's workspace-wide access, not just the roles their bindings ask for.
+
+## Who may call RPC methods
+
+```typescript
+const embed = yield* Modal.InvokeFunction(Embed);
+const api = yield* Modal.FetchServer(Api);
+```
+
+Each binding mints its own key for that caller and target. The caller keeps the key as a secret, the target keeps only its SHA-256, and every RPC call carries the key. A Function or Server answers RPC calls only from callers whose binding issued a key, so anything else in the workspace, including code with Modal access, gets `401`.
+
+The key applies inside Modal too. A Function calling another Function logs in to Modal as its container, but that login names no caller the target can check, so the key is what limits a target to the callers you bound.
+
+## Keep a program away from Modal's API
+
+```typescript
+{ main: import.meta.url, app: Sandboxed, restrictModalAccess: true }
+```
+
+A program with `restrictModalAccess` can't call Modal as its container. Its bindings get a scoped service user instead, so it can reach only what it binds.
+
+## Share one port with a token
+
+```typescript
+const { url, token } = yield* sandbox.connectToken({ port: 8080, userMetadata: user });
+```
+
+The token opens that port only.
+
+## Issue tokens for protected endpoints
+
+```typescript
+// src/Tokens.ts
+import * as Modal from "@alchemy.run/modal";
+import { Production } from "./Environments.ts";
+
+export const Caller = Modal.WebhookToken("Caller", { scoped: true, environments: [Production] });
+```
+
+Send `tokenId` as `Modal-Key` and `tokenSecret` as `Modal-Secret`.
+
+## Set workspace defaults
+
+```typescript
+// src/Settings.ts
+import * as Modal from "@alchemy.run/modal";
+import { Production } from "./Environments.ts";
+
+export const Settings = Modal.WorkspaceSettings("Settings", {
+  defaultEnvironment: Production,
+  blockUnauthenticatedResources: true,
+});
+```
+
+Destroying it restores the settings it found.

@@ -1,6 +1,6 @@
 ---
 title: Domain
-description: A domain-driven design framework for Effect. Model your business as commands, aggregates, events, views, projections and policies, test it in memory, and run it on Cloudflare Durable Objects.
+description: A domain-driven design framework for Effect. Model your business as commands, aggregates, events, views, projections and policies, test it in memory, and run it on Durable Objects on Cloudflare, Rivet or Effect Cluster.
 ---
 
 import DAG from "../../../components/DAG.astro";
@@ -8,7 +8,7 @@ import PackageManagers from "../../../components/PackageManagers.astro";
 
 `@alchemy.run/domain` models your business in its own terms. Commands ask for changes, aggregates decide them, and events record what happened. Views, projections and policies then answer questions, feed your own stores, and apply the business's rules about what to do next.
 
-The same model runs in memory for tests and on Cloudflare Durable Objects in production, with one ordered partition per key.
+The same model runs in memory for tests and, in production, on [Cloudflare](/domain/cloudflare), [Rivet](/domain/rivet) or [Effect Cluster](/domain/effect-cluster), with one ordered partition per key.
 
 <DAG
   nodes={[
@@ -48,10 +48,12 @@ export class DepositMoney extends Domain.Command("DepositMoney", {
 The account aggregate decides it against its current state:
 
 ```typescript title="src/Account.aggregate.ts"
-DepositMoney: (s, cmd) =>
-  s._tag !== "Open"
-    ? new NotOpen()
-    : [new MoneyDeposited({ amount: cmd.amount, balanceAfter: s.balance + cmd.amount })],
+decide: {
+  DepositMoney: (account, cmd) =>
+    account._tag !== "Open"
+      ? new NotOpen()
+      : [new MoneyDeposited({ amount: cmd.amount, balanceAfter: account.balance + cmd.amount })],
+},
 ```
 
 And a story tests it in memory, in the business's own words: given this history, when this command, then these events.

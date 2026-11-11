@@ -5,6 +5,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as kms from "@distilled.cloud/gcp/cloudkms_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { expectFound } from "../lookup.ts";
 import { KEY_RING_ID, kmsTestId } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -50,6 +51,14 @@ test.provider(
             labels: { env: "test" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.KMS.CryptoKey.lookup({
+          cryptoKeyId: created.cryptoKeyId,
+          keyRing: created.keyRing,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.cryptoKeyId).toEqual(expect.any(String));

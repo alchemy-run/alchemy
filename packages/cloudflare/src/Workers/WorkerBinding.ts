@@ -65,8 +65,19 @@ export type DurableObjectNamespaceWorkerBinding = Extract<
   { type: "durable_object_namespace" }
 > & {
   transferredFrom?: string | string[];
+  /**
+   * The class this one was called before on the same Worker, for a
+   * data-preserving `renamed_classes` migration; alchemy-only, never uploaded.
+   */
+  renamedFrom?: string;
   /** The class's declared storage backend; alchemy-only, never uploaded. */
   storage?: "sqlite" | "legacy-kv";
+  /**
+   * For a cross-script binding, the namespace id the host Worker has for
+   * this class. Orders this Worker's deploy after a host that adds the
+   * class; alchemy-only, never uploaded.
+   */
+  hostNamespace?: string;
 };
 
 /**

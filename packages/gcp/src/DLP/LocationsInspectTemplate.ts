@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -88,8 +89,33 @@ export type LocationsInspectTemplate = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  LocationsInspectTemplateLookup
 >;
+
+/**
+ * Props for {@link LocationsInspectTemplate.lookup}: find a locations
+ * inspect template this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface LocationsInspectTemplateLookup {
+  /**
+   * Template id (the `{inspectTemplate}` segment of
+   * `projects/{project}/loca
+   * tions/{location}/inspectTemplates/{inspectTemplate}`). Must match
+   * `[a-zA-Z0-9_-]+` and is at most 100 characters.
+   */
+  templateId: string;
+  /**
+   * Processing location (`us-central1`, `global`, …).
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A regional Cloud DLP inspect template
@@ -121,6 +147,19 @@ export type LocationsInspectTemplate = Resource<
  *     minLikelihood: "LIKELY",
  *     includeQuote: true,
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing locations inspect template
+ * `LocationsInspectTemplate.lookup` references a locations inspect template
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared locations inspect template.
+ *
+ * **Example:** Reference an existing locations inspect template
+ * ```typescript
+ * const locationsInspectTemplate = GCP.DLP.LocationsInspectTemplate.lookup({
+ *   templateId: "my-template",
  * });
  * ```
  *
@@ -185,6 +224,15 @@ export const LocationsInspectTemplateProvider = () =>
           normalizeLocation(previousLocation, env.region);
       return replaceOnIdentity(idChanged || locationChanged);
     }),
+
+    lookup: Effect.fn(function* ({ templateId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, templateId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

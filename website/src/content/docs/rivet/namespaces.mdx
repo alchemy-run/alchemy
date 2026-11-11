@@ -1,0 +1,68 @@
+---
+title: Control planes and namespaces
+description: What holds a Rivet app — a control plane you run or Rivet Cloud, divided into namespaces — how Alchemy gives each stage its own namespace, and when to give an environment a control plane of its own.
+---
+
+import PackageManagers from "../../../components/PackageManagers.astro";
+import Tree from "../../../components/diagrams/Tree.astro";
+
+Everything a Rivet app has lives on a **control plane**: every instance's data, every pool, and the record of which node runs what. A control plane is the boundary around a Rivet app. Nothing on one can reach anything on another, and each has its own admin token, its own storage and its own bill on the cloud it runs on.
+
+A control plane is divided into **namespaces**. Each namespace has its own pools and its own instances, so the same class in two namespaces is two separate sets of instances.
+
+<Tree
+  nodes={[
+    { id: "cp", label: "Control plane", type: "RivetHetzner.ServerControlPlane" },
+    { id: "dev", label: "dev", type: "namespace", parent: "cp" },
+    { id: "prod", label: "prod", type: "namespace", parent: "cp" },
+    { id: "devPool", label: "Default", type: "pool", parent: "dev" },
+    { id: "devLobby", label: "lobby", type: "Room", parent: "dev", dashed: true },
+    { id: "prodPool", label: "Default", type: "pool", parent: "prod" },
+    { id: "prodServices", label: "services", type: "pool", parent: "prod" },
+    { id: "prodLobby", label: "lobby", type: "Room", parent: "prod", dashed: true },
+  ]}
+  caption="One control plane, two namespaces. The dev lobby and the prod lobby are two instances that never meet, and each namespace has its own pools."
+/>
+
+## A namespace for every stage
+
+A control plane Layer creates a namespace for the stage it's deployed with, so `alchemy deploy --stage dev` and `alchemy deploy --stage prod` against the same control plane get separate namespaces:
+
+```typescript title="src/cluster.ts"
+import * as RivetHetzner from "@alchemy.run/rivet/Hetzner";
+
+export const Cluster = RivetHetzner.ServerControlPlane("Rivet");
+```
+
+Pools, classes and streams all go in the stage's namespace, and callers reach only that namespace's instances.
+
+Rivet has no API to delete a namespace. Destroying a stage removes its pools and stops managing its namespace, which stays on the control plane, empty.
+
+## A control plane per environment
+
+Namespaces separate stages, but they share a control plane: its engines, its storage and its admin token. A control plane is the stronger wall. Give production its own when you want its data, its capacity and its token apart from everything else.
+
+The stage decides what is deployed, and the profile decides where it goes. Deploy the production stage with a profile that signs in to the production account:
+
+<PackageManagers script={`{run} alchemy profile create prod
+{run} alchemy deploy --stage prod --profile prod`} />
+
+Each stage that runs its own control plane deploys its own engines, on the cloud its profile signs in to.
+
+## A control plane you already run
+
+A control plane that runs outside the Stack, Rivet Cloud or one you operate yourself, connects with its URL and admin token. A namespace is still created for the stage unless you name one:
+
+```typescript title="src/cluster.ts"
+import * as Rivet from "@alchemy.run/rivet";
+import * as Config from "effect/Config";
+
+export const Cluster = Rivet.ControlPlane("Rivet", {
+  endpoint: "https://rivet.example.com",
+  token: Config.Redacted("RIVET_TOKEN"),
+});
+```
+
+See [Control Plane](/rivet/control-planes) and [Rivet Cloud](/rivet/rivet-cloud).
+
+Next, [Tokens and networks](/rivet/tokens-and-networks): who can reach a control plane, and with what.

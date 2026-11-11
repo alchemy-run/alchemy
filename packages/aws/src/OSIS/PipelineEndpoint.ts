@@ -68,8 +68,18 @@ export interface PipelineEndpoint extends Resource<
     ingestEndpointUrl: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  PipelineEndpointLookup
 > {}
+
+/**
+ * Props for {@link PipelineEndpoint.lookup}: find a pipeline endpoint this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface PipelineEndpointLookup {
+  /** The id of the existing pipeline endpoint. */
+  endpointId: string;
+}
 
 /**
  * A VPC endpoint for an Amazon OpenSearch Ingestion (OSIS) pipeline — lets
@@ -95,6 +105,16 @@ export interface PipelineEndpoint extends Resource<
  *   },
  * });
  * // endpoint.ingestEndpointUrl — the VPC-private ingest URL
+ * ```
+ *
+ * ### Looking up an existing pipeline endpoint
+ * `PipelineEndpoint.lookup` references a pipeline endpoint Alchemy doesn't manage (created in the
+ * console or by another stack), found by `endpointId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing pipeline endpoint
+ * ```typescript
+ * const existing = AWS.OSIS.PipelineEndpoint.lookup({ endpointId: "..." });
  * ```
  *
  * @resource
@@ -172,6 +192,12 @@ export const PipelineEndpointProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ endpointId }) {
+          const endpoint = yield* findEndpoint(endpointId);
+          if (endpoint === undefined) return undefined;
+          return yield* toAttrs(endpoint);
         }),
 
         read: Effect.fn(function* ({ output }) {

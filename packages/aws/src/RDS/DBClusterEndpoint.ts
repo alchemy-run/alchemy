@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 
@@ -89,8 +90,18 @@ export interface DBClusterEndpoint extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DBClusterEndpointLookup
 > {}
+
+/**
+ * Props for {@link DBClusterEndpoint.lookup}: find a DB cluster endpoint this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DBClusterEndpointLookup {
+  /** The identifier of the existing custom endpoint. */
+  dbClusterEndpointIdentifier: string;
+}
 
 /**
  * A custom Aurora cluster endpoint — a DNS name that routes to a chosen
@@ -116,6 +127,17 @@ export interface DBClusterEndpoint extends Resource<
  *   endpointType: "ANY",
  *   staticMembers: [reporting.dbInstanceIdentifier],
  * });
+ * ```
+ *
+ * ### Looking up an existing DB cluster endpoint
+ * `DBClusterEndpoint.lookup` references a DB cluster endpoint Alchemy doesn't manage (created in the
+ * console or by another stack), found by `dbClusterEndpointIdentifier`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing DB cluster endpoint
+ * ```typescript
+ * const analytics = AWS.RDS.DBClusterEndpoint.lookup({ dbClusterEndpointIdentifier: "analytics" });
+ * const endpoint = analytics.endpoint;
  * ```
  *
  * @resource
@@ -189,6 +211,12 @@ export const DBClusterEndpointProvider = () =>
           if (olds?.dbClusterIdentifier !== news.dbClusterIdentifier) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ dbClusterEndpointIdentifier }) {
+          const endpoint = yield* readEndpoint(dbClusterEndpointIdentifier);
+          return endpoint?.DBClusterEndpointIdentifier
+            ? toAttrs({ endpoint, tags: {} })
+            : undefined;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const identifier =
@@ -282,7 +310,30 @@ export const DBClusterEndpointProvider = () =>
             .deleteDBClusterEndpoint({
               DBClusterEndpointIdentifier: output.dbClusterEndpointIdentifier,
             })
-            .pipe(Effect.catchTag("DBClusterEndpointNotFoundFault", () => Effect.void));
+            .pipe(
+              Effect.catchTags({
+                DBClusterEndpointNotFoundFault: () => Effect.void,
+                // An endpoint already `deleting` rejects a second delete: an
+                // interrupted destroy, or a delete started outside the stack.
+                InvalidDBClusterEndpointStateFault: (error) =>
+                  readEndpoint(output.dbClusterEndpointIdentifier).pipe(
+                    Effect.flatMap((endpoint) =>
+                      endpoint === undefined || endpoint.Status === "deleting"
+                        ? Effect.void
+                        : Effect.fail(error),
+                    ),
+                  ),
+              }),
+            );
+          // Wait until the endpoint is gone, so a destroy interrupted here
+          // leaves it in state and the next destroy finishes the delete.
+          yield* readEndpoint(output.dbClusterEndpointIdentifier).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("5 seconds"),
+              until: (endpoint) => endpoint === undefined,
+              times: 36,
+            }),
+          );
         }),
       };
     }),

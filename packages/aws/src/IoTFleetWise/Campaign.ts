@@ -304,8 +304,18 @@ export interface Campaign extends Resource<
     targetArn: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  CampaignLookup
 > {}
+
+/**
+ * Props for {@link Campaign.lookup}: find a campaign this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface CampaignLookup {
+  /** The campaign name of the existing campaign. */
+  campaignName: string;
+}
 
 /**
  * An AWS IoT FleetWise campaign — the orchestration of data-collection
@@ -354,6 +364,16 @@ export interface Campaign extends Resource<
  *     { s3Config: { bucketArn: bucket.bucketArn } },
  *   ],
  * });
+ * ```
+ *
+ * ### Looking up an existing campaign
+ * `Campaign.lookup` references a campaign Alchemy doesn't manage (created in the
+ * console or by another stack), found by `campaignName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing campaign
+ * ```typescript
+ * const existing = AWS.IoTFleetWise.Campaign.lookup({ campaignName: "my-campaign" });
  * ```
  *
  * @resource
@@ -440,6 +460,13 @@ export const CampaignProvider = () =>
           if (!stableEquals(createOnly(olds), createOnly(news))) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ campaignName: name }) {
+          const found = yield* readCampaign(name);
+          if (found?.arn === undefined) return undefined;
+          const attrs = yield* toAttrs(found);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

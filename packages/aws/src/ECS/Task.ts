@@ -4,6 +4,13 @@ import * as ecs from "@distilled.cloud/aws/ecs";
 import * as iam from "@distilled.cloud/aws/iam";
 import { Region } from "@distilled.cloud/aws/Region";
 import { isResolved } from "alchemy/Diff";
+import {
+  checkMountSupport,
+  collectMountCapabilities,
+  mountInstallLines,
+  MountUnsupported,
+  type MountCapability,
+} from "alchemy/Mount";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import { Platform, type Main, type PlatformProps, type PlatformServices } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
@@ -68,6 +75,13 @@ export interface TaskBindingContract {
    * primary container.
    */
   mountPoints?: ecs.MountPoint[];
+  /**
+   * Filesystem clients bound by mount bindings (e.g. `Archil.MountDisk`):
+   * installed into the generated image, with `/dev/fuse` and `SYS_ADMIN`
+   * granted to the primary container. Needs the EC2 launch type; Fargate
+   * has no FUSE.
+   */
+  mounts?: ReadonlyArray<MountCapability>;
 }
 
 /**
@@ -180,6 +194,17 @@ export interface TaskDefinitionConfig {
    * @default false
    */
   enableFaultInjection?: boolean;
+  /**
+   * Run each task in its own Nitro Sandbox, a lightweight VM isolated by the
+   * AWS Nitro hypervisor. `ISOLATED_SANDBOX` isolates tasks from each other;
+   * `CONFIDENTIAL_SANDBOX` also hides the task's memory from the instance and
+   * needs an `attestationPolicy`.
+   *
+   * Requires `requiresCompatibilities: ["MANAGED_INSTANCES"]` and a Managed
+   * Instances capacity provider with `nitroEnclavesEnabled`.
+   * @default { isolationMode: "SHARED" }
+   */
+  trustedExecutionConfiguration?: ecs.TrustedExecutionConfiguration;
   /**
    * Additional task definition overrides applied last (escape hatch for
    * fields not yet surfaced as first-class props).
@@ -391,6 +416,35 @@ export { createContainerRuntimeContext } from "alchemy/Runtime/Process";
  * });
  * ```
  *
+ * ### Caching Build Layers
+ * Builds reuse the local BuildKit cache of the machine they run on, and
+ * nothing but the image is pushed. A builder that has never built the image,
+ * such as a fresh CI runner, reruns every step. Set `build.cache: true` to keep
+ * every stage's layers at the image repository's `:buildcache` tag, so fresh
+ * builders skip unchanged steps. For another backend, pass BuildKit's own
+ * `--cache-from` / `--cache-to` values as `from` and `to`.
+ *
+ * **Example:** Cache layers in the image repository
+ * ```typescript
+ * const worker = yield* AWS.ECS.Task("Worker", {
+ *   context: "./worker",
+ *   build: { cache: true },
+ * });
+ * ```
+ *
+ * **Example:** Cache layers in GitHub Actions
+ * ```typescript
+ * const worker = yield* AWS.ECS.Task("Worker", {
+ *   context: "./worker",
+ *   build: {
+ *     cache: {
+ *       from: ["type=gha,scope=worker"],
+ *       to: ["type=gha,scope=worker,mode=max"],
+ *     },
+ *   },
+ * });
+ * ```
+ *
  * ### Bundling & Tree-shaking
  * `main` is bundled with rolldown at deploy time. Unused code is
  * tree-shaken. `effect`, alchemy, and `@distilled.cloud` are marked
@@ -466,6 +520,45 @@ export const taskImagePlatform = (runtimePlatform?: ecs.RuntimePlatform) =>
   runtimePlatform?.cpuArchitecture === "ARM64" ? "linux/arm64" : "linux/amd64";
 
 /** Keep image resolution, drift detection and dev watching on the same inputs. */
+/**
+ * The mount capabilities bound onto a task, checked against its launch
+ * types: FUSE needs EC2 (or EXTERNAL), not Fargate.
+ */
+export const taskMountCapabilities = (
+  id: string,
+  props: Pick<TaskProps, "requiresCompatibilities">,
+  bindings: ReadonlyArray<ResourceBinding<TaskBindingContract>>,
+) => {
+  const capabilities = collectMountCapabilities(bindings);
+  if (capabilities.length > 0 && !(props as { main?: string }).main) {
+    return Effect.fail(
+      new MountUnsupported({
+        host: id,
+        capability: capabilities[0]!.id,
+        requirement: "image",
+        message: `Task ${id} can't install the ${capabilities.map((c) => c.id).join(", ")} mount client: it runs a pre-built image. Give it a \`main\`.`,
+      }),
+    );
+  }
+  const fuse = !(props.requiresCompatibilities ?? ["FARGATE"]).includes("FARGATE");
+  const unsupported = checkMountSupport(
+    id,
+    capabilities,
+    { fuse, nfs: true },
+    'Set `requiresCompatibilities: ["EC2"]` and run the task on an EC2 capacity provider.',
+  );
+  return unsupported ? Effect.fail(unsupported) : Effect.succeed(capabilities);
+};
+
+/** Fold mount install lines into a task's image source props. */
+export const withMountInstall = (
+  props: TaskProps,
+  capabilities: ReadonlyArray<MountCapability>,
+): TaskProps =>
+  capabilities.length === 0
+    ? props
+    : ({ ...props, install: mountInstallLines(capabilities) } as TaskProps);
+
 export const taskImageInput = (props: TaskProps) => {
   const source = props as ImageSourceLike;
   return {
@@ -705,6 +798,7 @@ export const registerTaskDefinitionRevision = Effect.fn(function* ({
   tags,
   bindingVolumes = [],
   bindingMountPoints = [],
+  fuse = false,
 }: {
   props: TaskDefinitionConfig;
   family: string;
@@ -717,6 +811,8 @@ export const registerTaskDefinitionRevision = Effect.fn(function* ({
   bindingVolumes?: ecs.Volume[];
   /** Primary-container mount points for binding-requested volumes. */
   bindingMountPoints?: ecs.MountPoint[];
+  /** Grant the primary container `/dev/fuse` and `SYS_ADMIN` (mount bindings). */
+  fuse?: boolean;
 }) {
   const { region } = yield* AWSEnvironment.current;
   const containerName = props.container?.name ?? family;
@@ -745,7 +841,8 @@ export const registerTaskDefinitionRevision = Effect.fn(function* ({
       options: {
         "awslogs-group": logGroupName,
         "awslogs-region": region,
-        "awslogs-stream-prefix": family,
+        // ECS caps the prefix at 200 characters; a generated family can be 255.
+        "awslogs-stream-prefix": family.slice(0, 200),
       },
     },
     ...props.container,
@@ -754,6 +851,32 @@ export const registerTaskDefinitionRevision = Effect.fn(function* ({
     ...(bindingMountPoints.length > 0
       ? {
           mountPoints: [...(props.container?.mountPoints ?? []), ...bindingMountPoints],
+        }
+      : {}),
+    // Mount bindings (e.g. `Archil.MountDisk`) mount FUSE filesystems at run
+    // time; the container needs the device and the capability to mount.
+    ...(fuse
+      ? {
+          linuxParameters: {
+            ...props.container?.linuxParameters,
+            capabilities: {
+              ...props.container?.linuxParameters?.capabilities,
+              add: [
+                ...new Set([
+                  ...(props.container?.linuxParameters?.capabilities?.add ?? []),
+                  "SYS_ADMIN",
+                ]),
+              ],
+            },
+            devices: [
+              ...(props.container?.linuxParameters?.devices ?? []),
+              {
+                hostPath: "/dev/fuse",
+                containerPath: "/dev/fuse",
+                permissions: ["read", "write", "mknod"],
+              },
+            ],
+          },
         }
       : {}),
   };
@@ -775,6 +898,7 @@ export const registerTaskDefinitionRevision = Effect.fn(function* ({
     proxyConfiguration: props.proxyConfiguration,
     inferenceAccelerators: props.inferenceAccelerators,
     enableFaultInjection: props.enableFaultInjection,
+    trustedExecutionConfiguration: props.trustedExecutionConfiguration,
     ...props.taskDefinition,
     containerDefinitions: [primaryContainer, ...(props.sidecars ?? [])],
     tags: Object.entries(tags).map(([key, value]) => ({ key, value })),
@@ -1023,7 +1147,9 @@ export const TaskProvider = () =>
       const createRepositoryName = (id: string) =>
         createPhysicalName({
           id: `${id}-repo`,
-          maxLength: 256,
+          // ECS caps an image reference at 255 characters: the registry host,
+          // this name and a 64-character tag must all fit.
+          maxLength: 128,
           lowercase: true,
         });
 
@@ -1098,8 +1224,11 @@ export const TaskProvider = () =>
           "logGroupArn",
           "taskFamily",
         ],
-        diff: Effect.fn(function* ({ id, olds, news, output }) {
-          if (!isResolved(news)) return;
+        diff: Effect.fn(function* ({ id, olds, news: declared, output, newBindings }) {
+          if (!isResolved(declared)) return;
+          const news = isResolved(newBindings)
+            ? withMountInstall(declared, yield* taskMountCapabilities(id, declared, newBindings))
+            : declared;
           if ((yield* toTaskFamily(id, olds ?? {})) !== (yield* toTaskFamily(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
@@ -1141,7 +1270,9 @@ export const TaskProvider = () =>
               output.port,
           };
         }),
-        reconcile: Effect.fn(function* ({ id, news, bindings, output, session }) {
+        reconcile: Effect.fn(function* ({ id, news: declared, bindings, output, session }) {
+          const mountCapabilities = yield* taskMountCapabilities(id, declared, bindings);
+          const news = withMountInstall(declared, mountCapabilities);
           // Prefer the deployed name: regenerating would target a different
           // resource if the generator's output for this id ever drifts. (An
           // explicit taskName change arrives here as a fresh replacement
@@ -1244,6 +1375,7 @@ export const TaskProvider = () =>
             tags,
             bindingVolumes,
             bindingMountPoints,
+            fuse: mountCapabilities.some((c) => c.requires?.fuse),
           });
 
           // Sync tags — task definition revisions carry tags at register

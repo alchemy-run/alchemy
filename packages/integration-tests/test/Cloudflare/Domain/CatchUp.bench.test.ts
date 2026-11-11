@@ -1,5 +1,6 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import { Credentials, formatHeaders } from "@distilled.cloud/cloudflare/Credentials";
@@ -7,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import { requestWorker } from "../Utils/WorkerRequest.ts";
 import BenchV1 from "./fixtures/bench/v1.ts";
@@ -165,7 +167,9 @@ const settledUsage = (scriptName: string, from: Date, to: Date) =>
 
 const now = Effect.sync(() => new Date());
 
-const { test } = Test.make({ providers: Cloudflare.providers() });
+const { test } = Test.make({
+  providers: Layer.mergeAll(Cloudflare.providers(), DomainCloudflare.providers()),
+});
 
 /** Retry a seed request, logging why: a slow seed is otherwise silent. */
 const seedRetry = <A, E extends { readonly _tag: string }, R>(

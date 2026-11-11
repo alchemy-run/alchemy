@@ -6,6 +6,7 @@ import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -79,6 +80,13 @@ test.provider.skipIf(!runLifecycle)(
             description: "endpoint health",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.RegionHealthCheckService.lookup({
+          serviceName: created.serviceName,
+          region: created.region,
+        }),
+        created,
       );
 
       expect(created.serviceName).toEqual(expect.any(String));

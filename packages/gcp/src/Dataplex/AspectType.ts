@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -111,8 +112,34 @@ export type AspectType = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AspectTypeLookup
 >;
+
+/**
+ * Props for {@link AspectType.lookup}: find an aspect type this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface AspectTypeLookup {
+  /**
+   * AspectType id (the `{aspectType}` segment of
+   * `projects/{project}/locations/{location}/aspectTypes/{aspectType}`).
+   * Must be 1-63 characters, start with a letter, and match
+   * `[a-z]([a-z0-9-]*[a-z0-9])?`.
+   */
+  aspectTypeId: string;
+  /**
+   * Region (`us-central1`, …). `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Dataplex AspectType — a template for Aspects on catalog Entries.
@@ -139,6 +166,19 @@ export type AspectType = Resource<
  *       },
  *     ],
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing aspect type
+ * `AspectType.lookup` references an aspect type Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * aspect type.
+ *
+ * **Example:** Reference an existing aspect type
+ * ```typescript
+ * const aspectType = GCP.Dataplex.AspectType.lookup({
+ *   aspectTypeId: "my-aspect-type",
  * });
  * ```
  *
@@ -214,6 +254,15 @@ export const AspectTypeProvider = () =>
             fingerprint(olds?.authorization ?? output?.authorization),
       });
     }),
+
+    lookup: Effect.fn(function* ({ aspectTypeId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, aspectTypeId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

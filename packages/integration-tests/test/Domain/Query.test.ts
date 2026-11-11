@@ -14,6 +14,7 @@ import * as Ref from "effect/Ref";
 import type * as Rpc from "effect/rpc/Rpc";
 import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import * as Tracer from "effect/Tracer";
 
 // ---------------------------------------------------------------- a wallet domain
@@ -143,7 +144,7 @@ const ViewerSessionLive = Layer.succeed(ViewerSession, (effect, { headers }) =>
 
 // ---------------------------------------------------------------- the queries
 
-/** One wallet's movements, for its owner: authorized per request. */
+/** One wallet's movements, for its owner: the handler checks who asks, then reads. */
 class WalletMovements extends Domain.Query("WalletMovements", {
   input: { wallet: Schema.String },
   success: Movement,
@@ -151,38 +152,38 @@ class WalletMovements extends Domain.Query("WalletMovements", {
   waitsFor: [Ledger],
   middleware: [ViewerSession],
   rejects: [NotYours],
-  validate: Effect.fn(function* ({ wallet }) {
-    const viewer = yield* Viewer;
-    const owners = yield* WalletOwner;
-    const owner = Option.getOrNull(yield* owners.query(Wallet.ref(wallet)).pipe(Effect.orDie));
-    if (owner && owner.owner !== viewer) return yield* new NotYours({ wallet });
-  }),
 }) {}
 const WalletMovementsLive = WalletMovements.toLayer(
   Effect.gen(function* () {
     const movements = yield* Movements;
-    return ({ wallet }, page) => movements.page((row) => row.wallet === wallet, page);
+    const owners = yield* WalletOwner;
+    return Effect.fn(function* ({ wallet }, page) {
+      const viewer = yield* Viewer;
+      const owner = Option.getOrNull(yield* owners.get(Wallet.ref(wallet)).pipe(Effect.orDie));
+      if (owner && owner.owner !== viewer) return yield* new NotYours({ wallet });
+      return yield* movements.page((row) => row.wallet === wallet, page);
+    });
   }),
   { take: { default: 2, max: 3 } },
 );
 
-/** Large movements across every wallet: each row judged on its own. */
+/** Large movements across every wallet, scoped to the viewer's own. */
 class LargeMovements extends Domain.Query("LargeMovements", {
   input: { min: Schema.Number, note: Schema.Redacted(Schema.String) },
   success: Movement,
   paged: true,
   middleware: [ViewerSession],
-  visible: Effect.fn(function* (row) {
-    return row.owner === (yield* Viewer);
-  }),
 }) {}
-// Forgets to scope by the viewer: `visible` still keeps other owners' rows out.
 const LargeMovementsLive = LargeMovements.toLayer(
   Effect.gen(function* () {
     const movements = yield* Movements;
-    return ({ min }, page) => movements.page((row) => row.amount >= min, page);
+    return Effect.fn(function* ({ min }, page) {
+      // The handler records what it wants on the query's span.
+      yield* Effect.annotateCurrentSpan("query.min", min);
+      const viewer = yield* Viewer;
+      return yield* movements.page((row) => row.amount >= min && row.owner === viewer, page);
+    });
   }),
-  { attributes: (input) => ({ "query.min": input.min, "query.note": input.note }) },
 );
 
 /** A single result, not paged. */
@@ -226,11 +227,27 @@ const CombinedLive = Combined.toLayer(
   }),
 );
 
+/** Who owns a wallet, from a view: the query waits for the view, not a projection. */
+class OwnerOf extends Domain.Query("OwnerOf", {
+  input: { wallet: Schema.String },
+  success: Schema.NullOr(Schema.String),
+  waitsFor: [WalletOwner],
+}) {}
+const OwnerOfLive = OwnerOf.toLayer(
+  Effect.gen(function* () {
+    const owners = yield* WalletOwner;
+    return Effect.fn(function* ({ wallet }) {
+      const owner = yield* owners.get(Wallet.ref(wallet)).pipe(Effect.orDie);
+      return Option.getOrNull(owner)?.owner ?? null;
+    });
+  }),
+);
+
 class Wallets extends Domain.Model("QueryWallets", {
   aggregates: [Wallet],
   views: [WalletOwner],
   projections: [Ledger],
-  queries: [WalletMovements, LargeMovements, Total, Combined],
+  queries: [WalletMovements, LargeMovements, Total, Combined, OwnerOf],
 }) {}
 
 class WalletApi extends Domain.Api("QueryWalletApi", {
@@ -238,8 +255,7 @@ class WalletApi extends Domain.Api("QueryWalletApi", {
   commands: ["Deposit"],
   views: [],
   streams: [],
-  aggregates: [],
-  queries: ["WalletMovements", "LargeMovements", "Total", "Combined"],
+  queries: ["WalletMovements", "LargeMovements", "Total", "Combined", "OwnerOf"],
 }) {}
 
 const handlers = (options?: Domain.Projection.Options) =>
@@ -249,6 +265,7 @@ const handlers = (options?: Domain.Projection.Options) =>
     LargeMovementsLive,
     TotalLive,
     CombinedLive,
+    OwnerOfLive,
   );
 
 const story = Story.make(Wallets, { layer: handlers() });
@@ -271,7 +288,7 @@ const recording = () => {
 };
 
 describe("Domain Query", { tags: ["unit", "local"] }, () => {
-  it.effect("reads rows a projection wrote, and refuses who validate refuses", () =>
+  it.effect("reads rows a projection wrote, and refuses who the handler refuses", () =>
     story(
       Story.given(sam, new Opened({ owner: "sam" })),
       Story.when(sam, new Deposit({ amounts: [10, 20] })),
@@ -318,7 +335,7 @@ describe("Domain Query", { tags: ["unit", "local"] }, () => {
     ).pipe(Effect.provide(Movements.memory)),
   );
 
-  it.effect("visible keeps rows the caller may not see out of a cross-key result", () =>
+  it.effect("a handler scopes a cross-key result to what the caller may see", () =>
     Effect.gen(function* () {
       const { tracer, named } = recording();
       yield* story(
@@ -333,11 +350,10 @@ describe("Domain Query", { tags: ["unit", "local"] }, () => {
       ).pipe(Effect.provide(Movements.memory), Effect.withTracer(tracer));
       const [span] = named("Domain.query LargeMovements");
       expect(span!.attributes.get("domain.query.rows")).toBe(1);
-      expect(span!.attributes.get("domain.query.hidden")).toBe(1);
       expect(span!.attributes.get("domain.outcome")).toBe("ok");
-      // Only what `attributes` returns is recorded, and a Redacted value never is.
+      // Only what the handler annotates is recorded.
       expect(span!.attributes.get("query.min")).toBe(100);
-      expect(span!.attributes.get("query.note")).toBe("<redacted>");
+      expect(span!.attributes.has("query.note")).toBe(false);
       expect([...span!.attributes.keys()].some((key) => key.includes("wallet"))).toBe(false);
     }),
   );
@@ -406,6 +422,32 @@ describe("Domain Query", { tags: ["unit", "local"] }, () => {
       );
       expect(next.entries.map((row) => row.amount)).toEqual([4, 5, 6]);
 
+      // `pages` follows each cursor to the last page (take is clamped to 3); `entries` flattens them.
+      const pages = yield* api.WalletMovements.pages(
+        { wallet: "sam-1" },
+        { ...asSam, take: 4 },
+      ).pipe(Stream.runCollect);
+      expect(pages.map((p) => p.entries.length)).toEqual([3, 3, 3, 3, 3, 3, 2]);
+      expect(pages.at(-1)!.cursor).toBeNull();
+      const all = yield* api.WalletMovements.entries(
+        { wallet: "sam-1" },
+        { ...asSam, take: 7 },
+      ).pipe(Stream.runCollect);
+      expect(all.map((row) => row.amount)).toEqual(amounts);
+      // From a cursor, and stopped early with `Stream.take`.
+      const rest = yield* api.WalletMovements.entries(
+        { wallet: "sam-1" },
+        { ...asSam, after: next.cursor!, take: 3 },
+      ).pipe(Stream.runCollect);
+      expect(rest.map((row) => row.amount)).toEqual(amounts.slice(6));
+      const first = yield* api.WalletMovements.entries({ wallet: "sam-1" }, asSam).pipe(
+        Stream.take(1),
+        Stream.runCollect,
+      );
+      expect(first.map((row) => row.amount)).toEqual([1]);
+      // A query that isn't paged has no streams.
+      expect("pages" in api.Total).toBe(false);
+
       const refused = yield* api
         .WalletMovements({ wallet: "sam-1" }, { headers: { "x-viewer": "kim" } })
         .pipe(Effect.flip);
@@ -437,6 +479,28 @@ describe("Domain Query", { tags: ["unit", "local"] }, () => {
       Effect.scoped,
       Effect.provide(
         Wallets.layer(handlers({ batch: { size: 100, wait: "200 millis" } })).pipe(
+          Layer.provideMerge(Layer.mergeAll(InMemory, Movements.memory, ViewerSessionLive)),
+        ),
+      ),
+    ),
+  );
+
+  it.live("waits for a view in waitsFor, on the key the receipt's command reached", () =>
+    Effect.gen(function* () {
+      const { tracer, named } = recording();
+      const wallets = yield* Wallet;
+      const api = yield* WalletApi.clientInProcess;
+      const receipt = yield* wallets.send(kim, new Open({ owner: "kim" }));
+      const owner = yield* api
+        .OwnerOf({ wallet: "kim-1" }, { atLeast: receipt })
+        .pipe(Effect.withTracer(tracer));
+      expect(owner).toBe("kim");
+      const [waited] = named("Domain.caughtUp WalletOwner");
+      expect(waited!.attributes.get("domain.stream")).toBe("Wallet/kim-1");
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        Wallets.layer(handlers()).pipe(
           Layer.provideMerge(Layer.mergeAll(InMemory, Movements.memory, ViewerSessionLive)),
         ),
       ),
@@ -525,21 +589,26 @@ describe("Domain Query", { tags: ["unit", "local"] }, () => {
 
   it("verify reports every query problem without hosting the model", () => {
     class Pages extends Domain.Query("Pages", { paged: true }) {}
-    class Judged extends Domain.Query("Judged", {
-      success: Schema.Number,
-      visible: () => Effect.succeed(true),
-    }) {}
     class Named extends Domain.Query("WalletOwner", { success: Schema.Number }) {}
+    // A view the model does not hold: there is nothing to wait for.
+    class Elsewhere extends Domain.View("Elsewhere", {
+      from: [Wallet],
+      key: Wallet,
+      state: Schema.Struct({ owner: Schema.String }),
+      initial: { owner: "" },
+      evolve: { Opened: (_, e) => ({ owner: e.owner }) },
+    }) {}
+    class Unheld extends Domain.Query("Unheld", { waitsFor: [Elsewhere] }) {}
     class Broken extends Domain.Model("QueryBroken", {
       aggregates: [Wallet],
       views: [WalletOwner],
-      queries: [Pages, Judged, Named, Total, Total],
+      queries: [Pages, Named, Total, Unheld, Total],
     }) {}
     expect(Domain.verify(Broken).map((problem) => problem.message)).toEqual([
       "Query 'Pages' is `paged` but declares no `success`: name the schema of one entry",
-      "Query 'Judged' declares `visible` but is not `paged`: only the entries of a page are judged",
       "Two entities are named 'WalletOwner'",
       "Total waits for Ledger, which is not in the Domain",
+      "Unheld waits for Elsewhere, which is not in the Domain",
       "Duplicate query 'Total'",
     ]);
   });
@@ -646,9 +715,9 @@ describe("Domain Query through Foldkit", { tags: ["unit", "local"] }, () => {
     Effect.gen(function* () {
       const wallets = yield* Wallet;
       const opened = yield* wallets.send(sam, new Open({ owner: "sam" }));
-      // `validate` reads this view: wait for it so the refusal is certain.
+      // The handler reads this view: wait for it so the refusal is certain.
       const owners = yield* WalletOwner;
-      yield* owners.query(sam, { atLeast: opened }).pipe(Effect.orDie);
+      yield* owners.get(sam, { atLeast: opened }).pipe(Effect.orDie);
       const rejected = yield* Wallets$.WalletMovements({
         input: { wallet: "sam-1" },
         requestId: "q:3",

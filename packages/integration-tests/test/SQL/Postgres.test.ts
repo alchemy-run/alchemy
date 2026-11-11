@@ -4,7 +4,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { exerciseSqlSurface, postJson, putJson } from "./exercise.ts";
+import { exerciseSqlSurface, getJson, postJson, putJson } from "./exercise.ts";
 import Stack from "./fixtures/postgres-stack.ts";
 import type { UserRow } from "./fixtures/routes.ts";
 
@@ -17,14 +17,15 @@ const HOOK_TIMEOUT = 300_000;
 const TEST_TIMEOUT = 120_000;
 
 /**
- * End-to-end test of `SQL.Postgres` — the raw `@effect/sql-pg` client
- * wrapped in alchemy's deferred `proxyChain` — against a real Cloudflare
+ * End-to-end test of `SQL.Postgres` — an `@effect/sql-pg` client that
+ * opens its pool per execution — against a real Cloudflare
  * Worker fronting a Neon Postgres origin through Hyperdrive (caching
  * disabled for read-after-write assertions).
  *
  * Runs the same shared exercise as the D1 suite, plus the Postgres-only
- * surface: `withTransaction` (commit + rollback) and multi-row
- * `sql.updateValues`.
+ * surface: `withTransaction` (commit + rollback), multi-row
+ * `sql.updateValues`, `sql.json`, a streamed statement, and a
+ * `Drizzle.Postgres` CTE built at Construction phase.
  */
 const stack = beforeAll(deploy(Stack), { timeout: HOOK_TIMEOUT });
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
@@ -69,6 +70,23 @@ test(
       rows: UserRow[];
     };
     expect(updated.rows).toEqual([daveV2, erinV2]);
+
+    // sql.json — the value reaches Postgres as one JSON parameter.
+    const doc = { tags: ["a", "b"], nested: { n: 1 } };
+    expect(yield* postJson(`${url}/json`, doc)).toEqual({ doc });
+
+    // A streamed statement.
+    expect(yield* getJson(`${url}/users/stream`)).toEqual({ ids: [1, 2, 3, 10, 11] });
+
+    // Drizzle.Postgres — a CTE column inside a `sql` fragment and a join
+    // condition, built before any connection (alchemy-run/alchemy#2001).
+    const cte = (yield* getJson(`${url}/drizzle/cte`)) as {
+      sql: string;
+      rows: Array<{ id: number; n: number }>;
+    };
+    expect(cte.sql).toContain('count("everyone"."id")');
+    expect(cte.sql).toContain('on "everyone"."name" = "alchemy_sql_users"."name"');
+    expect(cte.rows).toEqual([1, 2, 3, 10, 11].map((id) => ({ id, n: 1 })));
   }),
   {
     tags: [

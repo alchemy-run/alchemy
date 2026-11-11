@@ -64,6 +64,11 @@ const sourceRoots: SourceRoot[] = [
     sourceDisplayPrefix: "packages/axiom/src",
   },
   {
+    srcRoot: "packages/e2b/src",
+    providerPrefix: "E2B",
+    sourceDisplayPrefix: "packages/e2b/src",
+  },
+  {
     srcRoot: "packages/doppler/src",
     providerPrefix: "Doppler",
     sourceDisplayPrefix: "packages/doppler/src",
@@ -74,9 +79,29 @@ const sourceRoots: SourceRoot[] = [
     sourceDisplayPrefix: "packages/infisical/src",
   },
   {
+    srcRoot: "packages/archil/src",
+    providerPrefix: "Archil",
+    sourceDisplayPrefix: "packages/archil/src",
+  },
+  {
+    srcRoot: "packages/boat/src",
+    providerPrefix: "Boat",
+    sourceDisplayPrefix: "packages/boat/src",
+  },
+  {
     srcRoot: "packages/turso/src",
     providerPrefix: "Turso",
     sourceDisplayPrefix: "packages/turso/src",
+  },
+  {
+    srcRoot: "packages/daytona/src",
+    providerPrefix: "Daytona",
+    sourceDisplayPrefix: "packages/daytona/src",
+  },
+  {
+    srcRoot: "packages/modal/src",
+    providerPrefix: "Modal",
+    sourceDisplayPrefix: "packages/modal/src",
   },
   {
     srcRoot: "packages/planetscale/src",
@@ -137,6 +162,16 @@ const sourceRoots: SourceRoot[] = [
     sourceDisplayPrefix: "packages/docker/src",
   },
   { srcRoot: "packages/sql/src", providerPrefix: "SQL", sourceDisplayPrefix: "packages/sql/src" },
+  {
+    srcRoot: "packages/rivet/src",
+    providerPrefix: "Rivet",
+    sourceDisplayPrefix: "packages/rivet/src",
+  },
+  {
+    srcRoot: "packages/effect-cluster/src",
+    providerPrefix: "Cluster",
+    sourceDisplayPrefix: "packages/effect-cluster/src",
+  },
 ];
 
 interface FileEntry {

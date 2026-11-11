@@ -1,5 +1,5 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -59,7 +59,7 @@ export default class DomainScheduleWorker extends Cloudflare.Worker<DomainSchedu
           });
         if (route[1] === "place") yield* holds.send(id, new PlaceHold());
         if (route[1] === "release") yield* holds.send(id, new ReleaseHold());
-        return yield* HttpServerResponse.json(yield* holds.state(id));
+        return yield* HttpServerResponse.json(yield* holds.get(id));
       }),
     };
   }).pipe(Effect.provide(HoldsLive)),

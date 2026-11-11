@@ -1,0 +1,230 @@
+---
+title: Workflows
+description: Durable workflows on Effect Cluster — persisted activities, durable sleeps, signals, compensations and child workflows — declared and implemented like an entity and started from any runtime.
+---
+
+import Timeline from "../../../components/diagrams/Timeline.astro";
+
+A workflow is a durable function. Each step, an **activity**, is persisted when it finishes, so a workflow that stops, because its runner restarts or a deploy replaces it, picks up where it left off on another runner without running finished steps again.
+
+A run's steps are written to the database as they finish, so the run doesn't belong to any one runner. When it waits, for a signal or a sleep, it holds no runner at all, and whichever runner owns its shard when it wakes carries on:
+
+<Timeline
+  end={10}
+  lanes={[
+    { id: "r1", label: "Runner 1" },
+    { id: "db", label: "Database" },
+    { id: "r2", label: "Runner 2" },
+  ]}
+  bars={[
+    { lane: "r1", start: 0, end: 1.5, label: "start", tone: "accent" },
+    { lane: "db", start: 1.5, end: 7, label: "waiting for Answer", tone: "muted" },
+    { lane: "r1", start: 3, end: 5, label: "stopped", tone: "warn" },
+    { lane: "r2", start: 7, end: 9, label: "join", tone: "accent" },
+  ]}
+  marks={[{ at: 7, label: "answer: true" }]}
+  caption="An Invite run waits for the guest's answer in the database. Runner 1 stops meanwhile, and the run finishes on Runner 2 without starting over."
+/>
+
+## Declare and implement it
+
+A workflow takes the same options as Effect's `Workflow.make`: its payload, success and error, and the key that makes two starts of the same work one run. Its implementation comes after them, an Effect that resolves bindings once per runner and returns the handler:
+
+```typescript title="src/Invite.ts"
+import * as Cluster from "@alchemy.run/effect-cluster";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import { Activity, DurableDeferred } from "effect/workflow";
+import { Default } from "./Cluster.ts";
+import Room from "./Room.ts";
+
+/** The guest's answer, which the run waits for. */
+export const Answer = DurableDeferred.make("answer", { success: Schema.Boolean });
+
+export class Declined extends Schema.TaggedError<Declined>()("Declined", {}) {}
+
+export default class Invite extends Cluster.Workflow<Invite>()(
+  "Invite",
+  {
+    payload: { room: Schema.String, guest: Schema.String },
+    success: Schema.String,
+    error: Declined,
+    idempotencyKey: ({ room, guest }) => `${room}/${guest}`,
+  },
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const rooms = yield* Room;
+    return Effect.fn(function* ({ room, guest }) {
+      const accepted = yield* DurableDeferred.await(Answer);
+      if (!accepted) return yield* new Declined();
+      const members = yield* Activity.make({
+        name: "join",
+        success: Schema.Int,
+        execute: rooms.getByName(room).pipe(
+          Effect.flatMap((target) => target.Join({ name: guest })),
+          Effect.orDie,
+        ),
+      });
+      return `${guest} joined ${room} with ${members} others`;
+    });
+  }).pipe(Effect.provide(Default)),
+) {}
+```
+
+The handler's payload, success and error are typed by the options. On the pool, each workflow runs on Effect Cluster's own workflow engine, as a workflow entity per run.
+
+## Keep its code out of its callers
+
+As with an [entity](/cluster/entities#keep-its-code-out-of-its-callers), a caller outside the workflow's pool would bundle its implementation and its pool. For those callers, declare the workflow on its own:
+
+```typescript title="src/Invite.ts"
+import * as Cluster from "@alchemy.run/effect-cluster";
+import * as Schema from "effect/Schema";
+import { DurableDeferred } from "effect/workflow";
+
+export const Answer = DurableDeferred.make("answer", { success: Schema.Boolean });
+
+export class Declined extends Schema.TaggedError<Declined>()("Declined", {}) {}
+
+export class Invite extends Cluster.Workflow<Invite>()("Invite", {
+  payload: { room: Schema.String, guest: Schema.String },
+  success: Schema.String,
+  error: Declined,
+  idempotencyKey: ({ room, guest }) => `${room}/${guest}`,
+}) {}
+```
+
+Then implement it in a file of its own with `.make`, which returns a Layer, typing the handler with `Invite.of`:
+
+```typescript title="src/InviteLive.ts"
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import { Activity, DurableDeferred } from "effect/workflow";
+import { Default } from "./Cluster.ts";
+import { Answer, Declined, Invite } from "./Invite.ts";
+import { Room } from "./Room.ts";
+
+export default Invite.make(
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const rooms = yield* Room;
+    return Invite.of(
+      Effect.fn(function* ({ room, guest }) {
+        const accepted = yield* DurableDeferred.await(Answer);
+        if (!accepted) return yield* new Declined();
+        const members = yield* Activity.make({
+          name: "join",
+          success: Schema.Int,
+          execute: rooms.getByName(room).pipe(
+            Effect.flatMap((target) => target.Join({ name: guest })),
+            Effect.orDie,
+          ),
+        });
+        return `${guest} joined ${room} with ${members} others`;
+      }),
+    );
+  }).pipe(Effect.provide(Default)),
+);
+```
+
+## Start and read runs
+
+`yield* Invite` from any runtime returns its client. `start` begins a run, or returns the run already started with the same key:
+
+```typescript title="src/Api.ts"
+import * as Docker from "@alchemy.run/docker";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Answer, Invite } from "./Invite.ts";
+
+export default class Api extends Docker.Service<Api>()(
+  "Api",
+  { main: import.meta.url, port: 3000 },
+  Effect.gen(function* () {
+    const invites = yield* Invite;
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const url = new URL(request.url, "http://api");
+        if (url.pathname === "/invite") {
+          const run = yield* invites.start({ room: "lobby", guest: "sam" });
+          return yield* HttpServerResponse.json({ executionId: run.executionId });
+        }
+        const run = invites.get(url.searchParams.get("executionId") ?? "");
+        if (url.pathname === "/accept") yield* run.signal(Answer, true);
+        return yield* HttpServerResponse.json(yield* run.status);
+      }).pipe(Effect.orDie),
+    };
+  }),
+) {}
+```
+
+A run's `status` is `NotStarted`, `Running`, `Completed` with its result, `Failed` with its error, `Interrupted` or `Died`. `signal` completes a `DurableDeferred` the run waits on, and `interrupt` stops it where it waits.
+
+## Sleep durably
+
+In a workflow's handler, `DurableClock.sleep` from `effect/workflow` waits without holding a runner: the wake-up is a persisted message, delivered when it's due. Here is the handler of a `Reminder` workflow, declared like `Invite` with a `room` in its payload:
+
+```typescript
+Effect.fn(function* ({ room }) {
+  yield* DurableClock.sleep({ name: "wait", duration: "1 day" });
+  yield* Activity.make({ name: "remind", execute: Effect.logInfo(`remind ${room}`) });
+});
+```
+
+Runners pick up due messages every 10 seconds, so a sleep wakes up to 10 seconds late.
+
+## Undo a step
+
+A workflow class's `withCompensation` attaches an undo to an activity. If the workflow fails later, the compensations run, newest first. Here is the handler of a `Checkout` workflow, with an `orderId` in its payload:
+
+```typescript
+Effect.fn(function* ({ orderId }) {
+  yield* Activity.make({ name: "reserve", execute: Effect.logInfo(`reserve ${orderId}`) }).pipe(
+    Checkout.withCompensation(() =>
+      Activity.make({ name: "release", execute: Effect.logInfo(`release ${orderId}`) }),
+    ),
+  );
+  yield* Activity.make({ name: "charge", execute: Effect.logInfo(`charge ${orderId}`) });
+});
+```
+
+## Child workflows
+
+Inside a workflow, the other workflow class's `execute` runs it as a child and waits for it. Here an `Onboard` workflow, with a `guest` in its payload, runs `Invite` for the lobby:
+
+```typescript
+Effect.fn(function* ({ guest }) {
+  return yield* Invite.execute({ room: "lobby", guest });
+});
+```
+
+Run a child in the same pool as its parent.
+
+## Run the same workflow on any engine
+
+Code written against Alchemy's engine-neutral `Workflows.RunWorkflow` runs a `Cluster.Workflow` with `Cluster.WorkflowEngine`:
+
+```typescript title="src/Api.ts"
+import * as Cluster from "@alchemy.run/effect-cluster";
+import * as Docker from "@alchemy.run/docker";
+import * as Workflows from "alchemy/Workflows";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Invite } from "./Invite.ts";
+
+export default class Api extends Docker.Service<Api>()(
+  "Api",
+  { main: import.meta.url, port: 3000 },
+  Effect.gen(function* () {
+    const invite = yield* Workflows.RunWorkflow(Invite.workflow);
+    return {
+      fetch: Effect.gen(function* () {
+        const run = yield* invite.start({ room: "lobby", guest: "sam" });
+        return HttpServerResponse.text(run.executionId);
+      }),
+    };
+  }).pipe(Effect.provide(Cluster.WorkflowEngine(Invite))),
+) {}
+```

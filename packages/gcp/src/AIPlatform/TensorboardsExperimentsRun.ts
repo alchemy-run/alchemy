@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -73,8 +74,32 @@ export type TensorboardsExperimentsRun = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  TensorboardsExperimentsRunLookup
 >;
+
+/**
+ * Props for {@link TensorboardsExperimentsRun.lookup}: find a tensorboards
+ * experiments run this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface TensorboardsExperimentsRunLookup {
+  /**
+   * Run id (the `{run}` segment).
+   */
+  runId: string;
+  /**
+   * Parent TensorboardExperiment resource name
+   * (`projects/{project}/location
+   * s/{location}/tensorboards/{tensorboard}/experiments/{experiment}`).
+   */
+  parent: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Vertex AI TensorboardRun, one execution of a training job.
@@ -88,6 +113,20 @@ export type TensorboardsExperimentsRun = Resource<
  * const run = yield* GCP.AIPlatform.TensorboardsExperimentsRun("Pass", {
  *   parent: experiment.name,
  *   displayName: "pass-1",
+ * });
+ * ```
+ *
+ * ### Looking up an existing tensorboards experiments run
+ * `TensorboardsExperimentsRun.lookup` references a tensorboards experiments
+ * run Alchemy doesn't manage (created in the console or by another stack).
+ * It is read during plan/deploy, never created, updated or deleted, and
+ * binds like a declared tensorboards experiments run.
+ *
+ * **Example:** Reference an existing tensorboards experiments run
+ * ```typescript
+ * const tensorboardsExperimentsRun = GCP.AIPlatform.TensorboardsExperimentsRun.lookup({
+ *   runId: "my-run",
+ *   parent: "my-parent",
  * });
  * ```
  *
@@ -184,6 +223,14 @@ export const TensorboardsExperimentsRunProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ runId, parent }) {
+      const env = yield* GcpEnvironment.current;
+      const name = parent !== undefined ? resourceName(parent, runId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;

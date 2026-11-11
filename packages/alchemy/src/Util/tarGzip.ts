@@ -6,6 +6,7 @@ import * as zlib from "node:zlib";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import type { PlatformError } from "effect/PlatformError";
 
 const encoder = new TextEncoder();
 
@@ -98,12 +99,12 @@ type WalkEntry = {
 
 const walkDirectory = (
   root: string,
-): Effect.Effect<WalkEntry[], unknown, FileSystem.FileSystem | Path.Path> =>
+): Effect.Effect<WalkEntry[], PlatformError, FileSystem.FileSystem | Path.Path> =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const files: WalkEntry[] = [];
-    const walk = (dir: string, rel: string): Effect.Effect<void, unknown> =>
+    const walk = (dir: string, rel: string): Effect.Effect<void, PlatformError> =>
       Effect.gen(function* () {
         const entries = [...(yield* fs.readDirectory(dir))].sort();
         for (const entry of entries) {

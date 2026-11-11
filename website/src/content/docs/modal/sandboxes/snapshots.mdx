@@ -1,0 +1,59 @@
+---
+title: Snapshots
+description: Save a Modal sandbox's files, its memory, or one directory, and start new sandboxes from it.
+---
+
+import BranchGraph from "../../../../components/diagrams/BranchGraph.astro";
+
+A **snapshot** saves a running sandbox so another can start where it was. Modal saves three things: the whole filesystem as an image, the memory with its running processes, or one directory to mount elsewhere.
+
+## A copy starts where the original was
+
+The original keeps running after a snapshot. Every copy starts from the saved state, and changes only its own files:
+
+<BranchGraph
+  end={6}
+  branches={[
+    { id: "a", label: "session-sam", type: "sandbox", tone: "accent" },
+    { id: "b", label: "copy", type: "from the snapshot", from: { branch: "a", at: 2 } },
+  ]}
+  points={[
+    { branch: "a", at: 1, label: "pnpm install" },
+    { branch: "a", at: 2, label: "snapshot" },
+    { branch: "a", at: 4, label: "agent edits" },
+    { branch: "b", at: 4.5, label: "pnpm test" },
+  ]}
+  caption="session-sam installs dependencies and takes a snapshot. The copy starts with them installed, and the agent's later edits stay in session-sam."
+/>
+
+## Save the filesystem as an image
+
+```typescript
+yield* sandbox.exec(["pnpm", "install"], { cwd: "/work" });
+const image = yield* sandbox.snapshotFilesystem();
+```
+
+The result is an image. Pass it to `create`:
+
+```typescript
+const next = yield* sandboxes.create({ image });
+```
+
+## Save memory and running processes
+
+A sandbox created with `enableSnapshot` can save its memory too. The copy resumes with its processes running:
+
+```typescript
+const sandbox = yield* sandboxes.create({ enableSnapshot: true });
+const snapshot = yield* sandbox.snapshotMemory();
+const restored = yield* sandboxes.restore(snapshot, { name: `session-${user}` });
+```
+
+## Move one directory to another sandbox
+
+```typescript
+const workspace = yield* sandbox.snapshotDirectory("/work");
+yield* other.mountDirectory("/work", workspace);
+```
+
+`other` gets a copy of `/work` and nothing else from the original.

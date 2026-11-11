@@ -18,7 +18,7 @@ import type { Input, InputProps } from "@/Input";
 import * as Namespace from "@/Namespace.ts";
 import * as Output from "@/Output";
 import * as Plan from "@/Plan";
-import { UnsatisfiedResourceCycle } from "@/Plan";
+import { type RefCycleError, UnsatisfiedResourceCycle } from "@/Plan";
 import * as Provider from "@/Provider";
 import { remote } from "@/ProviderMode.ts";
 import * as RemovalPolicy from "@/RemovalPolicy.ts";
@@ -52,6 +52,8 @@ import {
   KindStablesResource,
   lookupCalls,
   LookupTarget,
+  OptionalProps,
+  optionalPropsReceived,
   lookupTargets,
   ModalResource,
   NoPrecreateBindingTarget,
@@ -3762,6 +3764,47 @@ describe("RefExpr resolution", { tags: ["unit", "local"] }, () => {
 // `Resource.lookup(props)` finds a resource no stack manages through its
 // provider's `lookup`. It resolves at plan time like a ref, but from the
 // provider instead of state, and never becomes a node in the plan.
+// Every prop of `OptionalProps` is optional, so it may be declared with none.
+// Its provider reads `news` without a default, as most real providers do.
+describe("resources declared without props", { tags: ["unit", "local"] }, () => {
+  test(
+    "plan a create with empty props",
+    Effect.gen(function* () {
+      const plan = yield* OptionalProps("PlanNoProps").pipe(makePlan);
+      expect(plan.resources.PlanNoProps?.action).toBe("create");
+      expect((plan.resources.PlanNoProps as any)?.props).toEqual({});
+    }),
+  );
+
+  // A row created before declarations defaulted to `{}` holds `undefined`
+  // props; the same declaration still plans as a noop, and diff sees `{}`.
+  test(
+    "plan a noop over a row created with undefined props",
+    Effect.gen(function* () {
+      yield* seed({
+        PlanLegacy: {
+          instanceId,
+          providerVersion: 0,
+          logicalId: "PlanLegacy",
+          fqn: "PlanLegacy",
+          namespace: undefined,
+          resourceType: "Test.OptionalProps",
+          status: "created",
+          // What an engine wrote before declarations defaulted to `{}`.
+          props: undefined as never,
+          attr: { label: "PlanLegacy" },
+          bindings: [],
+          downstream: [],
+        },
+      });
+      const plan = yield* OptionalProps("PlanLegacy").pipe(makePlan);
+      expect(plan.resources.PlanLegacy?.action).toBe("noop");
+      expect(optionalPropsReceived.get("PlanLegacy")).toEqual([{ op: "diff", news: {} }]);
+      optionalPropsReceived.delete("PlanLegacy");
+    }),
+  );
+});
+
 describe("Resource.lookup", { tags: ["unit", "local"] }, () => {
   test(
     "resolves through the provider's lookup and is not planned",
@@ -4131,6 +4174,76 @@ describe("same-stack refs to declared resources", { tags: ["unit", "local"] }, (
       expect(plan.resources.Shared!.downstream).toContain("Compute");
     }),
   );
+
+  // #3112: two resources that reference each other, one through a ref,
+  // deadlocked the plan.
+  describe("a ref that closes a cycle (#3112)", () => {
+    const refCycle = Effect.gen(function* () {
+      const api = yield* TestResource.ref("Api");
+      const auth = yield* TestResource("Auth", { string: "auth", stringArray: [api.string] });
+      yield* TestResource("Api", { string: "api", stringArray: [auth.string] });
+    });
+
+    for (const [name, seeded] of [
+      ["neither exists", {}],
+      [
+        "both exist",
+        {
+          Api: row("Api", { string: "api", stringArray: ["auth"] }),
+          Auth: row("Auth", { string: "auth", stringArray: ["api"] }),
+        },
+      ],
+    ] as const) {
+      test(
+        `props cycle fails the plan with RefCycleError when ${name}`,
+        Effect.gen(function* () {
+          yield* seed(seeded);
+          const exit = yield* refCycle.pipe(makePlan, Effect.timeout("5 seconds"), Effect.exit);
+          expect(Exit.isFailure(exit)).toBe(true);
+          if (Exit.isFailure(exit)) {
+            const error = Cause.squash(exit.cause) as RefCycleError;
+            expect(error._tag).toBe("RefCycleError");
+            expect(error.owner).toBe("Auth");
+            expect(error.target).toBe("Api");
+            expect(error.message).toContain("Auth -> Api -> Auth");
+          }
+        }),
+      );
+    }
+
+    test(
+      "binding cycle: plan finishes and plans noops",
+      Effect.gen(function* () {
+        const host = (fqn: string, sid: string, env: Record<string, string>) =>
+          ({
+            instanceId,
+            providerVersion: 0,
+            logicalId: fqn,
+            fqn,
+            namespace: undefined,
+            resourceType: "Test.BindingTarget",
+            status: "created",
+            props: { name: fqn },
+            attr: { name: fqn, string: "", env, replaceString: undefined },
+            bindings: [{ sid, data: { env } }],
+            downstream: [],
+          }) as ResourceState;
+        yield* seed({
+          Api: host("Api", "Auth", { AUTH: "Auth" }),
+          Auth: host("Auth", "Api", { API: "Api" }),
+        });
+        const plan = yield* Effect.gen(function* () {
+          const apiRef = yield* BindingTarget.ref("Api");
+          const auth = yield* BindingTarget("Auth", { name: "Auth" });
+          yield* auth.bind("Api", { env: { API: apiRef.name } });
+          const api = yield* BindingTarget("Api", { name: "Api" });
+          yield* api.bind("Auth", { env: { AUTH: auth.name } });
+        }).pipe(makePlan, Effect.timeout("5 seconds"));
+        expect(plan.resources.Api!.action).toBe("noop");
+        expect(plan.resources.Auth!.action).toBe("noop");
+      }),
+    );
+  });
 });
 
 describe("StackRefExpr resolution", { tags: ["unit", "local"] }, () => {

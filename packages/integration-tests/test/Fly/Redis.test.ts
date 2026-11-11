@@ -10,6 +10,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import RedisApi, { Cache, REDIS_VALUE, RedisIp, RedisSite } from "./fixtures/redis-api.ts";
 import { flyApi } from "./limit.ts";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ limit: flyApi, providers: Fly.providers() });
 
@@ -65,6 +66,7 @@ describe.sequential("Redis", () => {
             return yield* Fly.Redis("Cache");
           }),
         );
+        yield* expectFound(Fly.Redis.lookup({ name: created.name }), created);
 
         expect(created.redisId).toEqual(expect.any(String));
         expect(created.redisId.length).toBeGreaterThan(0);

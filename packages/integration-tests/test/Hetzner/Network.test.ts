@@ -6,6 +6,7 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
 
@@ -43,6 +44,7 @@ test.provider(
           });
         }),
       );
+      yield* expectFound(Hetzner.Network.lookup({ name: created.name }), created);
 
       expect(created.networkId).toEqual(expect.any(Number));
       expect(created.name).toEqual(expect.any(String));
@@ -227,6 +229,51 @@ test.provider(
     }).pipe(logLevel),
   {
     tags: ["provider:hetzner", "provider:hetzner:network", "provider:hetzner:service", "live"],
+    timeout: 120_000,
+  },
+);
+
+test.provider(
+  "a subnet without a range gets the first free /24 and redeploys unchanged",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const network = Effect.gen(function* () {
+        return yield* Hetzner.Network("AutoSubnet", {
+          ipRange: "10.30.0.0/16",
+          subnets: [{ type: "cloud", networkZone: "eu-central" }],
+        });
+      });
+      const deployed = yield* stack.deploy(network);
+
+      const live = yield* networks.getNetwork({ id: deployed.networkId });
+      expect(live.network?.subnets).toEqual([
+        expect.objectContaining({
+          type: "cloud",
+          ip_range: "10.30.0.0/24",
+          network_zone: "eu-central",
+        }),
+      ]);
+
+      // The range Hetzner picked satisfies the subnet: nothing to update.
+      const plan = yield* stack.plan(network);
+      expect(
+        Object.values(plan.resources).filter((r: { action: string }) => r.action !== "noop"),
+      ).toEqual([]);
+
+      // A reconcile keeps the one subnet rather than adding another.
+      yield* stack.deploy(network);
+      const after = yield* networks.getNetwork({ id: deployed.networkId });
+      expect(after.network?.subnets).toHaveLength(1);
+
+      yield* stack.destroy();
+
+      const gone = yield* waitUntilGone(deployed.networkId);
+      expect(gone).toEqual("gone");
+    }).pipe(logLevel),
+  {
+    tags: ["provider:hetzner", "provider:hetzner:network", "live"],
     timeout: 120_000,
   },
 );

@@ -17,8 +17,14 @@ export class Notes extends Domain.View("Notes", {
   evolve: {
     NoteWritten: (v, e) => ({ notes: [...v.notes, e.text] }),
   },
-  validate: Effect.fn(function* (request) {
-    const user = yield* CurrentUser;
-    if (request.key.id !== user.userId) return yield* new NotYours();
-  }),
 }) {}
+
+/** Only a notebook's owner reads its notes. */
+export const NotesLive = Notes.toLayer(
+  Effect.succeed(
+    Effect.fn(function* (request) {
+      const user = yield* CurrentUser;
+      if (request.key.id !== user.userId) return yield* new NotYours();
+    }),
+  ),
+);
