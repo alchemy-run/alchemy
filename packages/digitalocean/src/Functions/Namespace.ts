@@ -7,6 +7,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import { ignoreNotFound, noneIfNotFound } from "../internal/notFound.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -123,6 +124,15 @@ export const NamespaceProvider = () =>
       return toAttrs(namespace);
     }),
     delete: Effect.fn(function* ({ output }) {
-      yield* ignoreNotFound(DO.deleteFunctionNamespace({ namespace_id: output.namespaceId }));
+      // Deleting two of a team's namespaces at once can race (409).
+      yield* ignoreNotFound(
+        DO.deleteFunctionNamespace({ namespace_id: output.namespaceId }).pipe(
+          Effect.retry({
+            while: (e) => e._tag === "NamespaceDeleteConflict",
+            schedule: Schedule.spaced("2 seconds"),
+            times: 10,
+          }),
+        ),
+      );
     }),
   });
