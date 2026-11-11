@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/digitalocean",
-  "version": "2.0.0-beta.84",
+  "version": "2.0.0-beta.85",
   "description": "DigitalOcean for Alchemy: App Platform, Droplets, Kubernetes, Managed Databases, Spaces, sandboxes, networking, DNS and monitoring.",
   "keywords": [
     "alchemy",
