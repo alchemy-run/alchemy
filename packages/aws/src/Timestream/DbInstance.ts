@@ -475,9 +475,25 @@ export const DbInstanceProvider = () =>
           return final;
         }),
         delete: Effect.fn(function* ({ output }) {
-          yield* influxdb
-            .deleteDbInstance({ identifier: output.id })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
+          yield* influxdb.deleteDbInstance({ identifier: output.id }).pipe(
+            Effect.catchTags({
+              ResourceNotFoundException: () => Effect.void,
+              // An instance already DELETING rejects a second delete: an
+              // interrupted destroy, or a delete started outside the stack.
+              // Wait for that delete below.
+              ConflictException: (error) =>
+                influxdb.getDbInstance({ identifier: output.id }).pipe(
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
+                  Effect.flatMap((instance) =>
+                    instance === undefined ||
+                    instance.status === "DELETING" ||
+                    instance.status === "DELETED"
+                      ? Effect.void
+                      : Effect.fail(error),
+                  ),
+                ),
+            }),
+          );
           yield* waitForStatus(output.id, "DELETED");
         }),
       };

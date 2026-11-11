@@ -364,7 +364,24 @@ export const DBProxyEndpointProvider = () =>
             .deleteDBProxyEndpoint({
               DBProxyEndpointName: output.dbProxyEndpointName,
             })
-            .pipe(Effect.catchTag("DBProxyEndpointNotFoundFault", () => Effect.void));
+            .pipe(
+              Effect.catchTags({
+                DBProxyEndpointNotFoundFault: () => Effect.void,
+                // An endpoint already `deleting` rejects a second delete: an
+                // interrupted destroy, or a delete started outside the stack.
+                InvalidDBProxyEndpointStateFault: (error) =>
+                  readEndpoint({
+                    dbProxyName: output.dbProxyName ?? "",
+                    dbProxyEndpointName: output.dbProxyEndpointName,
+                  }).pipe(
+                    Effect.flatMap((endpoint) =>
+                      endpoint === undefined || endpoint.Status === "deleting"
+                        ? Effect.void
+                        : Effect.fail(error),
+                    ),
+                  ),
+              }),
+            );
         }),
       };
     }),

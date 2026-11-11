@@ -456,20 +456,37 @@ export const GraphProvider = () =>
           // first if the live graph still has it enabled.
           const observed = yield* getGraph(output.graphId);
           if (observed === undefined) return;
-          if (observed.deletionProtection === true) {
+          // A graph already DELETING rejects an update and a second delete
+          // with ConflictException: an interrupted destroy, or a delete
+          // started outside the stack. Wait for that delete below.
+          if (observed.status !== "DELETING") {
+            if (observed.deletionProtection === true) {
+              yield* neptunegraph
+                .updateGraph({
+                  graphIdentifier: output.graphId,
+                  deletionProtection: false,
+                })
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
+            }
             yield* neptunegraph
-              .updateGraph({
+              .deleteGraph({
                 graphIdentifier: output.graphId,
-                deletionProtection: false,
+                skipSnapshot: true,
               })
-              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
+              .pipe(
+                Effect.catchTags({
+                  ResourceNotFoundException: () => Effect.void,
+                  ConflictException: (error) =>
+                    getGraph(output.graphId).pipe(
+                      Effect.flatMap((graph) =>
+                        graph === undefined || graph.status === "DELETING"
+                          ? Effect.void
+                          : Effect.fail(error),
+                      ),
+                    ),
+                }),
+              );
           }
-          yield* neptunegraph
-            .deleteGraph({
-              graphIdentifier: output.graphId,
-              skipSnapshot: true,
-            })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           // Block until the graph is fully gone — deletion is async and the
           // graph bills until it disappears.
           yield* Effect.repeat(

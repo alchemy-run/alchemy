@@ -6,6 +6,7 @@ import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as neptune from "@distilled.cloud/aws/neptune";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { interruptDestroy } from "../../interruptDestroy.ts";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -120,7 +121,7 @@ const assertClusterDeleting = (identifier: string) =>
 // instance-hour while they exist. The full lifecycle is skipped under
 // `--fast` and always destroys what it created.
 test.provider.skipIf(!!process.env.FAST)(
-  "create Neptune cluster + serverless instance, verify, destroy",
+  "create Neptune cluster + serverless instance, verify, destroy through two interruptions",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -178,8 +179,25 @@ test.provider.skipIf(!!process.env.FAST)(
       });
       expect(describedInstance.DBInstances?.[0]?.DBInstanceStatus).toBe("available");
 
-      // Destroy immediately — instances bill while they exist — and verify
-      // cluster deletion was initiated out-of-band.
+      // Destroy immediately — instances bill while they exist. The destroy is
+      // interrupted twice on the way, once while the instance is deleting and
+      // once while the cluster is: Neptune rejects a second delete of either,
+      // so each next destroy has to wait for the one already running.
+      yield* interruptDestroy(stack, {
+        status: neptune
+          .describeDBInstances({ DBInstanceIdentifier: instance.dbInstanceIdentifier })
+          .pipe(Effect.map((response) => response.DBInstances?.[0]?.DBInstanceStatus)),
+        deleting: "deleting",
+      });
+      // The cluster's delete starts once the instance is gone.
+      yield* interruptDestroy(stack, {
+        status: neptune
+          .describeDBClusters({ DBClusterIdentifier: cluster.dbClusterIdentifier })
+          .pipe(Effect.map((response) => response.DBClusters?.[0]?.Status)),
+        deleting: "deleting",
+        spaced: "5 seconds",
+        times: 240,
+      });
       yield* stack.destroy();
       yield* assertClusterDeleting(cluster.dbClusterIdentifier);
     }),
