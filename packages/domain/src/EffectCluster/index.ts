@@ -16,7 +16,13 @@ import { PgClient } from "@effect/sql-pg";
 import { entrypointLayer, entrypointTag } from "alchemy/Runtime/Bootstrap";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { makeInputGate, type InputGateShape } from "alchemy/Workers/InputGate";
-import { decodeResult, encodeResult, payloadCodec } from "alchemy/WorkflowEncoding";
+import {
+  CurrentActivity,
+  decodeResult,
+  encodeResult,
+  makeCurrentActivity,
+  payloadCodec,
+} from "alchemy/WorkflowEncoding";
 import { ClusterSchema, DeliverAt, Entity as EffectEntity } from "effect/cluster";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
@@ -35,7 +41,7 @@ import { Rpc } from "effect/rpc";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import { SqlClient } from "effect/sql/SqlClient";
-import { DurableDeferred, Workflow, WorkflowEngine } from "effect/workflow";
+import { type Activity, DurableDeferred, Workflow, WorkflowEngine } from "effect/workflow";
 import {
   alarmCallbacks,
   className,
@@ -276,6 +282,48 @@ const remoteEngine = (workflows: Namespace): WorkflowEngine.WorkflowEngine["Serv
     activityExecute: () => outside("step"),
     deferredResult: () => outside("wait"),
     scheduleClock: () => outside("sleep"),
+  });
+};
+
+/**
+ * Effect Cluster's engine, as a model's sagas register on it. Each step of a
+ * run gets its own sequence of command ids (`CurrentActivity`), as on the
+ * other hosts: a step that runs again, after a retry or when its runner died,
+ * sends the same commands, and they commit once. Effect Cluster runs a step
+ * with the context it was called with, so the step sees it.
+ *
+ * @internal
+ */
+export const sagaEngine = (
+  engine: WorkflowEngine.WorkflowEngine["Service"],
+): WorkflowEngine.WorkflowEngine["Service"] => {
+  const steps = WorkflowEngine.WorkflowEngine.of({
+    ...engine,
+    activityExecute: ((activity: Activity.Any, attempt: number) =>
+      Effect.flatMap(WorkflowEngine.WorkflowInstance, (instance) =>
+        engine
+          .activityExecute(activity as never, attempt)
+          .pipe(
+            Effect.provideService(
+              CurrentActivity,
+              makeCurrentActivity(instance.workflow._tag, instance.executionId, activity.name),
+            ),
+          ),
+      )) as never,
+  });
+  return WorkflowEngine.WorkflowEngine.of({
+    ...engine,
+    register: ((
+      workflow: Workflow.Any,
+      execute: (payload: any, id: string) => Effect.Effect<any, any, any>,
+    ) =>
+      engine.register(
+        workflow as never,
+        ((payload: unknown, id: string) =>
+          execute(payload, id).pipe(
+            Effect.provideService(WorkflowEngine.WorkflowEngine, steps),
+          )) as never,
+      )) as never,
   });
 };
 
@@ -583,8 +631,9 @@ export const layerEntities = <PoolReq>(
           hosted,
           Effect.gen(function* () {
             const clusterEngine = yield* WorkflowEngine.WorkflowEngine;
+            const sagas = sagaEngine(clusterEngine);
             for (const [workflow, execute] of yield* Ref.get(registrations))
-              yield* clusterEngine.register(workflow as never, execute as never);
+              yield* sagas.register(workflow as never, execute as never);
             yield* Deferred.succeed(engine, clusterEngine);
           }).pipe(Layer.effectDiscard),
         );
