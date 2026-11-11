@@ -53,6 +53,8 @@ yield* sandbox.setNetworkAccess({ blockNetwork: true });
 yield* sandbox.exec(["node", "agent-output.mjs"], { cwd: "/work" });
 ```
 
+The new policy replaces the old one, and Modal closes the connections it no longer allows. Pass an allow-list to narrow the network instead, or `{}` to open it again.
+
 ## Open a port through a tunnel
 
 List the ports when you create the sandbox. Each gets a tunnel, and `getTcpPort` returns its public URL and a client for it:
@@ -101,5 +103,7 @@ const sandbox = yield* sandboxes.create({ proxy: { proxyId: yield* egressId } })
 ```
 
 The Proxy's `ips` attribute lists the addresses to allow on the other side. Proxies need Modal's Team plan.
+
+A route's `redirect` sends traffic to a `Modal.Proxy` or to a sidecar container, never to a URL of yours, so a gateway such as a Cloudflare Worker can't sit on a sandbox's egress path. To call one, have the code in the sandbox use the gateway's URL as its base URL.
 
 To add an API key to a sandbox's requests without letting it see the key, see [Secrets](/modal/security/secrets#add-it-to-requests-never-into-the-sandbox).

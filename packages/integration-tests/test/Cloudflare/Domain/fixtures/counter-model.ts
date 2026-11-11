@@ -112,7 +112,7 @@ export const CountersLive = Counters.layer(Layer.mergeAll(StartMirrorLive, Mirro
  * its view, `/echo/:id` for what the saga wrote, and `/platform` for which
  * platform the deployed version runs on.
  */
-export const serve = (platform: "eu" | "unrestricted") =>
+export const serve = (platform: "eu" | "unrestricted" | "wnam") =>
   Effect.gen(function* () {
     const counters = yield* Counter;
     const echoes = yield* Echo;

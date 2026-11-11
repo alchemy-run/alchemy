@@ -233,12 +233,14 @@ export const ReplicationGroupProvider = () =>
           }),
         );
       });
-      const retryWhileCacheTransitioning = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+      const retryWhileCacheTransitioning = <A, E extends { readonly _tag: string }, R>(
+        effect: Effect.Effect<A, E, R>,
+      ) =>
         effect.pipe(
           Effect.retry({
             while: (error) =>
-              (error as { _tag?: string })._tag === "InvalidReplicationGroupStateFault" ||
-              (error as { _tag?: string })._tag === "InvalidCacheClusterStateFault",
+              error._tag === "InvalidReplicationGroupStateFault" ||
+              error._tag === "InvalidCacheClusterStateFault",
             schedule: Schedule.max([
               Schedule.fixed("15 seconds"),
               // AWS can report the group as available before its member

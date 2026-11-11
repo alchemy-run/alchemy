@@ -117,6 +117,13 @@ export interface MakeOptions<ROut = any> {
    * exports credentials).
    */
   sidecar?: boolean | SidecarOptions;
+  /**
+   * Directory for Alchemy's runtime data (logs, local state) for every
+   * deploy in the file, sidecar included — the `.alchemy` the CLI uses.
+   * Set it to put `.alchemy` somewhere a test controls, e.g. inside a
+   * container build context. Defaults to `.alchemy` under the cwd.
+   */
+  dotAlchemy?: string;
 }
 
 /** Options for the dev sidecar process — see {@link MakeOptions.sidecar}. */
@@ -354,10 +361,16 @@ export const makeSidecarHandle = <ROut = any>(
   };
 };
 
-const overrideAlchemyContext = (overrides: { dev: boolean }) =>
+const overrideAlchemyContext = (overrides: { dev: boolean; dotAlchemy?: string }) =>
   Layer.effect(
     AlchemyContext,
-    AlchemyContext.pipe(Effect.map((ctx) => ({ ...ctx, ...overrides }))),
+    AlchemyContext.pipe(
+      Effect.map((ctx) => ({
+        ...ctx,
+        dev: overrides.dev,
+        dotAlchemy: overrides.dotAlchemy ?? ctx.dotAlchemy,
+      })),
+    ),
   );
 
 export type TestEffect<A, Req = never> = StackEffect<A, any, Req>;
@@ -567,7 +580,9 @@ export const toEffect = <A, ROut = any>(
     );
   }).pipe(
     Effect.provideService(AdoptPolicy, options.adopt ?? false),
-    Effect.provide(overrideAlchemyContext({ dev: resolveDev(options) })),
+    Effect.provide(
+      overrideAlchemyContext({ dev: resolveDev(options), dotAlchemy: options.dotAlchemy }),
+    ),
     // `options.state` (e.g. `Cloudflare.state()`) itself requires
     // `AuthProviders` to read credentials, so AuthProviders must be provided
     // AFTER the state layer or the state layer's requirement is never
