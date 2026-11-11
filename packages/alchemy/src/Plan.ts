@@ -11,6 +11,7 @@ import { asEffect } from ".//Util/types.ts";
 import { isAction, type ActionLike } from "./Action.ts";
 import {
   AdoptPolicy,
+  Unresolved,
   OwnedBySomeoneElse,
   stripUnowned,
   Unowned,
@@ -161,7 +162,22 @@ export interface Create<R extends ResourceLike = ResourceLike> extends ApplyNode
   state: CreatingResourceState | undefined;
   /** Ownership probe deferred until upstream identities resolve during apply. */
   deferredAdoption?: { adopt: boolean };
+  /**
+   * The plan found an existing resource at this identity before the props
+   * resolved, so Apply will adopt it rather than create one. Displayed as
+   * `adopted`; see {@link displayAction}.
+   */
+  adopts?: boolean;
 }
+
+/**
+ * The action to show for a plan node: a create that the plan already knows
+ * will adopt an existing resource shows as `adopted`.
+ */
+export const displayAction = <A extends string>(node: {
+  readonly action: A;
+  readonly adopts?: boolean;
+}): A | "adopted" => (node.action === "create" && node.adopts === true ? "adopted" : node.action);
 
 export interface Update<R extends ResourceLike = ResourceLike> extends ApplyNodeBase<R> {
   action: "update" | "adopted";
@@ -1607,6 +1623,25 @@ const makePlan = <A>(
         }
       }
 
+      // Props that are still unresolved (they reference an upstream created
+      // in this same plan) can't be read, but the identity they claim often
+      // is known already: a Worker's name, say, while its env waits on a new
+      // token. `observe` checks that identity (reporting `Unresolved` when it
+      // can't), so the plan can say the resource will be adopted. This only
+      // labels the plan: Apply still runs the ownership check, and refuses a
+      // foreign resource, once the props resolve (see `deferredAdoption`).
+      let adoptsObserved = false;
+      if (oldState === undefined && provider.observe && !isResolved(news) && !reusesMigratedFqn) {
+        const observeInstanceId = yield* generateInstanceId();
+        const observed = yield* provider
+          .observe({ id, fqn, instanceId: observeInstanceId, news })
+          .pipe(providePlanScope(resource, observeInstanceId));
+        adoptsObserved =
+          observed !== undefined &&
+          observed !== Unresolved &&
+          (!Unowned.is(observed) || (resource.Adopt ?? (yield* shouldAdopt)));
+      }
+
       // Sid-sorted like `newBindings` (see the resolveResource note).
       const oldBindings = dedupeBindings(oldState?.bindings ?? []);
       // Actions come from the materialized comparison (`newBindings`);
@@ -1673,6 +1708,7 @@ const makePlan = <A>(
           action: "create",
           props: applyProps,
           state: oldState,
+          adopts: adoptsObserved || undefined,
         });
       } else if (!modeSwitched && oldState.status === "creating" && oldState.attr === undefined) {
         // A create may have succeeded before state persistence failed. If the
@@ -2683,8 +2719,8 @@ export const printPlan = (plan: Plan): string => {
   const resourceIds = Object.keys(plan.resources).sort();
   for (const id of resourceIds) {
     const node = plan.resources[id];
-    const symbol = actionSymbol(node.action);
-    const type = node.resource?.type ?? "unknown";
+    const symbol = actionSymbol(displayAction(node));
+    const type = node.resource?.Type ?? "unknown";
     const downstream = node.state?.downstream?.length
       ? ` → [${node.state?.downstream.join(", ")}]`
       : "";

@@ -6,7 +6,13 @@ import * as Layer from "effect/Layer";
 import type * as LogLevel from "effect/LogLevel";
 import type { ApplyEvent, ApplyStatus } from "../Events.ts";
 import { NonInteractiveTerminal } from "../Interaction.ts";
-import type { ActionApply, ActionDelete, CRUD, Plan } from "../Plan.ts";
+import {
+  displayAction,
+  type ActionApply,
+  type ActionDelete,
+  type CRUD,
+  type Plan,
+} from "../Plan.ts";
 import { Cli, type PlanDisplayOptions } from "../Report.ts";
 import { canPromptOnStdin } from "../Util/interactive.ts";
 import { formatResourceTag } from "../Util/ResourceOutput.ts";
@@ -116,7 +122,8 @@ export const formatPlanLines = (plan: Plan, options: PlanDisplayOptions = {}): s
   if (options.detailed && sorted.length > 0) lines.push("");
   for (const [index, item] of sorted.entries()) {
     if (options.detailed && index > 0) lines.push("");
-    const action = actionColor[item.action](item.action);
+    const shown = displayAction(item);
+    const action = actionColor[shown](shown);
     const mode = modeSuffix({
       mode: item.mode,
       priorMode: item.action === "replace" ? item.state.providerMode : undefined,

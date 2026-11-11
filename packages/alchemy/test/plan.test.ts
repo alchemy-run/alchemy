@@ -1,3 +1,4 @@
+import { stripVTControlCharacters as stripAnsi } from "node:util";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Cause from "effect/Cause";
@@ -10,8 +11,11 @@ import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import { Action } from "@/Action";
-import { adopt, AdoptPolicy, Unowned } from "@/AdoptPolicy";
+import { adopt, AdoptPolicy, Unowned, Unresolved } from "@/AdoptPolicy";
+import { summarize } from "@/Alchemist/Operations";
 import { AuthProviders } from "@/Auth/AuthProvider.ts";
+import { formatPlanLines } from "@/Cli/LoggingCli";
+import { buildPlanSummary } from "@/Cli/NamespaceTree";
 import { dedupeBindings, isResolved } from "@/Diff";
 import { onEvent, type Event } from "@/Events.ts";
 import type { Input, InputProps } from "@/Input";
@@ -6328,6 +6332,247 @@ describe("RemovalPolicy.protect()", { tags: ["unit", "local"] }, () => {
       });
       const error = yield* refusalOf(makePlan(declare({ replaceString: "v2" })));
       expect(error).toMatchObject({ resources: [{ fqn: "A", action: "replace" }] });
+    }),
+  );
+});
+
+describe("plan-time observation of unresolved identities", { tags: ["unit", "local"] }, () => {
+  // `name` is the identity and always literal; `tag` comes from an upstream
+  // created in the same plan, so the props stay unresolved at plan time.
+  interface Claimed extends Resource<
+    "Test.PlanObserved",
+    { name: string; tag: string },
+    { name: string; tag?: string }
+  > {}
+  const Claimed = Resource<Claimed>("Test.PlanObserved");
+  // The same shape, from a provider that implements `read` but not `observe`.
+  interface Unobserved extends Resource<
+    "Test.PlanUnobserved",
+    { name: string; tag: string },
+    { name: string; tag?: string }
+  > {}
+  const Unobserved = Resource<Unobserved>("Test.PlanUnobserved");
+
+  class Cloud extends Context.Service<
+    Cloud,
+    {
+      /** Physical name -> owning logical id. */
+      owners: Map<string, string>;
+      events: string[];
+      /** `observe` can't check the identity yet. */
+      unresolved: boolean;
+    }
+  >()("PlanObservationCloud") {}
+
+  const ownership = (cloud: Cloud["Service"], id: string, name: string) => {
+    const owner = cloud.owners.get(name);
+    if (owner === undefined) return undefined;
+    return owner === id ? { name } : Unowned({ name });
+  };
+  const lifecycle = {
+    read: Effect.fn(function* ({ id, olds, output }: any) {
+      const cloud = yield* Cloud;
+      const name = output?.name ?? olds?.name;
+      cloud.events.push(`read ${name}`);
+      return name === undefined ? undefined : ownership(cloud, id, name);
+    }),
+    reconcile: Effect.fn(function* ({ id, news }: any) {
+      const cloud = yield* Cloud;
+      cloud.events.push(`reconcile ${news.name}`);
+      cloud.owners.set(news.name, id);
+      return { name: news.name, tag: news.tag };
+    }),
+    delete: Effect.fn(function* ({ output }: any) {
+      const cloud = yield* Cloud;
+      cloud.owners.delete(output.name);
+    }),
+  };
+  const providers = Layer.mergeAll(
+    Provider.succeed(Claimed, {
+      ...lifecycle,
+      observe: Effect.fn(function* ({ id, news }) {
+        const cloud = yield* Cloud;
+        cloud.events.push(`observe ${news.name}`);
+        if (cloud.unresolved) return Unresolved;
+        return ownership(cloud, id, news.name);
+      }),
+    }),
+    Provider.succeed(Unobserved, lifecycle),
+  ).pipe(
+    Layer.provideMerge(
+      Layer.effect(
+        Cloud,
+        Effect.sync(() => ({
+          owners: new Map<string, string>(),
+          events: [] as string[],
+          unresolved: false,
+        })),
+      ),
+    ),
+  );
+  const { test: observeTest } = Test.make({
+    providers: Layer.mergeAll(providers, TestLayers()),
+  });
+
+  const subject = (opts: { resolved?: boolean; adopt?: boolean; observe?: boolean } = {}) =>
+    Effect.gen(function* () {
+      const upstream = yield* TestResource("Tag", { string: "tag" });
+      const tag = opts.resolved ? "tag" : upstream.string;
+      if (opts.observe === false) return yield* Unobserved("Subject", { name: "api", tag });
+      const declared = Claimed("Subject", { name: "api", tag });
+      return yield* opts.adopt === undefined ? declared : declared.pipe(adopt(opts.adopt));
+    });
+
+  const reset = Effect.fn(function* (stack: Test.ScratchStack) {
+    const cloud = yield* Cloud;
+    yield* stack.destroy();
+    cloud.owners.clear();
+    cloud.events.length = 0;
+    cloud.unresolved = false;
+    return cloud;
+  });
+
+  const subjectNode = (plan: Plan.Plan<unknown>) => plan.resources.Subject as Plan.Create;
+
+  observeTest.provider("an absent identity plans a create", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* reset(stack);
+      const node = subjectNode(yield* stack.plan(subject()));
+      expect(node.action).toBe("create");
+      expect(node.adopts).toBeUndefined();
+      expect(Plan.displayAction(node)).toBe("create");
+      expect(cloud.events).toEqual(["observe api"]);
+    }),
+  );
+
+  observeTest.provider("an owned identity plans an adoption without --adopt", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* reset(stack);
+      cloud.owners.set("api", "Subject");
+      const node = subjectNode(yield* stack.plan(subject()));
+      // Still a create: the props resolve, and ownership is checked again,
+      // during apply.
+      expect(node.action).toBe("create");
+      expect(node.adopts).toBe(true);
+      expect(node.deferredAdoption).toEqual({ adopt: false });
+      expect(Plan.displayAction(node)).toBe("adopted");
+      expect(cloud.events).toEqual(["observe api"]);
+    }),
+  );
+
+  observeTest.provider("a foreign identity plans a create without --adopt", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* reset(stack);
+      cloud.owners.set("api", "SomeoneElse");
+      const node = subjectNode(yield* stack.plan(subject()));
+      expect(node.adopts).toBeUndefined();
+      expect(Plan.displayAction(node)).toBe("create");
+    }),
+  );
+
+  observeTest.provider("a foreign identity plans an adoption with global adoption", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* reset(stack);
+      cloud.owners.set("api", "SomeoneElse");
+      const node = subjectNode(
+        yield* stack.plan(subject()).pipe(Effect.provideService(AdoptPolicy, true)),
+      );
+      expect(node.adopts).toBe(true);
+      expect(node.deferredAdoption).toEqual({ adopt: true });
+      expect(Plan.displayAction(node)).toBe("adopted");
+    }),
+  );
+
+  observeTest.provider("a foreign identity plans an adoption with adopt(true)", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* reset(stack);
+      cloud.owners.set("api", "SomeoneElse");
+      const node = subjectNode(yield* stack.plan(subject({ adopt: true })));
+      expect(Plan.displayAction(node)).toBe("adopted");
+    }),
+  );
+
+  observeTest.provider("adopt(false) overrides global adoption of a foreign identity", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* reset(stack);
+      cloud.owners.set("api", "SomeoneElse");
+      const node = subjectNode(
+        yield* stack.plan(subject({ adopt: false })).pipe(Effect.provideService(AdoptPolicy, true)),
+      );
+      expect(Plan.displayAction(node)).toBe("create");
+    }),
+  );
+
+  observeTest.provider("an identity observe can't check yet plans a create", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* reset(stack);
+      cloud.owners.set("api", "Subject");
+      cloud.unresolved = true;
+      const node = subjectNode(yield* stack.plan(subject()));
+      expect(node.adopts).toBeUndefined();
+      expect(Plan.displayAction(node)).toBe("create");
+      expect(cloud.events).toEqual(["observe api"]);
+    }),
+  );
+
+  observeTest.provider("resolved props are read, not observed", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* reset(stack);
+      cloud.owners.set("api", "Subject");
+      const plan = yield* stack.plan(subject({ resolved: true }));
+      // A resolved read adopts the resource outright.
+      expect(plan.resources.Subject!.action).toBe("adopted");
+      expect(cloud.events).toEqual(["read api"]);
+    }),
+  );
+
+  observeTest.provider("a provider without observe plans a create", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* reset(stack);
+      cloud.owners.set("api", "Subject");
+      const node = subjectNode(yield* stack.plan(subject({ observe: false })));
+      expect(node.adopts).toBeUndefined();
+      expect(Plan.displayAction(node)).toBe("create");
+      expect(cloud.events).toEqual([]);
+    }),
+  );
+
+  observeTest.provider("a resource already in state is not observed", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* reset(stack);
+      yield* stack.deploy(subject());
+      cloud.events.length = 0;
+      const plan = yield* stack.plan(subject());
+      expect(plan.resources.Subject!.action).toBe("noop");
+      expect(cloud.events).not.toContain("observe api");
+    }),
+  );
+
+  observeTest.provider("planning an observed adoption writes nothing", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* reset(stack);
+      cloud.owners.set("api", "Subject");
+      yield* stack.plan(subject());
+      const state = yield* yield* State;
+      const stk = yield* Stack.Stack;
+      expect(
+        yield* state.get({ stack: stk.name, stage: stk.stage, fqn: "Subject" }),
+      ).toBeUndefined();
+      expect(cloud.events).not.toContain("reconcile api");
+    }),
+  );
+
+  observeTest.provider("plan summaries and output count an observed adoption as adopted", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* reset(stack);
+      cloud.owners.set("api", "Subject");
+      const plan = yield* stack.plan(subject());
+      expect(summarize(plan)).toMatchObject({ create: 1, adopted: 1 });
+      expect(buildPlanSummary(plan).counts).toMatchObject({ create: 1, adopted: 1 });
+      expect(Plan.printPlan(plan)).toContain("[(+)] Subject");
+      const lines = formatPlanLines(plan).map(stripAnsi);
+      expect(lines[0]).toBe("Plan: 1 to create, 1 to adopted");
+      expect(lines.some((l) => /\bSubject\b.*\badopted\b/.test(l))).toBe(true);
     }),
   );
 });

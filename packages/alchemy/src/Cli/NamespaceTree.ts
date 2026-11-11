@@ -1,5 +1,12 @@
 import { toPath } from "../FQN.ts";
-import type { BindingAction, CRUD, ActionApply, ActionDelete, Plan } from "../Plan.ts";
+import {
+  displayAction,
+  type BindingAction,
+  type CRUD,
+  type ActionApply,
+  type ActionDelete,
+  type Plan,
+} from "../Plan.ts";
 import type { ProviderMode } from "../ProviderMode.ts";
 import {
   formatDeclaredPropertyYaml,
@@ -37,7 +44,7 @@ export const buildPlanSummary = (plan: Plan): PlanSummaryCounts => {
     replace: 0,
   };
   for (const item of allItems) {
-    counts[item.action]++;
+    counts[displayAction(item)]++;
   }
   const taskCounts = { run: 0, noop: 0, delete: 0 };
   for (const item of [
@@ -212,7 +219,7 @@ const flattenNamespace = (
       depth,
       id: resource.resource.LogicalId,
       path: [...node.path, resource.resource.LogicalId],
-      action: resource.action,
+      action: displayAction(resource),
       resourceType: resource.resource.Type,
       bindingCount: resource.bindings.length,
       providerMode: resource.mode,
