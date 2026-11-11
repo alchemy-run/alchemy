@@ -198,9 +198,29 @@ The store creates its table, with deletion protection, and the overflow bucket o
 alchemy state bootstrap --backend aws --profile <your-ci-profile>
 ```
 
-`AWS.state({ name: "team-a" })` uses a separate table, `alchemy-state-team-a`. `kmsKeyId` encrypts the table and the overflow bucket with your own KMS key.
+`AWS.state({ name: "team-a" })` uses a separate table, `alchemy-state-team-a`.
 
-The credentials that deploy need DynamoDB access to the table and S3 access to the overflow bucket. The first deploy of a stage also lists the old S3 store's bucket, to check the stage isn't still there; `migrateFrom: false` skips that.
+The credentials that deploy need DynamoDB access to the table, S3 access to the overflow bucket, and `kms:GenerateDataKey`, `kms:Decrypt` and `kms:DescribeKey` on the store's key. The first deploy of a stage also lists the old S3 store's bucket, to check the stage isn't still there; `migrateFrom: false` skips that.
+
+### Encryption
+
+The store has its own KMS key, `alias/alchemy-state` (`alias/alchemy-state-<name>` for a named store), created with the table. The table and the overflow bucket are encrypted at rest with it, and every secret in state is [encrypted](#encrypting-secrets) with it before it leaves your machine. Provide `AWS.stateEncryption()` to use a key of your own for both:
+
+```typescript
+state: AWS.state().pipe(Layer.provide(AWS.stateEncryption({ kmsKeyId: "alias/my-state-key" }))),
+```
+
+Any other `StateEncryption` layer works too; it encrypts the secrets, and the store's own key still encrypts the table and buckets. A table an earlier version created with `kmsKeyId` keeps that key: the store seals with it and creates no key of its own.
+
+A store created before encryption moves over on its own. The first deploy or plan outside CI creates the key, switches the table and bucket to it, and encrypts the secrets of each stage it loads. DynamoDB re-encrypts the table in the background without downtime. In CI the store only does this with `--yes`, so run `alchemy state bootstrap --backend aws` once, or deploy from your machine first.
+
+Once a stage's secrets are encrypted, versions of alchemy from before encryption fail to read the stage instead of reading the ciphertext as the secret, and write nothing to it. A stage the new version hasn't deployed yet still works with the old one, so upgrade every machine and CI job that deploys a stage before you deploy it with the new version. Copies of old plaintext stay in DynamoDB's point-in-time backups for up to 35 days, and in the overflow bucket's old object versions.
+
+To go back to an older version, deploy every stage with encryption turned off first, so each decrypts its secrets:
+
+```typescript
+state: AWS.state().pipe(Layer.provide(AWS.stateEncryption({ disable: true }))),
+```
 
 ### Migrating from the S3 store
 
@@ -220,11 +240,11 @@ To go back to an older alchemy, move the stages back first:
 alchemy state migrate --rollback
 ```
 
-Roll back with the version you migrated with, before downgrading. State written by a newer version may use fields an older one can't read.
+Roll back with the version you migrated with, before downgrading. State written by a newer version may use fields an older one can't read. The migration encrypts secrets as it copies them into DynamoDB, and the rollback decrypts them as it copies them back, since older versions can't.
 
 ### Keeping state in S3
 
-`AWS.state({ backend: "s3" })` keeps using the S3 bucket. So does any config that passes `bucketName`, `prefix` or `encryption`, which only the S3 store takes. Bootstrap it with `--backend aws-s3`.
+`AWS.state({ backend: "s3" })` keeps using the S3 bucket. So does any config that passes `bucketName`, `prefix` or `encryption`, which only the S3 store takes. Bootstrap it with `--backend aws-s3`. The S3 store encrypts the same way, with SSE-KMS and the same key, shared by the S3 and DynamoDB stores of one name so stages stay readable when they move between them. An `encryption` that names a customer-managed key seals secrets with that key instead.
 
 ## Postgres state store
 
@@ -248,6 +268,8 @@ Alchemy.Stack(
 
 It is imported from `@alchemy.run/sql/PostgresState` rather than the `State` barrel because it depends on the optional `@effect/sql-pg` driver, which must stay out of bundled worker code. Install `@effect/sql-pg` to use it.
 
+The store records its format in an `alchemy_state_store` table and keeps records in a `data` column. The first run of a version with [secret encryption](#encrypting-secrets) renames the `value` column earlier versions used. Those versions then fail to query the store, so they can't deploy from state they would misread; upgrade every machine and CI job that uses the database together.
+
 ## State and lifecycle
 
 State transitions track the lifecycle of each resource:
@@ -265,6 +287,71 @@ These intermediate states (`creating`, `updating`, `deleting`) exist
 because state is persisted before the cloud operation completes. If
 the process crashes mid-operation, Alchemy uses the intermediate
 state to recover on the next deploy.
+
+## Encrypting secrets
+
+A record can hold secrets: a minted API token, a `Random` value, any `Redacted` output. Provide a `StateEncryption` layer to a state store and it encrypts each secret before writing, so the store only ever holds ciphertext. Everything else in a record stays readable, so plans and `alchemy state` still show it:
+
+```json
+alchemy:sealed:1:aws-kms:AQIDAHh…
+{"status":"created","attr":{"name":"db","password":{"__sealed__":"m9Yq…"}}}
+```
+
+`AWS.stateEncryption()` encrypts with AWS KMS. A deploy asks KMS for one data key per stage and encrypts each secret under it with AES-256-GCM. The layer works with any store, so a cloud without a KMS can borrow one. Here Cloudflare keeps the state and AWS holds the key:
+
+```typescript
+Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Cloudflare.providers(),
+    state: Cloudflare.state().pipe(Layer.provide(AWS.stateEncryption())),
+  },
+  Effect.gen(function* () {
+    // ...
+  }),
+);
+```
+
+The AWS state store encrypts this way with its own key already. Local state does too once you provide a layer:
+
+```typescript
+state: localState().pipe(Layer.provide(AWS.stateEncryption({ kmsKeyId: "alias/dev-state" }))),
+```
+
+Reading a stage's secrets takes `kms:Decrypt` on the key, and writing them takes `kms:GenerateDataKey`. Each data key is bound to its stack and stage, so a role's IAM policy can grant decrypt for one stage only:
+
+```json
+{
+  "Effect": "Allow",
+  "Action": ["kms:Decrypt", "kms:GenerateDataKey"],
+  "Resource": "arn:aws:kms:us-east-1:123456789012:key/<state-key-id>",
+  "Condition": { "StringEquals": { "kms:EncryptionContext:alchemy:stage": "staging" } }
+}
+```
+
+Encryption happens in the client, so every store supports it, including Postgres, and none of them ever sees a plaintext secret. A record names the layer that encrypted it, and a store refuses a record another layer encrypted. Records written before you added a layer still read, and are encrypted as each stage loads.
+
+To turn encryption off, keep the layer and set `disable`, since decrypting needs the key. Deploy every stage once, so each decrypts its secrets as it loads, then remove the layer:
+
+```typescript
+state: Cloudflare.state().pipe(Layer.provide(AWS.stateEncryption({ disable: true }))),
+```
+
+A stage that still holds encrypted secrets fails to load without the layer, and says how to fix it. The AWS stores encrypt by default, so keep `disable` on them to store secrets in plaintext.
+
+Every store records the format of what it holds, and a version of alchemy refuses a store in a newer format than it knows. Versions from before the format record are kept out of an encrypted store too: text records aren't valid JSON to them, the Cloudflare store reports a newer version, and Postgres renames the column they read.
+
+Without a key service, `passphraseEncryption()` encrypts with a passphrase. It reads `ALCHEMY_STATE_PASSPHRASE` and wraps each stage's data key with a key derived from it by scrypt:
+
+```typescript
+import { passphraseEncryption } from "alchemy/State/PassphraseEncryption";
+
+state: Cloudflare.state().pipe(Layer.provide(passphraseEncryption())),
+```
+
+Whoever has the passphrase can read every secret, and losing it loses them. A key service like AWS KMS is the safer choice: nobody holds the key, access is an IAM grant that can be scoped to one stage, and every decrypt is logged.
+
+To encrypt with another key service, implement `StateEncryption` from `alchemy/State/StateEncryption`: an `id`, `generate` for a stage's data key, and `unwrap` to recover it.
 
 ## In-memory state (testing)
 

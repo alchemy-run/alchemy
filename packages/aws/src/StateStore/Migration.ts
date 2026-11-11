@@ -5,6 +5,7 @@ import type { DynamoDBStateService, HeldLease } from "./DynamoDBState.ts";
 import {
   fenceLegacyStage,
   isLeaseHeld,
+  isLegacyStageFenced,
   type LegacyLocation,
   listLegacyStacks,
   listLegacyStages,
@@ -20,6 +21,8 @@ import {
  * Each stage moves on its own, under both stores' leases:
  *
  * 1. Hold the stage's DynamoDB lease. A stage DynamoDB owns has moved.
+ *    Read the stage and seal it once, to find out before the fence whether
+ *    this store's encryption can.
  * 2. Fence the stage in S3: replace its lease with one that never expires,
  *    which every S3 store since 2.0.0-beta.84 reads as held, and deny
  *    writes to its objects in the bucket policy, which stops the versions
@@ -145,11 +148,20 @@ const migrateStage = Effect.fn(function* (
   return yield* migration.exclusive(stack, stage, (lease: HeldLease) =>
     Effect.gen(function* () {
       if (ownsStage(yield* migration.status(stack, stage))) return yield* alreadyMigrated;
+      // Seal a first read before fencing. A store that can't seal the stage
+      // (no permission on its key), or can't open what the S3 store sealed,
+      // fails here, and the S3 store keeps deploying the stage.
+      yield* migration.sealStage(stack, stage, yield* s3(readLegacyStage(legacy, stack, stage)));
       const fence = yield* s3(fenceLegacyStage(legacy, stack, stage, table));
       if (!fence.fenced) return heldInS3(stack, stage, fence.expiresAt);
       yield* s3(setStageAccess(legacy, stack, stage, "fenced"));
       yield* options.afterStep?.("fenced", { stack, stage }) ?? Effect.void;
-      const contents = yield* s3(readLegacyStage(legacy, stack, stage));
+      // Sealed as it is copied, so no plaintext secret reaches the table.
+      const contents = yield* migration.sealStage(
+        stack,
+        stage,
+        yield* s3(readLegacyStage(legacy, stack, stage)),
+      );
       yield* migration.commitStage(
         stack,
         stage,
@@ -185,7 +197,21 @@ const rollbackStage = Effect.fn(function* (
     Effect.gen(function* () {
       const status = yield* migration.status(stack, stage);
       if (status === undefined) {
-        return { stack, stage, status: "not-migrated" } satisfies StageMigration;
+        // DynamoDB never took the stage. A migration that stopped before
+        // its commit left it fenced in S3, with part of a copy here: drop
+        // the copy and lift the fence, so the S3 store deploys it again.
+        if (!(yield* s3(isLegacyStageFenced(legacy, stack, stage)))) {
+          return { stack, stage, status: "not-migrated" } satisfies StageMigration;
+        }
+        yield* s3(setStageAccess(legacy, stack, stage, "open"));
+        yield* migration.deleteStageItems(stack, stage, lease);
+        yield* s3(unfenceLegacyStage(legacy, stack, stage));
+        return {
+          stack,
+          stage,
+          status: "not-migrated",
+          reason: "its unfinished migration was undone, and the S3 state store holds it again",
+        } satisfies StageMigration;
       }
       // Reading and writing the S3 copy needs the bucket policy lifted.
       yield* s3(setStageAccess(legacy, stack, stage, "open"));
@@ -197,8 +223,14 @@ const rollbackStage = Effect.fn(function* (
         // no S3 store writes the stage while it is copied back.
         const fence = yield* s3(fenceLegacyStage(legacy, stack, stage, table));
         if (!fence.fenced) return heldInS3(stack, stage, fence.expiresAt);
-        // A destroyed stage has no contents, which empties its S3 copy.
-        const contents = yield* migration.readStage(stack, stage);
+        // A destroyed stage has no contents, which empties its S3 copy. The
+        // copy is for a version from before sealing, so its secrets are
+        // opened.
+        const contents = yield* migration.openStage(
+          stack,
+          stage,
+          yield* migration.readStage(stack, stage),
+        );
         yield* s3(writeLegacyStage(legacy, stack, stage, contents));
         // The switch back. Past it, the S3 copy is the stage's state.
         yield* migration.markRolledBack(stack, stage, lease);
@@ -267,14 +299,28 @@ export const migrateToDynamoDB = Effect.fn("AWS.state.migrate")(function* (
 
 /**
  * Move every DynamoDB stage (or the selected ones) back to the S3 store,
- * for going back to a version of alchemy that only has the S3 store.
+ * for going back to a version of alchemy that only has the S3 store. That
+ * version can't open sealed secrets, so the copy holds them in plaintext.
+ * A stage whose migration stopped before it committed is released: it never
+ * left the S3 store, which deploys it again.
  */
 export const rollbackToS3 = Effect.fn("AWS.state.rollback")(function* (
   store: DynamoDBStateService,
   options: MigrateOptions = {},
 ) {
   const { legacy, table } = yield* store.migration.names.pipe(Effect.flatMap(requireLegacy));
-  const stages = (yield* store.migration.catalog()).filter(selected(options));
+  const cataloged = (yield* store.migration.catalog()).filter(selected(options));
+  // Stages a migration fenced in S3 and never committed are in no catalog.
+  const known = new Set(cataloged.map((entry) => `${entry.stack}\u0000${entry.stage}`));
+  const unfinished = yield* Effect.filter(
+    (yield* legacyStages(legacy)).filter(
+      (entry) => selected(options)(entry) && !known.has(`${entry.stack}\u0000${entry.stage}`),
+    ),
+    ({ stack, stage }) =>
+      isLegacyStageFenced(legacy, stack, stage).pipe(Effect.mapError(toStoreError)),
+    { concurrency: 8 },
+  );
+  const stages = [...cataloged, ...unfinished];
   return yield* Effect.forEach(
     stages,
     ({ stack, stage }) =>

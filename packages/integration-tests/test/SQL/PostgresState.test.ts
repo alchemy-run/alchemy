@@ -2,10 +2,17 @@ import { makePostgresState, type PostgresStateOptions } from "@alchemy.run/sql/P
 import { describe, expect, it } from "@alchemy.run/test";
 import * as PgClient from "@effect/sql-pg/PgClient";
 import { StateStoreError, type StateService } from "alchemy/State/State";
+import {
+  SEALED_RECORD_MARKER,
+  StateEncryption,
+  type StateEncryptionService,
+} from "alchemy/State/StateEncryption";
+import { STATE_STORE_FORMAT } from "alchemy/State/StoreFormat";
 import * as Config from "effect/Config";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
 import * as Reactivity from "effect/reactivity/Reactivity";
 import * as Redacted from "effect/Redacted";
 import * as SqlClient from "effect/sql/SqlClient";
@@ -64,6 +71,8 @@ const makeFakePostgres = (options: { singleConnection?: boolean } = {}) => {
     failLockQuery: false,
     // Holds the lock query in flight: `started` fires when the store issues
     // it, and it only answers once `release` completes.
+    // The store's recorded format; `undefined` until the store writes one.
+    format: undefined as number | undefined,
     lockGate: undefined as
       | { started: Deferred.Deferred<void>; release: Deferred.Deferred<void> }
       | undefined,
@@ -110,6 +119,16 @@ const makeFakePostgres = (options: { singleConnection?: boolean } = {}) => {
     if (sql.startsWith("create table")) {
       return rows([]);
     }
+    if (sql.startsWith("select format from alchemy_state_store")) {
+      return rows(control.format === undefined ? [] : [{ format: control.format }]);
+    }
+    if (sql.startsWith("insert into alchemy_state_store")) {
+      control.format = Number(values[0]);
+      return rows([]);
+    }
+    if (sql.includes("information_schema.columns")) {
+      return rows([]);
+    }
     if (sql.startsWith("insert into alchemy_resource_state")) {
       const [stack, stage, fqn, json] = values;
       resources.set(resourceKey(stack, stage, fqn), JSON.parse(String(json)));
@@ -120,24 +139,24 @@ const makeFakePostgres = (options: { singleConnection?: boolean } = {}) => {
       outputs.set(outputKey(stack, stage), JSON.parse(String(json)));
       return rows([]);
     }
-    if (sql.includes("value ->> 'status'")) {
+    if (sql.includes("data ->> 'status'")) {
       const [stack, stage] = values;
       return rows(
         Array.from(resources.entries())
           .filter(([key]) => key.startsWith(`${stack} ${stage} `))
-          .map(([, value]) => ({ value }))
-          .filter((row) => (row.value as { status?: string } | undefined)?.status === "replaced"),
+          .map(([, data]) => ({ data }))
+          .filter((row) => (row.data as { status?: string } | undefined)?.status === "replaced"),
       );
     }
-    if (sql.startsWith("select value from alchemy_resource_state")) {
+    if (sql.startsWith("select data from alchemy_resource_state")) {
       const [stack, stage, fqn] = values;
-      const value = resources.get(resourceKey(stack, stage, fqn));
-      return rows(value === undefined ? [] : [{ value }]);
+      const data = resources.get(resourceKey(stack, stage, fqn));
+      return rows(data === undefined ? [] : [{ data }]);
     }
-    if (sql.startsWith("select value from alchemy_stack_output")) {
+    if (sql.startsWith("select data from alchemy_stack_output")) {
       const [stack, stage] = values;
-      const value = outputs.get(outputKey(stack, stage));
-      return rows(value === undefined ? [] : [{ value }]);
+      const data = outputs.get(outputKey(stack, stage));
+      return rows(data === undefined ? [] : [{ data }]);
     }
     if (sql.startsWith("select fqn from alchemy_resource_state")) {
       const [stack, stage] = values;
@@ -367,9 +386,14 @@ describe("Postgres state store", { tags: ["unit", "local"] }, () => {
         expect(statements[0]).toBe("begin");
         expect(statements[1]).toContain("pg_advisory_xact_lock");
         expect(migration!.queries[1]?.values).toEqual(["alchemy:schema"]);
-        expect(statements[2]).toContain("create table if not exists alchemy_resource_state");
-        expect(statements[3]).toContain("create table if not exists alchemy_stack_output");
-        expect(statements[4]).toBe("commit");
+        // The format is checked before anything else changes.
+        expect(statements[2]).toContain("create table if not exists alchemy_state_store");
+        expect(statements[3]).toBe("select format from alchemy_state_store");
+        expect(statements[4]).toContain("create table if not exists alchemy_resource_state");
+        expect(statements[5]).toContain("create table if not exists alchemy_stack_output");
+        expect(statements[6]).toContain("information_schema.columns");
+        expect(statements[7]).toContain("insert into alchemy_state_store");
+        expect(statements[8]).toBe("commit");
         expect(migration!.released).toBe(true);
       }),
     );
@@ -620,5 +644,60 @@ describe("Postgres state store", { tags: ["unit", "local"] }, () => {
         expect(yield* store.get(request)).toBeUndefined();
       }),
     );
+  });
+});
+
+/** A fixed-key StateEncryption, enough to exercise the store's use of it. */
+const fixedKey = new Uint8Array(32).fill(7);
+const testEncryption: StateEncryptionService = {
+  id: "test",
+  generate: () => Effect.succeed({ plaintext: fixedKey, wrapped: "Zml4ZWQ=" }),
+  unwrap: () => Effect.succeed(fixedKey),
+};
+
+describe("Postgres state store format and encryption", { tags: ["unit", "local"] }, () => {
+  it.effect("records its format, and refuses a store in a newer one", () => {
+    const fake = makeFakePostgres();
+    return Effect.gen(function* () {
+      yield* withStore(fake, {}, (store) => store.get(request));
+      expect(fake.control.format).toBe(STATE_STORE_FORMAT);
+
+      fake.control.format = STATE_STORE_FORMAT + 1;
+      const refused = yield* withStore(fake, {}, (store) => store.get(request)).pipe(Effect.flip);
+      expect(refused.message).toContain(`format ${STATE_STORE_FORMAT + 1}, newer than`);
+    });
+  });
+
+  it.effect("encrypts secrets in place, and decrypts them again with decryptOnly", () => {
+    const fake = makeFakePostgres();
+    const withEncryption = (service: StateEncryptionService) =>
+      Effect.provide(Layer.succeed(StateEncryption, service));
+    const key = `${request.stack} ${request.stage} ${request.fqn}`;
+    return Effect.gen(function* () {
+      yield* withStore(fake, {}, (store) => store.set({ ...request, value: sampleState })).pipe(
+        withEncryption(testEncryption),
+      );
+      const stored = fake.resources.get(key) as Record<string, unknown>;
+      expect(JSON.stringify(stored)).not.toContain("s3cret");
+      // The row keeps its status, so `getReplacedResources` can filter on it.
+      expect(stored.status).toBe("created");
+      expect(stored[SEALED_RECORD_MARKER]).toMatchObject({ by: "test" });
+
+      const read = (yield* withStore(fake, {}, (store) => store.get(request)).pipe(
+        withEncryption(testEncryption),
+      )) as unknown as { output: { password: Redacted.Redacted<string> } };
+      expect(Redacted.value(read.output.password)).toBe("s3cret");
+
+      // Without the encryption, the row fails to read instead of leaking.
+      const refused = yield* withStore(fake, {}, (store) => store.get(request)).pipe(Effect.flip);
+      expect(refused.message).toContain("encrypted with 'test'");
+
+      // Turning encryption off rewrites the row in plaintext as it loads.
+      yield* withStore(fake, {}, (store) => store.get(request)).pipe(
+        withEncryption({ ...testEncryption, decryptOnly: true }),
+      );
+      expect(SEALED_RECORD_MARKER in (fake.resources.get(key) as object)).toBe(false);
+      expect(JSON.stringify(fake.resources.get(key))).toContain("s3cret");
+    });
   });
 });
