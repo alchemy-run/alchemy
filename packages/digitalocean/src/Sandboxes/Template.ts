@@ -131,9 +131,8 @@ export const TemplateProvider = () =>
     nuke: { skip: true },
     read: Effect.fn(function* ({ output }) {
       if (output === undefined) return undefined;
-      return Option.getOrUndefined(
-        Option.map(yield* observeCheckpoint(output.checkpointId), toAttrs),
-      );
+      const checkpoint = yield* observeCheckpoint(output.checkpointId);
+      return Option.getOrUndefined(Option.map(checkpoint, toAttrs));
     }),
     diff: Effect.fn(function* ({ olds, news }) {
       if (!isResolved(news)) return undefined;
@@ -167,7 +166,8 @@ export const TemplateProvider = () =>
           microvm_id: builder.id,
           name,
         });
-        return toAttrs(yield* waitUntilAvailable(checkpoint.id));
+        const available = yield* waitUntilAvailable(checkpoint.id);
+        return toAttrs(available);
       }).pipe(Effect.ensuring(Effect.ignore(deleteMicrovm(builder.id))));
     }),
     delete: Effect.fn(function* ({ output }) {

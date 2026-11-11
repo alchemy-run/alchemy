@@ -419,7 +419,8 @@ export const LoadBalancerProvider = () =>
             Effect.as(lb.id),
           ),
       });
-      return toAttrs(yield* waitUntilActive(loadBalancerId));
+      const active = yield* waitUntilActive(loadBalancerId);
+      return toAttrs(active);
     }),
     delete: Effect.fn(function* ({ output }) {
       yield* ignoreNotFound(DO.deleteLoadBalancer({ lb_id: output.loadBalancerId }));

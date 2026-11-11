@@ -283,7 +283,8 @@ export const CertificateProvider = () =>
         onNone: () => createCertificate(name, news),
         onSome: Effect.succeed,
       });
-      return toAttrs(yield* waitUntilVerified(cert.id));
+      const verified = yield* waitUntilVerified(cert.id);
+      return toAttrs(verified);
     }),
     delete: Effect.fn(function* ({ output }) {
       yield* ignoreNotFound(DO.deleteCertificate({ certificate_id: output.certificateId }));

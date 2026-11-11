@@ -222,7 +222,8 @@ export const KnowledgeBaseProvider = () =>
         if (Option.isSome(byId)) return toAttrs(byId.value, owns);
       }
       if (olds.name !== undefined) return undefined;
-      const named = yield* observeByName(yield* physicalName(id));
+      const generatedName = yield* physicalName(id);
+      const named = yield* observeByName(generatedName);
       return Option.getOrUndefined(Option.map(named, (kb) => toAttrs(kb, owns)));
     }),
     diff: Effect.fn(function* ({ olds, news }) {

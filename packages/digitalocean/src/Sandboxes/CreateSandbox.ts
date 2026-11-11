@@ -76,9 +76,8 @@ export interface SandboxesClient {
  *   "Api",
  *   { main: import.meta.url },
  *   Effect.gen(function* () {
- *     const sandboxes = yield* DigitalOcean.Sandboxes.CreateSandbox(Base, {
- *       token: yield* Config.redacted("SANDBOX_TOKEN"),
- *     });
+ *     const token = yield* Config.redacted("SANDBOX_TOKEN");
+ *     const sandboxes = yield* DigitalOcean.Sandboxes.CreateSandbox(Base, { token });
  *     return {
  *       fetch: Effect.gen(function* () {
  *         const sandbox = yield* Effect.acquireRelease(sandboxes.create(), (s) =>

@@ -179,7 +179,8 @@ export const AutoscalePoolProvider = () =>
       }
       if (olds.name !== undefined) return undefined;
       const generatedName = yield* physicalName(id);
-      return Option.getOrUndefined(Option.map(yield* observeByName(generatedName), toAttrs));
+      const named = yield* observeByName(generatedName);
+      return Option.getOrUndefined(Option.map(named, toAttrs));
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const name = news.name ?? (yield* physicalName(id));
