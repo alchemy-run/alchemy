@@ -21,8 +21,11 @@ import * as Clock from "effect/Clock";
 import * as MachineId from "effect/cluster/MachineId";
 import * as Snowflake from "effect/cluster/Snowflake";
 import * as SqlMessageStorage from "effect/cluster/SqlMessageStorage";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import { SqlClient } from "effect/sql/SqlClient";
 
@@ -209,6 +212,59 @@ describe.skipIf(URL === undefined)(
           yield* setTime(T0 + 13 * DAY + 1);
           yield* sweep(sql, "Bank");
           expect(yield* keysOf("Bank/Bank.HoldAggregate/h")).toEqual([]);
+        }).pipe(onDatabase),
+      { timeout: 60_000 },
+    );
+
+    it.live(
+      "a cancelled command armed again while the sweep runs keeps its token",
+      () =>
+        Effect.gen(function* () {
+          yield* setTime(T0);
+          const sql = yield* SqlClient;
+          const timer = yield* storageOf("Bank/Bank.HoldAggregate/h");
+          yield* timer.put("scheduled:expire", "cancelled");
+          yield* setTime(T0 + 8 * DAY);
+          // `schedule` arms the name again: its row is locked until the commit.
+          const armed = yield* Deferred.make<void>();
+          const arming = yield* timer
+            .transaction(
+              Effect.gen(function* () {
+                yield* timer.put("scheduled:expire", "token-2");
+                yield* Deferred.succeed(armed, undefined);
+                yield* Effect.sleep("500 millis");
+              }),
+            )
+            .pipe(Effect.forkDetach);
+          yield* Deferred.await(armed);
+          // The sweep reads the row as cancelled and a week old, then waits for it.
+          yield* sweep(sql, "Bank");
+          yield* Fiber.join(arming);
+          expect(yield* timer.get("scheduled:expire")).toBe("token-2");
+        }).pipe(onDatabase),
+      { timeout: 60_000 },
+    );
+
+    it.live(
+      "a runner that starts on a migrated table does not lock it",
+      () =>
+        Effect.gen(function* () {
+          const sql = yield* SqlClient;
+          // A read in an open transaction: `ALTER TABLE` would wait for it.
+          const reading = yield* Deferred.make<void>();
+          const reader = yield* sql
+            .withTransaction(
+              Effect.gen(function* () {
+                yield* sql`SELECT count(*) FROM ${sql(TABLE)}`;
+                yield* Deferred.succeed(reading, undefined);
+                yield* Effect.sleep("2 seconds");
+              }),
+            )
+            .pipe(Effect.forkDetach);
+          yield* Deferred.await(reading);
+          const migrated = yield* migrate(sql).pipe(Effect.timeoutOption("1 second"));
+          expect(Option.isSome(migrated)).toBe(true);
+          yield* Fiber.join(reader);
         }).pipe(onDatabase),
       { timeout: 60_000 },
     );

@@ -93,26 +93,40 @@ export const objectStorage = (
 /**
  * Create the storage table, or add what a newer host needs to it. Runners
  * start together, so one at a time: the others wait on the lock.
+ *
+ * A table that has everything gets no DDL: `ALTER TABLE` and `CREATE INDEX`
+ * lock the table even when they change nothing, so every runner that starts
+ * would wait for the open transactions of the others and hold their queries.
  */
 export const migrate = (sql: SqlClient) =>
-  sql
-    .withTransaction(
-      Effect.gen(function* () {
-        yield* sql`SELECT pg_advisory_xact_lock(hashtext(${TABLE}))`;
-        yield* sql`CREATE TABLE IF NOT EXISTS ${sql(TABLE)} (
+  Effect.gen(function* () {
+    const [table] = yield* sql<{ migrated: boolean }>`SELECT (
+        EXISTS (
+          SELECT 1 FROM pg_attribute
+          WHERE attrelid = to_regclass(${TABLE}) AND attname = 'at' AND NOT attisdropped
+        ) AND to_regclass(${`${TABLE}_at`}) IS NOT NULL
+      ) AS migrated`;
+    if (table?.migrated) return;
+    yield* migrateLocked(sql);
+  }).pipe(Effect.orDie);
+
+const migrateLocked = (sql: SqlClient) =>
+  sql.withTransaction(
+    Effect.gen(function* () {
+      yield* sql`SELECT pg_advisory_xact_lock(hashtext(${TABLE}))`;
+      yield* sql`CREATE TABLE IF NOT EXISTS ${sql(TABLE)} (
           object TEXT COLLATE "C" NOT NULL,
           key TEXT COLLATE "C" NOT NULL,
           value TEXT NOT NULL,
           at BIGINT,
           PRIMARY KEY (object, key)
         )`;
-        // A table made by an earlier host: its rows have no time yet; the
-        // first sweep gives them one.
-        yield* sql`ALTER TABLE ${sql(TABLE)} ADD COLUMN IF NOT EXISTS at BIGINT`;
-        yield* sql`CREATE INDEX IF NOT EXISTS ${sql(`${TABLE}_at`)} ON ${sql(TABLE)} (at)`;
-      }),
-    )
-    .pipe(Effect.orDie);
+      // A table made by an earlier host: its rows have no time yet; the
+      // first sweep gives them one.
+      yield* sql`ALTER TABLE ${sql(TABLE)} ADD COLUMN IF NOT EXISTS at BIGINT`;
+      yield* sql`CREATE INDEX IF NOT EXISTS ${sql(`${TABLE}_at`)} ON ${sql(TABLE)} (at)`;
+    }),
+  );
 
 /**
  * How long the host keeps rows that only dedupe needs. `"forever"` keeps
@@ -192,11 +206,15 @@ export const sweep = (sql: SqlClient, entity: string, retention: Retention = {})
       yield* sql`UPDATE ${table} SET at = ${now}
         WHERE at IS NULL AND starts_with(object, ${objects}) AND starts_with(key, ${prefix}) ${only}`;
       while (true) {
+        // The age and the value are tested on the row again, outside the
+        // subquery: a row another transaction wrote while this delete waited
+        // for it (a cancelled name armed again) is tested as it is now, and
+        // kept. The subquery alone would still name the row it read before.
         const deleted = yield* sql`DELETE FROM ${table} WHERE (object, key) IN (
           SELECT object, key FROM ${table}
           WHERE at < ${now - kept} AND starts_with(object, ${objects}) AND starts_with(key, ${prefix}) ${only}
           LIMIT ${BATCH}
-        ) RETURNING key`;
+        ) AND at < ${now - kept} ${only} RETURNING key`;
         if (deleted.length < BATCH) break;
       }
     }
