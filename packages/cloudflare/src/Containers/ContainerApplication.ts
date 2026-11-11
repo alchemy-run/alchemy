@@ -109,9 +109,13 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
    */
   className?: string;
   /**
-   * Initial number of instances to maintain. Matches wrangler, which forces
-   * this to 0 whenever {@link maxInstances} is set (pure scale-from-zero).
-   * @default 0
+   * Number of instances to keep running.
+   *
+   * Set it to own the count: every deploy restores it if it drifted, without
+   * rolling out an unchanged configuration. Omit it to leave capacity to
+   * Cloudflare: a new application starts at 0 (pure scale-from-zero, like
+   * wrangler) and later deploys never reset the live count.
+   * @default 0 when the application is created; the live count afterwards
    */
   instances?: number;
   /**
