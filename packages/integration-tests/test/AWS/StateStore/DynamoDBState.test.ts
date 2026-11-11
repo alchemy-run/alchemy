@@ -501,6 +501,60 @@ test.provider(
   { tags, timeout: 120_000 },
 );
 
+const formatRecord = (tableName: string) =>
+  dynamodb
+    .getItem({
+      TableName: tableName,
+      Key: { PK: { S: "STORE" }, SK: { S: "FORMAT" } },
+      ConsistentRead: true,
+    })
+    .pipe(Effect.map((result) => result.Item?.format?.N));
+
+test.provider(
+  "the format record is written before the first write, and a newer one is refused",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const storage = yield* stack.deploy(StateStorage);
+      const stage = "format";
+
+      // Reading, as a stack reference to another stage's output does,
+      // leaves the table as it was.
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const state = yield* makeStore(storage);
+          expect(yield* state.getOutput({ stack: STACK, stage })).toBeUndefined();
+          expect(yield* state.listStages(STACK)).toEqual([]);
+          expect(yield* formatRecord(storage.tableName)).toBeUndefined();
+
+          yield* state.setOutput({ stack: STACK, stage, value: { url: "u" } });
+          expect(yield* formatRecord(storage.tableName)).toBe("1");
+        }),
+      );
+
+      // A store a later version wrote is refused before anything is read.
+      yield* dynamodb.putItem({
+        TableName: storage.tableName,
+        Item: { PK: { S: "STORE" }, SK: { S: "FORMAT" }, format: { N: "2" } },
+      });
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const state = yield* makeStore(storage);
+          const error = yield* state.getOutput({ stack: STACK, stage }).pipe(Effect.flip);
+          expect(error.message).toContain("format 2, newer than this version of alchemy's");
+          const refused = yield* state
+            .setOutput({ stack: STACK, stage, value: { url: "v" } })
+            .pipe(Effect.flip);
+          expect(refused.message).toContain("format 2, newer than this version of alchemy's");
+          expect(yield* formatRecord(storage.tableName)).toBe("2");
+        }),
+      );
+
+      yield* stack.destroy();
+    }),
+  { tags, timeout: 120_000 },
+);
+
 test.provider(
   "a second DynamoDB state store cannot write a stage another deploy holds",
   (stack) =>

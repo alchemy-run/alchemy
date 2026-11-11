@@ -12,6 +12,7 @@ import {
   StateStoreError,
 } from "alchemy/State/State";
 import {
+  isSealed,
   makeSealingCodec,
   type SealingScope,
   StateEncryption,
@@ -153,6 +154,8 @@ const catalogSk = (stack: string, stage: string) => `${catalogPrefix(stack)}${pa
 const S = (value: string): dynamodb.AttributeValue => ({ S: value });
 const N = (value: number): dynamodb.AttributeValue => ({ N: String(value) });
 const str = (item: Item | undefined, name: string) => item?.[name]?.S;
+
+const FORMAT_KEY = { PK: S(STORE), SK: S(FORMAT) };
 
 /**
  * Build the default table name. Table names are unique per account and
@@ -447,31 +450,24 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
     );
   });
 
-  // Ensure the table and overflow bucket exist on the first operation, so a
-  // missing one fails the run before it changes anything.
   /**
-   * Check the store's format record, and write this version's for a store
-   * it hasn't used yet. A newer format is refused before anything changes.
+   * The store's format record, checked on the first operation: a newer
+   * format is refused before anything changes.
    */
-  const ensureFormat = Effect.fn(function* (table: string) {
-    const key = { PK: S(STORE), SK: S(FORMAT) };
-    const existing = yield* dynamodb.getItem({ TableName: table, Key: key, ConsistentRead: true });
+  const readFormat = Effect.fn(function* (table: string) {
+    const existing = yield* dynamodb.getItem({
+      TableName: table,
+      Key: FORMAT_KEY,
+      ConsistentRead: true,
+    });
     const observed =
       existing.Item?.format?.N === undefined ? undefined : Number(existing.Item.format.N);
     yield* checkStoreFormat(`DynamoDB state table '${table}'`, observed);
-    if (observed === STATE_STORE_FORMAT) return;
-    yield* dynamodb
-      .putItem({
-        TableName: table,
-        Item: { ...key, format: N(STATE_STORE_FORMAT) },
-        ConditionExpression: "attribute_not_exists(PK) OR #format < :format",
-        ExpressionAttributeNames: { "#format": "format" },
-        ExpressionAttributeValues: { ":format": N(STATE_STORE_FORMAT) },
-      })
-      // Another first caller wrote it.
-      .pipe(Effect.catchTag("ConditionalCheckFailedException", () => Effect.void));
+    return observed;
   });
 
+  // Ensure the table and overflow bucket exist on the first operation, so a
+  // missing one fails the run before it changes anything.
   const target = yield* Effect.cached(
     Effect.gen(function* () {
       const { table, bucket, region, legacy } = yield* names;
@@ -481,12 +477,7 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
       );
       // A table an earlier version created under a customer-managed key
       // (its `kmsKeyId` option) keeps that key, unless a layer picks one.
-      const existingKey =
-        Option.isNone(kmsKey) &&
-        observed?.SSEDescription?.SSEType === "KMS" &&
-        observed.SSEDescription.KMSMasterKeyArn !== undefined
-          ? yield* customerKeyArn(observed.SSEDescription.KMSMasterKeyArn)
-          : undefined;
+      const existingKey = Option.isNone(kmsKey) ? yield* tableCustomerKey(observed) : undefined;
       const keyArn = existingKey ?? (yield* storeKey(table));
       if (observed === undefined) {
         yield* Provisioning.deployMissing(
@@ -504,8 +495,8 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
         }
         yield* convergeAtRest(table, observed, bucket, keyArn, !bucketExists);
       }
-      yield* ensureFormat(table);
-      return { table, bucket, region, legacy, keyArn };
+      const format = yield* readFormat(table);
+      return { table, bucket, region, legacy, keyArn, format };
     }).pipe(Effect.provideContext(context), Effect.mapError(toError)),
   );
 
@@ -517,6 +508,30 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
       legacy: LegacyLocation | undefined;
     }) => Effect.Effect<A, E, AwsDeps>,
   ): Effect.Effect<A, StateStoreError> => target.pipe(Effect.flatMap((t) => run(f(t))));
+
+  // Write this version's format record before the store's first write. Every
+  // write holds a stage's lease, so taking one is where it happens, and a
+  // store that is only read (a stack reference's `getOutput`) stays as it was.
+  const stampFormat = yield* Effect.cached(
+    target.pipe(
+      Effect.flatMap(({ table, format }) =>
+        format === STATE_STORE_FORMAT
+          ? Effect.void
+          : run(
+              dynamodb
+                .putItem({
+                  TableName: table,
+                  Item: { ...FORMAT_KEY, format: N(STATE_STORE_FORMAT) },
+                  ConditionExpression: "attribute_not_exists(PK) OR #format < :format",
+                  ExpressionAttributeNames: { "#format": "format" },
+                  ExpressionAttributeValues: { ":format": N(STATE_STORE_FORMAT) },
+                })
+                // Another first caller wrote it.
+                .pipe(Effect.catchTag("ConditionalCheckFailedException", () => Effect.void)),
+            ),
+      ),
+    ),
+  );
 
   const hashFqn = (fqn: string) =>
     Effect.sync(() => createHash("sha256").update(fqn).digest("hex"));
@@ -714,6 +729,7 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
 
   /** Take the stage's lease, held until `scope` closes. */
   const acquireLease = Effect.fn(function* (stack: string, stage: string, scope: Scope.Scope) {
+    yield* stampFormat;
     const token = yield* random.uuidV4();
     const now = yield* Clock.currentTimeMillis;
     // Take the lease when nobody holds it or the holder let it expire.
@@ -1442,7 +1458,12 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
               ? parse<unknown>(scope, text, what).pipe(
                   Effect.flatMap((value) => codec.encode(scope, value)),
                 )
-              : Effect.succeed(text);
+              : isSealed(text)
+                ? // Sealed already, and kept as it is. Opening it first fails
+                  // the stage while S3 still holds it, if this store's
+                  // encryption can't read what the S3 store's wrote.
+                  parse<unknown>(scope, text, what).pipe(Effect.as(text))
+                : Effect.succeed(text);
           const records = yield* Effect.forEach(
             Array.from(contents.records),
             ([fqn, text]) =>
@@ -1558,7 +1579,7 @@ export interface DynamoDBStateService extends StateService {
 const describeStateTable = (table: string) =>
   dynamodb.describeTable({ TableName: table }).pipe(
     Effect.map((result) => result.Table),
-    Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
   );
 
 const validateKeySchema = (table: dynamodb.TableDescription) => {
@@ -1596,6 +1617,25 @@ const waitForTableActive = (table: string) =>
       ),
     ),
   );
+
+/**
+ * The enabled customer-managed key a table is encrypted at rest with, or
+ * `undefined` for a table that is missing, or under a key DynamoDB owns or
+ * AWS manages.
+ */
+const tableCustomerKey = (observed: dynamodb.TableDescription | undefined) =>
+  observed?.SSEDescription?.SSEType === "KMS" &&
+  observed.SSEDescription.KMSMasterKeyArn !== undefined
+    ? customerKeyArn(observed.SSEDescription.KMSMasterKeyArn)
+    : Effect.succeed(undefined);
+
+/**
+ * The customer-managed key a state table already uses, which first use and
+ * `alchemy state bootstrap` both keep rather than move the table to the
+ * store's own key.
+ */
+export const stateTableCustomerKey = (table: string) =>
+  describeStateTable(table).pipe(Effect.flatMap(tableCustomerKey));
 
 /** Whether the table is encrypted at rest with `keyArn`. */
 const tableUsesKey = (table: dynamodb.TableDescription, keyArn: string) =>

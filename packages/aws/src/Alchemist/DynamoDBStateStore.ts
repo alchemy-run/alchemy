@@ -12,9 +12,15 @@ import {
   createStateTableName,
   dynamoDBState,
   provisionStateTable,
+  stateTableCustomerKey,
   stateTableExists,
 } from "../StateStore/DynamoDBState.ts";
-import { createStateKeyAlias, ensureStateKey, removeStateKey } from "../StateStore/Key.ts";
+import {
+  createStateKeyAlias,
+  ensureStateKey,
+  removeStateKey,
+  stateKeyArn,
+} from "../StateStore/Key.ts";
 import {
   createStateBucketName,
   provisionStateBucket,
@@ -25,7 +31,9 @@ import {
 /**
  * Ensure a state table, its overflow bucket and its KMS key (by default the
  * account's in this region), with the settings first use would give them.
- * An existing table and bucket are moved to SSE-KMS under the key.
+ * An existing table and bucket are moved to SSE-KMS under the key. A table
+ * already under a customer-managed key of its own keeps that key, as it does
+ * on first use, and gets no other.
  */
 const bootstrapStateTable = Effect.fn("AWS.state.bootstrap")(function* (name?: string) {
   const { accountId, region } = yield* AWSEnvironment.current;
@@ -33,7 +41,15 @@ const bootstrapStateTable = Effect.fn("AWS.state.bootstrap")(function* (name?: s
   const tableName = createStateTableName(name);
   const bucketName = createOverflowBucketName(accountId, region, name);
   const existed = yield* stateTableExists(tableName);
-  const keyArn = yield* ensureStateKey(createStateKeyAlias(name));
+  const alias = createStateKeyAlias(name);
+  const [customerKey, ownKey] = yield* Effect.all(
+    [stateTableCustomerKey(tableName), stateKeyArn(alias)],
+    { concurrency: 2 },
+  );
+  const keyArn =
+    customerKey !== undefined && customerKey !== ownKey
+      ? customerKey
+      : yield* ensureStateKey(alias);
   yield* provisionStateTable(tableName, keyArn);
   // Provisioned ahead too, so a record that overflows mid-deploy in CI
   // does not need to create it.

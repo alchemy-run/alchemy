@@ -159,6 +159,10 @@ export const resolveStateKey = Effect.fn("AWS.state.resolveKey")(function* (opti
   );
 });
 
+/** The ARN of the key behind `alias`, or `undefined` when there is none. */
+export const stateKeyArn = (alias: string) =>
+  describeKey(alias).pipe(Effect.map((metadata) => metadata?.Arn));
+
 /**
  * The ARN of `keyId` when it is an enabled customer-managed key, which a
  * store can seal secrets with; `undefined` for an AWS-managed key

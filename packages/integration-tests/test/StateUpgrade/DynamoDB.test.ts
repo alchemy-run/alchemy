@@ -316,6 +316,21 @@ test.provider(
       expect((yield* describeTable(table))?.SSEDescription?.KMSMasterKeyArn).toBe(key.keyArn);
       const secrets = secretsOfTexts((yield* stageTexts(table, bucket, "one")).values());
 
+      // Bootstrapping the store with the new version, as its CI failure
+      // tells other stores to, keeps the table on the customer key too.
+      yield* succeeds(next, ["state", "bootstrap", "--backend", "aws", "--name", name], on());
+      const bootstrapped = (yield* describeTable(table))!;
+      expect(bootstrapped.SSEDescription?.KMSMasterKeyArn).toBe(key.keyArn);
+      expect(bootstrapped.SSEDescription?.Status).toBe("ENABLED");
+      expect(yield* keyArnOf(`alias/alchemy-state-${name}`)).toBeUndefined();
+      const overflowDefault = yield* s3.getBucketEncryption({ Bucket: bucket });
+      expect(
+        unredact(
+          overflowDefault.ServerSideEncryptionConfiguration?.Rules?.[0]
+            ?.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID,
+        ),
+      ).toBe(key.keyArn);
+
       // The option is gone; deploying without a layer keeps the table on
       // the customer key, seals with it, and creates no key of its own.
       const upgraded = yield* succeeds(next, deployArgs("one"), on());
