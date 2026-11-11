@@ -2392,8 +2392,6 @@ export const LiveWorkerProvider = () =>
             id,
             fqn,
             workerName,
-            // A build inlines env as literals: `Worker.URL`, Redacted and
-            // env-bound Effects are resolved here, once, for every source.
             props: { ...props, env: yield* resolveBuildEnv(props.env, opts.selfUrl) },
             compatibility: getCompatibility(props),
             stack: { name: stack.name, stage: stack.stage },

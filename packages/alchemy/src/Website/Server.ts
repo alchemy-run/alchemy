@@ -95,6 +95,12 @@ export type ServerDevProps =
        * @default false
        */
       strictPort?: boolean;
+      /**
+       * The JS runtime the dev server runs under, overriding the
+       * framework's default (Node for frameworks whose dev server is known
+       * to misbehave under Bun, otherwise the engine's own runtime).
+       */
+      runtime?: "node" | "bun";
     }
   | {
       /**
@@ -140,12 +146,12 @@ export interface ServerProps {
    */
   dev?: ServerDevProps;
   /**
-   * The JS runtime the dev server's child process runs under. Some
-   * framework dev servers are runtime-sensitive (Vocs's Vite dev server
-   * exhausts memory under Bun), so the composite can pin the child to
-   * `"node"`. Defaults to the engine's runtime.
+   * The framework's default JS runtime for its dev server. Some dev servers
+   * are runtime-sensitive (Vocs's Vite dev server exhausts memory under
+   * Bun), so the composite pins them to `"node"`; `dev.runtime` overrides
+   * it. Defaults to the engine's runtime.
    */
-  runtime?: "node";
+  runtime?: "node" | "bun";
   /**
    * Environment variables for the framework server. On deploy the
    * composite sets these on the Lambda; during `alchemy dev` they are set
@@ -522,12 +528,8 @@ export const ServerProviderLocal = () =>
                   strictPort: dev.strictPort ?? false,
                 })
               : undefined;
-          // The dev server runs in its own child process rooted at the
-          // project, never in the sidecar: framework toolchains read the
-          // cwd and keep process-wide caches. The child is scoped: it lives
-          // in the instance scope the LocalProvider helper provides and is
-          // stopped on restart/delete. It resolves at readiness with the
-          // local URL.
+          // Never in the sidecar: framework toolchains read the cwd and keep
+          // process-wide caches.
           const { runDevChild } = yield* Effect.tryPromise({
             try: () => import("@alchemy.run/frontend-frameworks/core"),
             catch: (cause) =>
@@ -541,13 +543,10 @@ export const ServerProviderLocal = () =>
           });
           const { url } = yield* Effect.mapError(
             runDevChild({
-              runtime: props.runtime,
+              runtime: dev?.runtime ?? props.runtime,
               framework: props.framework,
               module: props.framework,
               rootDir: root,
-              // Dev/live env parity: the composite sets these on the Lambda
-              // on deploy; in dev they go on this site's child only. `env`
-              // is part of the restart surface, so a change restarts it.
               env: definedEnv(props.env),
               makeOptions: { ...props.options, root, target: props.target },
               devOptions: {

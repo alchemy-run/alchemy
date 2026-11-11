@@ -43,6 +43,7 @@ export type {
   DeployTargetServer,
   DeployTargetServices,
 } from "./DeployTarget.ts";
+export type { ChildRuntime } from "./ChildRuntime.ts";
 export { inProjectCwd, isJsonSerializable, runDevChild } from "./DevChild.ts";
 export type { DevChildOptions, DevChildPayload } from "./DevChild.ts";
 export { findEphemeralPort, resolveViteDevPort } from "./DevPort.ts";

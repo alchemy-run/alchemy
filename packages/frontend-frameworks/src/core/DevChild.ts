@@ -30,9 +30,8 @@ import { fileURLToPath } from "node:url";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import type * as Scope from "effect/Scope";
-import * as SemVer from "effect/SemVer";
-import * as SemVerRange from "effect/SemVerRange";
 import { makeChildOutput } from "./ChildOutput.ts";
+import { childCommand, type ChildRuntime } from "./ChildRuntime.ts";
 import { FrameworkError, type FrameworkDevServer } from "./Framework.ts";
 
 /**
@@ -129,23 +128,9 @@ export const isJsonSerializable = (value: unknown): boolean => {
   }
 };
 
-/**
- * Node CLI flags that transparently strip TypeScript types, so the `.ts`
- * runner entry works when running from `src/` under plain Node (Bun handles
- * `.ts` natively). Mirrors `core/BuildChild.ts`.
- */
-const transformTypesFlags = (): Array<string> =>
-  SemVerRange.matches(
-    SemVerRange.parseUnsafe(">=22.7.0 <26.0.0-0"),
-    SemVer.parseUnsafe(process.versions.node),
-    { includePrerelease: true },
-  )
-    ? ["--experimental-transform-types", "--no-warnings=ExperimentalWarning"]
-    : [];
-
 export interface DevChildOptions {
-  /** Use Node from PATH for toolchains that cannot run under Bun. Requires native TypeScript support when running source modules. */
-  readonly runtime?: "node" | undefined;
+  /** The runtime the child runs under. @default this process's runtime */
+  readonly runtime?: ChildRuntime | undefined;
   /** Framework name for error attribution (e.g. "solidstart", "waku"). */
   readonly framework: string;
   /** Bare module specifier the runner imports (see {@link DevChildPayload}). */
@@ -196,23 +181,13 @@ export const runDevChild = (
         options.callerUrl ?? import.meta.url,
       ),
     );
-    const isBun =
-      options.runtime !== "node" && typeof (globalThis as { Bun?: unknown }).Bun !== "undefined";
-    const executable = options.runtime === "node" ? "node" : process.execPath;
+    const { executable, args: runnerArgs } = childCommand(options.runtime, entry);
     const payload: DevChildPayload = {
       module: options.module,
       makeOptions: options.makeOptions,
       devOptions: options.devOptions,
     };
-    const args = [
-      ...(isBun
-        ? ["run"]
-        : entry.endsWith(".ts") && options.runtime !== "node"
-          ? transformTypesFlags()
-          : []),
-      entry,
-      JSON.stringify(payload),
-    ];
+    const args = [...runnerArgs, JSON.stringify(payload)];
 
     const spawnFailure = fail(`Failed to spawn the ${options.framework} dev child (${executable})`);
     const spawnError = yield* Deferred.make<never, FrameworkError>();

@@ -1,16 +1,14 @@
-import type { MemoOptions } from "alchemy/Command/Memo";
 import type { InputProps } from "alchemy/Input";
 import { effectClass } from "alchemy/Util/effect";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
-import type { AssetsConfig } from "../Workers/Assets.ts";
 import {
   Worker,
   type NormalizedBindings,
   type WorkerAssetsConfig,
   type WorkerBindingProps,
-  type WorkerProps,
 } from "../Workers/Worker.ts";
+import type { FrameworkWebsiteProps } from "./FrameworkWebsite.ts";
 
 /**
  * The specifier of the Nuxt source-provider module. The package must be
@@ -19,16 +17,9 @@ import {
  */
 const NUXT_SOURCE_PROVIDER = "@alchemy.run/frontend-frameworks/nuxt/source";
 
-export interface NuxtProps<Bindings extends WorkerBindingProps = {}> extends Omit<
-  WorkerProps<Bindings>,
-  "vite" | "main" | "assets" | "source" | "script" | "bundle" | "rules"
-> {
-  /**
-   * Nuxt project root (the directory containing `nuxt.config.ts`).
-   * Relative paths resolve from the process working directory.
-   * @default process.cwd()
-   */
-  rootDir?: string;
+export interface NuxtProps<
+  Bindings extends WorkerBindingProps = {},
+> extends FrameworkWebsiteProps<Bindings> {
   /**
    * Overrides the module that becomes the deployed Worker entry (nitro's
    * entry/exports seam). Relative paths resolve from {@link rootDir}.
@@ -48,18 +39,6 @@ export interface NuxtProps<Bindings extends WorkerBindingProps = {}> extends Omi
    * ```
    */
   main?: string;
-  /**
-   * Controls which files are content-hashed to decide whether a rebuild is
-   * needed. By default every non-gitignored file under `rootDir` (plus the
-   * nearest package-manager lockfile) is hashed; narrow the scope with
-   * `include`/`exclude` globs when the project sits in a large repository.
-   */
-  memo?: MemoOptions;
-  /**
-   * Optional configuration for static asset routing behavior.
-   * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.
-   */
-  assets?: AssetsConfig;
   /**
    * Nuxt config overrides merged over the project's own `nuxt.config.ts`
    * (the highest-priority c12 layer — a value here wins over the file).
@@ -325,7 +304,7 @@ export const Nuxt: {
           // `nodejs_compat` to every non-python Worker.
           // `main` is the source provider's user-entry seam (nitro's
           // entry), not the Worker's own bundling entry.
-          main: undefined!,
+          main: null,
           source: {
             provider: NUXT_SOURCE_PROVIDER,
             devMode: "server",

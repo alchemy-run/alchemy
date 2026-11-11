@@ -1,35 +1,18 @@
-import type { MemoOptions } from "alchemy/Command/Memo";
 import type { InputProps } from "alchemy/Input";
 import { effectClass } from "alchemy/Util/effect";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
-import type { AssetsConfig } from "../Workers/Assets.ts";
 import {
   Worker,
   type NormalizedBindings,
   type WorkerAssetsConfig,
   type WorkerBindingProps,
-  type WorkerProps,
 } from "../Workers/Worker.ts";
+import type { FrameworkWebsiteProps } from "./FrameworkWebsite.ts";
 
-export interface SvelteKitProps<Bindings extends WorkerBindingProps = {}> extends Omit<
-  WorkerProps<Bindings>,
-  "vite" | "main" | "assets" | "source" | "script" | "bundle" | "rules"
-> {
-  /**
-   * SvelteKit project root (the directory containing `package.json` and
-   * `src/routes`). Relative paths resolve from the process working
-   * directory.
-   * @default process.cwd()
-   */
-  rootDir?: string;
-  /**
-   * Controls which files are content-hashed to decide whether a rebuild is
-   * needed. By default every non-gitignored file under `rootDir` (plus the
-   * nearest package-manager lockfile) is hashed; narrow the scope with
-   * `include`/`exclude` globs when the project sits in a large repository.
-   */
-  memo?: MemoOptions;
+export interface SvelteKitProps<
+  Bindings extends WorkerBindingProps = {},
+> extends FrameworkWebsiteProps<Bindings> {
   /**
    * SvelteKit config overrides for the `sveltekit(...)` plugin call, merged
    * over the options of the user's own call (these win). JSON-serializable
@@ -39,11 +22,6 @@ export interface SvelteKitProps<Bindings extends WorkerBindingProps = {}> extend
    * always owned by alchemy.
    */
   kit?: Record<string, unknown>;
-  /**
-   * Optional configuration for static asset routing behavior.
-   * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.
-   */
-  assets?: AssetsConfig;
 }
 
 // These options are inspected while constructing the Worker. Resolve them in

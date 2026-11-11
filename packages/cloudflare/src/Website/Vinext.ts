@@ -1,4 +1,3 @@
-import type { MemoOptions } from "alchemy/Command/Memo";
 import type { InputProps } from "alchemy/Input";
 import { effectClass } from "alchemy/Util/effect";
 import * as Effect from "effect/Effect";
@@ -11,8 +10,8 @@ import {
   type NormalizedBindings,
   type WorkerAssetsConfig,
   type WorkerBindingProps,
-  type WorkerProps,
 } from "../Workers/Worker.ts";
+import type { FrameworkWebsiteProps } from "./FrameworkWebsite.ts";
 
 /**
  * The default compatibility date when none is provided. Matches other
@@ -26,10 +25,9 @@ const DEFAULT_COMPATIBILITY_DATE = "2026-05-12";
  */
 const DEFAULT_WORKER_ENTRY = "worker/index.ts";
 
-export interface VinextProps<Bindings extends WorkerBindingProps = {}> extends Omit<
-  WorkerProps<Bindings>,
-  "vite" | "main" | "assets" | "script" | "bundle" | "source" | "rules"
-> {
+export interface VinextProps<
+  Bindings extends WorkerBindingProps = {},
+> extends FrameworkWebsiteProps<Bindings> {
   /**
    * Worker entry that delegates to vinext. Defaults to
    * `worker/index.ts` — the official vinext Cloudflare layout:
@@ -44,17 +42,6 @@ export interface VinextProps<Bindings extends WorkerBindingProps = {}> extends O
    * ```
    */
   main?: string;
-  /**
-   * The vinext project root (the directory containing `app/` or `pages/`
-   * and `vite.config.ts`). Defaults to the process working directory.
-   */
-  rootDir?: string;
-  /**
-   * Controls which files are content-hashed to decide whether the Vite
-   * build needs to re-run. By default every project file outside build
-   * outputs and `node_modules` is hashed, plus the nearest lockfile.
-   */
-  memo?: MemoOptions;
   /**
    * Which Vite environments make up the deployed Worker.
    *

@@ -123,8 +123,8 @@ export interface Website {
 
 /** Internal framework-to-Node-target wiring. */
 export interface FrameworkSiteConfig {
-  /** The JS runtime the dev server's child process runs under. @default the engine's runtime */
-  runtime?: "node";
+  /** The framework's default JS runtime for its dev server; `dev.runtime` overrides it. @default the engine's runtime */
+  runtime?: "node" | "bun";
   /** Framework integration module. */
   framework: string;
   /** Existing Node deploy-target module. */

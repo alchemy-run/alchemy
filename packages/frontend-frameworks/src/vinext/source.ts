@@ -404,7 +404,6 @@ export const makeVinextSourceProvider = (
     rootDir,
     memo: options.memo,
     outputDirs: ["dist"],
-    // A changed user entry or Vite environment layout must bust the memo.
     hashOptions: { main: options.main, viteEnvironments: options.viteEnvironments },
     buildConfig: (ctx, rootDir) =>
       ({

@@ -1,4 +1,3 @@
-import type { MemoOptions } from "alchemy/Command/Memo";
 import type { InputProps } from "alchemy/Input";
 import { effectClass } from "alchemy/Util/effect";
 import * as Effect from "effect/Effect";
@@ -9,20 +8,14 @@ import {
   type NormalizedBindings,
   type WorkerAssetsConfig,
   type WorkerBindingProps,
-  type WorkerProps,
 } from "../Workers/Worker.ts";
+import type { FrameworkWebsiteProps } from "./FrameworkWebsite.ts";
 
 const VOCS_SOURCE_PROVIDER = "@alchemy.run/frontend-frameworks/vocs/source";
 
-export interface VocsProps<Bindings extends WorkerBindingProps = {}> extends Omit<
-  WorkerProps<Bindings>,
-  "vite" | "main" | "assets" | "source" | "script" | "bundle" | "rules"
-> {
-  /**
-   * Root directory of the Vocs project.
-   * @default process.cwd()
-   */
-  rootDir?: string;
+export interface VocsProps<
+  Bindings extends WorkerBindingProps = {},
+> extends FrameworkWebsiteProps<Bindings> {
   /**
    * Vocs build output directory, relative to {@link rootDir}. Set this when
    * `vocs.config.*` customizes `outDir` so generated output stays outside the
@@ -30,12 +23,6 @@ export interface VocsProps<Bindings extends WorkerBindingProps = {}> extends Omi
    * @default "dist"
    */
   outDir?: string;
-  /**
-   * Controls which files feed the content hash that decides whether Vocs
-   * rebuilds. By default every non-gitignored file under {@link rootDir} is
-   * hashed, plus the nearest package-manager lockfile.
-   */
-  memo?: MemoOptions;
   /**
    * Static asset routing configuration. Vocs links prerendered pages without
    * trailing slashes, so extensionless routing is enabled by default.
@@ -180,11 +167,10 @@ export const Vocs: {
             htmlHandling: "drop-trailing-slash" as const,
             ...props?.assets,
           },
-          main: undefined!,
+          main: null,
           source: {
             provider: VOCS_SOURCE_PROVIDER,
             devMode: "server",
-            // The dev child runs in the project root, as Vocs expects.
             rootDir: props?.rootDir,
             options: {
               outDir: props?.outDir,

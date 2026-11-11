@@ -60,10 +60,6 @@ const PROVIDER = "@alchemy.run/frontend-frameworks/nextjs/source";
 /** Build outputs and tool caches under the root, never hashed. */
 const OUTPUT_DIRS = [".next", ".open-next", "dist", ".turbo", ".vercel", ".wrangler"];
 
-// ─────────────────────────────────────────────────────────────────────
-// Options
-// ─────────────────────────────────────────────────────────────────────
-
 /** Controls which project files are content-hashed to decide whether the OpenNext build re-runs. */
 export type NextjsMemoOptions = MemoOptions;
 
@@ -126,10 +122,6 @@ export interface NextjsSourceProvider extends Omit<SourceProvider, "build" | "ha
   ) => Effect.Effect<Partial<SourceHash>, SourceError, SourceRequirements>;
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// Build child
-// ─────────────────────────────────────────────────────────────────────
-
 /** Run `use` against a freshly-built `Framework` service for `options`. */
 const withFramework = <A, E, R>(
   options: Nextjs.NextjsFrameworkOptions,
@@ -181,10 +173,6 @@ export const buildInChild = (config: NextjsBuildChildConfig) =>
     },
     (framework) => framework.build({ root: config.rootDir }),
   );
-
-// ─────────────────────────────────────────────────────────────────────
-// The provider
-// ─────────────────────────────────────────────────────────────────────
 
 export const makeNextjsSourceProvider = (
   options: NextjsSourceOptions,
@@ -307,7 +295,6 @@ export const makeNextjsSourceProvider = (
       } satisfies SourceBuildOutput;
     }),
 
-    // Rebuild-free: re-hash the tree over the previously discovered workspaces.
     hash: Effect.fn(function* (ctx, previous) {
       const { hash, workspaces } = yield* input(
         root,

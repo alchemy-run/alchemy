@@ -150,7 +150,6 @@ const listFollowingLinks = Effect.fn(function* (rootDir: string) {
         entered.add(real);
         return { name: entry.name, type: "Directory" };
       }),
-      // A dangling link: keep it as a link, which hashes nothing.
       Effect.orElseSucceed(() => entry),
     );
   };
@@ -310,7 +309,6 @@ export const hashInput = Effect.fn(function* (params: {
       root,
       workspaces: workspaceHashes.sort(),
     }),
-    // Pinned workspaces come from the options, so none are recorded.
     workspaces: pinned !== undefined ? undefined : workspaces.map(({ dir }) => relative(dir)),
   };
 });

@@ -1,28 +1,20 @@
-import type { MemoOptions } from "alchemy/Command/Memo";
 import type { InputProps } from "alchemy/Input";
 import { effectClass } from "alchemy/Util/effect";
 import { resolveAstroSettings } from "alchemy/Website/AstroOutput";
 import * as Effect from "effect/Effect";
 import { Namespace } from "../KV/Namespace.ts";
 import type { Providers } from "../Providers.ts";
-import type { AssetsConfig } from "../Workers/Assets.ts";
 import {
   Worker,
   type NormalizedBindings,
   type WorkerAssetsConfig,
   type WorkerBindingProps,
-  type WorkerProps,
 } from "../Workers/Worker.ts";
+import type { FrameworkWebsiteProps } from "./FrameworkWebsite.ts";
 
-export interface AstroProps<Bindings extends WorkerBindingProps = {}> extends Omit<
-  WorkerProps<Bindings>,
-  "vite" | "main" | "assets" | "source" | "script" | "bundle" | "rules"
-> {
-  /**
-   * Astro project root directory.
-   * Defaults to the current working directory (`process.cwd()`).
-   */
-  rootDir?: string;
+export interface AstroProps<
+  Bindings extends WorkerBindingProps = {},
+> extends FrameworkWebsiteProps<Bindings> {
   /**
    * A custom Worker entry that wraps Astro's handler and adds exports of its
    * own (Durable Object classes, a `scheduled` handler, ...). Import the Astro
@@ -39,21 +31,6 @@ export interface AstroProps<Bindings extends WorkerBindingProps = {}> extends Om
    * as a package import. When unset, Astro's server entrypoint is deployed.
    */
   main?: string;
-  /**
-   * Controls which files are hashed to decide whether a rebuild is needed.
-   * By default every non-gitignored file under `rootDir` is hashed, plus the
-   * nearest package-manager lockfile. Provide explicit globs to narrow the
-   * scope.
-   */
-  memo?: MemoOptions & {
-    /**
-     * Additional workspace directories to hash (relative to `rootDir`).
-     * By default (`"auto"`), workspaces are auto-detected from the build's
-     * module graph; an explicit array pins them.
-     * @default "auto"
-     */
-    workspaces?: "auto" | Array<MemoOptions & { cwd: string }>;
-  };
   /**
    * The name of the KV binding backing Astro's session API.
    *
@@ -106,11 +83,6 @@ export interface AstroProps<Bindings extends WorkerBindingProps = {}> extends Om
    * Defaults to astro's own config discovery.
    */
   config?: string;
-  /**
-   * Optional configuration for static asset routing behavior.
-   * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.
-   */
-  assets?: AssetsConfig;
 }
 
 // These options are inspected while constructing the Worker. Resolve them in
@@ -390,7 +362,7 @@ export const Astro: {
             // and needs `nodejs_compat`; `getCompatibility` already adds it
             // to every non-python Worker (honoring an explicit
             // `no_nodejs_compat` opt-out and the v2-mode date guard).
-            main: undefined!,
+            main: null,
             source: {
               provider: "@alchemy.run/frontend-frameworks/astro/source",
               devMode: "server",

@@ -22,16 +22,15 @@ import type { PlatformError } from "effect/PlatformError";
 import type * as Scope from "effect/Scope";
 import { resolveBuildEnv, runBuildChild } from "./BuildChild.ts";
 import type { BuildOutput } from "./BuildOutput.ts";
+import type { ChildRuntime } from "./ChildRuntime.ts";
 import { hashInput, sha256, sha256Object, type MemoOptions } from "./InputHash.ts";
 
 export type { MemoOptions } from "./InputHash.ts";
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Structural mirror of alchemy's Worker source-provider contract
 // (`packages/cloudflare/src/Workers/Source.ts`). Implemented structurally, with
 // no alchemy import, so version skew degrades to a load-time
 // `SourceProviderError` instead of a crash. Keep in sync with alchemy.
-// ─────────────────────────────────────────────────────────────────────────────
 
 export interface SourceHash {
   readonly bundle: string | undefined;
@@ -152,10 +151,6 @@ export interface SourceProvider {
   ) => Effect.Effect<ServerDevHandle, SourceError, SourceRequirements | Scope.Scope>;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Building blocks
-// ─────────────────────────────────────────────────────────────────────────────
-
 /** Routing config from raw `props.assets`; `directory`/`hash` are alchemy's path-level concerns. */
 export const assetsConfigOf = (assets: unknown): Record<string, unknown> | undefined => {
   if (assets === undefined || assets === null || typeof assets !== "object") return undefined;
@@ -258,10 +253,6 @@ export const bundleOf = Effect.fn(function* (
   return { files, hash: yield* sha256Object(files.map((file) => [file.path, file.hash])) };
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// The provider
-// ─────────────────────────────────────────────────────────────────────────────
-
 export interface WorkerSourceSpec<Config> {
   /**
    * This source module's package specifier. It must export
@@ -273,7 +264,7 @@ export interface WorkerSourceSpec<Config> {
   readonly framework: string;
   readonly displayName: string;
   /** Run the build child under Node instead of the current runtime. */
-  readonly runtime?: "node" | undefined;
+  readonly runtime?: ChildRuntime | undefined;
   /** Absolute project root, from the module context. */
   readonly rootDir: string;
   readonly memo: MemoOptions | undefined;
@@ -385,7 +376,6 @@ export const makeWorkerSource = <Config>(spec: WorkerSourceSpec<Config>): Source
       } satisfies SourceBuildOutput;
     }),
 
-    // Rebuild-free: re-hash the tree over the previously discovered workspaces.
     hash: Effect.fn(function* (_ctx, previous) {
       const { hash, workspaces } = yield* input(spec.rootDir, previous?.additionalWorkspaces ?? []);
       return { input: hash, additionalWorkspaces: workspaces };

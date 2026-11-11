@@ -128,7 +128,6 @@ export const makeWakuSourceProvider = (
     rootDir,
     memo: options.memo,
     outputDirs: [options.distDir ?? "dist"],
-    // A changed user entry or waku layout must bust the memo.
     hashOptions: {
       main: options.main,
       srcDir: options.srcDir,

@@ -1,4 +1,3 @@
-import type { MemoOptions } from "alchemy/Command/Memo";
 import type { InputProps } from "alchemy/Input";
 import { effectClass } from "alchemy/Util/effect";
 import * as Effect from "effect/Effect";
@@ -9,8 +8,8 @@ import {
   type NormalizedBindings,
   type WorkerAssetsConfig,
   type WorkerBindingProps,
-  type WorkerProps,
 } from "../Workers/Worker.ts";
+import type { FrameworkWebsiteProps } from "./FrameworkWebsite.ts";
 
 /**
  * The specifier of the Waku source-provider module. The package must be
@@ -19,10 +18,9 @@ import {
  */
 const WAKU_SOURCE_PROVIDER = "@alchemy.run/frontend-frameworks/waku/source";
 
-export interface WakuProps<Bindings extends WorkerBindingProps = {}> extends Omit<
-  WorkerProps<Bindings>,
-  "vite" | "main" | "assets" | "source" | "script" | "bundle" | "rules"
-> {
+export interface WakuProps<
+  Bindings extends WorkerBindingProps = {},
+> extends FrameworkWebsiteProps<Bindings> {
   /**
    * Overrides the module that becomes the deployed Worker entry. Relative
    * paths resolve from {@link rootDir}.
@@ -43,18 +41,6 @@ export interface WakuProps<Bindings extends WorkerBindingProps = {}> extends Omi
    * ```
    */
   main?: string;
-  /**
-   * Root directory of the Waku project. Defaults to the process working
-   * directory.
-   */
-  rootDir?: string;
-  /**
-   * Controls which files feed the content hash that decides whether a
-   * rebuild is needed. By default every non-gitignored file under
-   * {@link rootDir} is hashed, plus the nearest package-manager lockfile.
-   * Provide `include`/`exclude` globs to narrow the scope.
-   */
-  memo?: MemoOptions;
   /**
    * Optional configuration for static asset routing behavior.
    * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.
@@ -288,7 +274,7 @@ export const Waku: {
             htmlHandling: "drop-trailing-slash" as const,
             ...props?.assets,
           },
-          main: undefined!,
+          main: null,
           source: {
             provider: WAKU_SOURCE_PROVIDER,
             devMode: "server",

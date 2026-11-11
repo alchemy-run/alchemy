@@ -76,14 +76,12 @@ export const makeOctaneSource = (
   { rootDir }: SourceModuleContext,
 ): SourceProvider =>
   makeWorkerSource({
-    // Octane always emits `dist/client`; a build without it is broken.
     requireClient: true,
     provider: PROVIDER,
     framework: "octane",
     displayName: "Octane",
     rootDir,
     memo: options.memo,
-    // Octane's default `build.outDir`.
     outputDirs: ["dist"],
     buildConfig: (ctx, rootDir) =>
       ({

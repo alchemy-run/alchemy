@@ -131,7 +131,6 @@ export const makeNuxtSource = (
     memo: options.memo,
     // nitro's output, nuxt's buildDir, and nitro's dev/build scratch dir.
     outputDirs: [".output", ".nuxt", ".nitro"],
-    // A changed user entry or config override must bust the memo.
     hashOptions: { nuxt: options.nuxt, main: options.main },
     buildConfig: (ctx, rootDir) =>
       ({
