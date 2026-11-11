@@ -131,7 +131,7 @@ export class Callbacks extends Context.Service<
  *   Effect.gen(function* () {
  *     const onExpire = yield* Alchemy.makeCallback("expire", expire);
  *     return { fetch: placeOrder(onExpire) };
- *   }).pipe(Effect.provide(AWS.Scheduler.SchedulerCallbacks)),
+ *   }).pipe(Effect.provide(AWS.Scheduler.SchedulerCallbacks())),
  * );
  * ```
  *

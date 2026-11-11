@@ -354,7 +354,13 @@ export default SchedulerTestFunction.make(
         Scheduler.DeleteScheduleHttp,
         Scheduler.ListSchedulesHttp,
         Lambda.ScheduleEventSource,
-        Scheduler.SchedulerCallbacks,
+        // Failed callbacks land in the dead-letter queue, and payloads are
+        // encrypted with the input key: the same declarations the bindings
+        // above use, de-duped by the engine.
+        Scheduler.SchedulerCallbacks({
+          deadLetterQueue: SQS.Queue("SchedulerDeadLetterQueue"),
+          kmsKey: KMS.Key("SchedulerInputKey", {}),
+        }),
         SQS.ReceiveMessageHttp,
         SQS.SendMessageHttp,
       ),

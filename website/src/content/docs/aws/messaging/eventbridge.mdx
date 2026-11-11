@@ -186,25 +186,19 @@ yield* onExpire.schedule(orderId, { after: "1 hour", payload: { orderId } });
 yield* onExpire.cancel(orderId);
 ```
 
-Provide `AWS.Scheduler.SchedulerCallbacks` to the Function. Each job is a one-time schedule in a schedule group of the Function's own, deleted once its handler succeeds. The same `makeCallback` code runs on a Cloudflare Durable Object with `Cloudflare.DurableObjectCallbacks` instead.
+Provide `AWS.Scheduler.SchedulerCallbacks()` to the Function. Each job is a one-time schedule in a schedule group of the Function's own, deleted once its handler succeeds. The same `makeCallback` code runs on a Cloudflare Durable Object with `Cloudflare.DurableObjectCallbacks` instead.
 
-A handler that dies, from a defect, a timeout or running out of memory, fails the invocation. The Function's `eventInvokeConfig` decides what happens next: Lambda retries it twice by default, then sends the event to an `OnFailure` destination, which the Function's role is allowed to write to:
+A callback can fail in two places: Scheduler can fail to invoke the Function, or the handler can die from a defect, a timeout or running out of memory. Give the Layer a dead-letter queue and both end up there:
 
 ```typescript title="src/orders.ts"
-export default Orders.make(
-  Effect.gen(function* () {
-    const failed = yield* FailedCallbacks;
-    return {
-      main: import.meta.url,
-      eventInvokeConfig: {
-        maximumRetryAttempts: 2,
-        destinationConfig: { OnFailure: { Destination: failed.queueArn } },
-      },
-    };
-  }),
-  impl.pipe(Effect.provide(AWS.Scheduler.SchedulerCallbacks)),
+}).pipe(
+  Effect.provide(
+    AWS.Scheduler.SchedulerCallbacks({ deadLetterQueue: AWS.SQS.Queue("FailedCallbacks") }),
+  ),
 );
 ```
+
+The queue becomes each job's dead-letter queue and the Function's `OnFailure` destination, and both roles may send to it. Lambda keeps one failure destination per Function, so it covers every callback the Function registers. `kmsKey` encrypts each job's payload with a key of your own the same way.
 
 ## Schedule containers
 

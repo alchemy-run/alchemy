@@ -34,6 +34,7 @@ let cronQueueUrl: string;
 let executionRoleArn: string;
 let deadLetterQueueArn: string;
 let inputKeyArn: string;
+let functionName: string;
 
 class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly status: number;
@@ -160,11 +161,12 @@ describe(
         yield* purgeTestSchedules;
 
         yield* Effect.logInfo("Scheduler test setup: deploying fixture");
-        const { functionUrl } = yield* sharedStack.deploy(
+        const { functionUrl, functionName: deployedName } = yield* sharedStack.deploy(
           Effect.gen(function* () {
             return yield* SchedulerTestFunction;
           }).pipe(Effect.provide(SchedulerTestFunctionLive)),
         );
+        functionName = deployedName;
 
         expect(functionUrl).toBeTruthy();
         baseUrl = functionUrl!.replace(/\/+$/, "");
@@ -547,6 +549,24 @@ describe(
           expect(replaced.status!.scheduledAt - first.status!.scheduledAt).toBeGreaterThan(
             3_000_000,
           );
+
+          // Out of band: the pending job carries the dead-letter queue and
+          // key, and the Function sends handlers that keep dying there too.
+          const groups = yield* scheduler.listScheduleGroups({});
+          const group = (groups.ScheduleGroups ?? []).find((g) =>
+            g.Name?.includes("SchedulerTestFunctionCallbacks"),
+          );
+          const jobs = yield* scheduler.listSchedules({ GroupName: group!.Name! });
+          const job = yield* scheduler.getSchedule({
+            GroupName: group!.Name!,
+            Name: jobs.Schedules!.find((s) => s.Name?.includes("pending"))!.Name!,
+          });
+          expect(job.KmsKeyArn).toBe(inputKeyArn);
+          expect(job.Target?.DeadLetterConfig?.Arn).toBe(deadLetterQueueArn);
+          const invokeConfig = yield* lambda.getFunctionEventInvokeConfig({
+            FunctionName: functionName,
+          });
+          expect(invokeConfig.DestinationConfig?.OnFailure?.Destination).toBe(deadLetterQueueArn);
 
           const cancelled = yield* call(HttpClientRequest.delete(`${baseUrl}/callbacks/${id}`));
           expect(cancelled.message).toBeUndefined();
