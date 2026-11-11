@@ -1232,47 +1232,66 @@ const syncBoundSecrets = Effect.fn(function* (
       ),
     );
   const observed = yield* listDigests;
-  const secrets: Record<string, BoundSecret> = {};
-  const hashes: Record<string, string> = {};
-  const writes: Record<string, Redacted.Redacted<string>> = {};
-  for (const [envVar, value] of Object.entries(desired)) {
-    const name = `${prefix}${envVar}`;
-    // Salted with the scoped name, so equal values on different Services
-    // or Apps never share a hash in state.
-    const hash = yield* sha256(`${name}:${Redacted.value(value)}`);
+  const planned = yield* Effect.forEach(
+    Object.entries(desired),
+    ([envVar, value]) =>
+      // Salted with the scoped name, so equal values on different Services
+      // or Apps never share a hash in state.
+      sha256(`${prefix}${envVar}:${Redacted.value(value)}`).pipe(
+        Effect.map((hash) => ({ envVar, name: `${prefix}${envVar}`, value, hash })),
+      ),
+    { concurrency: "unbounded" },
+  );
+  const isUnchanged = ({ envVar, name, hash }: (typeof planned)[number]) => {
     const last = previous.secrets[envVar];
-    if (
+    return (
       last !== undefined &&
       last.name === name &&
       last.sha256 === hash &&
       observed.get(name) === last.digest
-    ) {
-      secrets[envVar] = last;
-    } else {
-      writes[name] = value;
-      hashes[envVar] = hash;
-    }
-  }
-  const versions: number[] = [];
-  const accept = (version: number | undefined) => {
-    if (version !== undefined && Number.isSafeInteger(version)) versions.push(version);
+    );
   };
-  if (Object.keys(writes).length > 0) {
-    const response = yield* machines.updateSecrets({ app_name: appName, values: writes });
-    accept(response.version ?? response.Version);
-    const written = yield* listDigests;
-    for (const envVar of Object.keys(hashes)) {
-      const name = `${prefix}${envVar}`;
-      secrets[envVar] = { name, digest: written.get(name) ?? "", sha256: hashes[envVar]! };
-    }
-  }
-  for (const name of observed.keys()) {
-    if (!name.startsWith(prefix) || name.slice(prefix.length) in desired) continue;
-    const response = yield* machines
-      .deleteSecret({ app_name: appName, secret_name: name })
-      .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-    accept(response?.version ?? response?.Version);
-  }
+  const kept = planned.filter(isUnchanged);
+  const changed = planned.filter((entry) => !isUnchanged(entry));
+  const unbound = [...observed.keys()].filter(
+    (name) => name.startsWith(prefix) && !(name.slice(prefix.length) in desired),
+  );
+  const write =
+    changed.length === 0
+      ? Effect.succeed({ version: undefined, written: [] as [string, BoundSecret][] })
+      : Effect.gen(function* () {
+          const response = yield* machines.updateSecrets({
+            app_name: appName,
+            values: Object.fromEntries(changed.map(({ name, value }) => [name, value])),
+          });
+          const digests = yield* listDigests;
+          return {
+            version: response.version ?? response.Version,
+            written: changed.map(({ envVar, name, hash }): [string, BoundSecret] => [
+              envVar,
+              { name, digest: digests.get(name) ?? "", sha256: hash },
+            ]),
+          };
+        });
+  const remove = Effect.forEach(
+    unbound,
+    (name) =>
+      machines.deleteSecret({ app_name: appName, secret_name: name }).pipe(
+        Effect.map((response) => response.version ?? response.Version),
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      ),
+    { concurrency: "unbounded" },
+  );
+  const [{ version: writeVersion, written }, deleteVersions] = yield* Effect.all([write, remove], {
+    concurrency: "unbounded",
+  });
+  const secrets: Record<string, BoundSecret> = Object.fromEntries([
+    ...kept.map(({ envVar }): [string, BoundSecret] => [envVar, previous.secrets[envVar]!]),
+    ...written,
+  ]);
+  const versions = [writeVersion, ...deleteVersions].filter(
+    (version): version is number => version !== undefined && Number.isSafeInteger(version),
+  );
   // A bound value wins over an App secret with the same env var name, as
   // a Machine env var did; that secret stays in the App untouched.
   const others = [...observed.keys()]
