@@ -5,12 +5,12 @@ import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { Capacity } from "./Infra.ts";
-import MySandbox from "./MySandbox.ts";
+import { MyImage } from "./MyImage.ts";
 
 /**
  * Keeps one sandbox per user and runs the code they send in it.
  *
- * - `POST /users/<user>/run` runs the request body as a TypeScript program.
+ * - `POST /users/<user>/run` runs the request body as a Python program.
  * - `DELETE /users/<user>` kills the user's sandbox.
  */
 export default class Api extends AWS.Lambda.Function<Api>()(
@@ -22,7 +22,7 @@ export default class Api extends AWS.Lambda.Function<Api>()(
     timeout: Duration.minutes(6),
   },
   Effect.gen(function* () {
-    const sandboxes = yield* AWS.ECS.CreateSandbox(Capacity, MySandbox);
+    const sandboxes = yield* AWS.ECS.CreateSandbox(Capacity, MyImage);
 
     /** The user's sandbox: found by its tag, or started. */
     const userSandbox = Effect.fn("userSandbox")(function* (user: string) {
@@ -43,10 +43,12 @@ export default class Api extends AWS.Lambda.Function<Api>()(
 
         if (request.method === "POST" && run !== undefined) {
           const sandbox = yield* userSandbox(name);
-          yield* sandbox.files.write("/work/main.ts", yield* request.text);
-          const result = yield* sandbox.exec("bun main.ts", { cwd: "/work", timeout: "1 minute" });
-          const greeting = yield* sandbox.hello(name);
-          return yield* HttpServerResponse.json({ greeting, ...result });
+          yield* sandbox.files.write("/work/main.py", yield* request.text);
+          const result = yield* sandbox.exec("python3 main.py", {
+            cwd: "/work",
+            timeout: "1 minute",
+          });
+          return yield* HttpServerResponse.json(result);
         }
 
         if (request.method === "DELETE" && run === undefined) {
