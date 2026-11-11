@@ -45,7 +45,7 @@ export default Alchemy.Stack(
 
 ## Network configuration
 
-Within a Stack's `Effect.gen`, networks can be isolated, made attachable and assigned explicit IPAM settings:
+A network can be internal, attachable, and pinned to an explicit subnet:
 
 ```typescript
 const internalNetwork = yield* Docker.Network("InternalNetwork", {
@@ -57,9 +57,7 @@ const internalNetwork = yield* Docker.Network("InternalNetwork", {
 });
 ```
 
-Docker assigns a subnet and gateway if none are provided. Explicit subnets and ranges use canonical CIDR prefixes (for example, `10.50.0.0/24`); IPv6 subnets require `enableIPv6: true`. The `alchemy::*` label prefix is reserved for ownership.
-
-Network creation options are immutable; changing them replaces the network, and Docker will refuse to remove it while containers are attached. Replacement is not transactional. `internal` restricts traffic through that network, not through a container's other network connections. To reference a network managed by Compose or another tool without changing it, use `Docker.Network.lookup`. See [local services](https://alchemy.run/docker/local-services) for driver options, dual-stack examples, and lifecycle details.
+Without `ipam`, Docker picks the subnet and gateway. Network settings are fixed at creation, so changing one replaces the network. See [local services](https://alchemy.run/docker/local-services) for dual-stack networks and driver options.
 
 ## Learn more
 

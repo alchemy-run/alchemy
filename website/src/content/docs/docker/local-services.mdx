@@ -80,8 +80,7 @@ fixed once it holds data you care about.
 
 ### Configure a network
 
-`Docker.Network` also supports internal networks, manual attachment, network
-driver options and explicit IP Address Management (IPAM):
+A network can be internal, attachable, and pinned to an explicit subnet:
 
 ```typescript
 const privateNetwork = yield* Docker.Network("private-network", {
@@ -99,23 +98,12 @@ const privateNetwork = yield* Docker.Network("private-network", {
 });
 ```
 
-Docker automatically assigns the subnet and gateway when `ipam` is omitted,
-and Alchemy does not treat those Docker-assigned values as configuration drift.
-Use network prefixes without host bits (`10.50.0.0/24`, not
-`10.50.0.1/24`); Alchemy validates ranges, address containment and
-non-overlapping subnets before replacing an existing network. Explicit IPv4
-subnets require IPv4 to be enabled, and IPv6 subnets require `enableIPv6: true`.
-Equivalent IPv6 address spellings do not trigger replacements.
-Invalid configurations report an `InvalidNetworkOptions` error with the
-offending property path (for example, `ipam.config[0].gateway`).
-Network labels use the `labels` map, but the `alchemy::*` prefix is reserved
-for Alchemy's resource ownership markers and cannot be set by the user.
-Alchemy also verifies the recorded Docker network ID: if a different network
-takes over the same name, it is treated as foreign rather than silently adopted.
+Without `ipam`, Docker picks the subnet and gateway, and Alchemy doesn't treat
+them as drift. Subnets are network prefixes (`10.50.0.0/24`, not
+`10.50.0.1/24`); a bad one fails with `InvalidNetworkOptions` naming the field,
+before the old network is touched.
 
-The network driver determines which IPAM combinations are supported. For
-IPv6-only networks, use `enableIPv4: false` with `enableIPv6: true`.
-For dual-stack bridge networks, enable IPv6 and declare both CIDR families:
+A dual-stack bridge network enables IPv6 and declares both families:
 
 ```typescript
 const dualStack = yield* Docker.Network("dual-stack", {
@@ -129,21 +117,10 @@ const dualStack = yield* Docker.Network("dual-stack", {
 });
 ```
 
-An `internal` network restricts external access **on that network**; a
-container attached to additional networks may still have an external route.
-Changes to network creation settings replace the network, and Docker will
-reject removal while active endpoints remain connected. Replacement is not
-transactional: a driver-specific error during creation can occur after the
-old network has been deleted. Alchemy checks known IPAM constraints before
-replacement, but the driver determines which configurations take effect. Some
-drivers may accept options without applying them; inspect the effective IPAM
-settings when using advanced driver configurations. If a managed network is
-deleted outside Alchemy, the next deploy recreates it. If a different network
-takes over the same name, Alchemy refuses to claim it automatically.
-
-For an existing network managed by Compose or another tool, use
-`Docker.Network.lookup({ name: "compose_default" })` to reference it without
-managing its lifecycle.
+`internal` cuts external access through that network only; a container on
+another network can still reach out. Every network setting is fixed at
+creation, so changing one replaces the network, and Docker refuses to remove
+it while containers are attached.
 
 ## A Redacted password
 

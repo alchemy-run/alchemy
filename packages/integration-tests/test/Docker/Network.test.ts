@@ -471,12 +471,12 @@ describe(
             path: "ipam.config[0].subnet",
           },
         ];
-        const name = "alchemy-test-invalid-network-options";
+        const name = `alchemy-test-invalid-network-options-${stack.stage}`;
         for (const { props, path } of cases) {
           const error = yield* stack
             .deploy(Docker.Network("invalid-network-options", { ...props, name }))
             .pipe(Effect.catchCause((cause) => Effect.succeed(findNetworkOptionsError(cause))));
-          expect(error).toBeInstanceOf(Docker.InvalidNetworkOptions);
+          expect(error?._tag).toBe("InvalidNetworkOptions");
           expect(error).toMatchObject({ path, message: expect.stringContaining(path) });
           const missing = yield* docker.network.inspect(name).pipe(Effect.flip);
           expect(missing.reason._tag).toBe("NotFound");
@@ -489,7 +489,7 @@ describe(
       (stack) =>
         Effect.gen(function* () {
           const docker = yield* Docker.Docker;
-          const name = "alchemy-test-network-preserve-on-invalid";
+          const name = `alchemy-test-network-preserve-on-invalid-${stack.stage}`;
           yield* stack.destroy();
           yield* Effect.addFinalizer(() => stack.destroy().pipe(Effect.ignore));
           const previous = yield* stack.deploy(
@@ -515,12 +515,12 @@ describe(
             const planned = yield* stack
               .plan(invalid)
               .pipe(Effect.catchCause((cause) => Effect.succeed(findNetworkOptionsError(cause))));
-            expect(planned).toBeInstanceOf(Docker.InvalidNetworkOptions);
+            expect(planned?._tag).toBe("InvalidNetworkOptions");
             expect(planned).toMatchObject({ path, message: expect.stringContaining(path) });
             const deployed = yield* stack
               .deploy(invalid)
               .pipe(Effect.catchCause((cause) => Effect.succeed(findNetworkOptionsError(cause))));
-            expect(deployed).toBeInstanceOf(Docker.InvalidNetworkOptions);
+            expect(deployed?._tag).toBe("InvalidNetworkOptions");
             expect(deployed).toMatchObject({ path, message: expect.stringContaining(path) });
             expect((yield* docker.network.inspect(previous.id)).Internal).toBe(true);
           }
@@ -532,7 +532,7 @@ describe(
       (stack) =>
         Effect.gen(function* () {
           const docker = yield* Docker.Docker;
-          const name = "alchemy-test-network-preserve-families";
+          const name = `alchemy-test-network-preserve-families-${stack.stage}`;
           yield* stack.destroy();
           yield* Effect.addFinalizer(() => stack.destroy().pipe(Effect.ignore));
           const original = yield* stack.deploy(
@@ -555,12 +555,12 @@ describe(
             const planned = yield* stack
               .plan(invalid)
               .pipe(Effect.catchCause((cause) => Effect.succeed(findNetworkOptionsError(cause))));
-            expect(planned).toBeInstanceOf(Docker.InvalidNetworkOptions);
+            expect(planned?._tag).toBe("InvalidNetworkOptions");
             expect(planned).toMatchObject({ path: "ipam.config[0].subnet" });
             const deployed = yield* stack
               .deploy(invalid)
               .pipe(Effect.catchCause((cause) => Effect.succeed(findNetworkOptionsError(cause))));
-            expect(deployed).toBeInstanceOf(Docker.InvalidNetworkOptions);
+            expect(deployed?._tag).toBe("InvalidNetworkOptions");
             expect(deployed).toMatchObject({ path: "ipam.config[0].subnet" });
             expect((yield* docker.network.inspect(original.id)).Internal).toBe(true);
           }
@@ -570,7 +570,7 @@ describe(
     test.provider("rejects ownership label overrides without replacing a network", (stack) =>
       Effect.gen(function* () {
         const docker = yield* Docker.Docker;
-        const name = "alchemy-test-network-preserve-ownership";
+        const name = `alchemy-test-network-preserve-ownership-${stack.stage}`;
         yield* stack.destroy();
         yield* Effect.addFinalizer(() => stack.destroy().pipe(Effect.ignore));
         const original = yield* stack.deploy(
@@ -583,12 +583,12 @@ describe(
         const planned = yield* stack
           .plan(invalid)
           .pipe(Effect.catchCause((cause) => Effect.succeed(findNetworkOptionsError(cause))));
-        expect(planned).toBeInstanceOf(Docker.InvalidNetworkOptions);
+        expect(planned?._tag).toBe("InvalidNetworkOptions");
         expect(planned).toMatchObject({ path: 'labels["alchemy::id"]' });
         const deployed = yield* stack
           .deploy(invalid)
           .pipe(Effect.catchCause((cause) => Effect.succeed(findNetworkOptionsError(cause))));
-        expect(deployed).toBeInstanceOf(Docker.InvalidNetworkOptions);
+        expect(deployed?._tag).toBe("InvalidNetworkOptions");
         expect(deployed).toMatchObject({ path: 'labels["alchemy::id"]' });
         expect((yield* docker.network.inspect(original.id)).Labels?.environment).toBe("test");
       }),
@@ -597,7 +597,7 @@ describe(
     test.provider("refuses a pre-existing network unless explicitly adopted", (stack) =>
       Effect.gen(function* () {
         const docker = yield* Docker.Docker;
-        const networkName = "alchemy-test-network-adoption";
+        const networkName = `alchemy-test-network-adoption-${stack.stage}`;
         yield* Effect.addFinalizer(() => docker.network.remove(networkName).pipe(Effect.ignore));
         yield* docker.network
           .remove(networkName)
@@ -610,7 +610,7 @@ describe(
             Effect.as(undefined),
             Effect.catchCause((cause) => Effect.succeed(findOwnedError(cause))),
           );
-        expect(error).toBeInstanceOf(OwnedBySomeoneElse);
+        expect(error?._tag).toBe("OwnedBySomeoneElse");
 
         const network = yield* stack.deploy(
           Docker.Network("existing-network", { name: networkName }).pipe(adopt(true)),
@@ -623,7 +623,7 @@ describe(
     test.provider("adopts an existing same-name network with stack adoption", (stack) =>
       Effect.gen(function* () {
         const docker = yield* Docker.Docker;
-        const networkName = "alchemy-test-network-adopt-existing";
+        const networkName = `alchemy-test-network-adopt-existing-${stack.stage}`;
         yield* Effect.addFinalizer(() => docker.network.remove(networkName).pipe(Effect.ignore));
         yield* docker.network
           .remove(networkName)
@@ -645,7 +645,7 @@ describe(
       (stack) =>
         Effect.gen(function* () {
           const docker = yield* Docker.Docker;
-          const name = "alchemy-test-network-adopt-internal";
+          const name = `alchemy-test-network-adopt-internal-${stack.stage}`;
           yield* docker.network
             .remove(name)
             .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.void));
@@ -664,7 +664,7 @@ describe(
     test.provider("recreates a managed network removed outside Alchemy", (stack) =>
       Effect.gen(function* () {
         const docker = yield* Docker.Docker;
-        const name = "alchemy-test-network-out-of-band-deletion";
+        const name = `alchemy-test-network-out-of-band-deletion-${stack.stage}`;
         yield* stack.destroy();
         yield* Effect.addFinalizer(() => stack.destroy().pipe(Effect.ignore));
         const resource = Docker.Network("recover-deleted-network", { name });
@@ -685,7 +685,7 @@ describe(
     test.provider("does not adopt a foreign network replacing a previously managed name", (stack) =>
       Effect.gen(function* () {
         const docker = yield* Docker.Docker;
-        const name = "alchemy-test-network-foreign-replacement";
+        const name = `alchemy-test-network-foreign-replacement-${stack.stage}`;
         yield* stack.destroy();
         yield* Effect.addFinalizer(() => stack.destroy().pipe(Effect.ignore));
         const resource = Docker.Network("ownership-replacement", { name });
@@ -696,17 +696,17 @@ describe(
         const planned = yield* stack
           .plan(resource)
           .pipe(Effect.catchCause((cause) => Effect.succeed(findOwnedError(cause))));
-        expect(planned).toBeInstanceOf(OwnedBySomeoneElse);
+        expect(planned?._tag).toBe("OwnedBySomeoneElse");
         const deployed = yield* stack
           .deploy(resource)
           .pipe(Effect.catchCause((cause) => Effect.succeed(findOwnedError(cause))));
-        expect(deployed).toBeInstanceOf(OwnedBySomeoneElse);
+        expect(deployed?._tag).toBe("OwnedBySomeoneElse");
         // A changed immutable option takes the delete-first replacement path.
         // It must also reject the foreign owner before any destructive work.
         const replacement = yield* stack
           .deploy(Docker.Network("ownership-replacement", { name, internal: true }))
           .pipe(Effect.catchCause((cause) => Effect.succeed(findOwnedError(cause))));
-        expect(replacement).toBeInstanceOf(OwnedBySomeoneElse);
+        expect(replacement?._tag).toBe("OwnedBySomeoneElse");
         expect((yield* docker.network.inspect(foreign.stdout)).Id).toBe(foreign.stdout);
       }),
     );
@@ -714,7 +714,7 @@ describe(
     test.provider("replaces a network when its labels change", (stack) =>
       Effect.gen(function* () {
         const docker = yield* Docker.Docker;
-        const name = "alchemy-test-network-replace";
+        const name = `alchemy-test-network-replace-${stack.stage}`;
         yield* docker.network
           .remove(name)
           .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.void));
@@ -731,9 +731,9 @@ describe(
   },
 );
 
-const findCauseValue = <A>(
+const findTagged = <Tag extends string, A extends { readonly _tag: Tag }>(
   cause: Cause.Cause<unknown>,
-  isValue: (value: unknown) => value is A,
+  tag: Tag,
 ): A | undefined =>
   cause.reasons
     .map((reason) =>
@@ -743,19 +743,13 @@ const findCauseValue = <A>(
           ? reason.defect
           : undefined,
     )
-    .find(isValue);
+    .find(
+      (value): value is A =>
+        typeof value === "object" && value !== null && "_tag" in value && value._tag === tag,
+    );
 
 const findOwnedError = (cause: Cause.Cause<unknown>) =>
-  findCauseValue(
-    cause,
-    (value): value is OwnedBySomeoneElse => value instanceof OwnedBySomeoneElse,
-  );
+  findTagged<"OwnedBySomeoneElse", OwnedBySomeoneElse>(cause, "OwnedBySomeoneElse");
 
 const findNetworkOptionsError = (cause: Cause.Cause<unknown>) =>
-  cause.reasons
-    .filter(Cause.isFailReason)
-    .map((reason) => reason.error)
-    .find(
-      (value): value is Docker.InvalidNetworkOptions =>
-        value instanceof Docker.InvalidNetworkOptions,
-    );
+  findTagged<"InvalidNetworkOptions", Docker.InvalidNetworkOptions>(cause, "InvalidNetworkOptions");
