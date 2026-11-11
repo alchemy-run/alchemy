@@ -193,6 +193,9 @@ const flociFixedValues: Record<string, string> = {
   // floci runs Entity Resolution matching and ID mapping jobs over the Glue tables' S3 data in
   // seconds, where AWS takes several minutes even for a few rows.
   AWS_TEST_ENTITYRESOLUTION_RUN: "1",
+  // floci onboards an organization to Firewall Manager in seconds, where AWS keeps it onboarding
+  // (and refusing to offboard) for over ten minutes.
+  AWS_TEST_FMS: "1",
   // Floci stores authorizer URIs without resolving the function.
   ALCHEMY_TEST_AUTHORIZER_URI:
     "arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-1:000000000000:function:alchemy-floci-standing-authorizer/invocations",
