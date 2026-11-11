@@ -70,7 +70,7 @@ export default class BindingsApi extends Fly.Service<BindingsApi>()(
             tokenKind: token.startsWith("FlyV1 ")
               ? "flyv1"
               : token.startsWith("{")
-                ? "packed"
+                ? "marker"
                 : "other",
           });
         }
