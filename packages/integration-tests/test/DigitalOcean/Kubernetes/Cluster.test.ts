@@ -21,19 +21,25 @@ const LIVE_TAGS = ["provider:digitalocean", "provider:digitalocean:kubernetes", 
 const LIVE_TIMEOUT = 2_400_000;
 
 test.provider.skipIf(skipSlow)(
-  "cluster: create, apply a manifest, forward its logs, add and scale a node pool, enable the registry, destroy",
+  "cluster: create, apply a manifest, forward its logs, add and scale a node pool, enable the registry, install a 1-Click app, destroy",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
       const configMapName = testName(stack.stage, "config").slice(0, 63);
 
-      const declare = (extraNodes: number, value: string, registryEnabled: boolean) =>
+      const declare = (
+        extraNodes: number,
+        value: string,
+        registryEnabled: boolean,
+        oneClickApps?: string[],
+      ) =>
         Effect.gen(function* () {
           yield* TestRegistry;
           const cluster = yield* DigitalOcean.Kubernetes.Cluster("K8s", {
             region: "nyc3",
             nodePool: { size: "s-2vcpu-4gb", count: 1 },
             registryEnabled,
+            oneClickApps,
           });
           const pool = yield* DigitalOcean.Kubernetes.NodePool("Extra", {
             clusterId: cluster.clusterId,
@@ -77,7 +83,8 @@ test.provider.skipIf(skipSlow)(
       const sink = yield* getMonitoringSink({ sink_uuid: created.sinkId });
       expect(sink.sink.resources?.[0]?.urn).toEqual(created.cluster.urn);
 
-      const scaled = yield* stack.deploy(declare(2, "hi", true));
+      const scaled = yield* stack.deploy(declare(2, "hi", true, ["metrics-server"]));
+      expect(scaled.cluster.oneClickApps).toEqual(["metrics-server"]);
       expect(scaled.pool.nodePoolId).toEqual(created.pool.nodePoolId);
       const pool = yield* getKubernetesNodePool({
         cluster_id: created.cluster.clusterId,

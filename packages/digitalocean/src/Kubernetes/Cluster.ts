@@ -79,6 +79,13 @@ export type ClusterProps = {
    */
   registryEnabled?: boolean;
   /**
+   * 1-Click apps to install, by slug (`monitoring`, `cert-manager`,
+   * `ingress-nginx`, …). Newly listed apps install on the next deploy;
+   * DigitalOcean has no API to uninstall one, so removing a slug leaves the
+   * app running.
+   */
+  oneClickApps?: string[];
+  /**
    * Also destroy the load balancers and volumes the cluster created for
    * Services and PersistentVolumeClaims when the cluster is destroyed.
    *
@@ -121,6 +128,8 @@ export type Cluster = Resource<
     connection: Connection;
     /** ISO 8601 creation time. */
     createdAt: string;
+    /** 1-Click apps this resource installed. */
+    oneClickApps: string[];
   },
   never,
   Providers
@@ -218,7 +227,10 @@ const physicalName = (id: string) => createPhysicalName({ id, lowercase: true, m
 const userTagsOf = (tags: ReadonlyArray<string>) =>
   withoutAlchemyTags(tags).filter((tag) => !tag.startsWith("k8s"));
 
-const toAttrs = (cluster: ClusterRead): ClusterAttributes => ({
+const toAttrs = (
+  cluster: ClusterRead,
+  oneClickApps: ReadonlyArray<string> = [],
+): ClusterAttributes => ({
   clusterId: cluster.id,
   urn: `do:kubernetes:${cluster.id}`,
   name: cluster.name,
@@ -234,6 +246,7 @@ const toAttrs = (cluster: ClusterRead): ClusterAttributes => ({
   tags: userTagsOf(cluster.tags),
   connection: doksConnectionOf({ clusterId: cluster.id, endpoint: cluster.endpoint }),
   createdAt: cluster.created_at,
+  oneClickApps: [...oneClickApps],
 });
 
 export const observeKubernetesCluster = (clusterId: string) =>
@@ -291,11 +304,11 @@ export const ClusterProvider = () =>
     ],
     list: Effect.fn(function* () {
       const clusters = yield* listAll;
-      return clusters.filter((c) => (c.tags ?? []).some(isAlchemyTag)).map(toAttrs);
+      return clusters.filter((c) => (c.tags ?? []).some(isAlchemyTag)).map((c) => toAttrs(c));
     }),
     read: Effect.fn(function* ({ fqn, instanceId, olds, output }) {
       const owned = yield* observeGeneration(output, instanceId);
-      if (Option.isSome(owned)) return toAttrs(owned.value);
+      if (Option.isSome(owned)) return toAttrs(owned.value, output?.oneClickApps);
       if (olds.name === undefined) return undefined;
       const ownershipTag = yield* ownershipTagFor(fqn);
       const clusters = yield* listAll;
@@ -411,8 +424,16 @@ export const ClusterProvider = () =>
           : DO.removeKubernetesRegistry({ cluster_uuids: [cluster.id] });
       }
 
+      // No API lists installed 1-Click apps: the attribute records what this
+      // resource installed on this cluster generation.
+      const installed = Option.isSome(observed) ? (output?.oneClickApps ?? []) : [];
+      const missing = (news.oneClickApps ?? []).filter((slug) => !installed.includes(slug));
+      if (missing.length > 0) {
+        yield* DO.installOneClickKubernetes({ cluster_uuid: cluster.id, addon_slugs: missing });
+      }
+
       const running = yield* waitUntilRunning(cluster.id, (c) => c.name === name);
-      return toAttrs(running);
+      return toAttrs(running, [...installed, ...missing]);
     }),
     delete: Effect.fn(function* ({ olds, output }) {
       const observed = yield* observeKubernetesCluster(output.clusterId);

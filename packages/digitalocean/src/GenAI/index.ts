@@ -6,3 +6,4 @@ export * from "./KnowledgeBase.ts";
 export * from "./Workspace.ts";
 export * from "./ModelRouter.ts";
 export * from "./ProviderKey.ts";
+export * from "./CustomModel.ts";

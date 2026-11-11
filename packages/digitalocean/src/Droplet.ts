@@ -44,6 +44,16 @@ import type { ImageSlug, RegionSlug, SizeSlug } from "./Slugs.ts";
 
 export type { DropletStatus } from "@distilled.cloud/digitalocean";
 
+/** When a droplet's automated backups run. */
+export interface DropletBackupPolicy {
+  /** `daily` backups are kept 7 days, `weekly` ones 4 weeks. */
+  plan: "daily" | "weekly";
+  /** The day a weekly backup runs. @default one DigitalOcean picks */
+  weekday?: "SUN" | "MON" | "TUE" | "WED" | "THU" | "FRI" | "SAT";
+  /** The UTC hour the four-hour backup window starts. */
+  hour: 0 | 4 | 8 | 12 | 16 | 20;
+}
+
 export type DropletProps = {
   /**
    * Droplet name. It is also the hostname. A change renames the droplet in
@@ -69,11 +79,20 @@ export type DropletProps = {
   sshKeys?: Array<string | number>;
 
   /**
-   * Enable automated backups. A change replaces the droplet.
+   * Enable automated backups. Updates in place.
    *
-   * @default false
+   * @default false, or true when `backupPolicy` is set
    */
   backups?: boolean;
+
+  /**
+   * When automated backups run and how long they're kept: `daily` backups
+   * are retained 7 days, `weekly` ones 4 weeks. Setting it turns backups
+   * on. Updates in place.
+   *
+   * @default DigitalOcean's weekly plan, in a window it picks
+   */
+  backupPolicy?: DropletBackupPolicy;
 
   /**
    * Enable IPv6. Enabling updates the droplet in place. Disabling replaces
@@ -313,13 +332,19 @@ const REPLACING_VALUES = [
   // `undefined` keeps the image default, which is not `false`.
   "withDropletAgent",
 ] as const;
-const REPLACING_FLAGS = ["backups", "monitoring"] as const;
+const REPLACING_FLAGS = ["monitoring"] as const;
 const REPLACING_LISTS = ["sshKeys", "volumes"] as const;
 
-// `name` and `tags` update in place; every other prop can replace the droplet.
-type InPlaceProp = "name" | "tags";
+// `name`, `tags` and backups update in place; every other prop can replace
+// the droplet.
+type InPlaceProp = "name" | "tags" | "backups" | "backupPolicy";
 type ReplacementProps = Omit<DropletProps, InPlaceProp>;
-const IN_PLACE_PROPS: ReadonlySet<string> = new Set<InPlaceProp>(["name", "tags"]);
+const IN_PLACE_PROPS: ReadonlySet<string> = new Set<InPlaceProp>([
+  "name",
+  "tags",
+  "backups",
+  "backupPolicy",
+]);
 
 const isOn = (flag: boolean | undefined) => flag ?? false;
 
@@ -566,6 +591,60 @@ const syncIpv6 = Effect.fn(function* (droplet: ApiDroplet, news: DropletProps) {
   yield* runAction(droplet.id, { type: "enable_ipv6" });
 });
 
+const backupsWanted = (news: DropletProps) =>
+  isOn(news.backups) || (news.backups === undefined && news.backupPolicy !== undefined);
+
+const policyBody = (policy: DropletBackupPolicy | undefined) =>
+  policy === undefined
+    ? undefined
+    : { plan: policy.plan, weekday: policy.weekday, hour: policy.hour };
+
+const observeBackupPolicy = (dropletId: number) =>
+  DO.getDropletBackupPolicy({ droplet_id: dropletId }).pipe(
+    Effect.map((response) => response.policy),
+  );
+
+const policyMatches = (
+  observed: DO.DropletBackupPolicyRecord | undefined,
+  wanted: boolean,
+  policy: DropletBackupPolicy | undefined,
+) =>
+  (observed?.backup_enabled ?? false) === wanted &&
+  (!wanted ||
+    policy === undefined ||
+    (observed?.backup_policy?.plan === policy.plan &&
+      observed?.backup_policy?.hour === policy.hour &&
+      (policy.weekday === undefined || observed?.backup_policy?.weekday === policy.weekday)));
+
+// Backup actions can report `in-progress` for minutes after the policy has
+// changed, so wait on the policy itself (≈ 80 s budget).
+const BACKUP_POLL: PollBudget = { maxDelay: "5 seconds", times: 20 };
+
+// Read the live policy: the droplet's `features` list lags it.
+const syncBackups = Effect.fn(function* (droplet: ApiDroplet, news: DropletProps) {
+  const wanted = backupsWanted(news);
+  const observed = yield* observeBackupPolicy(droplet.id);
+  if (policyMatches(observed, wanted, news.backupPolicy)) return;
+  const enabled = observed?.backup_enabled ?? false;
+  const policy = policyBody(news.backupPolicy);
+  const body: PostDropletActionRequestBody = !wanted
+    ? { type: "disable_backups" }
+    : !enabled || policy === undefined
+      ? { type: "enable_backups", backup_policy: policy }
+      : { type: "change_backup_policy", backup_policy: policy };
+  const posted = yield* DO.postDropletAction({ droplet_id: droplet.id, body });
+  yield* pollUntil(observeBackupPolicy(droplet.id), {
+    ...BACKUP_POLL,
+    until: (observedPolicy) => policyMatches(observedPolicy, wanted, news.backupPolicy),
+    onTimeout: () =>
+      new DropletActionFailed({
+        dropletId: droplet.id,
+        actionId: posted.action.id,
+        status: "in-progress",
+      }),
+  });
+});
+
 const syncName = Effect.fn(function* (droplet: ApiDroplet, name: string) {
   if (droplet.name === name) return;
   yield* runAction(droplet.id, { type: "rename", name });
@@ -583,7 +662,8 @@ const createDroplet = Effect.fn(function* (
       size: news.size,
       image: news.image,
       ssh_keys: news.sshKeys,
-      backups: news.backups,
+      backups: backupsWanted(news),
+      backup_policy: policyBody(news.backupPolicy),
       ipv6: news.ipv6,
       monitoring: news.monitoring,
       tags: [...tags],
@@ -681,6 +761,7 @@ export const DropletProvider = () =>
 
       yield* syncTags("droplet", droplet.id, droplet.tags, tags);
       yield* syncIpv6(droplet, news);
+      yield* syncBackups(droplet, news);
       yield* syncName(droplet, name);
       return toAttrs(yield* waitUntilConverged(droplet.id, name, tags, news));
     }),
