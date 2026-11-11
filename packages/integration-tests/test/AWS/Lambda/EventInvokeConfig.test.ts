@@ -39,15 +39,19 @@ test.provider(
             eventInvokeConfig: functionConfig,
           });
 
-          yield* fn.bind("AllowEventInvokeDestination", {
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: ["sqs:SendMessage"],
-                Resource: [queue.queueArn],
-              },
-            ],
-          });
+          // The function's own destinations are granted automatically (Lambda
+          // checks the role when the config is put). An alias's are not.
+          if (alias) {
+            yield* fn.bind("AllowEventInvokeDestination", {
+              policyStatements: [
+                {
+                  Effect: "Allow",
+                  Action: ["sqs:SendMessage"],
+                  Resource: [queue.queueArn],
+                },
+              ],
+            });
+          }
 
           const version = yield* AWS.Lambda.Version("AsyncVersion", {
             function: fn,
@@ -280,4 +284,69 @@ test.provider(
       yield* stack.destroy();
     }),
   { tags: ["provider:aws", "provider:aws:lambda", "live"], timeout: 240_000 },
+);
+
+test.provider(
+  "a binding's async invocation settings merge with the prop, and conflicts fail the deploy",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const program = (propDestination: "same" | "other" | "none") =>
+        Effect.gen(function* () {
+          const failures = yield* AWS.SQS.Queue("BindingFailureQueue", {});
+          const other = yield* AWS.SQS.Queue("PropFailureQueue", {});
+          const fn = yield* AWS.Lambda.Function("BindingAsyncFn", {
+            main: timeoutHandlerPath,
+            handler: "handler",
+            isExternal: true,
+            functionUrl: false,
+            eventInvokeConfig: {
+              maximumRetryAttempts: 1,
+              maximumEventAge: "1 minute",
+              ...(propDestination === "none"
+                ? {}
+                : {
+                    destinationConfig: {
+                      OnFailure: {
+                        Destination:
+                          propDestination === "same" ? failures.queueArn : other.queueArn,
+                      },
+                    },
+                  }),
+            },
+          });
+          // As a binding (e.g. SchedulerCallbacks) requests it.
+          yield* fn.bind("FailureDestination", {
+            eventInvokeConfig: {
+              destinationConfig: { OnFailure: { Destination: failures.queueArn } },
+            },
+          });
+          return { fn, failures };
+        });
+
+      // The binding's destination and the prop's retries combine, and the
+      // Function's role is granted the destination.
+      const merged = yield* stack.deploy(program("none"));
+      const config = yield* expectConfig(merged.fn.functionName, {
+        maximumRetryAttempts: 1,
+        maximumEventAgeInSeconds: 60,
+        onFailureDestination: merged.failures.queueArn,
+      });
+      expect(config.MaximumRetryAttempts).toBe(1);
+      expect(config.DestinationConfig?.OnFailure?.Destination).toBe(merged.failures.queueArn);
+
+      // The prop agreeing with the binding is fine.
+      yield* stack.deploy(program("same"));
+
+      // Two destinations can't both apply.
+      const error = yield* stack.deploy(program("other")).pipe(Effect.flip);
+      expect(error).toMatchObject({
+        _tag: "ConflictingEventInvokeConfig",
+        field: "destinationConfig.OnFailure",
+      });
+
+      yield* stack.destroy();
+    }),
+  { timeout: 240_000 },
 );

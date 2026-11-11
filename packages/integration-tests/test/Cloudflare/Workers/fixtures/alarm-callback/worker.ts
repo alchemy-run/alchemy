@@ -64,32 +64,6 @@ export default class AlarmCallbackWorker extends Cloudflare.Worker<AlarmCallback
                   Number(url.searchParams.get("count") ?? "0"),
                 ),
             );
-          case "worker-registration": {
-            const snapshot = yield* object.snapshot();
-            const context = yield* Alchemy.RuntimeContext;
-            const exit = yield* Effect.exit(
-              Alchemy.makeCallback(
-                "unsupported-worker",
-                (_payload: { value: string }) => Effect.void,
-              ),
-            );
-            const defect = Exit.isFailure(exit)
-              ? Result.getOrUndefined(Cause.findDefect(exit.cause))
-              : undefined;
-            const result: RegistrationResult & { runtimeType: string } = {
-              runtimeType: context.Type,
-              failure:
-                defect instanceof Alchemy.CallbackError
-                  ? {
-                      tag: defect._tag,
-                      callback: defect.callback,
-                      message: defect.message,
-                    }
-                  : null,
-              snapshot,
-            };
-            return yield* HttpServerResponse.json(result);
-          }
           case "late-registration":
             return yield* HttpServerResponse.json(yield* object.registerLate());
           case "bookkeeping":

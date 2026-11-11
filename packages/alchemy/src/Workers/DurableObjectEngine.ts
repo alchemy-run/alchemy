@@ -11,7 +11,7 @@ import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import { Workflow, WorkflowEngine } from "effect/workflow";
-import { makeCallback } from "../Callback.ts";
+import { type Callbacks, makeCallback } from "../Callback.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import {
   CurrentActivity,
@@ -376,7 +376,7 @@ const executionObject = <State>(
       // Every wake-up (a start, a completed deferred, a fired clock, an
       // interrupt) records what changed and schedules this one job. Jobs run
       // one at a time and are retried until a run succeeds.
-      const runs = yield* makeCallback(RUN, () => run, { retry: { delay: "5 seconds" } });
+      const runs = yield* makeCallback(RUN, () => run);
       const wake = (progress?: number) =>
         runs
           .schedule(RUN, { after: 0, payload: {}, progress })
@@ -398,13 +398,10 @@ const executionObject = <State>(
           }),
         );
 
-      const clocks = yield* makeCallback(
-        "clock",
-        (job: { readonly deferred: string }) =>
-          Effect.gen(function* () {
-            yield* complete(job.deferred, yield* encodeExit(Exit.void));
-          }),
-        { retry: { delay: "5 seconds" } },
+      const clocks = yield* makeCallback("clock", (job: { readonly deferred: string }) =>
+        Effect.gen(function* () {
+          yield* complete(job.deferred, yield* encodeExit(Exit.void));
+        }),
       );
       // Replays reach the same sleep again: a clock that's done or already
       // pending is left alone.
@@ -591,8 +588,22 @@ export interface Namespace {
 }
 
 /** The two-stage implementation of an execution object. */
+/**
+ * Provide an engine object's instances with a host's `Callbacks`
+ * implementation. Every host's `declare` does this with its own.
+ */
+export const provideCallbacks = <State, R>(
+  impl: ObjectImpl<State>,
+  callbacks: Layer.Layer<Callbacks, never, R>,
+) =>
+  Effect.map(impl, (instance) => instance.pipe(Effect.provide(callbacks))) as Effect.Effect<
+    Effect.Effect<Record<string, unknown>, never, State | RuntimeContext | Scope.Scope | R>,
+    never,
+    State
+  >;
+
 export type ObjectImpl<State> = Effect.Effect<
-  Effect.Effect<Record<string, unknown>, never, State | RuntimeContext | Scope.Scope>,
+  Effect.Effect<Record<string, unknown>, never, State | RuntimeContext | Callbacks | Scope.Scope>,
   never,
   State
 >;

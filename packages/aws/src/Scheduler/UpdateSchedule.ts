@@ -1,30 +1,23 @@
 import type * as scheduler from "@distilled.cloud/aws/scheduler";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
-import type { Role } from "../IAM/Role.ts";
-import type { ScheduleGroup } from "./ScheduleGroup.ts";
-
-/**
- * The schedule target passed at runtime. `RoleArn` defaults to the execution
- * role the binding was constructed with, so callers normally omit it.
- */
-export interface UpdateScheduleTarget extends Omit<scheduler.Target, "RoleArn"> {
-  /**
-   * Execution role EventBridge Scheduler assumes to invoke the target.
-   * @default the execution role bound via `UpdateSchedule(role)`
-   */
-  RoleArn?: string;
-}
+import type {
+  ScheduleTarget,
+  ScheduleTargetRequest,
+  ScheduleWriteClient,
+  ScheduleWriteOptions,
+} from "./ScheduleWriteTypes.ts";
 
 export interface UpdateScheduleRequest extends Omit<
   scheduler.UpdateScheduleInput,
   "GroupName" | "Target" | "FlexibleTimeWindow"
 > {
   /**
-   * Target the schedule invokes when it fires. The bound execution role is
-   * injected as `RoleArn` unless the request overrides it.
+   * Target the schedule delivers to. `Arn` and `RoleArn` default to the
+   * bound target and its execution role.
+   * @default the bound target
    */
-  Target: UpdateScheduleTarget;
+  Target?: ScheduleTargetRequest;
   /**
    * Flexible time window configuration.
    * @default { Mode: "OFF" }
@@ -33,38 +26,50 @@ export interface UpdateScheduleRequest extends Omit<
 }
 
 /**
+ * The runtime client `UpdateSchedule(target)` returns.
+ */
+export type UpdateScheduleClient = ScheduleWriteClient<
+  UpdateScheduleRequest,
+  scheduler.UpdateScheduleOutput,
+  scheduler.UpdateScheduleError
+>;
+
+/**
  * Runtime binding for `scheduler:UpdateSchedule`.
  *
- * Pairs with {@link CreateSchedule} for the dynamic-scheduling pattern: a
- * deployed Lambda reschedules or pauses schedules it minted at runtime (push
- * a reminder back, disable a recurring job). `UpdateSchedule` is a full PUT —
- * unspecified fields are reset to their defaults, so send the complete
- * desired configuration.
+ * Pairs with {@link CreateSchedule}: a deployed runtime reschedules or pauses
+ * schedules it created (push a reminder back, disable a recurring job).
+ * `UpdateSchedule` is a full PUT — unspecified fields are reset to their
+ * defaults — so `at`, `every` and `cron` send the complete configuration.
  *
- * Like {@link CreateSchedule}, the binding is constructed with the schedule
- * **execution role** and optionally a scoping `ScheduleGroup`; it contributes
- * both `scheduler:UpdateSchedule` on the group's schedule ARN pattern and
- * `iam:PassRole` on the execution role.
+ * Like {@link CreateSchedule}, bind it to the Queue or Function the schedules
+ * deliver to. It declares the same execution role and grants the host
+ * `scheduler:UpdateSchedule` on the group's schedules plus `iam:PassRole` on
+ * that role.
  * ### Updating Schedules At Runtime
- * **Example:** Reschedule A Reminder
+ * **Example:** Push A Reminder Back A Day
  * ```typescript
- * const updateSchedule = yield* AWS.Scheduler.UpdateSchedule(role);
+ * const reschedule = yield* AWS.Scheduler.UpdateSchedule(queue);
  *
- * // runtime: push the reminder back a day (full PUT — resend the target)
- * yield* updateSchedule({
- *   Name: `reminder-${userId}`,
- *   ScheduleExpression: "at(2026-01-02T00:00:00)",
- *   ActionAfterCompletion: "DELETE",
- *   Target: {
- *     Arn: yield* queueArn,
- *     Input: JSON.stringify({ userId }),
- *   },
+ * // runtime
+ * yield* reschedule.at(new Date(Date.now() + 24 * 60 * 60_000), {
+ *   name: `reminder-${userId}`,
+ *   payload: { userId },
  * });
  * ```
  *
- * **Example:** Scope Updates To A Schedule Group
+ * **Example:** Pause A Recurring Schedule
  * ```typescript
- * const updateSchedule = yield* AWS.Scheduler.UpdateSchedule(role, group);
+ * yield* reschedule.every("1 day", {
+ *   name: `digest-${userId}`,
+ *   state: "DISABLED",
+ *   payload: { userId },
+ * });
+ * ```
+ *
+ * **Example:** Update Schedules In A Schedule Group
+ * ```typescript
+ * const reschedule = yield* AWS.Scheduler.UpdateSchedule(queue, { group });
  * ```
  *
  * @binding
@@ -72,13 +77,9 @@ export interface UpdateScheduleRequest extends Omit<
 export interface UpdateSchedule extends Binding.Service<
   UpdateSchedule,
   "AWS.Scheduler.UpdateSchedule",
-  <R extends Role>(
-    executionRole: R,
-    group?: ScheduleGroup,
-  ) => Effect.Effect<
-    (
-      request: UpdateScheduleRequest,
-    ) => Effect.Effect<scheduler.UpdateScheduleOutput, scheduler.UpdateScheduleError>
-  >
+  <T extends ScheduleTarget>(
+    target: T,
+    options?: ScheduleWriteOptions,
+  ) => Effect.Effect<UpdateScheduleClient>
 > {}
 export const UpdateSchedule = Binding.Service<UpdateSchedule>("AWS.Scheduler.UpdateSchedule");

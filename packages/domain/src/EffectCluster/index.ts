@@ -13,6 +13,7 @@ import type { Providers } from "@alchemy.run/effect-cluster/Providers";
  * @module
  */
 import { PgClient } from "@effect/sql-pg";
+import type { Callbacks } from "alchemy/Callback";
 import { entrypointLayer, entrypointTag } from "alchemy/Runtime/Bootstrap";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { makeInputGate, type InputGateShape } from "alchemy/Workers/InputGate";
@@ -90,7 +91,7 @@ const entity = <const Type extends string>(type: Type): EffectEntity.Entity<Type
 type InstanceBuild = Effect.Effect<
   Record<string, unknown>,
   never,
-  ObjectState | RuntimeContext | Scope.Scope
+  ObjectState | RuntimeContext | Callbacks | Scope.Scope
 >;
 
 /** Where every instance keeps its storage: one row per key, in the cluster's database. */
@@ -515,13 +516,9 @@ export const layerEntities = <PoolReq>(
           // Background work stays part of the call that started it.
           waitUntil: (effect) => Effect.asVoid(Effect.forkIn(effect, instanceScope)),
         };
-        const runtime = yield* RuntimeContext;
         const record = yield* build.pipe(
           Effect.provideService(ObjectState, state),
-          Effect.provideService(RuntimeContext, {
-            ...runtime,
-            makeCallback: callbacks.makeCallback,
-          }),
+          Effect.provide(callbacks.callbacks),
         );
         return objects.of({
           Call: ({ payload }) =>

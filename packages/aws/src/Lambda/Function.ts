@@ -376,8 +376,11 @@ export interface FunctionCommonProps extends PlatformProps {
    * Asynchronous invocation settings (retries, event age, destinations) for
    * the unqualified function. Omit to remove any existing config and fall
    * back to Lambda's defaults (2 retries, 6-hour max event age, no
-   * destinations). Use {@link AliasProps.eventInvokeConfig} to scope the
-   * config to an alias instead.
+   * destinations). The function's role is granted what it needs to send to
+   * each destination (`sqs:SendMessage`, `sns:Publish`,
+   * `lambda:InvokeFunction`, `events:PutEvents`, or `s3:PutObject`). Use
+   * {@link AliasProps.eventInvokeConfig} to scope the config to an alias
+   * instead.
    */
   eventInvokeConfig?: EventInvokeConfig;
   /**
@@ -765,6 +768,14 @@ export interface Function extends Resource<
       /** Local mount path inside the function (must begin with `/mnt/`). */
       localMountPath: string;
     }[];
+    /**
+     * Async invocation settings a binding needs (e.g. a failure destination
+     * for the events it delivers). Merged with the Function's own
+     * `eventInvokeConfig` prop and other bindings' settings; two sources
+     * that set the same field differently fail the deploy, since Lambda
+     * keeps one config per function.
+     */
+    eventInvokeConfig?: EventInvokeConfig;
   },
   Providers,
   FunctionLookup
@@ -801,6 +812,71 @@ export class FunctionAliasPublishFailed extends Data.TaggedError("FunctionAliasP
   reason: "CodeStorageExceeded" | "VersionLimitExceeded" | "AliasLimitExceeded";
   message: string;
 }> {}
+
+/**
+ * Two sources (the `eventInvokeConfig` prop and a binding, or two bindings)
+ * set the same async invocation field to different values. Lambda keeps one
+ * config per function, so they can't both apply.
+ */
+export class ConflictingEventInvokeConfig extends Data.TaggedError("ConflictingEventInvokeConfig")<{
+  readonly field: string;
+  readonly message: string;
+}> {}
+
+/**
+ * Merge the `eventInvokeConfig` prop with the settings bindings request.
+ * Each field may be set by any number of sources as long as they agree.
+ */
+const mergeEventInvokeConfig = (
+  prop: EventInvokeConfig | undefined,
+  requested: ReadonlyArray<EventInvokeConfig>,
+) =>
+  Effect.gen(function* () {
+    const sources = [...(prop ? [prop] : []), ...requested];
+    if (sources.length === 0) return undefined;
+    const pick = <A>(
+      field: string,
+      read: (config: EventInvokeConfig) => A | undefined,
+      key: (a: A) => unknown = (a) => a,
+    ) =>
+      Effect.gen(function* () {
+        const values = sources.flatMap((config) => {
+          const value = read(config);
+          return value === undefined ? [] : [value];
+        });
+        const distinct = [...new Set(values.map(key))];
+        if (distinct.length > 1) {
+          return yield* new ConflictingEventInvokeConfig({
+            field,
+            message: `eventInvokeConfig.${field} is set to ${distinct.map(String).join(" and ")} by different sources. Lambda keeps one async invocation config per function; set it in one place.`,
+          });
+        }
+        return values[0];
+      });
+    const onSuccess = yield* pick(
+      "destinationConfig.OnSuccess",
+      (c) => c.destinationConfig?.OnSuccess?.Destination,
+    );
+    const onFailure = yield* pick(
+      "destinationConfig.OnFailure",
+      (c) => c.destinationConfig?.OnFailure?.Destination,
+    );
+    return {
+      maximumRetryAttempts: yield* pick("maximumRetryAttempts", (c) => c.maximumRetryAttempts),
+      maximumEventAge: yield* pick(
+        "maximumEventAge",
+        (c) => c.maximumEventAge,
+        (age) => Duration.toMillis(age),
+      ),
+      destinationConfig:
+        onSuccess || onFailure
+          ? {
+              OnSuccess: onSuccess ? { Destination: onSuccess } : undefined,
+              OnFailure: onFailure ? { Destination: onFailure } : undefined,
+            }
+          : undefined,
+    } satisfies EventInvokeConfig;
+  });
 
 /** An event source was used inside a Lambda Web Function. */
 export class EventSourceRequiresFunction extends Data.TaggedError("EventSourceRequiresFunction")<{
@@ -1561,6 +1637,32 @@ export const Function: Platform<
   },
 });
 
+/**
+ * What the function's role needs to deliver async invocation records to a
+ * destination: Lambda sends them as the role, so without these a configured
+ * `OnFailure` queue silently receives nothing.
+ */
+const destinationStatements = (arn: string): IAM.PolicyStatement[] => {
+  const service = arn.split(":")[2];
+  switch (service) {
+    case "sqs":
+      return [{ Effect: "Allow", Action: ["sqs:SendMessage"], Resource: [arn] }];
+    case "sns":
+      return [{ Effect: "Allow", Action: ["sns:Publish"], Resource: [arn] }];
+    case "lambda":
+      return [{ Effect: "Allow", Action: ["lambda:InvokeFunction"], Resource: [arn] }];
+    case "events":
+      return [{ Effect: "Allow", Action: ["events:PutEvents"], Resource: [arn] }];
+    case "s3":
+      return [
+        { Effect: "Allow", Action: ["s3:ListBucket"], Resource: [arn] },
+        { Effect: "Allow", Action: ["s3:PutObject"], Resource: [`${arn}/*`] },
+      ];
+    default:
+      return [];
+  }
+};
+
 export const FunctionProvider = () =>
   Provider.effect(
     Function,
@@ -1609,12 +1711,15 @@ export const FunctionProvider = () =>
         // functionArn,
         // functionName,
         bindings,
+        destinations,
       }: {
         roleName: string;
         policyName: string;
         functionArn: string;
         functionName: string;
         bindings: ResourceBinding<Function["Binding"]>[];
+        /** Async invocation destinations, which Lambda sends to as the function's role. */
+        destinations: ReadonlyArray<string>;
       }) {
         const activeBindings = bindings.filter(
           (binding: ResourceBinding<Function["Binding"]> & { action?: string }) =>
@@ -1629,6 +1734,11 @@ export const FunctionProvider = () =>
               ...stmt,
               Sid: stmt.Sid?.replace(/[^A-Za-z0-9]+/gi, ""),
             })) ?? [],
+        );
+        policyStatements.push(
+          ...destinations
+            .flatMap(destinationStatements)
+            .map((stmt) => ({ ...stmt, Sid: undefined })),
         );
         // VPC attachments requested through the binding channel (DECISION
         // #5) — set-union across bindings; merged with the `vpc` prop in
@@ -3148,6 +3258,16 @@ export const FunctionProvider = () =>
           yield* syncLogGroupGuard({ roleName, functionName });
           yield* ensureLogGroup({ id, functionName, retention: news.logging?.retention });
 
+          // The prop and every binding's request converge on one config.
+          const invokeConfig = yield* mergeEventInvokeConfig(
+            news.eventInvokeConfig,
+            bindings.flatMap(
+              (binding: ResourceBinding<Function["Binding"]> & { action?: string }) =>
+                binding.action !== "delete" && binding.data?.eventInvokeConfig
+                  ? [binding.data.eventInvokeConfig]
+                  : [],
+            ),
+          );
           const {
             env,
             vpc: bindingVpc,
@@ -3158,6 +3278,10 @@ export const FunctionProvider = () =>
             functionArn,
             functionName,
             bindings,
+            destinations: [
+              invokeConfig?.destinationConfig?.OnSuccess?.Destination,
+              invokeConfig?.destinationConfig?.OnFailure?.Destination,
+            ].filter((arn): arn is string => typeof arn === "string"),
           });
 
           // Both VPC paths (the `vpc` prop and binding-channel requests)
@@ -3317,7 +3441,7 @@ export const FunctionProvider = () =>
           yield* syncEventInvokeConfig({
             functionName,
             qualifier: news.alias,
-            config: news.eventInvokeConfig,
+            config: invokeConfig,
           });
           if (news.alias) {
             // The config moved to the alias; `$LATEST` falls back to defaults.

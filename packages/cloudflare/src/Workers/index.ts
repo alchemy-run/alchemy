@@ -1,4 +1,5 @@
 export * from "./AccountSetting.ts";
+export { DurableObjectCallbacks } from "./AlarmCallback.ts";
 export { UnsupportedAlarmSchemaVersion } from "./DurableObjectAlarmStorage.ts";
 export * from "./AI.ts";
 export * from "./AIBinding.ts";

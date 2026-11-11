@@ -1,7 +1,10 @@
 import * as IAM from "@alchemy.run/aws/IAM";
+import * as KMS from "@alchemy.run/aws/KMS";
 import * as Lambda from "@alchemy.run/aws/Lambda";
 import * as Scheduler from "@alchemy.run/aws/Scheduler";
 import * as SQS from "@alchemy.run/aws/SQS";
+import * as Alchemy from "alchemy";
+import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -11,13 +14,18 @@ import path from "pathe";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
+class FirstAttemptDies extends Data.TaggedError("FirstAttemptDies") {}
+
 // Shared Lambda fixture for the EventBridge Scheduler runtime surface:
-// - CreateSchedule / GetSchedule / DeleteSchedule bindings, one HTTP route
-//   per operation. Runtime-minted one-shot schedules target the sink queue,
-//   so the test can observe the fire out-of-band.
+// - CreateSchedule / UpdateSchedule / GetSchedule / DeleteSchedule /
+//   ListSchedules bindings, one HTTP route per operation. Runtime-minted
+//   schedules target the sink queue, so the test can observe the fire
+//   out-of-band.
 // - consumeSchedule (the cron-handler DX): a rate(1 minute) schedule invokes
 //   this same Lambda; the handler forwards the typed event into the cron
 //   queue for out-of-band observation.
+// - Alchemy.makeCallback over AWS.Scheduler.SchedulerCallbacks: jobs call this Lambda
+//   back, and the handlers forward into the cron queue too.
 export class SchedulerTestFunction extends Lambda.Function<Lambda.Function>()(
   "SchedulerTestFunction",
 ) {}
@@ -36,9 +44,9 @@ export default SchedulerTestFunction.make(
     // Queue the consumeSchedule cron handler forwards its typed events into.
     const cronQueue = yield* SQS.Queue("SchedulerCronQueue");
 
-    // Execution role for runtime-minted schedules: assumable by EventBridge
-    // Scheduler, allowed to send into the sink queue. The CreateSchedule
-    // binding contributes iam:PassRole on this role to the host's policy.
+    // An existing execution role, passed via `{ role }` to cover the
+    // bring-your-own-role path. The bindings bound without it declare their
+    // own role for the sink queue.
     const executionRole = yield* IAM.Role("SchedulerExecutionRole", {
       assumeRolePolicyDocument: {
         Version: "2012-10-17",
@@ -64,12 +72,25 @@ export default SchedulerTestFunction.make(
       },
     });
 
-    const createSchedule = yield* Scheduler.CreateSchedule(executionRole);
-    const updateSchedule = yield* Scheduler.UpdateSchedule(executionRole);
+    const schedule = yield* Scheduler.CreateSchedule(sinkQueue);
+    const reschedule = yield* Scheduler.UpdateSchedule(sinkQueue);
+    const scheduleWithRole = yield* Scheduler.CreateSchedule(sinkQueue, { role: executionRole });
+    // Deliveries Scheduler gives up on go to this queue; the generated role
+    // may send to it.
+    const deadLetterQueue = yield* SQS.Queue("SchedulerDeadLetterQueue");
+    const scheduleWithDlq = yield* Scheduler.CreateSchedule(sinkQueue, { deadLetterQueue });
+    // A customer managed key encrypts the target input; the generated role
+    // may decrypt with it, so Scheduler can still deliver.
+    const inputKey = yield* KMS.Key("SchedulerInputKey", {});
+    const scheduleWithKey = yield* Scheduler.CreateSchedule(sinkQueue, { kmsKey: inputKey });
     const getSchedule = yield* Scheduler.GetSchedule();
     const deleteSchedule = yield* Scheduler.DeleteSchedule();
     const listSchedules = yield* Scheduler.ListSchedules();
     const sendCron = yield* SQS.SendMessage(cronQueue);
+    // Records each `flaky` delivery attempt.
+    const attemptsQueue = yield* SQS.Queue("SchedulerAttemptsQueue");
+    const sendAttempt = yield* SQS.SendMessage(attemptsQueue);
+    const receiveAttempt = yield* SQS.ReceiveMessage(attemptsQueue);
 
     // The cron-handler DX: consume this Lambda's own scheduled invocations
     // and forward the typed event into the cron queue.
@@ -85,7 +106,47 @@ export default SchedulerTestFunction.make(
       }).pipe(Effect.orDie, Effect.asVoid),
     );
 
+    // Durable callbacks into this Lambda. `remind` forwards its payload into
+    // the cron queue; `flaky` fails its first attempt, so the forwarded
+    // message proves the retry ran.
+    const remind = yield* Alchemy.makeCallback(
+      "remind",
+      Effect.fn(function* ({ marker }: { marker: string }) {
+        yield* sendCron({
+          MessageBody: JSON.stringify({ marker: "alch-schedtest-callback", id: marker }),
+        }).pipe(Effect.orDie);
+      }),
+    );
+    // `flaky` dies on its first delivery, leaving a marker in the attempts
+    // queue. Lambda retries the failed invocation, and the retry finds the
+    // marker and forwards: proof the redelivery ran.
+    const flaky = yield* Alchemy.makeCallback(
+      "flaky",
+      Effect.fn(function* ({ marker }: { marker: string }) {
+        const received = yield* receiveAttempt({
+          MaxNumberOfMessages: 10,
+          WaitTimeSeconds: 2,
+          VisibilityTimeout: 0,
+        }).pipe(Effect.orDie);
+        const retried = (received.Messages ?? []).some((message) => message.Body === marker);
+        if (!retried) {
+          yield* sendAttempt({ MessageBody: marker }).pipe(Effect.orDie);
+          return yield* Effect.die(new FirstAttemptDies());
+        }
+        yield* sendCron({
+          MessageBody: JSON.stringify({
+            marker: "alch-schedtest-callback",
+            id: marker.split("#")[0],
+            retried,
+          }),
+        }).pipe(Effect.orDie);
+      }),
+    );
+
     const sinkQueueArn = yield* sinkQueue.queueArn;
+    const executionRoleArn = yield* executionRole.roleArn;
+    const deadLetterQueueArn = yield* deadLetterQueue.queueArn;
+    const inputKeyArn = yield* inputKey.keyArn;
     const sinkQueueUrl = yield* sinkQueue.queueUrl;
     const cronQueueUrl = yield* cronQueue.queueUrl;
 
@@ -99,7 +160,11 @@ export default SchedulerTestFunction.make(
           return yield* HttpServerResponse.json({
             ok: true,
             sinkQueueUrl: yield* sinkQueueUrl,
+            sinkQueueArn: yield* sinkQueueArn,
             cronQueueUrl: yield* cronQueueUrl,
+            executionRoleArn: yield* executionRoleArn,
+            deadLetterQueueArn: yield* deadLetterQueueArn,
+            inputKeyArn: yield* inputKeyArn,
           });
         }
 
@@ -119,25 +184,101 @@ export default SchedulerTestFunction.make(
           );
         }
 
+        // Raw CreateSchedule request through the `{ role }` binding: Target.Arn
+        // and Target.RoleArn are left to the binding's defaults.
+        if (request.method === "POST" && pathname.startsWith("/raw-schedules/")) {
+          const name = pathname.slice("/raw-schedules/".length);
+          const delaySeconds = Number(url.searchParams.get("delaySeconds") ?? "30");
+          const fireAt = yield* Effect.sync(() => new Date(Date.now() + delaySeconds * 1000));
+          const expression = `at(${fireAt.toISOString().slice(0, 19)})`;
+          // Surface the typed failure (424 so the 5xx retry doesn't mask it).
+          return yield* scheduleWithRole({
+            Name: name,
+            ScheduleExpression: expression,
+            ActionAfterCompletion: "DELETE",
+            Target: { Input: JSON.stringify({ marker: name }) },
+          }).pipe(
+            Effect.flatMap((created) =>
+              HttpServerResponse.json({ scheduleArn: created.ScheduleArn, expression }),
+            ),
+            Effect.catch((e) =>
+              HttpServerResponse.json({ error: e._tag, message: String(e) }, { status: 424 }),
+            ),
+          );
+        }
+
+        // Durable callbacks: schedule, read, cancel. Typed failures surface
+        // in the body (424 so the 5xx retry doesn't mask them).
+        if (pathname.startsWith("/callbacks/") || pathname.startsWith("/flaky/")) {
+          const callback = pathname.startsWith("/flaky/") ? flaky : remind;
+          const id = pathname.slice(pathname.indexOf("/", 1) + 1);
+          const after = `${Number(url.searchParams.get("after") ?? "0")} seconds` as const;
+          const respond = <A, R>(effect: Effect.Effect<A, Alchemy.CallbackError, R>) =>
+            effect.pipe(
+              Effect.flatMap((value) => HttpServerResponse.json({ status: value ?? null })),
+              Effect.catch((e) =>
+                HttpServerResponse.json({ error: e._tag, message: e.message }, { status: 424 }),
+              ),
+            );
+          if (request.method === "POST") {
+            // A fresh marker per run, so an attempt left over from an earlier
+            // run can't count as this one's retry.
+            const now = yield* Effect.clockWith((clock) => clock.currentTimeMillis);
+            const marker = callback === flaky ? `${id}#${now}` : id;
+            return yield* respond(
+              callback
+                .schedule(id, { after, payload: { marker } })
+                .pipe(Effect.andThen(callback.getStatus(id))),
+            );
+          }
+          if (request.method === "GET") return yield* respond(callback.getStatus(id));
+          if (request.method === "DELETE") return yield* respond(callback.cancel(id));
+        }
+
+        // A one-shot schedule through the dead-letter binding.
+        if (request.method === "POST" && pathname.startsWith("/dlq-schedules/")) {
+          const name = pathname.slice("/dlq-schedules/".length);
+          const fireAt = yield* Effect.sync(() => new Date(Date.now() + 3_600_000));
+          const created = yield* scheduleWithDlq.at(fireAt, { name, payload: { marker: name } });
+          return yield* HttpServerResponse.json({ scheduleArn: created.ScheduleArn });
+        }
+
+        // A one-shot schedule whose input is encrypted with the bound key.
+        if (request.method === "POST" && pathname.startsWith("/kms-schedules/")) {
+          const name = pathname.slice("/kms-schedules/".length);
+          const fireAt = yield* Effect.sync(() => new Date(Date.now() + 15_000));
+          return yield* scheduleWithKey.at(fireAt, { name, payload: { marker: name } }).pipe(
+            Effect.flatMap((created) =>
+              HttpServerResponse.json({ scheduleArn: created.ScheduleArn }),
+            ),
+            Effect.catch((e) =>
+              HttpServerResponse.json({ error: e._tag, message: String(e) }, { status: 424 }),
+            ),
+          );
+        }
+
+        // Recurring schedule through the `every` shortcut.
+        if (request.method === "POST" && pathname.startsWith("/recurring-schedules/")) {
+          const name = pathname.slice("/recurring-schedules/".length);
+          const created = yield* schedule.every("1 day", {
+            name,
+            payload: { marker: name },
+          });
+          return yield* HttpServerResponse.json({ scheduleArn: created.ScheduleArn });
+        }
+
         if (pathname.startsWith("/schedules/")) {
           const name = pathname.slice("/schedules/".length);
 
           if (request.method === "POST") {
             const delaySeconds = Number(url.searchParams.get("delaySeconds") ?? "30");
             const fireAt = yield* Effect.sync(() => new Date(Date.now() + delaySeconds * 1000));
-            // One-shot at() expressions take second granularity, no timezone
-            // suffix (UTC by default): at(yyyy-mm-ddThh:mm:ss)
             const expression = `at(${fireAt.toISOString().slice(0, 19)})`;
 
-            const created = yield* createSchedule({
-              Name: name,
-              ScheduleExpression: expression,
-              ActionAfterCompletion: "DELETE",
-              Target: {
-                Arn: yield* sinkQueueArn,
-                Input: JSON.stringify({ marker: name }),
-              },
-            }).pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+            // The `at` shortcut: one-shot, deletes itself after it fires.
+            const created = yield* schedule
+              .at(fireAt, { name, payload: { marker: name } })
+              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
 
             if (created === undefined) {
               return yield* HttpServerResponse.json(
@@ -157,17 +298,10 @@ export default SchedulerTestFunction.make(
             const fireAt = yield* Effect.sync(() => new Date(Date.now() + delaySeconds * 1000));
             const expression = `at(${fireAt.toISOString().slice(0, 19)})`;
 
-            // UpdateSchedule is a full PUT — resend the complete config.
-            const updated = yield* updateSchedule({
-              Name: name,
-              ScheduleExpression: expression,
-              Description: description,
-              ActionAfterCompletion: "DELETE",
-              Target: {
-                Arn: yield* sinkQueueArn,
-                Input: JSON.stringify({ marker: name }),
-              },
-            }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            // UpdateSchedule is a full PUT; the `at` shortcut sends it all.
+            const updated = yield* reschedule
+              .at(fireAt, { name, description, payload: { marker: name } })
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
 
             if (updated === undefined) {
               return yield* HttpServerResponse.json({ error: "Not found", name }, { status: 404 });
@@ -191,6 +325,8 @@ export default SchedulerTestFunction.make(
               state: found.State,
               expression: found.ScheduleExpression,
               actionAfterCompletion: found.ActionAfterCompletion,
+              targetArn: found.Target?.Arn,
+              roleArn: found.Target?.RoleArn,
             });
           }
 
@@ -218,6 +354,14 @@ export default SchedulerTestFunction.make(
         Scheduler.DeleteScheduleHttp,
         Scheduler.ListSchedulesHttp,
         Lambda.ScheduleEventSource,
+        // Failed callbacks land in the dead-letter queue, and payloads are
+        // encrypted with the input key: the same declarations the bindings
+        // above use, de-duped by the engine.
+        Scheduler.SchedulerCallbacks({
+          deadLetterQueue: SQS.Queue("SchedulerDeadLetterQueue"),
+          kmsKey: KMS.Key("SchedulerInputKey", {}),
+        }),
+        SQS.ReceiveMessageHttp,
         SQS.SendMessageHttp,
       ),
     ),
