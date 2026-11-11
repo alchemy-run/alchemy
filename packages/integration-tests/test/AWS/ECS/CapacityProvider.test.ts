@@ -8,6 +8,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as ecs from "@distilled.cloud/aws/ecs";
+import * as iam from "@distilled.cloud/aws/iam";
 import * as Provider from "alchemy/Provider";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -137,6 +138,109 @@ test.provider(
   {
     tags: ["provider:aws", "provider:aws:autoscaling", "provider:aws:ecs", "live"],
     timeout: 300_000,
+  },
+);
+
+// A Managed Instances provider given only subnets creates what ECS needs
+// around it: the infrastructure role, the instance role and profile, a
+// security group for the instances and one for their tasks. It picks instance
+// types that support Nitro Sandboxes. No task runs, so no instance launches.
+test.provider(
+  "Managed Instances capacity creates its roles, profile and security groups",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { vpcId, subnetIds } = yield* getDefaultVpcNetwork;
+
+      const program = Effect.gen(function* () {
+        const cluster = yield* Cluster("DefaultsCluster", {});
+        const provider = yield* CapacityProvider("DefaultsCapacity", {
+          cluster: cluster.clusterName,
+          managedInstancesProvider: {
+            instanceLaunchTemplate: {
+              networkConfiguration: { subnets: subnetIds },
+              nitroEnclavesEnabled: true,
+            },
+          },
+        });
+        return {
+          clusterName: cluster.clusterName,
+          providerName: provider.name,
+          infrastructureRoleName: provider.infrastructureRoleName,
+          instanceRoleName: provider.instanceRoleName,
+          instanceProfileName: provider.instanceProfileName,
+          securityGroupId: provider.securityGroupId,
+          taskSecurityGroupId: provider.taskSecurityGroupId,
+        };
+      });
+
+      const deployed = yield* stack.deploy(program);
+      const infrastructureRoleName = deployed.infrastructureRoleName!;
+      const instanceRoleName = deployed.instanceRoleName!;
+      const instanceProfileName = deployed.instanceProfileName!;
+      const groupIds = [deployed.securityGroupId!, deployed.taskSecurityGroupId!];
+      expect(groupIds[0]).not.toBe(groupIds[1]);
+
+      const observed = (yield* ecs.describeCapacityProviders({
+        cluster: deployed.clusterName,
+      })).capacityProviders?.find((p) => p.name === deployed.providerName);
+      const launchTemplate = observed?.managedInstancesProvider?.instanceLaunchTemplate;
+      expect(observed?.status).toBe("ACTIVE");
+      expect(launchTemplate?.nitroEnclavesEnabled).toBe(true);
+      expect(launchTemplate?.networkConfiguration?.securityGroups).toEqual([
+        deployed.securityGroupId,
+      ]);
+      // The default instance types support Nitro Sandboxes.
+      expect(launchTemplate?.instanceRequirements?.allowedInstanceTypes).toContain("m7i.xlarge");
+      expect(launchTemplate?.instanceRequirements?.vCpuCount).toMatchObject({ min: 4, max: 16 });
+
+      // ECS assumes the infrastructure role and passes the instance role,
+      // which the instances run with through the profile.
+      const infrastructureRole = yield* iam.getRole({ RoleName: infrastructureRoleName });
+      expect(observed?.managedInstancesProvider?.infrastructureRoleArn).toBe(
+        infrastructureRole.Role.Arn,
+      );
+      const profile = yield* iam.getInstanceProfile({ InstanceProfileName: instanceProfileName });
+      expect(launchTemplate?.ec2InstanceProfileArn).toBe(profile.InstanceProfile.Arn);
+      expect(profile.InstanceProfile.Roles?.map((role) => role.RoleName)).toEqual([
+        instanceRoleName,
+      ]);
+
+      // Both groups are in the subnets' VPC and admit nothing.
+      const groups = yield* ec2.describeSecurityGroups({ GroupIds: groupIds });
+      expect(groups.SecurityGroups?.map((group) => group.VpcId)).toEqual([vpcId, vpcId]);
+      expect(groups.SecurityGroups?.flatMap((group) => group.IpPermissions ?? [])).toEqual([]);
+
+      // The defaults are stable: an unchanged program plans no update.
+      expect((yield* stack.plan(program)).resources.DefaultsCapacity?.action).toBe("noop");
+
+      yield* stack.destroy();
+
+      const roleExists = (RoleName: string) =>
+        iam.getRole({ RoleName }).pipe(
+          Effect.as(true),
+          Effect.catchTag("NoSuchEntityException", () => Effect.succeed(false)),
+        );
+      expect(yield* roleExists(infrastructureRoleName)).toBe(false);
+      expect(yield* roleExists(instanceRoleName)).toBe(false);
+      expect(
+        yield* iam.getInstanceProfile({ InstanceProfileName: instanceProfileName }).pipe(
+          Effect.as(true),
+          Effect.catchTag("NoSuchEntityException", () => Effect.succeed(false)),
+        ),
+      ).toBe(false);
+      for (const groupId of groupIds) {
+        expect(
+          yield* ec2.describeSecurityGroups({ GroupIds: [groupId] }).pipe(
+            Effect.map((found) => (found.SecurityGroups ?? []).length > 0),
+            Effect.catchTag("InvalidGroup.NotFound", () => Effect.succeed(false)),
+          ),
+        ).toBe(false);
+      }
+    }).pipe(logLevel),
+  {
+    tags: ["provider:aws", "provider:aws:ecs", "provider:aws:ec2", "provider:aws:iam", "live"],
+    timeout: 600_000,
   },
 );
 
