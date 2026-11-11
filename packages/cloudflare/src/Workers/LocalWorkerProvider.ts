@@ -12,6 +12,7 @@ import {
 } from "@alchemy.run/cloudflare-runtime/core";
 import type { ContainerImage as RuntimeContainerImage } from "@alchemy.run/cloudflare-runtime/core/Docker";
 import * as WorkerProxy from "@alchemy.run/cloudflare-runtime/core/proxy/WorkerProxy";
+import { hashDockerBuildInputs } from "@alchemy.run/docker/BuildHash";
 import { dotAlchemyDirectory } from "alchemy/AlchemyContext";
 import {
   Artifacts as AlchemyArtifacts,
@@ -25,7 +26,6 @@ import { unwrapRedacted } from "alchemy/Util";
 import { isPathWithin } from "alchemy/Util/isPathWithin";
 import { LogAnnotation } from "alchemy/Util/LogAnnotation";
 import { makeResourceLogger, makeResourceOutput } from "alchemy/Util/ResourceOutput";
-import { sha256 } from "alchemy/Util/sha256";
 import { terminalStyle } from "alchemy/Util/Terminal";
 import { theme } from "alchemy/Util/Theme";
 import * as Cause from "effect/Cause";
@@ -680,9 +680,10 @@ export const LocalWorkerProvider = () =>
        * rewrites its bundle there on every plan, which would loop; that
        * variant reloads through the config's `containerHashes` instead.
        *
-       * Events are debounced and gated on a content fingerprint
-       * (`node_modules`/`.git` skipped), so editor double-saves and
-       * metadata-only churn don't bounce the instance.
+       * Events are debounced and gated on the Docker build hash
+       * (`.dockerignore` applied, `.alchemy` skipped), so editor
+       * double-saves, ignored files and Alchemy's own state/log writes
+       * don't bounce the instance.
        */
       const ensureContainerWatcher = (
         worker: RunnableWorkerConfig,
@@ -721,32 +722,23 @@ export const LocalWorkerProvider = () =>
           }
           if (watched.size === 0) return;
 
-          const fingerprint = Effect.gen(function* () {
-            const hashes: string[] = [];
-            const walk = (dir: string): Effect.Effect<void, any> =>
-              Effect.gen(function* () {
-                const entries = yield* fs.readDirectory(dir);
-                for (const entry of entries.sort()) {
-                  if (entry === "node_modules" || entry === ".git") continue;
-                  const file = path.join(dir, entry);
-                  const stat = yield* fs.stat(file);
-                  if (stat.type === "Directory") {
-                    yield* walk(file);
-                  } else {
-                    hashes.push(`${file}:${yield* fs.readFile(file).pipe(Effect.flatMap(sha256))}`);
-                  }
-                }
-              });
-            for (const [context, { dockerfile }] of watched) {
-              yield* walk(context);
-              if (dockerfile !== undefined && !dockerfile.startsWith(context)) {
-                hashes.push(
-                  `${dockerfile}:${yield* fs.readFile(dockerfile).pipe(Effect.flatMap(sha256))}`,
-                );
-              }
-            }
-            return yield* sha256(hashes.join("\n"));
-          }).pipe(Effect.orElseSucceed(() => undefined));
+          // Fingerprint what Docker receives — the same hash the container
+          // provider tags the image with — so `.dockerignore`d paths and
+          // Alchemy's own `.alchemy` writes (logs, local state) inside a
+          // `context: "."` never restart the instance.
+          const fingerprint = Effect.forEach([...watched.entries()], ([context, { dockerfile }]) =>
+            hashDockerBuildInputs(
+              {
+                context,
+                dockerfile: dockerfile ?? path.join(context, "Dockerfile"),
+                platform: "local",
+              },
+              "effective",
+            ),
+          ).pipe(
+            Effect.map((hashes) => hashes.join("\n")),
+            Effect.orElseSucceed(() => undefined),
+          );
 
           const streams = [...watched.entries()].flatMap(([context, { dockerfile }]) => [
             fs.watch(context, { recursive: true }),

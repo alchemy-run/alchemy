@@ -11,7 +11,8 @@
  *     memo would compare the FIRST run's hash forever and report noop);
  *  2. the local worker runner fs-watches each Build-variant container's
  *     context and restarts the instance — which IS the docker rebuild —
- *     when the content fingerprint changes, with no deploy in between.
+ *     when the content fingerprint changes, with no deploy in between —
+ *     and NOT when only `.dockerignore`d paths change.
  *
  * Requires Docker; skipped when the daemon is unavailable.
  */
@@ -38,7 +39,7 @@ const dockerfile = (marker: string) =>
 COPY index.html /www/index.html
 ENV BAKED_MARKER=${marker}
 EXPOSE ${RELOAD_CONTAINER_PORT}
-CMD ["sh", "-c", "echo -n \\"$BAKED_MARKER\\" > /www/baked.txt && exec httpd -f -p ${RELOAD_CONTAINER_PORT} -h /www"]
+CMD ["sh", "-c", "echo -n \\"$BAKED_MARKER\\" > /www/baked.txt && cat /proc/sys/kernel/random/uuid > /www/boot.txt && exec httpd -f -p ${RELOAD_CONTAINER_PORT} -h /www"]
 `;
 
 /** Poll the worker's proxy route until the file body matches. */
@@ -63,6 +64,13 @@ const pollText = Effect.fn(function* (options: {
     }),
   );
   expect(body.trim()).toBe(options.expected);
+});
+
+/** One read through the worker's proxy route. */
+const readText = Effect.fn(function* (url: string, path: string) {
+  const client = yield* HttpClient.HttpClient;
+  const response = yield* client.get(`${url}${path}`);
+  return (yield* response.text).trim();
 });
 
 /**
@@ -122,6 +130,11 @@ describe.sequential(
             dockerfile("baked-v1"),
           );
           yield* fs.writeFileString(path.join(RELOAD_CONTEXT_DIR, "index.html"), "content-v1\n");
+          yield* fs.writeFileString(path.join(RELOAD_CONTEXT_DIR, ".dockerignore"), "ignored/\n");
+          yield* fs.remove(path.join(RELOAD_CONTEXT_DIR, "ignored"), {
+            recursive: true,
+            force: true,
+          });
 
           const deploy = Effect.gen(function* () {
             const worker = yield* ReloadContainerWorker;
@@ -156,6 +169,23 @@ describe.sequential(
           yield* pollText({ url, path: "/baked.txt", expected: "baked-v2" });
           // The content file survived the Dockerfile rebuild.
           yield* pollText({ url, path: "/index.html", expected: "content-v3" });
+
+          // ── 4. writes the image never sees (`.dockerignore`d, like
+          // Alchemy's own `.alchemy` logs under `context: "."`) must NOT
+          // restart the container (#3233) ──
+          const bootId = yield* readText(url, "/boot.txt");
+          expect(bootId).toMatch(/^[0-9a-f-]{36}$/);
+          yield* fs.makeDirectory(path.join(RELOAD_CONTEXT_DIR, "ignored"), { recursive: true });
+          for (let i = 0; i < 3; i++) {
+            yield* fs.writeFileString(
+              path.join(RELOAD_CONTEXT_DIR, "ignored", "log.txt"),
+              `${i}\n`,
+            );
+            yield* Effect.sleep("2 seconds");
+          }
+          // Past the watcher's debounce + fingerprint: still the same boot.
+          yield* Effect.sleep("5 seconds");
+          expect(yield* readText(url, "/boot.txt")).toBe(bootId);
 
           yield* stack.destroy();
         }).pipe(logLevel),
