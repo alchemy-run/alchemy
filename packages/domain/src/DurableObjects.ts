@@ -1186,7 +1186,11 @@ const viewObject = (
     };
   });
 
-const policyObject = (kit: PolicyKit) =>
+/**
+ * A policy key's object: deliveries are deduped by source and seq, staged in
+ * an ordered inbox and run one at a time.
+ */
+export const policyObject = (kit: PolicyKit) =>
   Effect.gen(function* () {
     const state = yield* ObjectState;
     const inbox = yield* queue<Delivery>("inbox", kit.run);
