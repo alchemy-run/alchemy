@@ -184,6 +184,8 @@ const flociFixedValues: Record<string, string> = {
   // actions on it export each hourly revision to the bucket.
   AWS_TEST_DATAEXCHANGE_ENTITLED_DATASET_ID: "f10c1000000040008000000000000ea7",
   AWS_TEST_DATAEXCHANGE_EXPORT_BUCKET: "alchemy-floci-dataexchange-exports",
+  // floci serves Deadline Cloud farms, fleets and jobs without an entitled account.
+  AWS_TEST_DEADLINE: "1",
   // Floci stores authorizer URIs without resolving the function.
   ALCHEMY_TEST_AUTHORIZER_URI:
     "arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-1:000000000000:function:alchemy-floci-standing-authorizer/invocations",
