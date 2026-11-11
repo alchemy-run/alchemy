@@ -10,13 +10,11 @@
  * - `dev()` starts `astro dev` with the `ssr` environment executing inside
  *   workerd (via `@alchemy.run/cloudflare-runtime/vite`).
  */
-import { fileURLToPath } from "node:url";
 import type { CloudflareVitePluginOptions } from "@alchemy.run/cloudflare-runtime/vite";
 import * as Effect from "effect/Effect";
-import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as FrameworkCore from "../core/index.ts";
-import { hashInput, sha256Object, type MemoOptions } from "../core/InputHash.ts";
+import type { MemoOptions } from "../core/InputHash.ts";
 import {
   makeSourceModule,
   makeWorkerSource,
@@ -63,14 +61,7 @@ export interface AstroSourceOptions {
    */
   readonly main?: string;
   /** Rebuild-scope configuration (see {@link MemoOptions}). */
-  readonly memo?: MemoOptions & {
-    /**
-     * Additional workspace directories to hash. `"auto"` (default)
-     * auto-detects workspaces from the build's module graph; an explicit
-     * array pins them.
-     */
-    readonly workspaces?: "auto" | Array<MemoOptions & { readonly cwd: string }>;
-  };
+  readonly memo?: MemoOptions;
   /**
    * The name of the KV binding injected into Astro's session config
    * when present on the Worker env.
@@ -175,21 +166,7 @@ export interface AstroBuildChildConfig {
   readonly prerenderEnvironment: "workerd" | "node" | undefined;
   readonly astro: AstroSourceOptions["astro"];
   readonly config: string | undefined;
-  /**
-   * Report the build's auto-detected workspaces. `false` when
-   * `memo.workspaces` pins them explicitly.
-   */
-  readonly discoverWorkspaces: boolean;
 }
-
-/**
- * This integration package's own root. It escapes the collector's
- * `node_modules` filter when workspace-linked; its influence on the build
- * is covered by the version salt, so it never counts as a workspace.
- */
-const ownPackageRoot = Effect.try(() =>
-  fileURLToPath(new URL(".", import.meta.resolve("@alchemy.run/frontend-frameworks/package.json"))),
-).pipe(Effect.orElseSucceed(() => undefined));
 
 export const buildInChild = (config: AstroBuildChildConfig) =>
   Effect.gen(function* () {
@@ -213,58 +190,16 @@ export const buildInChild = (config: AstroBuildChildConfig) =>
         }),
       ),
     );
-    const output = yield* astro.build({ root: config.rootDir });
-    const path = yield* Path.Path;
-    const own = yield* ownPackageRoot;
-    const isOwnPackage = (dir: string) => {
-      if (own === undefined) return false;
-      const resolved = path.resolve(config.rootDir, dir);
-      const root = own.endsWith(path.sep) ? own.slice(0, -1) : own;
-      return resolved === root || resolved.startsWith(root + path.sep);
-    };
-    return {
-      ...output,
-      externalWorkspaces: new Set(
-        config.discoverWorkspaces
-          ? Array.from(output.externalWorkspaces).filter((dir) => !isOwnPackage(dir))
-          : [],
-      ),
-    };
+    return yield* astro.build({ root: config.rootDir });
   });
 
 const PROVIDER = "@alchemy.run/frontend-frameworks/astro/source";
 
-/** `${rootRelativePath}:${hash}` for each pinned `memo.workspaces` entry, sorted. */
-const hashPinnedWorkspaces = Effect.fn(function* (
-  rootDir: string,
-  workspaces: ReadonlyArray<MemoOptions & { readonly cwd: string }>,
-) {
-  const path = yield* Path.Path;
-  const hashes = yield* Effect.forEach(
-    workspaces,
-    Effect.fn(function* ({ cwd, ...memo }) {
-      const dir = path.resolve(rootDir, cwd);
-      const { hash } = yield* hashInput({
-        rootDir: dir,
-        outputDirs: [],
-        memo,
-        workspaces: [],
-        options: undefined,
-      });
-      return `${path.relative(rootDir, dir).replaceAll("\\", "/")}:${hash}`;
-    }),
-    { concurrency: "unbounded" },
-  );
-  return hashes.sort();
-});
-
 const makeAstroSourceProvider = (
   options: AstroSourceOptions,
   { rootDir }: SourceModuleContext,
-): SourceProvider => {
-  const workspaces = options.memo?.workspaces;
-  const pinned = Array.isArray(workspaces) ? workspaces : undefined;
-  const source = makeWorkerSource({
+): SourceProvider =>
+  makeWorkerSource({
     provider: PROVIDER,
     framework: "astro",
     displayName: "Astro",
@@ -292,7 +227,6 @@ const makeAstroSourceProvider = (
         prerenderEnvironment: options.prerenderEnvironment,
         astro: options.astro,
         config: options.config,
-        discoverWorkspaces: pinned === undefined,
       }) satisfies AstroBuildChildConfig,
     // `output: "static"` builds are assets-only.
     requireServer: false,
@@ -350,27 +284,5 @@ const makeAstroSourceProvider = (
         return { mode: "server", url: new URL(server.url) } satisfies ServerDevHandle;
       }),
   });
-  if (pinned === undefined) return source;
-
-  // Pinned `memo.workspaces`: the child reports no auto-detected workspaces,
-  // so the base `input` covers the root alone; fold in each pinned
-  // workspace's hash (under its own memo options).
-  const withPinned = Effect.fn(function* (rootInput: string | undefined) {
-    const workspaces = yield* hashPinnedWorkspaces(rootDir, pinned);
-    return yield* sha256Object({ root: rootInput, workspaces });
-  });
-  return {
-    ...source,
-    build: Effect.fn(function* (ctx) {
-      const output = yield* source.build(ctx);
-      const input = yield* withPinned(output.hash.input);
-      return { ...output, hash: { ...output.hash, input, additionalWorkspaces: undefined } };
-    }),
-    hash: Effect.fn(function* (ctx) {
-      const { input } = yield* source.hash(ctx, undefined);
-      return { input: yield* withPinned(input), additionalWorkspaces: undefined };
-    }),
-  };
-};
 
 export default makeSourceModule(PROVIDER, makeAstroSourceProvider);

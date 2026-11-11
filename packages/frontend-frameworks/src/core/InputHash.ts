@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import {
   combineIgnoreRules,
   listFileSystemDirectory,
@@ -29,6 +30,19 @@ export interface MemoOptions {
    * @default true when both `include` and `exclude` are unset; false otherwise
    */
   readonly lockfile?: boolean | undefined;
+  /**
+   * Workspace directories outside the root to hash, relative to the root.
+   * `"auto"` hashes the workspaces the build's module graph reached; an
+   * explicit array pins the set, each hashed under its own scope.
+   * @default "auto"
+   */
+  readonly workspaces?: "auto" | Array<MemoWorkspace> | undefined;
+}
+
+/** A pinned `memo.workspaces` entry. */
+export interface MemoWorkspace extends Omit<MemoOptions, "workspaces"> {
+  /** The workspace directory, relative to the root. */
+  readonly cwd: string;
 }
 
 /** Lowercase hex sha256 of `input`. */
@@ -179,21 +193,37 @@ const hashDirectory = Effect.fn(function* (
 });
 
 /**
+ * This package's own root. It escapes the collector's `node_modules` filter
+ * when workspace-linked; the version salt already covers it, and hashing its
+ * build output would churn, so it never counts as a workspace.
+ */
+const ownPackageRoot = Effect.try(() =>
+  fileURLToPath(new URL(".", import.meta.resolve("@alchemy.run/frontend-frameworks/package.json"))),
+).pipe(Effect.orElseSucceed(() => undefined));
+
+/**
  * The `input` hash slot: the project tree, the workspaces it imports, the
  * lockfile, this package's version, and the integration's build-affecting
  * options. Deterministic for an unchanged tree and stable across `rootDir`
  * moves.
+ *
+ * `workspaces` are the auto-detected ones: from the build, or recorded by
+ * the previous build. A recorded workspace that no longer exists (its
+ * package was deleted, or `rootDir` moved) is skipped, so the hash differs
+ * and the next build records a fresh set (#2606). Pinned `memo.workspaces`
+ * replace them and must exist.
  */
 export const hashInput = Effect.fn(function* (params: {
   readonly rootDir: string;
   /** Build output directories relative to the root, never hashed. */
   readonly outputDirs: ReadonlyArray<string>;
   readonly memo: MemoOptions | undefined;
-  /** Workspace directories, absolute or relative to the root. */
+  /** Auto-detected workspace directories, absolute or relative to the root. */
   readonly workspaces: Iterable<string>;
   /** The integration's build-affecting options. */
   readonly options: unknown;
 }) {
+  const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   // Dependency trees, VCS metadata, alchemy's state and the framework's own
   // build output (hashing it would make every build bust its memo).
@@ -203,17 +233,26 @@ export const hashInput = Effect.fn(function* (params: {
     "/.alchemy/",
     ...params.outputDirs.map((dir) => `/${dir.replace(/^\.?\//, "").replace(/\/+$/, "")}/`),
   ];
-  const workspaces = Array.from(params.workspaces, (workspace) =>
-    path.resolve(params.rootDir, workspace),
-  );
+  const relative = (dir: string) => path.relative(params.rootDir, dir).replaceAll("\\", "/");
+  const pinned = Array.isArray(params.memo?.workspaces) ? params.memo.workspaces : undefined;
+  const own = yield* ownPackageRoot;
+  const isOwn = (dir: string) =>
+    own !== undefined &&
+    (dir === path.resolve(own) || dir.startsWith(path.resolve(own) + path.sep));
+  const workspaces: Array<{ readonly dir: string; readonly memo?: MemoOptions }> =
+    pinned !== undefined
+      ? pinned.map(({ cwd, ...memo }) => ({ dir: path.resolve(params.rootDir, cwd), memo }))
+      : (yield* Effect.filter(
+          new Set(Array.from(params.workspaces, (dir) => path.resolve(params.rootDir, dir))),
+          (dir) => (isOwn(dir) ? Effect.succeed(false) : fs.exists(dir)),
+        ))
+          .sort()
+          .map((dir) => ({ dir }));
   const [root, ...workspaceHashes] = yield* Effect.all(
     [
       hashDirectory(params.rootDir, params.memo, alwaysExclude),
-      ...workspaces.map((workspace) =>
-        Effect.map(
-          hashDirectory(workspace, undefined, alwaysExclude),
-          (hash) => `${path.relative(params.rootDir, workspace).replaceAll("\\", "/")}:${hash}`,
-        ),
+      ...workspaces.map(({ dir, memo }) =>
+        Effect.map(hashDirectory(dir, memo, alwaysExclude), (hash) => `${relative(dir)}:${hash}`),
       ),
     ],
     { concurrency: 4 },
@@ -225,8 +264,7 @@ export const hashInput = Effect.fn(function* (params: {
       root,
       workspaces: workspaceHashes.sort(),
     }),
-    workspaces: workspaces.map((workspace) =>
-      path.relative(params.rootDir, workspace).replaceAll("\\", "/"),
-    ),
+    // Pinned workspaces come from the options, so none are recorded.
+    workspaces: pinned !== undefined ? undefined : workspaces.map(({ dir }) => relative(dir)),
   };
 });
