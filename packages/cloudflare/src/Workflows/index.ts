@@ -4,4 +4,4 @@ export {
   layerDurableObjectEngine,
   type DurableObjectEngineOptions,
 } from "./DurableObjectEngine.ts";
-export { ActivityStepConfig, NativeEngine } from "./NativeEngine.ts";
+export { ActivityStepConfig, NativeEngine, withStepConfig } from "./NativeEngine.ts";
