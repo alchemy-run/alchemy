@@ -1,34 +1,43 @@
 import * as DigitalOcean from "@alchemy.run/digitalocean";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
-import { getDedicatedInference } from "@distilled.cloud/digitalocean";
+import { getDedicatedInference, listVpcs } from "@distilled.cloud/digitalocean";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { isGone, logLevel, skipSlow } from "../support.ts";
 
 const { test } = Test.make({ providers: DigitalOcean.providers() });
 
-// One MI300X for the life of the test (≈ $2.59/hour); provisioning and
+const REGION = "nyc2";
+const GPU = "gpu-h100x1-80gb";
+
+// One GPU for the life of the test (an H100 is ≈ $4.41/hour); provisioning and
 // loading weights take ten to thirty minutes.
 test.provider.skipIf(skipSlow)(
   "dedicated inference: serve a model on one GPU, answer a chat completion, destroy",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+      // The region's default VPC: the first VPC in a region becomes its
+      // default and can never be deleted, so the test doesn't create one.
+      const vpcs = yield* listVpcs.items({ per_page: 200 }).pipe(Stream.runCollect);
+      const defaultVpc = vpcs.find((v) => v.region === REGION && v.default);
+      if (defaultVpc === undefined) return yield* Effect.die(`no default VPC in ${REGION}`);
+      const vpcId = defaultVpc.id;
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
-          const vpc = yield* DigitalOcean.Vpc("Vpc", { region: "atl1", ipRange: "10.61.0.0/20" });
           const llm = yield* DigitalOcean.Inference.DedicatedInference("Llm", {
-            region: "atl1",
-            vpcId: vpc.vpcId,
+            region: REGION,
+            vpcId,
             publicEndpoint: true,
             models: [
               {
                 model: "mistralai/Mistral-7B-Instruct-v0.3",
-                accelerators: [{ gpu: "gpu-mi300x1-192gb" }],
+                accelerators: [{ gpu: GPU }],
               },
             ],
           });
