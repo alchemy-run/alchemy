@@ -542,6 +542,34 @@ A handler's error type must be `never`. Retry or handle typed errors inside
 it; `Effect.orDie` turns a storage failure into a defect, which is
 redelivered.
 
+:::caution[Migrating existing callbacks]
+Callbacks are no longer built into Durable Objects, and `makeCallback` no
+longer takes retry options. Provide `Cloudflare.DurableObjectCallbacks` to
+the inner Effect, handle typed errors inside the handler, and remove the
+third argument:
+
+```diff lang="typescript"
+return Effect.gen(function* () {
+  const onSnapshot = yield* Alchemy.makeCallback(
+    "snapshot",
+    Effect.fn(function* (payload: { revision: string; body: string }) {
+-      yield* state.storage.put(`revisions:${payload.revision}`, payload.body);
++      yield* state.storage.put(`revisions:${payload.revision}`, payload.body).pipe(Effect.orDie);
+    }),
+-    { retry: { delay: "10 seconds" } },
+  );
+  return {};
+-});
++}).pipe(Effect.provide(Cloudflare.DurableObjectCallbacks));
+```
+
+Pending jobs keep running after the upgrade: they stay in the same SQLite
+tables, under the same callback names. A handler that dies is redelivered
+from 2 seconds doubling, then hourly. `getStatus` now returns only
+`scheduledAt` and `progress`; `attempts`, `parked` and `retryAt` are gone.
+Domain models need no changes, since Domain provides the Layer itself.
+:::
+
 Payloads must be JSON values: objects, arrays, strings, finite numbers,
 booleans, or `null`. Values such as `Date`, `undefined`, and `BigInt` are
 rejected when scheduling, even if the handler's TypeScript type accepts

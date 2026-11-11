@@ -144,6 +144,25 @@ The binding creates the role Scheduler assumes, which may send to that Queue onl
 
 Provide `AWS.Scheduler.CreateScheduleHttp` to the runtime. `UpdateSchedule`, `GetSchedule`, `DeleteSchedule` and `ListSchedules` change, read and cancel the schedules it created.
 
+:::caution[Migrating from `CreateSchedule(role, group)`]
+`CreateSchedule` and `UpdateSchedule` used to take the execution role and an optional group. They now take the target. Move the group into the options, drop `Target.Arn` from raw requests, and drop the role you declared for Scheduler, since the binding creates one:
+
+```diff lang="typescript"
+const queue = yield* Reminders;
+-const schedule = yield* AWS.Scheduler.CreateSchedule(role, group);
++const schedule = yield* AWS.Scheduler.CreateSchedule(queue, { group });
+
+yield* schedule({
+  Name: `reminder-${userId}`,
+  ScheduleExpression: "at(2026-01-01T00:00:00)",
+-  Target: { Arn: queueArn, Input: JSON.stringify({ userId }) },
++  Target: { Input: JSON.stringify({ userId }) },
+});
+```
+
+To keep a role of your own, pass it as `{ role }`. A dead-letter queue or a customer managed KMS key goes on the binding as `{ deadLetterQueue }` or `{ kmsKey }`, so the role and the runtime are granted them. A Function that scheduled calls to itself switches to `Alchemy.makeCallback`, below: `CreateSchedule` no longer accepts the Function it runs in.
+:::
+
 ## Call a Function back later
 
 A Function that needs to finish something later, like expiring an order in an hour, registers a callback with `Alchemy.makeCallback`. The Function routes each scheduled job to the handler registered under the callback's name:
