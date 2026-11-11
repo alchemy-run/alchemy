@@ -152,8 +152,18 @@ export interface ClientVpnEndpoint extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ClientVpnEndpointLookup
 > {}
+
+/**
+ * Props for {@link ClientVpnEndpoint.lookup}: find a Client VPN endpoint this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ClientVpnEndpointLookup {
+  /** The id of the existing endpoint. */
+  clientVpnEndpointId: string;
+}
 
 /**
  * An AWS Client VPN endpoint for authenticated remote access to a VPC.
@@ -198,6 +208,16 @@ export interface ClientVpnEndpoint extends Resource<
  *     cloudwatchLogGroup: logGroup.logGroupName,
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing Client VPN endpoint
+ * `ClientVpnEndpoint.lookup` references a Client VPN endpoint Alchemy doesn't manage (created in the
+ * console or by another stack), found by `clientVpnEndpointId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing Client VPN endpoint
+ * ```typescript
+ * const vpn = AWS.EC2.ClientVpnEndpoint.lookup({ clientVpnEndpointId: "cvpn-endpoint-0123456789abcdef0" });
  * ```
  *
  * @resource
@@ -446,6 +466,10 @@ export const ClientVpnEndpointProvider = () =>
           );
           if (Object.keys(changes).length || removed.length || upsert.length)
             return { action: "update" };
+        }),
+        lookup: Effect.fn(function* ({ clientVpnEndpointId }) {
+          const endpoint = yield* describe(clientVpnEndpointId);
+          return endpoint ? yield* toAttrs(endpoint) : undefined;
         }),
         read: Effect.fn(function* ({ id, instanceId, output }) {
           const endpoint = output

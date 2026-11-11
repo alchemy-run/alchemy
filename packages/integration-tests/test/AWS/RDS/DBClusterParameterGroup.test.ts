@@ -22,7 +22,6 @@ test.provider(
       const group = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* DBClusterParameterGroup("ListDBClusterParameterGroup", {
-            dbClusterParameterGroupName: "alchemy-test-dbcpg-list",
             family: "aurora-postgresql16",
             description: "Alchemy list() test cluster parameter group",
           });

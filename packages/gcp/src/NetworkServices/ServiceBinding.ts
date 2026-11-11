@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -88,8 +89,33 @@ export type ServiceBinding = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ServiceBindingLookup
 >;
+
+/**
+ * Props for {@link ServiceBinding.lookup}: find a service binding this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface ServiceBindingLookup {
+  /**
+   * Binding id (the `{serviceBinding}` segment of
+   * `projects/{project}/locati
+   * ons/{location}/serviceBindings/{serviceBinding}`).
+   */
+  serviceBindingId: string;
+  /**
+   * Location (`global`, `us-central1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A ServiceBinding attaches a producer service (Service Directory, PSC,
@@ -106,6 +132,19 @@ export type ServiceBinding = Resource<
  *   location: "global",
  *   description: "prod api",
  *   labels: { env: "prod" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing service binding
+ * `ServiceBinding.lookup` references a service binding Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * service binding.
+ *
+ * **Example:** Reference an existing service binding
+ * ```typescript
+ * const serviceBinding = GCP.NetworkServices.ServiceBinding.lookup({
+ *   serviceBindingId: "my-service-binding",
  * });
  * ```
  *
@@ -178,6 +217,15 @@ export const ServiceBindingProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ serviceBindingId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, DEFAULT_GLOBAL);
+      const name = resourceName(env.project, location, COLLECTION, serviceBindingId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

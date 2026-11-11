@@ -1,0 +1,2 @@
+FROM alpine
+STOPSIGNAL --foo=1 SIGTERM

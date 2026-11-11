@@ -1,0 +1,136 @@
+---
+title: Choosing a runtime
+description: Program sandboxes, a declared dev box, and sandboxes created per task, and when to use each.
+---
+
+import Tree from "../../../../components/diagrams/Tree.astro";
+import Responsibility from "../../../../components/Responsibility.astro";
+import Timeline from "../../../../components/diagrams/Timeline.astro";
+
+Every way of running code on Boat is a sandbox: a Linux machine that stops on a timer with its disk saved. They differ in who starts the work, and who decides when the machine comes and goes.
+
+## Boat manages less as you decide more
+
+Each runtime hands you more of the machine:
+
+<Responsibility
+  platform="Boat"
+  columns={[
+    { label: "program", type: "Sandbox + main" },
+    { label: "dev box", type: "ConnectSandbox" },
+    { label: "per task", type: "CreateSandbox" },
+  ]}
+  rows={[
+    { label: "your code", you: [true, true, true] },
+    { label: "processes", you: [false, true, true] },
+    { label: "start & stop", you: [false, true, true] },
+    { label: "how many machines", you: [false, false, true] },
+  ]}
+  caption="From left to right, Boat manages less and you decide more. A program runs itself; a dev box is one machine you drive; per-task sandboxes are as many machines as your code creates."
+/>
+
+## Programs: your server at a URL
+
+A `Boat.Sandbox` with a `main` runs your Effect program with Node.js. Each deploy that changes the code restarts it in the same sandbox, and its port answers at `https://<subdomain>-3000.on.boat.dev`.
+
+```typescript title="src/Api.ts"
+import * as Boat from "@alchemy.run/boat";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+export default class Api extends Boat.Sandbox<Api>()(
+  "Api",
+  { main: import.meta.url, public: true },
+  Effect.gen(function* () {
+    return { fetch: Effect.succeed(HttpServerResponse.text("hello")) };
+  }),
+) {}
+```
+
+A program sandbox never stops on its own. Choose it for an API or a service that needs a whole machine: Docker, a desktop, a long-lived process. See [Programs](/boat/sandboxes/programs).
+
+<Timeline
+  end={10}
+  lanes={[{ id: "s", label: "Api" }]}
+  bars={[
+    { lane: "s", start: 0, end: 5, label: "v1 serving" },
+    { lane: "s", start: 5, end: 5.6, tone: "warn" },
+    { lane: "s", start: 5.6, end: 10, label: "v2 serving" },
+  ]}
+  marks={[{ at: 5, label: "deploy" }]}
+  legend={[{ tone: "warn", label: "restart" }]}
+  caption="One sandbox serves every request, and keeps serving. A deploy that changes the code restarts the process in place."
+/>
+
+## A dev box: one machine you drive
+
+A `Boat.Sandbox` without `main` is a machine the Stack keeps. A Worker reaches it with `ConnectSandbox`, runs commands in it, and resumes it when it has stopped.
+
+```typescript
+const devBox = yield* Boat.ConnectSandbox(DevBox);
+yield* devBox.resume({ autoStop: "30 minutes" });
+yield* devBox.exec("git pull && npm test", { cwd: "/home/user/app" });
+```
+
+It stops after its `autoStop` with its disk saved, so you pay for it only while it works. Choose it for an agent's home, a preview environment, or a build box. See [Sandboxes](/boat/sandboxes/sandboxes#drive-a-declared-sandbox-from-a-worker).
+
+<Timeline
+  end={10}
+  lanes={[{ id: "box", label: "DevBox" }]}
+  bars={[
+    { lane: "box", start: 0, end: 3, label: "npm test" },
+    { lane: "box", start: 3, end: 6.5, tone: "muted", label: "stopped" },
+    { lane: "box", start: 6.5, end: 10, label: "npm test" },
+  ]}
+  marks={[{ at: 3, label: "autoStop" }, { at: 6.5, label: "resume()" }]}
+  legend={[{ tone: "muted", label: "stopped, disk saved" }]}
+  caption="The dev box stops when its timer runs out and keeps its files. The next request resumes it."
+/>
+
+## Sandboxes per task: as many machines as you need
+
+`CreateSandbox` gives a Worker or Function a client that creates sandboxes, from a snapshot when you bind one. Your code drives each one and deletes it when the task is done.
+
+```typescript
+const sandboxes = yield* Boat.CreateSandbox(Golden);
+const sandbox = yield* sandboxes.create({ type: "small", autoStop: "10 minutes" });
+yield* sandbox.exec("npm test");
+yield* sandbox.delete();
+```
+
+Choose it for agent loops, code a user sends, and anything that needs a fresh machine each time. See [Sandboxes](/boat/sandboxes/sandboxes#create-sandboxes-while-your-app-runs).
+
+<Timeline
+  end={10}
+  lanes={[{ id: "t1", label: "task-1" }, { id: "t2", label: "task-2" }, { id: "t3", label: "task-3" }]}
+  bars={[
+    { lane: "t1", start: 0.4, end: 4, label: "npm test" },
+    { lane: "t2", start: 1.5, end: 7, label: "agent loop" },
+    { lane: "t3", start: 5, end: 9, label: "npm test" },
+  ]}
+  caption="Each task gets a sandbox of its own, started from the same snapshot, and deleted when the task ends."
+/>
+
+## Mix runtimes in one app
+
+One account runs all three at once. A Worker creates a sandbox per task from a snapshot, drives a dev box, and calls a program's API:
+
+<Tree
+  nodes={[
+    { id: "api", label: "Api", type: "Worker", icon: "square-function" },
+    { id: "account", label: "acme", type: "account", icon: "brand:boat", areas: ["task golden", "box golden", "search golden"], colGap: 3 },
+    { id: "golden", label: "Golden", type: "snapshot", parent: "account", icon: "camera" },
+    { id: "task", label: "task-42", type: "sandbox per task", parent: "account", icon: "box" },
+    { id: "box", label: "DevBox", type: "dev box", parent: "account", icon: "box" },
+    { id: "search", label: "Search", type: "program", parent: "account", tone: "accent", icon: "file-code" },
+  ]}
+  areas={["api account"]}
+  colGap={3.5}
+  links={[
+    { from: "api", to: "task", label: "creates" },
+    { from: "api", to: "box", label: "exec" },
+    { from: "api", to: "search", label: "calls" },
+    { from: "golden", to: "task", label: "from" },
+  ]}
+  caption="A Worker, Api, outside Boat creates task sandboxes from Golden, runs commands in DevBox, and calls the Search program at its URL. Each binding gets its own key."
+/>

@@ -1,9 +1,11 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import { requestWorker } from "../Utils/WorkerRequest.ts";
 import WorkerV1 from "./fixtures/catch-up/v1.ts";
@@ -73,7 +75,10 @@ for (const dev of [true, false]) {
     dev ? "local lazy views" : "live lazy views",
     { tags: ["provider:cloudflare", "provider:cloudflare:worker", dev ? "local" : "live"] },
     () => {
-      const { test } = Test.make({ providers: Cloudflare.providers(), dev });
+      const { test } = Test.make({
+        providers: Layer.mergeAll(Cloudflare.providers(), DomainCloudflare.providers()),
+        dev,
+      });
 
       test.provider(
         `${dev ? "local" : "live"}: a lazy view added later fills each key when first read`,

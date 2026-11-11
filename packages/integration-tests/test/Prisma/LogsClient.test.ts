@@ -24,7 +24,9 @@ describe("Prisma log request builders", { tags: ["unit", "provider:prisma", "loc
       expect(request.url).toBe(
         "wss://api.prisma.test/v1/deployments/deployment-1/logs?tail=100&cursor=byte-42&from_start=true",
       );
-      expect(Redacted.value(request.headers.Authorization)).toBe("Bearer test-token");
+      expect(request.headers.Authorization && Redacted.value(request.headers.Authorization)).toBe(
+        "Bearer test-token",
+      );
     }).pipe(provideEnv),
   );
 
@@ -34,9 +36,23 @@ describe("Prisma log request builders", { tags: ["unit", "provider:prisma", "loc
       expect(request.url).toBe(
         "https://api.prisma.test/v1/builds/build-1/logs?follow=true&cursor=cursor-1",
       );
-      expect(Redacted.value(request.headers.Authorization)).toBe("Bearer test-token");
+      expect(request.headers.Authorization && Redacted.value(request.headers.Authorization)).toBe(
+        "Bearer test-token",
+      );
       expect(request.headers.Accept).toBe("application/x-ndjson");
     }).pipe(provideEnv),
+  );
+
+  it.effect("fails log requests with a ConfigError when the credentials have no token", () =>
+    Effect.gen(function* () {
+      const deploymentLog = yield* getDeploymentLogsRequest("deployment-1").pipe(Effect.flip);
+      const buildLog = yield* getBuildLogsRequest("build-1").pipe(Effect.flip);
+      for (const error of [deploymentLog, buildLog]) {
+        expect(error._tag).toBe("ConfigError");
+      }
+    }).pipe(
+      Effect.provideService(Credentials, Effect.succeed({ apiBaseUrl: "https://api.prisma.test" })),
+    ),
   );
 
   it.effect("rejects path-confusing resource IDs before building a URL", () =>

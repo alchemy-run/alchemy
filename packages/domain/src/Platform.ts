@@ -207,16 +207,6 @@ export interface AggregateKit {
   readonly consumerSingleSource: (target: string) => boolean;
   /** Route stored events to the consumers lagging behind them (see `CatchUp`). */
   readonly replay: (input: ReplayInput<StoredEvent>) => Effect.Effect<ReplayResult>;
-  /**
-   * What a subscriber of instance `id` receives, given its current state and
-   * the events committed since (at least those after the subscription's cursor).
-   */
-  readonly push: (
-    id: string,
-    subscription: Subscription,
-    current: { readonly state: Json; readonly version: number },
-    events: ReadonlyArray<StoredEvent>,
-  ) => Effect.Effect<Push>;
 }
 
 /**
@@ -253,25 +243,29 @@ export interface AggregateStore {
   readonly send: (id: string, command: Json, meta: Aggregate.SendMeta) => Effect.Effect<SendResult>;
   /**
    * Send a command to one instance when it is due, durably (it survives
-   * restarts) and at least once. Replaces a pending one with the same
-   * `commandId`. Rejections are impossible: only non-rejecting commands are
-   * scheduled. Returns when it is due, in epoch milliseconds on the
-   * platform's clock. Fails with `AlreadyExecuted` when the instance already
-   * has a receipt for `commandId`, so the command would never run.
+   * restarts) and at least once. `name` is the scheduled command's id on the
+   * instance; `meta.commandId` is this arming's, the one the command commits
+   * with. Scheduling under a `name` replaces its command, pending or already
+   * run, unless that command has the same `meta.commandId`: then it is the
+   * same arming again (a policy or step that ran again) and nothing changes,
+   * not even when it is due. Rejections are impossible: only non-rejecting
+   * commands are scheduled. Returns when it is due, in epoch milliseconds on
+   * the platform's clock.
    */
   readonly schedule: (
     id: string,
+    name: string,
     command: Json,
     meta: Aggregate.SendMeta,
     due: Aggregate.Due,
-  ) => Effect.Effect<number, Aggregate.AlreadyExecuted>;
+  ) => Effect.Effect<number>;
   /**
-   * Cancel the pending scheduled command with this `commandId` on one
-   * instance, durably, and remember the cancel. Once this succeeds, the
-   * command never runs, even one already due. Fails with `AlreadyExecuted`
-   * when the instance has a receipt for `commandId`, `AlreadyCancelled` when
-   * it was cancelled before (and not scheduled again since), and
-   * `NotScheduled` when it was never scheduled.
+   * Cancel the pending scheduled command named `commandId` on one instance,
+   * durably, and remember the cancel. Once this succeeds, the command never
+   * runs, even one already due. Fails with `AlreadyExecuted` when the
+   * command under that name already ran, `AlreadyCancelled` when it was
+   * cancelled before (and not scheduled again since), and `NotScheduled`
+   * when nothing was scheduled under it.
    */
   readonly unschedule: (
     id: string,
@@ -295,12 +289,6 @@ export interface AggregateStore {
    * trigger policies (tests; optional).
    */
   readonly seed?: (id: string, events: ReadonlyArray<Json>) => Effect.Effect<void>;
-  /**
-   * Accept a WebSocket upgrade (the current request) for a live read of
-   * `key`, then push to it on every commit. Optional: without it, live reads
-   * are streamed responses over `changes` and `tail`.
-   */
-  readonly connect?: (key: string, subscription: Subscription) => HttpEffect;
 }
 
 /** How much history has reached a consumer: see `View.History`. */
@@ -646,7 +634,7 @@ export interface HostedModel {
   readonly id: object;
   /** The names of the model's sagas, which run on the workflow engine. */
   readonly sagas: ReadonlyArray<string>;
-  /** Whether this model keeps data it shared with other models before Domain version 0: `legacyData` on its `layer`. */
+  /** Whether this model takes over data it shared with other models before Domain version 0: `legacyData` on its `layer`. */
   readonly legacyData: boolean;
 }
 

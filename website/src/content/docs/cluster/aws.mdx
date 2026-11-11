@@ -1,0 +1,94 @@
+---
+title: AWS
+description: Run an Effect Cluster's database on RDS and its runners on ECS Fargate, called from Lambda or anywhere through a load balancer.
+---
+
+import Tree from "../../../components/diagrams/Tree.astro";
+
+Host your cluster in your AWS account: Postgres runs on RDS, in a VPC of its own, and runners run on ECS Fargate in the same VPC. A load balancer serves each pool's gateway, so a Lambda function, a container or a Worker calls the rooms by id.
+
+```typescript title="src/Cluster.ts"
+import * as ClusterAWS from "@alchemy.run/effect-cluster/AWS";
+import * as Layer from "effect/Layer";
+
+export const Database = ClusterAWS.Database("Cluster");
+
+export const Default = ClusterAWS.EcsPool("Default", { replicas: 2 }).pipe(
+  Layer.provide(Database),
+);
+```
+
+Install `@alchemy.run/aws` and finish [AWS setup](/aws/setup).
+
+<Tree
+  nodes={[
+    { id: "account", label: "AWS account", type: "your profile's account" },
+    { id: "vpc", label: "VPC", type: "two Availability Zones", parent: "account", dashed: true },
+    { id: "db", label: "Database", type: "RDS Postgres", parent: "vpc", specs: [["class", "db.m7g.large"]] },
+    { id: "sg", label: "runners", type: "security group", parent: "vpc", dashed: true },
+    { id: "pool", label: "Default", type: "ECS service · Fargate", parent: "sg", specs: [["replicas", "3"]] },
+    { id: "alb", label: "Load Balancer", type: "internet-facing", parent: "vpc", side: true },
+  ]}
+  caption="The runners' security group is the only way to Postgres and to the other runners. The pool's Application Load Balancer is the only way in from outside."
+/>
+
+## The database
+
+`ClusterAWS.Database` creates a VPC across two Availability Zones, an RDS Postgres instance in it, and one security group every runner joins. That group reaches Postgres and the other runners; nothing else does.
+
+```typescript title="src/Cluster.ts"
+import * as ClusterAWS from "@alchemy.run/effect-cluster/AWS";
+
+export const Database = ClusterAWS.Database("Cluster", {
+  instanceClass: "db.m7g.large",
+  multiAZ: true,
+  allocatedStorage: 100,
+});
+```
+
+A new RDS instance takes 10 to 15 minutes to create.
+
+## The pool
+
+`EcsPool` runs the pool as an ECS service on Fargate, in the database's VPC:
+
+```typescript title="src/Cluster.ts"
+import * as ClusterAWS from "@alchemy.run/effect-cluster/AWS";
+import * as Layer from "effect/Layer";
+
+export const Database = ClusterAWS.Database("Cluster");
+
+export const Default = ClusterAWS.EcsPool("Default", {
+  replicas: 3,
+  cpu: 1024,
+  memory: 2048,
+  architecture: "ARM64",
+}).pipe(Layer.provide(Database));
+```
+
+Each pool gets an internet-facing Application Load Balancer in front of its gateway. The runners only take gateway traffic from it, and the gateway checks every call's token.
+
+## Call it from a Lambda
+
+```typescript title="src/Api.ts"
+import * as Lambda from "@alchemy.run/aws/Lambda";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Room } from "./Room.ts";
+
+export default class Api extends Lambda.Function<Api>()(
+  "Api",
+  { main: import.meta.url, functionUrl: true },
+  Effect.gen(function* () {
+    const rooms = yield* Room;
+    return {
+      fetch: Effect.gen(function* () {
+        const lobby = yield* rooms.getByName("lobby");
+        return yield* HttpServerResponse.json({ members: yield* lobby.Join({ name: "sam" }) });
+      }).pipe(Effect.orDie),
+    };
+  }),
+) {}
+```
+
+Every option, with its default, is in the reference: [Database](/providers/cluster/aws#database) and [EcsPool](/providers/cluster/aws#ecspool).

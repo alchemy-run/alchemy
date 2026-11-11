@@ -4,21 +4,20 @@ description: Host the bank on Durable Objects behind a Worker, run it locally, d
 sidebar:
   order: 5
 ---
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 Put the bank on Cloudflare. Every account, customer, view and policy becomes a Durable Object, and a Worker serves the Api. You need a [configured Cloudflare profile](/cloudflare/setup).
 
 ## Install the Cloudflare provider
 
-```sh
-bun add @alchemy.run/cloudflare
-```
+<PackageManagers add="@alchemy.run/cloudflare" />
 
 ## Serve the Api from a Worker
 
 ```typescript
 // src/BankWorker.ts
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Bank, BankHandlers } from "./Bank.model.ts";
@@ -48,12 +47,17 @@ export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import BankWorker from "./src/BankWorker.ts";
 
 export default Alchemy.Stack(
   "Bank",
-  { providers: Cloudflare.providers(), state: Cloudflare.state() },
+  {
+    providers: Layer.mergeAll(Cloudflare.providers(), DomainCloudflare.providers()),
+    state: Cloudflare.state(),
+  },
   Effect.gen(function* () {
     const bank = yield* BankWorker;
     return { url: bank.url.as<string>() };
@@ -61,13 +65,11 @@ export default Alchemy.Stack(
 );
 ```
 
-The stack deploys the Worker and returns its URL.
+The stack deploys the Worker and returns its URL. `DomainCloudflare.providers()` lets a deploy that adds a view wait until the view has caught up on the events recorded before it.
 
 ## Run it locally
 
-```sh
-bun alchemy dev
-```
+<PackageManagers run="alchemy dev" />
 
 `alchemy dev` runs the Worker and its Durable Objects on your machine and prints the URL, such as `http://localhost:1337`.
 
@@ -134,9 +136,7 @@ The watch prints the balance each time it changes. Over HTTP it checks for chang
 
 ## Deploy
 
-```sh
-bun alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 The deploy prints the Worker's `url`. Run the same script against it.
 

@@ -5,6 +5,7 @@ import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -41,6 +42,12 @@ test.provider(
             networkEndpoints: [{ fqdn: "www.example.com", port: 443 }],
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.GlobalNetworkEndpointGroup.lookup({
+          networkEndpointGroupName: created.networkEndpointGroupName,
+        }),
+        created,
       );
 
       expect(created.networkEndpointGroupName).toEqual(expect.any(String));

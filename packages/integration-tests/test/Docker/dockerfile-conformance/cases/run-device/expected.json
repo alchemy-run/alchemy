@@ -1,0 +1,55 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "alpine",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "RUN",
+          "line": 2,
+          "flags": [
+            {
+              "name": "device",
+              "value": "/dev/fuse"
+            }
+          ],
+          "command": {
+            "form": "shell",
+            "script": "true"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 3,
+          "flags": [
+            {
+              "name": "device",
+              "value": "name=/dev/x,required"
+            }
+          ],
+          "command": {
+            "form": "shell",
+            "script": "true"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 4,
+          "flags": [
+            {
+              "name": "device",
+              "value": "/dev/y,required=false"
+            }
+          ],
+          "command": {
+            "form": "shell",
+            "script": "true"
+          }
+        }
+      ]
+    }
+  ]
+}

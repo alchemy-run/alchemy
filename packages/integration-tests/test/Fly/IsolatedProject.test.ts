@@ -1,5 +1,5 @@
 import * as Fly from "@alchemy.run/fly";
-import { expect } from "@alchemy.run/test";
+import { expect, describe } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -13,8 +13,9 @@ import IsolatedProjectApi, {
 import IsolatedProjectBox, {
   project as spriteProject,
 } from "./fixtures/isolated-project-sprite.ts";
+import { flyApi } from "./limit.ts";
 
-const { test } = Test.make({ providers: Fly.providers() });
+const { test } = Test.make({ limit: flyApi, providers: Fly.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
@@ -26,76 +27,80 @@ const healthOk = (url: string) =>
     Effect.retry({ schedule: Schedule.spaced("4 seconds"), times: 15 }),
   );
 
-// Live proof that the Fly bun bootstrap (shared by Service and Sprite) boots
-// when `main` lives in an isolated project (see test/IsolatedProject.ts) —
-// the bundle `cwd` resolves none of alchemy's dependencies, so the
-// bootstrap's `@effect/platform-bun` / `alchemy/*` imports must be bundled
-// by the virtual-entry plugin rather than found from the project root. With
-// them left external bun dies at module load and the app never answers.
-test.provider(
-  "service bundled from an isolated project serves HTTP",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* materializeIsolatedProject(serviceProject);
-      yield* stack.destroy();
-
-      try {
-        const deployed = yield* stack.deploy(
-          Effect.gen(function* () {
-            const app = yield* IsolatedSite;
-            yield* Fly.IpAssignment("IsolatedProjectShared", {
-              app,
-              type: "shared_v4",
-            });
-            return yield* IsolatedProjectApi;
-          }),
-        );
-        expect(deployed.state).toEqual("started");
-        expect(deployed.url).toBeTruthy();
-
-        expect(yield* healthOk(deployed.url!)).toEqual({ ok: true });
-
+// Every case deploys its own stack, so they run concurrently; the flyApi limit
+// caps the load on Fly.
+describe.concurrent("IsolatedProject", () => {
+  // Live proof that the Fly bun bootstrap (shared by Service and Sprite) boots
+  // when `main` lives in an isolated project (see test/IsolatedProject.ts) —
+  // the bundle `cwd` resolves none of alchemy's dependencies, so the
+  // bootstrap's `@effect/platform-bun` / `alchemy/*` imports must be bundled
+  // by the virtual-entry plugin rather than found from the project root. With
+  // them left external bun dies at module load and the app never answers.
+  test.provider(
+    "service bundled from an isolated project serves HTTP",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* materializeIsolatedProject(serviceProject);
         yield* stack.destroy();
-      } finally {
-        yield* removeIsolatedProject(serviceProject);
-      }
-    }).pipe(logLevel),
-  {
-    tags: [
-      "provider:fly",
-      "provider:fly:app",
-      "provider:fly:ipassignment",
-      "provider:fly:service",
-      "live",
-    ],
-    timeout: 180_000,
-  },
-);
 
-test.provider(
-  "sprite bundled from an isolated project serves HTTP",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* materializeIsolatedProject(spriteProject);
-      yield* stack.destroy();
+        try {
+          const deployed = yield* stack.deploy(
+            Effect.gen(function* () {
+              const app = yield* IsolatedSite;
+              yield* Fly.IpAssignment("IsolatedProjectShared", {
+                app,
+                type: "shared_v4",
+              });
+              return yield* IsolatedProjectApi;
+            }),
+          );
+          expect(deployed.state).toEqual("started");
+          expect(deployed.url).toBeTruthy();
 
-      try {
-        const deployed = yield* stack.deploy(
-          Effect.gen(function* () {
-            return yield* IsolatedProjectBox;
-          }),
-        );
-        expect(deployed.url).toContain("sprites.app");
+          expect(yield* healthOk(deployed.url!)).toEqual({ ok: true });
 
-        expect(yield* healthOk(deployed.url)).toEqual({ ok: true });
+          yield* stack.destroy();
+        } finally {
+          yield* removeIsolatedProject(serviceProject);
+        }
+      }).pipe(logLevel),
+    {
+      tags: [
+        "provider:fly",
+        "provider:fly:app",
+        "provider:fly:ipassignment",
+        "provider:fly:service",
+        "live",
+      ],
+      timeout: 180_000,
+    },
+  );
 
+  test.provider(
+    "sprite bundled from an isolated project serves HTTP",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* materializeIsolatedProject(spriteProject);
         yield* stack.destroy();
-      } finally {
-        yield* removeIsolatedProject(spriteProject);
-      }
-    }).pipe(logLevel),
-  {
-    tags: ["provider:fly", "provider:fly:service", "provider:fly:sprite", "live"],
-    timeout: 180_000,
-  },
-);
+
+        try {
+          const deployed = yield* stack.deploy(
+            Effect.gen(function* () {
+              return yield* IsolatedProjectBox;
+            }),
+          );
+          expect(deployed.url).toContain("sprites.app");
+
+          expect(yield* healthOk(deployed.url)).toEqual({ ok: true });
+
+          yield* stack.destroy();
+        } finally {
+          yield* removeIsolatedProject(spriteProject);
+        }
+      }).pipe(logLevel),
+    {
+      tags: ["provider:fly", "provider:fly:service", "provider:fly:sprite", "live"],
+      timeout: 180_000,
+    },
+  );
+});

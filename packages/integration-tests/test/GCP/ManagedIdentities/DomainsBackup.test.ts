@@ -6,6 +6,7 @@ import * as managedidentities from "@distilled.cloud/gcp/managedidentities_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -99,6 +100,13 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { domain, backup };
         }),
+      );
+      yield* expectFound(
+        GCP.ManagedIdentities.DomainsBackup.lookup({
+          backupId: created.backup.backupId,
+          domain: created.backup.domain,
+        }),
+        created.backup,
       );
 
       expect(created.backup.name).toContain("/backups/");

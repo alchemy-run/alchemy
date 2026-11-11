@@ -1,3 +1,4 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Docker from "@alchemy.run/docker";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
@@ -5,14 +6,19 @@ import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
+import { doWork, OtelCollector, waitForWorkSpan, withCollectorUrl } from "../Utils/Telemetry.ts";
 import TestServiceV2Scaled from "./fixtures/service-v2-scaled.ts";
 import TestServiceV2 from "./fixtures/service-v2.ts";
 import TestService, { SERVICE_EXTERNAL_PORT } from "./fixtures/service.ts";
+import TracedService, { TRACED_EXTERNAL_PORT } from "./fixtures/traced.ts";
 import { ensureDockerSwarm } from "./Runtime.ts";
 
-const { test } = Test.make({ providers: Docker.providers() });
+const { test } = Test.make({
+  providers: Layer.mergeAll(Docker.providers(), Cloudflare.providers()),
+});
 
 // Full end-to-end for the effectful `Docker.Service` platform: bundle the
 // fixture's Effect program, build the content-addressed image on the local
@@ -173,5 +179,46 @@ test.provider(
   {
     tags: ["provider:docker", "provider:docker:service", "local"],
     timeout: 420_000,
+  },
+);
+
+// The collector is a live Cloudflare Worker: the swarm task exports to it
+// over the internet, as a deployed service would.
+test.provider(
+  "effectful service exports spans to the bound OTLP destination",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* ensureDockerSwarm;
+      yield* stack.destroy();
+
+      // The traced program binds the collector url at deploy, so it deploys first.
+      const collector = yield* stack.deploy(OtelCollector());
+      yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            yield* OtelCollector();
+            return yield* TracedService;
+          }),
+        )
+        .pipe(withCollectorUrl(collector.url!));
+
+      expect(yield* doWork(`http://localhost:${TRACED_EXTERNAL_PORT}`, "docker")).toBe(
+        "did work docker",
+      );
+      const traces = yield* waitForWorkSpan(collector.url!, "docker");
+      expect(traces).toContain("work:docker");
+      expect(traces).toContain("docker-service-e2e");
+
+      yield* stack.destroy();
+    }),
+  {
+    tags: [
+      "provider:docker",
+      "provider:docker:service",
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 300_000,
   },
 );

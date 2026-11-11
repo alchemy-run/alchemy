@@ -5,6 +5,7 @@ import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -56,6 +57,20 @@ test.provider(
           });
           return { key, valueA, valueB, binding };
         }),
+      );
+      yield* expectFound(
+        GCP.ResourceManager.TagKey.lookup({
+          shortName: created.key.shortName,
+          parent: created.key.parent,
+        }),
+        created.key,
+      );
+      yield* expectFound(
+        GCP.ResourceManager.TagValue.lookup({
+          shortName: created.valueA.shortName,
+          parent: created.valueA.parent,
+        }),
+        created.valueA,
       );
 
       expect(created.binding.name).toContain("tagBindings/");

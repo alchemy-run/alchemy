@@ -6,6 +6,7 @@ import * as oracle from "@distilled.cloud/gcp/oracledatabase_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -87,6 +88,28 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { net, subnet, gg };
         }),
+      );
+      yield* expectFound(
+        GCP.OracleDatabase.GoldengateDeployment.lookup({
+          goldengateDeploymentId: created.gg.goldengateDeploymentId,
+          location: created.gg.location,
+        }),
+        created.gg,
+      );
+      yield* expectFound(
+        GCP.OracleDatabase.OdbNetwork.lookup({
+          odbNetworkId: created.net.odbNetworkId,
+          location: created.net.location,
+        }),
+        created.net,
+      );
+      yield* expectFound(
+        GCP.OracleDatabase.OdbNetworksOdbSubnet.lookup({
+          odbSubnetId: created.subnet.odbSubnetId,
+          location: created.subnet.location,
+          odbNetwork: created.subnet.odbNetwork,
+        }),
+        created.subnet,
       );
 
       expect(created.gg.name).toContain("/goldengateDeployments/");

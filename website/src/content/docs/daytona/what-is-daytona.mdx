@@ -1,0 +1,161 @@
+---
+title: What is Daytona?
+description: The concepts behind Daytona — organizations, API keys, regions and runners, snapshots, sandboxes and their lifecycle, the toolbox, previews, volumes, network limits and secrets — and how @alchemy.run/daytona models each of them.
+---
+
+import PackageManagers from "../../../components/PackageManagers.astro";
+import Tree from "../../../components/diagrams/Tree.astro";
+import StateMachine from "../../../components/diagrams/StateMachine.astro";
+
+Everything in Daytona belongs to an organization, and you reach it only through Daytona's API, with a key whose permissions Daytona checks.
+
+Take one small app: a Worker gives each user a sandbox, booted from the `Base` snapshot, with that user's volume as their home.
+
+<Tree
+  nodes={[
+    {
+      id: "org", label: "acme", type: "organization", icon: "brand:daytona", colGap: 3,
+      areas: ["base region home"],
+    },
+    { id: "base", label: "Base", type: "snapshot", parent: "org", icon: "camera" },
+    { id: "region", label: "us", type: "region", parent: "org", dashed: true, icon: "map-pin", areas: ["sam", "ana"], phoneAreas: ["sam ana"] },
+    { id: "sam", label: "user-sam", type: "sandbox", parent: "region", tone: "accent", icon: "box" },
+    { id: "ana", label: "user-ana", type: "sandbox", parent: "region", icon: "box" },
+    { id: "home", label: "home-sam", type: "volume", parent: "org", icon: "hard-drive" },
+  ]}
+  links={[
+    { from: "base", to: "sam", label: "from" },
+    { from: "base", to: "ana", label: "from" },
+    { from: "sam", to: "home", label: "mounts" },
+  ]}
+  caption="The organization holds its snapshots and volumes, and runs its sandboxes in a region. Each sandbox starts from a snapshot and can mount a volume. A Worker outside Daytona creates and drives the sandboxes through Daytona's API with its own key."
+/>
+
+## Organizations: the boundary around everything
+
+An **organization** holds your sandboxes, snapshots, volumes, secrets and API keys, the people who may use them, and the bill. Nothing in one organization can see another's.
+
+You sign in to Daytona once, and pick the organization your profile deploys to:
+
+<PackageManagers run="alchemy profile edit --add Daytona" />
+
+See [Organizations and API keys](/daytona/organizations-and-keys).
+
+## API keys: permissions per kind of object
+
+Every call to Daytona carries an **API key**. A key belongs to one organization and holds permissions per kind of object: `write:sandboxes` lets it create any sandbox in the organization, `manage:secrets` any secret.
+
+Each binding creates a key of its own for its Worker or Lambda, with only the permissions its calls need:
+
+```typescript
+const sandboxes = yield* Daytona.CreateSandbox(Base);
+```
+
+See [Organizations and API keys](/daytona/organizations-and-keys).
+
+## Regions and runners: where sandboxes run
+
+A **region** is where sandboxes run, such as `us` or `eu`. Inside it, **runners** are the machines that host sandboxes. Daytona runs shared regions for everyone, and you can add a region of your own and run its runners on your machines. A sandbox picks its region with `target`:
+
+```typescript
+export const DevBox = Daytona.Sandbox("DevBox", { snapshot: Base, target: "eu" });
+```
+
+See [Regions and runners](/daytona/sandboxes/runners).
+
+## Snapshots: the image and size a sandbox boots with
+
+A **snapshot** is the image a sandbox boots from, plus its size: CPU, memory, disk and GPUs. Daytona builds it from an image, a Dockerfile, or another snapshot with commands run in it.
+
+```typescript title="src/Images.ts"
+export const Base = Daytona.Snapshot("Base", { image: "node:22-bookworm-slim", cpu: 1, memory: 1, disk: 3 });
+```
+
+See [Snapshots](/daytona/sandboxes/snapshots).
+
+## Sandboxes: stop, archive, start again
+
+A **sandbox** moves through four states, and its disk survives all but the last:
+
+<StateMachine
+  states={[
+    { id: "started", label: "started", type: "billed while it runs", col: 0, row: 0, start: true, tone: "accent" },
+    { id: "stopped", label: "stopped", type: "disk kept", col: 1, row: 0 },
+    { id: "archived", label: "archived", type: "slower to start", col: 2, row: 0 },
+    { id: "deleted", label: "deleted", col: 2, row: 1, end: true, tone: "danger" },
+  ]}
+  transitions={[
+    { from: "started", to: "stopped", label: "idle 15 min" },
+    { from: "stopped", to: "started", label: "start", bend: -0.6 },
+    { from: "stopped", to: "archived", label: "stopped 7 days" },
+    { from: "archived", to: "started", label: "start", bend: 0.3 },
+    { from: "stopped", to: "deleted", label: "autoDeleteInterval" },
+  ]}
+  caption="A sandbox stops after 15 idle minutes and keeps its disk. After 7 days stopped it is archived, and it can be deleted after a stop if you set autoDeleteInterval. A stopped or archived sandbox starts again with its files."
+/>
+
+Create sandboxes per request or per user from a Worker, or declare a long-lived one in your Stack. See [Sandboxes](/daytona/sandboxes/sandboxes).
+
+## The toolbox: the API inside every sandbox
+
+The **toolbox** is the API inside every sandbox. Alchemy hands you a sandbox as a handle with all of it:
+
+```typescript
+const result = yield* sandbox.exec("npm test", { cwd: "/home/daytona/repo" });
+```
+
+See [Toolbox](/daytona/sandboxes/toolbox).
+
+## Previews: a URL for each port
+
+A **preview URL** reaches a port inside a sandbox from outside, through Daytona's proxy. It needs the sandbox's preview token unless the sandbox is `public`. A port's `fetch` sends the token for you:
+
+```typescript
+const port = yield* sandbox.getTcpPort(3000);
+const res = yield* port.fetch(HttpClientRequest.get("/health"));
+```
+
+See [Network and previews](/daytona/networking/network).
+
+## Volumes: files that outlive the sandbox
+
+A **volume** is a persistent disk, backed by object storage, that sandboxes mount at a path. Its files outlive every sandbox that mounts it, so a user's home can survive their sandbox.
+
+```typescript title="src/Storage.ts"
+export const Cache = Daytona.Volume("Cache", {});
+```
+
+See [Volumes](/daytona/sandboxes/volumes).
+
+## Network limits: what a sandbox can reach
+
+Daytona controls what a sandbox can reach, outside the sandbox. Your organization's tier sets the default: below Tier 3, sandboxes reach only an allowlist of essential services, such as package registries, GitHub and AI APIs. On top of that, a sandbox can allow only some domains or ranges, or no network at all:
+
+```typescript
+export const DevBox = Daytona.Sandbox("DevBox", { snapshot: Base, domainAllowList: ["github.com"] });
+```
+
+See [Network and previews](/daytona/networking/network).
+
+## Secrets: values a sandbox uses but can't read
+
+A **secret** is a value a sandbox can use but not read. The sandbox sees a placeholder, and Daytona's egress proxy swaps in the real value only on requests to the hosts you name:
+
+```typescript
+export const NpmToken = Daytona.Secret("NpmToken", {
+  value: Config.Redacted("NPM_TOKEN"),
+  hosts: ["registry.npmjs.org"],
+});
+```
+
+See [Secrets](/daytona/security/secrets).
+
+## State: where Alchemy keeps its record
+
+Daytona has no storage for Alchemy's own record of what each Stack created. Keep it on disk with `Alchemy.localState()`, or share it with your team and CI through `Cloudflare.state()` or `AWS.state()`.
+
+## How @alchemy.run/daytona models these concepts
+
+Snapshots, volumes, secrets, registries, warm pools, regions, runners, roles and organization settings are resources you declare in a Stack. A sandbox is a resource too when it should live as long as the Stack, like a dev box, or a sandbox that runs a program you write. Sandboxes, volumes, secrets and snapshots that come and go per request or per user are created at runtime through bindings (`CreateSandbox`, `CreateVolume`, `CreateSecret`, `CreateSnapshot`), each with its own API key. Your [profile](/environments/profiles) signs you in to Daytona and picks the organization.
+
+Next, build one: [set up](/daytona/setup) your profile, then the [tutorial](/daytona/tutorial/part-1) puts these ideas to work, one step at a time.

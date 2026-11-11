@@ -9,8 +9,9 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { authorizationHeader } from "./internal/Authorization.ts";
 import { type ObservedConnection, secretValue } from "./internal/Observed.ts";
-import { PrismaEnvironment } from "./PrismaEnvironment.ts";
+import { PrismaEnvironment, type PrismaEnvironmentShape } from "./PrismaEnvironment.ts";
 import type {
   App,
   AccelerateRegion,
@@ -509,10 +510,10 @@ function makePrismaClient(): Effect.Effect<
   PrismaEnvironment | HttpClient.HttpClient
 > {
   return Effect.gen(function* () {
-    const env = yield* PrismaEnvironment;
+    const environment = yield* PrismaEnvironment;
     const http = yield* HttpClient.HttpClient;
 
-    function isValidApiPath(path: string): boolean {
+    function isValidApiPath(env: PrismaEnvironmentShape, path: string): boolean {
       if (
         (path !== "/v1" && !path.startsWith("/v1/")) ||
         path.startsWith("//") ||
@@ -535,8 +536,12 @@ function makePrismaClient(): Effect.Effect<
       }
     }
 
-    const buildUrl = (path: string, query?: object): Effect.Effect<string, PrismaApiError> => {
-      if (!isValidApiPath(path)) {
+    const buildUrl = (
+      env: PrismaEnvironmentShape,
+      path: string,
+      query?: object,
+    ): Effect.Effect<string, PrismaApiError> => {
+      if (!isValidApiPath(env, path)) {
         return Effect.fail(
           new PrismaApiError({
             method: "GET",
@@ -562,8 +567,8 @@ function makePrismaClient(): Effect.Effect<
       });
     };
 
-    const buildWebSocketUrl = (path: string, query?: object) =>
-      buildUrl(path, query).pipe(
+    const buildWebSocketUrl = (env: PrismaEnvironmentShape, path: string, query?: object) =>
+      buildUrl(env, path, query).pipe(
         Effect.map((value) => {
           const url = new URL(value);
           if (url.protocol === "https:") url.protocol = "wss:";
@@ -583,7 +588,12 @@ function makePrismaClient(): Effect.Effect<
       };
     };
 
-    const makeRequest = (method: Method, url: string, options: RequestOptions | undefined) => {
+    const makeRequest = (
+      env: PrismaEnvironmentShape,
+      method: Method,
+      url: string,
+      options: RequestOptions | undefined,
+    ) => {
       const init =
         method === "GET"
           ? HttpClientRequest.get(url)
@@ -592,8 +602,10 @@ function makePrismaClient(): Effect.Effect<
             : method === "PATCH"
               ? HttpClientRequest.patch(url)
               : HttpClientRequest.delete(url);
-      const request = init.pipe(
-        HttpClientRequest.bearerToken(Redacted.value(env.serviceToken)),
+      const authenticated = env.serviceToken
+        ? init.pipe(HttpClientRequest.bearerToken(Redacted.value(env.serviceToken)))
+        : init;
+      const request = authenticated.pipe(
         HttpClientRequest.setHeaders({
           Accept: "application/json",
           "User-Agent": "alchemy-prisma/1.0",
@@ -609,8 +621,18 @@ function makePrismaClient(): Effect.Effect<
       method: Method,
       path: string,
       options?: RequestOptions,
+    ): Effect.Effect<{ status: number; body: T }, PrismaApiError | PrismaApiDecodeError> =>
+      // Resolve the environment on every request, so a token the host
+      // refreshes reaches the next call.
+      Effect.flatMap(environment, (env) => requestWithEnv<T>(env, method, path, options));
+
+    const requestWithEnv = <T>(
+      env: PrismaEnvironmentShape,
+      method: Method,
+      path: string,
+      options?: RequestOptions,
     ): Effect.Effect<{ status: number; body: T }, PrismaApiError | PrismaApiDecodeError> => {
-      if (!isValidApiPath(path)) {
+      if (!isValidApiPath(env, path)) {
         return Effect.fail(
           new PrismaApiError({
             method,
@@ -625,8 +647,8 @@ function makePrismaClient(): Effect.Effect<
         method,
         path,
         Effect.gen(function* () {
-          const url = yield* buildUrl(path, options?.query);
-          const req = makeRequest(method, url, options);
+          const url = yield* buildUrl(env, path, options?.query);
+          const req = makeRequest(env, method, url, options);
           const response = Effect.gen(function* () {
             const res = yield* http.execute(req).pipe(
               Effect.mapError(
@@ -1052,23 +1074,25 @@ function makePrismaClient(): Effect.Effect<
         data<StartDeploymentResult>("POST", `/v1/deployments/${pathSegment(id)}/start`),
       stopDeployment: (id) => request<void>("POST", `/v1/deployments/${pathSegment(id)}/stop`),
       getDeploymentLogsRequest: (id, query) =>
-        buildWebSocketUrl(`/v1/deployments/${pathSegment(id)}/logs`, logsQuery(query)).pipe(
-          Effect.map((url): DeploymentLogsRequest => ({
-            url,
-            headers: {
-              Authorization: Redacted.make(`Bearer ${Redacted.value(env.serviceToken)}`),
-            },
-          })),
+        Effect.flatMap(environment, (env) =>
+          buildWebSocketUrl(env, `/v1/deployments/${pathSegment(id)}/logs`, logsQuery(query)).pipe(
+            Effect.map((url): DeploymentLogsRequest => ({
+              url,
+              headers: authorizationHeader(env.serviceToken),
+            })),
+          ),
         ),
       getBuildLogsRequest: (buildId, query) =>
-        buildUrl(`/v1/builds/${pathSegment(buildId)}/logs`, query).pipe(
-          Effect.map((url): BuildLogsRequest => ({
-            url,
-            headers: {
-              Authorization: Redacted.make(`Bearer ${Redacted.value(env.serviceToken)}`),
-              Accept: "application/x-ndjson",
-            },
-          })),
+        Effect.flatMap(environment, (env) =>
+          buildUrl(env, `/v1/builds/${pathSegment(buildId)}/logs`, query).pipe(
+            Effect.map((url): BuildLogsRequest => ({
+              url,
+              headers: {
+                ...authorizationHeader(env.serviceToken),
+                Accept: "application/x-ndjson",
+              },
+            })),
+          ),
         ),
 
       listEnvironmentVariables: (query) =>

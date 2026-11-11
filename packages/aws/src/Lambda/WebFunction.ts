@@ -30,7 +30,11 @@ import { Assets, ensureLambdaWebCodeAccess } from "../Assets.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyDocument, PolicyStatement } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
-import type { FunctionBuildOptions, FunctionZipProps } from "./Function.ts";
+import {
+  LambdaLiveTailError,
+  type FunctionBuildOptions,
+  type FunctionZipProps,
+} from "./Function.ts";
 import { makeFunctionBundler, type FunctionBundleOptions } from "./FunctionBundle.ts";
 import type { NetworkConnectorProps } from "./NetworkConnector.ts";
 import { createConnector, getConnector, syncConnector } from "./NetworkConnectorLifecycle.ts";
@@ -1503,6 +1507,7 @@ export const WebFunctionProvider = () =>
                     )
                   : Stream.empty,
               ),
+              Stream.mapError((cause) => new LambdaLiveTailError({ cause })),
             );
           });
           return Stream.unwrap(session).pipe(Stream.retry(Schedule.spaced("1 second")));

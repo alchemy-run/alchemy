@@ -84,15 +84,12 @@ export interface SiblingTransactionResult {
   snapshot: Snapshot;
 }
 
-export interface BookkeepingCounts {
-  schemaChecks: number;
-  reconciliations: number;
-  setAlarm: number;
-  deleteAlarm: number;
+export interface NestedTransactionResult {
+  failure: string;
+  snapshot: Snapshot;
 }
 
 export interface BatchResult {
-  counts: BookkeepingCounts;
   snapshot: Snapshot;
 }
 
@@ -318,94 +315,46 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
         return result;
       });
 
-      const measureBookkeeping = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-        Effect.acquireUseRelease(
-          Effect.sync(() => {
-            const raw = state.raw.storage;
-            const counts: BookkeepingCounts = {
-              schemaChecks: 0,
-              reconciliations: 0,
-              setAlarm: 0,
-              deleteAlarm: 0,
-            };
-            const exec = raw.sql.exec;
-            const setAlarm = raw.setAlarm;
-            const deleteAlarm = raw.deleteAlarm;
-            raw.sql.exec = function <T extends Record<string, Cloudflare.SqlStorageValue>>(
-              query: string,
-              ...bindings: Cloudflare.SqlStorageValue[]
-            ) {
-              if (
-                query.includes("SELECT name FROM sqlite_master") &&
-                query.includes("alchemy_alarm_schema")
-              )
-                counts.schemaChecks++;
-              if (query.includes("SELECT MIN(run_at) AS run_at FROM (")) {
-                counts.reconciliations++;
-              }
-              return exec.call(raw.sql, query, ...bindings) as ReturnType<typeof raw.sql.exec<T>>;
-            };
-            raw.setAlarm = (at, options) => {
-              counts.setAlarm++;
-              return setAlarm.call(raw, at, options);
-            };
-            raw.deleteAlarm = (options) => {
-              counts.deleteAlarm++;
-              return deleteAlarm.call(raw, options);
-            };
-            return { raw, counts, exec, setAlarm, deleteAlarm };
-          }),
-          ({ counts }) => effect.pipe(Effect.as(counts)),
-          ({ raw, exec, setAlarm, deleteAlarm }) =>
-            Effect.sync(() => {
-              raw.sql.exec = exec;
-              raw.setAlarm = setAlarm;
-              raw.deleteAlarm = deleteAlarm;
-            }),
-        );
-
       return {
         snapshot,
         bookkeeping: Effect.fn(function* () {
           const at = yield* Effect.sync(() => Date.now() + 1_500);
-          const counts = yield* measureBookkeeping(
-            storage
-              .transaction(
-                Effect.gen(function* () {
-                  for (let i = 0; i < 20; i++) {
-                    yield* onArchive.schedule(`cancelled-${i}`, {
-                      at,
-                      payload: { value: "cancelled" },
-                    });
-                    yield* onArchive.cancel(`cancelled-${i}`);
-                  }
-                  yield* onArchive.schedule("kept", {
+          yield* storage
+            .transaction(
+              Effect.gen(function* () {
+                for (let i = 0; i < 20; i++) {
+                  yield* onArchive.schedule(`cancelled-${i}`, {
                     at,
-                    payload: { value: "batched" },
+                    payload: { value: "cancelled" },
                   });
-                  yield* storage.transaction(
-                    Effect.gen(function* () {
-                      yield* onSecondary.schedule("kept", {
-                        at,
-                        payload: { value: "nested" },
-                      });
-                      yield* Cloudflare.scheduleEvent("cancelled-legacy", new Date(at), {});
-                      yield* Cloudflare.cancelEvent("cancelled-legacy");
-                    }),
-                  );
-                  yield* Effect.addFinalizer(() =>
-                    onArchive
-                      .schedule("finalizer", {
-                        at,
-                        payload: { value: "finalizer" },
-                      })
-                      .pipe(Effect.orDie),
-                  );
-                }),
-              )
-              .pipe(Effect.provideService(Cloudflare.DurableObjectState, state)),
-          );
-          const result: BatchResult = { counts, snapshot: yield* snapshot() };
+                  yield* onArchive.cancel(`cancelled-${i}`);
+                }
+                yield* onArchive.schedule("kept", {
+                  at,
+                  payload: { value: "batched" },
+                });
+                yield* storage.transaction(
+                  Effect.gen(function* () {
+                    yield* onSecondary.schedule("kept", {
+                      at,
+                      payload: { value: "nested" },
+                    });
+                    yield* Cloudflare.scheduleEvent("cancelled-legacy", new Date(at), {});
+                    yield* Cloudflare.cancelEvent("cancelled-legacy");
+                  }),
+                );
+                yield* Effect.addFinalizer(() =>
+                  onArchive
+                    .schedule("finalizer", {
+                      at,
+                      payload: { value: "finalizer" },
+                    })
+                    .pipe(Effect.orDie),
+                );
+              }),
+            )
+            .pipe(Effect.provideService(Cloudflare.DurableObjectState, state));
+          const result: BatchResult = { snapshot: yield* snapshot() };
           return result;
         }),
         cancelBookkeeping: Effect.fn(function* () {
@@ -413,67 +362,60 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
             after: "1 minute",
             payload: { value: "cancelled" },
           });
-          const counts = yield* measureBookkeeping(
-            storage.transaction(
-              Effect.gen(function* () {
-                yield* onArchive.cancel("cancelled");
-                for (let i = 0; i < 20; i++) yield* onArchive.cancel(`missing-${i}`);
-              }),
-            ),
+          yield* storage.transaction(
+            Effect.gen(function* () {
+              yield* onArchive.cancel("cancelled");
+              for (let i = 0; i < 20; i++) yield* onArchive.cancel(`missing-${i}`);
+            }),
           );
-          const result: BatchResult = { counts, snapshot: yield* snapshot() };
+          const result: BatchResult = { snapshot: yield* snapshot() };
           return result;
         }),
         failedBookkeeping: Effect.fn(function* (explicit: boolean) {
           let failure: string | null = null;
-          const counts = yield* measureBookkeeping(
-            storage
-              .transaction(
-                Effect.fn(function* (txn: Cloudflare.DurableObjectTransaction) {
-                  yield* storage.put("application", "uncommitted");
-                  yield* storage.sql.exec(
-                    "INSERT INTO application_values (value) VALUES ('uncommitted')",
-                  );
-                  yield* onArchive.schedule("rolled-back", {
-                    after: "1 minute",
-                    payload: { value: "rolled-back" },
-                  });
-                  if (explicit) {
-                    yield* txn.rollback();
-                  } else {
-                    // A real SQLite failure during deferred reconciliation must roll back the batch.
-                    yield* storage.sql.exec("DROP TABLE alchemy_alarm_callbacks");
-                  }
+          yield* storage
+            .transaction(
+              Effect.fn(function* (txn: Cloudflare.DurableObjectTransaction) {
+                yield* storage.put("application", "uncommitted");
+                yield* storage.sql.exec(
+                  "INSERT INTO application_values (value) VALUES ('uncommitted')",
+                );
+                yield* onArchive.schedule("rolled-back", {
+                  after: "1 minute",
+                  payload: { value: "rolled-back" },
+                });
+                if (explicit) {
+                  yield* txn.rollback();
+                } else {
+                  // A native SQLite failure rolls back the scheduled job and its wake.
+                  yield* storage.sql.exec("SELECT * FROM missing_table");
+                }
+              }),
+            )
+            .pipe(
+              Effect.exit,
+              Effect.tap((exit) =>
+                Effect.sync(() => {
+                  failure = Exit.isFailure(exit) ? String(Cause.squash(exit.cause)) : null;
                 }),
-              )
-              .pipe(
-                Effect.exit,
-                Effect.tap((exit) =>
-                  Effect.sync(() => {
-                    failure = Exit.isFailure(exit) ? String(Cause.squash(exit.cause)) : null;
-                  }),
-                ),
               ),
-          );
+            );
           const rolledBack: BatchResult = {
-            counts,
             snapshot: yield* snapshot(),
           };
-          const recovered = yield* measureBookkeeping(
-            storage.transaction(
-              Effect.gen(function* () {
-                yield* onArchive.schedule("recovered", {
-                  after: "1 second",
-                  payload: { value: "recovered" },
-                });
-                yield* onArchive.cancel("missing");
-              }),
-            ),
+          yield* storage.transaction(
+            Effect.gen(function* () {
+              yield* onArchive.schedule("recovered", {
+                after: "1 second",
+                payload: { value: "recovered" },
+              });
+              yield* onArchive.cancel("missing");
+            }),
           );
           const result: FailedBatchResult = {
             failure,
             rolledBack,
-            recovered: { counts: recovered, snapshot: yield* snapshot() },
+            recovered: { snapshot: yield* snapshot() },
           };
           return result;
         }),
@@ -673,6 +615,48 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
               return result;
             }),
           ).pipe(Effect.provideService(Scheduler.Scheduler, scheduler));
+        }),
+        nestedTransactions: Effect.fn(function* () {
+          let failure = "";
+          const insert = (value: string) =>
+            storage.sql.exec("INSERT INTO application_values (value) VALUES (?)", value);
+          yield* storage.transaction(
+            Effect.gen(function* () {
+              yield* storage.put("application", "outer");
+              yield* onArchive.schedule("outer", {
+                after: "1 second",
+                payload: { value: "outer" },
+              });
+              failure = yield* storage
+                .transaction(
+                  Effect.gen(function* () {
+                    yield* insert("inner-failed");
+                    yield* onArchive.schedule("inner-failed", {
+                      after: "1 second",
+                      payload: { value: "inner-failed" },
+                    });
+                    return yield* new Rollback({ value: "inner-failure" });
+                  }),
+                )
+                .pipe(Effect.catchTag("Rollback", (error) => Effect.succeed(error.value)));
+              yield* storage.transaction(
+                Effect.fn(function* (txn: Cloudflare.DurableObjectTransaction) {
+                  yield* insert("inner-rolled-back");
+                  yield* onSecondary.schedule("inner-rolled-back", {
+                    after: "1 second",
+                    payload: { value: "inner-rolled-back" },
+                  });
+                  yield* txn.rollback();
+                }),
+              );
+              yield* storage.transaction(insert("inner-committed"));
+            }),
+          );
+          const result: NestedTransactionResult = {
+            failure,
+            snapshot: yield* snapshot(),
+          };
+          return result;
         }),
         rollbackExplicit: Effect.fn(function* () {
           const describeOperation = <A, E>(

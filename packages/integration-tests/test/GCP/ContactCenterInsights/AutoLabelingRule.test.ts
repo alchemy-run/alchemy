@@ -6,6 +6,7 @@ import * as cci from "@distilled.cloud/gcp/contactcenterinsights_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -61,6 +62,13 @@ test.provider.skipIf(!process.env.GCP_TEST_CCAI_QUALITY || !!process.env.FAST)(
             conditions: [{ value: '"billing"', condition: "true" }],
           });
         }),
+      );
+      yield* expectFound(
+        GCP.ContactCenterInsights.AutoLabelingRule.lookup({
+          autoLabelingRuleId: created.autoLabelingRuleId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.autoLabelingRuleId).toEqual(expect.any(String));

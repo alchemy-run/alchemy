@@ -149,6 +149,53 @@ describe.sequential("Instance", { tags: ["provider:aws", "provider:aws:ec2", "li
     { timeout: 300_000 },
   );
 
+  // Nitro Enclaves are enabled at launch (they also let the instance run
+  // Nitro Sandboxes) and can't change afterwards, so turning them off plans a
+  // replacement. Intel and AMD types need 4 vCPUs for enclaves.
+  test.provider(
+    "enclaveOptions enable Nitro Enclaves at launch and replace on change",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const imageId = amazonLinux2023();
+
+        const program = (enabled: boolean) =>
+          Effect.gen(function* () {
+            const vpc = yield* Vpc("EnclaveInstanceVpc", { cidrBlock: "10.0.0.0/16" });
+            const subnet = yield* Subnet("EnclaveInstanceSubnet", {
+              vpcId: vpc.vpcId,
+              cidrBlock: "10.0.1.0/24",
+            });
+            const instance = yield* Instance("EnclaveInstance", {
+              imageId,
+              instanceType: "m6i.xlarge",
+              subnetId: subnet.subnetId,
+              enclaveOptions: { enabled },
+            });
+            return { vpc, instance };
+          });
+
+        const deployed = yield* stack.deploy(program(true));
+        const observed = yield* ec2
+          .describeInstances({ InstanceIds: [deployed.instance.instanceId] })
+          .pipe(Effect.map((r) => r.Reservations?.[0]?.Instances?.[0]?.EnclaveOptions));
+        expect(observed?.Enabled).toBe(true);
+        expect(deployed.instance.enclaveOptions).toEqual({ enabled: true });
+
+        const unchanged = yield* stack.plan(program(true));
+        expect(unchanged.resources.EnclaveInstance).toMatchObject({ action: "noop" });
+        const disabled = yield* stack.plan(program(false));
+        expect(disabled.resources.EnclaveInstance).toMatchObject({ action: "replace" });
+
+        yield* stack.destroy();
+
+        yield* assertInstanceTerminated(deployed.instance.instanceId);
+        yield* assertVpcGone(deployed.vpc.vpcId);
+      }).pipe(logLevel),
+    { timeout: 300_000 },
+  );
+
   // Replacement must launch a distinct physical instance. The create phase of a
   // replacement runs under a freshly minted generation id, so the tag-based
   // recovery lookup (branded with `alchemy::instance`) can never re-adopt the

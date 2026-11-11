@@ -1,0 +1,19 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "alpine",
+      "name": null,
+      "flags": [],
+      "instructions": []
+    },
+    {
+      "line": 2,
+      "image": "alpine:3",
+      "name": null,
+      "flags": [],
+      "instructions": []
+    }
+  ]
+}

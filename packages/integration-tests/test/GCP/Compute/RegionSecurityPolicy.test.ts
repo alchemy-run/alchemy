@@ -5,6 +5,7 @@ import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -51,6 +52,13 @@ test.provider(
             ],
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.RegionSecurityPolicy.lookup({
+          securityPolicyName: created.securityPolicyName,
+          region: created.region,
+        }),
+        created,
       );
 
       expect(created.securityPolicyName).toEqual(expect.any(String));

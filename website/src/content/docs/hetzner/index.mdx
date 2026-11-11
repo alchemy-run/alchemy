@@ -1,99 +1,69 @@
 ---
 title: Hetzner
-description: Build applications on Hetzner Cloud with Alchemy — Servers running your Effect programs as Services, plus volumes, networks, firewalls, load balancers, and DNS, all in one typed program.
+description: Run Effect programs on Hetzner Cloud Servers with Alchemy. Declare Servers, Services, Volumes, networks, firewalls, load balancers and DNS in one TypeScript program.
 ---
 
-An Alchemy app on Hetzner is one or more **Servers** — real VMs,
-booted in seconds and billed by the hour — running your Effect
-programs as **Services**: bundled with rolldown, copied over SSH, and
-supervised by systemd. No Dockerfile, no ansible, no hand-written
-unit files. Around them you declare the rest of the platform —
-volumes, private networks, firewalls, load balancers, and DNS — in
-the same TypeScript program.
+import HubMap from "../../../components/HubMap.astro";
 
-New here? [Set up your project and API token](/hetzner/setup), then
-start the [tutorial](/hetzner/tutorial/part-1).
+Hetzner rents dedicated and cloud servers at a fraction of the large clouds' prices. Hetzner Cloud, its virtual-machine platform, runs in Germany, Finland, the US and Singapore.
 
-## Compute
+Around its Servers, Hetzner Cloud offers just what servers need: network disks, private networks, firewalls, load balancers, IP addresses and DNS. There are no managed functions or queues: you run your own programs on your own machines.
 
-- **[Servers](/hetzner/compute/servers)** — the VM: pick a
-  `serverType`, an `image`, and a `location`; attach SSH keys,
-  networks, firewalls, volumes, and placement groups. Alchemy injects
-  a deploy key so it can reach every server it manages.
-- **[Services](/hetzner/compute/services)** — your code on a Server.
-  An HTTP `fetch` handler (or a background process) deployed as a
-  systemd unit; N Services can share one Server.
-- **[SSH](/hetzner/compute/servers#run-commands-over-ssh)** — typed
-  `exec`/`scp` against any managed Server, usable from deploy-time
-  Effects.
-- **Images & snapshots** — snapshot a Server with `Hetzner.Image`,
-  look up stock images with `Hetzner.findImage`.
+**New to Hetzner?** Start with [What is Hetzner?](/hetzner/what-is-hetzner).
 
-## Frontend
+## A quick example
 
-- **[Websites](/hetzner/frontend/websites)** — Vite, Astro,
-  Next.js, Nuxt, React Router, SolidStart, SvelteKit, TanStack
-  Start, Waku, Octane, Foldkit, Vocs, and StaticSite. Each builds
-  your app and deploys a systemd
-  [Service](/hetzner/compute/services) on a
-  [Server](/hetzner/compute/servers). Several sites can share one
-  VM. Live URL is `http://{ipv4}:3000`.
-- [`Vite`](/hetzner/frontend/vite), [`Astro`](/hetzner/frontend/astro),
-  [`Next.js`](/hetzner/frontend/nextjs), [`Nuxt`](/hetzner/frontend/nuxt),
-  [`React Router`](/hetzner/frontend/react-router),
-  [`SolidStart`](/hetzner/frontend/solidstart),
-  [`SvelteKit`](/hetzner/frontend/sveltekit),
-  [`TanStack Start`](/hetzner/frontend/tanstack-start),
-  [`Waku`](/hetzner/frontend/waku),
-  [`Octane`](/hetzner/frontend/octane), [`Foldkit`](/hetzner/frontend/foldkit),
-  [`Vocs`](/hetzner/frontend/vocs),
-  [`StaticSite`](/hetzner/frontend/static-site).
+A Server is a declaration:
 
-## Storage
+```typescript title="src/server.ts"
+import * as Hetzner from "@alchemy.run/hetzner";
 
-- **[Volumes](/hetzner/data/volumes)** — network block storage
-  attached to a Server. Mount one into a Service with the
-  `MountVolume` binding and read/write it like a local directory.
+export const Box = Hetzner.Server("Box", { serverType: "cx22", image: "ubuntu-24.04", location: "nbg1" });
+```
 
-## Networking
+A Service is your program on it:
 
-- **[Networks, Firewalls & Load Balancers](/hetzner/networking)** —
-  private networks with subnets, stateful firewall rules applied to
-  servers, and managed load balancers with health checks and TLS
-  certificates.
-- **Floating & Primary IPs** — stable public addresses that survive
-  server replacement.
+```typescript title="src/api.ts"
+import * as Hetzner from "@alchemy.run/hetzner";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Box } from "./server.ts";
 
-## DNS
+export default class Api extends Hetzner.Service<Api>()(
+  "Api",
+  { server: Box, main: import.meta.url, port: 3000 },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("hello from Hetzner")),
+    };
+  }),
+) {}
+```
 
-- **[Zones & records](/hetzner/networking/dns)** — Hetzner DNS zones
-  and record sets as resources, plus `ReadDns`/`WriteDns` bindings
-  for querying and mutating records from deploy-time Effects.
+And the Stack deploys both to your project:
 
-## What are you building?
+```typescript title="alchemy.run.ts"
+import * as Alchemy from "alchemy";
+import * as Hetzner from "@alchemy.run/hetzner";
+import * as Effect from "effect/Effect";
+import Api from "./src/api.ts";
 
-| You're building                    | Reach for                                                                                                    |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| An HTTP API on a VM                | [Server](/hetzner/compute/servers) + [Service](/hetzner/compute/services)                                      |
-| A Vite SPA                         | [`Website.Vite`](/hetzner/frontend/vite) — pass `server` to share the VM                                       |
-| An SSR site (Astro, Next, Nuxt, …) | [`Website`](/hetzner/frontend/websites)                                                                        |
-| A background worker / daemon       | [Service](/hetzner/compute/services) with `host.run(...)` — no port, no HTTP                                   |
-| Persistent state on disk           | [Volume + MountVolume](/hetzner/data/volumes)                                                                  |
-| A load-balanced, TLS-terminated app | [Load Balancer + Certificate](/hetzner/networking#load-balancer)                                              |
-| Servers talking privately          | [Network](/hetzner/networking#private-networks) + `usePrivateIp` targets                                       |
-| Locking down public access         | [Firewall](/hetzner/networking#firewalls)                                                                      |
-| Your own domain                    | [Zone + RecordSet](/hetzner/networking/dns)                                                                    |
-| A stable IP across replacements    | Primary IP / Floating IP — see [Networking](/hetzner/networking#floating--primary-ips)                         |
-| Golden images                      | `Hetzner.Image` snapshots — see [Servers](/hetzner/compute/servers#snapshots)                                   |
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Hetzner.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const api = yield* Api;
+    return { url: api.url };
+  }),
+);
+```
 
-## Where next
+## Where to start
 
-- [Setup](/hetzner/setup) — create a Hetzner project, generate an
-  API token, and connect alchemy.
-- [Tutorial](/hetzner/tutorial/part-1) — from empty directory to a
-  Server running an HTTP Service with a mounted Volume and a
-  firewall.
-- [Websites](/hetzner/frontend/websites) — Vite, Astro, Next.js, and
-  other framework sites as a systemd unit.
-- [Providers reference](/providers) — generated API docs for every
-  Hetzner resource Alchemy ships.
+**Want to build?** The [tutorial](/hetzner/tutorial/part-1) goes from an empty directory to a Server running an HTTP Service with a Volume and a firewall, one step at a time. Start with [Setup](/hetzner/setup) to connect your project.
+
+**Looking for something specific?** Every section of these docs is listed below, and every resource is in the generated [API reference](/providers).
+
+## The docs
+
+<HubMap />

@@ -48,9 +48,13 @@ import { isSecret } from "../SecretsStore/Secret.ts";
 import { isStream } from "../Stream/Stream.ts";
 import { isIndex } from "../Vectorize/VectorizeIndex.ts";
 import { isVpcService } from "../VpcService/VpcService.ts";
-import type { VpcServiceLookup } from "../VpcService/VpcServiceLookup.ts";
 import { isDispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
-import { isWorkflowLike, WorkflowResource, type WorkflowBinding } from "../Workflows/Workflow.ts";
+import {
+  isWorkflowLike,
+  isWorkflowResource,
+  WorkflowResource,
+  type WorkflowBinding,
+} from "../Workflows/Workflow.ts";
 import { asScriptNameOutput, makeWorkflowName } from "../Workflows/WorkflowName.ts";
 import { isAI } from "./AI.ts";
 import { isAssets } from "./Assets.ts";
@@ -58,6 +62,7 @@ import { isBinding as isWorkerOnlyBinding } from "./Binding.ts";
 import { isBrowser } from "./Browser.ts";
 import {
   type DurableObjectLike,
+  hostNamespaceOf,
   isDurableObjectLike,
   normalizeTransferredFrom,
 } from "./DurableObject.ts";
@@ -296,7 +301,8 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
           // binding value; contribute it as binding data so the wire binding
           // stays pure.
           devRemote:
-            (isWorkerOnlyBinding(binding) || isSendEmail(binding)) && binding.devRemote
+            ((isWorkerOnlyBinding(binding) || isSendEmail(binding)) && binding.devRemote) ||
+            isLookedUpWorker(binding)
               ? { [bindingName]: true }
               : undefined,
         });
@@ -311,7 +317,44 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
   if (resource.Props?.isExternal === true) {
     Object.assign(resource, { env });
   }
+  // A `Worker.ref` in `env` is a service binding, which records the
+  // target's `workerName`. Left in props as well, the ref is a prop
+  // dependency on the target's whole output, whose `versionId` changes on
+  // every upload. A ref is the only way a Worker's props can reach a Worker
+  // that depends back on it (a direct reference needs the declaration
+  // first), so two Workers that bind each other this way form a cycle through
+  // props instead of bindings: plans deadlock and the first deploy re-uploads
+  // both until it gives up (#3112). Drop the ref from props, so the cycle
+  // runs through bindings. The upload and `alchemy dev` both skip `env` keys
+  // a binding covers. A direct reference stays: its prop dependency is what
+  // orders a deploy after the Worker it binds.
+  const refKeys = Object.keys(env).filter((key) => {
+    const value = env[key];
+    const target = isWorkerEntrypoint(value) ? value.worker : value;
+    return isWorker(target) && Output.isRefExpr(target);
+  });
+  if (refKeys.length > 0 && resource.Props?.env) {
+    const kept = Object.fromEntries(
+      Object.entries(resource.Props.env as Record<string, unknown>).filter(
+        ([key]) => !refKeys.includes(key),
+      ),
+    );
+    resource.Props = { ...resource.Props, env: kept } as typeof resource.Props;
+  }
 });
+
+/**
+ * A service binding to a `Worker.lookup(...)`: the target is deployed, never
+ * run by `alchemy dev`, so the dev worker reaches it remotely.
+ */
+const isLookedUpWorker = (binding: unknown): boolean =>
+  // A looked-up Workflow binds like the `scriptName` form, which carries no
+  // flag; the dev runtime ignores it on `workflow` bindings, and adding it
+  // would make switching between the two forms plan an update.
+  (Output.isLookupExpr(binding) && !isWorkflowResource(binding)) ||
+  (isWorkerEntrypoint(binding) &&
+    binding.worker !== undefined &&
+    Output.isLookupExpr(binding.worker));
 
 /**
  * Structural check for a `Cloudflare.Container` class declaration. Keyed on
@@ -599,8 +642,21 @@ const toBinding = (
       name: bindingName,
       className: binding.className ?? binding.name,
       scriptName: binding.scriptName,
+      hostNamespace: hostNamespaceOf(binding.scriptName, binding.className ?? binding.name),
       transferredFrom: normalizeTransferredFrom(binding.transferredFrom),
+      ...(binding.renamedFrom !== undefined &&
+        binding.scriptName === undefined && { renamedFrom: binding.renamedFrom }),
       storage: binding.storage,
+    };
+  } else if (isWorkflowResource(binding)) {
+    // `Workflow.lookup`: a Workflow another script hosts, bound by the class
+    // and script Cloudflare reported for it.
+    return {
+      type: "workflow",
+      name: bindingName,
+      workflowName: binding.workflowName,
+      className: binding.className,
+      scriptName: binding.scriptName,
     };
   } else if (isWorkflowLike(binding)) {
     return {
@@ -775,17 +831,8 @@ const toBinding = (
       stream: binding.streamId,
     };
   } else if (Output.isOutput(binding)) {
-    return Output.map(binding, (value: Json | Redacted.Redacted<Json> | VpcServiceLookup) =>
-      // A `VpcService.lookup(...)` data source resolves to the service's
-      // attributes branded with the resource `Type`; classify it like the
-      // managed resource instead of a plain json env value.
-      isVpcService(value)
-        ? {
-            type: "vpc_service" as const,
-            name: bindingName,
-            serviceId: (value as VpcServiceLookup).serviceId,
-          }
-        : toValueBinding(bindingName, value as Json | Redacted.Redacted<Json>),
+    return Output.map(binding, (value: Json | Redacted.Redacted<Json>) =>
+      toValueBinding(bindingName, value),
     );
   } else {
     return {

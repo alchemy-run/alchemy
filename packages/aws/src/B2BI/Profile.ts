@@ -68,8 +68,18 @@ export interface Profile extends Resource<
     logGroupName: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ProfileLookup
 > {}
+
+/**
+ * Props for {@link Profile.lookup}: find a profile this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ProfileLookup {
+  /** The id of the existing profile. */
+  profileId: string;
+}
 
 /**
  * An AWS B2B Data Interchange (B2BI) customer profile. A profile is the
@@ -96,6 +106,16 @@ export interface Profile extends Resource<
  *   phone: "+15555550100",
  *   logging: "DISABLED",
  * });
+ * ```
+ *
+ * ### Looking up an existing profile
+ * `Profile.lookup` references a profile Alchemy doesn't manage (created in the
+ * console or by another stack), found by `profileId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing profile
+ * ```typescript
+ * const existing = AWS.B2BI.Profile.lookup({ profileId: "..." });
  * ```
  *
  * @resource
@@ -139,6 +159,15 @@ export const ProfileProvider = () =>
           if ((olds.logging ?? "ENABLED") !== (news.logging ?? "ENABLED")) {
             return { action: "replace", deleteFirst: true } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ profileId }) {
+          const found = yield* b2bi
+            .getProfile({ profileId: profileId })
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
+          if (found === undefined) return undefined;
+          const attrs = toAttrs(found);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output, previous }) {

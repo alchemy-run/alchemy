@@ -28,6 +28,9 @@
   "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
+    "./Cloudflare": "./src/Cloudflare/index.ts",
+    "./EffectCluster": "./src/EffectCluster/index.ts",
+    "./Rivet": "./src/Rivet/index.ts",
     "./*": "./src/*.ts",
     "./package.json": "./package.json"
   },
@@ -37,6 +40,21 @@
         "types": "./lib/index.d.ts",
         "bun": "./src/index.ts",
         "default": "./lib/index.js"
+      },
+      "./Cloudflare": {
+        "types": "./lib/Cloudflare/index.d.ts",
+        "bun": "./src/Cloudflare/index.ts",
+        "default": "./lib/Cloudflare/index.js"
+      },
+      "./EffectCluster": {
+        "types": "./lib/EffectCluster/index.d.ts",
+        "bun": "./src/EffectCluster/index.ts",
+        "default": "./lib/EffectCluster/index.js"
+      },
+      "./Rivet": {
+        "types": "./lib/Rivet/index.d.ts",
+        "bun": "./src/Rivet/index.ts",
+        "default": "./lib/Rivet/index.js"
       },
       "./internal": null,
       "./*": {
@@ -53,6 +71,11 @@
     "build:package": "node scripts/build.ts"
   },
   "devDependencies": {
+    "@alchemy.run/cloudflare": "workspace:*",
+    "@alchemy.run/effect-cluster": "workspace:*",
+    "@alchemy.run/rivet": "workspace:*",
+    "@distilled.cloud/cloudflare": "workspace:*",
+    "@effect/sql-pg": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "alchemy": "workspace:*",
@@ -61,11 +84,31 @@
     "typescript": "catalog:"
   },
   "peerDependencies": {
+    "@alchemy.run/cloudflare": "workspace:*",
+    "@alchemy.run/effect-cluster": "workspace:*",
+    "@alchemy.run/rivet": "workspace:*",
+    "@distilled.cloud/cloudflare": "workspace:*",
+    "@effect/sql-pg": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",
     "foldkit": "catalog:"
   },
   "peerDependenciesMeta": {
+    "@alchemy.run/cloudflare": {
+      "optional": true
+    },
+    "@alchemy.run/effect-cluster": {
+      "optional": true
+    },
+    "@alchemy.run/rivet": {
+      "optional": true
+    },
+    "@distilled.cloud/cloudflare": {
+      "optional": true
+    },
+    "@effect/sql-pg": {
+      "optional": true
+    },
     "foldkit": {
       "optional": true
     }

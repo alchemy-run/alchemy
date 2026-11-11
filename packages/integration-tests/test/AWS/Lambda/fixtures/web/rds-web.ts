@@ -3,6 +3,7 @@ import * as Lambda from "@alchemy.run/aws/Lambda";
 import * as RDS from "@alchemy.run/aws/RDS";
 import * as SecretsManager from "@alchemy.run/aws/SecretsManager";
 import * as Drizzle from "@alchemy.run/drizzle/Postgres";
+import { Region } from "@distilled.cloud/aws/Region";
 import { sql } from "drizzle-orm";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -16,16 +17,19 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
  * nothing but the in-VPC socket.
  */
 export const RdsWebInfra = Effect.gen(function* () {
+  // The Region service, which the function runtime also provides at init. A
+  // construction may only fail with ConfigError, and no credentials means no test.
+  const region = yield* (yield* Region).pipe(Effect.orDie);
   const vpc = yield* EC2.Vpc("RdsWebVpc", { cidrBlock: "10.62.0.0/16" });
   const subnetA = yield* EC2.Subnet("RdsWebSubnetA", {
     vpcId: vpc.vpcId,
     cidrBlock: "10.62.0.0/24",
-    availabilityZone: "us-west-2a",
+    availabilityZone: `${region}a`,
   });
   const subnetB = yield* EC2.Subnet("RdsWebSubnetB", {
     vpcId: vpc.vpcId,
     cidrBlock: "10.62.1.0/24",
-    availabilityZone: "us-west-2b",
+    availabilityZone: `${region}b`,
   });
   const appSecurityGroup = yield* EC2.SecurityGroup("RdsWebAppSg", {
     vpcId: vpc.vpcId,

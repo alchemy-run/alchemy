@@ -6,6 +6,7 @@ import * as networkconnectivity from "@distilled.cloud/gcp/networkconnectivity_v
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { withNetworkSlot } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -88,6 +89,20 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { network, subnet, policy, record };
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkConnectivity.AutomatedDnsRecord.lookup({
+          automatedDnsRecordId: created.record.automatedDnsRecordId,
+          location: created.record.location,
+        }),
+        created.record,
+      );
+      yield* expectFound(
+        GCP.NetworkConnectivity.ServiceConnectionPolicy.lookup({
+          serviceConnectionPolicyId: created.policy.serviceConnectionPolicyId,
+          location: created.policy.location,
+        }),
+        created.policy,
       );
 
       expect(created.record.name).toContain("/automatedDnsRecords/");

@@ -116,8 +116,18 @@ export interface Stack extends Resource<
     outputs: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  StackLookup
 > {}
+
+/**
+ * Props for {@link Stack.lookup}: find a stack this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface StackLookup {
+  /** The id of the existing stack. */
+  stackId: string;
+}
 
 /**
  * An AWS CloudFormation stack — deploy an existing CloudFormation template
@@ -166,6 +176,16 @@ export interface Stack extends Resource<
  *   templateBody: iamTemplateJson,
  *   capabilities: ["CAPABILITY_NAMED_IAM"],
  * });
+ * ```
+ *
+ * ### Looking up an existing stack
+ * `Stack.lookup` references a stack Alchemy doesn't manage (created in the
+ * console or by another stack), found by `stackId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing stack
+ * ```typescript
+ * const existing = AWS.CloudFormation.Stack.lookup({ stackId: "..." });
  * ```
  *
  * @resource
@@ -322,6 +342,13 @@ export const StackProvider = () =>
           if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ stackId }) {
+          const stack = yield* describe(stackId);
+          if (stack === undefined) return undefined;
+          const attrs = toAttrs(stack);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

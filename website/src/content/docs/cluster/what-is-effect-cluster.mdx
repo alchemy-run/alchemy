@@ -1,0 +1,213 @@
+---
+title: What is Effect Cluster?
+description: The concepts behind Effect Cluster — entities addressed by id, messages handled one at a time, shards, runners and pools, the database, workflows, singletons and crons — and how @alchemy.run/effect-cluster deploys them.
+---
+
+import DAG from "../../../components/DAG.astro";
+import Timeline from "../../../components/diagrams/Timeline.astro";
+import Tree from "../../../components/diagrams/Tree.astro";
+
+[Effect Cluster](https://effect.website) is Effect's library for stateful services spread across many processes. Its center is the **entity**: a small, long-lived program with an id and its own state, like one chat room. Effect Cluster runs each instance on one process at a time, delivers its messages in order, and moves it when processes come and go. The processes are **runners**, and they agree on who runs what through a Postgres **database**.
+
+Take one small app: chat rooms. Each room is an instance of the `Room` entity, and an Api container calls a room by its name. Two runners, in a **pool** called `Default`, hold the rooms between them, and the database records which runner owns each room's shard. With Alchemy all of it deploys from one Stack, here on a Docker swarm:
+
+<Tree
+  nodes={[
+    { id: "swarm", label: "Docker swarm", type: "your cloud", icon: "brand:docker", areas: ["api cluster"], colGap: 3.5 },
+    { id: "api", label: "Api", type: "your app · Docker Service", parent: "swarm", icon: "server" },
+    { id: "cluster", label: "cluster", type: "runners + database", parent: "swarm", dashed: true, icon: "network", areas: ["pool", "db"] },
+    { id: "pool", label: "Default", type: "pool", parent: "cluster", icon: "layers", areas: ["gw gw", "r1 r2"], phoneAreas: ["gw gw", "r1 r2"] },
+    { id: "gw", label: "gateway", type: "HTTP · the pool's name", parent: "pool", icon: "globe" },
+    { id: "r1", label: "Runner 1", type: "shards 1–150", parent: "pool", dashed: true, icon: "server" },
+    { id: "lobby", label: "lobby", type: "Room", parent: "r1", icon: "circle-user-round" },
+    { id: "r2", label: "Runner 2", type: "shards 151–300", parent: "pool", dashed: true, icon: "server" },
+    { id: "kitchen", label: "kitchen", type: "Room", parent: "r2", icon: "circle-user-round" },
+    { id: "db", label: "Database", type: "Postgres", parent: "cluster", icon: "brand:postgresql", specs: [["messages", "persisted"]] },
+  ]}
+  links={[
+    { from: "api", to: "gw", label: "calls lobby" },
+    { from: "gw", to: "r1", label: "routes" },
+    { from: "pool", to: "db", label: "shard locks" },
+  ]}
+  caption="Api is your own service. It calls a room through the pool's gateway, reached by the pool's name, which routes the call to the runner holding the room. Each room runs inside the runner that owns its shard. The database records the owners, so either runner can take over the other's shards."
+/>
+
+## Entities: a class and its instances
+
+An entity starts from the messages it accepts, as Effect RPC schemas, passed to Effect's `Entity.make`:
+
+```typescript title="src/Rooms.ts"
+import { Entity } from "effect/cluster";
+import { Rpc } from "effect/rpc";
+import * as Schema from "effect/Schema";
+
+export const Rooms = Entity.make("Room", [
+  Rpc.make("Join", { payload: { name: Schema.String }, success: Schema.Int }),
+  Rpc.make("Members", { success: Schema.Array(Schema.String) }),
+]);
+```
+
+An **instance** is one room: the lobby, the kitchen. Every instance runs the same code against its own state.
+
+See [Entities](/cluster/entities).
+
+## One instance per id, one message at a time
+
+You never create an instance. Every id exists from the start, and the first message to an id brings its instance to life. Inside any runtime's Effect, `yield* Room` (the class [below](#an-instances-code-and-its-state)) returns the entity's client. A caller gets a room by its name and sends it messages:
+
+```typescript
+const rooms = yield* Room;
+const lobby = yield* rooms.getByName("lobby");
+yield* lobby.Join({ name: "sam" });
+```
+
+However many callers message the lobby, from however many servers, they reach the same instance, and it handles their messages one at a time. Other rooms run beside it:
+
+<Timeline
+  end={10}
+  lanes={[
+    { id: "lobby", label: "lobby" },
+    { id: "kitchen", label: "kitchen" },
+  ]}
+  bars={[
+    { lane: "lobby", start: 0.4, end: 3, label: "Join sam" },
+    { lane: "lobby", start: 3, end: 5.6, label: "Join ada" },
+    { lane: "lobby", start: 5.6, end: 8, label: "Members" },
+    { lane: "kitchen", start: 1.2, end: 3.8, label: "Join kim" },
+  ]}
+  caption="Sam and Ada join the lobby at the same moment from two servers. The lobby takes Join sam, then Join ada. The kitchen handles its own message meanwhile."
+/>
+
+That's what lets a room keep its members in a plain `Ref` without locks: nothing else ever touches them.
+
+## An instance's code and its state
+
+`Cluster.Entity` makes the entity a class, from its messages and its code. The code comes in two phases. The outer Effect runs once per runner and resolves what every room shares, here a capacity from config. The inner one runs once per instance, on its first message: it creates that room's own members and returns the handlers for its messages:
+
+```typescript title="src/Room.ts"
+import * as Cluster from "@alchemy.run/effect-cluster";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as Ref from "effect/Ref";
+import { Default } from "./Cluster.ts";
+import { Rooms } from "./Rooms.ts";
+
+export default class Room extends Cluster.Entity<Room>()(
+  Rooms,
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const capacity = yield* Config.Int("ROOM_CAPACITY");
+    return Effect.gen(function* () {
+      const members = yield* Ref.make(new Set<string>());
+      return Rooms.of({
+        Join: ({ payload }) =>
+          Ref.modify(members, (all) => {
+            if (all.size >= capacity) return [all.size, all];
+            const next = new Set(all).add(payload.name);
+            return [next.size, next];
+          }),
+        Members: () => Effect.map(Ref.get(members), (all) => [...all]),
+      });
+    });
+  }).pipe(Effect.provide(Default)),
+) {}
+```
+
+`Rooms.of` types the handlers against the messages. `Default` is the pool the room runs on, [next](#runners-run-the-instances).
+
+An instance's state lives in memory. When it sits idle (a minute, by default), when its runner restarts, or when a deploy replaces the runners, the instance stops and its state is gone. The next message starts it fresh. Keep anything that must survive in a database the instance reads on its first message.
+
+## Runners run the instances
+
+**Runners** are the processes that host instances. A **pool** is a group of runners that run the same code, and `Default` is one:
+
+```typescript title="src/Cluster.ts"
+import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
+import * as Layer from "effect/Layer";
+
+export const Database = ClusterDocker.Database("Cluster");
+
+export const Default = ClusterDocker.SwarmPool("Default", { replicas: 2 }).pipe(
+  Layer.provide(Database),
+);
+```
+
+Providing `Default` to the room's code is what deploys it. Every class given the same pool is bundled into one program, built into one image, and run on every runner in the pool. A second pool is its own **shard group**: its classes only run on its runners.
+
+See [Pools](/cluster/pools).
+
+## Shards and the database
+
+Effect Cluster hashes each instance's id to one of 300 **shards**, and each runner owns some of the shards. A message to the lobby goes to whichever runner owns the lobby's shard.
+
+The runners agree on who owns what through the **database**: a Postgres they all reach. Each runner registers itself there and takes locks on its shards. When a runner stops, its locks lapse, and the others take its shards over, along with the instances in them.
+
+<DAG
+  nodes={[
+    { id: "lobby", label: "lobby", type: "id", layer: 0 },
+    { id: "shard", label: "shard 42", type: "hash of the id", tone: "accent", layer: 1 },
+    { id: "r1", label: "Runner 1", type: "owns shard 42", layer: 2 },
+  ]}
+  edges={[
+    { from: "lobby", to: "shard" },
+    { from: "shard", to: "r1", label: "lock in Postgres" },
+  ]}
+  caption="An id always hashes to the same shard; the shard's owner can change."
+/>
+
+See [Databases](/cluster/databases).
+
+## Persisted messages
+
+By default a message travels straight to its runner. Mark an RPC **persisted** with the `Persisted` annotation from `ClusterSchema`, Effect Cluster's RPC annotations, and the message is written to the database first, delivered at least once, and handled once per primary key:
+
+```typescript title="src/Rooms.ts"
+import { ClusterSchema, Entity } from "effect/cluster";
+import { Rpc } from "effect/rpc";
+import * as Schema from "effect/Schema";
+
+export const Rooms = Entity.make("Room", [
+  Rpc.make("Post", {
+    payload: { messageId: Schema.String, text: Schema.String },
+    primaryKey: ({ messageId }) => messageId,
+  }).annotate(ClusterSchema.Persisted, true),
+]);
+```
+
+A persisted message survives its runner restarting: whichever runner owns the shard next delivers it.
+
+## The gateway
+
+Callers outside the cluster, like a Worker or a Lambda function, don't reach the database or the runners. They reach the **gateway**: each pool serves its classes over HTTP, behind a token every caller is given. On AWS, GCP and Hetzner a load balancer puts it on the internet; on Fly it's the pool's `fly.dev` address. On [Cloudflare](/cluster/cloudflare) the pool is one Worker and each instance is a Durable Object, so there are no shards and no database.
+
+Inside the cluster, one entity calling another skips the gateway: the call goes straight from runner to runner.
+
+See [Calling an entity](/cluster/calling).
+
+## Workflows, singletons and crons
+
+Effect Cluster runs three more kinds of programs in the same pool, declared the same way as an entity. A **workflow** is a durable function: each step is persisted, it can sleep for days or wait for a signal, and it picks up where it left off on another runner. A **singleton** is one fiber running on exactly one runner.
+
+A **cron** is a job that runs on a schedule, once per scheduled time across the cluster, however many runners the pool has:
+
+```typescript title="src/Cleanup.ts"
+import * as Cluster from "@alchemy.run/effect-cluster";
+import * as Effect from "effect/Effect";
+import { Default } from "./Cluster.ts";
+
+export default class Cleanup extends Cluster.Cron<Cleanup>()(
+  "Cleanup",
+  { main: import.meta.url, cron: "0 3 * * *" },
+  Effect.gen(function* () {
+    return Effect.logInfo("closing empty rooms");
+  }).pipe(Effect.provide(Default)),
+) {}
+```
+
+See [Workflows](/cluster/workflows), [Singletons](/cluster/singletons) and [Crons](/cluster/crons).
+
+## How @alchemy.run/effect-cluster models these concepts
+
+Each cloud's entry point, like `@alchemy.run/effect-cluster/Docker`, has a `Database` Layer that runs Postgres on that cloud and a pool Layer that runs the runners: `SwarmPool`, `EcsPool`, `ComputeEnginePool`, `DeploymentPool`, `MachinePool` or `ServerPool`. `Cluster.Entity`, `Cluster.Workflow`, `Cluster.Singleton` and `Cluster.Cron` are classes, and providing a pool to one deploys it. `yield* Room` from any runtime returns a client that reaches the pool's gateway, with its URL and token given to that runtime. On Cloudflare, `DurableObjectPool` runs each instance as a Durable Object instead.
+
+Next, [Setup](/cluster/setup), then the [tutorial](/cluster/tutorial/part-1).

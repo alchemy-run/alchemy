@@ -12,6 +12,7 @@ import {
   functionRolloutTimeout,
   functionTextSamples,
 } from "./FunctionRollout.ts";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: providers() });
 
@@ -76,6 +77,16 @@ test.provider.skipIf(!!process.env.FAST)(
         FUNCTION_TEST_VALUE: "one",
         FUNCTION_TEST_REMOVED: "remove-me",
       });
+      yield* expectFound(
+        Function.lookup({
+          projectId: first.api.projectId,
+          branchId: first.api.branchId,
+          slug: first.api.slug,
+        }),
+        first.api,
+        // The deployed code and environment are this stack's record.
+        { ignore: ["codeHash", "environmentHash"] },
+      );
       expect(first.api.slug).toMatch(/^[a-z0-9]{1,20}$/);
       expect(first.api.currentDeploymentId).toBe(first.api.activeDeploymentId);
       const client = yield* HttpClient.HttpClient;

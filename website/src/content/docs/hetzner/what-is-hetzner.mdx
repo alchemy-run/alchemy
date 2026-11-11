@@ -1,0 +1,122 @@
+---
+title: What is Hetzner?
+description: The concepts behind Hetzner Cloud — projects, locations, Servers, images, SSH keys, Volumes, private networks, firewalls, load balancers, IPs and DNS — and how @alchemy.run/hetzner models each of them.
+---
+
+import Tree from "../../../components/diagrams/Tree.astro";
+
+
+Hetzner Cloud rents you virtual machines, called **Servers**, by the hour, at a fraction of what the large clouds charge. Around them it offers just what servers need: disks, private networks, firewalls, load balancers, IP addresses and DNS. There are no managed queues or functions. You run your own programs on your own machines.
+
+Take one small app: an API running on a Server, keeping its data on a Volume, behind a firewall and a domain. Your API token reaches one project. Inside it, a Server runs your Service, a Volume holds its data, a firewall guards it, and DNS points your domain at it.
+
+<Tree
+  nodes={[
+    {
+      id: "project", label: "my-app", type: "project", icon: "brand:hetzner", colGap: 4,
+      areas: ["fw location zone"],
+      phoneAreas: ["fw zone", "location location"],
+    },
+    { id: "fw", label: "Web", type: "firewall", parent: "project", icon: "shield" },
+    { id: "location", label: "nbg1", type: "location · Nuremberg", parent: "project", dashed: true, icon: "map-pin", areas: ["server", "vol"] },
+    { id: "server", label: "Box", type: "server · cx22", parent: "location", tone: "accent", icon: "server" },
+    { id: "vol", label: "Data", type: "volume", parent: "location", icon: "hard-drive" },
+    { id: "zone", label: "example.com", type: "DNS zone", parent: "project", dashed: true, icon: "globe" },
+    { id: "record", label: "api", type: "A record", parent: "zone", icon: "link" },
+  ]}
+  links={[
+    { from: "fw", to: "server", label: "applies" },
+    { from: "record", to: "server", label: "points at" },
+    { from: "vol", to: "server", label: "attached" },
+  ]}
+  caption="An API token reaches one project. A server and its volumes sit in one location. Firewalls and DNS zones belong to the project and apply anywhere in it."
+/>
+
+## Projects and API tokens
+
+A **project** holds your Servers and everything around them. An **API token** is created inside a project and reaches only that project, so a token is how you choose where Alchemy deploys. Use separate projects, and separate tokens, to keep production apart from everything else.
+
+Connect a token once, in [Setup](/hetzner/setup).
+
+## Locations
+
+A **location** is one Hetzner data center: `nbg1` Nuremberg, `fsn1` Falkenstein, `hel1` Helsinki, `ash` Ashburn, `hil` Hillsboro, `sin` Singapore. A Server, a Volume and a load balancer each live in one. A Volume can only attach to a Server in its own location.
+
+## Servers: the machine
+
+A **Server** is a virtual machine. You pick its **type**, which sets its CPUs, memory and disk, like `cx22`, an **image**, like `ubuntu-24.04`, and a location. It boots in about ten seconds.
+
+```typescript title="src/server.ts"
+export const Box = Hetzner.Server("Box", { serverType: "cx22", image: "ubuntu-24.04", location: "nbg1" });
+```
+
+Type, image and location are fixed once it's created: changing one replaces the Server. A **snapshot** saves a Server's disk as an image, to start others from.
+
+See [Servers](/hetzner/compute/servers).
+
+## SSH keys
+
+Servers are reached over SSH. An **SSH key** registered in the project is installed on a Server when it's created, so you can log in with it. Alchemy also installs a deploy key of its own on every Server it manages, which it uses to deploy your code.
+
+## Services: your program on a Server
+
+In Alchemy, a **Service** is your Effect program running on a Server. Its code and configuration live in one file:
+
+```typescript title="src/api.ts"
+export default class Api extends Hetzner.Service<Api>()(
+  "Api",
+  { server: Box, main: import.meta.url, port: 3000 },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("hello from Hetzner")),
+    };
+  }),
+) {}
+```
+
+Deploy bundles the file, copies it to the Server over SSH, and runs it under **systemd**, the Linux service manager, which restarts it if it exits and starts it when the Server boots. Several Services can share one Server.
+
+See [Services](/hetzner/compute/services).
+
+## Volumes
+
+A **Volume** is a network disk, from 10 GB to 10 TB, attached to one Server at a time in the same location. It outlives the Server, so data on it survives a Server being replaced.
+
+See [Volumes](/hetzner/data/volumes).
+
+## Networks, firewalls and load balancers
+
+A **private network** connects Servers on internal addresses, so they can talk without going over the internet. A **firewall** is a set of rules for which traffic may reach the Servers it's applied to. A **load balancer** spreads traffic across several Servers, checks their health, and terminates TLS with a certificate.
+
+**Primary IPs** and **floating IPs** are public addresses you own separately from a Server, so an address can stay the same when the Server behind it is replaced.
+
+See [Networks, firewalls & load balancers](/hetzner/networking).
+
+## DNS
+
+Hetzner hosts DNS **zones** for your domains, with their records. Point a name at a Server's address, or a load balancer's, in the same program that creates it.
+
+See [DNS](/hetzner/networking/dns).
+
+## State: where Alchemy keeps its record
+
+Hetzner has no storage for Alchemy's own record of what each Stack created. Keep it on disk with `Alchemy.localState()`, or share it with your team and CI through `Cloudflare.state()` or `AWS.state()`.
+
+```typescript title="alchemy.run.ts"
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Hetzner.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const api = yield* Api;
+    return { url: api.url };
+  }),
+);
+```
+
+## How @alchemy.run/hetzner models these concepts
+
+Each of these concepts is something your Stack declares.
+
+Your API token picks the project, and `Hetzner.providers()` deploys into it. A Server is a declaration. A Service is your program on a Server, deployed over SSH and run by systemd. Volumes, networks, firewalls, load balancers, addresses and DNS records are declarations like any other, next to the Server they serve.
+
+Next, build one: the [tutorial](/hetzner/tutorial/part-1) puts these ideas to work, one step at a time. Or read the concepts in depth, starting with [Servers](/hetzner/compute/servers).
