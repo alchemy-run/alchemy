@@ -87,7 +87,11 @@ export interface AppProps extends PlatformProps {
   instanceSizeSlug?: AppInstanceSize;
   /** Instances behind the app's load balancer. @default 1 */
   instanceCount?: number;
-  /** Path App Platform probes for readiness. @default "/" */
+  /**
+   * Path App Platform probes over HTTP for readiness; it must answer 2xx.
+   *
+   * @default a TCP check on `port`
+   */
   healthCheckPath?: string;
   /** Environment variables, merged after the ones bindings add. */
   env?: Record<string, any>;
@@ -530,7 +534,10 @@ export const AppProvider = () =>
                 http_port: news.port ?? DEFAULT_PORT,
                 instance_size_slug: instanceSize,
                 instance_count: news.instanceCount ?? 1,
-                health_check: { http_path: news.healthCheckPath ?? "/" },
+                health_check:
+                  news.healthCheckPath === undefined
+                    ? { port: news.port ?? DEFAULT_PORT }
+                    : { http_path: news.healthCheckPath },
                 envs,
               },
             ],

@@ -1,6 +1,6 @@
 # @alchemy.run/digitalocean
 
-DigitalOcean for [Alchemy](https://alchemy.run). Declare Droplets, SSH keys and Cloud Firewalls in one typed Effect program, next to the rest of your stack.
+DigitalOcean for [Alchemy](https://alchemy.run). Run Effect programs on App Platform, and declare Droplets, Kubernetes clusters, Managed Databases, Spaces buckets, MicroVM sandboxes, load balancers, DNS and monitoring in one typed Effect program, next to the rest of your stack.
 
 ```sh
 npm install alchemy @alchemy.run/digitalocean effect
@@ -45,6 +45,31 @@ export default Alchemy.Stack(
 ```
 
 `alchemy deploy` registers the key, creates the Droplet and attaches the firewall by tag. Passing `host.tags` instead of `["app"]` makes the firewall wait for the Droplet that creates the tag. `name`, `tags` and enabling `ipv6` update the Droplet in place. Any other change replaces it, so provision it with `userData` (cloud-init).
+
+An App Platform app that reads and writes a Spaces bucket with a key scoped to it:
+
+```typescript
+// src/Api.ts
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+export const Uploads = DigitalOcean.Spaces.Bucket("uploads", { region: "nyc3" });
+
+export default class Api extends DigitalOcean.App<Api>()(
+  "Api",
+  { main: import.meta.url, region: "nyc" },
+  Effect.gen(function* () {
+    const putObject = yield* DigitalOcean.Spaces.PutObject(yield* Uploads);
+    return {
+      fetch: Effect.gen(function* () {
+        yield* putObject({ Key: "hello.txt", Body: "hello" });
+        return HttpServerResponse.text("stored");
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(DigitalOcean.Spaces.PutObjectHttp)),
+) {}
+```
 
 ## Learn more
 

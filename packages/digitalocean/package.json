@@ -1,7 +1,7 @@
 {
   "name": "@alchemy.run/digitalocean",
   "version": "2.0.0-beta.84",
-  "description": "DigitalOcean Droplets, SSH keys and Cloud Firewalls for Alchemy.",
+  "description": "DigitalOcean for Alchemy: App Platform, Droplets, Kubernetes, Managed Databases, Spaces, sandboxes, networking, DNS and monitoring.",
   "keywords": [
     "alchemy",
     "digitalocean",

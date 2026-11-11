@@ -35,6 +35,8 @@ export default class BindingsApp extends DigitalOcean.App<BindingsApp>()(
         const url = new URL(request.url, "http://app");
         const key = url.searchParams.get("key") ?? "hello.txt";
         switch (url.pathname) {
+          case "/":
+            return HttpServerResponse.text("ok");
           case "/put":
             yield* putObject({ Key: key, Body: "hello spaces", ContentType: "text/plain" });
             return HttpServerResponse.text("put");
