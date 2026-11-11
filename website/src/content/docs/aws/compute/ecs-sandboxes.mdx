@@ -1,0 +1,288 @@
+---
+title: ECS Sandboxes
+description: Create a Nitro Sandbox per user or session on ECS from a Lambda Function, then run commands, use files, open terminals and call ports in it through a typed handle.
+---
+
+import Tree from "../../../../components/diagrams/Tree.astro";
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+An ECS sandbox is one ECS task in its own [Nitro Sandbox](/aws/compute/nitro-sandboxes): a lightweight VM, with its own kernel, that the Nitro hypervisor isolates from the instance it runs on and from every other task there. Your app starts one while it runs, usually one per user or session, and runs code it doesn't trust inside: a code interpreter, an agent's workspace, a build from a pull request.
+
+## One task per sandbox, on instances ECS runs
+
+Sandboxes run on **Managed Instances**: EC2 instances in your account that ECS launches, patches and replaces. A **capacity provider** tells ECS which instances it may launch. ECS launches one when a sandbox needs room and terminates it once it's empty.
+
+Each sandbox is a task with its own network interface and private address in your VPC. It has 20 GiB of storage, and the vCPUs of all sandboxes on an instance can add up to five times the instance's own.
+
+<Tree
+  nodes={[
+    { id: "api", label: "Api", type: "your Lambda Function", icon: "square-function" },
+    { id: "capacity", label: "Capacity", type: "capacity provider" },
+    { id: "instance", label: "m7i.xlarge", type: "EC2 instance", parent: "capacity", icon: "server" },
+    { id: "s1", label: "user-42", type: "Nitro Sandbox · task", parent: "instance", tone: "accent", icon: "box" },
+    { id: "s2", label: "user-43", type: "Nitro Sandbox · task", parent: "instance", tone: "accent", icon: "box" },
+  ]}
+  areas={["api capacity"]}
+  phoneAreas={["api", "capacity"]}
+  colGap={10.5}
+  links={[{ from: "api", to: "s1", label: "creates one per person" }]}
+  caption="The Api Function starts a sandbox for each person. ECS launches the instance when the first sandbox needs it. Each sandbox has its own kernel and its own private address."
+/>
+
+In Alchemy, an `AWS.ECS.Task` with `isolation: "isolated"` is the sandbox's blueprint, and `AWS.ECS.CreateSandbox` lets a Function start tasks from it and drive each one through a handle.
+
+## Give the cluster capacity for sandboxes
+
+Declare a network, a cluster and a capacity provider with `nitroEnclavesEnabled`:
+
+```typescript title="src/Infra.ts"
+import * as AWS from "@alchemy.run/aws";
+import * as Effect from "effect/Effect";
+
+export const Network = AWS.EC2.Network("Network", {
+  cidrBlock: "10.0.0.0/16",
+  nat: "single",
+});
+
+export const Cluster = AWS.ECS.Cluster("Cluster", {});
+
+export const Capacity = Effect.gen(function* () {
+  const cluster = yield* Cluster;
+  const network = yield* Network;
+  return yield* AWS.ECS.CapacityProvider("Capacity", {
+    cluster: cluster.clusterName,
+    managedInstancesProvider: {
+      instanceLaunchTemplate: {
+        networkConfiguration: { subnets: network.privateSubnetIds },
+        nitroEnclavesEnabled: true,
+      },
+    },
+  });
+});
+```
+
+The capacity provider creates the two roles ECS needs, the instance profile, and a security group each for the instances and the sandboxes. It picks from 4 to 16 vCPU `m6i`, `m7i`, `c6i`, `c7i`, `r6i` and `r7i` instance types, which all support Nitro Sandboxes. Set `instanceRequirements` to choose your own.
+
+The instances sit in private subnets and pull the sandbox's image through the NAT gateway. A Function attached to those subnets calls ECS through it too. Deploying launches no instance.
+
+## Write the program that runs in each sandbox
+
+A sandbox runs a program you write. It answers the handle's calls, and it can add typed methods of its own:
+
+```typescript title="src/MySandbox.ts"
+import * as AWS from "@alchemy.run/aws";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+export default class MySandbox extends AWS.ECS.Task<
+  MySandbox,
+  { hello: (name: string) => Effect.Effect<string> }
+>()(
+  "MySandbox",
+  {
+    main: import.meta.url,
+    port: 3000,
+    cpu: 1024,
+    memory: 2048,
+    isolation: "isolated",
+  },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("ok")),
+      hello: Effect.fn(function* (name: string) {
+        return `hello ${name}`;
+      }),
+    };
+  }),
+) {}
+```
+
+`isolation: "isolated"` puts every task started from it in its own Nitro Sandbox. Deploy bundles the program into an image, `oven/bun:1` unless you set `image`, and pushes it to a repository in your account. Add the tools your users need with an `image` of your own.
+
+A Task built from your own `image` alone or a `context` has no program to answer the handle, so `CreateSandbox` takes only a Task with `main`.
+
+## Create a sandbox from a Lambda Function
+
+`AWS.ECS.CreateSandbox` takes the capacity provider and the Task. This Function starts a sandbox for each request and kills it when the request ends:
+
+```typescript title="src/Api.ts"
+import * as AWS from "@alchemy.run/aws";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Capacity } from "./Infra.ts";
+import MySandbox from "./MySandbox.ts";
+
+export default class Api extends AWS.Lambda.Function<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    functionUrl: true,
+    // The first sandbox waits for ECS to launch an instance.
+    timeout: Duration.minutes(6),
+  },
+  Effect.gen(function* () {
+    const sandboxes = yield* AWS.ECS.CreateSandbox(Capacity, MySandbox);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const sandbox = yield* Effect.acquireRelease(sandboxes.create(), (sandbox) =>
+          Effect.ignore(sandbox.kill()),
+        );
+        const result = yield* sandbox.exec("uname -a");
+        return HttpServerResponse.text(result.stdout);
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(AWS.ECS.CreateSandboxHttp)),
+) {}
+```
+
+The binding grants the Function's role what it needs to run, stop, describe and list the Task's tasks on this cluster, and attaches the Function to the capacity provider's subnets so it can reach each sandbox at its private address.
+
+`create` returns once the sandbox's program answers. On an empty cluster that includes the time ECS takes to launch an instance, so give the Function a `timeout` of a few minutes. `startTimeout` bounds the wait, five minutes by default, and a sandbox that misses it is stopped and fails with `EcsSandboxStartFailed`.
+
+The Stack only has to yield the Function:
+
+```typescript title="alchemy.run.ts"
+import * as AWS from "@alchemy.run/aws";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import Api from "./src/Api.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: AWS.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const api = yield* Api;
+    return { url: api.functionUrl };
+  }),
+);
+```
+
+<PackageManagers run="alchemy deploy" />
+
+## Keep a sandbox per user
+
+Tag each sandbox with who it belongs to, then find it again by that tag:
+
+```typescript
+// in fetch
+const [existing] = yield* sandboxes.list({ tags: { user } });
+const sandbox =
+  existing !== undefined
+    ? yield* sandboxes.connect(existing.taskArn)
+    : yield* sandboxes.create({ tags: { user }, idleTimeout: "15 minutes" });
+```
+
+`list` returns the running sandboxes of this Task that carry every tag you pass. `connect` returns the handle of one by its task ARN, and fails with `EcsSandboxNotFound` when it has stopped.
+
+With `idleTimeout`, a sandbox stops itself once it has received no call for that long. Without it, a sandbox runs until you kill it.
+
+## Run commands
+
+```typescript
+yield* sandbox.files.write("/work/main.ts", `console.log("hi " + Bun.argv[2])`);
+const result = yield* sandbox.exec("bun main.ts sam", { cwd: "/work" });
+// { exitCode: 0, stdout: "hi sam\n", stderr: "" }
+```
+
+`exec` runs a command to completion. A non-zero exit code is returned, not failed. A string runs in a shell, and `exec(["bun", "--version"])` runs an argument vector without one. `env` and `stdin` feed the command, and `timeout` kills it and fails with `SandboxExecTimedOut`.
+
+## Stream a process
+
+```typescript
+const decoder = new TextDecoder();
+const process = yield* sandbox.start("bun test", { cwd: "/work" });
+yield* process.output.pipe(
+  Stream.runForEach((chunk) => Effect.logInfo(chunk.fd, decoder.decode(chunk.data))),
+);
+const { exitCode } = yield* process.wait;
+```
+
+`start` returns a `Process` with its `output`, `write`, `kill` and `wait`. Closing the scope detaches; the process keeps running in the sandbox.
+
+`sandbox.attach(process.id)` returns the same process in a later request. Its `output` replays the most recent output, up to 1 MiB, then follows it live.
+
+## Read and write files
+
+```typescript
+yield* sandbox.files.write("/work/notes.txt", "remember this");
+const text = yield* sandbox.files.readText("/work/notes.txt");
+const entries = yield* sandbox.files.list("/work");
+yield* sandbox.files.remove("/work/notes.txt");
+```
+
+`write` creates the file's parent directories. `files` also has `read` for bytes, `stat` and `makeDir`. Files live on the sandbox's own disk and are gone when it stops.
+
+## Open a terminal
+
+```typescript
+const decoder = new TextDecoder();
+const pty = yield* sandbox.pty.open({ cols: 80, rows: 24 });
+const output = yield* pty.output.pipe(
+  Stream.map((chunk) => decoder.decode(chunk)),
+  Stream.mkString,
+  Effect.forkScoped,
+);
+yield* pty.write("ls /work; exit\n");
+const text = yield* Fiber.join(output);
+```
+
+`pty.output` streams the terminal's bytes until its shell exits, and `pty.resize` changes its size. Terminals need the sandbox's program to run on Bun, which the default image does.
+
+## Call the program's methods
+
+```typescript
+const greeting = yield* sandbox.hello("sam");
+```
+
+The handle has every method the Task's program returns, with its types. Use them for work you'd rather write once inside the sandbox than compose from commands.
+
+## Call a port
+
+```typescript
+const port = yield* sandbox.getTcpPort(8080);
+const response = yield* port.fetch(HttpClientRequest.get("/health"));
+```
+
+`getTcpPort` reaches any port a process in the sandbox listens on, not only the Task's own. `port.fetch` also takes the request the Function received and proxies it to the port, and `port.url` is the port's address inside the VPC.
+
+A sandbox has no public URL. To serve one to a browser, proxy through the Function. A Lambda function URL can't carry a WebSocket, so for those put an [ECS Service](/aws/compute/ecs) behind a load balancer in front of the sandboxes instead.
+
+## Stop a sandbox
+
+```typescript
+yield* sandbox.kill();
+```
+
+`kill` stops the task. `connect` and `list` stop returning it at once, while ECS can take a minute or so to shut the task down.
+
+A sandbox with an `idleTimeout` also stops by itself. Calls through the handle and open process or terminal streams keep it alive. Traffic to a port from `getTcpPort` doesn't.
+
+Sandboxes aren't resources in your Stack. Each carries the tags `alchemy::stack`, `alchemy::stage` and `alchemy::id`, and destroying the capacity provider stops every sandbox on it.
+
+## Who can reach a sandbox
+
+Sandboxes join a security group that admits nothing. The binding adds one rule to it, which admits the Function's own security group. A sandbox can't open a connection to the Function or to another sandbox through these groups, and nothing outside the VPC can reach one.
+
+Each sandbox also gets a random token when it starts. Every call through the handle carries it, and the sandbox's program refuses `exec`, `files` and its own methods without it. `connect` reads the token back from the task, so only a role that may describe the cluster's tasks can get a handle. Calls to a port carry no token: whatever listens there, the program's own `fetch` included, answers anything the security groups admit.
+
+:::caution
+The code you run shares the sandbox's VM with its program, and both run as the Task's role. Give the Task only the bindings you'd hand to the code inside, and keep one person's work to one sandbox.
+:::
+
+Only a Lambda Function is attached to the subnets for you. A host that already runs in the VPC, like an ECS Service, reaches sandboxes through a security group of your own that admits it: pass `securityGroups` to `CreateSandbox`, and every sandbox joins them next to the capacity provider's group.
+
+```typescript
+const sandboxes = yield* AWS.ECS.CreateSandbox(Capacity, MySandbox, {
+  securityGroups: [sandboxAccess.groupId],
+});
+```
+
+## Where next
+
+- [Nitro Sandboxes](/aws/compute/nitro-sandboxes): how the isolation works, and isolated against confidential mode.
+- [ECS](/aws/compute/ecs): Tasks, Services and their images.
+- [Lambda MicroVMs](/aws/compute/microvms): sandboxes on AWS's machines, with no instances of your own.
+- [CreateSandbox reference](/providers/aws/ecs#createsandbox): every option of `create`, `connect` and `list`.
+- [`examples/aws-ecs-sandboxes`](https://github.com/alchemy-run/alchemy/tree/main/examples/aws-ecs-sandboxes): one sandbox per user behind a Function URL.

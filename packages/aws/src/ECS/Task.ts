@@ -195,13 +195,25 @@ export interface TaskDefinitionConfig {
    */
   enableFaultInjection?: boolean;
   /**
+   * Run each task in its own Nitro Sandbox, a lightweight VM the AWS Nitro
+   * hypervisor isolates from every other task on the instance.
+   *
+   * `"isolated"` sets `trustedExecutionConfiguration` to `ISOLATED_SANDBOX`
+   * and `requiresCompatibilities` to `["MANAGED_INSTANCES"]`. The task then
+   * runs on a Managed Instances capacity provider with
+   * `nitroEnclavesEnabled`, never on Fargate.
+   * @default undefined (tasks share the instance's kernel)
+   */
+  isolation?: "isolated";
+  /**
    * Run each task in its own Nitro Sandbox, a lightweight VM isolated by the
    * AWS Nitro hypervisor. `ISOLATED_SANDBOX` isolates tasks from each other;
    * `CONFIDENTIAL_SANDBOX` also hides the task's memory from the instance and
    * needs an `attestationPolicy`.
    *
    * Requires `requiresCompatibilities: ["MANAGED_INSTANCES"]` and a Managed
-   * Instances capacity provider with `nitroEnclavesEnabled`.
+   * Instances capacity provider with `nitroEnclavesEnabled`. `isolation:
+   * "isolated"` sets both for the common case.
    * @default { isolationMode: "SHARED" }
    */
   trustedExecutionConfiguration?: ecs.TrustedExecutionConfiguration;
@@ -499,6 +511,45 @@ export { createContainerRuntimeContext } from "alchemy/Runtime/Process";
  * });
  * ```
  *
+ * ### Nitro Sandboxes
+ * `isolation: "isolated"` runs every task in its own Nitro Sandbox: a VM the
+ * Nitro hypervisor isolates from the instance and from every other task. Use
+ * it for code you do not trust. The task needs a Managed Instances capacity
+ * provider with `nitroEnclavesEnabled`, and does not run on Fargate. A
+ * sandbox has 20 GiB of storage.
+ *
+ * **Example:** A Task that runs in a Nitro Sandbox
+ * ```typescript
+ * const sandbox = yield* AWS.ECS.Task("MySandbox", {
+ *   main: import.meta.url,
+ *   port: 3000,
+ *   cpu: 1024,
+ *   memory: 2048,
+ *   isolation: "isolated",
+ * });
+ * ```
+ *
+ * **Example:** A sandbox class with typed methods
+ * `AWS.ECS.CreateSandbox(capacity, MySandbox)` starts one per call and hands back
+ * a handle with `exec`, `files` and the methods below.
+ * ```typescript
+ * export default class MySandbox extends AWS.ECS.Task<
+ *   MySandbox,
+ *   { hello: (name: string) => Effect.Effect<string> }
+ * >()(
+ *   "MySandbox",
+ *   { main: import.meta.url, port: 3000, cpu: 1024, memory: 2048, isolation: "isolated" },
+ *   Effect.gen(function* () {
+ *     return {
+ *       fetch: Effect.succeed(HttpServerResponse.text("ok")),
+ *       hello: Effect.fn(function* (name: string) {
+ *         return `hello ${name}`;
+ *       }),
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ *
  * @resource
  */
 export const Task: Platform<Task, TaskServices, TaskShape, TaskRuntimeContext> = Platform(
@@ -519,6 +570,16 @@ export const taskImagePlatform = (runtimePlatform?: ecs.RuntimePlatform) =>
   // platform 'linux/amd64'`.
   runtimePlatform?.cpuArchitecture === "ARM64" ? "linux/arm64" : "linux/amd64";
 
+/**
+ * The launch types a task definition is registered for: what the user set,
+ * else Managed Instances for a Nitro Sandbox task, else Fargate.
+ */
+export const taskCompatibilities = (
+  props: Pick<TaskDefinitionConfig, "requiresCompatibilities" | "isolation">,
+): ecs.Compatibility[] =>
+  props.requiresCompatibilities ??
+  (props.isolation === "isolated" ? ["MANAGED_INSTANCES"] : ["FARGATE"]);
+
 /** Keep image resolution, drift detection and dev watching on the same inputs. */
 /**
  * The mount capabilities bound onto a task, checked against its launch
@@ -526,7 +587,7 @@ export const taskImagePlatform = (runtimePlatform?: ecs.RuntimePlatform) =>
  */
 export const taskMountCapabilities = (
   id: string,
-  props: Pick<TaskProps, "requiresCompatibilities">,
+  props: Pick<TaskProps, "requiresCompatibilities" | "isolation">,
   bindings: ReadonlyArray<ResourceBinding<TaskBindingContract>>,
 ) => {
   const capabilities = collectMountCapabilities(bindings);
@@ -540,7 +601,7 @@ export const taskMountCapabilities = (
       }),
     );
   }
-  const fuse = !(props.requiresCompatibilities ?? ["FARGATE"]).includes("FARGATE");
+  const fuse = !taskCompatibilities(props).includes("FARGATE");
   const unsupported = checkMountSupport(
     id,
     capabilities,
@@ -885,7 +946,7 @@ export const registerTaskDefinitionRevision = Effect.fn(function* ({
     taskRoleArn,
     executionRoleArn,
     networkMode: props.networkMode ?? "awsvpc",
-    requiresCompatibilities: props.requiresCompatibilities ?? ["FARGATE"],
+    requiresCompatibilities: taskCompatibilities(props),
     cpu: String(props.cpu ?? 256),
     memory: String(props.memory ?? 512),
     volumes:
@@ -898,7 +959,9 @@ export const registerTaskDefinitionRevision = Effect.fn(function* ({
     proxyConfiguration: props.proxyConfiguration,
     inferenceAccelerators: props.inferenceAccelerators,
     enableFaultInjection: props.enableFaultInjection,
-    trustedExecutionConfiguration: props.trustedExecutionConfiguration,
+    trustedExecutionConfiguration:
+      props.trustedExecutionConfiguration ??
+      (props.isolation === "isolated" ? { isolationMode: "ISOLATED_SANDBOX" } : undefined),
     ...props.taskDefinition,
     containerDefinitions: [primaryContainer, ...(props.sidecars ?? [])],
     tags: Object.entries(tags).map(([key, value]) => ({ key, value })),

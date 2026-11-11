@@ -23,10 +23,10 @@ Turn the feature on for an instance, and each task or pod scheduled onto it star
       type: "EC2 instance · Nitro Enclaves enabled",
       specs: [["budget", "4 vCPU × 5 = 20 sandbox vCPUs"]],
     },
-    { id: "s1", label: "agent-a", type: "Nitro Sandbox · own kernel", parent: "host", tone: "accent" },
-    { id: "c1", label: "agent", type: "container", parent: "s1" },
-    { id: "s2", label: "agent-b", type: "Nitro Sandbox · own kernel", parent: "host", tone: "accent" },
-    { id: "c2", label: "agent", type: "container", parent: "s2" },
+    { id: "s1", label: "user-42", type: "Nitro Sandbox · own kernel", parent: "host", tone: "accent" },
+    { id: "c1", label: "app", type: "container", parent: "s1" },
+    { id: "s2", label: "user-43", type: "Nitro Sandbox · own kernel", parent: "host", tone: "accent" },
+    { id: "c2", label: "app", type: "container", parent: "s2" },
     { id: "s3", label: "ci-run", type: "Nitro Sandbox · own kernel", parent: "host", tone: "accent" },
     { id: "c3", label: "runner", type: "container", parent: "s3" },
   ]}
@@ -50,35 +50,35 @@ Start with isolated. Move to confidential when the people or software operating 
 ECS runs sandboxes on **Managed Instances**: a capacity provider whose instances ECS launches and patches. Enable sandboxes on its instances, then set the isolation mode on the task definition:
 
 ```typescript title="alchemy.run.ts"
-const capacity = yield* AWS.ECS.CapacityProvider("Sandboxes", {
+const capacity = yield* AWS.ECS.CapacityProvider("Capacity", {
   cluster: cluster.clusterName,
   managedInstancesProvider: {
-    infrastructureRoleArn: infrastructureRole.roleArn,
     instanceLaunchTemplate: {
-      ec2InstanceProfileArn: instanceProfile.instanceProfileArn,
       networkConfiguration: { subnets: network.privateSubnetIds },
       nitroEnclavesEnabled: true,
     },
   },
 });
 
-const task = yield* AWS.ECS.TaskDefinition("Agent", {
+const task = yield* AWS.ECS.TaskDefinition("MyTask", {
   requiresCompatibilities: ["MANAGED_INSTANCES"],
   trustedExecutionConfiguration: { isolationMode: "ISOLATED_SANDBOX" },
-  containerDefinitions: [{ name: "agent", image: "ghcr.io/acme/agent:1" }],
+  containerDefinitions: [{ name: "app", image: "ghcr.io/acme/app:1" }],
 });
 ```
 
-The full setup, with the roles ECS needs, is in [ECS: Isolate each task in its own VM](/aws/compute/ecs#isolate-each-task-in-its-own-vm).
+Running it as a Service is in [ECS: Isolate each task in its own VM](/aws/compute/ecs#isolate-each-task-in-its-own-vm).
+
+Your app can also start sandboxes while it runs, one per user or session, and run commands, use files and call ports in each through a handle. See [ECS Sandboxes](/aws/compute/ecs-sandboxes).
 
 ## On EKS
 
 On an EKS Auto Mode cluster, set `runtimeClassName` on a Deployment or a Job. Auto Mode provisions a node that supports sandboxes and starts each pod in its own:
 
 ```typescript title="alchemy.run.ts"
-yield* Kubernetes.Deployment("Agent", {
+yield* Kubernetes.Deployment("MyApp", {
   cluster,
-  image: "ghcr.io/acme/agent:1",
+  image: "ghcr.io/acme/app:1",
   port: 8080,
   runtimeClassName: "isolated-sandbox", // or "confidential-sandbox"
 });
@@ -104,6 +104,6 @@ See [EC2: Host Nitro Sandboxes](/aws/compute/ec2#host-nitro-sandboxes).
 
 Both give each workload its own VM. They differ in who runs the machines.
 
-Nitro Sandboxes run on instances in your account, inside ECS or EKS. You keep the instances, the cluster and the network, and pay for the instances whether sandboxes run on them or not. They suit a fleet you already run on containers.
+Nitro Sandboxes run on instances in your account, inside ECS or EKS. You keep the cluster and the network, and pay for each instance while it runs, however many sandboxes share it. They suit a fleet you already run on containers, and work that must stay on machines in your own account.
 
-[Lambda MicroVMs](/aws/compute/microvms) run on AWS's machines. You build an image, launch one MicroVM per user or session from a Function, and drive it over HTTP. There are no instances to keep warm. They suit sandboxes started on demand, one per request.
+[Lambda MicroVMs](/aws/compute/microvms) run on AWS's machines. You build an image, launch one MicroVM per user or session from a Function, and drive it over HTTP. There are no instances or cluster to run. They suit sandboxes started on demand when you'd rather not run the machines.

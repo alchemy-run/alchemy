@@ -12,7 +12,7 @@ import type { RuntimeContext } from "./RuntimeContext.ts";
 /**
  * The names a sandbox handle uses for what every sandbox platform does: run
  * a command, stream a process, use files, open a terminal, call a port. A
- * provider's handle (`E2B`, `Daytona`, `Modal`, `Archil`) extends the parts
+ * provider's handle (`E2B`, `Daytona`, `Modal`, `Archil`, `AWS.ECS`) extends the parts
  * its platform supports and adds the platform's own calls next to them
  * (lifecycle, snapshots, forks, network policy).
  *

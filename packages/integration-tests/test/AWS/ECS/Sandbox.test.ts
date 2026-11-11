@@ -1,0 +1,314 @@
+import * as AWS from "@alchemy.run/aws";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
+import * as ecs from "@distilled.cloud/aws/ecs";
+import * as Alchemy from "alchemy";
+import * as Data from "effect/Data";
+import type * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+import SandboxHost, { SandboxCapacity, SandboxCluster } from "./fixtures/sandbox-host.ts";
+
+const testOptions = { providers: AWS.providers(), state: Alchemy.localState() };
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make(testOptions);
+
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
+
+// The deploy creates a NAT gateway, builds and pushes the sandbox image and
+// attaches a Lambda Function to the VPC; destroy waits for the Function's
+// network interfaces and the instances ECS launched to go.
+const HOOK_TIMEOUT = 1_800_000;
+const TEST_TIMEOUT = 300_000;
+
+const Stack = Alchemy.Stack(
+  "EcsSandboxStack",
+  testOptions,
+  Effect.gen(function* () {
+    const cluster = yield* SandboxCluster;
+    const capacity = yield* SandboxCapacity;
+    const host = yield* SandboxHost;
+    return {
+      url: host.functionUrl.as<string>(),
+      cluster: cluster.clusterName,
+      capacity: capacity.name,
+    };
+  }),
+);
+
+class HostFailed extends Data.TaggedError("HostFailed")<{
+  readonly status: number;
+  readonly body: string;
+}> {}
+
+/** Calls one route of the host and decodes its JSON. */
+const call = <A>(baseUrl: string, path: string, timeout: Duration.Input = "60 seconds") =>
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    const response = yield* client.get(`${baseUrl}${path}`).pipe(Effect.timeout(timeout));
+    if (response.status !== 200) {
+      return yield* new HostFailed({ status: response.status, body: yield* response.text });
+    }
+    return (yield* response.json) as A;
+  });
+
+interface Created {
+  readonly taskArn: string;
+  readonly privateIp: string;
+}
+
+/**
+ * Starts a sandbox. The first one on empty capacity waits for ECS to launch
+ * an instance, which can outlast one request: a failed start stops its task
+ * and leaves the instance, so the next attempt starts on it.
+ */
+const create = (baseUrl: string, user: string, idleSeconds?: number) =>
+  call<Created>(
+    baseUrl,
+    `/create?user=${user}${idleSeconds === undefined ? "" : `&idle=${idleSeconds}`}`,
+    // Under the 300 seconds at which Bun gives up on a response.
+    "295 seconds",
+  ).pipe(Effect.retry({ times: 2 }));
+
+const taskArnParam = (taskArn: string) => `taskArn=${encodeURIComponent(taskArn)}`;
+
+/** Reads a sandbox's task from ECS, with the providers' credentials. */
+const describeTask = (cluster: string, taskArn: string) =>
+  Core.withProviders(
+    ecs
+      .describeTasks({ cluster, tasks: [taskArn], include: ["TAGS"] })
+      .pipe(Effect.map((response) => response.tasks?.[0])),
+    testOptions,
+    "EcsSandboxStack",
+  );
+
+describe.sequential.skipIf(!!process.env.FAST)(
+  "AWS.ECS.CreateSandbox",
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:ecs",
+      "provider:aws:ec2",
+      "provider:aws:iam",
+      "provider:aws:lambda",
+      "live",
+    ],
+  },
+  () => {
+    const stack = beforeAll(deploy(Stack).pipe(logLevel), { timeout: HOOK_TIMEOUT });
+
+    // One sandbox the cases below share.
+    const shared = beforeAll(
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        const baseUrl = url.replace(/\/+$/, "");
+        // A fresh function URL takes a few seconds to serve.
+        yield* call<unknown>(baseUrl, "/list?user=nobody").pipe(
+          Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 10 }),
+        );
+        const sandbox = yield* create(baseUrl, "shared");
+        return { baseUrl, ...sandbox };
+      }).pipe(logLevel),
+      { timeout: 900_000 },
+    );
+
+    // The shared sandbox is still running here. Sandboxes are not resources
+    // in the stack, so the destroy passes only if deleting the capacity
+    // provider stops them.
+    afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack).pipe(logLevel), {
+      timeout: HOOK_TIMEOUT,
+    });
+
+    test(
+      "a sandbox is a task in its own Nitro Sandbox, tagged with its host",
+      Effect.gen(function* () {
+        const { cluster, capacity } = yield* stack;
+        const { taskArn, privateIp } = yield* shared;
+
+        const task = yield* describeTask(cluster, taskArn);
+        expect(task?.lastStatus).toBe("RUNNING");
+        expect(task?.trustedExecutionSummary?.isolationMode).toBe("ISOLATED_SANDBOX");
+        expect(task?.capacityProviderName).toBe(capacity);
+        expect(privateIp).toMatch(/^10\.67\./);
+
+        const tags = Object.fromEntries((task?.tags ?? []).map((tag) => [tag.key, tag.value]));
+        expect(tags).toMatchObject({
+          user: "shared",
+          "alchemy::stack": "EcsSandboxStack",
+          "alchemy::stage": Core.resolveStage({}),
+          "alchemy::id": "EcsSandboxHost",
+        });
+      }).pipe(logLevel),
+      { timeout: TEST_TIMEOUT },
+    );
+
+    test(
+      "exec runs commands and files round-trip",
+      Effect.gen(function* () {
+        const { baseUrl, taskArn } = yield* shared;
+        const result = yield* call<{
+          run: { exitCode: number; stdout: string; stderr: string };
+          failed: { exitCode: number; stdout: string; stderr: string };
+          env: string;
+          readBack: string;
+          entries: { path: string; type: string; size?: number }[];
+        }>(baseUrl, `/exec?${taskArnParam(taskArn)}`);
+
+        expect(result.run).toEqual({ exitCode: 0, stdout: "hi sam\n", stderr: "" });
+        // A non-zero exit is a result, not a failure.
+        expect(result.failed).toEqual({ exitCode: 3, stdout: "", stderr: "oops\n" });
+        // `create`'s env and the call's env both reach the command.
+        expect(result.env).toBe("from the host/per call\n");
+        expect(result.readBack).toBe(`console.log("hi " + Bun.argv[2])`);
+        expect(result.entries).toEqual([
+          { path: "/work/hello.ts", type: "file", size: result.readBack.length },
+        ]);
+      }).pipe(logLevel),
+      { timeout: TEST_TIMEOUT },
+    );
+
+    test(
+      "the handle has the Task's methods",
+      Effect.gen(function* () {
+        const { baseUrl, taskArn } = yield* shared;
+        const result = yield* call<{ greeting: string }>(
+          baseUrl,
+          `/hello?${taskArnParam(taskArn)}&name=sam`,
+        );
+        expect(result.greeting).toBe("hello sam");
+      }).pipe(logLevel),
+      { timeout: TEST_TIMEOUT },
+    );
+
+    test(
+      "start streams a process's output until it exits",
+      Effect.gen(function* () {
+        const { baseUrl, taskArn } = yield* shared;
+        const result = yield* call<{ exitCode: number; stdout: string }>(
+          baseUrl,
+          `/process?${taskArnParam(taskArn)}`,
+        );
+        expect(result).toEqual({ exitCode: 0, stdout: "one\ntwo\n" });
+      }).pipe(logLevel),
+      { timeout: TEST_TIMEOUT },
+    );
+
+    test(
+      "pty opens a terminal that takes input and a resize",
+      Effect.gen(function* () {
+        const { baseUrl, taskArn } = yield* shared;
+        const result = yield* call<{ output: string }>(baseUrl, `/pty?${taskArnParam(taskArn)}`);
+        expect(result.output).toContain("pty-42");
+        // `stty size` prints rows then columns, after the resize.
+        expect(result.output).toContain("30 100");
+      }).pipe(logLevel),
+      { timeout: TEST_TIMEOUT },
+    );
+
+    test(
+      "getTcpPort reaches the Task's port and a port opened later",
+      Effect.gen(function* () {
+        const { baseUrl, taskArn, privateIp } = yield* shared;
+        const result = yield* call<{
+          url: string;
+          health: number;
+          echo: string;
+          started: string;
+        }>(baseUrl, `/port?${taskArnParam(taskArn)}`);
+        expect(result.url).toBe(`http://${privateIp}:3000`);
+        expect(result.health).toBe(200);
+        expect(result.echo).toBe("sandbox agent /some/path");
+        expect(result.started).toBe("from 8080 /started");
+      }).pipe(logLevel),
+      { timeout: TEST_TIMEOUT },
+    );
+
+    test(
+      "a call without the sandbox's token is refused",
+      Effect.gen(function* () {
+        const { baseUrl, taskArn } = yield* shared;
+        const result = yield* call<{ exec: number; method: number }>(
+          baseUrl,
+          `/unauthorized?${taskArnParam(taskArn)}`,
+        );
+        expect(result).toEqual({ exec: 401, method: 401 });
+      }).pipe(logLevel),
+      { timeout: TEST_TIMEOUT },
+    );
+
+    test(
+      "list finds sandboxes by tag",
+      Effect.gen(function* () {
+        const { baseUrl, taskArn, privateIp } = yield* shared;
+        const found = yield* call<
+          { taskArn: string; status: string; privateIp?: string; tags: Record<string, string> }[]
+        >(baseUrl, "/list?user=shared");
+        expect(found.map((sandbox) => sandbox.taskArn)).toEqual([taskArn]);
+        expect(found[0]).toMatchObject({ status: "RUNNING", privateIp, tags: { user: "shared" } });
+
+        expect(yield* call<unknown[]>(baseUrl, "/list?user=nobody")).toEqual([]);
+      }).pipe(logLevel),
+      { timeout: TEST_TIMEOUT },
+    );
+
+    test(
+      "kill stops the task",
+      Effect.gen(function* () {
+        const { cluster } = yield* stack;
+        const { baseUrl } = yield* shared;
+        const sandbox = yield* create(baseUrl, "killed");
+        expect(
+          yield* call<{ found: boolean }>(baseUrl, `/connect?${taskArnParam(sandbox.taskArn)}`),
+        ).toMatchObject({ found: true });
+
+        yield* call(baseUrl, `/kill?${taskArnParam(sandbox.taskArn)}`);
+
+        const task = yield* describeTask(cluster, sandbox.taskArn);
+        expect(task?.desiredStatus).toBe("STOPPED");
+        expect(task?.stoppedReason).toBe("Sandbox killed");
+        // `connect` stops handing the sandbox out at once, while ECS still
+        // reports the task as running.
+        expect(
+          yield* call<{ found: boolean }>(baseUrl, `/connect?${taskArnParam(sandbox.taskArn)}`),
+        ).toEqual({ found: false });
+        expect(
+          (yield* call<{ taskArn: string }[]>(baseUrl, "/list?user=killed")).map(
+            (found) => found.taskArn,
+          ),
+        ).toEqual([]);
+
+        const stopped = yield* describeTask(cluster, sandbox.taskArn).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("5 seconds"),
+            until: (task) => task?.lastStatus === "STOPPED",
+            times: 36,
+          }),
+        );
+        expect(stopped?.lastStatus).toBe("STOPPED");
+      }).pipe(logLevel),
+      { timeout: 900_000 },
+    );
+
+    test(
+      "an idle sandbox stops itself",
+      Effect.gen(function* () {
+        const { cluster } = yield* stack;
+        const { baseUrl } = yield* shared;
+        const sandbox = yield* create(baseUrl, "idle", 20);
+
+        const task = yield* describeTask(cluster, sandbox.taskArn).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("10 seconds"),
+            until: (task) => task?.lastStatus !== "RUNNING",
+            times: 18,
+          }),
+        );
+        expect(task?.lastStatus).not.toBe("RUNNING");
+        expect(task?.containers?.[0]?.exitCode ?? 0).toBe(0);
+      }).pipe(logLevel),
+      { timeout: 900_000 },
+    );
+  },
+);
