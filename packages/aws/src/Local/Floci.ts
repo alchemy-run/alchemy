@@ -598,6 +598,15 @@ const ensureFlociUnsynchronized = (
       try: () => fs.mkdir(FLOCI_TLS_DIR, { recursive: true }),
       catch: (cause) => new FlociError({ message: "tls dir", cause }),
     }).pipe(Effect.ignore);
+    // Nitro Sandbox tasks run on gVisor when the daemon has its runtime
+    // registered (`runsc install` on Linux); otherwise on the default runc.
+    const runtimes = yield* docker(["info", "--format", "{{json .Runtimes}}"]).pipe(
+      Effect.map(({ stdout }) => stdout),
+      Effect.orElseSucceed(() => ""),
+    );
+    const ecsSandboxRuntime = /"runsc"\s*:/.test(runtimes)
+      ? ["-e", "FLOCI_SERVICES_ECS_SANDBOX_RUNTIME=runsc"]
+      : [];
     const runContainer = (
       elb: readonly number[],
       edge: readonly number[],
@@ -631,6 +640,16 @@ const ensureFlociUnsynchronized = (
           : "FLOCI_SERVICES_CLOUDFRONT_EDGE_PORTS_ENABLED=false",
         "-e",
         `FLOCI_SERVICES_CLOUDFRONT_DOMAIN_SUFFIX=${FLOCI_CLOUDFRONT_DOMAIN_SUFFIX}`,
+        // Workloads deploy onto an emulated EKS cluster with the emulator's
+        // public credentials, so its k3s API server must accept their tokens.
+        // Safe here: the container publishes on loopback only.
+        "-e",
+        "FLOCI_SERVICES_EKS_IAM_AUTH_ALLOW_PUBLIC_CREDENTIALS=true",
+        // An Auto Mode cluster's Nitro Sandbox RuntimeClasses run pods on
+        // gVisor, so a sandboxed pod gets its own kernel as it does on AWS.
+        "-e",
+        "FLOCI_SERVICES_EKS_SANDBOX_RUNTIME=gvisor",
+        ...ecsSandboxRuntime,
         ...(config?.dockerSocket === false
           ? []
           : ["-v", "/var/run/docker.sock:/var/run/docker.sock", "-u", "root"]),

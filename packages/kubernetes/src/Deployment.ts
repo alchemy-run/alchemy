@@ -915,6 +915,7 @@ export const DeploymentProvider = () =>
           }
           if (adapter.registry) {
             yield* adapter.registry.delete({
+              connection,
               state:
                 (output.registry as Record<string, unknown> | undefined) ??
                 (output as Record<string, unknown>),

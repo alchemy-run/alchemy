@@ -228,6 +228,8 @@ export interface WorkloadIdentityDeleteOptions {
 }
 
 export interface ImageRegistryResolveOptions {
+  /** The cluster the image is for, so the registry is the one its nodes pull from. */
+  connection?: Connection | undefined;
   /** Logical resource id — keys generated repository names. */
   id: string;
   /** The image-source props bag. */
@@ -270,6 +272,8 @@ export interface ImageRegistryHashOptions {
 }
 
 export interface ImageRegistryDeleteOptions {
+  /** The cluster the image was for, when it is known. */
+  connection?: Connection | undefined;
   /**
    * The persisted registry state. Untyped because legacy pre-rename rows
    * carry the old flat attribute shape — adapters narrow structurally.

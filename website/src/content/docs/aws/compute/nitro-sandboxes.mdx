@@ -100,6 +100,14 @@ yield* AWS.EC2.Instance("SandboxHost", {
 
 See [EC2: Host Nitro Sandboxes](/aws/compute/ec2#host-nitro-sandboxes).
 
+## Run sandboxes in `alchemy dev`
+
+The [local emulator](/aws/local-development) takes the same props, so a stack that uses sandboxes runs in `alchemy dev` without changes. Your laptop has no Nitro hypervisor, so the emulator isolates sandboxed workloads with [gVisor](https://gvisor.dev) where it can: each one runs on its own user-space kernel instead of sharing the host's. gVisor needs no KVM, so it works in Docker Desktop.
+
+On an EKS Auto Mode cluster, the emulator creates the `isolated-sandbox` and `confidential-sandbox` RuntimeClasses and runs their pods on gVisor. It downloads gVisor (about 70 MB) the first time it creates an Auto Mode cluster.
+
+On ECS, the emulator launches one EC2 instance per Managed Instances capacity provider, with enclaves enabled when `nitroEnclavesEnabled` is set. Tasks report their `trustedExecutionSummary`, and a task that sets an isolation mode still needs a provider with `nitroEnclavesEnabled`, as it does on AWS. The task's containers run on gVisor when Docker has its `runsc` runtime installed, which is possible on Linux; otherwise they run as ordinary containers, without isolation.
+
 ## Nitro Sandboxes or Lambda MicroVMs
 
 Both give each workload its own VM. They differ in who runs the machines.
