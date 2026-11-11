@@ -1,5 +1,7 @@
 import * as CliOutput from "effect/cli/CliOutput";
 import type { FlagDoc, HelpDoc } from "effect/cli/HelpDoc";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 
 /**
  * Compact enum-style flag types so one long choice list (`--log-level`'s
@@ -22,8 +24,11 @@ const compactFlag = (flag: FlagDoc): FlagDoc => ({
 
 const compactDoc = (doc: HelpDoc): HelpDoc => ({
   ...doc,
-  flags: doc.flags?.map(compactFlag),
-  globalFlags: doc.globalFlags?.map(compactFlag),
+  flags: doc.flags.map(compactFlag),
+  ...Record.filterMap(
+    { globalFlags: doc.globalFlags?.map(compactFlag) },
+    Result.fromNullishOr(() => undefined),
+  ),
 });
 
 /**

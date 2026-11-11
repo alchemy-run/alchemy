@@ -91,7 +91,7 @@ export interface AssessmentProps {
   /**
    * A description of the assessment.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * The unique identifier of the framework the assessment is created from.
    * Changing it replaces the assessment.

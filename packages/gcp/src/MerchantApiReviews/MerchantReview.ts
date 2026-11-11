@@ -33,51 +33,54 @@ import {
 
 export type MerchantReviewAttributesProps = {
   /** Reviewer's overall rating of the merchant. */
-  rating?: number;
+  rating?: number | undefined;
   /** Title of the review. */
-  title?: string;
+  title?: string | undefined;
   /**
    * Unique, stable identifier for the merchant being reviewed. Defaults
    * to the Merchant Center account id.
    */
-  merchantId?: string;
+  merchantId?: string | undefined;
   /** When true, the reviewer remains anonymous. */
-  isAnonymous?: boolean;
+  isAnonymous?: boolean | undefined;
   /**
    * Timestamp when the review was written (RFC3339).
    * @default "2020-01-01T00:00:00Z"
    */
-  reviewTime?: string;
+  reviewTime?: string | undefined;
   /** URL of the merchant's main website. */
-  merchantLink?: string;
+  merchantLink?: string | undefined;
   /** How the review was collected. */
-  collectionMethod?: reviews.MerchantReviewAttributesCollectionMethodEnum | (string & {});
+  collectionMethod?:
+    | reviews.MerchantReviewAttributesCollectionMethodEnum
+    | (string & {})
+    | undefined;
   /** Publisher-system identifier for the review author. */
-  reviewerId?: string;
+  reviewerId?: string | undefined;
   /**
    * BCP-47 language of the review.
    * @default "en"
    */
-  reviewLanguage?: string;
+  reviewLanguage?: string | undefined;
   /**
    * ISO 3166-1 alpha-2 country where the reviewer ordered.
    * @default "US"
    */
-  reviewCountry?: string;
+  reviewCountry?: string | undefined;
   /** Human-readable merchant display name. */
-  merchantDisplayName?: string;
+  merchantDisplayName?: string | undefined;
   /** Landing page that hosts reviews for this merchant. */
-  merchantRatingLink?: string;
+  merchantRatingLink?: string | undefined;
   /** Maximum possible rating (must be greater than `minRating`). */
-  maxRating?: string;
+  maxRating?: string | undefined;
   /** Minimum possible rating (worst value, not "no rating"). */
-  minRating?: string;
+  minRating?: string | undefined;
   /** Display name of the review author. */
-  reviewerUsername?: string;
+  reviewerUsername?: string | undefined;
   /**
    * Freeform review text, sent verbatim.
    */
-  content?: string;
+  content?: string | undefined;
 };
 
 export type MerchantReviewProps = {
@@ -106,7 +109,7 @@ export type MerchantReviewProps = {
    * Custom (merchant-provided) attributes. Alchemy ownership keys are
    * merged in automatically.
    */
-  customAttributes?: ReviewCustomAttribute[];
+  customAttributes?: ReviewCustomAttribute[] | undefined;
 };
 
 export type MerchantReview = Resource<

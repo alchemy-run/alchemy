@@ -26,18 +26,18 @@ export type CustomerManagedEncryption = {
    * Cloud KMS CryptoKey used to encrypt secret payloads
    * (`projects/{project}/locations/{location}/keyRings/{keyRing}/cryptoKeys/{cryptoKey}`).
    */
-  kmsKeyName?: string;
+  kmsKeyName?: string | undefined;
 };
 
 export type Replica = {
   /**
    * Replica location (e.g. `"us-central1"`).
    */
-  location?: string;
+  location?: string | undefined;
   /**
    * Optional customer-managed encryption for this replica.
    */
-  customerManagedEncryption?: CustomerManagedEncryption;
+  customerManagedEncryption?: CustomerManagedEncryption | undefined;
 };
 
 export type Replication = {
@@ -45,7 +45,7 @@ export type Replication = {
    * Replicate the secret without location restrictions.
    */
   automatic?: {
-    customerManagedEncryption?: CustomerManagedEncryption;
+    customerManagedEncryption?: CustomerManagedEncryption | undefined;
   };
   /**
    * Replicate the secret only into the listed locations.
@@ -59,11 +59,11 @@ export type Rotation = {
   /**
    * Timestamp in UTC when the next rotation notification should fire.
    */
-  nextRotationTime?: string;
+  nextRotationTime?: string | undefined;
   /**
    * Period between rotation notifications (e.g. `"3600s"`).
    */
-  rotationPeriod?: string;
+  rotationPeriod?: string | undefined;
 };
 
 export type SecretTopic = {

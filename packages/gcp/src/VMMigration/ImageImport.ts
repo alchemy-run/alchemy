@@ -178,7 +178,9 @@ export const ImageImport = Resource<ImageImport>("GCP.VMMigration.ImageImport");
 const resourceName = (project: string, location: string, imageImportId: string) =>
   `${locationParent(project, location)}/imageImports/${imageImportId}`;
 
-const stripTarget = <T extends { labels?: vm.StringMap; description?: string }>(
+const stripTarget = <
+  T extends { labels?: vm.StringMap | undefined; description?: string | undefined },
+>(
   target: T | undefined,
 ): T | undefined => {
   if (target === undefined) return undefined;
@@ -227,7 +229,9 @@ const ownedById = (id: string, image: vm.ImageImport) =>
     return false;
   });
 
-const stampTarget = <T extends { labels?: vm.StringMap; description?: string }>(
+const stampTarget = <
+  T extends { labels?: vm.StringMap | undefined; description?: string | undefined },
+>(
   target: T | undefined,
   ownership: Record<string, string>,
 ): T | undefined => {

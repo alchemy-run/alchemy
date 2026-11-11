@@ -44,12 +44,12 @@ export interface FunctionAutoscalerProps {
 
 /** The autoscaler settings Modal stores for a function. */
 export interface AutoscalerSettingsState {
-  minContainers?: number;
-  maxContainers?: number;
-  bufferContainers?: number;
-  scaledownWindow?: number;
-  scaleupWindow?: number;
-  targetConcurrency?: number;
+  minContainers?: number | undefined;
+  maxContainers?: number | undefined;
+  bufferContainers?: number | undefined;
+  scaledownWindow?: number | undefined;
+  scaleupWindow?: number | undefined;
+  targetConcurrency?: number | undefined;
 }
 
 export interface FunctionAutoscalerAttributes {

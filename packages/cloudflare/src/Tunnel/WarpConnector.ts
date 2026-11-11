@@ -23,7 +23,7 @@ export interface WarpConnectorProps {
    *
    * @default ${app}-${stage}-${id}
    */
-  name?: string;
+  name?: string | undefined;
 }
 
 export interface WarpConnectorAttributes {
@@ -268,11 +268,11 @@ export const WarpConnectorProvider = () =>
   });
 
 interface ObservedConnector {
-  id?: string;
-  name?: string | null;
-  status?: "inactive" | "degraded" | "healthy" | "down" | null;
-  createdAt?: string | null;
-  deletedAt?: string | null;
+  id?: string | undefined;
+  name?: string | null | undefined;
+  status?: "inactive" | "degraded" | "healthy" | "down" | null | undefined;
+  createdAt?: string | null | undefined;
+  deletedAt?: string | null | undefined;
 }
 
 /**

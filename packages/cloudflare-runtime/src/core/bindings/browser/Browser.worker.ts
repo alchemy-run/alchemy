@@ -138,9 +138,9 @@ function forwardClose(target?: WebSocket, e?: CloseEvent) {
 }
 
 export class BrowserSession implements DurableObject {
-  sessionInfo?: SessionInfo;
-  chromeWs?: WebSocket;
-  legacyServerWs?: WebSocket;
+  sessionInfo: SessionInfo | undefined;
+  chromeWs: WebSocket | undefined;
+  legacyServerWs: WebSocket | undefined;
   wss: Array<{ chrome: WebSocket; server: WebSocket }> = [];
   #statusTimeout: ReturnType<typeof setTimeout> | undefined;
 

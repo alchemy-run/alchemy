@@ -147,7 +147,7 @@ export class ConnectorPending extends Data.TaggedError("ConnectorPending")<{
 export class ConnectorFailed extends Data.TaggedError("ConnectorFailed")<{
   identifier: string;
   state: string;
-  reason?: string;
+  reason?: string | undefined;
 }> {}
 
 export const waitForActive = (identifier: string, session: ScopedPlanStatusSession) =>

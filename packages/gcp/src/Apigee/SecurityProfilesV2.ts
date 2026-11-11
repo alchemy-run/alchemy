@@ -30,10 +30,12 @@ export type ProfileAssessmentConfig = {
   /**
    * API Hub gateway types to include.
    */
-  include?: Array<
-    | apigee.GoogleCloudApigeeV1SecurityProfileV2ProfileAssessmentConfigApiHubGatewayTypeArrayGatewayTypesItemEnum
-    | (string & {})
-  >;
+  include?:
+    | Array<
+        | apigee.GoogleCloudApigeeV1SecurityProfileV2ProfileAssessmentConfigApiHubGatewayTypeArrayGatewayTypesItemEnum
+        | (string & {})
+      >
+    | undefined;
 };
 
 export type SecurityProfilesV2Props = {

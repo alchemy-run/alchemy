@@ -28,19 +28,19 @@ import { loadConfigProvider, StackConfigOverrides } from "../Util/ConfigProvider
 /** Which credentials and config a stack build sees. */
 export interface ConfigOptions {
   /** `.env` file layered under the process environment. */
-  readonly envFile?: string;
+  readonly envFile?: string | undefined;
   /** Profile whose credentials the run uses. Falls back to the active profile. */
-  readonly profile?: string;
+  readonly profile?: string | undefined;
 }
 
 export interface BuildOptions extends ConfigOptions {
   readonly stage: string;
   /** Run local (emulated) providers instead of the real cloud. */
-  readonly dev?: boolean;
+  readonly dev?: boolean | undefined;
   /** Adopt pre-existing cloud resources instead of failing on conflict. */
-  readonly adopt?: boolean;
+  readonly adopt?: boolean | undefined;
   /** Upgrade an out-of-date state store without prompting. */
-  readonly updateStateStore?: boolean;
+  readonly updateStateStore?: boolean | undefined;
 }
 
 /** Config services shared by every stack build. */
@@ -240,7 +240,7 @@ export const describeStackPlan = Effect.fn("Alchemist.describeStackPlan")(functi
 export interface DeployPlanOptions extends BuildOptions, ResourceSelection {
   readonly operation: "deploy";
   /** Re-run every Action regardless of input drift. */
-  readonly force?: boolean;
+  readonly force?: boolean | undefined;
 }
 
 /**

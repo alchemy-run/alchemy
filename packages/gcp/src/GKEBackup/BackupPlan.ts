@@ -36,87 +36,87 @@ export type RetentionPolicy = {
    * Default maximum age of a Backup created via this plan, in days
    * (`0`–`365`). `0` disables automatic deletion.
    */
-  backupRetainDays?: number;
+  backupRetainDays?: number | undefined;
   /**
    * When true, the retention policy cannot be updated further.
    */
-  locked?: boolean;
+  locked?: boolean | undefined;
   /**
    * Minimum age before a Backup can be deleted, in days (`0`–`90`).
    */
-  backupDeleteLockDays?: number;
+  backupDeleteLockDays?: number | undefined;
 };
 
 export type TimeOfDay = {
   /** Hours of day in 24-hour format (`0`–`23`). */
-  hours?: number;
+  hours?: number | undefined;
   /** Minutes of hour (`0`–`59`). */
-  minutes?: number;
+  minutes?: number | undefined;
   /** Seconds of minute (`0`–`59`). */
-  seconds?: number;
+  seconds?: number | undefined;
   /** Fractional seconds, in nanoseconds. */
-  nanos?: number;
+  nanos?: number | undefined;
 };
 
 export type CalendarDate = {
   /** Year (`1`–`9999`), or `0` to omit. */
-  year?: number;
+  year?: number | undefined;
   /** Month (`1`–`12`), or `0` to omit. */
-  month?: number;
+  month?: number | undefined;
   /** Day (`1`–`31`), or `0` to omit. */
-  day?: number;
+  day?: number | undefined;
 };
 
 export type DayOfWeekList = {
   /** Days of week in UTC. */
-  daysOfWeek?: Array<gkebackup.DayOfWeekListDaysOfWeekItemEnum | (string & {})>;
+  daysOfWeek?: Array<gkebackup.DayOfWeekListDaysOfWeekItemEnum | (string & {})> | undefined;
 };
 
 export type ExclusionWindow = {
   /** Weekly recurrence days in UTC. */
-  daysOfWeek?: DayOfWeekList;
+  daysOfWeek?: DayOfWeekList | undefined;
   /** Start time of the window in UTC. */
-  startTime?: TimeOfDay;
+  startTime?: TimeOfDay | undefined;
   /** When true, the window recurs every day. */
-  daily?: boolean;
+  daily?: boolean | undefined;
   /** Window duration (at least 5 minutes). */
-  duration?: string;
+  duration?: string | undefined;
   /** Single-occurrence date in UTC (no recurrence). */
-  singleOccurrenceDate?: CalendarDate;
+  singleOccurrenceDate?: CalendarDate | undefined;
 };
 
 export type RpoConfig = {
   /**
    * Target RPO in minutes (`60`–`86400`).
    */
-  targetRpoMinutes?: number;
+  targetRpoMinutes?: number | undefined;
   /**
    * Windows during which backups must not run.
    */
-  exclusionWindows?: ExclusionWindow[];
+  exclusionWindows?: ExclusionWindow[] | undefined;
 };
 
 export type BackupSchedule = {
   /**
    * When true, automatic Backup creation is paused.
    */
-  paused?: boolean;
+  paused?: boolean | undefined;
   /**
    * Cron schedule for creating Backups. Mutually exclusive with
    * `rpoConfig`.
    */
-  cronSchedule?: string;
+  cronSchedule?: string | undefined;
   /**
    * RPO schedule. Mutually exclusive with `cronSchedule`.
    */
-  rpoConfig?: RpoConfig;
+  rpoConfig?: RpoConfig | undefined;
 };
 
 export type NamespacedName = {
   /** Kubernetes namespace. */
-  namespace?: string;
+  namespace?: string | undefined;
   /** Kubernetes resource name. */
-  name?: string;
+  name?: string | undefined;
 };
 
 export type EncryptionKey = {
@@ -124,45 +124,47 @@ export type EncryptionKey = {
    * Cloud KMS key used to encrypt config backup artifacts.
    * Format: `projects/{project}/locations/{location}/keyRings/{keyRing}/cryptoKeys/{cryptoKey}`.
    */
-  gcpKmsEncryptionKey?: string;
+  gcpKmsEncryptionKey?: string | undefined;
 };
 
 export type ResourceLabels = {
   /** Kubernetes label-value pairs. */
-  resourceLabels?: Array<{
-    /** Label key. */
-    key?: string;
-    /** Label value. */
-    value?: string;
-  }>;
+  resourceLabels?:
+    | Array<{
+        /** Label key. */
+        key?: string | undefined;
+        /** Label value. */
+        value?: string | undefined;
+      }>
+    | undefined;
 };
 
 export type BackupConfig = {
   /** When true, include all namespaced resources. */
-  allNamespaces?: boolean;
+  allNamespaces?: boolean | undefined;
   /** Include namespaces matching these Kubernetes labels. */
-  selectedNamespaceLabels?: ResourceLabels;
+  selectedNamespaceLabels?: ResourceLabels | undefined;
   /**
    * Whether Kubernetes Secret resources are included.
    * @default false
    */
-  includeSecrets?: boolean;
+  includeSecrets?: boolean | undefined;
   /**
    * Whether volume data is backed up when PVCs are in scope.
    * @default false
    */
-  includeVolumeData?: boolean;
+  includeVolumeData?: boolean | undefined;
   /**
    * When false, backups fail on non-standard Kubernetes configuration.
    * @default false
    */
-  permissiveMode?: boolean;
+  permissiveMode?: boolean | undefined;
   /** Include only resources in these namespaces. */
-  selectedNamespaces?: { namespaces?: string[] };
+  selectedNamespaces?: { namespaces?: string[] | undefined } | undefined;
   /** Include only resources referenced by these ProtectedApplications. */
-  selectedApplications?: { namespacedNames?: NamespacedName[] };
+  selectedApplications?: { namespacedNames?: NamespacedName[] | undefined } | undefined;
   /** Customer-managed key that encrypts config backup artifacts. */
-  encryptionKey?: EncryptionKey;
+  encryptionKey?: EncryptionKey | undefined;
 };
 
 export type BackupPlanProps = {

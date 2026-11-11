@@ -32,27 +32,27 @@ const DEFAULT_STATE = "ENABLED";
 
 export type SecurityActionConditionConfig = {
   /** Developer emails. Limit 1000. */
-  developers?: string[];
+  developers?: string[] | undefined;
   /** IPv4 or IPv6 ranges. Limit 100. */
-  ipAddressRanges?: string[];
+  ipAddressRanges?: string[] | undefined;
   /** API keys. Limit 1000. */
-  apiKeys?: string[];
+  apiKeys?: string[] | undefined;
   /** Developer app names. Limit 1000. */
-  developerApps?: string[];
+  developerApps?: string[] | undefined;
   /** Exact user-agent matches. Limit 50. */
-  userAgents?: string[];
+  userAgents?: string[] | undefined;
   /** API product names. Limit 1000. */
-  apiProducts?: string[];
+  apiProducts?: string[] | undefined;
   /** Access tokens. Limit 1000. */
-  accessTokens?: string[];
+  accessTokens?: string[] | undefined;
   /** ASN numbers. */
-  asns?: string[];
+  asns?: string[] | undefined;
   /** Bot reasons (`Flooder`, `Robot Abuser`, …). */
-  botReasons?: string[];
+  botReasons?: string[] | undefined;
   /** ISO 3166-1 alpha-2 region codes. */
-  regionCodes?: string[];
+  regionCodes?: string[] | undefined;
   /** HTTP methods (`GET`, `POST`, …). */
-  httpMethods?: string[];
+  httpMethods?: string[] | undefined;
 };
 
 export type SecurityActionDeny = {
@@ -62,14 +62,14 @@ export type SecurityActionDeny = {
 
 export type SecurityActionFlagHeader = {
   /** Header name sent to the target. */
-  name?: string;
+  name?: string | undefined;
   /** Header value sent to the target. */
-  value?: string;
+  value?: string | undefined;
 };
 
 export type SecurityActionFlag = {
   /** Headers added when flagging. At least one is required. */
-  headers?: SecurityActionFlagHeader[];
+  headers?: SecurityActionFlagHeader[] | undefined;
 };
 
 export type EnvironmentsSecurityActionProps = {
@@ -113,7 +113,7 @@ export type EnvironmentsSecurityActionProps = {
   /**
    * Flag matching requests by adding headers.
    */
-  flag?: SecurityActionFlag;
+  flag?: SecurityActionFlag | undefined;
   /**
    * Input-only TTL (e.g. `"3600s"`).
    */

@@ -51,7 +51,7 @@ export type DevelopersAppsKeyProps = {
    * omitted, a unique secret is generated. Immutable — changing it
    * replaces the key.
    */
-  consumerSecret?: string;
+  consumerSecret?: string | undefined;
   /**
    * Scopes to apply to the key.
    */

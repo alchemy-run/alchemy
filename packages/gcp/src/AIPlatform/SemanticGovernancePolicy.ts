@@ -29,9 +29,9 @@ export type McpTool = {
    * MCP server resource name
    * (`projects/{project}/locations/{location}/mcpServers/{mcp_server}`).
    */
-  mcpServer?: string;
+  mcpServer?: string | undefined;
   /** MCP tool resource names. Omit to apply to every tool on the server. */
-  tools?: string[];
+  tools?: string[] | undefined;
 };
 
 export type SemanticGovernancePolicyProps = {
@@ -66,7 +66,7 @@ export type SemanticGovernancePolicyProps = {
   /**
    * Optional MCP tools the policy applies to.
    */
-  mcpTools?: McpTool[];
+  mcpTools?: McpTool[] | undefined;
 };
 
 export type SemanticGovernancePolicy = Resource<

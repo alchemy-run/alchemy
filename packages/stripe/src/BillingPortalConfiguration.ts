@@ -130,11 +130,11 @@ export interface BillingPortalAdjustableQuantity {
   /**
    * Maximum quantity that can be set.
    */
-  maximum?: number;
+  maximum?: number | undefined;
   /**
    * Minimum quantity that can be set.
    */
-  minimum?: number;
+  minimum?: number | undefined;
 }
 
 export interface BillingPortalSubscriptionUpdateProduct {
@@ -746,7 +746,7 @@ const findByAlchemyId = Effect.fn(function* (id: string) {
   return matches[0];
 });
 
-const observe = Effect.fn(function* (input: { id?: string; logicalId: string }) {
+const observe = Effect.fn(function* (input: { id?: string | undefined; logicalId: string }) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);
     if (byId !== undefined) return byId;

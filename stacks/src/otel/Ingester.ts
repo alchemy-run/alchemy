@@ -47,10 +47,9 @@ export default class Ingester extends Cloudflare.Worker<Ingester>()(
     // current store adopt it instead of creating a second Worker.
     name: stage === "prod" ? "alchemyotel-otelworker-prod-kqnztkgnqozwsgw5" : undefined,
     observability: { enabled: true },
-    domain:
-      stage === "prod"
-        ? { name: "otel.alchemy.run", aliases: ["analytics.alchemy.run"] }
-        : undefined,
+    ...(stage === "prod" && {
+      domain: { name: "otel.alchemy.run", aliases: ["analytics.alchemy.run"] },
+    }),
   })),
   Effect.gen(function* () {
     const tokenValue = yield* (yield* IngestToken).token;

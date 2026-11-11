@@ -13,6 +13,8 @@ import * as Provider from "alchemy/Provider";
 import { Resource, type ResourceBinding } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import { App } from "./App.ts";
 import {
   deploymentPolicy,
@@ -63,23 +65,23 @@ export interface MachineGuest {
    *
    * @default "shared"
    */
-  cpuKind?: string;
+  cpuKind?: string | undefined;
   /**
    * Number of CPUs.
    *
    * @default 1
    */
-  cpus?: number;
+  cpus?: number | undefined;
   /**
    * Memory in MB.
    *
    * @default 256
    */
-  memoryMb?: number;
+  memoryMb?: number | undefined;
   /** GPU kind, if this Machine should have a GPU. */
-  gpuKind?: string;
+  gpuKind?: string | undefined;
   /** Number of GPUs. */
-  gpus?: number;
+  gpus?: number | undefined;
 }
 
 export interface MachineInit {
@@ -241,11 +243,11 @@ export interface MachineContainer {
 
 export interface MachinePropsBase {
   /** Deployment strategy and readiness deadline. Defaults to in-place rolling updates. */
-  deploy?: MachineDeploy;
+  deploy?: MachineDeploy | undefined;
   /** Graceful process shutdown. Defaults to SIGTERM / 30 seconds when blue/green is enabled. */
-  shutdown?: MachineShutdown;
+  shutdown?: MachineShutdown | undefined;
   /** Named readiness checks for workers without public services. */
-  checks?: Record<string, MachineCheck>;
+  checks?: Record<string, MachineCheck> | undefined;
   /**
    * Parent Fly App. Changing it replaces the Machine.
    */
@@ -284,13 +286,13 @@ export interface MachinePropsBase {
   /**
    * Fly proxy services (HTTP/TCP ports).
    */
-  services?: MachineService[];
+  services?: MachineService[] | undefined;
   /**
    * Disks to attach. Each entry is a Fly volume group: `count`
    * independent Volumes, one mounted on each replica. Also collected
    * from `MountVolume` bindings.
    */
-  mounts?: MachineMount[];
+  mounts?: MachineMount[] | undefined;
   /**
    * User metadata. Alchemy ownership keys (`alchemy.stack` /
    * `alchemy.stage` / `alchemy.id` / `alchemy.type` /
@@ -302,24 +304,24 @@ export interface MachinePropsBase {
    *
    * @default false
    */
-  autoDestroy?: boolean;
+  autoDestroy?: boolean | undefined;
   /**
    * Restart policy after the main process exits.
    */
-  restart?: MachineRestart;
+  restart?: MachineRestart | undefined;
   /**
    * Create or update without launching the Machine.
    *
    * @default false
    */
-  skipLaunch?: boolean;
+  skipLaunch?: boolean | undefined;
   /**
    * Minimum App-secrets version required by this Machine, not an immutable
    * snapshot. Other writers can advance the shared vault. Secret changes are
    * not automatically watched; change an explicit deployment input or floor
    * when an out-of-band rotation requires reconciliation.
    */
-  minSecretsVersion?: number;
+  minSecretsVersion?: number | undefined;
 }
 
 export type MachineProps =
@@ -338,10 +340,10 @@ export type MachineProps =
     });
 
 export type MachineImageRef = {
-  registry?: string;
-  repository?: string;
-  tag?: string;
-  digest?: string;
+  registry?: string | undefined;
+  repository?: string | undefined;
+  tag?: string | undefined;
+  digest?: string | undefined;
 };
 
 export type Machine = Resource<
@@ -349,7 +351,7 @@ export type Machine = Resource<
   MachineProps,
   {
     /** Whether recovery must finish an interrupted deployment. */
-    rolloutPending?: boolean;
+    rolloutPending?: boolean | undefined;
     /** Parent Fly App name. */
     appName: string;
     /** Fly Machine id of replica 0. */
@@ -357,7 +359,7 @@ export type Machine = Resource<
     /** Fly Machine ids of every replica. */
     machineIds: string[];
     /** Logical base for generation-qualified Machine names. */
-    baseName?: string;
+    baseName?: string | undefined;
     /** Machine name of replica 0 (unique per App). Changes during blue/green deployment. */
     name: string;
     /** Region the Machines are running in. */
@@ -1099,7 +1101,12 @@ export const MachineProvider = () =>
     diff: Effect.fn(function* ({ news, output }) {
       if (news === undefined) return;
       if ("app" in news) {
-        const imageMode = { image: news.image, containers: news.containers, init: news.init };
+        const imageMode = {
+          ...Record.filterMap(
+            { image: news.image, containers: news.containers, init: news.init },
+            Result.fromNullishOr(() => undefined),
+          ),
+        };
         const imageModeResolved =
           isResolved<Pick<MachineProps, "image" | "containers" | "init">>(imageMode);
         if (imageModeResolved) yield* validateMachineContainers(imageMode);
@@ -1125,7 +1132,10 @@ export const MachineProvider = () =>
           skipLaunch: news.skipLaunch,
           autoDestroy: news.autoDestroy,
           restart: news.restart,
-          containers: news.containers,
+          ...Record.filterMap(
+            { containers: news.containers },
+            Result.fromNullishOr(() => undefined),
+          ),
         };
         if (
           imageModeResolved &&

@@ -102,7 +102,7 @@ export interface ServiceBinding {
    * Tigris bucket to attach. Object HTTP bindings write `AWS_*` /
    * `BUCKET_NAME` as App secrets during Service reconcile.
    */
-  bucket?: { name: string; id?: string };
+  bucket?: { name: string; id?: string } | undefined;
   /**
    * Managed Postgres cluster to attach. `Fly.ConnectPostgres` records
    * the MPG attachment during Service reconcile. Connection URIs travel

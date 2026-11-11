@@ -21,9 +21,9 @@ export class SecurityHubTestFunction extends Lambda.Function<Lambda.Function>()(
  */
 const errorTagged = <A, E extends { _tag: string }, R>(
   effect: Effect.Effect<A, E, R>,
-): Effect.Effect<A | { errorTag: string; errorMessage?: string }, never, R> =>
+): Effect.Effect<A | { errorTag: string; errorMessage?: string | undefined }, never, R> =>
   effect.pipe(
-    Effect.map((a): A | { errorTag: string; errorMessage?: string } => a),
+    Effect.map((a): A | { errorTag: string; errorMessage?: string | undefined } => a),
     Effect.catch((e) =>
       Effect.succeed({
         errorTag: e._tag,

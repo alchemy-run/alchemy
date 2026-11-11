@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
+import * as Record from "effect/Record";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Semaphore from "effect/Semaphore";
@@ -76,14 +77,19 @@ const sanitizeName = (value: string) =>
 const optionsFrom = (databaseId: string, dev: DatabaseDev): ServerOptions => ({
   name: dev.name ?? `alchemy-${sanitizeName(databaseId)}`,
   persistenceMode: dev.persistenceMode ?? "stateful",
-  port: dev.port,
-  databasePort: dev.databasePort,
-  shadowDatabasePort: dev.shadowDatabasePort,
-  debug: dev.debug,
-  databaseConnectTimeoutMillis: dev.databaseConnectTimeoutMillis,
-  databaseIdleTimeoutMillis: dev.databaseIdleTimeoutMillis,
-  shadowDatabaseConnectTimeoutMillis: dev.shadowDatabaseConnectTimeoutMillis,
-  shadowDatabaseIdleTimeoutMillis: dev.shadowDatabaseIdleTimeoutMillis,
+  ...Record.filterMap(
+    {
+      port: dev.port,
+      databasePort: dev.databasePort,
+      shadowDatabasePort: dev.shadowDatabasePort,
+      debug: dev.debug,
+      databaseConnectTimeoutMillis: dev.databaseConnectTimeoutMillis,
+      databaseIdleTimeoutMillis: dev.databaseIdleTimeoutMillis,
+      shadowDatabaseConnectTimeoutMillis: dev.shadowDatabaseConnectTimeoutMillis,
+      shadowDatabaseIdleTimeoutMillis: dev.shadowDatabaseIdleTimeoutMillis,
+    },
+    Result.fromNullishOr(() => undefined),
+  ),
 });
 
 const parseUrl = (label: string, value: string) =>

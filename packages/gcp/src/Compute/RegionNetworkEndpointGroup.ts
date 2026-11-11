@@ -30,27 +30,27 @@ export type RegionNetworkEndpointGroupType =
 
 export type RegionNetworkEndpointGroupCloudRun = {
   /** Cloud Run service name (RFC1035). Provide this or `urlMask`. */
-  service?: string;
+  service?: string | undefined;
   /** Named Cloud Run revision tag. */
-  tag?: string;
+  tag?: string | undefined;
   /** URL mask used to parse `service` and `tag` from request URLs. */
-  urlMask?: string;
+  urlMask?: string | undefined;
 };
 
 export type RegionNetworkEndpointGroupAppEngine = {
   /** App Engine service name. */
-  service?: string;
+  service?: string | undefined;
   /** App Engine version. */
-  version?: string;
+  version?: string | undefined;
   /** URL mask used to parse `service` and `version` from request URLs. */
-  urlMask?: string;
+  urlMask?: string | undefined;
 };
 
 export type RegionNetworkEndpointGroupCloudFunction = {
   /** Cloud Function name. Provide this or `urlMask`. */
-  function?: string;
+  function?: string | undefined;
   /** URL mask used to parse the function name from request URLs. */
-  urlMask?: string;
+  urlMask?: string | undefined;
 };
 
 export type RegionNetworkEndpointGroupPscData = {
@@ -58,13 +58,13 @@ export type RegionNetworkEndpointGroupPscData = {
    * Producer port used to connect a PSC NEG to a specific port on the
    * producer side. Only valid for `PRIVATE_SERVICE_CONNECT`.
    */
-  producerPort?: number;
+  producerPort?: number | undefined;
   /** Address allocated from the given subnetwork for PSC. */
-  consumerPscAddress?: string;
+  consumerPscAddress?: string | undefined;
   /** PSC connection id. */
-  pscConnectionId?: string;
+  pscConnectionId?: string | undefined;
   /** PSC forwarding-rule connection status. */
-  pscConnectionStatus?: string;
+  pscConnectionStatus?: string | undefined;
 };
 
 export type RegionNetworkEndpointGroupProps = {

@@ -40,7 +40,7 @@ export interface GraphQLRequest {
   /** The GraphQL document, e.g. `query($a: Int!) { add(a: $a, b: 1) }`. */
   query: string;
   /** Values for the document's variables. */
-  variables?: Record<string, unknown>;
+  variables?: Record<string, unknown> | undefined;
   /** Which operation to run when the document defines several. */
   operationName?: string;
 }

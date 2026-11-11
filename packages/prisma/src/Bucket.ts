@@ -45,7 +45,7 @@ export interface BucketProps {
    * the bucket to the project's default branch, which Alchemy then leaves
    * unmanaged.
    */
-  branchId?: string;
+  branchId?: string | undefined;
   /**
    * Stable identity of this declaration on the Prisma platform, unique per
    * branch. A rename in the Console does not change it. After lost state, the
@@ -178,7 +178,9 @@ const attrsFrom = (bucket: ObservedBucket): Bucket["Attributes"] => ({
 
 // Distilled emits the cursor-paginated list operations as plain ops, so
 // callers walk `pagination` themselves (see `src/Neon/Project.ts`).
-const listBuckets = (filter: { projectId?: string; logicalId?: string; branchId?: string } = {}) =>
+const listBuckets = (
+  filter: { projectId?: string; logicalId?: string; branchId?: string | undefined } = {},
+) =>
   Effect.gen(function* () {
     const buckets: GetBucketsResponse["data"][number][] = [];
     let cursor: string | undefined;

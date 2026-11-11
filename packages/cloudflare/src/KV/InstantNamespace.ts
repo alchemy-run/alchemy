@@ -163,7 +163,7 @@ const ProviderLive = () =>
             id: string;
             title: string;
             supportsUrlEncoding?: boolean | null | undefined;
-            mode?: "instant" | null;
+            mode?: "instant" | null | undefined;
           }
         | undefined;
       if (output?.namespaceId) {

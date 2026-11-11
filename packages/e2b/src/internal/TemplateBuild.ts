@@ -59,7 +59,7 @@ export interface TemplateSteps {
   /** Another E2B template (name or id) to build on, reusing its cached layers. */
   readonly fromTemplate?: string;
   /** Environment variables set in the template (`ENV`). */
-  readonly env?: Readonly<Record<string, string>>;
+  readonly env?: Readonly<Record<string, string>> | undefined;
   /** Files written into the template. */
   readonly files?: ReadonlyArray<TemplateFile>;
   /** Shell commands run as extra `RUN` steps, after `env` and `files`. */
@@ -121,11 +121,11 @@ export interface LoweredSource {
 }
 
 export interface TemplateBuildPlan {
-  readonly fromImage?: string;
-  readonly fromTemplate?: string;
+  readonly fromImage?: string | undefined;
+  readonly fromTemplate?: string | undefined;
   readonly steps: ReadonlyArray<PlannedStep>;
-  readonly startCmd?: string;
-  readonly readyCmd?: string;
+  readonly startCmd?: string | undefined;
+  readonly readyCmd?: string | undefined;
   /** Files per `COPY` hash, uploaded when E2B does not have them. */
   readonly uploads: ReadonlyMap<string, ReadonlyArray<UploadFile>>;
   /** Content hash of everything that determines the build. A different hash means rebuild. */

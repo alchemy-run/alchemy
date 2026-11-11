@@ -38,7 +38,7 @@ export const RetrieveProductHttp = Layer.effect(
       const label = isId ? product : (product as Product).LogicalId;
 
       return Effect.fn(`Stripe.RetrieveProduct(${label})`)(function* (request?: {
-        expand?: string[];
+        expand?: string[] | undefined;
       }) {
         return yield* auth(
           GetProduct({

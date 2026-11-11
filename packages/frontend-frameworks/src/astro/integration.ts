@@ -211,7 +211,7 @@ export const withDevSessionKv = (
   worker: {
     ...viteOptions?.worker,
     bindings: [...(viteOptions?.worker?.bindings ?? []), KvNamespace.local({ binding })],
-  } as CloudflareVitePluginOptions["worker"],
+  } as NonNullable<CloudflareVitePluginOptions["worker"]>,
 });
 
 /**
@@ -364,7 +364,7 @@ export function distilledCloudflare(options: DistilledCloudflareOptions = {}): A
         // supported contract of the dev plugin.
         if (isTypeGenPhase) {
           for (const plugin of cloudflarePlugins) {
-            plugin.configureServer = undefined;
+            delete plugin.configureServer;
           }
         }
 
@@ -496,7 +496,7 @@ export function distilledCloudflare(options: DistilledCloudflareOptions = {}): A
                 config(conf) {
                   if (conf.ssr) {
                     // Cloudflare does not support externalizing modules in server environments
-                    conf.ssr.external = undefined;
+                    delete conf.ssr.external;
                   }
                 },
               } satisfies vite.Plugin,

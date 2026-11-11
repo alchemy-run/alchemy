@@ -191,7 +191,7 @@ export class Context extends RpcTarget {
     rollbackFn: RollbackFn | undefined;
     stepContext: WorkflowStepContext;
     output?: unknown;
-    rollbackConfig?: WorkflowStepConfig;
+    rollbackConfig?: WorkflowStepConfig | undefined;
   }): void {
     const { cacheKey, rollbackFn, stepContext, output, rollbackConfig } = options;
     if (rollbackFn && this.#rollbackStep === undefined) {

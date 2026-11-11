@@ -39,57 +39,57 @@ export interface VolumeProps {
    * can be increased in place via `modifyVolume`; decreasing it replaces the
    * volume.
    */
-  size?: number;
+  size?: number | undefined;
 
   /**
    * The volume type.
    * @default "gp3"
    */
-  volumeType?: ec2.VolumeType;
+  volumeType?: ec2.VolumeType | undefined;
 
   /**
    * The number of I/O operations per second (IOPS). Only valid for `io1`,
    * `io2`, and `gp3` volumes. Mutable in place via `modifyVolume`.
    */
-  iops?: number;
+  iops?: number | undefined;
 
   /**
    * The throughput to provision, in MiB/s. Only valid for `gp3` volumes.
    * Mutable in place via `modifyVolume`.
    */
-  throughput?: number;
+  throughput?: number | undefined;
 
   /**
    * Whether the volume is encrypted. Changing this replaces the volume.
    * @default false
    */
-  encrypted?: boolean;
+  encrypted?: boolean | undefined;
 
   /**
    * The identifier of the KMS key to use for encryption. Can be a key ID, key
    * ARN, alias name (`alias/my-key`), or alias ARN. Implies `encrypted: true`.
    * Changing this replaces the volume.
    */
-  kmsKeyId?: string;
+  kmsKeyId?: string | undefined;
 
   /**
    * The snapshot from which to create the volume. Changing this replaces the
    * volume.
    */
-  snapshotId?: string;
+  snapshotId?: string | undefined;
 
   /**
    * Whether the volume can be attached to multiple instances (Multi-Attach).
    * Only valid for `io1`/`io2` volumes.
    * @default false
    */
-  multiAttachEnabled?: boolean;
+  multiAttachEnabled?: boolean | undefined;
 
   /**
    * Tags to assign to the volume. Merged with alchemy auto-tags
    * (alchemy::stack, alchemy::stage, alchemy::id).
    */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
 }
 
 export interface Volume extends Resource<
@@ -124,12 +124,12 @@ export interface Volume extends Resource<
     /**
      * The number of IOPS provisioned for the volume.
      */
-    iops?: number;
+    iops?: number | undefined;
 
     /**
      * The throughput provisioned for the volume, in MiB/s.
      */
-    throughput?: number;
+    throughput?: number | undefined;
 
     /**
      * Whether the volume is encrypted.
@@ -139,12 +139,12 @@ export interface Volume extends Resource<
     /**
      * The KMS key used for encryption, if any.
      */
-    kmsKeyId?: string;
+    kmsKeyId?: string | undefined;
 
     /**
      * The snapshot the volume was created from, if any.
      */
-    snapshotId?: string;
+    snapshotId?: string | undefined;
 
     /**
      * Whether Multi-Attach is enabled.

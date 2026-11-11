@@ -38,14 +38,14 @@ export type GlobalForwardingRuleProps = {
    * generated from the stack, stage, and logical id. Immutable —
    * changing it replaces the rule.
    */
-  forwardingRuleName?: string;
+  forwardingRuleName?: string | undefined;
   /**
    * Optional description. Immutable — changing it replaces the rule.
    * Alchemy stamps ownership into the stored description so `list` /
    * nuke can find a rule even if `setLabels` never ran (labels cannot
    * be set on insert).
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * URL of the target that receives matched traffic (a global target
    * HTTP/HTTPS/SSL/TCP/gRPC proxy self-link, a PSC service attachment,
@@ -57,66 +57,66 @@ export type GlobalForwardingRuleProps = {
    * (self-link, `global/addresses/name`, or the IP itself). If omitted,
    * GCP assigns an ephemeral address. Immutable.
    */
-  ipAddress?: string;
+  ipAddress?: string | undefined;
   /**
    * IP protocol (`TCP`, `UDP`, `ESP`, `AH`, `SCTP`, `ICMP`,
    * `L3_DEFAULT`). Immutable.
    * @default "TCP"
    */
-  ipProtocol?: compute.ForwardingRuleIPProtocolEnum | (string & {});
+  ipProtocol?: compute.ForwardingRuleIPProtocolEnum | (string & {}) | undefined;
   /**
    * `IPV4` or `IPV6`. Immutable.
    */
-  ipVersion?: compute.ForwardingRuleIpVersionEnum | (string & {});
+  ipVersion?: compute.ForwardingRuleIpVersionEnum | (string & {}) | undefined;
   /**
    * Port or range (`80` or `80-80`). Required for HTTP(S) / proxy NLB
    * frontends. Immutable.
    */
-  portRange?: string;
+  portRange?: string | undefined;
   /**
    * Forwarding-rule type. `EXTERNAL` is classic HTTP(S) LB;
    * `EXTERNAL_MANAGED` is the global external Application Load
    * Balancer. Immutable — changing it replaces the rule.
    * @default "EXTERNAL"
    */
-  loadBalancingScheme?: compute.ForwardingRuleLoadBalancingSchemeEnum | (string & {});
+  loadBalancingScheme?: compute.ForwardingRuleLoadBalancingSchemeEnum | (string & {}) | undefined;
   /**
    * VPC network URL. Unused for external HTTP(S) LB; required for
    * PSC-to-Google-APIs. Immutable.
    */
-  network?: string;
+  network?: string | undefined;
   /**
    * Networking tier. Global forwarding rules only support `PREMIUM`.
    * Mutable via `patch`.
    * @default "PREMIUM"
    */
-  networkTier?: compute.ForwardingRuleNetworkTierEnum | (string & {});
+  networkTier?: compute.ForwardingRuleNetworkTierEnum | (string & {}) | undefined;
   /**
    * User labels. Alchemy ownership labels are merged in and synced via
    * `setLabels` (labels cannot be set on insert).
    */
-  labels?: Record<string, string>;
+  labels?: Record<string, string> | undefined;
   /**
    * xDS metadata filters (`INTERNAL_SELF_MANAGED` only). Immutable.
    */
-  metadataFilters?: compute.MetadataFilter[];
+  metadataFilters?: compute.MetadataFilter[] | undefined;
   /**
    * Restrict forwarding to these source IPs / CIDRs (regional EXTERNAL
    * only). Immutable.
    */
-  sourceIpRanges?: string[];
+  sourceIpRanges?: string[] | undefined;
   /**
    * Skip auto-creating a DNS zone on a PSC consumer rule. Immutable.
    */
-  noAutomateDnsZone?: boolean;
+  noAutomateDnsZone?: boolean | undefined;
   /**
    * Service Directory registration (PSC for Google APIs). Immutable.
    */
-  serviceDirectoryRegistrations?: compute.ForwardingRuleServiceDirectoryRegistration[];
+  serviceDirectoryRegistrations?: compute.ForwardingRuleServiceDirectoryRegistration[] | undefined;
   /**
    * Public delegated prefix URL for BYOIP IPv6. Immutable.
    */
-  ipCollection?: string;
+  ipCollection?: string | undefined;
   /**
    * Canary state when migrating backend buckets from `EXTERNAL` to
    * `EXTERNAL_MANAGED` (`PREPARE`, `TEST_BY_PERCENTAGE`,
@@ -124,12 +124,13 @@ export type GlobalForwardingRuleProps = {
    */
   externalManagedBackendBucketMigrationState?:
     | compute.ForwardingRuleExternalManagedBackendBucketMigrationStateEnum
-    | (string & {});
+    | (string & {})
+    | undefined;
   /**
    * Percent of backend-bucket traffic on the new scheme when the
    * migration state is `TEST_BY_PERCENTAGE` (`0`–`100`).
    */
-  externalManagedBackendBucketMigrationTestingPercentage?: number;
+  externalManagedBackendBucketMigrationTestingPercentage?: number | undefined;
 };
 
 export type GlobalForwardingRule = Resource<
@@ -309,7 +310,7 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
 
 const resourceTail = (value: string | undefined): string => lastSegment(value).toLowerCase();
 
-const proxyName = (proxy: { name?: string; description?: string }) =>
+const proxyName = (proxy: { name?: string | undefined; description?: string | undefined }) =>
   hasOwnershipMarker(proxy.description) ? lastSegment(proxy.name).toLowerCase() : "";
 
 const ownedProxyNames = (project: string) =>

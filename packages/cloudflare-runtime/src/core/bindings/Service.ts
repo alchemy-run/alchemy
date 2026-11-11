@@ -18,11 +18,11 @@ export interface LocalServiceProps {
   /**
    * Named entrypoint on the target worker. Defaults to the default entrypoint.
    */
-  readonly entrypoint?: string;
+  readonly entrypoint?: string | undefined;
   /**
    * Optional `ctx.props` forwarded to the remote entrypoint.
    */
-  readonly props?: Record<string, unknown>;
+  readonly props?: Record<string, unknown> | undefined;
 }
 
 /**
@@ -57,11 +57,11 @@ export interface SelfServiceProps {
   /**
    * Named entrypoint on the worker. Defaults to the default entrypoint.
    */
-  readonly entrypoint?: string;
+  readonly entrypoint?: string | undefined;
   /**
    * Optional `ctx.props` delivered to the entrypoint.
    */
-  readonly props?: Record<string, unknown>;
+  readonly props?: Record<string, unknown> | undefined;
 }
 
 /**

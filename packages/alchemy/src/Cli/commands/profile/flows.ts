@@ -96,10 +96,12 @@ export const editProfileFlow = Effect.fn(function* (options: {
   remove: ReadonlyArray<string>;
   envFile: Option.Option<string>;
   main: string;
-  configureInput?: {
-    method?: string;
-    values: Record<string, string>;
-  };
+  configureInput?:
+    | {
+        method?: string | undefined;
+        values: Record<string, string>;
+      }
+    | undefined;
 }) {
   let plan: Array<{ provider: string; action: EditAction }> = [
     ...options.add.map((provider) => ({ provider, action: "add" as const })),

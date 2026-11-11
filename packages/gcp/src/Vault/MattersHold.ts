@@ -29,14 +29,14 @@ import {
 
 export type HeldAccount = {
   /** Primary email. Takes precedence over `accountId` on write. */
-  email?: string;
+  email?: string | undefined;
   /** Admin SDK account id. */
-  accountId?: string;
+  accountId?: string | undefined;
 };
 
 export type HeldOrgUnit = {
   /** Admin SDK organizational unit id. */
-  orgUnitId?: string;
+  orgUnitId?: string | undefined;
 };
 
 export type MattersHoldProps = {

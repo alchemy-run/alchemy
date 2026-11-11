@@ -36,9 +36,9 @@ export type EndpointPolicyType = networkservices.EndpointPolicyTypeEnum | (strin
 
 export type EndpointPolicyMetadataLabel = {
   /** Label name presented as a key in xDS node metadata. */
-  labelName?: string;
+  labelName?: string | undefined;
   /** Label value presented as the matching value. */
-  labelValue?: string;
+  labelValue?: string | undefined;
 };
 
 export type EndpointPolicyMetadataLabelMatcher = {
@@ -46,7 +46,7 @@ export type EndpointPolicyMetadataLabelMatcher = {
    * How labels are combined. `MATCH_ANY` matches if any listed label is
    * present; `MATCH_ALL` requires every listed label.
    */
-  metadataLabelMatchCriteria?: string;
+  metadataLabelMatchCriteria?: string | undefined;
   /**
    * Label pairs that must match xDS node metadata. At most 64 entries.
    * Empty with `MATCH_ANY` is a wildcard.

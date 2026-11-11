@@ -34,12 +34,12 @@ export type EncryptionConfig = {
    * (`projects/{project}/locations/{location}/keyRings/{keyRing}/cryptoKeys/{cryptoKey}`).
    * Immutable — changing it replaces the database.
    */
-  kmsKeyName?: string;
+  kmsKeyName?: string | undefined;
   /**
    * KMS keys covering every region of the instance config. Immutable —
    * changing them replaces the database.
    */
-  kmsKeyNames?: string[];
+  kmsKeyNames?: string[] | undefined;
 };
 
 export type DatabaseProps = {

@@ -6,6 +6,8 @@ import * as functions from "@distilled.cloud/modal/functions";
 import type { Input } from "alchemy/Input";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import { environmentOf, type ErrorOf, type OpError, operations } from "./internal.ts";
 import type { OperationServices } from "./internal.ts";
 import type { FunctionRef, FunctionTarget } from "./InvokeFunction.ts";
@@ -61,10 +63,15 @@ const serializeParameters = Effect.fn(function* (
       parameters.push({
         name,
         type: spec.type ?? "PARAM_TYPE_UNSPECIFIED",
-        stringValue: spec.stringDefault,
-        intValue: spec.intDefault,
-        bytesValue: spec.bytesDefault,
-        boolValue: spec.boolDefault,
+        ...Record.filterMap(
+          {
+            stringValue: spec.stringDefault,
+            intValue: spec.intDefault,
+            bytesValue: spec.bytesDefault,
+            boolValue: spec.boolDefault,
+          },
+          Result.fromNullishOr(() => undefined),
+        ),
       });
       continue;
     }

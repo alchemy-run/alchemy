@@ -76,11 +76,11 @@ export interface AdditionalAuthProvider {
   /** The authentication mode of this additional provider. */
   authenticationType: AuthenticationType;
   /** Cognito user pool config (for `AMAZON_COGNITO_USER_POOLS`). */
-  userPoolConfig?: Omit<UserPoolAuthConfig, "defaultAction">;
+  userPoolConfig?: Omit<UserPoolAuthConfig, "defaultAction"> | undefined;
   /** OIDC config (for `OPENID_CONNECT`). */
-  openIDConnectConfig?: OpenIDConnectAuthConfig;
+  openIDConnectConfig?: OpenIDConnectAuthConfig | undefined;
   /** Lambda authorizer config (for `AWS_LAMBDA`). */
-  lambdaAuthorizerConfig?: LambdaAuthorizerConfig;
+  lambdaAuthorizerConfig?: LambdaAuthorizerConfig | undefined;
 }
 
 export interface ApiCacheConfig {
@@ -112,85 +112,85 @@ export interface GraphqlApiProps {
    * Name of the API. If omitted, a deterministic physical name is
    * generated from the app, stage, and logical ID. Names are mutable.
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * The primary authentication mode.
    * @default "API_KEY"
    */
-  authenticationType?: AuthenticationType;
+  authenticationType?: AuthenticationType | undefined;
   /**
    * The GraphQL schema (SDL string). Applied via `startSchemaCreation`
    * and awaited until the schema is active. Resolvers can only be
    * attached to types/fields that exist in this schema.
    */
-  schema?: string;
+  schema?: string | undefined;
   /**
    * Cognito user pool config — required when `authenticationType` is
    * `AMAZON_COGNITO_USER_POOLS`.
    */
-  userPoolConfig?: UserPoolAuthConfig;
+  userPoolConfig?: UserPoolAuthConfig | undefined;
   /**
    * OIDC config — required when `authenticationType` is `OPENID_CONNECT`.
    */
-  openIDConnectConfig?: OpenIDConnectAuthConfig;
+  openIDConnectConfig?: OpenIDConnectAuthConfig | undefined;
   /**
    * Lambda authorizer config — required when `authenticationType` is
    * `AWS_LAMBDA`.
    */
-  lambdaAuthorizerConfig?: LambdaAuthorizerConfig;
+  lambdaAuthorizerConfig?: LambdaAuthorizerConfig | undefined;
   /**
    * Additional authentication modes beyond the primary one.
    */
-  additionalAuthenticationProviders?: AdditionalAuthProvider[];
+  additionalAuthenticationProviders?: AdditionalAuthProvider[] | undefined;
   /**
    * CloudWatch Logs configuration. Requires a role AppSync can assume
    * with log-delivery permissions.
    */
-  logConfig?: appsync.LogConfig;
+  logConfig?: appsync.LogConfig | undefined;
   /**
    * Whether AWS X-Ray tracing is enabled.
    * @default false
    */
-  xrayEnabled?: boolean;
+  xrayEnabled?: boolean | undefined;
   /**
    * `GLOBAL` (public endpoint) or `PRIVATE` (VPC-only). Immutable —
    * changing it triggers a replacement.
    * @default "GLOBAL"
    */
-  visibility?: "GLOBAL" | "PRIVATE";
+  visibility?: "GLOBAL" | "PRIVATE" | undefined;
   /**
    * `GRAPHQL` (standard) or `MERGED` (merged API). Immutable — changing
    * it triggers a replacement.
    * @default "GRAPHQL"
    */
-  apiType?: "GRAPHQL" | "MERGED";
+  apiType?: "GRAPHQL" | "MERGED" | undefined;
   /**
    * Whether introspection queries are allowed.
    * @default "ENABLED"
    */
-  introspectionConfig?: "ENABLED" | "DISABLED";
+  introspectionConfig?: "ENABLED" | "DISABLED" | undefined;
   /** Maximum depth a query is allowed to reach (0 disables the limit). */
-  queryDepthLimit?: number;
+  queryDepthLimit?: number | undefined;
   /** Maximum number of resolvers a query may invoke (0 disables the limit). */
-  resolverCountLimit?: number;
+  resolverCountLimit?: number | undefined;
   /**
    * Server-side API cache. **Cache instances bill hourly** while
    * provisioned; omit to run without a cache. Provisioning is
    * asynchronous (~10–20 minutes to reach `AVAILABLE`); reconcile does
    * not wait for it.
    */
-  cache?: ApiCacheConfig;
+  cache?: ApiCacheConfig | undefined;
   /**
    * Environment variables exposed to `APPSYNC_JS` resolver and function
    * code via `ctx.env`. The whole map is replaced on each change; pass
    * `{}` to clear all variables. When omitted, environment variables are
    * left unmanaged.
    */
-  environmentVariables?: Record<string, string>;
+  environmentVariables?: Record<string, string> | undefined;
   /**
    * Tags to apply to the API. Merged with internal Alchemy tags.
    */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
 }
 
 export interface GraphqlApi extends Resource<
@@ -391,17 +391,17 @@ const toWireAdditionalProviders = (
  * and desired states compare structurally (dropping undefined members).
  */
 const authSurface = (api: {
-  name?: string;
-  authenticationType?: string;
-  userPoolConfig?: appsync.UserPoolConfig;
-  openIDConnectConfig?: appsync.OpenIDConnectConfig;
-  lambdaAuthorizerConfig?: appsync.LambdaAuthorizerConfig;
-  additionalAuthenticationProviders?: appsync.AdditionalAuthenticationProvider[];
-  xrayEnabled?: boolean;
-  introspectionConfig?: string;
-  queryDepthLimit?: number;
-  resolverCountLimit?: number;
-  logConfig?: appsync.LogConfig;
+  name?: string | undefined;
+  authenticationType?: string | undefined;
+  userPoolConfig?: appsync.UserPoolConfig | undefined;
+  openIDConnectConfig?: appsync.OpenIDConnectConfig | undefined;
+  lambdaAuthorizerConfig?: appsync.LambdaAuthorizerConfig | undefined;
+  additionalAuthenticationProviders?: appsync.AdditionalAuthenticationProvider[] | undefined;
+  xrayEnabled?: boolean | undefined;
+  introspectionConfig?: string | undefined;
+  queryDepthLimit?: number | undefined;
+  resolverCountLimit?: number | undefined;
+  logConfig?: appsync.LogConfig | undefined;
 }) =>
   JSON.parse(
     JSON.stringify({

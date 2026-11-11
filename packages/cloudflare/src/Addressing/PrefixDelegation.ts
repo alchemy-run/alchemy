@@ -212,11 +212,11 @@ export const PrefixDelegationProvider = () =>
   });
 
 interface ObservedDelegation {
-  readonly id?: string | null;
-  readonly cidr?: string | null;
-  readonly createdAt?: string | null;
-  readonly delegatedAccountId?: string | null;
-  readonly parentPrefixId?: string | null;
+  readonly id?: string | null | undefined;
+  readonly cidr?: string | null | undefined;
+  readonly createdAt?: string | null | undefined;
+  readonly delegatedAccountId?: string | null | undefined;
+  readonly parentPrefixId?: string | null | undefined;
 }
 
 /**

@@ -26,7 +26,7 @@ export type ScanConfigSchedule = {
    * RFC3339 time of the next run. The server refreshes this after each
    * run. Omit to start the first run immediately when a schedule is set.
    */
-  scheduleTime?: string;
+  scheduleTime?: string | undefined;
   /**
    * Days between scheduled executions. Required when `schedule` is set.
    */
@@ -85,23 +85,23 @@ export type ScanConfigAuthentication = {
 
 export type ScanConfigLatestRun = {
   /** Scan run resource name. */
-  name?: string;
+  name?: string | undefined;
   /** Execution state (`QUEUED`, `SCANNING`, `FINISHED`). */
-  executionState?: string;
+  executionState?: string | undefined;
   /** Result state after finish (`SUCCESS`, `ERROR`, `KILLED`). */
-  resultState?: string;
+  resultState?: string | undefined;
   /** RFC3339 start time. */
-  startTime?: string;
+  startTime?: string | undefined;
   /** RFC3339 end time. */
-  endTime?: string;
+  endTime?: string | undefined;
   /** Completion percent 0–100. */
-  progressPercent?: number;
+  progressPercent?: number | undefined;
   /** URLs crawled so far. */
-  urlsCrawledCount?: string;
+  urlsCrawledCount?: string | undefined;
   /** URLs tested so far. */
-  urlsTestedCount?: string;
+  urlsTestedCount?: string | undefined;
   /** Whether any vulnerabilities were found. */
-  hasVulnerabilities?: boolean;
+  hasVulnerabilities?: boolean | undefined;
 };
 
 export type ScanConfigProps = {
@@ -428,7 +428,7 @@ const toBody = (news: ScanConfigProps, displayName: string): websecurityscanner.
 const lookupNameOf = (
   project: string,
   news: { scanConfigId?: string },
-  output: { name?: string; scanConfigId?: string } | undefined,
+  output: { name?: string | undefined; scanConfigId?: string } | undefined,
 ) =>
   output?.name ??
   (news.scanConfigId !== undefined

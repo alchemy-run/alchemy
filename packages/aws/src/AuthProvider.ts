@@ -212,7 +212,7 @@ export const getAccountId = ({
 }: {
   accessKeyId: Redacted.Redacted<string>;
   secretAccessKey: Redacted.Redacted<string>;
-  sessionToken?: Redacted.Redacted<string>;
+  sessionToken?: Redacted.Redacted<string> | undefined;
   region: string;
 }) =>
   STS.getCallerIdentity({}).pipe(

@@ -15,7 +15,7 @@ export interface SandboxPortTokenProps {
    * How long the token lasts, e.g. `"24h"` or `"30m"`. Omit for a token
    * that lasts until revoked. Changing it replaces the token.
    */
-  ttl?: string;
+  ttl?: string | undefined;
 }
 
 export interface SandboxPortTokenAttributes {

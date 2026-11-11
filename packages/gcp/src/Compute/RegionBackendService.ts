@@ -29,19 +29,19 @@ export type RegionBackendServiceBackend = {
   /** Fully-qualified instance group or NEG URL. */
   group: string;
   /** Optional backend description. */
-  description?: string;
+  description?: string | undefined;
   /** Balancing mode (`UTILIZATION`, `RATE`, `CONNECTION`, …). */
-  balancingMode?: string;
+  balancingMode?: string | undefined;
   /** Capacity scaler in `[0.0, 1.0]`. */
-  capacityScaler?: number;
+  capacityScaler?: number | undefined;
   /** Max requests per second (RATE mode). */
-  maxRate?: number;
+  maxRate?: number | undefined;
   /** Max RPS per instance. */
-  maxRatePerInstance?: number;
+  maxRatePerInstance?: number | undefined;
   /** Target utilization in `[0.0, 1.0]`. */
-  maxUtilization?: number;
+  maxUtilization?: number | undefined;
   /** Whether this backend is a failover group. */
-  failover?: boolean;
+  failover?: boolean | undefined;
 };
 
 export type RegionBackendServiceLogConfigProps = {
@@ -49,12 +49,12 @@ export type RegionBackendServiceLogConfigProps = {
    * Export load-balancer logs to Cloud Logging.
    * @default false
    */
-  enable?: boolean;
+  enable?: boolean | undefined;
   /**
    * Sampling rate in `[0, 1]` when logging is enabled.
    * @default 1.0
    */
-  sampleRate?: number;
+  sampleRate?: number | undefined;
 };
 
 export type RegionBackendServiceProps = {
@@ -77,7 +77,7 @@ export type RegionBackendServiceProps = {
    * description (`[alchemy alchemy-stack=… alchemy-stage=… alchemy-id=…]`);
    * regional backend services have no labels API.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * Protocol used to talk to backends (`HTTP`, `HTTPS`, `HTTP2`, `TCP`,
    * `SSL`, `UDP`, `GRPC`, `H2C`).

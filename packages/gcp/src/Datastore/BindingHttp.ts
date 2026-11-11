@@ -11,11 +11,11 @@ import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
 export type DatastoreDatabaseRequest<
   I extends {
     projectId: string;
-    requestParams?: string;
-    body?: { databaseId?: string };
+    requestParams?: string | undefined;
+    body?: { databaseId?: string | undefined } | undefined;
   },
 > = Omit<I, "projectId" | "requestParams" | "body"> & {
-  body?: Omit<NonNullable<I["body"]>, "databaseId">;
+  body?: Omit<NonNullable<I["body"]>, "databaseId"> | undefined;
 };
 
 /** The Datastore API names the default database `""`, not `(default)`. */
@@ -31,8 +31,8 @@ const apiDatabaseId = (databaseId: string) => (databaseId === "(default)" ? "" :
 export const makeDatastoreHttpBinding = <
   I extends {
     projectId: string;
-    requestParams?: string;
-    body?: { databaseId?: string };
+    requestParams?: string | undefined;
+    body?: { databaseId?: string | undefined } | undefined;
   },
   A,
   E,

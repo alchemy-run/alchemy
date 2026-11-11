@@ -37,7 +37,7 @@ class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
 class JobRunNotTerminal extends Data.TaggedError("JobRunNotTerminal")<{
   readonly jobRunId: string;
   readonly state: string;
-  readonly stateDetails?: string;
+  readonly stateDetails?: string | undefined;
 }> {
   override get message() {
     return `EMR Serverless job ${this.jobRunId} is still ${this.state}: ${this.stateDetails ?? "no state details"}`;

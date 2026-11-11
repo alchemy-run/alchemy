@@ -30,7 +30,9 @@ export interface PluginConfig {
    * Resources and tasks acquired here are released before the next process
    * starts. Replay any state held only inside workerd from this hook.
    */
-  readonly start?: (ports: Workerd.WorkerdPorts) => Effect.Effect<void, RuntimeError, Scope.Scope>;
+  readonly start?:
+    | ((ports: Workerd.WorkerdPorts) => Effect.Effect<void, RuntimeError, Scope.Scope>)
+    | undefined;
 }
 
 export interface Middleware {

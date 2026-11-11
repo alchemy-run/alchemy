@@ -23,28 +23,28 @@ export interface DatabaseProps {
    * Changing the name replaces the database.
    * @default a generated lowercase physical name
    */
-  databaseName?: string;
+  databaseName?: string | undefined;
   /**
    * A description of the database.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * The location of the database (for example, an S3 path) used as the
    * default for tables that do not specify their own location.
    */
-  locationUri?: string;
+  locationUri?: string | undefined;
   /**
    * Free-form key/value properties stored on the database. Alchemy adds its
    * own `alchemy::*` ownership markers to this map (Glue databases are not
    * ARN-taggable) — user keys are preserved alongside them.
    */
-  parameters?: Record<string, string>;
+  parameters?: Record<string, string> | undefined;
   /**
    * The AWS account ID of the Data Catalog the database lives in. Changing it
    * replaces the database.
    * @default the caller's account (the default Data Catalog)
    */
-  catalogId?: string;
+  catalogId?: string | undefined;
 }
 
 export interface Database extends Resource<
@@ -62,11 +62,13 @@ export interface Database extends Resource<
      * markers), as observed. Lets `alchemy drift` detect out-of-band
      * changes.
      */
-    configuration?: {
-      description?: string;
-      locationUri?: string;
-      parameters: Record<string, string>;
-    };
+    configuration?:
+      | {
+          description?: string | undefined;
+          locationUri?: string | undefined;
+          parameters: Record<string, string>;
+        }
+      | undefined;
   },
   {},
   Providers,

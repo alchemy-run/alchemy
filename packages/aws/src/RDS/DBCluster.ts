@@ -32,7 +32,7 @@ export interface DBClusterProps {
   /**
    * Optional engine version.
    */
-  engineVersion?: string;
+  engineVersion?: string | undefined;
   /**
    * Optional database name created with the cluster.
    */
@@ -44,7 +44,7 @@ export interface DBClusterProps {
   /**
    * Cluster parameter group name.
    */
-  dbClusterParameterGroupName?: string;
+  dbClusterParameterGroupName?: string | undefined;
   /**
    * Security groups attached to the cluster.
    */
@@ -52,11 +52,11 @@ export interface DBClusterProps {
   /**
    * Optional listener port.
    */
-  port?: number;
+  port?: number | undefined;
   /**
    * Enable IAM database authentication.
    */
-  enableIAMDatabaseAuthentication?: boolean;
+  enableIAMDatabaseAuthentication?: boolean | undefined;
   /**
    * Enable Aurora Data API / HTTP endpoint support.
    */
@@ -82,20 +82,20 @@ export interface DBClusterProps {
    * Backup retention period (e.g. `"7 days"` or `Duration.days(7)`).
    * Sent to the API in whole days. In-place modify.
    */
-  backupRetentionPeriod?: Duration.Input;
+  backupRetentionPeriod?: Duration.Input | undefined;
   /**
    * Daily backup window, e.g. `07:00-09:00`. In-place modify.
    */
-  preferredBackupWindow?: string;
+  preferredBackupWindow?: string | undefined;
   /**
    * Weekly maintenance window, e.g. `Mon:00:00-Mon:03:00`. In-place modify.
    */
-  preferredMaintenanceWindow?: string;
+  preferredMaintenanceWindow?: string | undefined;
   /**
    * Backtrack window (Aurora MySQL only), e.g. `"1 hour"`. Sent to the API
    * in whole seconds. In-place modify.
    */
-  backtrackWindow?: Duration.Input;
+  backtrackWindow?: Duration.Input | undefined;
   /**
    * Option group name. In-place modify.
    */
@@ -104,7 +104,7 @@ export interface DBClusterProps {
    * Log types to export to CloudWatch Logs. Diffed against observed state and
    * applied via the delta-shaped `CloudwatchLogsExportConfiguration` on modify.
    */
-  enableCloudwatchLogsExports?: string[];
+  enableCloudwatchLogsExports?: string[] | undefined;
   /**
    * Auto minor version upgrade. In-place modify.
    */
@@ -117,15 +117,15 @@ export interface DBClusterProps {
    * Enhanced-monitoring granularity (e.g. `"60 seconds"`). Sent to the API
    * in whole seconds (valid: 0, 1, 5, 10, 15, 30, 60). In-place modify.
    */
-  monitoringInterval?: Duration.Input;
+  monitoringInterval?: Duration.Input | undefined;
   /**
    * IAM role ARN for enhanced monitoring. In-place modify.
    */
-  monitoringRoleArn?: string;
+  monitoringRoleArn?: string | undefined;
   /**
    * Enable Performance Insights. In-place modify.
    */
-  enablePerformanceInsights?: boolean;
+  enablePerformanceInsights?: boolean | undefined;
   /**
    * KMS key for Performance Insights. In-place modify.
    */
@@ -142,7 +142,7 @@ export interface DBClusterProps {
   /**
    * CA certificate identifier. In-place modify.
    */
-  caCertificateIdentifier?: string;
+  caCertificateIdentifier?: string | undefined;
   /**
    * KMS key used to encrypt the managed master user secret. In-place modify.
    */
@@ -198,11 +198,11 @@ export interface DBClusterProps {
   /**
    * Whether the storage is encrypted. Immutable — forces replacement.
    */
-  storageEncrypted?: boolean;
+  storageEncrypted?: boolean | undefined;
   /**
    * Optional KMS key used for storage encryption. Immutable — forces replace.
    */
-  kmsKeyId?: string;
+  kmsKeyId?: string | undefined;
   /**
    * Let RDS manage the master user password in Secrets Manager.
    */
@@ -461,7 +461,7 @@ export interface DBClusterLookup {
 export const DBCluster = Resource<DBCluster>("AWS.RDS.DBCluster");
 
 const toTagRecord = (
-  tags: Array<{ Key?: string; Value?: string }> | undefined,
+  tags: Array<{ Key?: string | undefined; Value?: string | undefined }> | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
     (tags ?? [])

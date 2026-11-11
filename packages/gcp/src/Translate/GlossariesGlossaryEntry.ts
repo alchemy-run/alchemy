@@ -24,22 +24,22 @@ export type GlossaryTermProps = {
   /**
    * Glossary term text.
    */
-  text?: string;
+  text?: string | undefined;
   /**
    * BCP-47 language code for this term, for example `"en"`.
    */
-  languageCode?: string;
+  languageCode?: string | undefined;
 };
 
 export type GlossaryTermsPairProps = {
   /**
    * Source term matched in input text (unidirectional glossaries).
    */
-  sourceTerm?: GlossaryTermProps;
+  sourceTerm?: GlossaryTermProps | undefined;
   /**
    * Replacement term written into the translation.
    */
-  targetTerm?: GlossaryTermProps;
+  targetTerm?: GlossaryTermProps | undefined;
 };
 
 export type GlossaryTermsSetProps = {

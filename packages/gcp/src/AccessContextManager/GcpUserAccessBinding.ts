@@ -32,7 +32,7 @@ export type GcpUserAccessBindingProps = {
    * or the project's Resource Manager parent. Immutable — changing it
    * replaces the binding.
    */
-  organization?: string;
+  organization?: string | undefined;
   /**
    * Google Group id whose users are subject to this binding. Directory
    * API group `id`, not the group email. Immutable — changing it

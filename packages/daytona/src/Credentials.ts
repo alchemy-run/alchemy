@@ -6,6 +6,8 @@ import {
 } from "@distilled.cloud/daytona/Credentials";
 import { lazyCredentials } from "alchemy/Auth/Resolve";
 import * as Layer from "effect/Layer";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import { DAYTONA_AUTH_PROVIDER_NAME, type DaytonaResolvedCredentials } from "./AuthProvider.ts";
 
 export {
@@ -30,7 +32,10 @@ export const fromAuthProvider = () =>
         apiBaseUrl: creds.apiBaseUrl,
         analyticsBaseUrl: DEFAULT_ANALYTICS_BASE_URL,
         toolboxBaseUrl: DEFAULT_TOOLBOX_BASE_URL,
-        organizationId: creds.organizationId,
+        ...Record.filterMap(
+          { organizationId: creds.organizationId },
+          Result.fromNullishOr(() => undefined),
+        ),
       }),
       { expiresAt: (creds) => creds.expires },
     ),

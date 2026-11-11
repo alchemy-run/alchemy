@@ -86,7 +86,7 @@ export interface FlowLogProps {
   /**
    * Tags to assign to the flow log.
    */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
 }
 
 export interface FlowLog extends Resource<

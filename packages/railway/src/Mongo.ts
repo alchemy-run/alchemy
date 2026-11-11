@@ -172,7 +172,7 @@ export interface MongoProps {
    * Defaults to the project's primary environment. Changing it replaces
    * Mongo.
    */
-  environment?: Ref<MongoEnvironment>;
+  environment?: Ref<MongoEnvironment> | undefined;
   /**
    * Service name. Unique per Project. If omitted, a unique name is
    * generated from the stack, stage and logical ID. Used as the private
@@ -847,7 +847,7 @@ const readMongoAttributes = Effect.fn(function* ({
 }: {
   id: string;
   olds?: MongoProps;
-  output?: Partial<Mongo["Attributes"]>;
+  output?: Partial<Mongo["Attributes"]> | undefined;
 }) {
   const projectId =
     output?.projectId ?? (olds !== undefined ? projectIdOf(olds.project) : undefined);

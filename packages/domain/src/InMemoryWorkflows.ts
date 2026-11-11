@@ -21,7 +21,7 @@ export interface Host {
    * Wait for the execution's turn before it runs its next Activity, so the
    * host decides what runs between two steps. Absent: run straight on.
    */
-  readonly turn?: (key: string, activity: string) => Effect.Effect<void>;
+  readonly turn?: ((key: string, activity: string) => Effect.Effect<void>) | undefined;
   /** Take a lock, counting the run as waiting while another run holds it. */
   readonly acquire: (lock: Semaphore.Semaphore) => Effect.Effect<void>;
   /** Fire `fire` at `at` on the platform's clock; scheduling the same key again replaces it. */

@@ -40,29 +40,29 @@ import {
 
 export type IntentTrainingPhrasePart = {
   /** Parameter id this part annotates. */
-  parameterId?: string;
+  parameterId?: string | undefined;
   /** Text of this part. */
-  text?: string;
+  text?: string | undefined;
 };
 
 export type IntentTrainingPhrase = {
   /** Ordered parts that concatenate to the phrase. */
-  parts?: IntentTrainingPhrasePart[];
+  parts?: IntentTrainingPhrasePart[] | undefined;
   /** Training phrase id. Output only when omitted. */
-  id?: string;
+  id?: string | undefined;
   /** How many times this phrase is repeated during training. */
-  repeatCount?: number;
+  repeatCount?: number | undefined;
 };
 
 export type IntentParameter = {
   /** Unique parameter id. */
-  id?: string;
+  id?: string | undefined;
   /** Entity type (`projects/-/locations/-/agents/-/entityTypes/sys.date`). */
-  entityType?: string;
+  entityType?: string | undefined;
   /** Redact the parameter in logs. */
-  redact?: boolean;
+  redact?: boolean | undefined;
   /** Whether the parameter is a list. */
-  isList?: boolean;
+  isList?: boolean | undefined;
 };
 
 export type AgentsIntentProps = {

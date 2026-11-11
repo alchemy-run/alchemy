@@ -169,7 +169,7 @@ export interface MySQLProps {
    * Defaults to the project's primary environment. Changing it replaces
    * MySQL.
    */
-  environment?: Ref<MySQLEnvironment>;
+  environment?: Ref<MySQLEnvironment> | undefined;
   /**
    * Service name. Unique per Project. If omitted, a unique name is
    * generated from the stack, stage and logical ID. Used as the private
@@ -838,7 +838,7 @@ const readMySQLAttributes = Effect.fn(function* ({
 }: {
   id: string;
   olds?: MySQLProps;
-  output?: Partial<MySQL["Attributes"]>;
+  output?: Partial<MySQL["Attributes"]> | undefined;
 }) {
   const projectId =
     output?.projectId ?? (olds !== undefined ? projectIdOf(olds.project) : undefined);

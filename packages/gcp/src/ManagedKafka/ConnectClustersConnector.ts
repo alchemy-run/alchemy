@@ -28,14 +28,14 @@ import {
 
 export type TaskRetryPolicy = {
   /** Minimum backoff before retrying a failed task (e.g. `"60s"`). */
-  minimumBackoff?: string;
+  minimumBackoff?: string | undefined;
   /** Maximum backoff before retrying a failed task (e.g. `"43200s"`). */
-  maximumBackoff?: string;
+  maximumBackoff?: string | undefined;
   /**
    * Disable task retry.
    * @default false
    */
-  taskRetryDisabled?: boolean;
+  taskRetryDisabled?: boolean | undefined;
 };
 
 export type ConnectClustersConnectorProps = {

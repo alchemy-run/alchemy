@@ -87,7 +87,10 @@ export class LifecycleWorkflow extends Cloudflare.Workflow<LifecycleWorkflow>()(
   "LifecycleWorkflow",
   Effect.gen(function* () {
     const journals = yield* Journal;
-    return Effect.fn(function* (input: { scenario: Scenario | "ready"; stage?: string }) {
+    return Effect.fn(function* (input: {
+      scenario: Scenario | "ready";
+      stage?: string | undefined;
+    }) {
       if (input.scenario === "ready") return ["workflow-ready"];
       const event = yield* Cloudflare.Workflows.WorkflowEvent;
       const journal = journals.getByName(event.instanceId);

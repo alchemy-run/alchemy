@@ -76,135 +76,135 @@ export interface PaymentMethodConfigurationProps {
    * the lookup key when the Stripe id is missing — this object has no
    * metadata.
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * Whether the configuration can be used for new payments. New
    * configurations are created active. Destroy sets this to `false`.
    * @default true
    */
-  active?: boolean;
+  active?: boolean | undefined;
   /**
    * Parent configuration id. Specify to create a child configuration for
    * a connected account. Create-only — changing it replaces the
    * configuration.
    */
-  parent?: string;
+  parent?: string | undefined;
   /** Display preference for ACSS Debit. */
-  acssDebit?: PaymentMethodPreferenceInput;
+  acssDebit?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for Affirm. */
-  affirm?: PaymentMethodPreferenceInput;
+  affirm?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for Afterpay / Clearpay. */
-  afterpayClearpay?: PaymentMethodPreferenceInput;
+  afterpayClearpay?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for Alipay. */
-  alipay?: PaymentMethodPreferenceInput;
+  alipay?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for Alma. */
-  alma?: PaymentMethodPreferenceInput;
+  alma?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for Amazon Pay. */
-  amazonPay?: PaymentMethodPreferenceInput;
+  amazonPay?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for Apple Pay. */
-  applePay?: PaymentMethodPreferenceInput;
+  applePay?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for AU BECS Debit. */
-  auBecsDebit?: PaymentMethodPreferenceInput;
+  auBecsDebit?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for Bacs Direct Debit. */
-  bacsDebit?: PaymentMethodPreferenceInput;
+  bacsDebit?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for Bancontact. */
-  bancontact?: PaymentMethodPreferenceInput;
+  bancontact?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for Billie. */
-  billie?: PaymentMethodPreferenceInput;
+  billie?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for Bizum. */
-  bizum?: PaymentMethodPreferenceInput;
+  bizum?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for BLIK. */
-  blik?: PaymentMethodPreferenceInput;
+  blik?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for Boleto. */
-  boleto?: PaymentMethodPreferenceInput;
+  boleto?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for cards. */
-  card?: PaymentMethodPreferenceInput;
+  card?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for Cartes Bancaires. */
-  cartesBancaires?: PaymentMethodPreferenceInput;
+  cartesBancaires?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for Cash App Pay. */
-  cashapp?: PaymentMethodPreferenceInput;
+  cashapp?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for crypto / stablecoin payments. */
-  crypto?: PaymentMethodPreferenceInput;
+  crypto?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for customer balance (bank transfer). */
-  customerBalance?: PaymentMethodPreferenceInput;
+  customerBalance?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for EPS. */
-  eps?: PaymentMethodPreferenceInput;
+  eps?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for FPX. */
-  fpx?: PaymentMethodPreferenceInput;
+  fpx?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for giropay. */
-  giropay?: PaymentMethodPreferenceInput;
+  giropay?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for Google Pay. */
-  googlePay?: PaymentMethodPreferenceInput;
+  googlePay?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for GrabPay. */
-  grabpay?: PaymentMethodPreferenceInput;
+  grabpay?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for iDEAL. */
-  ideal?: PaymentMethodPreferenceInput;
+  ideal?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for JCB. */
-  jcb?: PaymentMethodPreferenceInput;
+  jcb?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for Kakao Pay. */
-  kakaoPay?: PaymentMethodPreferenceInput;
+  kakaoPay?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for Klarna. */
-  klarna?: PaymentMethodPreferenceInput;
+  klarna?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for Konbini. */
-  konbini?: PaymentMethodPreferenceInput;
+  konbini?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for Korean cards. */
-  krCard?: PaymentMethodPreferenceInput;
+  krCard?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for Link. */
-  link?: PaymentMethodPreferenceInput;
+  link?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for MB WAY. */
-  mbWay?: PaymentMethodPreferenceInput;
+  mbWay?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for MobilePay. */
-  mobilepay?: PaymentMethodPreferenceInput;
+  mobilepay?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for Multibanco. */
-  multibanco?: PaymentMethodPreferenceInput;
+  multibanco?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for Naver Pay. */
-  naverPay?: PaymentMethodPreferenceInput;
+  naverPay?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for NZ BECS Debit. */
-  nzBankAccount?: PaymentMethodPreferenceInput;
+  nzBankAccount?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for OXXO. */
-  oxxo?: PaymentMethodPreferenceInput;
+  oxxo?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for Przelewy24. */
-  p24?: PaymentMethodPreferenceInput;
+  p24?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for Pay by Bank. */
-  payByBank?: PaymentMethodPreferenceInput;
+  payByBank?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for PAYCO. */
-  payco?: PaymentMethodPreferenceInput;
+  payco?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for PayNow. */
-  paynow?: PaymentMethodPreferenceInput;
+  paynow?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for PayPal. */
-  paypal?: PaymentMethodPreferenceInput;
+  paypal?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for PayTo. */
-  payto?: PaymentMethodPreferenceInput;
+  payto?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for Pix. */
-  pix?: PaymentMethodPreferenceInput;
+  pix?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for PromptPay. */
-  promptpay?: PaymentMethodPreferenceInput;
+  promptpay?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for Revolut Pay. */
-  revolutPay?: PaymentMethodPreferenceInput;
+  revolutPay?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for Samsung Pay. */
-  samsungPay?: PaymentMethodPreferenceInput;
+  samsungPay?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for Satispay. */
-  satispay?: PaymentMethodPreferenceInput;
+  satispay?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for Scalapay. */
-  scalapay?: PaymentMethodPreferenceInput;
+  scalapay?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for SEPA Debit. */
-  sepaDebit?: PaymentMethodPreferenceInput;
+  sepaDebit?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for Sofort. */
-  sofort?: PaymentMethodPreferenceInput;
+  sofort?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for Sunbit. */
-  sunbit?: PaymentMethodPreferenceInput;
+  sunbit?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for Swish. */
-  swish?: PaymentMethodPreferenceInput;
+  swish?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for Twint. */
-  twint?: PaymentMethodPreferenceInput;
+  twint?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for UPI. */
-  upi?: PaymentMethodPreferenceInput;
+  upi?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for US bank account (ACH). */
-  usBankAccount?: PaymentMethodPreferenceInput;
+  usBankAccount?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for WeChat Pay. */
-  wechatPay?: PaymentMethodPreferenceInput;
+  wechatPay?: PaymentMethodPreferenceInput | undefined;
   /** Display preference for Zip. */
-  zip?: PaymentMethodPreferenceInput;
+  zip?: PaymentMethodPreferenceInput | undefined;
 }
 
 type MethodKey = Exclude<keyof PaymentMethodConfigurationProps, "name" | "active" | "parent">;
@@ -511,7 +511,10 @@ const findByName = Effect.fn(function* (name: string) {
   return matches.find((configuration) => configuration.active) ?? matches[0];
 });
 
-const observe = Effect.fn(function* (input: { id?: string; name?: string }) {
+const observe = Effect.fn(function* (input: {
+  id?: string | undefined;
+  name?: string | undefined;
+}) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);
     if (byId !== undefined) return byId;

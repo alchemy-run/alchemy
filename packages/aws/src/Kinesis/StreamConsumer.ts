@@ -137,7 +137,7 @@ const createConsumerName = (
     });
   });
 
-const toTagRecord = (tags: Array<{ Key: string; Value?: string }> | undefined) =>
+const toTagRecord = (tags: Array<{ Key: string; Value?: string | undefined }> | undefined) =>
   Object.fromEntries(
     (tags ?? [])
       .filter((tag): tag is { Key: string; Value: string } => typeof tag.Value === "string")
@@ -164,9 +164,9 @@ const readConsumer = Effect.fn(function* ({
   consumerName,
   consumerArn,
 }: {
-  streamArn?: string;
+  streamArn?: string | undefined;
   consumerName?: string;
-  consumerArn?: string;
+  consumerArn?: string | undefined;
 }) {
   const response = yield* kinesis
     .describeStreamConsumer({

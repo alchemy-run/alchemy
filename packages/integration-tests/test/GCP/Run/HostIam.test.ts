@@ -67,10 +67,12 @@ class IamJob extends GCP.Run.Job<IamJob>()(
 
 const membersOf = (
   policy: {
-    bindings?: ReadonlyArray<{
-      role?: string;
-      members?: ReadonlyArray<string>;
-    }>;
+    bindings?:
+      | ReadonlyArray<{
+          role?: string | undefined;
+          members?: ReadonlyArray<string> | undefined;
+        }>
+      | undefined;
   },
   member: string,
 ) =>

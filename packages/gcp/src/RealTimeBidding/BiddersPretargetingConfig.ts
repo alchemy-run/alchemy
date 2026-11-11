@@ -51,7 +51,7 @@ export type BiddersPretargetingConfigProps = {
    * the observed id to keep the same config. Immutable — changing it
    * replaces the config.
    */
-  configId?: string;
+  configId?: string | undefined;
   /**
    * Human-readable display name. Must be unique among the bidder's
    * pretargeting configs. If omitted, a unique name is generated from
@@ -59,90 +59,90 @@ export type BiddersPretargetingConfigProps = {
    * labels field, so Alchemy stamps ownership into a `[alchemy …]`
    * prefix and strips it from attributes.
    */
-  displayName?: string;
+  displayName?: string | undefined;
   /**
    * Desired serving state after create (`ACTIVE` or `SUSPENDED`).
    * Create always yields `ACTIVE`. `SUSPENDED` is applied with
    * `pretargetingConfigs.suspend`.
    */
-  state?: PretargetingState;
+  state?: PretargetingState | undefined;
   /**
    * Creative formats (`HTML`, `VAST`, `NATIVE`). Unset allows every
    * format.
    */
-  includedFormats?: string[];
+  includedFormats?: string[] | undefined;
   /**
    * Environments (`APP`, `WEB`). Unset includes every environment.
    */
-  includedEnvironments?: string[];
+  includedEnvironments?: string[] | undefined;
   /**
    * Device platforms (`PERSONAL_COMPUTER`, `PHONE`, `TABLET`,
    * `CONNECTED_TV`). Unset allows every platform.
    */
-  includedPlatforms?: string[];
+  includedPlatforms?: string[] | undefined;
   /**
    * User identifier types (`GOOGLE_COOKIE`, `DEVICE_ID`, …). At least
    * one listed type must be present on a bid request.
    */
-  includedUserIdTypes?: string[];
+  includedUserIdTypes?: string[] | undefined;
   /**
    * Language codes to include (AdWords language codes).
    */
-  includedLanguages?: string[];
+  includedLanguages?: string[] | undefined;
   /**
    * Mobile OS ids from the Authorized Buyers mobile-os dictionary.
    */
-  includedMobileOperatingSystemIds?: string[];
+  includedMobileOperatingSystemIds?: string[] | undefined;
   /**
    * Sensitive content label ids to exclude.
    */
-  excludedContentLabelIds?: string[];
+  excludedContentLabelIds?: string[] | undefined;
   /**
    * User targeting modes a bid request must allow (`REMARKETING_ADS`,
    * `INTEREST_BASED_TARGETING`).
    */
-  allowedUserTargetingModes?: string[];
+  allowedUserTargetingModes?: string[] | undefined;
   /**
    * Interstitial filter (`ONLY_INTERSTITIAL_REQUESTS` or
    * `ONLY_NON_INTERSTITIAL_REQUESTS`). Unset allows both.
    */
-  interstitialTargeting?: string;
+  interstitialTargeting?: string | undefined;
   /**
    * Maximum QPS for this config across bidding endpoints.
    */
-  maximumQps?: string;
+  maximumQps?: string | undefined;
   /**
    * Minimum predicted viewability decile (0–10). `5` means 50%.
    */
-  minimumViewabilityDecile?: number;
+  minimumViewabilityDecile?: number | undefined;
   /**
    * Included and excluded geo ids.
    */
-  geoTargeting?: NumericTargetingDimension;
+  geoTargeting?: NumericTargetingDimension | undefined;
   /**
    * Included and excluded remarketing list ids.
    */
-  userListTargeting?: NumericTargetingDimension;
+  userListTargeting?: NumericTargetingDimension | undefined;
   /**
    * Included and excluded publisher vertical ids.
    */
-  verticalTargeting?: NumericTargetingDimension;
+  verticalTargeting?: NumericTargetingDimension | undefined;
   /**
    * Inclusive or exclusive website targeting.
    */
-  webTargeting?: StringTargetingDimension;
+  webTargeting?: StringTargetingDimension | undefined;
   /**
    * Inclusive or exclusive publisher-id targeting.
    */
-  publisherTargeting?: StringTargetingDimension;
+  publisherTargeting?: StringTargetingDimension | undefined;
   /**
    * App id and app-category targeting.
    */
-  appTargeting?: AppTargeting;
+  appTargeting?: AppTargeting | undefined;
   /**
    * Creative pixel dimensions (HTML and Native).
    */
-  includedCreativeDimensions?: CreativeDimensions[];
+  includedCreativeDimensions?: CreativeDimensions[] | undefined;
 };
 
 export type BiddersPretargetingConfig = Resource<

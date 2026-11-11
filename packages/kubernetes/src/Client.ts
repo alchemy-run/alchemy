@@ -108,7 +108,7 @@ const requestJson = Effect.fn(function* ({
   path: string;
   body?: Record<string, unknown>;
   /** Secrets already plaintext in `body` (Helm renders them). */
-  redactions?: readonly string[];
+  redactions?: readonly string[] | undefined;
 }) {
   // Outside the attempt retry: a hung token mint must not be retried as
   // if it were a refused connection.
@@ -376,7 +376,7 @@ export const applyObject = Effect.fn(function* ({
   transport: ClusterTransport;
   object: KubernetesObjectDefinition;
   /** Plaintext secrets already rendered into `object` (Helm values). */
-  redactions?: readonly string[];
+  redactions?: readonly string[] | undefined;
 }) {
   const basePath = yield* buildPath({
     transport,

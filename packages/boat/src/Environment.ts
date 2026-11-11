@@ -262,7 +262,7 @@ const listEnvironments = Effect.fn(function* (org: string | undefined) {
 
 const findEnvironment = Effect.fn(function* (
   org: string | undefined,
-  match: { environmentId?: string; name: string },
+  match: { environmentId?: string | undefined; name: string },
 ) {
   const environments = yield* listEnvironments(org);
   return (

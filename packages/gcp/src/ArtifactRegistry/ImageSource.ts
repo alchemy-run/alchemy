@@ -47,19 +47,19 @@ import { waitForDeleteOperation, waitForOperation } from "./internal.ts";
 
 export interface BundledImageSource {
   main: string;
-  image?: string;
-  dockerfile?: string | InlineDockerfile;
-  context?: string;
-  handler?: string;
-  build?: Bundle.BundleConfig & BuildCacheOptions;
+  image?: string | undefined;
+  dockerfile?: string | InlineDockerfile | undefined;
+  context?: string | undefined;
+  handler?: string | undefined;
+  build?: (Bundle.BundleConfig & BuildCacheOptions) | undefined;
   /**
    * Host files baked into the image next to `main`. With an external
    * (`isExternal`) `main`, this selects the unbundled Node program mode:
    * `main` is copied as-is and run by `node` (website serve entries).
    */
-  extraFiles?: ReadonlyArray<ExtraFile>;
+  extraFiles?: ReadonlyArray<ExtraFile> | undefined;
   /** Packages `npm install`ed into the Node program image. */
-  install?: PackageInstall;
+  install?: PackageInstall | undefined;
 }
 
 export type { DockerfileImageSource };
@@ -69,15 +69,15 @@ export interface RegistryImageSource {
 }
 
 export interface ImageSourceLike {
-  main?: string;
-  handler?: string;
+  main?: string | undefined;
+  handler?: string | undefined;
   /** Bundler config for `main`; Docker build args and secrets for `context`. */
-  build?: Bundle.BundleConfig & DockerfileBuild;
-  context?: string;
-  dockerfile?: string | InlineDockerfile;
-  image?: string;
-  extraFiles?: ReadonlyArray<ExtraFile>;
-  install?: PackageInstall;
+  build?: (Bundle.BundleConfig & DockerfileBuild) | undefined;
+  context?: string | undefined;
+  dockerfile?: string | InlineDockerfile | undefined;
+  image?: string | undefined;
+  extraFiles?: ReadonlyArray<ExtraFile> | undefined;
+  install?: PackageInstall | undefined;
 }
 
 /** Base image for unbundled Node programs (website serve entries). */
@@ -166,18 +166,18 @@ export interface ResolveImageOptions {
   id: string;
   source: ImageSourceLike;
   repositoryName: string;
-  repositoryUri?: string;
-  tags?: Record<string, string>;
-  platform?: string;
-  port?: number;
-  isExternal?: boolean;
+  repositoryUri?: string | undefined;
+  tags?: Record<string, string> | undefined;
+  platform?: string | undefined;
+  port?: number | undefined;
+  isExternal?: boolean | undefined;
   bootstrap: (importPath: string) => string;
   session: { note: (message: string) => Effect.Effect<void> };
 }
 
 const resolveContextPaths = Effect.fn(function* (source: {
   context: string | undefined;
-  dockerfile?: string;
+  dockerfile?: string | undefined;
 }) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -262,10 +262,10 @@ export const buildAndPushArtifactRegistryImage = Effect.fn(function* (
   options: {
     imageUri: string;
     context: string;
-    dockerfile?: string;
-    platform?: string;
+    dockerfile?: string | undefined;
+    platform?: string | undefined;
     location: string;
-    build?: DockerfileBuild;
+    build?: DockerfileBuild | undefined;
   },
 ) {
   const credentials = yield* getArtifactRegistryCredentials(options.location);
@@ -369,7 +369,7 @@ export const makeImageSource = Effect.gen(function* () {
 
   const bundleProgram = Effect.fn(function* (options: {
     source: BundledImageSource;
-    isExternal?: boolean;
+    isExternal?: boolean | undefined;
     bootstrap: (importPath: string) => string;
   }) {
     const { source } = options;
@@ -414,9 +414,9 @@ export const makeImageSource = Effect.gen(function* () {
 
   const computeMainCodeHash = Effect.fn(function* (options: {
     source: BundledImageSource;
-    isExternal?: boolean;
+    isExternal?: boolean | undefined;
     bootstrap: (importPath: string) => string;
-    port?: number;
+    port?: number | undefined;
     platform: string;
   }) {
     const bundled = yield* bundleProgram({
@@ -458,7 +458,7 @@ export const makeImageSource = Effect.gen(function* () {
    */
   const computeNodeProgram = Effect.fn(function* (options: {
     source: BundledImageSource;
-    port?: number;
+    port?: number | undefined;
     platform: string;
   }) {
     const fs = yield* FileSystem.FileSystem;
@@ -502,7 +502,7 @@ export const makeImageSource = Effect.gen(function* () {
     id: string;
     repositoryId: string;
     location: string;
-    tags?: Record<string, string>;
+    tags?: Record<string, string> | undefined;
   }) {
     const env = yield* GcpEnvironment.current;
     const name = resourceName(env.project, options.location, options.repositoryId);
@@ -800,9 +800,9 @@ export const makeImageSource = Effect.gen(function* () {
 
   const hash = Effect.fn(function* (options: {
     source: ImageSourceLike;
-    platform?: string;
-    port?: number;
-    isExternal?: boolean;
+    platform?: string | undefined;
+    port?: number | undefined;
+    isExternal?: boolean | undefined;
     bootstrap: (importPath: string) => string;
   }) {
     const platform = options.platform ?? "linux/amd64";

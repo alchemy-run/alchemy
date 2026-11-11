@@ -159,7 +159,7 @@ export interface DBInstanceLookup {
 export const DBInstance = Resource<DBInstance>("AWS.Neptune.DBInstance");
 
 const toTagRecord = (
-  tags: Array<{ Key?: string; Value?: string }> | undefined,
+  tags: Array<{ Key?: string | undefined; Value?: string | undefined }> | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
     (tags ?? [])

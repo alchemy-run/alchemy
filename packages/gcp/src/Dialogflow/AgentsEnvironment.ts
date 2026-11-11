@@ -52,7 +52,7 @@ export type AgentsEnvironmentProps = {
    */
   location?: string;
   /** Human-readable name, unique within the agent. */
-  displayName?: string;
+  displayName?: string | undefined;
   /**
    * Description. Environments have no labels field, so Alchemy stamps
    * ownership into this field for `list` / nuke.

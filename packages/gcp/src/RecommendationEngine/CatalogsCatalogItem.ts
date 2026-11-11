@@ -98,7 +98,7 @@ export type CatalogsCatalogItemProps = {
    * Extra categorical and numerical features for the recommendation
    * model.
    */
-  itemAttributes?: FeatureMap;
+  itemAttributes?: FeatureMap | undefined;
 };
 
 export type CatalogsCatalogItem = Resource<

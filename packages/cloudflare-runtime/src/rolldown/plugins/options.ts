@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { nonPrefixedNodeModules } from "@cloudflare/unenv-preset";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import type * as vite from "vite";
 import { createPlugin } from "../factory.ts";
 import { parseViteEnvironments, type BasePluginOptions } from "../options.ts";
@@ -132,6 +134,7 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
           const entries = isEntry
             ? (pluginOptions.main ?? defaultEnvironmentEntries(name, userConfig))
             : (defaultEnvironmentEntries(name, userConfig) ?? pluginOptions.main);
+          const optimizeEntries = asArray(entries)?.map(vite.normalizePath);
           return {
             // Bake `process.env.NODE_ENV` (and friends) into the worker build.
             // workerd has no value for it at runtime, so without this libraries
@@ -150,7 +153,10 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
                 userConfig.optimizeDeps?.noDiscovery ??
                 false,
               ignoreOutdatedRequests: true,
-              entries: asArray(entries)?.map(vite.normalizePath),
+              ...Record.filterMap(
+                { entries: optimizeEntries },
+                Result.fromNullishOr(() => undefined),
+              ),
               // Node.js built-ins are never pre-bundled, with or without
               // `nodejs_compat` (`cloudflare:*` modules: `cloudflare-externals`).
               exclude: [
@@ -236,36 +242,39 @@ export const optionsPlugin = createPlugin<"options", OptionsApi>("options", (plu
         const appType = userConfig.appType ?? "custom";
         return {
           appType,
-          builder:
-            // Vite merges plugin `config` results over the user config, so an
-            // unconditional default here would clobber a framework's own
-            // `buildApp` orchestrator (e.g. Astro's prerender -> ssr -> client
-            // pipeline). Only default it when the resolved user config doesn't
-            // already define one.
-            userConfig.builder?.buildApp !== undefined
-              ? undefined
-              : {
-                  buildApp: (builder) =>
+          // Vite merges plugin `config` results over the user config, so an
+          // unconditional default here would clobber a framework's own
+          // `buildApp` orchestrator (e.g. Astro's prerender -> ssr -> client
+          // pipeline). Only default it when the resolved user config doesn't
+          // already define one.
+          ...(userConfig.builder?.buildApp !== undefined
+            ? {}
+            : {
+                builder: {
+                  buildApp: (builder: vite.ViteBuilder) =>
                     // An assets-only site builds only its client.
                     buildApp(builder, assetsOnly ? [] : environmentNames, pluginOptions),
                 },
+              }),
           // An assets-only site has no Worker environments, as with
           // `@cloudflare/vite-plugin`: the client builds to Vite's own outDir.
-          environments: assetsOnly
-            ? undefined
+          ...(assetsOnly
+            ? {}
             : {
-                client: {
-                  build: {
-                    outDir: getOutputDirectory(userConfig, "client"),
+                environments: {
+                  client: {
+                    build: {
+                      outDir: getOutputDirectory(userConfig, "client"),
+                    },
                   },
+                  ...Object.fromEntries(
+                    environmentNames.map((name, index) => [
+                      name,
+                      makeEnvironment({ name, isEntry: index === 0 }),
+                    ]),
+                  ),
                 },
-                ...Object.fromEntries(
-                  environmentNames.map((name, index) => [
-                    name,
-                    makeEnvironment({ name, isEntry: index === 0 }),
-                  ]),
-                ),
-              },
+              }),
         };
       },
     },

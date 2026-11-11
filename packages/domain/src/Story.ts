@@ -88,7 +88,7 @@ export type Step =
       readonly _tag: "When";
       readonly ref: Aggregate.Ref;
       readonly command: { readonly _tag: string };
-      readonly commandId?: string;
+      readonly commandId?: string | undefined;
     }
   | {
       readonly _tag: "Then";
@@ -271,7 +271,7 @@ const given = <A extends Aggregate.Any>(
 const when = <A extends Aggregate.Any, Cmd extends Aggregate.CommandOf<A>>(
   ref: Aggregate.Ref<A>,
   command: Cmd,
-  options?: { readonly commandId?: string },
+  options?: Aggregate.SendOptions,
 ): WhenStep<CommandClassOf<A, Cmd>> => ({
   _tag: "When",
   ref,

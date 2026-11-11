@@ -36,23 +36,23 @@ export type SecurityProfileType =
 
 export type AntivirusOverride = {
   /** Protocol to match (`HTTP`, `SMTP`, `FTP`, …). */
-  protocol?: networksecurity.AntivirusOverrideProtocolEnum | (string & {});
+  protocol?: networksecurity.AntivirusOverrideProtocolEnum | (string & {}) | undefined;
   /** Threat action override (`ALLOW`, `ALERT`, `DENY`, …). */
-  action?: networksecurity.AntivirusOverrideActionEnum | (string & {});
+  action?: networksecurity.AntivirusOverrideActionEnum | (string & {}) | undefined;
 };
 
 export type SeverityOverride = {
   /** Severity level to match (`INFORMATIONAL`, `LOW`, `MEDIUM`, `HIGH`, `CRITICAL`). */
-  severity?: networksecurity.SeverityOverrideSeverityEnum | (string & {});
+  severity?: networksecurity.SeverityOverrideSeverityEnum | (string & {}) | undefined;
   /** Threat action override (`ALLOW`, `ALERT`, `DENY`, …). */
-  action?: networksecurity.SeverityOverrideActionEnum | (string & {});
+  action?: networksecurity.SeverityOverrideActionEnum | (string & {}) | undefined;
 };
 
 export type ThreatOverride = {
   /** Vendor-specific threat id to override. */
-  threatId?: string;
+  threatId?: string | undefined;
   /** Threat action override (`ALLOW`, `ALERT`, `DENY`, …). */
-  action?: networksecurity.ThreatOverrideActionEnum | (string & {});
+  action?: networksecurity.ThreatOverrideActionEnum | (string & {}) | undefined;
 };
 
 export type ThreatPreventionProfile = {
@@ -69,7 +69,7 @@ export type CustomMirroringProfile = {
    * Target MirroringEndpointGroup. Immutable — changing it replaces the
    * profile.
    */
-  mirroringEndpointGroup?: string;
+  mirroringEndpointGroup?: string | undefined;
 };
 
 export type CustomInterceptProfile = {
@@ -77,19 +77,19 @@ export type CustomInterceptProfile = {
    * Target InterceptEndpointGroup. Immutable — changing it replaces the
    * profile.
    */
-  interceptEndpointGroup?: string;
+  interceptEndpointGroup?: string | undefined;
 };
 
 export type UrlFilter = {
   /** Action taken when this filter matches (`ALLOW` or `DENY`). */
-  filteringAction?: networksecurity.UrlFilterFilteringActionEnum | (string & {});
+  filteringAction?: networksecurity.UrlFilterFilteringActionEnum | (string & {}) | undefined;
   /** URL strings that must match for this filter to apply. */
-  urls?: string[];
+  urls?: string[] | undefined;
   /**
    * Priority within the profile. Lower integers are higher priority.
    * Must be unique within a URL Filtering Profile.
    */
-  priority?: number;
+  priority?: number | undefined;
 };
 
 export type UrlFilteringProfile = {
@@ -106,49 +106,49 @@ export type SecurityProfileProps = {
    * underscores, and must not start with a number. Immutable — changing
    * it replaces the profile.
    */
-  securityProfileId?: string;
+  securityProfileId?: string | undefined;
   /**
    * Location. Security profiles live in `global`. Immutable — changing
    * it replaces the profile.
    * @default "global"
    */
-  location?: string;
+  location?: string | undefined;
   /**
    * Human-readable description (max 512 characters).
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
    */
-  labels?: Record<string, string>;
+  labels?: Record<string, string> | undefined;
   /**
    * Single ProfileType this resource configures. Inferred from nested
    * profile blocks when omitted. Immutable — changing it replaces the
    * profile.
    * @default "THREAT_PREVENTION"
    */
-  type?: SecurityProfileType;
+  type?: SecurityProfileType | undefined;
   /**
    * Threat-prevention configuration. Used when `type` is
    * `THREAT_PREVENTION`.
    */
-  threatPreventionProfile?: ThreatPreventionProfile;
+  threatPreventionProfile?: ThreatPreventionProfile | undefined;
   /**
    * Out-of-band packet mirroring configuration. Used when `type` is
    * `CUSTOM_MIRRORING`. Immutable nested target — changing
    * `mirroringEndpointGroup` replaces the profile.
    */
-  customMirroringProfile?: CustomMirroringProfile;
+  customMirroringProfile?: CustomMirroringProfile | undefined;
   /**
    * In-band intercept configuration. Used when `type` is
    * `CUSTOM_INTERCEPT`. Immutable nested target — changing
    * `interceptEndpointGroup` replaces the profile.
    */
-  customInterceptProfile?: CustomInterceptProfile;
+  customInterceptProfile?: CustomInterceptProfile | undefined;
   /**
    * URL filtering configuration. Used when `type` is `URL_FILTERING`.
    */
-  urlFilteringProfile?: UrlFilteringProfile;
+  urlFilteringProfile?: UrlFilteringProfile | undefined;
 };
 
 export type SecurityProfile = Resource<
@@ -291,11 +291,11 @@ export class SecurityProfileStillExists extends Data.TaggedError(
 
 const typeOf = (
   props: {
-    type?: string;
-    threatPreventionProfile?: ThreatPreventionProfile;
-    customMirroringProfile?: CustomMirroringProfile;
-    customInterceptProfile?: CustomInterceptProfile;
-    urlFilteringProfile?: UrlFilteringProfile;
+    type?: string | undefined;
+    threatPreventionProfile?: ThreatPreventionProfile | undefined;
+    customMirroringProfile?: CustomMirroringProfile | undefined;
+    customInterceptProfile?: CustomInterceptProfile | undefined;
+    urlFilteringProfile?: UrlFilteringProfile | undefined;
   },
   fallback: string = DEFAULT_TYPE,
 ): string => {

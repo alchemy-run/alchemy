@@ -87,7 +87,7 @@ export interface BoatResolvedCredentials {
   apiBaseUrl: string;
   /** The organization (wallet) calls bill, sent as `X-Boat-Org`. */
   org?: string;
-  source: { type: BoatAuthConfig["method"] | "env"; details?: string };
+  source: { type: BoatAuthConfig["method"] | "env"; details?: string | undefined };
 }
 
 const apiKeyField: ConfigureField = {

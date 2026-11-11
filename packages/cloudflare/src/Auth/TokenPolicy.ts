@@ -19,7 +19,7 @@ export interface TokenPolicy {
 export interface PermissionGroup {
   readonly id: string;
   readonly name: string;
-  readonly category?: string;
+  readonly category?: string | undefined;
   readonly scopes: ReadonlyArray<string>;
   /** Whether this group's scope maps onto a policy we know how to express. */
   readonly selectable: boolean;

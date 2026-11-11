@@ -24,9 +24,9 @@ import {
 
 export type MatterPermission = {
   /** Collaborator role (`COLLABORATOR` or `OWNER`). */
-  role?: vault.MatterPermissionRoleEnum | (string & {});
+  role?: vault.MatterPermissionRoleEnum | (string & {}) | undefined;
   /** Admin SDK account id. */
-  accountId?: string;
+  accountId?: string | undefined;
 };
 
 export type MatterProps = {

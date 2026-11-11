@@ -22,7 +22,12 @@ let clusterName: string;
 let clusterResource: string;
 let project: string;
 
-const rolesOf = (bindings: ReadonlyArray<{ role?: string; members?: ReadonlyArray<string> }>) =>
+const rolesOf = (
+  bindings: ReadonlyArray<{
+    role?: string | undefined;
+    members?: ReadonlyArray<string> | undefined;
+  }>,
+) =>
   bindings
     .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${hostAccount}`))
     .map((binding) => binding.role)

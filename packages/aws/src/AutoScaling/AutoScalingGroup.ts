@@ -38,16 +38,16 @@ export interface LaunchTemplateReference {
    * ID of the launch template (`lt-...`). Provide either the ID or the name,
    * not both.
    */
-  launchTemplateId?: Input<LaunchTemplateId>;
+  launchTemplateId?: Input<LaunchTemplateId> | undefined;
   /**
    * Name of the launch template. Provide either the ID or the name, not both.
    */
-  launchTemplateName?: Input<LaunchTemplateName>;
+  launchTemplateName?: Input<LaunchTemplateName> | undefined;
   /**
    * Template version to launch.
    * @default "$Default"
    */
-  version?: Input<string | number>;
+  version?: Input<string | number> | undefined;
 }
 
 export interface AutoScalingGroupProps {
@@ -137,16 +137,16 @@ export interface AutoScalingGroup extends Resource<
     /**
      * ID of the launch template used by the fleet.
      */
-    launchTemplateId?: string;
+    launchTemplateId?: string | undefined;
     /**
      * Name of the launch template used by the fleet.
      */
-    launchTemplateName?: string;
+    launchTemplateName?: string | undefined;
     /**
      * Launch template version used by the fleet (e.g. `"$Default"` or a
      * version number).
      */
-    launchTemplateVersion?: string;
+    launchTemplateVersion?: string | undefined;
     /**
      * Subnets the fleet is placed into.
      */
@@ -170,28 +170,28 @@ export interface AutoScalingGroup extends Resource<
     /**
      * Health check type (`EC2` or `ELB`).
      */
-    healthCheckType?: string;
+    healthCheckType?: string | undefined;
     /**
      * Grace period in seconds before health checks start.
      */
-    healthCheckGracePeriod?: number;
+    healthCheckGracePeriod?: number | undefined;
     /**
      * Default cooldown in seconds between scaling activities.
      */
-    defaultCooldown?: number;
+    defaultCooldown?: number | undefined;
     /**
      * Termination policies applied on scale-in.
      */
-    terminationPolicies?: string[];
+    terminationPolicies?: string[] | undefined;
     /**
      * Instance requirements of the group's mixed instances policy, when it
      * launches by attributes rather than a fixed instance type.
      */
-    instanceRequirements?: autoscaling.InstanceRequirements;
+    instanceRequirements?: autoscaling.InstanceRequirements | undefined;
     /**
      * How capacity is spread across Availability Zones.
      */
-    availabilityZoneDistribution?: autoscaling.AvailabilityZoneDistribution;
+    availabilityZoneDistribution?: autoscaling.AvailabilityZoneDistribution | undefined;
     /**
      * Tags on the Auto Scaling Group.
      */

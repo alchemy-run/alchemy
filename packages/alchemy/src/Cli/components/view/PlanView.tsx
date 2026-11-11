@@ -19,6 +19,9 @@
  *   line-budget aware so multi-line rows never overflow the terminal.
  */
 import { useMemo, useSyncExternalStore } from "@alchemy.run/sigil/react";
+import * as Predicate from "effect/Predicate";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import type { JSX, ReactNode } from "react";
 import type { ApplyStatus } from "../../../Events.ts";
 import type { Plan as AlchemyPlan } from "../../../Plan.ts";
@@ -83,7 +86,7 @@ export interface PlanProps {
   /** Reactive tree containing rows, statuses, label, and presentation state. */
   tree: PlanTree;
   /** Allow the tree to collapse behind `p`. */
-  collapsible?: boolean;
+  collapsible?: boolean | undefined;
   /** Widget rendered before the summary block. */
   before?: ReactNode;
   /** Widget rendered on the summary row before the summary. */
@@ -712,7 +715,7 @@ function DetailLine({
   children,
 }: {
   readonly paddingLeft: number;
-  readonly backgroundColor?: string;
+  readonly backgroundColor?: string | undefined;
   readonly children: ReactNode;
 }) {
   const borderStyle = useBorderStyle();
@@ -728,7 +731,10 @@ function DetailLine({
         borderBottom={false}
         borderColor={theme.color.muted}
         borderDimColor
-        backgroundColor={backgroundColor}
+        {...Record.filterMap(
+          { backgroundColor },
+          Result.liftPredicate(Predicate.isNotUndefined, () => undefined),
+        )}
       >
         {children}
       </Box>

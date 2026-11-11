@@ -33,7 +33,7 @@ export type TargetInstanceProps = {
    * URL, otherwise `us-central1-a`.
    * @default "us-central1-a"
    */
-  zone?: string;
+  zone?: string | undefined;
   /**
    * Backend VM that terminates traffic. Accepts an instance name, a
    * `projects/{project}/zones/{zone}/instances/{instance}` path, or a
@@ -282,7 +282,7 @@ const toNetworkRef = (project: string, network: string | undefined) => {
   return `projects/${project}/global/networks/${network}`;
 };
 
-const resolveZone = (news: { zone?: string; instance?: string }, fallback?: string) =>
+const resolveZone = (news: { zone?: string | undefined; instance?: string }, fallback?: string) =>
   lastSegment(news.zone) || zoneFromUrl(news.instance) || lastSegment(fallback) || DEFAULT_ZONE;
 
 const toAttrs = (target: compute.TargetInstance, project: string) => {

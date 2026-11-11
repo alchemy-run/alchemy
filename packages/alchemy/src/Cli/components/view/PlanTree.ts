@@ -26,13 +26,13 @@ export type PlanRow =
       id: string;
       resourceType: string;
       /** Secondary identity for inventories without logical resource names. */
-      detail?: string;
+      detail?: string | undefined;
       depth: number;
       action: CRUD["action"];
-      persistedApplyStatus?: "created" | "updated";
-      providerMode?: ProviderMode;
-      fromProviderMode?: ProviderMode;
-      propertyYaml?: DeclaredPropertyYaml;
+      persistedApplyStatus?: "created" | "updated" | undefined;
+      providerMode?: ProviderMode | undefined;
+      fromProviderMode?: ProviderMode | undefined;
+      propertyYaml?: DeclaredPropertyYaml | undefined;
     }
   | {
       key: string;
@@ -66,9 +66,9 @@ const isProgressRow = (row: PlanRow) => row.type === "resource" || row.type === 
 
 export interface RowState extends Required<Pick<ResourceStatusChanged, "id" | "status">> {
   key: string;
-  message?: string;
-  startedAt?: number;
-  elapsedMs?: number;
+  message?: string | undefined;
+  startedAt?: number | undefined;
+  elapsedMs?: number | undefined;
 }
 
 export type PlanViewport = "full" | "virtual";
@@ -95,10 +95,10 @@ export interface PlanTreeState {
 }
 
 export interface PlanTreeOptions {
-  readonly detailed?: boolean;
+  readonly detailed?: boolean | undefined;
   readonly mode?: "review" | "apply";
   readonly label?: string;
-  readonly titleDetail?: string;
+  readonly titleDetail?: string | undefined;
   readonly viewport?: PlanViewport;
   readonly busy?: boolean;
   /**
@@ -219,8 +219,8 @@ export class PlanTree {
   readonly summary: PlanSummaryCounts;
   readonly mode: "review" | "apply";
   readonly detailed: boolean;
-  readonly titleDetail?: string;
-  readonly defaultMode?: ProviderMode;
+  readonly titleDetail: string | undefined;
+  readonly defaultMode: ProviderMode | undefined;
   private state: PlanTreeState;
   private readonly listeners = new Set<() => void>();
 

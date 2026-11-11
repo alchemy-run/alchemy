@@ -103,7 +103,7 @@ export interface VpcProps {
    * Tags to assign to the VPC.
    * These will be merged with alchemy auto-tags (alchemy::stack, alchemy::stage, alchemy::id).
    */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
 }
 
 export interface Vpc extends Resource<
@@ -143,38 +143,42 @@ export interface Vpc extends Resource<
     /**
      * The ID of the AWS account that owns the VPC.
      */
-    ownerId?: string;
+    ownerId?: string | undefined;
 
     /**
      * Information about the IPv4 CIDR blocks associated with the VPC.
      */
-    cidrBlockAssociationSet?: Array<{
-      associationId: string;
-      cidrBlock: string;
-      cidrBlockState: {
-        state: EC2.VpcCidrBlockStateCode;
-        statusMessage?: string;
-      };
-    }>;
+    cidrBlockAssociationSet?:
+      | Array<{
+          associationId: string;
+          cidrBlock: string;
+          cidrBlockState: {
+            state: EC2.VpcCidrBlockStateCode;
+            statusMessage?: string | undefined;
+          };
+        }>
+      | undefined;
 
     /**
      * Information about the IPv6 CIDR blocks associated with the VPC.
      */
-    ipv6CidrBlockAssociationSet?: Array<{
-      associationId: string;
-      ipv6CidrBlock: string;
-      ipv6CidrBlockState: {
-        state: EC2.VpcCidrBlockStateCode;
-        statusMessage?: string;
-      };
-      networkBorderGroup?: string;
-      ipv6Pool?: string;
-    }>;
+    ipv6CidrBlockAssociationSet?:
+      | Array<{
+          associationId: string;
+          ipv6CidrBlock: string;
+          ipv6CidrBlockState: {
+            state: EC2.VpcCidrBlockStateCode;
+            statusMessage?: string | undefined;
+          };
+          networkBorderGroup?: string | undefined;
+          ipv6Pool?: string | undefined;
+        }>
+      | undefined;
 
     /**
      * The tags currently assigned to the VPC, including alchemy auto-tags.
      */
-    tags?: Record<string, string>;
+    tags?: Record<string, string> | undefined;
 
     /**
      * Whether DNS resolution is enabled, as observed. Lets `alchemy drift`

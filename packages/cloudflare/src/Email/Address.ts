@@ -100,11 +100,11 @@ export const Address = Resource<Address>("Cloudflare.Email.Address", {
 const toAttrs = (
   accountId: string,
   result: {
-    id?: string | null;
-    email?: string | null;
-    verified?: string | null;
-    created?: string | null;
-    modified?: string | null;
+    id?: string | null | undefined;
+    email?: string | null | undefined;
+    verified?: string | null | undefined;
+    created?: string | null | undefined;
+    modified?: string | null | undefined;
   },
 ) => ({
   addressId: result.id ?? "",

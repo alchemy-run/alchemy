@@ -37,38 +37,38 @@ export type InstanceDefaultBackupScheduleType =
 
 export type AutoscalingLimits = {
   /** Minimum nodes. Mutually exclusive with processing-unit limits. */
-  minNodes?: number;
+  minNodes?: number | undefined;
   /** Minimum processing units (multiples of 1000). */
-  minProcessingUnits?: number;
+  minProcessingUnits?: number | undefined;
   /** Maximum nodes. */
-  maxNodes?: number;
+  maxNodes?: number | undefined;
   /** Maximum processing units (multiples of 1000). */
-  maxProcessingUnits?: number;
+  maxProcessingUnits?: number | undefined;
 };
 
 export type AutoscalingTargets = {
   /** Target high-priority CPU percent (`10`–`90`). */
-  highPriorityCpuUtilizationPercent?: number;
+  highPriorityCpuUtilizationPercent?: number | undefined;
   /** Target total CPU percent (`10`–`90`). */
-  totalCpuUtilizationPercent?: number;
+  totalCpuUtilizationPercent?: number | undefined;
   /** Target storage percent (`10`–`99`). */
-  storageUtilizationPercent?: number;
+  storageUtilizationPercent?: number | undefined;
 };
 
 export type AutoscalingConfig = {
   /** Min/max compute capacity. */
-  autoscalingLimits?: AutoscalingLimits;
+  autoscalingLimits?: AutoscalingLimits | undefined;
   /** CPU and storage targets. */
-  autoscalingTargets?: AutoscalingTargets;
+  autoscalingTargets?: AutoscalingTargets | undefined;
 };
 
 export type ReplicaComputeCapacity = {
   /** Replica location (e.g. `us-central1`). */
-  location?: string;
+  location?: string | undefined;
   /** Nodes allocated to this replica selection. */
-  nodeCount?: number;
+  nodeCount?: number | undefined;
   /** Processing units allocated to this replica selection. */
-  processingUnits?: number;
+  processingUnits?: number | undefined;
 };
 
 export type InstanceProps = {
@@ -79,55 +79,55 @@ export type InstanceProps = {
    * `^[a-z][-a-z0-9]*[a-z0-9]$` (2–64 characters). Immutable — changing
    * it replaces the instance.
    */
-  instanceId?: string;
+  instanceId?: string | undefined;
   /**
    * Instance configuration id (`regional-us-central1`) or full name
    * (`projects/{project}/instanceConfigs/{config}`). Immutable —
    * changing it replaces the instance.
    * @default `regional-{region}` for the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
-  config?: string;
+  config?: string | undefined;
   /**
    * User-facing display name. Must be unique per project and 4–30
    * characters. Defaults to a truncated instance id.
    */
-  displayName?: string;
+  displayName?: string | undefined;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
    */
-  labels?: Record<string, string>;
+  labels?: Record<string, string> | undefined;
   /**
    * Processing units. Mutually exclusive with `nodeCount`. Ignored when
    * autoscaling is enabled or `instanceType` is `FREE_INSTANCE`.
    * @default 100
    */
-  processingUnits?: number;
+  processingUnits?: number | undefined;
   /**
    * Node count. Mutually exclusive with `processingUnits`. Ignored when
    * autoscaling is enabled or `instanceType` is `FREE_INSTANCE`.
    */
-  nodeCount?: number;
+  nodeCount?: number | undefined;
   /**
    * Autoscaling configuration. When set, `nodeCount` and
    * `processingUnits` become output-only.
    */
-  autoscalingConfig?: AutoscalingConfig;
+  autoscalingConfig?: AutoscalingConfig | undefined;
   /**
    * Instance type. Immutable — changing it replaces the instance.
    * @default "PROVISIONED"
    */
-  instanceType?: InstanceType;
+  instanceType?: InstanceType | undefined;
   /**
    * Edition (`STANDARD`, `ENTERPRISE`, `ENTERPRISE_PLUS`).
    * @default "STANDARD"
    */
-  edition?: InstanceEdition;
+  edition?: InstanceEdition | undefined;
   /**
    * Default backup schedule for new databases. `NONE` skips automatic
    * schedules (required for free instances).
    * @default "NONE"
    */
-  defaultBackupScheduleType?: InstanceDefaultBackupScheduleType;
+  defaultBackupScheduleType?: InstanceDefaultBackupScheduleType | undefined;
 };
 
 export type Instance = Resource<

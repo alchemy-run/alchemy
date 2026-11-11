@@ -41,7 +41,7 @@ export interface OpenSearchHttpRequest {
   /** Path relative to the domain endpoint, e.g. `"songs/_search"`. */
   path: string;
   /** Query-string parameters (undefined values are skipped). */
-  query?: Record<string, string | undefined>;
+  query?: Record<string, string | undefined> | undefined;
   /** JSON body (sent as `application/json`). */
   json?: unknown;
   /** Raw NDJSON body (used by `_bulk`; sent as `application/x-ndjson`). */

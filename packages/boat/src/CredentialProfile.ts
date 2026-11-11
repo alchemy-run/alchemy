@@ -30,11 +30,11 @@ export interface CredentialProfileProps {
    * name is generated from the stack, stage and logical ID. Renamed in
    * place.
    */
-  name?: string;
+  name?: string | undefined;
   /** Anthropic API key. Sandboxes get it as `ANTHROPIC_API_KEY`. */
   anthropic?: Secret;
   /** OpenAI API key. Sandboxes get it as `OPENAI_API_KEY`. */
-  openai?: Secret;
+  openai?: Secret | undefined;
   /** OpenRouter API key. */
   openrouter?: Secret;
   /** LLM Gateway API key. */
@@ -55,7 +55,7 @@ export interface CredentialProfileProps {
    * Provider names (`ANTHROPIC_*`, `OPENAI_*`, `AWS_*`, …) and names ending
    * in `_BASE_URL` are reserved.
    */
-  apis?: Record<string, CredentialProfileApi>;
+  apis?: Record<string, CredentialProfileApi> | undefined;
 }
 
 export interface CredentialProfileAttributes {
@@ -196,7 +196,7 @@ const listProfiles = Effect.fn(function* (org: string | undefined) {
 
 const findProfile = Effect.fn(function* (
   org: string | undefined,
-  match: { credentialProfileId?: string; name: string },
+  match: { credentialProfileId?: string | undefined; name: string },
 ) {
   const profiles = yield* listProfiles(org);
   return (

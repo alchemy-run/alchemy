@@ -5,9 +5,9 @@ import picomatch from "picomatch";
 /** Selection applies after the whole stack declaration evaluates. */
 export interface ResourceSelection {
   /** Exact FQNs, unique logical IDs, or FQN globs; dependencies are included. */
-  readonly include?: ReadonlyArray<string>;
+  readonly include?: ReadonlyArray<string> | undefined;
   /** Hard exclusions. A selected node depending on an excluded node fails planning. */
-  readonly exclude?: ReadonlyArray<string>;
+  readonly exclude?: ReadonlyArray<string> | undefined;
 }
 
 /** Required filters return no output; possibly supplied filters make output optional. */

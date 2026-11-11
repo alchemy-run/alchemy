@@ -45,16 +45,16 @@ export interface ContactInformation extends Resource<
   {
     fullName: string;
     addressLine1: string;
-    addressLine2?: string;
-    addressLine3?: string;
+    addressLine2: string | undefined;
+    addressLine3: string | undefined;
     city: string;
-    stateOrRegion?: string;
-    districtOrCounty?: string;
+    stateOrRegion: string | undefined;
+    districtOrCounty: string | undefined;
     postalCode: string;
     countryCode: string;
     phoneNumber: string;
-    companyName?: string;
-    websiteUrl?: string;
+    companyName: string | undefined;
+    websiteUrl: string | undefined;
   },
   never,
   Providers

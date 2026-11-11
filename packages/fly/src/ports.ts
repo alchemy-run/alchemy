@@ -24,12 +24,12 @@ export class ServicePortConflict extends Data.TaggedError("Fly.ServicePortConfli
 }
 
 const normalize = (entry: {
-  protocol?: string;
-  port?: number;
-  startPort?: number;
-  endPort?: number;
-  handlers?: string[];
-  forceHttps?: boolean;
+  protocol?: string | undefined;
+  port?: number | undefined;
+  startPort?: number | undefined;
+  endPort?: number | undefined;
+  handlers?: string[] | undefined;
+  forceHttps?: boolean | undefined;
 }): PublishedPort[] => {
   const start = entry.port ?? entry.startPort;
   const end = entry.port ?? entry.endPort ?? entry.startPort;

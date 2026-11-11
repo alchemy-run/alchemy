@@ -53,8 +53,9 @@ const retryForbidden = <A, E extends { _tag: string }, R>(effect: Effect.Effect<
     }),
   );
 
-const targetOf = (rule: { targets: ReadonlyArray<{ constraint?: { value: string } | null }> }) =>
-  rule.targets[0]?.constraint?.value;
+const targetOf = (rule: {
+  targets: ReadonlyArray<{ constraint?: { value: string } | null | undefined }>;
+}) => rule.targets[0]?.constraint?.value;
 
 const listRules = (zoneId: string) => retryForbidden(pageRules.listPageRules({ zoneId }));
 

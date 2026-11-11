@@ -31,23 +31,23 @@ export type ConversationMedium = "MEDIUM_UNSPECIFIED" | "PHONE_CALL" | "CHAT";
 
 export type GcsSource = {
   /** Cloud Storage URI of conversation audio. */
-  audioUri?: string;
+  audioUri?: string | undefined;
   /** Cloud Storage URI of the conversation transcript. Immutable. */
-  transcriptUri?: string;
+  transcriptUri?: string | undefined;
 };
 
 export type ConversationDataSource = {
   /** Cloud Storage audio and/or transcript. */
-  gcsSource?: GcsSource;
+  gcsSource?: GcsSource | undefined;
   /** Cloud Storage URI of conversation metadata. */
-  metadataUri?: string;
+  metadataUri?: string | undefined;
 };
 
 export type CallMetadata = {
   /** Audio channel that contains the customer. */
-  customerChannel?: number;
+  customerChannel?: number | undefined;
   /** Audio channel that contains the agent. */
-  agentChannel?: number;
+  agentChannel?: number | undefined;
 };
 
 export type ConversationProps = {

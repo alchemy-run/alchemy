@@ -28,7 +28,7 @@ export interface S3DiskStorage {
   /** Bucket name. */
   bucketName: string;
   /** Prefix within the bucket the disk lives under, e.g. `"data/"`. */
-  bucketPrefix?: string;
+  bucketPrefix?: string | undefined;
   /** Access key id. Omit for IAM-role access through the bucket policy. */
   accessKeyId?: Redacted.Redacted<string>;
   /** Secret access key. */

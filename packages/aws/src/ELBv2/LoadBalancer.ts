@@ -72,9 +72,9 @@ export interface LoadBalancerProps {
    */
   enforceSecurityGroupInboundRulesOnPrivateLinkTraffic?: "on" | "off";
   /** Raw load-balancer attributes (idle timeout, deletion protection, access logs, ...). */
-  attributes?: Record<string, string>;
+  attributes?: Record<string, string> | undefined;
   /** Tags to apply to the load balancer. */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
 }
 
 export interface LoadBalancer extends Resource<
@@ -105,7 +105,7 @@ export interface LoadBalancer extends Resource<
      * The live values of the keys declared in `attributes`. Undeclared
      * attributes are left out so AWS defaults never register as drift.
      */
-    attributes?: Record<string, string>;
+    attributes?: Record<string, string> | undefined;
   },
   never,
   Providers,

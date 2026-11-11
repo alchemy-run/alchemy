@@ -132,7 +132,7 @@ export interface SandboxCreateOptions {
   /** Environment variables for the main process. */
   readonly env?: Record<string, string>;
   /** Secrets whose variables the sandbox sees as environment variables. */
-  readonly secrets?: ReadonlyArray<{ readonly secretId: string }>;
+  readonly secrets?: ReadonlyArray<{ readonly secretId: string }> | undefined;
   /**
    * Volumes and cloud buckets to mount: volume handles, bucket names, or
    * the references `Modal.MountVolume` / `Modal.MountBucket` return.
@@ -153,7 +153,7 @@ export interface SandboxCreateOptions {
   /** Name, unique among the app's running sandboxes; find it again with `fromName`. */
   readonly name?: string;
   /** Tags, for `list({ tags })`. */
-  readonly tags?: Record<string, string>;
+  readonly tags?: Record<string, string> | undefined;
   /** Regions to run in (`"us-east"`, `"eu"`, ...). */
   readonly regions?: ReadonlyArray<string>;
   /** Block all network access. */
@@ -207,11 +207,11 @@ export type Command = Sandbox.Command;
 /** Options for {@link SandboxHandleOf.exec}. */
 export interface ExecOptions {
   /** Working directory. @default the sandbox's `workdir` */
-  readonly cwd?: string;
+  readonly cwd?: string | undefined;
   /** Extra environment variables for this command. */
-  readonly env?: Record<string, string>;
+  readonly env?: Record<string, string> | undefined;
   /** Secrets whose variables this command sees. */
-  readonly secrets?: ReadonlyArray<{ readonly secretId: string }>;
+  readonly secrets?: ReadonlyArray<{ readonly secretId: string }> | undefined;
   /** Kill the command after this long. */
   readonly timeout?: DurationInput;
   /** Bytes (or text) written to the command's stdin, then closed. */
@@ -408,7 +408,7 @@ export interface SandboxHandleOf<R> {
   wait(
     timeout?: DurationInput,
   ): Effect.Effect<
-    { readonly exitCode?: number; readonly status: string },
+    { readonly exitCode?: number | undefined; readonly status: string },
     SandboxOpError<"wait">,
     R
   >;
@@ -486,18 +486,20 @@ export type RawSandboxHandle = SandboxHandleOf<never>;
 export interface SandboxTarget {
   readonly appId: string;
   /** Environment of the app (for name lookups and tag updates). */
-  readonly environment?: string;
+  readonly environment?: string | undefined;
   /** Name of the app (for name lookups). */
-  readonly appName?: string;
+  readonly appName?: string | undefined;
   /** Image used when `create` names none. */
-  readonly imageId?: string;
+  readonly imageId?: string | undefined;
   /** A `Modal.Sandbox` program: the secret holding its env, its command, its port and mounts. */
-  readonly program?: {
-    readonly secretId: string;
-    readonly command: ReadonlyArray<string>;
-    readonly port: number;
-    readonly mounts?: ModalMounts;
-  };
+  readonly program?:
+    | {
+        readonly secretId: string;
+        readonly command: ReadonlyArray<string>;
+        readonly port: number;
+        readonly mounts?: ModalMounts;
+      }
+    | undefined;
 }
 
 /** The text of a command's output stream, from its router read chunks. */

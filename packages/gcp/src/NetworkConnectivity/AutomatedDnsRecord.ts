@@ -44,9 +44,9 @@ export type AutomatedDnsRecordDeleteMode =
 
 export type DnsRecordConfig = {
   /** TTL as a duration string, e.g. `"30s"`. */
-  ttl?: string;
+  ttl?: string | undefined;
   /** Resource-record data. Format depends on `recordType`. */
-  rrdatas?: string[];
+  rrdatas?: string[] | undefined;
 };
 
 export type AutomatedDnsRecordProps = {

@@ -143,7 +143,7 @@ const delMany = (base: string, keys: string[]) =>
 /** One page of `/list`, with the paging fields the client reports. */
 const listPage = (
   base: string,
-  query: { prefix: string; delimiter?: string; limit?: number; cursor?: string },
+  query: { prefix: string; delimiter?: string; limit?: number; cursor?: string | undefined },
 ) => {
   const params = new URLSearchParams({ prefix: query.prefix });
   if (query.delimiter) params.set("delimiter", query.delimiter);

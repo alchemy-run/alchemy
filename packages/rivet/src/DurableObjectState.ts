@@ -155,7 +155,7 @@ interface StoredAlarm {
   readonly id?: string;
   readonly at: number;
   readonly token: string;
-  readonly retries?: number;
+  readonly retries?: number | undefined;
 }
 
 /** A failed alarm is retried this many times, as on Cloudflare. */

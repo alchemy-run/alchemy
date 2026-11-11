@@ -552,9 +552,9 @@ const findByIdentity = Effect.fn(function* (
 });
 
 const observe = Effect.fn(function* (input: {
-  id?: string;
-  country?: string;
-  countryOptions?: TaxRegistrationCountryOptions;
+  id?: string | undefined;
+  country?: string | undefined;
+  countryOptions?: TaxRegistrationCountryOptions | undefined;
 }) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);

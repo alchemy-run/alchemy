@@ -3,6 +3,8 @@ import * as aisearch from "@distilled.cloud/cloudflare/aisearch";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
 import type * as HttpClient from "effect/http/HttpClient";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import type { Credentials } from "../Credentials.ts";
 import { SearchError, type QuerySearchClient } from "./QuerySearch.ts";
@@ -35,8 +37,6 @@ export interface SearchAuth {
   accountId: string;
 }
 
-const u = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
-
 const run = <A, E>(
   auth: SearchAuth,
   eff: Effect.Effect<A, E, Credentials | HttpClient.HttpClient>,
@@ -64,19 +64,32 @@ const mapChunk = (c: ChunkIn): runtime.AiSearchSearchResponse["chunks"][number] 
   text: c.text,
   item: {
     key: c.item?.key ?? "",
-    timestamp: u(c.item?.timestamp),
-    metadata: u(c.item?.metadata) as Record<string, unknown> | undefined,
+    ...Record.filterMap(
+      {
+        timestamp: c.item?.timestamp,
+        metadata: c.item?.metadata as Record<string, unknown> | null | undefined,
+      },
+      Result.fromNullishOr(() => undefined),
+    ),
   },
-  scoring_details: c.scoringDetails
-    ? {
-        keyword_score: u(c.scoringDetails.keywordScore),
-        vector_score: u(c.scoringDetails.vectorScore),
-        keyword_rank: u(c.scoringDetails.keywordRank),
-        vector_rank: u(c.scoringDetails.vectorRank),
-        reranking_score: u(c.scoringDetails.rerankingScore),
-        fusion_method: u(c.scoringDetails.fusionMethod) as "rrf" | "max" | undefined,
-      }
-    : undefined,
+  ...Record.filterMap(
+    {
+      scoring_details: c.scoringDetails
+        ? Record.filterMap(
+            {
+              keyword_score: c.scoringDetails.keywordScore,
+              vector_score: c.scoringDetails.vectorScore,
+              keyword_rank: c.scoringDetails.keywordRank,
+              vector_rank: c.scoringDetails.vectorRank,
+              reranking_score: c.scoringDetails.rerankingScore,
+              fusion_method: c.scoringDetails.fusionMethod as "rrf" | "max" | null | undefined,
+            },
+            Result.fromNullishOr(() => undefined),
+          )
+        : undefined,
+    },
+    Result.fromNullishOr(() => undefined),
+  ),
 });
 
 const mapSearch = (
@@ -89,11 +102,15 @@ const mapSearch = (
 const mapChat = (
   r: aisearch.ChatCompletionsNamespaceInstanceResponse,
 ): runtime.AiSearchChatCompletionsResponse => ({
-  id: u(r.id),
-  object: u(r.object),
-  model: u(r.model),
+  ...Record.filterMap(
+    { id: r.id, object: r.object, model: r.model },
+    Result.fromNullishOr(() => undefined),
+  ),
   choices: r.choices.map((choice) => ({
-    index: u(choice.index),
+    ...Record.filterMap(
+      { index: choice.index },
+      Result.fromNullishOr(() => undefined),
+    ),
     message: {
       role: choice.message.role as "system" | "developer" | "user" | "assistant" | "tool",
       content:
@@ -108,84 +125,119 @@ const mapChat = (
 });
 
 const mapStats = (r: aisearch.StatsNamespaceInstanceResponse): runtime.AiSearchStatsResponse => ({
-  queued: u(r.queued),
-  running: u(r.running),
-  completed: u(r.completed),
-  error: u(r.error),
-  skipped: u(r.skipped),
-  outdated: u(r.outdated),
-  last_activity: u(r.lastActivity),
-  engine: r.engine
-    ? {
-        vectorize: r.engine.vectorize
-          ? {
-              vectorsCount: r.engine.vectorize.vectorsCount,
-              dimensions: r.engine.vectorize.dimensions,
-            }
-          : undefined,
-        r2: r.engine.r2
-          ? {
-              payloadSizeBytes: r.engine.r2.payloadSizeBytes,
-              metadataSizeBytes: r.engine.r2.metadataSizeBytes,
-              objectCount: r.engine.r2.objectCount,
-            }
-          : undefined,
-      }
-    : undefined,
+  ...Record.filterMap(
+    {
+      queued: r.queued,
+      running: r.running,
+      completed: r.completed,
+      error: r.error,
+      skipped: r.skipped,
+      outdated: r.outdated,
+      last_activity: r.lastActivity,
+      engine: r.engine
+        ? Record.filterMap(
+            {
+              vectorize: r.engine.vectorize
+                ? {
+                    vectorsCount: r.engine.vectorize.vectorsCount,
+                    dimensions: r.engine.vectorize.dimensions,
+                  }
+                : undefined,
+              r2: r.engine.r2
+                ? {
+                    payloadSizeBytes: r.engine.r2.payloadSizeBytes,
+                    metadataSizeBytes: r.engine.r2.metadataSizeBytes,
+                    objectCount: r.engine.r2.objectCount,
+                  }
+                : undefined,
+            },
+            Result.fromNullishOr(() => undefined),
+          )
+        : undefined,
+    },
+    Result.fromNullishOr(() => undefined),
+  ),
 });
 
 const mapInfo = (r: aisearch.ReadNamespaceInstanceResponse): runtime.AiSearchInstanceInfo => ({
   id: r.id,
-  type: u(r.type) as runtime.AiSearchInstanceInfo["type"],
-  source: u(r.source),
-  source_params: u(r.sourceParams),
-  paused: u(r.paused),
-  status: u(r.status),
-  namespace: u(r.namespace),
-  created_at: u(r.createdAt),
-  modified_at: u(r.modifiedAt),
-  token_id: u(r.tokenId),
-  ai_gateway_id: u(r.aiGatewayId),
-  rewrite_query: u(r.rewriteQuery),
-  reranking: u(r.reranking),
-  embedding_model: u(r.embeddingModel),
-  ai_search_model: u(r.aiSearchModel),
-  rewrite_model: u(r.rewriteModel),
-  reranking_model: u(r.rerankingModel),
-  hybrid_search_enabled: u(r.hybridSearchEnabled),
-  index_method: r.indexMethod
-    ? { vector: r.indexMethod.vector, keyword: r.indexMethod.keyword }
-    : undefined,
-  fusion_method: u(r.fusionMethod) as "max" | "rrf" | undefined,
-  indexing_options: r.indexingOptions
-    ? {
-        keyword_tokenizer: u(r.indexingOptions.keywordTokenizer) as
-          | "porter"
-          | "trigram"
-          | undefined,
-      }
-    : undefined,
-  retrieval_options: r.retrievalOptions
-    ? {
-        keyword_match_mode: u(r.retrievalOptions.keywordMatchMode) as "and" | "or" | undefined,
-        boost_by: u(r.retrievalOptions.boostBy)?.map((b) => ({
-          field: b.field,
-          direction: u(b.direction) as "asc" | "desc" | "exists" | "not_exists" | undefined,
-        })),
-      }
-    : undefined,
-  chunk_size: u(r.chunkSize),
-  chunk_overlap: u(r.chunkOverlap),
-  score_threshold: u(r.scoreThreshold),
-  max_num_results: u(r.maxNumResults),
-  cache: u(r.cache),
-  cache_threshold: u(r.cacheThreshold) as runtime.AiSearchInstanceInfo["cache_threshold"],
-  custom_metadata: u(r.customMetadata)?.map((m) => ({
-    field_name: m.fieldName,
-    data_type: m.dataType as "text" | "number" | "boolean" | "datetime",
-  })),
-  sync_interval: u(r.syncInterval) as runtime.AiSearchInstanceInfo["sync_interval"],
-  metadata: u(r.metadata) as Record<string, unknown> | undefined,
+  ...Record.filterMap(
+    {
+      type: r.type,
+      source: r.source,
+      source_params: r.sourceParams,
+      paused: r.paused,
+      status: r.status,
+      namespace: r.namespace,
+      created_at: r.createdAt,
+      modified_at: r.modifiedAt,
+      token_id: r.tokenId,
+      ai_gateway_id: r.aiGatewayId,
+      rewrite_query: r.rewriteQuery,
+      reranking: r.reranking,
+      embedding_model: r.embeddingModel,
+      ai_search_model: r.aiSearchModel,
+      rewrite_model: r.rewriteModel,
+      reranking_model: r.rerankingModel,
+      hybrid_search_enabled: r.hybridSearchEnabled,
+      index_method: r.indexMethod
+        ? { vector: r.indexMethod.vector, keyword: r.indexMethod.keyword }
+        : undefined,
+      fusion_method: r.fusionMethod as "max" | "rrf" | null | undefined,
+      indexing_options: r.indexingOptions
+        ? Record.filterMap(
+            {
+              keyword_tokenizer: r.indexingOptions.keywordTokenizer as
+                | "porter"
+                | "trigram"
+                | null
+                | undefined,
+            },
+            Result.fromNullishOr(() => undefined),
+          )
+        : undefined,
+      retrieval_options: r.retrievalOptions
+        ? Record.filterMap(
+            {
+              keyword_match_mode: r.retrievalOptions.keywordMatchMode as
+                | "and"
+                | "or"
+                | null
+                | undefined,
+              boost_by: r.retrievalOptions.boostBy?.map((b) => ({
+                field: b.field,
+                ...Record.filterMap(
+                  {
+                    direction: b.direction as
+                      | "asc"
+                      | "desc"
+                      | "exists"
+                      | "not_exists"
+                      | null
+                      | undefined,
+                  },
+                  Result.fromNullishOr(() => undefined),
+                ),
+              })),
+            },
+            Result.fromNullishOr(() => undefined),
+          )
+        : undefined,
+      chunk_size: r.chunkSize,
+      chunk_overlap: r.chunkOverlap,
+      score_threshold: r.scoreThreshold,
+      max_num_results: r.maxNumResults,
+      cache: r.cache,
+      cache_threshold: r.cacheThreshold as runtime.AiSearchInstanceInfo["cache_threshold"],
+      custom_metadata: r.customMetadata?.map((m) => ({
+        field_name: m.fieldName,
+        data_type: m.dataType as "text" | "number" | "boolean" | "datetime",
+      })),
+      sync_interval: r.syncInterval as runtime.AiSearchInstanceInfo["sync_interval"],
+      metadata: r.metadata as Record<string, unknown> | null | undefined,
+    },
+    Result.fromNullishOr(() => undefined),
+  ),
 });
 
 const mapList = (
@@ -197,10 +249,15 @@ const mapList = (
 const mapMulti = (r: aisearch.SearchNamespaceResponse): runtime.AiSearchMultiSearchResponse => ({
   search_query: r.searchQuery ?? "",
   chunks: r.chunks.map((c) => ({ ...mapChunk(c), instance_id: c.instanceId })),
-  errors: u(r.errors)?.map((e) => ({
-    instance_id: e.instanceId,
-    message: e.message,
-  })),
+  ...Record.filterMap(
+    {
+      errors: r.errors?.map((e) => ({
+        instance_id: e.instanceId,
+        message: e.message,
+      })),
+    },
+    Result.fromNullishOr(() => undefined),
+  ),
 });
 
 // ── request mappers (runtime snake_case -> distilled camelCase) ──────────────

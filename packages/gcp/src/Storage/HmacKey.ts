@@ -100,7 +100,7 @@ export const HmacKey = Resource<HmacKey>("GCP.Storage.HmacKey");
 export class HmacKeyNotResolved extends Data.TaggedError("GCP.Storage.HmacKeyNotResolved")<{
   projectId: string;
   serviceAccountEmail: string;
-  accessId?: string;
+  accessId?: string | undefined;
 }> {}
 
 export class HmacKeyStillExists extends Data.TaggedError("GCP.Storage.HmacKeyStillExists")<{

@@ -1,5 +1,7 @@
 import * as Railway from "@alchemy.run/railway";
 import * as Effect from "effect/Effect";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import {
   bundleNodes,
   isImageProgram,
@@ -63,7 +65,10 @@ export const ServicePool = (id: string, options: ServicePoolOptions = {}) =>
               build: { install: { rivetkit: RIVETKIT_VERSION } },
             }),
         publicDomain: false,
-        region: options.region,
+        ...Record.filterMap(
+          { region: options.region },
+          Result.fromNullishOr(() => undefined),
+        ),
         env: nodeEnvironment(nodes),
       });
     }),

@@ -87,8 +87,8 @@ export const resolveIdentityStoreId = Effect.fn(function* ({
   identityStoreId,
   instanceArn,
 }: {
-  identityStoreId?: string;
-  instanceArn?: string;
+  identityStoreId?: string | undefined;
+  instanceArn?: string | undefined;
 }) {
   if (identityStoreId) {
     return identityStoreId;

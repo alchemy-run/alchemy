@@ -28,7 +28,7 @@ export type SinkExclusion = {
   /**
    * Human-readable description of this exclusion.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * When true, the exclusion exists but does not exclude any entries.
    * @default false
@@ -74,7 +74,7 @@ export type SinkProps = {
    * no labels field, so Alchemy ownership is stored in a `[alchemy …]`
    * prefix and stripped from attributes.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * When true, the sink exists but does not export any log entries.
    * @default false

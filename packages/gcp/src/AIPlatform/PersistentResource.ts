@@ -43,15 +43,15 @@ export type ResourcePool = {
   /**
    * Unique id within the PersistentResource. Generated if omitted.
    */
-  id?: string;
+  id?: string | undefined;
   /** Machine spec. Immutable. */
-  machineSpec?: MachineSpec;
+  machineSpec?: MachineSpec | undefined;
   /** Replica count (string). @default "1" */
-  replicaCount?: string;
+  replicaCount?: string | undefined;
   /** Disk spec. */
-  diskSpec?: DiskSpec;
+  diskSpec?: DiskSpec | undefined;
   /** Autoscaling spec. */
-  autoscalingSpec?: ResourcePoolAutoscalingSpec;
+  autoscalingSpec?: ResourcePoolAutoscalingSpec | undefined;
 };
 
 export type RaySpec = {
@@ -474,7 +474,9 @@ export const PersistentResourceProvider = () =>
       // machine spec is immutable (a change replaces), so only replica counts
       // are compared and patched.
       const replicaCounts = (
-        pools: ReadonlyArray<{ id?: string; replicaCount?: string }> | undefined,
+        pools:
+          | ReadonlyArray<{ id?: string | undefined; replicaCount?: string | undefined }>
+          | undefined,
       ) =>
         Object.fromEntries(
           (pools ?? []).map((pool, index) => [

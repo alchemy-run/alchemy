@@ -28,7 +28,7 @@ export const makeSmsVoicePhoneNumberHttpBinding = <
   // Optional so the builder accepts SendTextMessage, whose wire
   // `OriginationIdentity` is optional (account-default routing); the
   // binding always injects the bound number's ARN regardless.
-  I extends { OriginationIdentity?: string },
+  I extends { OriginationIdentity?: string | undefined },
   A,
   E,
   R,

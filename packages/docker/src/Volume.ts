@@ -47,7 +47,7 @@ export interface Volume extends Resource<
     /** Labels reported by Docker. */
     labels: Record<string, string>;
     /** Host mountpoint path. */
-    mountpoint?: string;
+    mountpoint?: string | undefined;
     /** Creation timestamp in milliseconds since epoch. */
     createdAt: number;
   },

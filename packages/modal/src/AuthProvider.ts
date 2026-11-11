@@ -63,7 +63,7 @@ export interface ModalResolvedCredentials {
   tokenId: Redacted.Redacted<string>;
   tokenSecret: Redacted.Redacted<string>;
   apiBaseUrl: string;
-  source: { type: ModalAuthConfig["method"] | "env"; details?: string };
+  source: { type: ModalAuthConfig["method"] | "env"; details?: string | undefined };
 }
 
 const trimmed = (value: Redacted.Redacted<string> | undefined) =>

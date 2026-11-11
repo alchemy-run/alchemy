@@ -196,7 +196,7 @@ export const environmentIdOf = (project: {
 
 const toAttrs = (
   project: CloudProject,
-  fallback?: { name?: string; workspaceId?: string; environmentId?: string },
+  fallback?: { name?: string; workspaceId?: string; environmentId?: string | undefined },
 ): Project["Attributes"] => {
   const name = project.name || fallback?.name || "";
   return {
@@ -344,7 +344,7 @@ const readProjectAttributes = Effect.fn(function* ({
 }: {
   id: string;
   olds?: ProjectProps;
-  output?: Partial<Project["Attributes"]>;
+  output?: Partial<Project["Attributes"]> | undefined;
 }) {
   const name = yield* resolveName(id, olds?.name, output?.name);
   const workspaceId = output?.workspaceId ?? olds?.workspaceId ?? (yield* currentWorkspaceId());

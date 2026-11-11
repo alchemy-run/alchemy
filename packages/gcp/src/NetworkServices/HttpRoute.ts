@@ -37,98 +37,98 @@ const COLLECTION = "httpRoutes";
 
 export type HttpRouteHeaderMatchIntegerRange = {
   /** Inclusive start of the range. */
-  start?: number;
+  start?: number | undefined;
   /** Exclusive end of the range. */
-  end?: number;
+  end?: number | undefined;
 };
 
 export type HttpRouteHeaderMatch = {
   /** Exact header value. */
-  exactMatch?: string;
+  exactMatch?: string | undefined;
   /** RE2 regular expression. */
-  regexMatch?: string;
+  regexMatch?: string | undefined;
   /** Prefix of the header value. */
-  prefixMatch?: string;
+  prefixMatch?: string | undefined;
   /** Suffix of the header value. */
-  suffixMatch?: string;
+  suffixMatch?: string | undefined;
   /** Header is present regardless of value. */
-  presentMatch?: boolean;
+  presentMatch?: boolean | undefined;
   /** Integer range match. */
-  rangeMatch?: HttpRouteHeaderMatchIntegerRange;
+  rangeMatch?: HttpRouteHeaderMatchIntegerRange | undefined;
   /** HTTP header name. */
-  header?: string;
+  header?: string | undefined;
   /** Invert the match result. */
-  invertMatch?: boolean;
+  invertMatch?: boolean | undefined;
 };
 
 export type HttpRouteQueryParameterMatch = {
   /** Exact query parameter value. */
-  exactMatch?: string;
+  exactMatch?: string | undefined;
   /** RE2 regular expression. */
-  regexMatch?: string;
+  regexMatch?: string | undefined;
   /** Parameter is present regardless of value. */
-  presentMatch?: boolean;
+  presentMatch?: boolean | undefined;
   /** Query parameter name. */
-  queryParameter?: string;
+  queryParameter?: string | undefined;
 };
 
 export type HttpRouteRouteMatch = {
   /** Exact request path. Mutually exclusive with prefix/regex. */
-  fullPathMatch?: string;
+  fullPathMatch?: string | undefined;
   /** Path prefix. Must start with `/`. */
-  prefixMatch?: string;
+  prefixMatch?: string | undefined;
   /** RE2 regular expression against the path. */
-  regexMatch?: string;
+  regexMatch?: string | undefined;
   /** Case-insensitive prefix/full path matching. */
-  ignoreCase?: boolean;
+  ignoreCase?: boolean | undefined;
   /** Header matchers. All must match. */
-  headers?: HttpRouteHeaderMatch[];
+  headers?: HttpRouteHeaderMatch[] | undefined;
   /** Query parameter matchers. All must match. */
-  queryParameters?: HttpRouteQueryParameterMatch[];
+  queryParameters?: HttpRouteQueryParameterMatch[] | undefined;
 };
 
 export type HttpRouteHeaderModifier = {
   /** Replace headers by name. */
-  set?: Record<string, string>;
+  set?: Record<string, string> | undefined;
   /** Append headers by name. */
-  add?: Record<string, string>;
+  add?: Record<string, string> | undefined;
   /** Header names to remove. */
-  remove?: string[];
+  remove?: string[] | undefined;
 };
 
 export type HttpRouteDestination = {
   /** BackendService URL. */
-  serviceName?: string;
+  serviceName?: string | undefined;
   /** Traffic weight relative to other destinations. */
-  weight?: number;
+  weight?: number | undefined;
   /** Request header modifiers applied before forwarding. */
-  requestHeaderModifier?: HttpRouteHeaderModifier;
+  requestHeaderModifier?: HttpRouteHeaderModifier | undefined;
   /** Response header modifiers applied before returning. */
-  responseHeaderModifier?: HttpRouteHeaderModifier;
+  responseHeaderModifier?: HttpRouteHeaderModifier | undefined;
 };
 
 export type HttpRouteRedirect = {
   /** Host used in the redirect. */
-  hostRedirect?: string;
+  hostRedirect?: string | undefined;
   /** Path used in the redirect. Mutually exclusive with `prefixRewrite`. */
-  pathRedirect?: string;
+  pathRedirect?: string | undefined;
   /** Replace the matched prefix with this value. */
-  prefixRewrite?: string;
+  prefixRewrite?: string | undefined;
   /** HTTP status (`MOVED_PERMANENTLY_DEFAULT`, `FOUND`, …). */
-  responseCode?: string;
+  responseCode?: string | undefined;
   /** Redirect to HTTPS. */
-  httpsRedirect?: boolean;
+  httpsRedirect?: boolean | undefined;
   /** Strip the original query string. */
-  stripQuery?: boolean;
+  stripQuery?: boolean | undefined;
   /** Port used in the redirect. */
-  portRedirect?: number;
+  portRedirect?: number | undefined;
 };
 
 export type HttpRouteURLRewrite = {
   /** Replace the matching path prefix. */
-  pathPrefixRewrite?: string;
+  pathPrefixRewrite?: string | undefined;
   /** Replace the Host header. */
-  hostRewrite?: string;
+  hostRewrite?: string | undefined;
 };
 
 export type HttpRouteRetryPolicy = {
@@ -136,75 +136,75 @@ export type HttpRouteRetryPolicy = {
    * Conditions that trigger a retry (`5xx`, `gateway-error`, `reset`,
    * `connect-failure`, `retriable-4xx`, `refused-stream`).
    */
-  retryConditions?: string[];
+  retryConditions?: string[] | undefined;
   /** Allowed retry count. Defaults to 1. */
-  numRetries?: number;
+  numRetries?: number | undefined;
   /** Timeout per retry attempt. */
-  perTryTimeout?: string;
+  perTryTimeout?: string | undefined;
 };
 
 export type HttpRouteRequestMirrorPolicy = {
   /** Shadow destination. Weight is ignored. */
-  destination?: HttpRouteDestination;
+  destination?: HttpRouteDestination | undefined;
   /** Percentage of requests mirrored. */
-  mirrorPercent?: number;
+  mirrorPercent?: number | undefined;
 };
 
 export type HttpRouteCorsPolicy = {
   /** Allowed origins. */
-  allowOrigins?: string[];
+  allowOrigins?: string[] | undefined;
   /** Allowed origin RE2 patterns. */
-  allowOriginRegexes?: string[];
+  allowOriginRegexes?: string[] | undefined;
   /** `Access-Control-Allow-Methods`. */
-  allowMethods?: string[];
+  allowMethods?: string[] | undefined;
   /** `Access-Control-Allow-Headers`. */
-  allowHeaders?: string[];
+  allowHeaders?: string[] | undefined;
   /** `Access-Control-Expose-Headers`. */
-  exposeHeaders?: string[];
+  exposeHeaders?: string[] | undefined;
   /** `Access-Control-Max-Age` in seconds. */
-  maxAge?: string;
+  maxAge?: string | undefined;
   /** `Access-Control-Allow-Credentials`. */
-  allowCredentials?: boolean;
+  allowCredentials?: boolean | undefined;
   /** Disable the CORS policy. */
-  disabled?: boolean;
+  disabled?: boolean | undefined;
 };
 
 export type HttpRouteHttpDirectResponse = {
   /** Response body as a string. Max 1024 characters. */
-  stringBody?: string;
+  stringBody?: string | undefined;
   /** Response body as bytes. Max 4096B. */
-  bytesBody?: string;
+  bytesBody?: string | undefined;
   /** HTTP status. */
-  status?: number;
+  status?: number | undefined;
 };
 
 export type HttpRouteRouteAction = {
   /** Destinations that receive matched traffic. */
   destinations?: HttpRouteDestination[];
   /** Redirect instead of forwarding. */
-  redirect?: HttpRouteRedirect;
+  redirect?: HttpRouteRedirect | undefined;
   /** Fault injection. */
-  faultInjectionPolicy?: GrpcRouteFaultInjectionPolicy;
+  faultInjectionPolicy?: GrpcRouteFaultInjectionPolicy | undefined;
   /** Request header modifiers. */
-  requestHeaderModifier?: HttpRouteHeaderModifier;
+  requestHeaderModifier?: HttpRouteHeaderModifier | undefined;
   /** Response header modifiers. */
-  responseHeaderModifier?: HttpRouteHeaderModifier;
+  responseHeaderModifier?: HttpRouteHeaderModifier | undefined;
   /** URL rewrite before forwarding. */
-  urlRewrite?: HttpRouteURLRewrite;
+  urlRewrite?: HttpRouteURLRewrite | undefined;
   /** End-to-end timeout including retries. */
-  timeout?: string;
+  timeout?: string | undefined;
   /** Retry policy. */
-  retryPolicy?: HttpRouteRetryPolicy;
+  retryPolicy?: HttpRouteRetryPolicy | undefined;
   /** Request mirroring. */
-  requestMirrorPolicy?: HttpRouteRequestMirrorPolicy;
+  requestMirrorPolicy?: HttpRouteRequestMirrorPolicy | undefined;
   /** CORS policy. */
-  corsPolicy?: HttpRouteCorsPolicy;
+  corsPolicy?: HttpRouteCorsPolicy | undefined;
   /** Cookie-based session affinity. */
-  statefulSessionAffinity?: GrpcRouteStatefulSessionAffinityPolicy;
+  statefulSessionAffinity?: GrpcRouteStatefulSessionAffinityPolicy | undefined;
   /** Static HTTP response. */
-  directResponse?: HttpRouteHttpDirectResponse;
+  directResponse?: HttpRouteHttpDirectResponse | undefined;
   /** Idle timeout. `0s` disables it. */
-  idleTimeout?: string;
+  idleTimeout?: string | undefined;
 };
 
 export type HttpRouteRouteRule = {
@@ -214,7 +214,7 @@ export type HttpRouteRouteRule = {
    */
   matches?: HttpRouteRouteMatch[];
   /** How to route matched traffic. */
-  action?: HttpRouteRouteAction;
+  action?: HttpRouteRouteAction | undefined;
 };
 
 export type HttpRouteProps = {

@@ -26,22 +26,24 @@ export interface LanguageModelOptions {
   /** Model ID from Neon's catalog that supports Chat Completions. */
   readonly model: string;
   /** Model-dependent generation settings, sent without silently rewriting them. */
-  readonly parameters?: {
-    /** Sampling temperature. */
-    readonly temperature?: number;
-    /** Maximum output tokens; mutually exclusive with maxCompletionTokens. */
-    readonly maxTokens?: number;
-    /** Completion budget for models using max_completion_tokens. */
-    readonly maxCompletionTokens?: number;
-    /** Nucleus sampling probability. */
-    readonly topP?: number;
-    /** Provider-supported deterministic sampling seed. */
-    readonly seed?: number;
-    /** Repetition penalty based on token frequency. */
-    readonly frequencyPenalty?: number;
-    /** Repetition penalty based on token presence. */
-    readonly presencePenalty?: number;
-  };
+  readonly parameters?:
+    | {
+        /** Sampling temperature. */
+        readonly temperature?: number;
+        /** Maximum output tokens; mutually exclusive with maxCompletionTokens. */
+        readonly maxTokens?: number;
+        /** Completion budget for models using max_completion_tokens. */
+        readonly maxCompletionTokens?: number;
+        /** Nucleus sampling probability. */
+        readonly topP?: number;
+        /** Provider-supported deterministic sampling seed. */
+        readonly seed?: number;
+        /** Repetition penalty based on token frequency. */
+        readonly frequencyPenalty?: number;
+        /** Repetition penalty based on token presence. */
+        readonly presencePenalty?: number;
+      }
+    | undefined;
 }
 
 /**

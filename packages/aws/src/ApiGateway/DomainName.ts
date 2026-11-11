@@ -71,12 +71,14 @@ export interface DomainName extends Resource<
      * changes.
      */
     configuration?: {
-      certificateArn?: string;
-      regionalCertificateArn?: string;
-      securityPolicy?: string;
-      endpointTypes?: string[];
-      ipAddressType?: string;
-      mutualTlsAuthentication?: { truststoreUri?: string; truststoreVersion?: string };
+      certificateArn?: string | undefined;
+      regionalCertificateArn?: string | undefined;
+      securityPolicy?: string | undefined;
+      endpointTypes?: string[] | undefined;
+      ipAddressType?: string | undefined;
+      mutualTlsAuthentication?:
+        | { truststoreUri?: string | undefined; truststoreVersion?: string | undefined }
+        | undefined;
     };
   },
   never,

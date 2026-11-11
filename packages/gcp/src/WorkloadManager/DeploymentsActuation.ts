@@ -26,32 +26,32 @@ import {
 
 export type ActuationOutput = {
   /** Blueprint Controller deployment and revision resource. */
-  blueprintId?: string;
+  blueprintId?: string | undefined;
   /** Terraform template used. */
-  terraformTemplate?: string;
+  terraformTemplate?: string | undefined;
   /** Cloud Storage file that stores build logs. */
-  actuateLogs?: string;
+  actuateLogs?: string | undefined;
   /** Error code when actuation failed. */
-  errorCode?: string;
+  errorCode?: string | undefined;
   /** Error message returned from Ansible. */
-  ansibleError?: string;
+  ansibleError?: string | undefined;
   /** Error message returned from Terraform. */
-  terraformError?: string;
+  terraformError?: string | undefined;
   /** Cloud Build instance UUID. */
-  cloudbuildId?: string;
+  cloudbuildId?: string | undefined;
   /** Failed Ansible task names. */
-  ansibleFailedTask?: string[];
+  ansibleFailedTask?: string[] | undefined;
   /** Link to the actuation Cloud Build log. */
-  errorLogs?: string;
+  errorLogs?: string | undefined;
   /** Whether the error message is user facing. */
-  hasUserFacingErrorMsg?: boolean;
+  hasUserFacingErrorMsg?: boolean | undefined;
 };
 
 export type DeploymentOutput = {
   /** Type of the deployed resource. */
-  type?: string;
+  type?: string | undefined;
   /** Name of the deployed resource. */
-  name?: string;
+  name?: string | undefined;
 };
 
 export type DeploymentsActuationProps = {

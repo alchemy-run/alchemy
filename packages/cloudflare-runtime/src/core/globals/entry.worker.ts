@@ -3,6 +3,8 @@ import type {
   Fetcher,
   Request as WorkersRequest,
 } from "@cloudflare/workers-types/experimental";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import PostalMime, { type Email } from "postal-mime";
 import { RAW_EMAIL } from "../bindings/send-email/SendEmailOptions.shared.ts";
 import { makeErrorResponse } from "../internal/response.shared.ts";
@@ -475,9 +477,13 @@ export default <ExportedHandler<Env>>{
     ) {
       try {
         const time = url.searchParams.get("time");
+        const cron = url.searchParams.get("cron");
         const result = await env[BINDING_USER_WORKER_DIRECT].scheduled({
-          scheduledTime: time ? new Date(parseInt(time)) : undefined,
-          cron: url.searchParams.get("cron") ?? undefined,
+          ...(time ? { scheduledTime: new Date(parseInt(time)) } : {}),
+          ...Record.filterMap(
+            { cron },
+            Result.fromNullishOr(() => undefined),
+          ),
         });
         if (url.searchParams.get("format") === "json") {
           return Response.json(result, { status: result.outcome === "ok" ? 200 : 500 });

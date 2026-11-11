@@ -32,7 +32,7 @@ export type CallbackScheduleOptions<Payload> = {
    * schedules cannot replace newer work. Commit progress and scheduling in the
    * same storage transaction; changing IDs, payloads, or deadlines is not progress.
    */
-  readonly progress?: number;
+  readonly progress?: number | undefined;
 } & (
   | {
       /** Absolute delivery time, as a Date or positive milliseconds since the Unix epoch. */

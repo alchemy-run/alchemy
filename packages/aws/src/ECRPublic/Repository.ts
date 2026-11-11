@@ -60,7 +60,7 @@ export interface PublicRepositoryProps {
    * Repository permission policy JSON granting push/pull access to other
    * principals. Omit for a private-push, public-pull repository.
    */
-  policyText?: string;
+  policyText?: string | undefined;
   /**
    * User-defined tags to apply to the repository.
    */
@@ -80,7 +80,7 @@ export interface PublicRepository extends Resource<
     /** The AWS account ID of the registry. */
     registryId: string;
     /** The JSON repository permissions policy, if any. */
-    policyText?: string;
+    policyText?: string | undefined;
     /** The tags attached to the repository. */
     tags: Record<string, string>;
   },

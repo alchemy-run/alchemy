@@ -58,10 +58,10 @@ export interface ReplicationGroupProps {
   /** User group IDs for Valkey/Redis RBAC. */
   userGroupIds?: string[];
   /** Snapshot used only while creating a new group. */
-  snapshotName?: string;
+  snapshotName?: string | undefined;
   snapshotArns?: string[];
   /** Optional final snapshot created before destroy. */
-  finalSnapshotName?: string;
+  finalSnapshotName?: string | undefined;
   tags?: Record<string, string>;
 }
 

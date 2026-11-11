@@ -39,7 +39,7 @@ export type DatasetProps = {
    * letters, numbers, and underscores; max 1024 characters. Immutable —
    * changing it replaces the dataset.
    */
-  datasetId?: string;
+  datasetId?: string | undefined;
   /**
    * Geographic location (`US`, `EU`, `US-CENTRAL1`, `us-central1`, …).
    * Immutable — changing it replaces the dataset.

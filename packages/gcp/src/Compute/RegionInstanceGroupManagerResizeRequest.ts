@@ -22,9 +22,9 @@ import {
 
 export type RegionInstanceGroupManagerResizeRequestDuration = {
   /** Whole seconds. */
-  seconds?: string;
+  seconds?: string | undefined;
   /** Fractional seconds at nanosecond resolution. */
-  nanos?: number;
+  nanos?: number | undefined;
 };
 
 export type RegionInstanceGroupManagerResizeRequestProps = {

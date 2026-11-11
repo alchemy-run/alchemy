@@ -46,27 +46,27 @@ export interface TargetGroupProps {
   /** The IP address type (`ipv4`/`ipv6`). Changing it replaces the target group. */
   ipAddressType?: "ipv4" | "ipv6";
   /** The health-check path (HTTP/HTTPS). Updated in place. */
-  healthCheckPath?: string;
+  healthCheckPath?: string | undefined;
   /** The health-check port. Updated in place. */
   healthCheckPort?: string;
   /** The health-check protocol. Updated in place. */
-  healthCheckProtocol?: string;
+  healthCheckProtocol?: string | undefined;
   /** Whether health checks are enabled. Updated in place. */
   healthCheckEnabled?: boolean;
   /** The approximate interval between health checks — e.g. `"15 seconds"`. Sent to AWS as whole seconds. Updated in place. */
   healthCheckInterval?: Duration.Input;
   /** The amount of time to wait for a health-check response — e.g. `"5 seconds"`. Sent to AWS as whole seconds. Updated in place. */
-  healthCheckTimeout?: Duration.Input;
+  healthCheckTimeout?: Duration.Input | undefined;
   /** The number of consecutive successes before a target is healthy. Updated in place. */
   healthyThresholdCount?: number;
   /** The number of consecutive failures before a target is unhealthy. Updated in place. */
   unhealthyThresholdCount?: number;
   /** The HTTP/gRPC codes used to determine a healthy response. Updated in place. */
-  matcher?: { HttpCode?: string; GrpcCode?: string };
+  matcher?: { HttpCode?: string; GrpcCode?: string } | undefined;
   /** Raw target-group attributes (deregistration delay, stickiness, slow start, ...). */
-  attributes?: Record<string, string>;
+  attributes?: Record<string, string> | undefined;
   /** Tags to apply to the target group. */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
 }
 
 export interface TargetGroup extends Resource<
@@ -91,7 +91,7 @@ export interface TargetGroup extends Resource<
      * The live values of the keys declared in `attributes`. Undeclared
      * attributes are left out so AWS defaults never register as drift.
      */
-    attributes?: Record<string, string>;
+    attributes?: Record<string, string> | undefined;
     /**
      * The health-check settings the props declare, as observed. Lets
      * `alchemy drift` detect out-of-band changes.

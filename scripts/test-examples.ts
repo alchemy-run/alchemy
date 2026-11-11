@@ -189,7 +189,7 @@ type Task = {
   /** Relative to the repository root; defaults to it. */
   cwd?: string;
   /** Tasks sharing a key run one at a time, in list order. */
-  serial?: string;
+  serial?: string | undefined;
 };
 
 type TaskState = Task & {

@@ -36,48 +36,48 @@ export type CustomOAuthConfig = {
    * Client secret of the OAuth application. Input only — not returned
    * on read.
    */
-  clientSecret?: string;
+  clientSecret?: string | undefined;
   /**
    * Service Directory config for a private OAuth host.
    */
-  serviceDirectoryConfig?: ServiceDirectoryConfig;
+  serviceDirectoryConfig?: ServiceDirectoryConfig | undefined;
   /**
    * SCM provider (`GITHUB_ENTERPRISE`, `GITLAB_ENTERPRISE`,
    * `BITBUCKET_DATA_CENTER`). Immutable — changing it replaces the
    * connector.
    */
-  scmProvider?: developerconnect.CustomOAuthConfigScmProviderEnum | (string & {});
+  scmProvider?: developerconnect.CustomOAuthConfigScmProviderEnum | (string & {}) | undefined;
   /**
    * Host URI of the OAuth application. Immutable — changing it
    * replaces the connector.
    */
-  hostUri?: string;
+  hostUri?: string | undefined;
   /**
    * OAuth client id.
    */
-  clientId?: string;
+  clientId?: string | undefined;
   /**
    * SSL certificate used for requests to a private host.
    */
-  sslCaCertificate?: string;
+  sslCaCertificate?: string | undefined;
   /**
    * OAuth2 token request URL. Immutable — changing it replaces the
    * connector.
    */
-  tokenUri?: string;
+  tokenUri?: string | undefined;
   /**
    * Disable PKCE for this OAuth config. PKCE is enabled by default.
    */
-  pkceDisabled?: boolean;
+  pkceDisabled?: boolean | undefined;
   /**
    * OAuth2 authorization server URL. Immutable — changing it replaces
    * the connector.
    */
-  authUri?: string;
+  authUri?: string | undefined;
   /**
    * Scopes requested during OAuth.
    */
-  scopes?: string[];
+  scopes?: string[] | undefined;
 };
 
 export type ProviderOAuthConfig = {
@@ -87,12 +87,15 @@ export type ProviderOAuthConfig = {
    * `DATASTAX`, `DYNATRACE`). Immutable — changing it replaces the
    * connector.
    */
-  systemProviderId?: developerconnect.ProviderOAuthConfigSystemProviderIdEnum | (string & {});
+  systemProviderId?:
+    | developerconnect.ProviderOAuthConfigSystemProviderIdEnum
+    | (string & {})
+    | undefined;
   /**
    * User-selected OAuth scopes. Changing scopes deletes existing user
    * records under the connector so users re-auth.
    */
-  scopes?: string[];
+  scopes?: string[] | undefined;
 };
 
 export type ProxyConfig = {

@@ -321,12 +321,12 @@ const unwrap = (value: Redacted.Redacted<string> | string): string =>
   Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
 type CertificateShape = {
-  id?: string | null;
-  status?: string | null;
-  expiresOn?: string | null;
-  issuer?: string | null;
-  signature?: string | null;
-  uploadedOn?: string | null;
+  id?: string | null | undefined;
+  status?: string | null | undefined;
+  expiresOn?: string | null | undefined;
+  issuer?: string | null | undefined;
+  signature?: string | null | undefined;
+  uploadedOn?: string | null | undefined;
 };
 
 const toAttributes = (cert: CertificateShape, zoneId: string): CertificateAttributes => ({

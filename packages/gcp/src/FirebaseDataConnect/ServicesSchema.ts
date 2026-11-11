@@ -34,17 +34,17 @@ import {
 
 export type File = {
   /** File contents (GraphQL SDL). */
-  content?: string;
+  content?: string | undefined;
   /**
    * Path relative to the Data Connect workspace, for example
    * `schema.gql`.
    */
-  path?: string;
+  path?: string | undefined;
 };
 
 export type Source = {
   /** GraphQL source files that make up the schema. */
-  files?: File[];
+  files?: File[] | undefined;
 };
 
 export type CloudSqlInstance = {
@@ -52,48 +52,48 @@ export type CloudSqlInstance = {
    * Cloud SQL instance resource name
    * `projects/{project}/locations/{location}/instances/{instance}`.
    */
-  instance?: string;
+  instance?: string | undefined;
 };
 
 export type HttpGraphql = {
   /** HTTP GraphQL endpoint URI. */
-  uri?: string;
+  uri?: string | undefined;
   /** Request timeout, for example `"3.5s"`. */
-  timeout?: string;
+  timeout?: string | undefined;
 };
 
 export type PostgreSql = {
   /** Cloud SQL instance used as the Postgres backend. */
-  cloudSql?: CloudSqlInstance;
+  cloudSql?: CloudSqlInstance | undefined;
   /**
    * When true, no Postgres instance is linked. Do not set `database`
    * or `schemaValidation` together with `unlinked`.
    */
-  unlinked?: boolean;
+  unlinked?: boolean | undefined;
   /** PostgreSQL database name. */
-  database?: string;
+  database?: string | undefined;
   /**
    * How much PostgreSQL schema validation to run before deploying
    * (`NONE`, `STRICT`, `COMPATIBLE`).
    */
-  schemaValidation?: firebasedataconnect.PostgreSqlSchemaValidationEnum | (string & {});
+  schemaValidation?: firebasedataconnect.PostgreSqlSchemaValidationEnum | (string & {}) | undefined;
   /**
    * Additive-only PostgreSQL schema migration before deploy
    * (`MIGRATE_COMPATIBLE`).
    */
-  schemaMigration?: firebasedataconnect.PostgreSqlSchemaMigrationEnum | (string & {});
+  schemaMigration?: firebasedataconnect.PostgreSqlSchemaMigrationEnum | (string & {}) | undefined;
   /**
    * PostgreSQL schema name.
    * @default "public"
    */
-  schema?: string;
+  schema?: string | undefined;
 };
 
 export type Datasource = {
   /** HTTP GraphQL webhook backend. */
-  httpGraphql?: HttpGraphql;
+  httpGraphql?: HttpGraphql | undefined;
   /** PostgreSQL (Cloud SQL or unlinked) backend. */
-  postgresql?: PostgreSql;
+  postgresql?: PostgreSql | undefined;
 };
 
 export type ServicesSchemaProps = {

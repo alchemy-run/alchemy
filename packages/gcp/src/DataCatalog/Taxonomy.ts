@@ -48,7 +48,7 @@ export type TaxonomyProps = {
    * numbers, underscores, dashes, and spaces; max 200 bytes. If omitted,
    * a unique name is generated from the stack, stage, and logical id.
    */
-  displayName?: string;
+  displayName?: string | undefined;
   /**
    * Human-readable description (max 2000 bytes). Taxonomies have no
    * labels field, so Alchemy ownership is stored in a `[alchemy …]`

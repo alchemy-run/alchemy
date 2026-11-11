@@ -38,13 +38,13 @@ export type GoldengateConnectionAssignmentPropertiesInput = {
    * (`projects/{project}/locations/{location}/goldengateConnections/{id}`).
    * Required on create. Immutable.
    */
-  goldengateConnection?: string;
+  goldengateConnection?: string | undefined;
   /**
    * GoldenGate deployment
    * (`projects/{project}/locations/{location}/goldengateDeployments/{id}`).
    * Required on create. Immutable.
    */
-  goldengateDeployment?: string;
+  goldengateDeployment?: string | undefined;
 };
 
 export type GoldengateConnectionAssignmentProps = {
@@ -52,28 +52,28 @@ export type GoldengateConnectionAssignmentProps = {
    * Assignment id. If omitted, a unique RFC1035 name is generated.
    * Immutable.
    */
-  goldengateConnectionAssignmentId?: string;
+  goldengateConnectionAssignmentId?: string | undefined;
   /**
    * Region. Immutable.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
-  location?: string;
+  location?: string | undefined;
   /**
    * Display name.
    */
-  displayName?: string;
+  displayName?: string | undefined;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
    */
-  labels?: Record<string, string>;
+  labels?: Record<string, string> | undefined;
   /**
    * Assignment properties.
    */
-  properties?: GoldengateConnectionAssignmentPropertiesInput;
+  properties?: GoldengateConnectionAssignmentPropertiesInput | undefined;
   /** Connection name. Convenience alias. */
-  goldengateConnection?: string;
+  goldengateConnection?: string | undefined;
   /** Deployment name. Convenience alias. */
-  goldengateDeployment?: string;
+  goldengateDeployment?: string | undefined;
 };
 
 export type GoldengateConnectionAssignment = Resource<

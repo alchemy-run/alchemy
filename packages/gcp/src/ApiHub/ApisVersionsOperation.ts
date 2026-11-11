@@ -41,25 +41,28 @@ export type HttpOperation = {
     | "HEAD"
     | "PATCH"
     | "TRACE"
-    | (string & {});
+    | (string & {})
+    | undefined;
   /** Path relative to the server endpoint. Required on create. */
-  path?: {
-    path?: string;
-    description?: string;
-  };
+  path?:
+    | {
+        path?: string | undefined;
+        description?: string | undefined;
+      }
+    | undefined;
 };
 
 export type OperationDetails = {
   /** HTTP operation. Required on create when not using MCP. */
-  httpOperation?: HttpOperation;
+  httpOperation?: HttpOperation | undefined;
   /** Description of the operation. Alchemy stamps ownership here. */
-  description?: string;
+  description?: string | undefined;
   /** When true, the operation is deprecated. */
-  deprecated?: boolean;
+  deprecated?: boolean | undefined;
   /** External documentation. */
-  documentation?: Documentation;
+  documentation?: Documentation | undefined;
   /** MCP tool details. */
-  mcpTool?: apihub.GoogleCloudApihubV1McpTool;
+  mcpTool?: apihub.GoogleCloudApihubV1McpTool | undefined;
 };
 
 export type ApisVersionsOperationProps = {

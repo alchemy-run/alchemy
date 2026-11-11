@@ -44,12 +44,12 @@ export interface AuthRegistry {
      * Path to the kubeconfig file.
      * @default `$KUBECONFIG` or `~/.kube/config`
      */
-    path?: string;
+    path?: string | undefined;
     /**
      * The context to use.
      * @default the file's `current-context`
      */
-    context?: string;
+    context?: string | undefined;
   };
   /** Authenticate with a static bearer token. */
   token: {
@@ -120,9 +120,9 @@ export interface Connection {
    * discover it (a kubeconfig file carries the server; the EKS adapter
    * re-describes the cluster).
    */
-  endpoint?: string;
+  endpoint?: string | undefined;
   /** Base64-encoded PEM certificate authority bundle for the endpoint. */
-  certificateAuthorityData?: string;
+  certificateAuthorityData?: string | undefined;
   /** Skip TLS verification (self-signed local clusters). */
   insecureSkipTlsVerify?: boolean;
   /** How to authenticate — selects the {@link ClusterAdapter} by `kind`. */

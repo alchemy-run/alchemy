@@ -49,7 +49,7 @@ export interface FunctionDockerImageSource extends FunctionImageConfig {
    * Build arguments are stored in deployment state and may be retained in
    * image layers. Do not use them for secrets.
    */
-  buildArgs?: Record<string, string>;
+  buildArgs?: Record<string, string> | undefined;
   /**
    * Keep build layers in a remote cache so a fresh builder (a new CI runner)
    * skips unchanged steps. `true` keeps every stage's layers at the function
@@ -215,7 +215,7 @@ export interface ResolveFunctionImageOptions {
   id: string;
   source: FunctionImageSource;
   architecture: "x86_64" | "arm64";
-  previousImage?: Omit<FunctionImageAttributes, "hash">;
+  previousImage?: Omit<FunctionImageAttributes, "hash"> | undefined;
   session: { note: (message: string) => Effect.Effect<void> };
 }
 
@@ -267,7 +267,7 @@ export const hashFunctionImageBuild = Effect.fn(function* (
   source: FunctionDockerImageSource,
   architecture: "x86_64" | "arm64",
 ) {
-  const decoded = yield* Schema.decodeEffect(FunctionDockerImageSourceSchema)(source);
+  const decoded = yield* Schema.decodeUnknownEffect(FunctionDockerImageSourceSchema)(source);
   return yield* hashDecodedFunctionImageBuild(decoded, architecture);
 });
 

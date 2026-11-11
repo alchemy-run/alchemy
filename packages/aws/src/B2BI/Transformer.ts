@@ -28,31 +28,31 @@ export interface TransformerProps {
    * status of an active transformer replaces it.
    * @default "inactive"
    */
-  status?: "active" | "inactive";
+  status?: "active" | "inactive" | undefined;
   /**
    * Describes the format of the source document (e.g. X12 EDI) and any
    * advanced options for parsing it.
    */
-  inputConversion?: b2bi.InputConversion;
+  inputConversion?: b2bi.InputConversion | undefined;
   /**
    * The mapping template (JSONATA or XSLT) that transforms the input
    * document into the output format.
    */
-  mapping?: b2bi.Mapping;
+  mapping?: b2bi.Mapping | undefined;
   /**
    * Describes the format of the output document (e.g. X12 EDI) for outbound
    * transformers.
    */
-  outputConversion?: b2bi.OutputConversion;
+  outputConversion?: b2bi.OutputConversion | undefined;
   /**
    * Locations of sample input and output documents used to test the
    * transformer.
    */
-  sampleDocuments?: b2bi.SampleDocuments;
+  sampleDocuments?: b2bi.SampleDocuments | undefined;
   /**
    * User-defined tags for the transformer.
    */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
 }
 
 export interface Transformer extends Resource<

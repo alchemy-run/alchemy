@@ -21,7 +21,7 @@ export function DescriptionList({ items, labelWidth = 16, stacked = false }: Des
     <Box flexDirection="column" gap={stacked ? 1 : 0}>
       {items.map((item, index) => (
         <Box key={index} flexDirection={stacked ? "column" : "row"}>
-          <Box width={stacked ? undefined : labelWidth} paddingRight={1}>
+          <Box {...(!stacked && { width: labelWidth })} paddingRight={1}>
             <Text tone="muted">{item.label}</Text>
           </Box>
           <Box paddingLeft={stacked ? 1 : 0}>

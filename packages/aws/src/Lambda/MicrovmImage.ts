@@ -46,38 +46,38 @@ export interface MicrovmImageProps {
    * generates a Dockerfile, zips the result, and uploads it as the
    * `codeArtifact`.
    */
-  main?: string;
+  main?: string | undefined;
 
   /**
    * **External mode.** A build-context directory containing your Dockerfile and
    * the files it copies. Alchemy zips and uploads it; AWS runs your Dockerfile.
    * @default "./"
    */
-  context?: string;
+  context?: string | undefined;
 
   /**
    * The Dockerfile. In effectful mode this is an inline base string (defaults
    * to `FROM public.ecr.aws/lambda/microvms:al2023-minimal`). In external mode
    * it is a path relative to {@link context} (defaults to `<context>/Dockerfile`).
    */
-  dockerfile?: string;
+  dockerfile?: string | undefined;
 
   /**
    * The port the in-VM HTTP server listens on (effectful mode).
    * @default 8080
    */
-  port?: number;
+  port?: number | undefined;
 
   /**
    * The JS runtime to bundle for (effectful mode).
    * @default "node"
    */
-  runtime?: "bun" | "node";
+  runtime?: "bun" | "node" | undefined;
 
   /**
    * Extra module ids to leave external when bundling (effectful mode).
    */
-  external?: string[];
+  external?: string[] | undefined;
 
   /**
    * Bundler configuration for {@link main} (effectful mode). Unused
@@ -91,7 +91,7 @@ export interface MicrovmImageProps {
    * names but point into the bundle. Set `output: { minify: false }` to
    * ship readable code.
    */
-  build?: Bundle.BundleConfig;
+  build?: Bundle.BundleConfig | undefined;
 
   /**
    * The base MicroVM image to build on top of — either its ARN or another
@@ -118,7 +118,7 @@ export interface MicrovmImageProps {
    * **Prebuilt mode.** A code artifact (S3 zip path or ECR image URI) to use
    * as-is, instead of bundling (`main`) or building a context (`context`).
    */
-  codeArtifact?: microvms.CodeArtifact;
+  codeArtifact?: microvms.CodeArtifact | undefined;
 
   /**
    * A description of the image version.
@@ -177,7 +177,7 @@ export interface MicrovmImageProps {
   /**
    * @internal Platform-managed: signals a non-Effect-native (external) image.
    */
-  isExternal?: boolean;
+  isExternal?: boolean | undefined;
 }
 
 export interface MicrovmImage extends Resource<
@@ -191,21 +191,21 @@ export interface MicrovmImage extends Resource<
     /** The current state of the image (e.g. `CREATED`, `CREATING`). */
     state: microvms.MicrovmImageState;
     /** The image version produced by the most recent build. */
-    imageVersion?: string;
+    imageVersion?: string | undefined;
     /** The latest version that built successfully. */
-    latestActiveImageVersion?: string;
+    latestActiveImageVersion?: string | undefined;
     /** The latest version that failed to build, if any. */
-    latestFailedImageVersion?: string;
+    latestFailedImageVersion?: string | undefined;
     /** When the image was created (ISO 8601). */
-    createdAt?: string;
+    createdAt?: string | undefined;
     /** When the image was last updated (ISO 8601). */
-    updatedAt?: string;
+    updatedAt?: string | undefined;
     /**
      * The resolved code artifact and its build identity hash. `contentHash`
      * covers only the bundled program / packaged context (no props), so a
      * content-only edit is detectable at plan time before the props resolve.
      */
-    codeArtifact?: { uri?: string; hash?: string; contentHash?: string };
+    codeArtifact?: { uri?: string; hash?: string; contentHash?: string } | undefined;
   },
   {
     env?: Record<string, any>;

@@ -37,19 +37,19 @@ export type WasmPluginLogConfig = {
    * Whether plugin activity logs are exported to Cloud Logging.
    * @default false
    */
-  enable?: boolean;
+  enable?: boolean | undefined;
   /**
    * Sampling rate in `[0.0, 1.0]` when logging is enabled. `1.0` reports
    * every log statement.
    * @default 1
    */
-  sampleRate?: number;
+  sampleRate?: number | undefined;
   /**
    * Lowest plugin log level exported to Cloud Logging. Only set when
    * logging is enabled.
    * @default "INFO"
    */
-  minLogLevel?: WasmPluginLogLevel;
+  minLogLevel?: WasmPluginLogLevel | undefined;
 };
 
 export type WasmPluginVersionInput = {

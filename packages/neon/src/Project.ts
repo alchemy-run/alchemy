@@ -56,48 +56,48 @@ export type ProjectProps = {
    * Mutable project name. If omitted at creation, a unique name is generated
    * from `${app}-${stage}-${id}`. Omitting it later preserves the deployed name.
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * Region where the project is provisioned. Cannot be changed after
    * creation.
    *
    * @default "aws-us-east-1"
    */
-  region?: NeonRegion;
+  region?: NeonRegion | undefined;
   /**
    * Postgres version. Cannot be changed after creation.
    *
    * @default 17
    */
-  pgVersion?: NeonPgVersion;
+  pgVersion?: NeonPgVersion | undefined;
   /**
    * Name of the default branch. Defaults to Neon's default ("main"). Cannot
    * be changed after creation.
    */
-  defaultBranchName?: string;
+  defaultBranchName?: string | undefined;
   /**
    * Name of the default role created with the project. Defaults to
    * `neondb_owner` on creation; omission preserves the observed role on adoption
    * and updates. An explicit change replaces the project.
    */
-  roleName?: string;
+  roleName?: string | undefined;
   /**
    * Name of the default database created with the project. Defaults to
    * `neondb` on creation; omission preserves the observed database on adoption
    * and updates. An explicit change replaces the project.
    */
-  databaseName?: string;
+  databaseName?: string | undefined;
   /**
    * Number of seconds of WAL history retained on the project for
    * point-in-time branching/restore.
    *
    * @default 86400
    */
-  historyRetentionSeconds?: number;
+  historyRetentionSeconds?: number | undefined;
   /**
    * Optional Neon organization ID. Cannot be changed after creation.
    */
-  orgId?: string;
+  orgId?: string | undefined;
   /**
    * Enable Postgres logical replication on the project. Once enabled,
    * Neon does not support disabling it again.
@@ -105,7 +105,7 @@ export type ProjectProps = {
    * @default false
    * @see https://neon.tech/docs/guides/logical-replication-neon
    */
-  enableLogicalReplication?: boolean;
+  enableLogicalReplication?: boolean | undefined;
   /**
    * SQL migrations to apply against the default branch's primary database.
    * Accepts a directory path, a `Drizzle.Schema` resource, or
@@ -124,13 +124,13 @@ export type ProjectProps = {
    * changing its contents keeps it applied. See
    * [Migrations](https://alchemy.run/sql/effect-sql/migrations#change-migration-history-safely).
    */
-  migrations?: MigrationsInput;
+  migrations?: MigrationsInput | undefined;
   /**
    * Paths to additional `.sql` files to apply after migrations. Each file
    * is hashed; only files whose contents change are re-applied on
    * subsequent deploys.
    */
-  importFiles?: string[];
+  importFiles?: string[] | undefined;
 };
 
 export type Project = Resource<
@@ -666,12 +666,12 @@ type ObservedProject = NeonProject | ListProjectsResponse["projects"][number];
 const hydrateProjectAttributes = (
   project: ObservedProject,
   opts: {
-    defaultBranchName?: string;
-    databaseName?: string;
-    migrationsDir?: string;
-    migrationsTable?: string;
-    migrationsHashes?: Record<string, string>;
-    importHashes?: Record<string, string>;
+    defaultBranchName?: string | undefined;
+    databaseName?: string | undefined;
+    migrationsDir?: string | undefined;
+    migrationsTable?: string | undefined;
+    migrationsHashes?: Record<string, string> | undefined;
+    importHashes?: Record<string, string> | undefined;
   } = {},
 ) =>
   Effect.gen(function* () {

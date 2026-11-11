@@ -28,18 +28,20 @@ export type CertificateKind = "acme" | "custom";
 export type CertificateSource = "custom" | "fly";
 
 export type CertificateDnsRequirements = {
-  a?: string[];
-  aaaa?: string[];
-  acmeChallenge?: { name?: string; target?: string };
-  cname?: string;
-  ownership?: { appValue?: string; name?: string; orgValue?: string };
+  a?: string[] | undefined;
+  aaaa?: string[] | undefined;
+  acmeChallenge?: { name?: string | undefined; target?: string | undefined } | undefined;
+  cname?: string | undefined;
+  ownership?:
+    | { appValue?: string | undefined; name?: string | undefined; orgValue?: string | undefined }
+    | undefined;
 };
 
 export type CertificateValidationState = {
-  alpnConfigured?: boolean;
-  dnsConfigured?: boolean;
-  httpConfigured?: boolean;
-  ownershipTxtConfigured?: boolean;
+  alpnConfigured?: boolean | undefined;
+  dnsConfigured?: boolean | undefined;
+  httpConfigured?: boolean | undefined;
+  ownershipTxtConfigured?: boolean | undefined;
 };
 
 export interface CertificateProps {

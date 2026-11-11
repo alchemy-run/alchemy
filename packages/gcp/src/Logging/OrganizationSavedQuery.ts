@@ -30,15 +30,15 @@ export type OrganizationSavedQueryLoggingQuery = {
   /**
    * Summary field start character offset.
    */
-  summaryFieldStart?: number;
+  summaryFieldStart?: number | undefined;
   /**
    * Summary field end character offset.
    */
-  summaryFieldEnd?: number;
+  summaryFieldEnd?: number | undefined;
   /**
    * LogEntry fields to include in the Logs Explorer summary line.
    */
-  summaryFields?: string[];
+  summaryFields?: string[] | undefined;
 };
 
 export type OrganizationSavedQueryProps = {

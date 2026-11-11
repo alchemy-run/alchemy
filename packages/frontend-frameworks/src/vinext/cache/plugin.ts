@@ -6,8 +6,8 @@ import { loadVinextModule } from "../Modules.ts";
 export type VinextCacheKind = "redis" | "s3" | "kv";
 
 export interface VinextCacheOptions {
-  data?: { adapter: string; options?: Record<string, unknown> };
-  cdn?: { adapter: string; options?: Record<string, unknown> };
+  data?: { adapter: string; options?: Record<string, unknown> | undefined };
+  cdn?: { adapter: string; options?: Record<string, unknown> | undefined };
 }
 
 interface CacheModule {

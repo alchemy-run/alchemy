@@ -17,6 +17,8 @@ import * as HttpMiddleware from "effect/http/HttpMiddleware";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Option from "effect/Option";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import type { Scope } from "effect/Scope";
 import { type InvocationTimeoutError, withInvocationDeadline } from "./InvocationDeadline.ts";
 
@@ -170,10 +172,14 @@ const functionUrlEventToWebRequest = (event: LambdaFunctionURLEvent): Request =>
       : event.body;
   }
 
+  const requestBody = body && method !== "GET" && method !== "HEAD" ? body : undefined;
   return new Request(url, {
     method,
     headers,
-    body: body && method !== "GET" && method !== "HEAD" ? body : undefined,
+    ...Record.filterMap(
+      { body: requestBody },
+      Result.fromNullishOr(() => undefined),
+    ),
   });
 };
 
@@ -229,10 +235,14 @@ const albEventToWebRequest = (event: ALBEvent): Request => {
       : event.body;
   }
 
+  const requestBody = body && method !== "GET" && method !== "HEAD" ? body : undefined;
   return new Request(url, {
     method,
     headers,
-    body: body && method !== "GET" && method !== "HEAD" ? body : undefined,
+    ...Record.filterMap(
+      { body: requestBody },
+      Result.fromNullishOr(() => undefined),
+    ),
   });
 };
 
@@ -294,10 +304,14 @@ const apiGatewayProxyEventToWebRequest = (event: APIGatewayProxyEvent): Request 
   // useful when constructing fully-qualified URLs in downstream code.
   void stage;
 
+  const requestBody = body && method !== "GET" && method !== "HEAD" ? body : undefined;
   return new Request(url, {
     method,
     headers,
-    body: body && method !== "GET" && method !== "HEAD" ? body : undefined,
+    ...Record.filterMap(
+      { body: requestBody },
+      Result.fromNullishOr(() => undefined),
+    ),
   });
 };
 

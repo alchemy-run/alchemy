@@ -36,72 +36,72 @@ export type TargetAttribute = {
    * Target id, the last segment of a Target name, or `*` for all
    * targets in the location.
    */
-  id?: string;
+  id?: string | undefined;
   /** Target labels that must match. */
-  labels?: Record<string, string>;
+  labels?: Record<string, string> | undefined;
 };
 
 export type AutomationResourceSelector = {
   /** Target attributes the automation applies to. */
-  targets?: TargetAttribute[];
+  targets?: TargetAttribute[] | undefined;
 };
 
 export type AdvanceRolloutRule = {
   /** Unique rule id within the Automation. */
-  id?: string;
+  id?: string | undefined;
   /** How long to wait after a rollout finishes. */
-  wait?: string;
+  wait?: string | undefined;
   /** Source phases that must match before advancing. */
-  sourcePhases?: string[];
+  sourcePhases?: string[] | undefined;
 };
 
 export type PromoteReleaseRule = {
   /** Unique rule id within the Automation. */
-  id?: string;
+  id?: string | undefined;
   /**
    * Destination stage id, or `@next` for the next stage in the
    * promotion flow.
    */
-  destinationTargetId?: string;
+  destinationTargetId?: string | undefined;
   /** Starting phase of the created rollout. */
-  destinationPhase?: string;
+  destinationPhase?: string | undefined;
   /** How long to wait before promoting. */
-  wait?: string;
+  wait?: string | undefined;
 };
 
 export type RepairRolloutRule = {
   /** Unique rule id within the Automation. */
-  id?: string;
+  id?: string | undefined;
   /** Phases whose failed jobs are repaired. */
-  phases?: string[];
+  phases?: string[] | undefined;
   /** Repair phases (retry and/or rollback). */
-  repairPhases?: clouddeploy.RepairPhaseConfig[];
+  repairPhases?: clouddeploy.RepairPhaseConfig[] | undefined;
   /** Job names to repair. Empty means all jobs. */
-  jobs?: string[];
+  jobs?: string[] | undefined;
 };
 
 export type TimedPromoteReleaseRule = {
   /** Unique rule id within the Automation. */
-  id?: string;
+  id?: string | undefined;
   /** Crontab schedule (for example `0 9 * * 1`). */
-  schedule?: string;
+  schedule?: string | undefined;
   /** Destination stage id, or `@next`. */
-  destinationTargetId?: string;
+  destinationTargetId?: string | undefined;
   /** Starting phase of the created rollout. */
-  destinationPhase?: string;
+  destinationPhase?: string | undefined;
   /** IANA time zone (for example `America/New_York`). */
-  timeZone?: string;
+  timeZone?: string | undefined;
 };
 
 export type AutomationRule = {
   /** Automatically advance a successful rollout. */
-  advanceRolloutRule?: AdvanceRolloutRule;
+  advanceRolloutRule?: AdvanceRolloutRule | undefined;
   /** Automatically promote a release to the next (or specified) target. */
-  promoteReleaseRule?: PromoteReleaseRule;
+  promoteReleaseRule?: PromoteReleaseRule | undefined;
   /** Automatically repair a failed rollout. */
-  repairRolloutRule?: RepairRolloutRule;
+  repairRolloutRule?: RepairRolloutRule | undefined;
   /** Promote on a cron schedule. */
-  timedPromoteReleaseRule?: TimedPromoteReleaseRule;
+  timedPromoteReleaseRule?: TimedPromoteReleaseRule | undefined;
 };
 
 export type DeliveryPipelinesAutomationProps = {

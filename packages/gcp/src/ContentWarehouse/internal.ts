@@ -228,11 +228,11 @@ export const ownedByAlchemy = (id: string, text: string | undefined) =>
   });
 
 export const replaceOnIdentity = (input: {
-  previousId?: string;
-  nextId?: string;
-  previousLocation?: string;
-  nextLocation?: string;
-  extra?: boolean;
+  previousId?: string | undefined;
+  nextId?: string | undefined;
+  previousLocation?: string | undefined;
+  nextLocation?: string | undefined;
+  extra?: boolean | undefined;
 }) => {
   const previousLocation = normalizeLocation(input.previousLocation);
   const nextLocation = normalizeLocation(input.nextLocation);

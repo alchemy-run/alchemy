@@ -36,7 +36,7 @@ export type EncryptionConfig = {
    * `projects/{project}/locations/{location}/keyRings/{ring}/cryptoKeys/{key}`.
    * Immutable after create.
    */
-  kmsKeyName?: string;
+  kmsKeyName?: string | undefined;
 };
 
 export type BackupVaultProps = {
@@ -47,7 +47,7 @@ export type BackupVaultProps = {
    * and logical id. 3-63 characters. Immutable — changing it replaces the
    * vault.
    */
-  backupVaultId?: string;
+  backupVaultId?: string | undefined;
   /**
    * Region (`us-central1`, `us-east1`, …). Immutable — changing it
    * replaces the vault. `US-CENTRAL1` is accepted and normalized to

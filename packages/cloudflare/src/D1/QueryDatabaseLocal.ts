@@ -69,8 +69,8 @@ export const QueryDatabaseLocal = Layer.effect(
       (databaseId: string) =>
       (
         body:
-          | { sql: string; params?: unknown[] }
-          | { batch: { sql: string; params?: unknown[] }[] },
+          | { sql: string; params?: unknown[] | undefined }
+          | { batch: { sql: string; params?: unknown[] | undefined }[] },
       ) =>
         withLocalD1Query(databaseId, (query) => query(body)).pipe(
           Effect.provide(localD1GatewayRuntime),

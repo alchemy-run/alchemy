@@ -1535,7 +1535,7 @@ const createTestResourceState = (options: {
   logicalId: string;
   status: ResourceStatus;
   props: TestResourceProps;
-  attr?: {};
+  attr?: {} | undefined;
 }) =>
   ({
     instanceId,
@@ -2899,7 +2899,7 @@ describe("engine-level adoption", { tags: ["unit", "local"] }, () => {
   const makeAdoptPlan = <A>(
     effect: Effect.Effect<A, any, any>,
     opts: {
-      adopt?: boolean;
+      adopt?: boolean | undefined;
       readHook?: (id: string) => Effect.Effect<TestResource["Attributes"] | undefined, any>;
     },
   ): Effect.Effect<Plan.Plan<A>, any, State> =>
@@ -3484,7 +3484,7 @@ describe("cyclic delete-first admission", { tags: ["unit", "local"] }, () => {
       resolved?: boolean;
       unread?: boolean;
       observed?: boolean;
-      adopt?: boolean;
+      adopt?: boolean | undefined;
     } = {},
   ) =>
     Effect.gen(function* () {

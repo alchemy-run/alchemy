@@ -6,6 +6,9 @@ import { taggedFunction } from "alchemy/Util/effect";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Predicate from "effect/Predicate";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import { fromCloudflareFetcher, type Fetcher } from "../Fetcher.ts";
 import { makeRpcStub } from "./Rpc.ts";
 import { Worker, WorkerEnvironment } from "./Worker.ts";
@@ -21,7 +24,7 @@ export interface WorkerLoaderWorkerCode {
   mainModule: string;
   modules: Record<string, WorkerLoaderModule | string>;
   env?: any;
-  globalOutbound?: Fetcher | null;
+  globalOutbound?: Fetcher | null | undefined;
   tails?: Fetcher[];
   streamingTails?: Fetcher[];
 }
@@ -325,12 +328,20 @@ export const WorkerLoader: WorkerLoaderClass = Object.assign(
  * `undefined`, which the runtime treats as "default outbound", silently
  * re-enabling network access for workers meant to be sandboxed (#746).
  */
-const unwrapWorkerLoader = (loader: WorkerLoaderWorkerCode) => ({
-  ...loader,
-  globalOutbound: loader.globalOutbound === null ? null : loader.globalOutbound?.raw,
-  tails: loader.tails?.map((t) => t.raw),
-  streamingTails: loader.streamingTails?.map((t) => t.raw),
-});
+const unwrapWorkerLoader = (loader: WorkerLoaderWorkerCode) => {
+  const { globalOutbound, tails, streamingTails, ...code } = loader;
+  return {
+    ...code,
+    ...Record.filterMap(
+      {
+        globalOutbound: globalOutbound === null ? null : globalOutbound?.raw,
+        tails: tails?.map((t) => t.raw),
+        streamingTails: streamingTails?.map((t) => t.raw),
+      },
+      Result.liftPredicate(Predicate.isNotUndefined, () => undefined),
+    ),
+  };
+};
 
 const wrapDynamicWorkerEntrypoint = <Shape>(raw: any): DynamicWorkerEntrypoint<Shape> =>
   Object.assign(makeRpcStub<any>(raw), fromCloudflareFetcher(raw));

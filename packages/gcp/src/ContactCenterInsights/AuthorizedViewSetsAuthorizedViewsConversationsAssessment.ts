@@ -22,17 +22,17 @@ import {
 
 export type AgentInfo = {
   /** Opaque agent id the assessment is for. Required on create. */
-  agentId?: string;
+  agentId?: string | undefined;
   /** Agent display name. */
-  displayName?: string;
+  displayName?: string | undefined;
   /** Agent type (e.g. `HUMAN_AGENT`). */
-  agentType?: string;
+  agentType?: string | undefined;
   /** Agent team. */
-  team?: string;
+  team?: string | undefined;
   /** Agent teams. */
-  teams?: string[];
+  teams?: string[] | undefined;
   /** Agent location. */
-  location?: string;
+  location?: string | undefined;
 };
 
 export type AuthorizedViewSetsAuthorizedViewsConversationsAssessmentProps = {

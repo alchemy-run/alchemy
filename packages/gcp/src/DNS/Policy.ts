@@ -18,12 +18,12 @@ export type PolicyAlternativeNameServer = {
   /**
    * IPv4 address of the target name server.
    */
-  ipv4Address?: string;
+  ipv4Address?: string | undefined;
   /**
    * IPv6 address of the target name server. Mutually exclusive with
    * `ipv4Address`.
    */
-  ipv6Address?: string;
+  ipv6Address?: string | undefined;
   /**
    * Forwarding path. `default` uses address ranges (RFC1918 via the VPC,
    * public via the internet). `private` always sends queries through the
@@ -31,7 +31,8 @@ export type PolicyAlternativeNameServer = {
    */
   forwardingPath?:
     | dns.PolicyAlternativeNameServerConfigTargetNameServerForwardingPathEnum
-    | (string & {});
+    | (string & {})
+    | undefined;
 };
 
 export type PolicyProps = {

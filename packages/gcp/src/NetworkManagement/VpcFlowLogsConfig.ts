@@ -54,80 +54,80 @@ export type VpcFlowLogsConfigProps = {
    * If omitted, a unique RFC1035 name is generated. Immutable — changing
    * it replaces the config.
    */
-  vpcFlowLogsConfigId?: string;
+  vpcFlowLogsConfigId?: string | undefined;
   /**
    * Location. Must be `global`. Immutable — changing it replaces the
    * config.
    * @default "global"
    */
-  location?: string;
+  location?: string | undefined;
   /**
    * Human-readable description (max 512 characters).
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * Whether log generation is enabled. Create requires `ENABLED`; a
    * subsequent update may set `DISABLED` to pause generation.
    * @default "ENABLED"
    */
-  state?: VpcFlowLogsConfigState;
+  state?: VpcFlowLogsConfigState | undefined;
   /**
    * Log aggregation interval.
    * @default "INTERVAL_5_SEC"
    */
-  aggregationInterval?: VpcFlowLogsConfigAggregationInterval;
+  aggregationInterval?: VpcFlowLogsConfigAggregationInterval | undefined;
   /**
    * Sampling rate in (0, 1]. Use `state` to disable logs rather than
    * setting this to 0.
    * @default 1
    */
-  flowSampling?: number;
+  flowSampling?: number | undefined;
   /**
    * Which metadata fields to include in reported logs.
    * @default "INCLUDE_ALL_METADATA"
    */
-  metadata?: VpcFlowLogsConfigMetadata;
+  metadata?: VpcFlowLogsConfigMetadata | undefined;
   /**
    * Custom metadata fields. Only valid when `metadata` is
    * `CUSTOM_METADATA`.
    */
-  metadataFields?: string[];
+  metadataFields?: string[] | undefined;
   /**
    * CEL export filter selecting which VPC Flow Logs are recorded.
    */
-  filterExpr?: string;
+  filterExpr?: string | undefined;
   /**
    * VPC network to log. Format
    * `projects/{project}/global/networks/{name}` or a Compute self-link.
    * Mutually exclusive with `subnet`, `interconnectAttachment`, and
    * `vpnTunnel`. Changing the target resource replaces the config.
    */
-  network?: string;
+  network?: string | undefined;
   /**
    * Subnetwork to log. Format
    * `projects/{project}/regions/{region}/subnetworks/{name}` or a Compute
    * self-link. Mutually exclusive with the other target fields. Changing
    * the target resource replaces the config.
    */
-  subnet?: string;
+  subnet?: string | undefined;
   /**
    * Interconnect attachment to log. Format
    * `projects/{project}/regions/{region}/interconnectAttachments/{name}`.
    * Mutually exclusive with the other target fields. Changing the target
    * resource replaces the config.
    */
-  interconnectAttachment?: string;
+  interconnectAttachment?: string | undefined;
   /**
    * VPN tunnel to log. Format
    * `projects/{project}/regions/{region}/vpnTunnels/{name}`. Mutually
    * exclusive with the other target fields. Changing the target resource
    * replaces the config.
    */
-  vpnTunnel?: string;
+  vpnTunnel?: string | undefined;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
    */
-  labels?: Record<string, string>;
+  labels?: Record<string, string> | undefined;
 };
 
 export type VpcFlowLogsConfig = Resource<
@@ -266,10 +266,10 @@ const metadataOf = (value: string | undefined) => (value ?? DEFAULT_METADATA).to
 const samplingOf = (value: number | undefined) => value ?? DEFAULT_SAMPLING;
 
 const targetKey = (props: {
-  network?: string;
-  subnet?: string;
-  interconnectAttachment?: string;
-  vpnTunnel?: string;
+  network?: string | undefined;
+  subnet?: string | undefined;
+  interconnectAttachment?: string | undefined;
+  vpnTunnel?: string | undefined;
 }) =>
   JSON.stringify({
     network: lastSegmentOf(props.network),
@@ -290,10 +290,10 @@ const toTarget = (
   project: string,
   region: string,
   news: {
-    network?: string;
-    subnet?: string;
-    interconnectAttachment?: string;
-    vpnTunnel?: string;
+    network?: string | undefined;
+    subnet?: string | undefined;
+    interconnectAttachment?: string | undefined;
+    vpnTunnel?: string | undefined;
   },
 ) => ({
   network: news.network !== undefined ? toNetworkResource(project, news.network) : undefined,

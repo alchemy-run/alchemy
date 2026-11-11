@@ -37,7 +37,7 @@ export const RetrieveProductFeatureHttp = Layer.effect(
       const auth = host !== undefined ? authorizeWith(bound) : ambient.authorize;
 
       return Effect.fn(`Stripe.RetrieveProductFeature(${feature.LogicalId})`)(function* (request?: {
-        expand?: string[];
+        expand?: string[] | undefined;
       }) {
         return yield* auth(
           GetProductFeature({

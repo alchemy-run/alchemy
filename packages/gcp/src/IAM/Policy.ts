@@ -25,47 +25,47 @@ import {
 
 export type DenyRuleCondition = {
   /** CEL expression. Resource-tag functions only. */
-  expression?: string;
+  expression?: string | undefined;
   /** Short title. */
-  title?: string;
+  title?: string | undefined;
   /** Longer description. */
-  description?: string;
+  description?: string | undefined;
   /** Location string for error reporting. */
-  location?: string;
+  location?: string | undefined;
 };
 
 export type DenyRule = {
   /**
    * Permissions denied (`{service_fqdn}/{resource}.{verb}`).
    */
-  deniedPermissions?: string[];
+  deniedPermissions?: string[] | undefined;
   /**
    * Permissions excluded from `deniedPermissions`.
    */
-  exceptionPermissions?: string[];
+  exceptionPermissions?: string[] | undefined;
   /**
    * Identities denied the permissions.
    */
-  deniedPrincipals?: string[];
+  deniedPrincipals?: string[] | undefined;
   /**
    * Identities excluded from `deniedPrincipals`.
    */
-  exceptionPrincipals?: string[];
+  exceptionPrincipals?: string[] | undefined;
   /**
    * CEL condition that selects when this rule applies.
    */
-  denialCondition?: DenyRuleCondition;
+  denialCondition?: DenyRuleCondition | undefined;
 };
 
 export type PolicyRule = {
   /**
    * User-specified description (max 256 characters).
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * Deny rule.
    */
-  denyRule?: DenyRule;
+  denyRule?: DenyRule | undefined;
 };
 
 export type PolicyProps = {

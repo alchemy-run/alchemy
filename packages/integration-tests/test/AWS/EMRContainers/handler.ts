@@ -71,7 +71,7 @@ export default EmrcTestFunction.make(
     // account is being mutated by other test files, so repeatedly reading only
     // page one makes the full-concurrency sweep flaky.
     const listAllJobTemplates = Effect.fn(function* () {
-      const templates: Array<{ readonly id?: string }> = [];
+      const templates: Array<{ readonly id?: string | undefined }> = [];
       let nextToken: string | undefined;
       for (let page = 0; page < 10; page++) {
         const response = yield* listJobTemplates({

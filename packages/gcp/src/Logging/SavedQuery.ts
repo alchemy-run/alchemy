@@ -39,15 +39,15 @@ export type SavedQueryLoggingQuery = {
   /**
    * Summary-field start character offset.
    */
-  summaryFieldStart?: number;
+  summaryFieldStart?: number | undefined;
   /**
    * Summary-field end character offset.
    */
-  summaryFieldEnd?: number;
+  summaryFieldEnd?: number | undefined;
   /**
    * Fields shown in the Logs Explorer summary line.
    */
-  summaryFields?: SavedQuerySummaryField[];
+  summaryFields?: SavedQuerySummaryField[] | undefined;
 };
 
 export type SavedQueryOpsAnalyticsQuery = {

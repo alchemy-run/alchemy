@@ -8,6 +8,8 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import { waitForImage } from "./internal/archil.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -188,7 +190,13 @@ export const planImage = (props: ImageProps) =>
     props.image !== undefined
       ? { image: props.image }
       : { dockerfile: props.dockerfile, context: props.context, build: props.build },
-    { capabilities, pull: props.registry },
+    {
+      capabilities,
+      ...Record.filterMap(
+        { pull: props.registry },
+        Result.fromNullishOr(() => undefined),
+      ),
+    },
   );
 
 /**

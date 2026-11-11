@@ -35,7 +35,7 @@ export type FolderExclusionProps = {
    * the parent folder of the current project. Immutable — changing it
    * replaces the exclusion.
    */
-  folderId?: string;
+  folderId?: string | undefined;
   /**
    * Advanced logs filter matching entries to exclude from the `_Default`
    * sink. Required.

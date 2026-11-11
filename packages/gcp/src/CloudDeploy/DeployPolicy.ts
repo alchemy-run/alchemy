@@ -35,9 +35,9 @@ export type DeliveryPipelineAttribute = {
    * Delivery pipeline id, the last segment of a pipeline name, or `*`
    * for all pipelines in the location.
    */
-  id?: string;
+  id?: string | undefined;
   /** Pipeline labels that must match. */
-  labels?: Record<string, string>;
+  labels?: Record<string, string> | undefined;
 };
 
 export type DeployPolicyTargetAttribute = {
@@ -45,90 +45,90 @@ export type DeployPolicyTargetAttribute = {
    * Target id, the last segment of a Target name, or `*` for all
    * targets in the location.
    */
-  id?: string;
+  id?: string | undefined;
   /** Target labels that must match. */
-  labels?: Record<string, string>;
+  labels?: Record<string, string> | undefined;
 };
 
 export type DeployPolicyResourceSelector = {
   /** Delivery pipeline attributes that must match. */
-  deliveryPipeline?: DeliveryPipelineAttribute;
+  deliveryPipeline?: DeliveryPipelineAttribute | undefined;
   /** Target attributes that must match. */
-  target?: DeployPolicyTargetAttribute;
+  target?: DeployPolicyTargetAttribute | undefined;
 };
 
 export type TimeOfDay = {
   /** Hours of day in 24-hour format (`0`–`23`, or `24` for end of day). */
-  hours?: number;
+  hours?: number | undefined;
   /** Minutes of hour (`0`–`59`). */
-  minutes?: number;
+  minutes?: number | undefined;
   /** Seconds of minute (`0`–`59`). */
-  seconds?: number;
+  seconds?: number | undefined;
   /** Fractional seconds, in nanoseconds. */
-  nanos?: number;
+  nanos?: number | undefined;
 };
 
 export type CalendarDate = {
   /** Year (`1`–`9999`), or `0` to omit. */
-  year?: number;
+  year?: number | undefined;
   /** Month (`1`–`12`), or `0` to omit. */
-  month?: number;
+  month?: number | undefined;
   /** Day (`1`–`31`), or `0` to omit. */
-  day?: number;
+  day?: number | undefined;
 };
 
 export type OneTimeWindow = {
   /** Inclusive start date. */
-  startDate?: CalendarDate;
+  startDate?: CalendarDate | undefined;
   /** Inclusive end date. */
-  endDate?: CalendarDate;
+  endDate?: CalendarDate | undefined;
   /** Inclusive start time. Use `00:00` for the beginning of the day. */
-  startTime?: TimeOfDay;
+  startTime?: TimeOfDay | undefined;
   /** Exclusive end time. Use `24:00` for the end of the day. */
-  endTime?: TimeOfDay;
+  endTime?: TimeOfDay | undefined;
 };
 
 export type WeeklyWindow = {
   /**
    * Days of week. Empty means every day.
    */
-  daysOfWeek?: Array<clouddeploy.WeeklyWindowDaysOfWeekItemEnum | (string & {})>;
+  daysOfWeek?: Array<clouddeploy.WeeklyWindowDaysOfWeekItemEnum | (string & {})> | undefined;
   /** Inclusive start time. Must be set with `endTime`. */
-  startTime?: TimeOfDay;
+  startTime?: TimeOfDay | undefined;
   /** Exclusive end time. Must be set with `startTime`. */
-  endTime?: TimeOfDay;
+  endTime?: TimeOfDay | undefined;
 };
 
 export type TimeWindows = {
   /** IANA time zone (for example `America/Los_Angeles`). */
-  timeZone?: string;
+  timeZone?: string | undefined;
   /** Recurring weekly restriction windows. */
-  weeklyWindows?: WeeklyWindow[];
+  weeklyWindows?: WeeklyWindow[] | undefined;
   /** One-time restriction windows. */
-  oneTimeWindows?: OneTimeWindow[];
+  oneTimeWindows?: OneTimeWindow[] | undefined;
 };
 
 export type RolloutRestriction = {
   /** Unique restriction id within the policy. */
-  id?: string;
+  id?: string | undefined;
   /**
    * Restricted invokers (`USER`, `DEPLOY_AUTOMATION`). Empty means all
    * invokers.
    */
-  invokers?: Array<clouddeploy.RolloutRestrictionInvokersItemEnum | (string & {})>;
+  invokers?: Array<clouddeploy.RolloutRestrictionInvokersItemEnum | (string & {})> | undefined;
   /**
    * Restricted rollout actions (`ADVANCE`, `APPROVE`, `CANCEL`,
    * `CREATE`, `IGNORE_JOB`, `RETRY_JOB`, `ROLLBACK`,
    * `TERMINATE_JOBRUN`). Empty means all actions.
    */
-  actions?: Array<clouddeploy.RolloutRestrictionActionsItemEnum | (string & {})>;
+  actions?: Array<clouddeploy.RolloutRestrictionActionsItemEnum | (string & {})> | undefined;
   /** Time windows during which actions are restricted. */
-  timeWindows?: TimeWindows;
+  timeWindows?: TimeWindows | undefined;
 };
 
 export type PolicyRule = {
   /** Rollout restriction for this rule. */
-  rolloutRestriction?: RolloutRestriction;
+  rolloutRestriction?: RolloutRestriction | undefined;
 };
 
 export type DeployPolicyProps = {

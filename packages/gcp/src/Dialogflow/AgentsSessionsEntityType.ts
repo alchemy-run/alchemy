@@ -35,9 +35,9 @@ export type SessionEntityOverrideMode =
 
 export type AgentsSessionsEntity = {
   /** Canonical entity value. */
-  value?: string;
+  value?: string | undefined;
   /** Synonyms that resolve to `value`. */
-  synonyms?: string[];
+  synonyms?: string[] | undefined;
 };
 
 export type AgentsSessionsEntityTypeProps = {

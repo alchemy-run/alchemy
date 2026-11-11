@@ -189,7 +189,7 @@ const desiredBody = (input: {
   locale: string;
   name: string;
   news: LeaderboardConfigurationProps;
-  current?: gamesConfiguration.LeaderboardConfiguration;
+  current?: gamesConfiguration.LeaderboardConfiguration | undefined;
 }): gamesConfiguration.LeaderboardConfiguration => {
   const draft = input.news.draft ?? {};
   const name = withTranslation(draft.name, input.locale, input.name);

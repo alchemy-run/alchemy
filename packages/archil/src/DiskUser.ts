@@ -22,7 +22,7 @@ export interface DiskUserProps {
    * Name shown in the console. If omitted, a unique name is generated from
    * the stack, stage, and logical ID. Changing it replaces the user.
    */
-  nickname?: string;
+  nickname?: string | undefined;
   /**
    * An AWS IAM role or user ARN that mounts with its own AWS identity
    * instead of a token, e.g. an ECS task role. Changing it replaces the user.
@@ -40,7 +40,7 @@ export interface DiskUserProps {
    * only `GET` and `HEAD`. Changing it replaces the user.
    * @default false
    */
-  readOnly?: boolean;
+  readOnly?: boolean | undefined;
   /**
    * When the user stops working, as an RFC 3339 timestamp in the future
    * (at most 365 days away). Requests signed with an expired `s3` key,
@@ -160,7 +160,11 @@ const userNickname = (id: string, nickname: string | undefined) =>
 
 const lookupDiskUser = Effect.fn(function* (
   diskId: string,
-  match: { nickname?: string; principal?: string; identifier?: string },
+  match: {
+    nickname?: string | undefined;
+    principal?: string | undefined;
+    identifier?: string | undefined;
+  },
 ) {
   const { data } = yield* archil.getDisk({ id: diskId });
   return (data.authorizedUsers ?? []).find((user) =>
@@ -182,7 +186,11 @@ const lookupDiskUser = Effect.fn(function* (
  */
 export const findDiskUser = Effect.fn(function* (
   diskId: string,
-  match: { nickname?: string; principal?: string; identifier?: string },
+  match: {
+    nickname?: string | undefined;
+    principal?: string | undefined;
+    identifier?: string | undefined;
+  },
 ) {
   const first = yield* lookupDiskUser(diskId, match);
   if (first || match.identifier === undefined) return first;
@@ -198,11 +206,11 @@ export const findDiskUser = Effect.fn(function* (
 /** What a disk user is created with. */
 export interface DiskUserSpec {
   readonly nickname: string;
-  readonly principal?: string;
-  readonly type?: "token" | "s3";
-  readonly readOnly?: boolean;
-  readonly expiresAt?: string;
-  readonly oneUse?: boolean;
+  readonly principal?: string | undefined;
+  readonly type?: "token" | "s3" | undefined;
+  readonly readOnly?: boolean | undefined;
+  readonly expiresAt?: string | undefined;
+  readonly oneUse?: boolean | undefined;
 }
 
 const userType = (user: Pick<DiskUserSpec, "principal" | "type">) =>
@@ -255,7 +263,7 @@ export const removeDiskUser = Effect.fn(function* (attrs: {
   diskId: string;
   type: "token" | "awssts" | "s3";
   identifier: string;
-  principal?: string;
+  principal?: string | undefined;
 }) {
   yield* archil
     .removeDiskUser({

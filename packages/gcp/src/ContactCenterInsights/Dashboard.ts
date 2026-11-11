@@ -24,17 +24,29 @@ import {
 
 export type DateRangeConfig = {
   /** Rolling window measured in `unit`. */
-  relativeDateRange?: {
-    /** Number of units in the past. */
-    quantity?: string;
-    /** Calendar unit (`DAY`, `WEEK`, `MONTH`, `QUARTER`, `YEAR`). */
-    unit?: "TIME_UNIT_UNSPECIFIED" | "DAY" | "WEEK" | "MONTH" | "QUARTER" | "YEAR" | (string & {});
-  };
+  relativeDateRange?:
+    | {
+        /** Number of units in the past. */
+        quantity?: string | undefined;
+        /** Calendar unit (`DAY`, `WEEK`, `MONTH`, `QUARTER`, `YEAR`). */
+        unit?:
+          | "TIME_UNIT_UNSPECIFIED"
+          | "DAY"
+          | "WEEK"
+          | "MONTH"
+          | "QUARTER"
+          | "YEAR"
+          | (string & {})
+          | undefined;
+      }
+    | undefined;
   /** Inclusive start/end timestamps. */
-  absoluteDateRange?: {
-    startTime?: string;
-    endTime?: string;
-  };
+  absoluteDateRange?:
+    | {
+        startTime?: string | undefined;
+        endTime?: string | undefined;
+      }
+    | undefined;
 };
 
 export type DashboardProps = {

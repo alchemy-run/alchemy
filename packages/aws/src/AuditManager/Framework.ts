@@ -48,7 +48,7 @@ export interface FrameworkProps {
   /**
    * A description of the framework.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * The compliance standard the framework relates to (e.g. `CIS`, `HIPAA`).
    */

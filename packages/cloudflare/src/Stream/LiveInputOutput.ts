@@ -43,7 +43,7 @@ export type LiveInputOutputProps = {
    * Mutable.
    * @default true
    */
-  enabled?: boolean;
+  enabled?: boolean | undefined;
 };
 
 export type LiveInputOutputAttributes = {

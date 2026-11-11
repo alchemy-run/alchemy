@@ -23,7 +23,7 @@ export interface AuthOAuthProviderProps {
   /** Supported OAuth provider identity. Changing it replaces this child. */
   provider: Neon.NeonAuthOauthProviderId;
   /** OAuth client ID. Omit for Neon-managed development credentials. */
-  clientId?: string;
+  clientId?: string | undefined;
   /** OAuth secret, never included in resource outputs. */
   clientSecret?: Redacted.Redacted<string>;
   /** Microsoft tenant ID; write-only in the current read schema. */

@@ -43,8 +43,8 @@ export class LocalD1QueryError extends Data.TaggedError("LocalD1QueryError")<{
  * swap transports without translation.
  */
 export type D1QueryBody =
-  | { sql: string; params?: unknown[] }
-  | { batch: Array<{ sql: string; params?: unknown[] }> };
+  | { sql: string; params?: unknown[] | undefined }
+  | { batch: Array<{ sql: string; params?: unknown[] | undefined }> };
 
 interface D1StatementResponse {
   success: boolean;

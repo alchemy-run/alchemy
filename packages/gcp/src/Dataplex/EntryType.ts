@@ -30,7 +30,7 @@ import {
 
 export type EntryTypeAspectInfo = {
   /** Required aspect type resource name for entries of this type. */
-  type?: string;
+  type?: string | undefined;
 };
 
 export type EntryTypeAuthorization = {
@@ -85,7 +85,7 @@ export type EntryTypeProps = {
   /**
    * Aspect types required on Entries of this type.
    */
-  requiredAspects?: EntryTypeAspectInfo[];
+  requiredAspects?: EntryTypeAspectInfo[] | undefined;
   /**
    * Authorization for this type. Immutable — changing it replaces the
    * entry type.

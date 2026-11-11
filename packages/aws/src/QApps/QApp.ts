@@ -55,7 +55,7 @@ export interface QAppProps {
   /**
    * A description of the Q App.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * The definition of the Q App — its cards and flow.
    */

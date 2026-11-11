@@ -45,7 +45,7 @@ export type SharedflowProps = {
    * Space id to associate with this shared flow. Only applied on create;
    * subsequent space changes call `move`.
    */
-  space?: string;
+  space?: string | undefined;
   /**
    * Base64-encoded ZIP shared-flow bundle. If omitted, Alchemy uploads a
    * minimal empty shared flow. Shared flows have no labels field, so
@@ -319,7 +319,12 @@ const observedDescription = (org: string, flow: apigee.GoogleCloudApigeeV1Shared
     return yield* descriptionFromBundle(revision);
   });
 
-const importBundle = (input: { org: string; sharedflowId: string; space?: string; data: string }) =>
+const importBundle = (input: {
+  org: string;
+  sharedflowId: string;
+  space?: string | undefined;
+  data: string;
+}) =>
   apigee.createOrganizationsSharedflows({
     parent: orgParent(input.org),
     action: "import",

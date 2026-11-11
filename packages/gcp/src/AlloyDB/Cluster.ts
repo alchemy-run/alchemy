@@ -66,12 +66,12 @@ export type NetworkConfig = {
    * (`projects/{project}/global/networks/{network}`). Immutable.
    * Required unless Private Service Connect is enabled.
    */
-  network?: string;
+  network?: string | undefined;
   /**
    * Allocated IP range name for private IP (e.g.
    * `google-managed-services-default`). Immutable.
    */
-  allocatedIpRange?: string;
+  allocatedIpRange?: string | undefined;
 };
 
 export type PscConfig = {
@@ -135,9 +135,9 @@ export type InitialUser = {
 
 export type SslConfig = {
   /** Client-server SSL mode. */
-  sslMode?: alloydb.SslConfigSslModeEnum | (string & {});
+  sslMode?: alloydb.SslConfigSslModeEnum | (string & {}) | undefined;
   /** Certificate authority source. Only `CA_SOURCE_MANAGED` is supported. */
-  caSource?: alloydb.SslConfigCaSourceEnum | (string & {});
+  caSource?: alloydb.SslConfigCaSourceEnum | (string & {}) | undefined;
 };
 
 export type DataplexConfig = {
@@ -187,7 +187,7 @@ export type ClusterProps = {
    * (`default`) is expanded to
    * `projects/{project}/global/networks/{network}`. Immutable.
    */
-  network?: string;
+  network?: string | undefined;
   /**
    * Private IP network configuration. Immutable. Defaults to the project
    * `default` network when Private Service Connect is not enabled.

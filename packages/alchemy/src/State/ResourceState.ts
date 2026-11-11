@@ -30,7 +30,7 @@ interface BaseResourceState {
    * Discriminator vs {@link ActionState}. Optional for back-compat: legacy
    * persisted rows have no `kind` field and are implicitly resources.
    */
-  readonly kind?: "resource";
+  readonly kind?: "resource" | undefined;
   /** Type of the Resource (e.g. AWS.Lambda.Function) */
   resourceType: string;
   /** Namespace of the Resource */
@@ -50,15 +50,15 @@ interface BaseResourceState {
   /** List of Bindings attached to this Resource */
   bindings: ResourceBinding[];
   /** Desired state (input props) of this Resource */
-  props?: Props;
+  props?: Props | undefined;
   /** The output attributes of this Resource (if it has been created) */
   attr?: Attr | undefined;
   /** The removal policy of the resource */
-  removalPolicy?: RemovalPolicy["Service"];
+  removalPolicy?: RemovalPolicy["Service"] | undefined;
   /** Attr-less lookup could recover the predecessor migrated away from this FQN. */
-  adoptionBlocked?: "migrated-fqn";
+  adoptionBlocked?: "migrated-fqn" | undefined;
   /** Unresolved props were stripped from this attr-less checkpoint; they cannot identify it. */
-  propsIncomplete?: true;
+  propsIncomplete?: true | undefined;
   /**
    * The {@link ProviderMode} this resource was last reconciled with.
    *
@@ -77,7 +77,7 @@ interface BaseResourceState {
    * Same-mode runs see no churn; a run in the other mode replaces it like
    * any stamped row.
    */
-  providerMode?: ProviderMode;
+  providerMode?: ProviderMode | undefined;
 }
 
 export interface CreatingResourceState extends BaseResourceState {
@@ -97,7 +97,7 @@ export interface CreatedResourceState extends BaseResourceState {
 export interface UpdatingReourceState extends BaseResourceState {
   status: "updating";
   /** Persisted until the first post-adoption reconcile succeeds. */
-  adopting?: true;
+  adopting?: true | undefined;
   /** The new resource properties that are being (or have been) applied. */
   props: Props;
   old: {

@@ -35,27 +35,27 @@ const COLLECTION = "datastores";
 
 export type GoogleFileService = {
   /** NetApp Volume resource name. */
-  netappVolume?: string;
+  netappVolume?: string | undefined;
   /** Filestore instance resource name. */
-  filestoreInstance?: string;
+  filestoreInstance?: string | undefined;
 };
 
 export type ThirdPartyFileService = {
   /** NFS server IP addresses or DNS names. */
-  servers?: string[];
+  servers?: string[] | undefined;
   /** VPC used for NFS access. */
-  network?: string;
+  network?: string | undefined;
   /** Mount folder name. */
-  fileShare?: string;
+  fileShare?: string | undefined;
 };
 
 export type NfsDatastore = {
   /** Google-managed file service (NetApp or Filestore). */
-  googleFileService?: GoogleFileService;
+  googleFileService?: GoogleFileService | undefined;
   /** GCVE-managed file service. */
-  googleVmwareFileService?: Record<string, never>;
+  googleVmwareFileService?: Record<string, never> | undefined;
   /** Third-party NFS file service. */
-  thirdPartyFileService?: ThirdPartyFileService;
+  thirdPartyFileService?: ThirdPartyFileService | undefined;
 };
 
 export type DatastoreProps = {

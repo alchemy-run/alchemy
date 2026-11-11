@@ -26,17 +26,17 @@ import {
 
 export type QaAnswerLabel = {
   /** Matches `QaQuestion.AnswerChoice.key`. */
-  key?: string;
+  key?: string | undefined;
   /** String answer. */
-  strValue?: string;
+  strValue?: string | undefined;
   /** Numeric answer. */
-  numValue?: number;
+  numValue?: number | undefined;
   /** Boolean answer. */
-  boolValue?: boolean;
+  boolValue?: boolean | undefined;
   /** Not-applicable answer. Should only be `true`. */
-  naValue?: boolean;
+  naValue?: boolean | undefined;
   /** Skip this question. Should only be `true`. */
-  skipValue?: boolean;
+  skipValue?: boolean | undefined;
 };
 
 export type AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabelProps = {

@@ -85,7 +85,7 @@ export interface ServerProps {
    * hostname (letters, digits, periods, dashes). If omitted, a unique
    * name is generated from the stack, stage and logical ID.
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * Server type name (`cpx12`, `cx23`, …) or numeric id. Cannot be
    * changed after creation — changing it replaces the Server.
@@ -178,7 +178,7 @@ export interface ServerProps {
    * User-defined labels. Alchemy ownership labels (`alchemy.stack` /
    * `alchemy.stage` / `alchemy.id`) are always merged in.
    */
-  labels?: Record<string, string>;
+  labels?: Record<string, string> | undefined;
 }
 
 export type Server = Resource<
@@ -234,9 +234,9 @@ export type Server = Resource<
      * can reach the box. Persisted in state; not present on adopted
      * foreign servers.
      */
-    privateKey?: Redacted.Redacted<string>;
+    privateKey?: Redacted.Redacted<string> | undefined;
     /** Numeric id of the Alchemy-managed deploy SSH key. */
-    deploySshKeyId?: number;
+    deploySshKeyId?: number | undefined;
   },
   {
     /** Environment variables collected from bindings. */
@@ -651,7 +651,7 @@ const findDeployKeyId = Effect.fn(function* (id: string, name: string) {
 const ensureDeployKey = Effect.fn(function* (input: {
   name: string;
   labels: Record<string, string>;
-  output?: Pick<Server["Attributes"], "privateKey" | "deploySshKeyId">;
+  output?: Pick<Server["Attributes"], "privateKey" | "deploySshKeyId"> | undefined;
   creating: boolean;
 }) {
   const existingKey = unwrapPrivateKey(input.output?.privateKey);
@@ -701,8 +701,8 @@ const observe = Effect.fn(function* ({
   outputId,
 }: {
   id: string;
-  name?: string;
-  outputId?: number;
+  name?: string | undefined;
+  outputId?: number | undefined;
 }) {
   if (outputId !== undefined) {
     const byId = yield* getById(outputId);

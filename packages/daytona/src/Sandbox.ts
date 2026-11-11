@@ -63,7 +63,7 @@ export interface SandboxMount {
 export interface SandboxVolumeBinding {
   volumeId: string;
   path: string;
-  subpath?: string;
+  subpath?: string | undefined;
 }
 
 /**
@@ -160,7 +160,7 @@ export interface SandboxProps extends PlatformProps {
    * that last changed it), whatever its state. Changing it restarts the
    * clock from now. `0` disables it, unless the region caps sandbox lifespan.
    */
-  ttl?: Duration.Input;
+  ttl?: Duration.Input | undefined;
   /**
    * Give up if no runner takes the sandbox within this long. The
    * organization needs the queue-timeout feature; without it, creating the
@@ -186,7 +186,7 @@ export interface SandboxProps extends PlatformProps {
    * deploy returns once Daytona has started it. Updated in place.
    * @default "started"
    */
-  state?: SandboxRunState;
+  state?: SandboxRunState | undefined;
   /**
    * Module entrypoint of a program to run in the sandbox, typically
    * `import.meta.url` in the class form. Alchemy bundles it, uploads it

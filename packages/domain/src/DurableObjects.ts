@@ -2134,7 +2134,7 @@ interface CallbackJob {
   readonly attempts: number;
   /** Replaced by every schedule: a job scheduled again while it ran isn't removed. */
   readonly token: string;
-  readonly progress?: number;
+  readonly progress?: number | undefined;
 }
 
 const JOB_PREFIX = "cb:";

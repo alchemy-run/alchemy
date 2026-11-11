@@ -118,17 +118,17 @@ export interface EcsTaskTargetProps {
   /** Subnets for the task's awsvpc network configuration. */
   subnets: Input<string[]>;
   /** Security groups for the task's awsvpc network configuration. */
-  securityGroups?: Input<string[]>;
+  securityGroups?: Input<string[]> | undefined;
   /**
    * Whether the task gets a public IP.
    * @default false
    */
-  assignPublicIp?: boolean;
+  assignPublicIp?: boolean | undefined;
   /**
    * Number of tasks to launch per invocation.
    * @default 1
    */
-  taskCount?: number;
+  taskCount?: number | undefined;
   /** JSON-serializable payload passed to the task as the event. */
   input?: unknown;
   /** Retry policy for failed task launches. */

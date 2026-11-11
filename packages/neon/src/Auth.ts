@@ -16,11 +16,11 @@ import type { Providers } from "./Providers.ts";
 /** Unspecified settings are preserved. Removing previously managed settings requires an explicit reset value. */
 export type AuthProps = BranchScope & {
   /** Database containing neon_auth. Omission preserves the existing database; changing its identity replaces the integration. */
-  database?: string;
+  database?: string | undefined;
   /** Application name shown in authentication emails. */
   name?: string;
   /** Permit localhost origins; explicitly set false in production. */
-  allowLocalhost?: boolean;
+  allowLocalhost?: boolean | undefined;
   /** Supported managed email/password settings, using Neon's wire field names. */
   emailAndPassword?: Omit<
     Neon.UpdateNeonAuthEmailAndPasswordConfigRequest,

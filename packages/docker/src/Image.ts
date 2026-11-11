@@ -88,7 +88,7 @@ export interface Image extends Resource<
     /** Local image id after build/tag. */
     imageId: string;
     /** Registry digest after push when available. */
-    repoDigest?: string;
+    repoDigest?: string | undefined;
     /** Tag used for the local image. */
     tag: string;
     /** Build timestamp in milliseconds since epoch. */

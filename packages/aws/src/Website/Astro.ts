@@ -24,47 +24,49 @@ export type AstroProps = FrameworkSiteProps<{
    * stage or derive from other resources' Outputs — everything else
    * belongs in the config file.
    */
-  astro?: {
-    /** Deployed URL origin (astro's `site`). */
-    site?: string;
-    /** Base path the site is served from (astro's `base`). */
-    base?: string;
-    /**
-     * Astro output target — a deploy-topology decision (whether a
-     * server function exists). `"server"` renders pages on demand in
-     * the Lambda; individual pages opt into prerendering with
-     * `export const prerender = true`. `"static"` prerenders every
-     * page at build time and deploys assets-only (no Lambda).
-     * Overrides the `output` in your `astro.config.*`; leave it unset to
-     * use the file's value.
-     * @default the config file's `output`, else `"server"`
-     */
-    output?: "server" | "static";
-    /** Source directory (astro's `srcDir`). */
-    srcDir?: string;
-    /** Public assets directory (astro's `publicDir`). */
-    publicDir?: string;
-    /** Build output directory (astro's `outDir`). */
-    outDir?: string;
-    /** Trailing-slash handling (astro's `trailingSlash`). */
-    trailingSlash?: "always" | "never" | "ignore";
-  };
+  astro?:
+    | {
+        /** Deployed URL origin (astro's `site`). */
+        site?: string | undefined;
+        /** Base path the site is served from (astro's `base`). */
+        base?: string | undefined;
+        /**
+         * Astro output target — a deploy-topology decision (whether a
+         * server function exists). `"server"` renders pages on demand in
+         * the Lambda; individual pages opt into prerendering with
+         * `export const prerender = true`. `"static"` prerenders every
+         * page at build time and deploys assets-only (no Lambda).
+         * Overrides the `output` in your `astro.config.*`; leave it unset to
+         * use the file's value.
+         * @default the config file's `output`, else `"server"`
+         */
+        output?: "server" | "static" | undefined;
+        /** Source directory (astro's `srcDir`). */
+        srcDir?: string | undefined;
+        /** Public assets directory (astro's `publicDir`). */
+        publicDir?: string | undefined;
+        /** Build output directory (astro's `outDir`). */
+        outDir?: string | undefined;
+        /** Trailing-slash handling (astro's `trailingSlash`). */
+        trailingSlash?: "always" | "never" | "ignore" | undefined;
+      }
+    | undefined;
   /**
    * Path to an alternate astro config file, relative to `rootDir`.
    * Defaults to astro's own config discovery.
    */
-  config?: string;
+  config?: string | undefined;
   /**
    * Serve the built error page (e.g. astro's `404.html`) for requests that
    * match no uploaded file. Only applies to `output: "static"`
    * sites — a server-backed site forwards misses to the Lambda instead.
    */
-  errorPage?: string;
+  errorPage?: string | undefined;
   /**
    * Answer misses with the index page (200) instead of a 404. Only applies
    * to `output: "static"` sites.
    */
-  spa?: boolean;
+  spa?: boolean | undefined;
 }>;
 
 /**

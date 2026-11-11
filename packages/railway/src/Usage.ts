@@ -67,7 +67,10 @@ export type UsageLimitWorkspace = { readonly workspaceId?: string; readonly id?:
  * Project whose workspace a usage limit applies to. Accepts a
  * `Railway.Project` or a `{ workspaceId, projectId? }` stub.
  */
-export type UsageLimitProject = { readonly workspaceId: string; readonly projectId?: string };
+export type UsageLimitProject = {
+  readonly workspaceId: string;
+  readonly projectId?: string | undefined;
+};
 
 /**
  * Dollar cap passed to `usageLimitSet`. A number is the soft limit.
@@ -82,13 +85,13 @@ export interface UsageQuery {
    * Project to query. Accepts a project id, a `Railway.Project`, or a
    * `{ projectId }` stub. Omit for workspace-wide usage.
    */
-  project?: string | { readonly projectId: string };
+  project?: string | { readonly projectId: string } | undefined;
   /**
    * Workspace to query. Accepts a workspace id, `{ workspaceId }` /
    * `{ id }`, or a `Railway.Project`. Defaults to the current token
    * workspace.
    */
-  workspace?: string | UsageLimitWorkspace;
+  workspace?: string | UsageLimitWorkspace | undefined;
   /**
    * Measurements to aggregate (`CPU_USAGE`, `MEMORY_USAGE_GB`, …).
    */
@@ -97,22 +100,22 @@ export interface UsageQuery {
    * Inclusive start of the window (RFC3339). Omit for the current
    * billing period of the project owner.
    */
-  startDate?: string;
+  startDate?: string | undefined;
   /**
    * Inclusive end of the window (RFC3339). Omit for now.
    */
-  endDate?: string;
+  endDate?: string | undefined;
   /**
    * Tags to group by (`PROJECT_ID`, `SERVICE_ID`, …). Default is the
    * whole project / workspace.
    */
-  groupBy?: ReadonlyArray<MetricTag>;
+  groupBy?: ReadonlyArray<MetricTag> | undefined;
   /**
    * Include deleted projects in the aggregation.
    *
    * @default false
    */
-  includeDeleted?: boolean;
+  includeDeleted?: boolean | undefined;
 }
 
 export interface EstimatedUsageQuery {
@@ -120,11 +123,11 @@ export interface EstimatedUsageQuery {
    * Project to estimate. Accepts a project id, a `Railway.Project`, or a
    * `{ projectId }` stub. Omit for workspace-wide estimates.
    */
-  project?: string | { readonly projectId: string };
+  project?: string | { readonly projectId: string } | undefined;
   /**
    * Workspace to estimate. Defaults to the current token workspace.
    */
-  workspace?: string | UsageLimitWorkspace;
+  workspace?: string | UsageLimitWorkspace | undefined;
   /**
    * Measurements to estimate (`CPU_USAGE`, `MEMORY_USAGE_GB`, …).
    */
@@ -134,7 +137,7 @@ export interface EstimatedUsageQuery {
    *
    * @default false
    */
-  includeDeleted?: boolean;
+  includeDeleted?: boolean | undefined;
 }
 
 export interface UsageLimitProps {
@@ -144,13 +147,13 @@ export interface UsageLimitProps {
    * current token's workspace. Changing it to a different workspace
    * replaces the limit.
    */
-  workspace?: Ref<UsageLimitWorkspace>;
+  workspace?: Ref<UsageLimitWorkspace> | undefined;
   /**
    * Project whose workspace this limit applies to. Alternative to
    * `workspace`. Changing it to a project in a different workspace
    * replaces the limit.
    */
-  project?: Ref<UsageLimitProject>;
+  project?: Ref<UsageLimitProject> | undefined;
   /**
    * Dollar cap. A number is `softLimitDollars`. Pass
    * `{ softLimitDollars, hardLimitDollars }` for both. Updates in place
@@ -216,7 +219,7 @@ const readUsage = Query.fn(
   (args: {
     measurements: ReadonlyArray<MetricMeasurement>;
     workspaceId: string;
-    projectId?: string;
+    projectId?: string | undefined;
     startDate?: string;
     endDate?: string;
     groupBy?: ReadonlyArray<MetricTag>;
@@ -228,7 +231,7 @@ const readEstimatedUsage = Query.fn(
   (args: {
     measurements: ReadonlyArray<MetricMeasurement>;
     workspaceId: string;
-    projectId?: string;
+    projectId?: string | undefined;
     includeDeleted?: boolean;
   }) => Railway.estimatedUsage(args).pipe(Query.map(estimatedUsageFields)),
 );
@@ -409,7 +412,7 @@ const getWorkspace = (workspaceId: string) =>
 
 const toAttrs = (
   limit: CloudLimit,
-  fallback: { workspaceId: string; customerId: string; projectId?: string },
+  fallback: { workspaceId: string; customerId: string; projectId?: string | undefined },
 ): UsageLimit["Attributes"] => ({
   usageLimitId: limit.id,
   customerId: limit.customerId || fallback.customerId,
@@ -450,7 +453,7 @@ const setLimit = (input: {
 const resolveScope = Effect.fn(function* (input: {
   news?: UsageLimitProps;
   olds?: UsageLimitProps;
-  output?: UsageLimit["Attributes"];
+  output?: UsageLimit["Attributes"] | undefined;
 }) {
   const projectId =
     projectIdOf(input.news?.project) ?? input.output?.projectId ?? projectIdOf(input.olds?.project);

@@ -36,17 +36,17 @@ export type Redirect = {
    * Redirect destination URI. URIs without a scheme are assumed to be
    * HTTPS. Prepended to the original request path.
    */
-  uri?: string;
+  uri?: string | undefined;
   /**
    * HTTP 3xx status used in the redirect response.
    * @default "302"
    */
-  status?: string;
+  status?: string | undefined;
 };
 
 export type ServingBehavior = {
   /** Redirect behavior. When set, the domain does not serve live content. */
-  redirect?: Redirect;
+  redirect?: Redirect | undefined;
 };
 
 export type BackendsDomainProps = {
@@ -67,7 +67,7 @@ export type BackendsDomainProps = {
    * If omitted, a unique `{id}.example.com` name is generated.
    * Immutable — changing it replaces the domain.
    */
-  domainId?: string;
+  domainId?: string | undefined;
   /**
    * Serving behavior. When set, the domain serves something other than
    * the backend's live content (typically a redirect).

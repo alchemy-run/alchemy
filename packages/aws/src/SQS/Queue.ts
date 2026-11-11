@@ -31,7 +31,7 @@ export type QueueProps = {
    * The reserved `.fifo` suffix is added for FIFO queues and removed for standard queues.
    * @default ${app}-${stage}-${id}?.fifo
    */
-  queueName?: string;
+  queueName?: string | undefined;
   /**
    * Delay applied to all messages in the queue (`0` - `900` seconds).
    * Accepts any `Duration.Input` (e.g. `"30 seconds"`,
@@ -39,19 +39,19 @@ export type QueueProps = {
    * is whole seconds.
    * @default 0
    */
-  delay?: Duration.Input;
+  delay?: Duration.Input | undefined;
   /**
    * Maximum message size in bytes (`1,024` - `1,048,576`).
    * @default 1048576
    */
-  maximumMessageSize?: number;
+  maximumMessageSize?: number | undefined;
   /**
    * How long messages are retained (`60` - `1,209,600` seconds). Accepts
    * any `Duration.Input` (e.g. `"4 days"`, `Duration.days(4)`; a bare
    * number is milliseconds); the wire unit is whole seconds.
    * @default 4 days
    */
-  messageRetentionPeriod?: Duration.Input;
+  messageRetentionPeriod?: Duration.Input | undefined;
   /**
    * How long `ReceiveMessage` waits for a message (`0` - `20` seconds).
    * Accepts any `Duration.Input` (e.g. `"20 seconds"`,
@@ -59,60 +59,64 @@ export type QueueProps = {
    * is whole seconds.
    * @default 0
    */
-  receiveMessageWaitTime?: Duration.Input;
+  receiveMessageWaitTime?: Duration.Input | undefined;
   /**
    * Visibility timeout (`0` - `43,200` seconds). Accepts any
    * `Duration.Input` (e.g. `"30 seconds"`, `Duration.seconds(30)`; a bare
    * number is milliseconds); the wire unit is whole seconds.
    * @default 30 seconds
    */
-  visibilityTimeout?: Duration.Input;
+  visibilityTimeout?: Duration.Input | undefined;
   /**
    * Dead-letter queue redrive policy. Failed messages are moved to the
    * dead-letter queue after `maxReceiveCount` receive attempts. The
    * dead-letter queue must be the same type (a FIFO source requires a
    * FIFO dead-letter queue).
    */
-  redrivePolicy?: {
-    /**
-     * The ARN of the dead-letter queue that failed messages are moved to.
-     */
-    deadLetterTargetArn: string;
-    /**
-     * The number of times a message is received before it is moved to the
-     * dead-letter queue (`1` - `1000`).
-     */
-    maxReceiveCount: number;
-  };
+  redrivePolicy?:
+    | {
+        /**
+         * The ARN of the dead-letter queue that failed messages are moved to.
+         */
+        deadLetterTargetArn: string;
+        /**
+         * The number of times a message is received before it is moved to the
+         * dead-letter queue (`1` - `1000`).
+         */
+        maxReceiveCount: number;
+      }
+    | undefined;
   /**
    * Redrive-allow policy. Set on the **dead-letter queue** to authorize
    * which source queues may use it.
    */
-  redriveAllowPolicy?: {
-    /**
-     * Whether all, none, or a specified list of source queues may use this
-     * queue as a dead-letter queue.
-     */
-    redrivePermission: "allowAll" | "denyAll" | "byQueue";
-    /**
-     * The ARNs of the source queues permitted to use this dead-letter
-     * queue. Only valid (and required) when `redrivePermission` is
-     * `byQueue` (up to 10 ARNs).
-     */
-    sourceQueueArns?: string[];
-  };
+  redriveAllowPolicy?:
+    | {
+        /**
+         * Whether all, none, or a specified list of source queues may use this
+         * queue as a dead-letter queue.
+         */
+        redrivePermission: "allowAll" | "denyAll" | "byQueue";
+        /**
+         * The ARNs of the source queues permitted to use this dead-letter
+         * queue. Only valid (and required) when `redrivePermission` is
+         * `byQueue` (up to 10 ARNs).
+         */
+        sourceQueueArns?: string[] | undefined;
+      }
+    | undefined;
   /**
    * An access-control policy document (IAM policy JSON) attached to the
    * queue. Provided as a JSON string or a plain object. Merged with any
    * policy statements contributed by capability bindings.
    */
-  policy?: string | Record<string, any>;
+  policy?: string | Record<string, any> | undefined;
   /**
    * The ID, alias, or ARN of a KMS key for server-side encryption (SSE-KMS).
    * Use `alias/aws/sqs` for the AWS-managed SQS key. Mutually exclusive with
    * `sqsManagedSseEnabled`.
    */
-  kmsMasterKeyId?: string;
+  kmsMasterKeyId?: string | undefined;
   /**
    * How long SQS reuses a data key before calling KMS again (`60` -
    * `86,400` seconds). Accepts any `Duration.Input` (e.g. `"5 minutes"`,
@@ -120,21 +124,21 @@ export type QueueProps = {
    * is whole seconds. Only meaningful with `kmsMasterKeyId`.
    * @default 5 minutes
    */
-  kmsDataKeyReusePeriod?: Duration.Input;
+  kmsDataKeyReusePeriod?: Duration.Input | undefined;
   /**
    * Enables server-side encryption using SQS-owned keys (SSE-SQS).
    * Mutually exclusive with `kmsMasterKeyId`.
    * @default false
    */
-  sqsManagedSseEnabled?: boolean;
+  sqsManagedSseEnabled?: boolean | undefined;
   /**
    * Tags to apply to the queue. Merged with internal Alchemy tags.
    */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
 } & (
   | {
       /** Standard queue mode. Must be known before precreation. */
-      fifo?: false;
+      fifo?: false | undefined;
       contentBasedDeduplication?: undefined;
       deduplicationScope?: undefined;
       fifoThroughputLimit?: undefined;
@@ -383,7 +387,7 @@ export const QueueProvider = () =>
         id: string,
         props: {
           queueName?: string | undefined;
-          fifo?: boolean;
+          fifo?: boolean | undefined;
         },
       ) {
         if (props.queueName) {
@@ -501,7 +505,7 @@ export const QueueProvider = () =>
       }: {
         id: string;
         news: QueueProps;
-        output?: Queue["Attributes"];
+        output?: Queue["Attributes"] | undefined;
         bindings?: ResourceBinding<Queue["Binding"]>[];
       }) {
         yield* validateEncryption(news);

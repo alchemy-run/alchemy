@@ -2,6 +2,8 @@ import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Formatter from "effect/Formatter";
+import * as Record from "effect/Record";
+import * as EffectResult from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import picomatch from "picomatch";
 import { emit, type ApplyStatus } from "./Events.ts";
@@ -39,16 +41,16 @@ export interface Target {
 export interface DiscoverOptions {
   readonly mode: ProviderMode;
   /** Provider-id globs to include. Omitted means every provider. */
-  readonly include?: ReadonlyArray<string>;
+  readonly include?: ReadonlyArray<string> | undefined;
   /** Provider-id globs to exclude. Applied after {@link DiscoverOptions.include}. */
-  readonly exclude?: ReadonlyArray<string>;
+  readonly exclude?: ReadonlyArray<string> | undefined;
 }
 
 export interface ListOptions extends DiscoverOptions {
   /** The built provider context — what a stack's `providers` layer produced. */
   readonly context: Context.Context<never>;
-  readonly concurrency?: number | "unbounded";
-  readonly timeoutSeconds?: number;
+  readonly concurrency?: number | "unbounded" | undefined;
+  readonly timeoutSeconds?: number | undefined;
 }
 
 export type Strategy =
@@ -61,8 +63,8 @@ export interface DestroyOptions {
   readonly targets: ReadonlyArray<Target>;
   readonly context: Context.Context<never>;
   readonly strategy: Strategy;
-  readonly concurrency?: number | "unbounded";
-  readonly timeoutSeconds?: number;
+  readonly concurrency?: number | "unbounded" | undefined;
+  readonly timeoutSeconds?: number | undefined;
 }
 
 export interface Result {
@@ -258,7 +260,10 @@ export const destroy = ({
         id: resource.providerId,
         resourceType: resource.providerId,
         status,
-        message,
+        ...Record.filterMap(
+          { message },
+          EffectResult.fromNullishOr(() => undefined),
+        ),
       });
     const onPass = (pass: number) => emit({ type: "nuke.pass.started", pass });
     const onDeleted = (resource: Target) =>

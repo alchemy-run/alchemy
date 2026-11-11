@@ -51,13 +51,13 @@ export interface PutObjectContent {
   /** Object content. Strings are encoded as UTF-8. */
   body: string | Uint8Array;
   /** @default "application/octet-stream" (or "text/plain; charset=utf-8" for strings) */
-  contentType?: string;
+  contentType?: string | undefined;
   /** Custom metadata stored on the object. */
-  metadata?: Record<string, string>;
+  metadata?: Record<string, string> | undefined;
   /** `Cache-Control` served with the object. */
-  cacheControl?: string;
+  cacheControl?: string | undefined;
   /** Only write when the live generation matches (`0` = only if absent). */
-  ifGenerationMatch?: string;
+  ifGenerationMatch?: string | undefined;
 }
 
 const isRetryable = (error: ObjectNotFound | ObjectRequestFailed) =>
@@ -117,7 +117,7 @@ export const makeObjectMedia = Effect.gen(function* () {
       Effect.map((config) => request.pipe(HttpClientRequest.bearerToken(config.accessToken))),
     );
 
-  const download = (options: { bucket: string; object: string; generation?: string }) =>
+  const download = (options: { bucket: string; object: string; generation?: string | undefined }) =>
     Effect.gen(function* () {
       const request = yield* authorized(
         options.bucket,

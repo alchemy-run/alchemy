@@ -62,9 +62,9 @@ export interface DataSourceProps {
    * logical ID (dashes sanitized to underscores). Changing the name
    * triggers a replacement.
    */
-  name?: string;
+  name?: string | undefined;
   /** Description of the data source. */
-  description?: string;
+  description?: string | undefined;
   /**
    * The data source type. `NONE` (local compute), `AWS_LAMBDA`,
    * `AMAZON_DYNAMODB`, `HTTP`, or `AMAZON_EVENTBRIDGE`.
@@ -76,18 +76,18 @@ export interface DataSourceProps {
    * automatically with `appsync.amazonaws.com` trust and least-privilege
    * access to the configured target.
    */
-  serviceRoleArn?: string;
+  serviceRoleArn?: string | undefined;
   /**
    * Additional IAM policy statements attached to the auto-created service
    * role (ignored when {@link DataSourceProps.serviceRoleArn} is provided).
    */
-  policyStatements?: PolicyStatement[];
+  policyStatements?: PolicyStatement[] | undefined;
   /** Lambda target — required when `type` is `AWS_LAMBDA`. */
-  lambdaConfig?: LambdaDataSourceConfig;
+  lambdaConfig?: LambdaDataSourceConfig | undefined;
   /** DynamoDB target — required when `type` is `AMAZON_DYNAMODB`. */
-  dynamodbConfig?: DynamodbDataSourceConfig;
+  dynamodbConfig?: DynamodbDataSourceConfig | undefined;
   /** HTTP target — required when `type` is `HTTP`. */
-  httpConfig?: HttpDataSourceConfig;
+  httpConfig?: HttpDataSourceConfig | undefined;
 }
 
 export interface AppSyncDataSource extends Resource<
@@ -440,12 +440,12 @@ export const DataSourceProvider = () =>
           } else {
             // 3. SYNC — single update when the observed surface drifted.
             const surface = (ds: {
-              description?: string;
-              type?: string;
-              serviceRoleArn?: string;
-              lambdaConfig?: appsync.LambdaDataSourceConfig;
-              dynamodbConfig?: appsync.DynamodbDataSourceConfig;
-              httpConfig?: appsync.HttpDataSourceConfig;
+              description?: string | undefined;
+              type?: string | undefined;
+              serviceRoleArn?: string | undefined;
+              lambdaConfig?: appsync.LambdaDataSourceConfig | undefined;
+              dynamodbConfig?: appsync.DynamodbDataSourceConfig | undefined;
+              httpConfig?: appsync.HttpDataSourceConfig | undefined;
             }) =>
               JSON.parse(
                 JSON.stringify({

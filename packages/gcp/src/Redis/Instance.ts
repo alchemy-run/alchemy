@@ -35,27 +35,27 @@ const MAX_NAME_LENGTH = 40;
 
 export type RedisTimeOfDay = {
   /** Hours of day in 24-hour format (`0`–`23`). */
-  hours?: number;
+  hours?: number | undefined;
   /** Minutes of hour (`0`–`59`). */
-  minutes?: number;
+  minutes?: number | undefined;
   /** Seconds of minute (`0`–`59`). */
-  seconds?: number;
+  seconds?: number | undefined;
   /** Fractional seconds, in nanoseconds. */
-  nanos?: number;
+  nanos?: number | undefined;
 };
 
 export type WeeklyMaintenanceWindow = {
   /** Day of week that maintenance occurs (`MONDAY` … `SUNDAY`). */
-  day?: redis.WeeklyMaintenanceWindowDayEnum | (string & {});
+  day?: redis.WeeklyMaintenanceWindowDayEnum | (string & {}) | undefined;
   /** Start time of the window in UTC. */
-  startTime?: RedisTimeOfDay;
+  startTime?: RedisTimeOfDay | undefined;
 };
 
 export type MaintenancePolicy = {
   /** Description of the policy. Max 512 characters. */
-  description?: string;
+  description?: string | undefined;
   /** Weekly windows. Current API maximum is one window. */
-  weeklyMaintenanceWindow?: WeeklyMaintenanceWindow[];
+  weeklyMaintenanceWindow?: WeeklyMaintenanceWindow[] | undefined;
 };
 
 export type PersistenceConfig = {
@@ -63,17 +63,17 @@ export type PersistenceConfig = {
    * Persistence mode. `DISABLED` deletes existing snapshots; `RDB` enables
    * RDB snapshots.
    */
-  persistenceMode?: redis.PersistenceConfigPersistenceModeEnum | (string & {});
+  persistenceMode?: redis.PersistenceConfigPersistenceModeEnum | (string & {}) | undefined;
   /**
    * Period between RDB snapshots (`ONE_HOUR`, `SIX_HOURS`, `TWELVE_HOURS`,
    * `TWENTY_FOUR_HOURS`).
    */
-  rdbSnapshotPeriod?: redis.PersistenceConfigRdbSnapshotPeriodEnum | (string & {});
+  rdbSnapshotPeriod?: redis.PersistenceConfigRdbSnapshotPeriodEnum | (string & {}) | undefined;
   /**
    * Alignment timestamp for snapshots (RFC3339). If omitted, the current
    * time is used.
    */
-  rdbSnapshotStartTime?: string;
+  rdbSnapshotStartTime?: string | undefined;
 };
 
 export type InstanceProps = {

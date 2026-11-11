@@ -364,14 +364,14 @@ export const BranchProtection = Resource<BranchProtection>("GitHub.BranchProtect
  * GitHub omits disabled aspects entirely.
  */
 interface ProtectionPayload {
-  url?: string;
-  enforce_admins?: { enabled?: boolean };
-  required_signatures?: { enabled?: boolean };
-  required_linear_history?: { enabled?: boolean };
-  allow_force_pushes?: { enabled?: boolean };
-  allow_deletions?: { enabled?: boolean };
-  required_conversation_resolution?: { enabled?: boolean };
-  lock_branch?: { enabled?: boolean };
+  url?: string | undefined;
+  enforce_admins?: { enabled?: boolean | undefined } | undefined;
+  required_signatures?: { enabled?: boolean | undefined } | undefined;
+  required_linear_history?: { enabled?: boolean | undefined } | undefined;
+  allow_force_pushes?: { enabled?: boolean | undefined } | undefined;
+  allow_deletions?: { enabled?: boolean | undefined } | undefined;
+  required_conversation_resolution?: { enabled?: boolean | undefined } | undefined;
+  lock_branch?: { enabled?: boolean | undefined } | undefined;
 }
 
 type RequiredStatusChecks = Repos.UpdateBranchProtectionRequest["required_status_checks"];

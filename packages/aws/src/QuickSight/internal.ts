@@ -45,7 +45,7 @@ const isFailed = (status: string | undefined): boolean =>
  * the real (still-converging) resource rather than a spurious failure.
  */
 export const waitForSettled = <
-  A extends { status?: string },
+  A extends { status?: string | undefined },
   E extends { readonly _tag: string },
   R,
 >(

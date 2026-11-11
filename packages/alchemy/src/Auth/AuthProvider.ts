@@ -291,7 +291,7 @@ export interface AuthProviderImpl<
    * Resolve credentials directly from the process environment for CI.
    * This never creates, selects, or mutates an Alchemy profile.
    */
-  readonly readEnvironment?: Effect.Effect<Credentials, AuthError, R>;
+  readonly readEnvironment?: Effect.Effect<Credentials, AuthError, R> | undefined;
 
   /**
    * The environment variables {@link readEnvironment} consumes. Required
@@ -299,7 +299,7 @@ export interface AuthProviderImpl<
    * so this list is the provider's entire CI configuration contract. Names
    * only, never values.
    */
-  readonly environment?: ReadonlyArray<EnvironmentVariable>;
+  readonly environment?: ReadonlyArray<EnvironmentVariable> | undefined;
 }
 
 // TODO(typescript>7.1.0): microsoft/TypeScript#64757 infers `R` through

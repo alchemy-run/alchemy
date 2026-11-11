@@ -26,15 +26,15 @@ export interface RootProps {
    * Optional root ID to import explicitly.
    * If omitted, Alchemy adopts the single organization root.
    */
-  rootId?: string;
+  rootId?: string | undefined;
   /**
    * Optional root name to match when multiple roots are ever supported.
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * Optional tags to apply to the imported root.
    */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
 }
 
 export interface Root extends Resource<
@@ -214,7 +214,13 @@ const listRoots = () =>
     (page) => page.Roots,
   );
 
-const readRoot = Effect.fn(function* ({ rootId, name }: { rootId?: string; name?: string }) {
+const readRoot = Effect.fn(function* ({
+  rootId,
+  name,
+}: {
+  rootId?: string | undefined;
+  name?: string | undefined;
+}) {
   const roots = yield* retryOrganizations(listRoots());
   const root = roots.find(
     (candidate) =>

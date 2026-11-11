@@ -34,35 +34,35 @@ export type Stage = {
   /**
    * Target id this stage points at (the last segment of a Target name).
    */
-  targetId?: string;
+  targetId?: string | undefined;
   /**
    * Skaffold profiles used when rendering this stage's Target.
    */
-  profiles?: string[];
+  profiles?: string[] | undefined;
   /**
    * Rollout strategy for this stage (`standard` or `canary`).
    */
-  strategy?: clouddeploy.Strategy;
+  strategy?: clouddeploy.Strategy | undefined;
   /**
    * Deploy parameters applied to the target in this stage.
    */
-  deployParameters?: clouddeploy.DeployParameters[];
+  deployParameters?: clouddeploy.DeployParameters[] | undefined;
 };
 
 export type SerialPipeline = {
   /**
    * Ordered stages. The list order is the promotion flow.
    */
-  stages?: Stage[];
+  stages?: Stage[] | undefined;
 };
 
 export type PipelineCondition = {
   /** Whether referenced targets exist. */
-  targetsPresentCondition?: clouddeploy.TargetsPresentCondition;
+  targetsPresentCondition?: clouddeploy.TargetsPresentCondition | undefined;
   /** Whether the pipeline's target types are compatible. */
-  targetsTypeCondition?: clouddeploy.TargetsTypeCondition;
+  targetsTypeCondition?: clouddeploy.TargetsTypeCondition | undefined;
   /** Whether the pipeline is ready. */
-  pipelineReadyCondition?: clouddeploy.PipelineReadyCondition;
+  pipelineReadyCondition?: clouddeploy.PipelineReadyCondition | undefined;
 };
 
 export type DeliveryPipelineProps = {

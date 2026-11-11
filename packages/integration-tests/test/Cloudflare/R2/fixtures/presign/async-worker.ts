@@ -1,6 +1,8 @@
 import type * as Cloudflare from "@alchemy.run/cloudflare";
 import type { R2Bucket } from "@cloudflare/workers-types";
 import { AwsClient } from "aws4fetch";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 
 interface Env {
   BUCKET: R2Bucket;
@@ -65,8 +67,8 @@ const presign = async (
   key: string,
   method: "GET" | "PUT",
   options: {
-    headers?: Record<string, string>;
-    query?: Record<string, string>;
+    headers?: Record<string, string> | undefined;
+    query?: Record<string, string> | undefined;
   },
   bucketName?: string,
 ) => {
@@ -84,7 +86,10 @@ const presign = async (
   url.searchParams.set("X-Amz-Expires", "900");
   const signed = await client.sign(url.toString(), {
     method,
-    headers: options.headers,
+    ...Record.filterMap(
+      { headers: options.headers },
+      Result.fromNullishOr(() => undefined),
+    ),
     aws: { signQuery: true, allHeaders: options.headers !== undefined },
   });
   return signed.url;

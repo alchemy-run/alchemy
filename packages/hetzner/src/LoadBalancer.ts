@@ -118,7 +118,7 @@ export interface LoadBalancerHealthCheck {
   /**
    * Extra options when `protocol` is `http`.
    */
-  http?: LoadBalancerHealthCheckHttp;
+  http?: LoadBalancerHealthCheckHttp | undefined;
 }
 
 export interface LoadBalancerServiceHttp {
@@ -180,7 +180,7 @@ export interface LoadBalancerService {
   /**
    * HTTP/HTTPS options. Ignored for `tcp` services.
    */
-  http?: LoadBalancerServiceHttp;
+  http?: LoadBalancerServiceHttp | undefined;
 }
 
 export type LoadBalancerTarget =
@@ -229,7 +229,7 @@ export interface LoadBalancerProps {
    * If omitted, a unique name is generated from the stack, stage and
    * logical ID.
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * Load Balancer type (`lb11`, `lb21`, `lb31`, …). Changing to a larger
    * type updates in place; Hetzner cannot downgrade a type.
@@ -296,22 +296,26 @@ export interface LoadBalancerServiceAttr {
     interval: number;
     timeout: number;
     retries: number;
-    http?: {
-      domain: string | null;
-      path: string;
-      response?: string;
-      statusCodes?: string[];
-      tls?: boolean;
-    };
+    http?:
+      | {
+          domain: string | null;
+          path: string;
+          response?: string;
+          statusCodes?: string[];
+          tls?: boolean;
+        }
+      | undefined;
   };
-  http?: {
-    cookieName: string;
-    cookieLifetime: number;
-    timeoutIdle: number;
-    stickySessions: boolean;
-    redirectHttp?: boolean;
-    certificates?: number[];
-  };
+  http?:
+    | {
+        cookieName: string;
+        cookieLifetime: number;
+        timeoutIdle: number;
+        stickySessions: boolean;
+        redirectHttp?: boolean;
+        certificates?: number[];
+      }
+    | undefined;
 }
 
 export type LoadBalancerTargetAttr =
@@ -555,7 +559,7 @@ type NormalizedHealthCheck = {
   interval: number;
   timeout: number;
   retries: number;
-  http?: NormalizedHealthHttp;
+  http?: NormalizedHealthHttp | undefined;
 };
 
 type NormalizedServiceHttp = {
@@ -573,7 +577,7 @@ type NormalizedService = {
   destinationPort: number;
   proxyprotocol: boolean;
   healthCheck: NormalizedHealthCheck;
-  http?: NormalizedServiceHttp;
+  http?: NormalizedServiceHttp | undefined;
 };
 
 type NormalizedTarget =
@@ -1046,8 +1050,8 @@ const observe = Effect.fn(function* ({
   outputId,
 }: {
   id: string;
-  name?: string;
-  outputId?: number;
+  name?: string | undefined;
+  outputId?: number | undefined;
 }) {
   if (outputId !== undefined) {
     const byId = yield* getById(outputId);

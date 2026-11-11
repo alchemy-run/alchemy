@@ -36,7 +36,7 @@ export type AnnotationSpec = {
   /**
    * Optional description of this spec. Maximum 10,000 characters.
    */
-  description?: string;
+  description?: string | undefined;
 };
 
 export type AnnotationSpecSetProps = {
@@ -57,7 +57,7 @@ export type AnnotationSpecSetProps = {
    * field, so Alchemy stamps ownership into this field. Immutable —
    * changing it replaces the set.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * The possible labels for a labeling task. Required. Immutable —
    * changing them replaces the set.

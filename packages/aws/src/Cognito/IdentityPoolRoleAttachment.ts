@@ -31,7 +31,7 @@ export interface IdentityPoolRoleAttachment extends Resource<
     /** The ID of the identity pool the roles are attached to. */
     identityPoolId: string;
     /** The attached role ARNs by identity type. */
-    roles: { authenticated?: string; unauthenticated?: string };
+    roles: { authenticated?: string | undefined; unauthenticated?: string | undefined };
   },
   never,
   Providers

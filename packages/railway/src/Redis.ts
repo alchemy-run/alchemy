@@ -75,7 +75,7 @@ export interface RedisProps {
    * Defaults to the project's primary environment. Changing it replaces
    * Redis.
    */
-  environment?: Ref<RedisEnvironment>;
+  environment?: Ref<RedisEnvironment> | undefined;
   /**
    * Service name. Unique per Project. If omitted, a unique name is
    * generated from the stack, stage and logical ID. Changing it updates
@@ -587,7 +587,7 @@ const readRedisAttributes = Effect.fn(function* ({
 }: {
   id: string;
   olds?: RedisProps;
-  output?: Partial<Redis["Attributes"]>;
+  output?: Partial<Redis["Attributes"]> | undefined;
 }) {
   const projectId =
     output?.projectId ?? (olds !== undefined ? projectIdOf(olds.project) : undefined);

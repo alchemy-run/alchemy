@@ -16,7 +16,7 @@ const TAR_BLOCK_BYTES = 512;
 
 export interface RailwayLocalContextSource {
   readonly context: string;
-  readonly dockerfilePath?: string;
+  readonly dockerfilePath?: string | undefined;
 }
 
 export class ServiceImageOrMainRequired extends Data.TaggedError(

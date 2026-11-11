@@ -1,4 +1,6 @@
 import { expect, test } from "bun:test";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 
 const baseURL = process.env.BETTER_AUTH_TEST_URL;
 
@@ -8,6 +10,7 @@ test.skipIf(!baseURL)(
     const origin = new URL(baseURL!).origin;
     const cookies = new Map<string, string>();
     const request = async (path: string, body?: object) => {
+      const payload = body ? JSON.stringify(body) : undefined;
       const response = await fetch(new URL(path, origin), {
         method: body ? "POST" : "GET",
         headers: {
@@ -15,7 +18,10 @@ test.skipIf(!baseURL)(
           "content-type": "application/json",
           cookie: [...cookies].map(([name, value]) => `${name}=${value}`).join("; "),
         },
-        body: body ? JSON.stringify(body) : undefined,
+        ...Record.filterMap(
+          { body: payload },
+          Result.fromNullishOr(() => undefined),
+        ),
         signal: AbortSignal.timeout(10_000),
       });
       for (const cookie of response.headers.getSetCookie()) {

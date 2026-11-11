@@ -228,7 +228,7 @@ export const App = Resource<App>("Fly.App");
 export class AppNotCreated extends Data.TaggedError("Fly.AppNotCreated")<{
   resourceName: string;
   /** Fly's rejection of the create request, when there was one. */
-  reason?: string;
+  reason?: string | undefined;
 }> {
   get message() {
     return `Fly App ${this.resourceName} was not created${this.reason ? `: ${this.reason}` : ""}`;
@@ -328,11 +328,11 @@ export const listOwnedApps = Effect.fn(function* () {
  */
 export const ensureApp = Effect.fn(function* (input: {
   name: string;
-  orgSlug?: string;
-  network?: string;
-  enableSubdomains?: boolean;
+  orgSlug?: string | undefined;
+  network?: string | undefined;
+  enableSubdomains?: boolean | undefined;
   /** Physical name from a previous reconcile, observed first. */
-  previousName?: string;
+  previousName?: string | undefined;
 }) {
   let current = input.previousName !== undefined ? yield* getByName(input.previousName) : undefined;
   if (current === undefined && input.previousName !== input.name) {

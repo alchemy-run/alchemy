@@ -7,6 +7,8 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import Agent from "./Agent.ts";
 import { Gateway } from "./AiGateway.ts";
@@ -244,7 +246,10 @@ export default class Api extends Cloudflare.Worker<Api>()(
           }
           return yield* repos
             .create(name, {
-              description: body.description,
+              ...Rec.filterMap(
+                { description: body.description },
+                Result.fromNullishOr(() => undefined),
+              ),
               setDefaultBranch: "main",
             })
             .pipe(

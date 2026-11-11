@@ -99,7 +99,7 @@ export interface ObservedDeployment {
   readonly foundryVersionId: string;
   readonly status: string;
   readonly previewDomain: string | null;
-  readonly createdAt?: string;
+  readonly createdAt?: string | undefined;
 }
 
 export interface ObservedBranch {

@@ -50,7 +50,7 @@ export type DatabaseProps = {
    *
    * @default ${app}-${stage}-${id}
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * Region in which the primary copy of the data is stored. Cannot be
    * changed after creation — updating this property triggers a replacement.
@@ -62,21 +62,21 @@ export type DatabaseProps = {
    * - `apac` — Asia Pacific
    * - `oc`   — Oceania
    */
-  primaryLocationHint?: PrimaryLocationHint;
+  primaryLocationHint?: PrimaryLocationHint | undefined;
   /**
    * Read replication configuration. The only mutable property after
    * creation; toggling `mode` triggers an in-place update.
    *
    * @default { mode: "disabled" }
    */
-  readReplication?: { mode: "auto" | "disabled" };
+  readReplication?: { mode: "auto" | "disabled" } | undefined;
   /**
    * Jurisdiction in which the database data is guaranteed to be stored.
    * Cannot be changed after creation.
    *
    * @default "default"
    */
-  jurisdiction?: Jurisdiction;
+  jurisdiction?: Jurisdiction | undefined;
   /**
    * SQL migrations to apply on deploy. Accepts a directory path, a
    * `Drizzle.Schema` resource, or a `{ dir, table? }` object.
@@ -99,7 +99,7 @@ export type DatabaseProps = {
    * changing its contents keeps it applied. See
    * [Migrations](https://alchemy.run/sql/effect-sql/migrations#change-migration-history-safely).
    */
-  migrations?: MigrationsInput;
+  migrations?: MigrationsInput | undefined;
   /**
    * Paths to additional `.sql` files to import after migrations are
    * applied. Each file is uploaded via Cloudflare's D1 import API and
@@ -108,7 +108,7 @@ export type DatabaseProps = {
    *
    * @see https://developers.cloudflare.com/d1/best-practices/import-export-data/
    */
-  importFiles?: string[];
+  importFiles?: string[] | undefined;
   /**
    * Clone data from an existing database during creation by exporting the
    * source and importing it into the new database. Only applied during the
@@ -119,7 +119,7 @@ export type DatabaseProps = {
    * - `{ databaseId }` — clone by explicit UUID
    * - `{ name }` — look up the source by name and clone it
    */
-  clone?: CloneSource;
+  clone?: CloneSource | undefined;
 };
 
 export type Database = Resource<
@@ -496,10 +496,10 @@ export const ProviderLive = () =>
       // the database but lost the result before persist).
       let observed:
         | {
-            uuid?: string | null;
-            name?: string | null;
+            uuid?: string | null | undefined;
+            name?: string | null | undefined;
             // Distilled widened generated string enums to open unions.
-            readReplication?: { mode: string } | null;
+            readReplication?: { mode: string } | null | undefined;
           }
         | undefined;
       if (output?.databaseId) {

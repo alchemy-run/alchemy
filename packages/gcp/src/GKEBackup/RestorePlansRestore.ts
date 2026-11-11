@@ -31,34 +31,38 @@ import type { GroupKind, RestoreConfig } from "./RestorePlan.ts";
 
 export type ResourceSelector = {
   /** Select resources of this group kind. */
-  groupKind?: GroupKind;
+  groupKind?: GroupKind | undefined;
   /** Select resources in this namespace. */
-  namespace?: string;
+  namespace?: string | undefined;
   /** Select resources with all of these labels. */
-  labels?: Record<string, string>;
+  labels?: Record<string, string> | undefined;
   /** Select resources with this name. */
-  name?: string;
+  name?: string | undefined;
 };
 
 export type RestoreFilter = {
   /** Restore only resources matching any of these selectors. */
-  inclusionFilters?: ResourceSelector[];
+  inclusionFilters?: ResourceSelector[] | undefined;
   /** Exclude resources matching any of these selectors. */
-  exclusionFilters?: ResourceSelector[];
+  exclusionFilters?: ResourceSelector[] | undefined;
 };
 
 export type VolumeDataRestorePolicyOverride = {
   /** Policy applied to the selected PVCs. */
-  policy?: gkebackup.VolumeDataRestorePolicyOverridePolicyEnum | (string & {});
+  policy?: gkebackup.VolumeDataRestorePolicyOverridePolicyEnum | (string & {}) | undefined;
   /** PVCs this override applies to. */
-  selectedPvcs?: {
-    namespacedNames?: Array<{
-      /** Kubernetes namespace. */
-      namespace?: string;
-      /** Kubernetes resource name. */
-      name?: string;
-    }>;
-  };
+  selectedPvcs?:
+    | {
+        namespacedNames?:
+          | Array<{
+              /** Kubernetes namespace. */
+              namespace?: string | undefined;
+              /** Kubernetes resource name. */
+              name?: string | undefined;
+            }>
+          | undefined;
+      }
+    | undefined;
 };
 
 export type RestorePlansRestoreProps = {

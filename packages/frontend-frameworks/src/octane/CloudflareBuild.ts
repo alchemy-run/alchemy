@@ -25,6 +25,8 @@ import { createRequire } from "node:module";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import type { InlineConfig, Plugin, PluginOption, ResolvedConfig } from "vite";
 import {
   FrameworkError,
@@ -96,9 +98,11 @@ export const clientPlugins = (
     if (octane.length !== 1 || octane[0]?.closeBundle === undefined) {
       return yield* fail("Expected one native octane() Vite plugin with a server build hook");
     }
-    return plugins.map((plugin) =>
-      plugin === octane[0] ? { ...plugin, closeBundle: undefined } : plugin,
-    );
+    return plugins.map((plugin) => {
+      if (plugin !== octane[0]) return plugin;
+      const { closeBundle: _, ...clientPlugin } = plugin;
+      return clientPlugin;
+    });
   });
 
 /** Generate the Worker entry without importing build-time adapter code. */
@@ -317,7 +321,10 @@ export const buildCloudflare = (rootDirectory: string) =>
             outDir: serverDir,
             emptyOutDir: true,
             ssr: true,
-            target: config.build.target,
+            ...Record.filterMap(
+              { target: config.build.target },
+              Result.fromNullishOr(() => undefined),
+            ),
             minify: config.build.minify ?? false,
             rollupOptions: {
               input: workerFile,

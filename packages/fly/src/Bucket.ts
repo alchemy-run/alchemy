@@ -421,7 +421,7 @@ const websiteDomain = (options: Record<string, unknown>): string | undefined => 
 const toAttrs = (
   addOn: ObservedAddOn,
   previous?: Bucket["Attributes"],
-  fallback?: { name?: string; orgSlug?: string },
+  fallback?: { name?: string | undefined; orgSlug?: string | undefined },
 ): Bucket["Attributes"] => {
   const options = asRecord(addOn.options);
   const env = asRecord(addOn.environment);
@@ -1033,7 +1033,7 @@ const envValuesOf = (addOn: ObservedAddOn): Record<string, string> => {
   return values;
 };
 
-const findAttachedBucket = (input: { id?: string; name: string }) =>
+const findAttachedBucket = (input: { id?: string | undefined; name: string }) =>
   Effect.gen(function* () {
     const listed =
       input.id !== undefined && input.id.length > 0
@@ -1089,7 +1089,7 @@ export const attachBucketSecrets = Effect.fn(function* (
   appName: string,
   attached: readonly {
     name: string;
-    id?: string;
+    id?: string | undefined;
     /** Credentials from the bound Bucket's attributes. */
     values?: Record<string, string>;
   }[],

@@ -71,7 +71,7 @@ export type BucketProps = {
    * bucket) — not on `storage.googleapis.com/{bucket}/…` path-style URLs.
    * Omitting it removes the configuration.
    */
-  website?: BucketWebsite;
+  website?: BucketWebsite | undefined;
 };
 
 export interface BucketWebsite {
@@ -79,9 +79,9 @@ export interface BucketWebsite {
    * Object suffix appended to directory-style requests, e.g. `index.html`
    * so `/docs/` serves `docs/index.html`.
    */
-  mainPageSuffix?: string;
+  mainPageSuffix?: string | undefined;
   /** Object served (with status 404) when a requested object is missing. */
-  notFoundPage?: string;
+  notFoundPage?: string | undefined;
 }
 
 export type Bucket = Resource<

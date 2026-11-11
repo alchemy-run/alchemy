@@ -47,7 +47,7 @@ export interface VpcEndpoint extends Resource<
     /**
      * Endpoint status (e.g. `ACTIVE`, `PENDING`, `DELETING`).
      */
-    status?: string;
+    status?: string | undefined;
   },
   {},
   Providers,

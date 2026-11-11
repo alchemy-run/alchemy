@@ -44,7 +44,7 @@ export type FolderSecurityHealthAnalyticsSettingsCustomModuleProps = {
    * If omitted, a unique name is generated. Custom modules have no labels
    * field, so Alchemy ownership is stored in `customConfig.description`.
    */
-  displayName?: string;
+  displayName?: string | undefined;
   /**
    * Detector configuration. When omitted, Alchemy uses a never-matching
    * CEL predicate so the module stays inert.

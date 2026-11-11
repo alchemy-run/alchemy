@@ -20,7 +20,9 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Record from "effect/Record";
 import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
 import type * as Stream from "effect/Stream";
 import { withAuthTokens } from "./Credentials.ts";
 import type { OperationServices } from "./internal.ts";
@@ -220,7 +222,10 @@ const operationContext = Effect.gen(function* () {
               tokenSecret: Redacted.isRedacted(tokenSecret)
                 ? tokenSecret
                 : Redacted.make(tokenSecret),
-              apiBaseUrl: serverUrl,
+              ...Record.filterMap(
+                { apiBaseUrl: serverUrl },
+                Result.fromNullishOr(() => undefined),
+              ),
             }),
           ),
           ModalTransport,

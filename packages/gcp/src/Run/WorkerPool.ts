@@ -56,7 +56,7 @@ const MAX_NAME_LENGTH = 49;
 
 export type WorkerPoolEnvVar = {
   /** Environment variable name. */
-  name?: string;
+  name?: string | undefined;
   /** Literal value. Mutually exclusive with `valueSource`. */
   value?: string;
   /** Secret Manager source for the value. */
@@ -70,7 +70,7 @@ export type WorkerPoolEnvVar = {
 
 export type WorkerPoolContainer = {
   /** DNS_LABEL container name. */
-  name?: string;
+  name?: string | undefined;
   /**
    * Container image (Artifact Registry, GCR, or Docker Hub). Required
    * unless `template` is omitted, in which case the public Cloud Run
@@ -106,27 +106,27 @@ export type WorkerPoolContainer = {
 
 export type WorkerPoolRevisionTemplate = {
   /** Containers that make up the revision. */
-  containers?: WorkerPoolContainer[];
+  containers?: WorkerPoolContainer[] | undefined;
   /** Runtime service account email. Defaults to the project Compute SA. */
-  serviceAccount?: string;
+  serviceAccount?: string | undefined;
   /** Revision labels. */
-  labels?: Record<string, string>;
+  labels?: Record<string, string> | undefined;
   /** Revision annotations. */
-  annotations?: Record<string, string>;
+  annotations?: Record<string, string> | undefined;
   /** Direct VPC egress / connector. */
-  vpcAccess?: cloudrun.GoogleCloudRunV2VpcAccess;
+  vpcAccess?: cloudrun.GoogleCloudRunV2VpcAccess | undefined;
   /** Volumes available to containers. */
-  volumes?: cloudrun.GoogleCloudRunV2VolumeList;
+  volumes?: cloudrun.GoogleCloudRunV2VolumeList | undefined;
   /** CMEK used to encrypt the container image. */
-  encryptionKey?: string;
+  encryptionKey?: string | undefined;
   /** Unique revision name. Generated from the worker pool name if omitted. */
-  revision?: string;
+  revision?: string | undefined;
   /** Node selector (e.g. GPU accelerator). */
-  nodeSelector?: cloudrun.GoogleCloudRunV2NodeSelector;
+  nodeSelector?: cloudrun.GoogleCloudRunV2NodeSelector | undefined;
   /** True if GPU zonal redundancy is disabled. */
-  gpuZonalRedundancyDisabled?: boolean;
+  gpuZonalRedundancyDisabled?: boolean | undefined;
   /** Service mesh connectivity. */
-  serviceMesh?: cloudrun.GoogleCloudRunV2ServiceMesh;
+  serviceMesh?: cloudrun.GoogleCloudRunV2ServiceMesh | undefined;
 };
 
 export type InstanceSplit = {
@@ -134,16 +134,16 @@ export type InstanceSplit = {
    * Allocation type (`INSTANCE_SPLIT_ALLOCATION_TYPE_LATEST` or
    * `INSTANCE_SPLIT_ALLOCATION_TYPE_REVISION`).
    */
-  type?: string;
+  type?: string | undefined;
   /** Revision to assign instances to when allocating by revision. */
-  revision?: string;
+  revision?: string | undefined;
   /** Percent of instances (0–100). */
-  percent?: number;
+  percent?: number | undefined;
 };
 
 export type WorkerPoolScaling = {
   /** Total instances in manual scaling mode. */
-  manualInstanceCount?: number;
+  manualInstanceCount?: number | undefined;
 };
 
 export type WorkerPoolBinaryAuthorization = {
@@ -217,7 +217,7 @@ export type WorkerPoolProps = PlatformProps & {
    * Named export to load from `main`.
    * @default "default"
    */
-  handler?: string;
+  handler?: string | undefined;
   /**
    * Additional environment variables for the Effect-native container.
    */
@@ -225,7 +225,7 @@ export type WorkerPoolProps = PlatformProps & {
   /**
    * Bundler configuration for `main`, and the image build's layer `cache`.
    */
-  build?: Bundle.BundleConfig & BuildCacheOptions;
+  build?: (Bundle.BundleConfig & BuildCacheOptions) | undefined;
   /**
    * Environment image for `main`: a Dockerfile path, or inline content
    * (`{ content }`), the bundled program is layered on top of. Use it to
@@ -724,9 +724,9 @@ const toAttrs = (
   project: string,
   region: string,
   extras: {
-    iamGrants?: AppliedIamGrant[];
-    codeHash?: string;
-    serviceAccountUniqueId?: string;
+    iamGrants?: AppliedIamGrant[] | undefined;
+    codeHash?: string | undefined;
+    serviceAccountUniqueId?: string | undefined;
   } = {},
 ): WorkerPool["Attributes"] => {
   const name = pool.name ?? "";

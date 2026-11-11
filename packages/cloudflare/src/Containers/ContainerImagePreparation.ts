@@ -13,7 +13,7 @@ import {
 export const waitForContainerImage = <E, R>(options: {
   image: string;
   name: string;
-  timeout?: Duration.Input;
+  timeout?: Duration.Input | undefined;
   prepare: Effect.Effect<Containers.PrepareContainerImageResponse, E, R>;
   session: Pick<ScopedPlanStatusSession, "note">;
 }) =>

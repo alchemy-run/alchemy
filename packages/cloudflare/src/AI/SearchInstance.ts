@@ -4,6 +4,8 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { isResourceOfType, Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -97,13 +99,13 @@ export type SearchInstanceProps = {
    * replacement.
    * @default "default"
    */
-  namespace?: string;
+  namespace?: string | undefined;
   /**
    * Data source kind: `r2` indexes objects in an R2 bucket, `web-crawler`
    * crawls a seed URL. Changing it triggers a replacement.
    * @default "r2"
    */
-  type?: SearchInstanceSourceType;
+  type?: SearchInstanceSourceType | undefined;
   /**
    * Data source: the R2 bucket name (for `type: "r2"`) or the crawl seed
    * URL (for `type: "web-crawler"`). Changing it triggers a replacement —
@@ -114,12 +116,12 @@ export type SearchInstanceProps = {
    * Source-specific indexing parameters (R2 prefix / include / exclude
    * filters, web-crawler crawl and parse options).
    */
-  sourceParams?: SourceParams;
+  sourceParams?: SourceParams | undefined;
   /**
    * Id of the AI Search service token used to access the data source on
    * sync. When omitted, Cloudflare provisions one automatically.
    */
-  tokenId?: string;
+  tokenId?: string | undefined;
   /**
    * AI Gateway to route model inference calls through.
    */
@@ -600,7 +602,10 @@ export const SearchInstanceProvider = () =>
       // from the new SearchInstance ID, so create-before-delete is safe there.
       const replace = {
         action: "replace",
-        deleteFirst: news.instanceId !== undefined || undefined,
+        ...Record.filterMap(
+          { deleteFirst: news.instanceId !== undefined || undefined },
+          Result.fromNullishOr(() => undefined),
+        ),
       } as const;
       // The data-source kind and location are fixed at creation; changing
       // either requires re-indexing from scratch (a replacement).
@@ -928,8 +933,12 @@ const preserveObserved = (observed: ObservedInstance) =>
   }) as Partial<MutableBody>;
 
 /** Strip `undefined` entries so they don't override spread order. */
-const defined = <T extends Record<string, unknown>>(value: T): Partial<T> =>
-  Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as Partial<T>;
+const defined = <T extends Record<string, unknown>>(
+  value: T,
+): { [K in keyof T]?: Exclude<T[K], undefined> } =>
+  Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as {
+    [K in keyof T]?: Exclude<T[K], undefined>;
+  };
 
 /**
  * The instance fields `read` projects, common to the create / read /
@@ -939,17 +948,17 @@ const defined = <T extends Record<string, unknown>>(value: T): Partial<T> =>
  */
 type SearchInstanceLike = {
   id: string;
-  type?: string | null;
-  source?: string | null;
-  tokenId?: string | null;
-  aiGatewayId?: string | null;
-  embeddingModel?: string | null;
-  aiSearchModel?: string | null;
-  status?: string | null;
-  paused?: boolean | null;
-  publicEndpointId?: string | null;
-  createdAt?: string | null;
-  modifiedAt?: string | null;
+  type?: string | null | undefined;
+  source?: string | null | undefined;
+  tokenId?: string | null | undefined;
+  aiGatewayId?: string | null | undefined;
+  embeddingModel?: string | null | undefined;
+  aiSearchModel?: string | null | undefined;
+  status?: string | null | undefined;
+  paused?: boolean | null | undefined;
+  publicEndpointId?: string | null | undefined;
+  createdAt?: string | null | undefined;
+  modifiedAt?: string | null | undefined;
 };
 
 const toAttributes = (

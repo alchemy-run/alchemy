@@ -98,7 +98,7 @@ export interface Implementation {
 /** A query's declaration, widened. @internal */
 export interface AnyDefinition {
   readonly input?: Fields;
-  readonly success?: Schema.Top;
+  readonly success?: Schema.Top | undefined;
   readonly paged?: boolean;
   readonly waitsFor?: ReadonlyArray<Waitable>;
   readonly middleware?: Middleware.List;
@@ -400,9 +400,9 @@ export interface QueryClass<
 
 /** How a client asks a query: the page, and the writes to read at least. @internal */
 export interface RunOptions {
-  readonly after?: string;
-  readonly take?: number;
-  readonly atLeast?: AtLeastInput;
+  readonly after?: string | undefined;
+  readonly take?: number | undefined;
+  readonly atLeast?: AtLeastInput | undefined;
 }
 
 /** Wait until a read has handled a command's events. @internal */

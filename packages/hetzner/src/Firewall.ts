@@ -48,7 +48,7 @@ export interface FirewallRule {
   /**
    * Description of the rule.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * Traffic direction. Incoming rules use `sourceIps`; outgoing rules
    * use `destinationIps`.
@@ -62,17 +62,17 @@ export interface FirewallRule {
    * Port or port range (`22` or `1024-5000`). Only valid for `tcp` and
    * `udp`.
    */
-  port?: string;
+  port?: string | undefined;
   /**
    * Permitted source CIDRs for incoming traffic. Use `0.0.0.0/0` and
    * `::/0` to allow any address.
    */
-  sourceIps?: string[];
+  sourceIps?: string[] | undefined;
   /**
    * Permitted destination CIDRs for outgoing traffic. Use `0.0.0.0/0`
    * and `::/0` to allow any address.
    */
-  destinationIps?: string[];
+  destinationIps?: string[] | undefined;
 }
 
 export interface FirewallProps {
@@ -257,12 +257,12 @@ const sortIps = (ips: ReadonlyArray<string> | undefined): string[] =>
   [...(ips ?? [])].map((ip) => ip.toLowerCase()).sort();
 
 const normalizeRule = (rule: {
-  description?: string | null;
+  description?: string | null | undefined;
   direction: string;
   protocol: string;
-  port?: string | null;
-  sourceIps?: ReadonlyArray<string>;
-  destinationIps?: ReadonlyArray<string>;
+  port?: string | null | undefined;
+  sourceIps?: ReadonlyArray<string> | undefined;
+  destinationIps?: ReadonlyArray<string> | undefined;
 }): FirewallRule => {
   const description = rule.description ?? undefined;
   const port = rule.port ?? undefined;

@@ -19,12 +19,12 @@ export type AclRule = {
    * Redis ACL username. For IAM auth this is an IAM user or service
    * account; otherwise any Redis ACL username.
    */
-  username?: string;
+  username?: string | undefined;
   /**
    * Redis OSS ACL rule string (e.g. `"on ~keys:* +get"`). See
    * https://redis.io/docs/latest/operate/oss_and_stack/management/security/acl/
    */
-  rule?: string;
+  rule?: string | undefined;
 };
 
 export type AclPolicyProps = {

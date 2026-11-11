@@ -66,11 +66,11 @@ export interface RuleTarget {
   /** ARN of the IAM role to use for this target when the rule is triggered. */
   RoleArn?: string;
   /** Valid JSON text passed to the target. Mutually exclusive with InputPath and InputTransformer. */
-  Input?: string;
+  Input?: string | undefined;
   /** JSONPath expression to extract from the event and send to the target. Mutually exclusive with Input and InputTransformer. */
-  InputPath?: string;
+  InputPath?: string | undefined;
   /** Settings to transform input before sending to the target. Mutually exclusive with Input and InputPath. */
-  InputTransformer?: eventbridge.InputTransformer;
+  InputTransformer?: eventbridge.InputTransformer | undefined;
   /** Settings for a Kinesis Data Stream target. */
   KinesisParameters?: eventbridge.KinesisParameters;
   /** Parameters for Systems Manager Run Command targets. */
@@ -80,7 +80,7 @@ export interface RuleTarget {
   /** Parameters for AWS Batch job targets. */
   BatchParameters?: RuleTargetBatchParameters;
   /** Parameters for SQS queue targets (e.g., FIFO message group ID). */
-  SqsParameters?: eventbridge.SqsParameters;
+  SqsParameters?: eventbridge.SqsParameters | undefined;
   /** Parameters for HTTP endpoint targets (API Gateway, API Destinations). */
   HttpParameters?: eventbridge.HttpParameters;
   /** Parameters for Amazon Redshift Data API targets. */
@@ -88,9 +88,9 @@ export interface RuleTarget {
   /** Parameters for SageMaker Pipeline targets. */
   SageMakerPipelineParameters?: eventbridge.SageMakerPipelineParameters;
   /** Dead-letter queue configuration for failed event delivery. */
-  DeadLetterConfig?: RuleTargetDeadLetterConfig;
+  DeadLetterConfig?: RuleTargetDeadLetterConfig | undefined;
   /** Retry policy settings for the target. */
-  RetryPolicy?: eventbridge.RetryPolicy;
+  RetryPolicy?: eventbridge.RetryPolicy | undefined;
   /** Parameters for AWS AppSync GraphQL API targets. */
   AppSyncParameters?: eventbridge.AppSyncParameters;
 }
@@ -124,18 +124,18 @@ export interface RuleProps {
    * Name of the rule. Must match [\.\-_A-Za-z0-9]+, 1-64 characters.
    * If omitted, a unique name will be generated.
    */
-  name?: string;
+  name?: string | undefined;
 
   /**
    * Description of the rule. Max 512 characters.
    */
-  description?: string;
+  description?: string | undefined;
 
   /**
    * The name or ARN of the event bus to associate with this rule.
    * If omitted, the default event bus is used.
    */
-  eventBusName?: string;
+  eventBusName?: string | undefined;
 
   /**
    * The event pattern that triggers this rule. Specified as a JSON-compatible object.
@@ -153,7 +153,7 @@ export interface RuleProps {
    * Whether the rule is enabled or disabled.
    * @default "ENABLED"
    */
-  state?: eventbridge.RuleState;
+  state?: eventbridge.RuleState | undefined;
 
   /**
    * ARN of the IAM role associated with the rule. Required for targets that need
@@ -282,11 +282,11 @@ export interface Rule extends Resource<
      * out-of-band changes.
      */
     configuration?: {
-      description?: string;
-      eventPattern?: string;
-      scheduleExpression?: string;
-      state?: string;
-      roleArn?: string;
+      description?: string | undefined;
+      eventPattern?: string | undefined;
+      scheduleExpression?: string | undefined;
+      state?: string | undefined;
+      roleArn?: string | undefined;
       targets: eventbridge.Target[];
       tags: Record<string, string>;
     };
@@ -300,7 +300,7 @@ export const RuleProvider = () =>
   Provider.effect(
     Rule,
     Effect.gen(function* () {
-      const createRuleName = (id: string, props: { name?: string } = {}) => {
+      const createRuleName = (id: string, props: { name?: string | undefined } = {}) => {
         if (props.name) {
           return Effect.succeed(props.name);
         }

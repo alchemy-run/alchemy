@@ -34,7 +34,7 @@ export interface ConfigurationProps {
    * ActiveMQ, `"3.13"` for RabbitMQ). Immutable — changing it replaces the
    * configuration.
    */
-  engineVersion?: string;
+  engineVersion?: string | undefined;
   /**
    * Authentication strategy for the associated broker. Immutable —
    * changing it replaces the configuration.

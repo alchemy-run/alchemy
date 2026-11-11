@@ -333,7 +333,11 @@ const findByAlchemyId = Effect.fn(function* (logicalId: string, account?: string
   return undefined;
 });
 
-const observe = Effect.fn(function* (input: { account?: string; id?: string; logicalId: string }) {
+const observe = Effect.fn(function* (input: {
+  account?: string | undefined;
+  id?: string | undefined;
+  logicalId: string;
+}) {
   if (input.account !== undefined && input.id !== undefined) {
     const byId = yield* getById(input.account, input.id);
     if (byId !== undefined) return byId;

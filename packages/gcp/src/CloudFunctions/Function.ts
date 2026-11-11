@@ -50,37 +50,37 @@ const MAX_NAME_LENGTH = 63;
 
 export type StorageSource = {
   /** GCS bucket that holds the source archive. */
-  bucket?: string;
+  bucket?: string | undefined;
   /** Object name of the source archive (typically a `.zip`). */
-  object?: string;
+  object?: string | undefined;
   /** Object generation. Omit to use the latest generation. */
-  generation?: string;
+  generation?: string | undefined;
   /** Signed upload URL returned by `generateUploadUrl` for 1st gen. */
-  sourceUploadUrl?: string;
+  sourceUploadUrl?: string | undefined;
 };
 
 export type RepoSource = {
   /** Cloud Source Repository name. */
-  repoName?: string;
+  repoName?: string | undefined;
   /** Branch regex (RE2). */
-  branchName?: string;
+  branchName?: string | undefined;
   /** Tag regex (RE2). */
-  tagName?: string;
+  tagName?: string | undefined;
   /** Commit SHA to build. */
-  commitSha?: string;
+  commitSha?: string | undefined;
   /** Directory relative to the repo root. */
-  dir?: string;
+  dir?: string | undefined;
   /** Project that owns the repository. Defaults to the function's project. */
-  projectId?: string;
+  projectId?: string | undefined;
 };
 
 export type Source = {
   /** Source archive in Cloud Storage. */
-  storageSource?: StorageSource;
+  storageSource?: StorageSource | undefined;
   /** Source in Cloud Source Repositories. */
-  repoSource?: RepoSource;
+  repoSource?: RepoSource | undefined;
   /** GitHub URI. 1st gen only. */
-  gitUri?: string;
+  gitUri?: string | undefined;
 };
 
 export type BuildConfig = {
@@ -204,40 +204,40 @@ export type ServiceConfig = {
 
 export type EventFilter = {
   /** CloudEvents attribute name. */
-  attribute?: string;
+  attribute?: string | undefined;
   /** Value to match. */
-  value?: string;
+  value?: string | undefined;
   /** Match operator. Only `match-path-pattern` is allowed. */
-  operator?: string;
+  operator?: string | undefined;
 };
 
 export type EventTrigger = {
   /**
    * Event type (e.g. `google.cloud.pubsub.topic.v1.messagePublished`).
    */
-  eventType?: string;
+  eventType?: string | undefined;
   /**
    * Pub/Sub topic used as the transport
    * (`projects/{project}/topics/{topic}`).
    */
-  pubsubTopic?: string;
+  pubsubTopic?: string | undefined;
   /** Service account email used to invoke the function. */
-  serviceAccountEmail?: string;
+  serviceAccountEmail?: string | undefined;
   /** Retry failed deliveries. */
-  retryPolicy?: cloudfunctions.EventTriggerRetryPolicyEnum | (string & {});
+  retryPolicy?: cloudfunctions.EventTriggerRetryPolicyEnum | (string & {}) | undefined;
   /** CloudEvents attribute filters. */
-  eventFilters?: EventFilter[];
+  eventFilters?: EventFilter[] | undefined;
   /**
    * Region that receives events. Defaults to the function location.
    */
-  triggerRegion?: string;
+  triggerRegion?: string | undefined;
   /**
    * Eventarc channel
    * (`projects/{project}/locations/{location}/channels/{channel}`) for partner events.
    */
-  channel?: string;
+  channel?: string | undefined;
   /** 1st gen hostname of the event service (e.g. `storage.googleapis.com`). */
-  service?: string;
+  service?: string | undefined;
 };
 
 export type FunctionProps = PlatformProps & {
@@ -272,7 +272,7 @@ export type FunctionProps = PlatformProps & {
    * Cloud KMS key used to encrypt function resources
    * (`projects/{project}/locations/{location}/keyRings/{keyRing}/cryptoKeys/{cryptoKey}`).
    */
-  kmsKeyName?: string;
+  kmsKeyName?: string | undefined;
   /** Build step that turns source into a container. */
   buildConfig?: BuildConfig;
   /** Cloud Run service settings for the deployed function. */
@@ -292,7 +292,7 @@ export type FunctionProps = PlatformProps & {
    * Named export to load from `main`.
    * @default "default"
    */
-  handler?: string;
+  handler?: string | undefined;
   /**
    * Additional environment variables for the Effect-native function.
    * Merged after binding-injected `env`.
@@ -650,9 +650,9 @@ const toAttrs = (
   project: string,
   region: string,
   extras: {
-    iamGrants?: AppliedIamGrant[];
-    codeHash?: string;
-    serviceAccountUniqueId?: string;
+    iamGrants?: AppliedIamGrant[] | undefined;
+    codeHash?: string | undefined;
+    serviceAccountUniqueId?: string | undefined;
   } = {},
 ): Function["Attributes"] => {
   const name = fn.name ?? "";

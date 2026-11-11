@@ -791,6 +791,7 @@ pnpmfileChecksum: sha256-hOUOGIkOdaSznqpGW2l2edqwXa8aByua1z6Sm0LAu2M=
 
 patchedDependencies:
   '@astrojs/starlight@0.42.0': 3ea8686c3055e8d097b5afa93dcf9e16ebfbebbf006e7493ad5df38e6edbfd19
+  '@rivetkit/effect@3.0.0': 959d7ba8f0eb90bc97de786db3667a32bce4c2284745bc268af4fd7a6e9bb8c6
   miniflare@4.20260730.0: 03c93f4d67afd647ce627eceae85f2cbbee668bcf55da2f93f84651683530c98
   starlight-blog@0.29.0: 7b6e57367fab3517e0cfd5e4d0da3459ac1430bf4b6036cf03002c978602c23b
 
@@ -10792,7 +10793,7 @@ importers:
         version: 8.5.0(react-router@8.5.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(typescript@7.1.0-dev.20261105.1)
       '@rivetkit/effect':
         specifier: 3.0.0
-        version: 3.0.0(effect@4.1.0)(rivetkit@3.0.0(7194fcae98044214450d0ad725027a02))
+        version: 3.0.0(patch_hash=959d7ba8f0eb90bc97de786db3667a32bce4c2284745bc268af4fd7a6e9bb8c6)(effect@4.1.0)(rivetkit@3.0.0(7194fcae98044214450d0ad725027a02))
       '@solidjs/router':
         specifier: 'catalog:'
         version: 1.0.0(solid-js@1.9.17)
@@ -37307,7 +37308,7 @@ snapshots:
 
   '@rivetkit/bare-ts@0.6.2': {}
 
-  '@rivetkit/effect@3.0.0(effect@4.1.0)(rivetkit@3.0.0(7194fcae98044214450d0ad725027a02))':
+  '@rivetkit/effect@3.0.0(patch_hash=959d7ba8f0eb90bc97de786db3667a32bce4c2284745bc268af4fd7a6e9bb8c6)(effect@4.1.0)(rivetkit@3.0.0(7194fcae98044214450d0ad725027a02))':
     dependencies:
       effect: 4.1.0
       rivetkit: 3.0.0(7194fcae98044214450d0ad725027a02)

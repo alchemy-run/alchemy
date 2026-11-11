@@ -48,15 +48,15 @@ export interface McpServerCapabilityOverride {
   /**
    * Custom name exposed for the capability.
    */
-  alias?: string;
+  alias?: string | undefined;
   /**
    * Custom description exposed for the capability.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * Whether the capability is available through the MCP server.
    */
-  enabled?: boolean;
+  enabled?: boolean | undefined;
 }
 
 /**
@@ -74,12 +74,12 @@ export interface McpServerProps {
    * the API's 32-character limit.
    * @default a generated ID of at most 32 characters
    */
-  serverId?: string;
+  serverId?: string | undefined;
   /**
    * Display name of the server. If omitted, the server id is reused.
    * @default the server id
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * URL of the upstream MCP endpoint, e.g. `https://mcp.example.com/mcp`.
    * Create-only on the API: changing it triggers a delete-first replacement.
@@ -98,39 +98,39 @@ export interface McpServerProps {
    * configuration. Write-only — the API never returns it, so rotation is
    * detected by comparing against the previously deployed value.
    */
-  authCredentials?: Redacted.Redacted<string>;
+  authCredentials?: Redacted.Redacted<string> | undefined;
   /**
    * Pre-registered OAuth `client_secret` for manually configured OAuth
    * servers. Write-only — never returned by the API.
    */
-  clientSecret?: Redacted.Redacted<string>;
+  clientSecret?: Redacted.Redacted<string> | undefined;
   /**
    * Optional description of the server.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * Route outbound traffic to this server through the Zero Trust Secure
    * Web Gateway.
    * @default false
    */
-  secureWebGateway?: boolean;
+  secureWebGateway?: boolean | undefined;
   /**
    * Use the shared Cloudflare-owned OAuth callback endpoint as the
    * `redirect_uri` for upstream on-behalf OAuth instead of the portal
    * hostname.
    * @default false
    */
-  isSharedOauthCallbackEnabled?: boolean;
+  isSharedOauthCallbackEnabled?: boolean | undefined;
   /**
    * Server-wide tool overrides: disable, rename, or re-describe tools the
    * upstream advertises. When omitted, the observed overrides are kept.
    */
-  updatedTools?: McpServerCapabilityOverride[];
+  updatedTools?: McpServerCapabilityOverride[] | undefined;
   /**
    * Server-wide prompt overrides: disable, rename, or re-describe prompts
    * the upstream advertises. When omitted, the observed overrides are kept.
    */
-  updatedPrompts?: McpServerCapabilityOverride[];
+  updatedPrompts?: McpServerCapabilityOverride[] | undefined;
   /**
    * Run a capability sync (tool and prompt discovery against the upstream)
    * after the server is created, its configuration changes, or sync is
@@ -141,7 +141,7 @@ export interface McpServerProps {
    * independently discover capabilities even when this option is false.
    * @default true
    */
-  sync?: boolean;
+  sync?: boolean | undefined;
 }
 
 export type McpServerAttributes = {
@@ -500,9 +500,9 @@ export const McpServerProvider = () =>
  */
 type ObservedOverride = {
   name: string;
-  alias?: string | null;
-  description?: string | null;
-  enabled?: boolean | null;
+  alias?: string | null | undefined;
+  description?: string | null | undefined;
+  enabled?: boolean | null | undefined;
 };
 
 /**

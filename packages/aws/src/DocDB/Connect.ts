@@ -21,11 +21,11 @@ export interface MongoConnectionInfo {
   /** Listener port (27017 by default). */
   port: number;
   /** Database name, when one was requested. */
-  database?: string;
+  database?: string | undefined;
   /** Login user resolved from the secret. */
-  username?: string;
+  username?: string | undefined;
   /** Login password resolved from the secret. */
-  password?: Redacted.Redacted<string>;
+  password?: Redacted.Redacted<string> | undefined;
   /** Whether the connection uses TLS (DocumentDB clusters default to on). */
   tls: boolean;
   /**
@@ -157,14 +157,14 @@ export const Connect = Binding.Service<Connect>("AWS.DocDB.Connect");
 
 export interface MongoConnectionUrlOptions {
   host: string;
-  port?: number;
-  database?: string;
-  username?: string;
-  password?: string | Redacted.Redacted<string>;
+  port?: number | undefined;
+  database?: string | undefined;
+  username?: string | undefined;
+  password?: string | Redacted.Redacted<string> | undefined;
   /** Appends the DocumentDB TLS options when `true`. */
-  tls?: boolean;
+  tls?: boolean | undefined;
   /** Extra query parameters to append verbatim. */
-  params?: Record<string, string>;
+  params?: Record<string, string> | undefined;
 }
 
 /**

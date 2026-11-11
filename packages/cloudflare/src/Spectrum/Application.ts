@@ -55,16 +55,16 @@ export interface OriginDns {
   /**
    * The hostname of the origin server.
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * TTL of the origin DNS lookup, in seconds.
    */
-  ttl?: number;
+  ttl?: number | undefined;
   /**
    * The DNS record type to resolve: `A`, `AAAA`, `SRV`, or `""` to let
    * Cloudflare pick.
    */
-  type?: "" | "A" | "AAAA" | "SRV";
+  type?: "" | "A" | "AAAA" | "SRV" | undefined;
 }
 
 /**

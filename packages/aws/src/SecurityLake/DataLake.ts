@@ -76,11 +76,11 @@ export interface DataLakeRegionConfiguration {
   /** The Region in which Security Lake is enabled. */
   region: string;
   /** Encryption at rest for this Region. */
-  encryptionConfiguration?: DataLakeEncryptionConfiguration;
+  encryptionConfiguration?: DataLakeEncryptionConfiguration | undefined;
   /** Retention and storage-class transitions for this Region. */
-  lifecycleConfiguration?: DataLakeLifecycleConfiguration;
+  lifecycleConfiguration?: DataLakeLifecycleConfiguration | undefined;
   /** Rollup-Region replication for this Region. */
-  replicationConfiguration?: DataLakeReplicationConfiguration;
+  replicationConfiguration?: DataLakeReplicationConfiguration | undefined;
 }
 
 export interface DataLakeProps {
@@ -207,9 +207,9 @@ const toWireConfiguration = (
 // Normalize a per-Region config for observed↔desired comparison. AWS reports
 // SSE-S3 as `S3_MANAGED_KEY`, so an unset kmsKeyId compares equal to it.
 const normalizeConfig = (config: {
-  encryptionConfiguration?: securitylake.DataLakeEncryptionConfiguration;
-  lifecycleConfiguration?: securitylake.DataLakeLifecycleConfiguration;
-  replicationConfiguration?: securitylake.DataLakeReplicationConfiguration;
+  encryptionConfiguration?: securitylake.DataLakeEncryptionConfiguration | undefined;
+  lifecycleConfiguration?: securitylake.DataLakeLifecycleConfiguration | undefined;
+  replicationConfiguration?: securitylake.DataLakeReplicationConfiguration | undefined;
 }) =>
   JSON.stringify({
     kmsKeyId: config.encryptionConfiguration?.kmsKeyId ?? "S3_MANAGED_KEY",

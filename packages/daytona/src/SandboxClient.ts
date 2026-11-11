@@ -20,7 +20,9 @@ import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import type * as HttpClientError from "effect/http/HttpClientError";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Record from "effect/Record";
 import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import type * as Scope from "effect/Scope";
 import * as Socket from "effect/socket/Socket";
@@ -524,10 +526,15 @@ export const makeSandboxMethods = (
         socket(
           toolboxStreams.createPty({
             id,
-            cols: options?.cols,
-            rows: options?.rows,
-            cwd: options?.cwd,
-            envs: options?.env,
+            ...Record.filterMap(
+              {
+                cols: options?.cols,
+                rows: options?.rows,
+                cwd: options?.cwd,
+                envs: options?.env,
+              },
+              Result.fromNullishOr(() => undefined),
+            ),
           }),
         ).pipe(Effect.map(terminal)),
       ),

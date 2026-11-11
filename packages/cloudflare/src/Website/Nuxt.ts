@@ -28,7 +28,7 @@ export interface NuxtProps<Bindings extends WorkerBindingProps = {}> extends Omi
    * Relative paths resolve from the process working directory.
    * @default process.cwd()
    */
-  rootDir?: string;
+  rootDir?: string | undefined;
   /**
    * Overrides the module that becomes the deployed Worker entry (nitro's
    * entry/exports seam). Relative paths resolve from {@link rootDir}.
@@ -315,7 +315,7 @@ export const Nuxt: {
           | InputProps<NuxtProps<Bindings>>
           | Effect.Effect<InputProps<NuxtProps<Bindings>>, never, Req>,
       ) => effectClass(Nuxt(id, propsEff))
-    : Worker(
+    : Worker<Bindings, WorkerAssetsConfig, Req>(
         id,
         Effect.map(Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff), (props) => ({
           ...props,

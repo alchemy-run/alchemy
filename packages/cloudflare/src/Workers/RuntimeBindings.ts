@@ -308,7 +308,7 @@ export const materializeRuntimeBindings = Effect.fn(function* (
      * into the `ALCHEMY_DEV_ACCESS` env binding the worker bridge reads to
      * serve `ctx.access` locally.
      */
-    devAccess?: { aud?: string; identity?: Record<string, unknown> };
+    devAccess?: { aud?: string; identity?: Record<string, unknown> } | undefined;
   },
   options: {
     accountId: string;

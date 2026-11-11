@@ -66,7 +66,7 @@ export type ApiToken = Resource<
  */
 export const ApiToken = Resource<ApiToken>("Archil.ApiToken");
 
-const observe = Effect.fn(function* (match: { tokenId?: string; name: string }) {
+const observe = Effect.fn(function* (match: { tokenId?: string | undefined; name: string }) {
   const { data } = yield* archil.listApiTokens({});
   return (data.tokens ?? []).find((token) =>
     match.tokenId !== undefined ? token.id === match.tokenId : token.name === match.name,

@@ -32,39 +32,39 @@ const COLLECTION = "serviceConnectionMaps";
 
 export type AutomatedDnsCreationSpec = {
   /** DNS suffix with trailing dot, e.g. `"internal."`. */
-  dnsSuffix?: string;
+  dnsSuffix?: string | undefined;
   /** Hostname (first label of the FQDN). */
-  hostname?: string;
+  hostname?: string | undefined;
   /** TTL as a duration string, e.g. `"30s"`. */
-  ttl?: string;
+  ttl?: string | undefined;
 };
 
 export type ProducerPscConfig = {
   /** Service attachment URI. */
-  serviceAttachmentUri?: string;
+  serviceAttachmentUri?: string | undefined;
   /** Optional spec for automatically creating a DNS record. */
-  automatedDnsCreationSpec?: AutomatedDnsCreationSpec;
+  automatedDnsCreationSpec?: AutomatedDnsCreationSpec | undefined;
 };
 
 export type ConsumerPscConfig = {
   /** Consumer project id or number. */
-  project?: string;
+  project?: string | undefined;
   /** Consumer instance project path (`projects/{project}`). */
-  consumerInstanceProject?: string;
+  consumerInstanceProject?: string | undefined;
   /** Consumer VPC (`projects/{project}/global/networks/{network}`). */
-  network?: string;
+  network?: string | undefined;
   /** Disable global access on the PSC endpoint. */
-  disableGlobalAccess?: boolean;
+  disableGlobalAccess?: boolean | undefined;
   /** Requested IP version (`IPV4` or `IPV6`). */
-  ipVersion?: string;
+  ipVersion?: string | undefined;
   /** Static IP map from VIP to service attachment. */
-  serviceAttachmentIpAddressMap?: Record<string, string>;
+  serviceAttachmentIpAddressMap?: Record<string, string> | undefined;
   /** Producer instance metadata. Immutable on the producer. */
-  producerInstanceMetadata?: Record<string, string>;
+  producerInstanceMetadata?: Record<string, string> | undefined;
   /** Deprecated producer instance id. */
-  producerInstanceId?: string;
+  producerInstanceId?: string | undefined;
   /** Output-only overall state. */
-  state?: string;
+  state?: string | undefined;
 };
 
 export type ServiceConnectionMapProps = {

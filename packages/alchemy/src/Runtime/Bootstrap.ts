@@ -103,7 +103,7 @@ export const runProcess = (
      * Enable process-wide SIGTERM/SIGINT handling and bounded cleanup for the
      * managed Fly bootstrap. May force process exit; see {@link withManagedHttpShutdown}.
      */
-    readonly managedHttpShutdownTimeoutMs?: number;
+    readonly managedHttpShutdownTimeoutMs?: number | undefined;
   },
 ): Promise<void> => {
   console.log(`${label} bootstrap starting...`);

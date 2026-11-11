@@ -44,20 +44,20 @@ export interface VariableProps {
    * Defaults to the project's primary environment. Changing it replaces
    * the variable.
    */
-  environment?: Ref<VariableEnvironment>;
+  environment?: Ref<VariableEnvironment> | undefined;
   /**
    * Service to scope the variable to. Omit for a shared (project-level)
    * variable. Accepts a `Railway.Service` or `{ serviceId }`. Changing it
    * replaces the variable.
    */
-  service?: Ref<VariableService>;
+  service?: Ref<VariableService> | undefined;
   /**
    * Variable name (the env-var name services see). Stored as-is when set
    * by the user (case-sensitive). If omitted, a unique name is generated
    * from the stack, stage and logical ID. Changing it replaces the
    * variable.
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * Variable value. Wrap secrets with `Redacted.make(...)` so they are
    * never logged. May also be a `Railway.ref(...)` template
@@ -351,8 +351,12 @@ const readVariables = Query.fn((projectId: string, environmentId: string, servic
 const variableUpsert = Query.fn((input: VariableUpsertInput) => Railway.variableUpsert({ input }));
 
 const variableDelete = Query.fn(
-  (input: { projectId: string; environmentId: string; name: string; serviceId?: string }) =>
-    Railway.variableDelete({ input }),
+  (input: {
+    projectId: string;
+    environmentId: string;
+    name: string;
+    serviceId?: string | undefined;
+  }) => Railway.variableDelete({ input }),
 );
 
 const listVariableMap = (projectId: string, environmentId: string, serviceId?: string) =>
@@ -369,7 +373,7 @@ const upsertVariable = (input: {
   environmentId: string;
   name: string;
   value: string;
-  serviceId?: string;
+  serviceId?: string | undefined;
 }) =>
   variableUpsert({
     projectId: input.projectId,

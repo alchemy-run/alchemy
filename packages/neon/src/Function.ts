@@ -55,7 +55,7 @@ export interface FunctionCommonProps extends PlatformProps {
   /** Immutable lowercase alphanumeric identifier, at most 20 characters. Generated when omitted. */
   slug?: string;
   /** Mutable display name. Removing it restores the slug. */
-  name?: string;
+  name?: string | undefined;
   /** Write-only values. Removing a managed key sends an empty deletion value. Platform-injected keys cannot be overridden. */
   env?: Record<string, string | Redacted.Redacted<string> | undefined>;
   /** Node-targeted bundler options; not used with prebuilt artifacts. */
@@ -90,7 +90,9 @@ export interface FunctionAttributes {
   /** Digest of the last successfully applied artifact, not a remote code attestation. */ codeHash:
     | string
     | undefined;
-  /** Last applied environment digest, not proof of remote write-only value equality. */ environmentHash?: string;
+  /** Last applied environment digest, not proof of remote write-only value equality. */ environmentHash?:
+    | string
+    | undefined;
   /** Previously managed environment names. Values cannot be read back. */ environment: string[];
 }
 

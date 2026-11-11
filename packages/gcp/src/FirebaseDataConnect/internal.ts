@@ -165,9 +165,9 @@ export const replaceOnIdentity = (input: {
   nextId: string | undefined;
   previousLocation: string;
   nextLocation: string;
-  extra?: boolean;
-  previousParent?: string;
-  nextParent?: string;
+  extra?: boolean | undefined;
+  previousParent?: string | undefined;
+  nextParent?: string | undefined;
 }) => {
   const parentChanged =
     (input.previousParent ?? "") !== "" &&
@@ -208,7 +208,7 @@ export const waitUntilExists = <A, E, R>(
     }),
   );
 
-export const waitUntilReady = <A extends { reconciling?: boolean }, E, R>(
+export const waitUntilReady = <A extends { reconciling?: boolean | undefined }, E, R>(
   get: Effect.Effect<A | undefined, E, R>,
   name: string,
 ): Effect.Effect<NonNullable<A>, E | ResourceNotResolved | ResourceReconciling, R> =>

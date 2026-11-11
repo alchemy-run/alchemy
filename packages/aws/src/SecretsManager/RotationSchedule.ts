@@ -57,14 +57,14 @@ export interface RotationScheduleProps {
    * When the rotation runs. Provide `scheduleExpression` or
    * `automaticallyAfter`.
    */
-  rotationRules?: RotationRules;
+  rotationRules?: RotationRules | undefined;
   /**
    * Rotate the secret immediately when the schedule is created/updated. If
    * `false`, Secrets Manager only tests the rotation configuration by
    * running the `testSecret` step of the rotation function.
    * @default false
    */
-  rotateImmediately?: boolean;
+  rotateImmediately?: boolean | undefined;
 }
 
 export interface RotationSchedule extends Resource<

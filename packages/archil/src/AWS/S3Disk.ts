@@ -44,7 +44,7 @@ export const archilBucketStatements = (input: {
   readonly region: string;
   readonly organization: string;
   readonly bucketArn: string;
-  readonly prefix?: string;
+  readonly prefix?: string | undefined;
 }): PolicyStatement[] => {
   const principal = ARCHIL_S3_PRINCIPALS[input.region]!;
   const condition = {

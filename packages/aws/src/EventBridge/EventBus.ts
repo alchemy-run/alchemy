@@ -40,7 +40,7 @@ export interface EventBusProps {
   /**
    * Description of the event bus.
    */
-  description?: string;
+  description?: string | undefined;
 
   /**
    * The identifier of the KMS customer managed key for EventBridge to use
@@ -140,7 +140,7 @@ export interface EventBus extends Resource<
     /** The ARN of the event bus. */
     eventBusArn: EventBusArn;
     /** Description of the event bus, if set. */
-    description?: string;
+    description?: string | undefined;
   },
   never,
   Providers,
@@ -249,7 +249,7 @@ export const EventBusProvider = () =>
             const attrs: {
               eventBusName: EventBusName;
               eventBusArn: EventBusArn;
-              description?: string;
+              description?: string | undefined;
             }[] = [];
             let nextToken: string | undefined;
             do {

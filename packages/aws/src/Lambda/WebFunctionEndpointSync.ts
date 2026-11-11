@@ -14,7 +14,7 @@ import { AWSEnvironment } from "../Environment.ts";
 export class WebFunctionNotReady extends Data.TaggedError("WebFunctionNotReady")<{
   functionName: string;
   resource: string;
-  state?: string;
+  state?: string | undefined;
 }> {
   override get message() {
     return `Lambda web function ${this.functionName}: ${this.resource} is ${this.state ?? "not ready"}`;
@@ -50,11 +50,11 @@ export interface WebFunctionCanary {
 export interface WebFunctionEndpointSpec {
   endpointName: string;
   authType: WebFunctionAuthType;
-  regions?: readonly string[];
-  maxEnvironments?: number;
-  rateLimit?: number;
-  description?: string;
-  canary?: WebFunctionCanary;
+  regions?: readonly string[] | undefined;
+  maxEnvironments?: number | undefined;
+  rateLimit?: number | undefined;
+  description?: string | undefined;
+  canary?: WebFunctionCanary | undefined;
 }
 
 /** How an endpoint splits traffic between at most two revisions. */
@@ -77,11 +77,11 @@ export class WebFunctionInvalidConfig extends Data.TaggedError("WebFunctionInval
 export const validateWebFunctionSettings = (
   resourceId: string,
   settings: {
-    rateLimit?: number;
-    maxEnvironments?: number;
-    maxConcurrencyPerEnvironment?: number;
-    timeoutSeconds?: number;
-    canary?: WebFunctionCanary;
+    rateLimit?: number | undefined;
+    maxEnvironments?: number | undefined;
+    maxConcurrencyPerEnvironment?: number | undefined;
+    timeoutSeconds?: number | undefined;
+    canary?: WebFunctionCanary | undefined;
   },
 ): Effect.Effect<void, WebFunctionInvalidConfig> => {
   const invalid = (setting: string, message: string) =>
@@ -158,8 +158,8 @@ export const normalizeRegions = (regions: readonly string[] | undefined) =>
 
 /** Endpoint type and Regions are immutable: changing them recreates the endpoint. */
 export const endpointIdentityChanged = (
-  olds: { regions?: readonly string[] },
-  news: { regions?: readonly string[] },
+  olds: { regions?: readonly string[] | undefined },
+  news: { regions?: readonly string[] | undefined },
 ) =>
   endpointTypeOf(olds.regions) !== endpointTypeOf(news.regions) ||
   !deepEqual(normalizeRegions(olds.regions), normalizeRegions(news.regions));
@@ -377,7 +377,7 @@ export const syncEndpoint = Effect.fn(function* ({
   functionName: string;
   spec: WebFunctionEndpointSpec;
   revisionId: string;
-  published?: string;
+  published?: string | undefined;
   session: { note: (note: string) => Effect.Effect<void> };
 }) {
   const endpointType = endpointTypeOf(spec.regions);

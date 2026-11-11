@@ -58,7 +58,7 @@ export interface PostgresDatabaseProps extends BaseDatabaseProps {
    * CPU architecture. Cannot be changed after creation.
    * @default "x86"
    */
-  arch?: "x86" | "arm";
+  arch?: "x86" | "arm" | undefined;
 }
 
 /**
@@ -165,7 +165,7 @@ const readPostgresDatabase = Effect.fn(function* ({
   olds,
 }: {
   id: string;
-  output?: PostgresDatabase["Attributes"];
+  output?: PostgresDatabase["Attributes"] | undefined;
   olds?: Partial<PostgresDatabaseProps>;
 }) {
   const { organization } = yield* yield* Credentials;

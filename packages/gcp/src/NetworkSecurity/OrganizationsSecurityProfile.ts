@@ -33,58 +33,58 @@ export type OrganizationsSecurityProfileType =
 
 export type OrganizationsAntivirusOverride = {
   /** Protocol to match (`HTTP`, `SMTP`, …). */
-  protocol?: string;
+  protocol?: string | undefined;
   /** Threat action (`ALLOW`, `ALERT`, `DENY`, `DEFAULT_ACTION`). */
-  action?: string;
+  action?: string | undefined;
 };
 
 export type OrganizationsSeverityOverride = {
   /** Severity (`INFORMATIONAL`, `LOW`, `MEDIUM`, `HIGH`, `CRITICAL`). */
-  severity?: string;
+  severity?: string | undefined;
   /** Threat action (`ALLOW`, `ALERT`, `DENY`, `DEFAULT_ACTION`). */
-  action?: string;
+  action?: string | undefined;
 };
 
 export type OrganizationsThreatOverride = {
   /** Vendor-specific threat id. */
-  threatId?: string;
+  threatId?: string | undefined;
   /** Threat type (output-only on the wire). */
-  type?: string;
+  type?: string | undefined;
   /** Threat action (`ALLOW`, `ALERT`, `DENY`, `DEFAULT_ACTION`). */
-  action?: string;
+  action?: string | undefined;
 };
 
 export type OrganizationsThreatPreventionProfile = {
   /** Antivirus action overrides per protocol. */
-  antivirusOverrides?: OrganizationsAntivirusOverride[];
+  antivirusOverrides?: OrganizationsAntivirusOverride[] | undefined;
   /** Action overrides by severity. */
-  severityOverrides?: OrganizationsSeverityOverride[];
+  severityOverrides?: OrganizationsSeverityOverride[] | undefined;
   /** Action overrides by threat id. */
-  threatOverrides?: OrganizationsThreatOverride[];
+  threatOverrides?: OrganizationsThreatOverride[] | undefined;
 };
 
 export type OrganizationsCustomMirroringProfile = {
   /** Target MirroringEndpointGroup resource name. Immutable. */
-  mirroringEndpointGroup?: string;
+  mirroringEndpointGroup?: string | undefined;
 };
 
 export type OrganizationsUrlFilter = {
   /** Action (`ALLOW` or `DENY`). */
-  filteringAction?: string;
+  filteringAction?: string | undefined;
   /** URL match strings. */
-  urls?: string[];
+  urls?: string[] | undefined;
   /** Unique priority within the profile. Lower is higher priority. */
-  priority?: number;
+  priority?: number | undefined;
 };
 
 export type OrganizationsUrlFilteringProfile = {
   /** URL filters. */
-  urlFilters?: OrganizationsUrlFilter[];
+  urlFilters?: OrganizationsUrlFilter[] | undefined;
 };
 
 export type OrganizationsCustomInterceptProfile = {
   /** Target InterceptEndpointGroup resource name. Immutable. */
-  interceptEndpointGroup?: string;
+  interceptEndpointGroup?: string | undefined;
 };
 
 export type OrganizationsSecurityProfileProps = {
@@ -93,51 +93,51 @@ export type OrganizationsSecurityProfileProps = {
    * from the stack, stage, and logical id. Immutable — changing it
    * replaces the profile.
    */
-  securityProfileId?: string;
+  securityProfileId?: string | undefined;
   /**
    * Organization id or `organizations/{organization}`. If omitted,
    * Alchemy uses `GOOGLE_ORGANIZATION_ID` or the project's Resource
    * Manager parent. Immutable — changing it replaces the profile.
    */
-  organization?: string;
+  organization?: string | undefined;
   /**
    * Location. Security profiles live in `global`. Immutable — changing
    * it replaces the profile.
    * @default "global"
    */
-  location?: string;
+  location?: string | undefined;
   /**
    * Profile type. Immutable — changing it replaces the profile.
    * @default "THREAT_PREVENTION"
    */
-  type?: OrganizationsSecurityProfileType;
+  type?: OrganizationsSecurityProfileType | undefined;
   /**
    * Threat prevention configuration. Used when `type` is
    * `THREAT_PREVENTION`.
    */
-  threatPreventionProfile?: OrganizationsThreatPreventionProfile;
+  threatPreventionProfile?: OrganizationsThreatPreventionProfile | undefined;
   /**
    * Packet mirroring configuration. Used when `type` is
    * `CUSTOM_MIRRORING`. Immutable.
    */
-  customMirroringProfile?: OrganizationsCustomMirroringProfile;
+  customMirroringProfile?: OrganizationsCustomMirroringProfile | undefined;
   /**
    * URL filtering configuration. Used when `type` is `URL_FILTERING`.
    */
-  urlFilteringProfile?: OrganizationsUrlFilteringProfile;
+  urlFilteringProfile?: OrganizationsUrlFilteringProfile | undefined;
   /**
    * Packet intercept configuration. Used when `type` is
    * `CUSTOM_INTERCEPT`. Immutable.
    */
-  customInterceptProfile?: OrganizationsCustomInterceptProfile;
+  customInterceptProfile?: OrganizationsCustomInterceptProfile | undefined;
   /**
    * Human-readable description (max 512 characters).
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
    */
-  labels?: Record<string, string>;
+  labels?: Record<string, string> | undefined;
 };
 
 export type OrganizationsSecurityProfile = Resource<

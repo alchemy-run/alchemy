@@ -107,23 +107,23 @@ export type { ExtraFile };
 
 export interface HostedProgramProps {
   main: string;
-  handler?: string;
-  port?: number;
+  handler?: string | undefined;
+  port?: number | undefined;
   /**
    * Dockerfile `FROM` for the Effect-native image. Ignored for the
    * public-image path (`props.image` without `main`).
    *
    * @default "node:26-slim"
    */
-  image?: string;
-  env?: Record<string, any>;
-  isExternal?: boolean;
-  build?: RailwayBuildOptions;
+  image?: string | undefined;
+  env?: Record<string, any> | undefined;
+  isExternal?: boolean | undefined;
+  build?: RailwayBuildOptions | undefined;
   /**
    * Extra files/directories copied into `/app` after the bundled entry.
    * Hashed into `code.hash` so asset-only changes rebuild the image.
    */
-  extraFiles?: ReadonlyArray<ExtraFile>;
+  extraFiles?: ReadonlyArray<ExtraFile> | undefined;
 }
 
 const matchesConfiguredExternal = (

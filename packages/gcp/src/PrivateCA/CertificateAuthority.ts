@@ -35,13 +35,13 @@ export type KeyVersionSpec = {
    * Algorithm for a Google-managed Cloud KMS key. Managed keys use
    * `HSM` protection. Immutable — changing it replaces the CA.
    */
-  algorithm?: privateca.KeyVersionSpecAlgorithmEnum | (string & {});
+  algorithm?: privateca.KeyVersionSpecAlgorithmEnum | (string & {}) | undefined;
   /**
    * Existing Cloud KMS CryptoKeyVersion
    * `projects/{project}/locations/{location}/keyRings/{keyRing}/cryptoKeys/{cryptoKey}/cryptoKeyVersions/{version}`.
    * Immutable — changing it replaces the CA.
    */
-  cloudKmsKeyVersion?: string;
+  cloudKmsKeyVersion?: string | undefined;
 };
 
 export type Subject = {
@@ -140,9 +140,9 @@ export type CertificateConfig = {
 
 export type UserDefinedAccessUrls = {
   /** URLs where CRL information is published. */
-  crlAccessUrls?: string[];
+  crlAccessUrls?: string[] | undefined;
   /** URLs where the issuer CA certificate may be downloaded. */
-  aiaIssuingCertificateUrls?: string[];
+  aiaIssuingCertificateUrls?: string[] | undefined;
 };
 
 export type SubordinateConfig = {
@@ -150,11 +150,13 @@ export type SubordinateConfig = {
    * Issuing CertificateAuthority resource name
    * `projects/{project}/locations/{location}/caPools/{caPool}/certificateAuthorities/{certificateAuthority}`.
    */
-  certificateAuthority?: string;
+  certificateAuthority?: string | undefined;
   /** PEM certificate chain of the issuers (leaf-to-root), excluding this CA. */
-  pemIssuerChain?: {
-    pemCertificates?: string[];
-  };
+  pemIssuerChain?:
+    | {
+        pemCertificates?: string[] | undefined;
+      }
+    | undefined;
 };
 
 export type CertificateAuthorityProps = {

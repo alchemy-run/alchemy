@@ -228,8 +228,11 @@ const destinationsOutput = (
               Object.entries(headers).map(([key, value]) => [key, resolve(value)]),
             );
       const resolveSignal = (
-        entry: { url: Placeholder; headers?: Record<string, Placeholder> },
-        base: { url?: Placeholder; headers?: Record<string, Placeholder> },
+        entry: { url: Placeholder; headers?: Record<string, Placeholder> | undefined },
+        base: {
+          url?: Placeholder | undefined;
+          headers?: Record<string, Placeholder> | undefined;
+        },
         path: string,
       ): ResolvedSignal | undefined => {
         if (entry !== undefined) {

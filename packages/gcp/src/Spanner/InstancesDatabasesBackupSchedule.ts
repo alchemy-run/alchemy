@@ -32,11 +32,14 @@ export type BackupScheduleEncryptionConfig = {
    * Encryption type (`USE_DATABASE_ENCRYPTION`,
    * `GOOGLE_DEFAULT_ENCRYPTION`, `CUSTOMER_MANAGED_ENCRYPTION`).
    */
-  encryptionType?: spanner.CreateBackupEncryptionConfigEncryptionTypeEnum | (string & {});
+  encryptionType?:
+    | spanner.CreateBackupEncryptionConfigEncryptionTypeEnum
+    | (string & {})
+    | undefined;
   /** Cloud KMS key. Prefer `kmsKeyNames` for new schedules. */
-  kmsKeyName?: string;
+  kmsKeyName?: string | undefined;
   /** Cloud KMS keys covering every region of the instance config. */
-  kmsKeyNames?: string[];
+  kmsKeyNames?: string[] | undefined;
 };
 
 export type BackupScheduleSpec = {

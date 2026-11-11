@@ -66,14 +66,14 @@ export interface BillingMeterProps {
    * The meter's name. Not visible to the customer. If omitted, a unique
    * name is generated from the stack, stage, and logical id. Mutable.
    */
-  displayName?: string;
+  displayName?: string | undefined;
   /**
    * Name of the meter event used to record usage. Corresponds with the
    * `event_name` field on meter events. If omitted, a unique name is
    * generated. Create-only — changing it replaces the meter. Stripe
    * event names are unique per account, including deactivated meters.
    */
-  eventName?: string;
+  eventName?: string | undefined;
   /**
    * How events are aggregated over a billing period. Create-only.
    */
@@ -82,21 +82,21 @@ export interface BillingMeterProps {
    * How a meter event is mapped to a customer. Create-only. Defaults to
    * `{ type: "by_id", eventPayloadKey: "stripe_customer_id" }`.
    */
-  customerMapping?: BillingMeterCustomerMapping;
+  customerMapping?: BillingMeterCustomerMapping | undefined;
   /**
    * Pre-aggregation window for meter events. Create-only.
    */
-  eventTimeWindow?: BillingMeterEventTimeWindow;
+  eventTimeWindow?: BillingMeterEventTimeWindow | undefined;
   /**
    * How to calculate a meter event's value. Create-only. Defaults to
    * `{ eventPayloadKey: "value" }`.
    */
-  valueSettings?: BillingMeterValueSettings;
+  valueSettings?: BillingMeterValueSettings | undefined;
   /**
    * Whether the meter accepts events and can attach to a price.
    * @default "active"
    */
-  status?: BillingMeterStatus;
+  status?: BillingMeterStatus | undefined;
 }
 
 export type BillingMeter = Resource<
@@ -309,7 +309,10 @@ const findByEventName = Effect.fn(function* (eventName: string) {
   return matches[0];
 });
 
-const observe = Effect.fn(function* (input: { id?: string; eventName?: string }) {
+const observe = Effect.fn(function* (input: {
+  id?: string | undefined;
+  eventName?: string | undefined;
+}) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);
     if (byId !== undefined) return byId;

@@ -44,7 +44,7 @@ export interface RunnerPoolProps {
    * The region the pool runs in. It must be enabled on the cluster.
    * @default the cluster's first region
    */
-  region?: string;
+  region?: string | undefined;
   /**
    * The runner pool's name. Rivet Cloud supports only `default` for now, so a
    * cluster runs one runner pool. Its nodes join the control-plane pool named
@@ -75,12 +75,12 @@ export interface RunnerPoolProps {
    * The machine each node runs on. The cluster's plan caps it.
    * @default "e2-small"
    */
-  machineType?: RunnerMachineType;
+  machineType?: RunnerMachineType | undefined;
   /**
    * The number of nodes. The cluster's plan caps it across all its pools.
    * @default 1
    */
-  nodeCount?: number;
+  nodeCount?: number | undefined;
 }
 
 export interface RunnerPool extends Resource<

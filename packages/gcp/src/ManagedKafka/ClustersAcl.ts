@@ -27,20 +27,20 @@ export type AclEntry = {
    * `DESCRIBE`, `CLUSTER_ACTION`, `DESCRIBE_CONFIGS`, `ALTER_CONFIGS`,
    * `IDEMPOTENT_WRITE`).
    */
-  operation?: string;
+  operation?: string | undefined;
   /**
    * Host. Must be `*` for Managed Service for Apache Kafka.
    * @default "*"
    */
-  host?: string;
+  host?: string | undefined;
   /**
    * Permission type (`ALLOW`, `DENY`).
    */
-  permissionType?: string;
+  permissionType?: string | undefined;
   /**
    * Principal (`User:sa@project.iam.gserviceaccount.com` or `User:*`).
    */
-  principal?: string;
+  principal?: string | undefined;
 };
 
 export type ClustersAclProps = {

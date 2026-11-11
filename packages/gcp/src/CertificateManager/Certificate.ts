@@ -31,9 +31,9 @@ export type CertificateScope = "DEFAULT" | "EDGE_CACHE" | "ALL_REGIONS" | "CLIEN
 
 export type CertificateSelfManaged = {
   /** PEM-encoded certificate chain. Leaf first, then intermediates. Input-only. */
-  pemCertificate?: string;
+  pemCertificate?: string | undefined;
   /** PEM-encoded private key of the leaf certificate. Input-only. */
-  pemPrivateKey?: string;
+  pemPrivateKey?: string | undefined;
 };
 
 export type CertificateManaged = {
@@ -42,17 +42,17 @@ export type CertificateManaged = {
    * require DNS authorization. Immutable — changing them replaces the
    * certificate.
    */
-  domains?: string[];
+  domains?: string[] | undefined;
   /**
    * DnsAuthorization resource names used to prove domain ownership.
    * Immutable — changing them replaces the certificate.
    */
-  dnsAuthorizations?: string[];
+  dnsAuthorizations?: string[] | undefined;
   /**
    * CertificateIssuanceConfig resource name for private PKI certificates.
    * Immutable — changing it replaces the certificate.
    */
-  issuanceConfig?: string;
+  issuanceConfig?: string | undefined;
 };
 
 export type CertificateManagedIdentity = {
@@ -72,7 +72,7 @@ export type CertificateProps = {
    * `[a-zA-Z][a-zA-Z0-9_-]*`. Immutable — changing it replaces the
    * certificate.
    */
-  certificateId?: string;
+  certificateId?: string | undefined;
   /**
    * Certificate Manager location (`global`, `us-central1`, …). Immutable —
    * changing it replaces the certificate. `US-CENTRAL1` is accepted and
@@ -81,55 +81,55 @@ export type CertificateProps = {
    * for a regional certificate.
    * @default "global"
    */
-  location?: string;
+  location?: string | undefined;
   /**
    * Human-readable description.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
    */
-  labels?: Record<string, string>;
+  labels?: Record<string, string> | undefined;
   /**
    * Certificate serving scope. Immutable — changing it replaces the
    * certificate. Inferred from `managed` / `selfManaged` / `managedIdentity`
    * when omitted.
    * @default "DEFAULT"
    */
-  scope?: CertificateScope | (string & {});
+  scope?: CertificateScope | (string & {}) | undefined;
   /**
    * `SELF_MANAGED` (upload PEM), `MANAGED` (Google provisions), or
    * `MANAGED_IDENTITY`. Inferred from nested blocks when omitted.
    * Immutable — changing it replaces the certificate.
    * @default "SELF_MANAGED"
    */
-  type?: CertificateType;
+  type?: CertificateType | undefined;
   /**
    * PEM certificate chain for a self-managed certificate. Input-only.
    * Changing it replaces the certificate.
    */
-  pemCertificate?: string;
+  pemCertificate?: string | undefined;
   /**
    * PEM private key for a self-managed certificate. Input-only. Changing
    * it replaces the certificate.
    */
-  pemPrivateKey?: string;
+  pemPrivateKey?: string | undefined;
   /**
    * Nested self-managed payload. Top-level `pemCertificate` /
    * `pemPrivateKey` take precedence when both are set.
    */
-  selfManaged?: CertificateSelfManaged;
+  selfManaged?: CertificateSelfManaged | undefined;
   /**
    * Google-managed certificate configuration. Immutable — changing
    * domains, DNS authorizations, or issuance config replaces the
    * certificate.
    */
-  managed?: CertificateManaged;
+  managed?: CertificateManaged | undefined;
   /**
    * Managed-identity certificate configuration. Immutable — changing
    * the identity replaces the certificate.
    */
-  managedIdentity?: CertificateManagedIdentity;
+  managedIdentity?: CertificateManagedIdentity | undefined;
 };
 
 export type Certificate = Resource<
@@ -357,9 +357,9 @@ const toId = (id: string, certificateId: string | undefined, existing?: string) 
   });
 
 const selfManagedOf = (props: {
-  pemCertificate?: string;
-  pemPrivateKey?: string;
-  selfManaged?: CertificateSelfManaged;
+  pemCertificate?: string | undefined;
+  pemPrivateKey?: string | undefined;
+  selfManaged?: CertificateSelfManaged | undefined;
 }): CertificateSelfManaged => ({
   pemCertificate: props.pemCertificate ?? props.selfManaged?.pemCertificate,
   pemPrivateKey: props.pemPrivateKey ?? props.selfManaged?.pemPrivateKey,
@@ -367,12 +367,12 @@ const selfManagedOf = (props: {
 
 const typeOf = (
   props: {
-    type?: string;
-    managed?: CertificateManaged;
-    managedIdentity?: CertificateManagedIdentity;
-    pemCertificate?: string;
-    pemPrivateKey?: string;
-    selfManaged?: CertificateSelfManaged;
+    type?: string | undefined;
+    managed?: CertificateManaged | undefined;
+    managedIdentity?: CertificateManagedIdentity | undefined;
+    pemCertificate?: string | undefined;
+    pemPrivateKey?: string | undefined;
+    selfManaged?: CertificateSelfManaged | undefined;
   },
   fallback: CertificateType = "SELF_MANAGED",
 ): CertificateType => {

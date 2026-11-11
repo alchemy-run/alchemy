@@ -244,7 +244,7 @@ const toConfiguration = (configuration: GroupConfigurationItem[]) =>
 const configurationFingerprint = (
   items: readonly {
     Type: string;
-    Parameters?: readonly { Name: string; Values?: readonly string[] }[];
+    Parameters?: readonly { Name: string; Values?: readonly string[] | undefined }[] | undefined;
   }[],
 ) =>
   JSON.stringify(

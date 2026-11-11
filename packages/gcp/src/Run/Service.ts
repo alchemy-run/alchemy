@@ -65,7 +65,7 @@ const MAX_NAME_LENGTH = 49;
 
 export type EnvVar = {
   /** Environment variable name. */
-  name?: string;
+  name?: string | undefined;
   /** Literal value. Mutually exclusive with `valueSource`. */
   value?: string;
   /** Secret Manager source for the value. */
@@ -79,7 +79,7 @@ export type EnvVar = {
 
 export type ContainerPort = {
   /** Protocol name (`http1` or `h2c`). */
-  name?: string;
+  name?: string | undefined;
   /** TCP port the container listens on. */
   containerPort?: number;
 };
@@ -105,26 +105,32 @@ export type Probe = {
    * Perform an HTTP GET; any 2xx–3xx response passes. Exactly one of
    * `httpGet`, `tcpSocket`, or `grpc` must be set.
    */
-  httpGet?: {
-    /** Request path. @default "/" */
-    path?: string;
-    /** Port to probe. @default the container's `ports[0].containerPort` */
-    port?: number;
-    /** Extra request headers. */
-    httpHeaders?: HttpHeader[];
-  };
+  httpGet?:
+    | {
+        /** Request path. @default "/" */
+        path?: string;
+        /** Port to probe. @default the container's `ports[0].containerPort` */
+        port?: number;
+        /** Extra request headers. */
+        httpHeaders?: HttpHeader[];
+      }
+    | undefined;
   /** Open a TCP connection; passes once the port accepts it. */
-  tcpSocket?: {
-    /** Port to probe. @default the container's `ports[0].containerPort` */
-    port?: number;
-  };
+  tcpSocket?:
+    | {
+        /** Port to probe. @default the container's `ports[0].containerPort` */
+        port?: number;
+      }
+    | undefined;
   /** Call the gRPC health checking protocol. */
-  grpc?: {
-    /** Port to probe. @default the container's `ports[0].containerPort` */
-    port?: number;
-    /** Service name sent in the `HealthCheckRequest`. */
-    service?: string;
-  };
+  grpc?:
+    | {
+        /** Port to probe. @default the container's `ports[0].containerPort` */
+        port?: number;
+        /** Service name sent in the `HealthCheckRequest`. */
+        service?: string;
+      }
+    | undefined;
   /**
    * Seconds after the container starts before the first probe (max 240
    * for startup probes, 3600 for liveness probes).
@@ -141,7 +147,7 @@ export type Probe = {
 
 export type ContainerSpec = {
   /** DNS_LABEL container name. Required to reference it from `dependsOn`. */
-  name?: string;
+  name?: string | undefined;
   /**
    * Container image (Artifact Registry, GCR, or Docker Hub). Required
    * unless `template` is omitted, in which case the public Cloud Run hello
@@ -149,32 +155,32 @@ export type ContainerSpec = {
    */
   image?: string;
   /** Entrypoint. */
-  command?: string[];
+  command?: string[] | undefined;
   /** Arguments to the entrypoint. */
-  args?: string[];
+  args?: string[] | undefined;
   /** Environment variables. */
   env?: EnvVar[];
   /** Exposed ports. Only one port may be set. */
   ports?: ContainerPort[];
   /** CPU / memory / GPU requirements. */
-  resources?: ResourceRequirements;
+  resources?: ResourceRequirements | undefined;
   /** Working directory. */
-  workingDir?: string;
+  workingDir?: string | undefined;
   /** Volume mounts. Names must match the template's `volumes`. */
-  volumeMounts?: cloudrun.GoogleCloudRunV2VolumeMountList;
+  volumeMounts?: cloudrun.GoogleCloudRunV2VolumeMountList | undefined;
   /**
    * Probe that must pass before the container counts as started. Until it
    * does, the revision takes no traffic and containers that `dependsOn`
    * this one wait. Omitting it restores Cloud Run's default TCP probe on
    * the serving port.
    */
-  startupProbe?: Probe;
+  startupProbe?: Probe | undefined;
   /**
    * Probe run for the container's lifetime; Cloud Run restarts the
    * container after `failureThreshold` consecutive failures. Omitting it
    * removes any liveness probe.
    */
-  livenessProbe?: Probe;
+  livenessProbe?: Probe | undefined;
   /**
    * Names of containers in the same revision that must start, and pass
    * their startup probe, before this one starts. Without it, every
@@ -184,18 +190,18 @@ export type ContainerSpec = {
    * A container bound with `GCP.Run.bindContainer` or `GCP.Run.bindPort`
    * is added for you.
    */
-  dependsOn?: string[];
+  dependsOn?: string[] | undefined;
 };
 
 export type RevisionScaling = {
   /** Minimum serving instances. */
-  minInstanceCount?: number;
+  minInstanceCount?: number | undefined;
   /** Maximum serving instances. Server default is 100. */
-  maxInstanceCount?: number;
+  maxInstanceCount?: number | undefined;
   /** CPU utilization target in `[0.1, 0.95]`, or `0` to disable. */
-  cpuUtilization?: number;
+  cpuUtilization?: number | undefined;
   /** Concurrency utilization target in `[0.1, 0.95]`, or `0` to disable. */
-  concurrencyUtilization?: number;
+  concurrencyUtilization?: number | undefined;
 };
 
 export type RevisionTemplate = {
@@ -204,53 +210,53 @@ export type RevisionTemplate = {
    * listed directly: its spec joins the revision, its bindings' roles go to
    * the revision's service account, and the sidecars it binds join too.
    */
-  containers?: (ContainerSpec | Container)[];
+  containers?: (ContainerSpec | Container)[] | undefined;
   /** Request timeout (e.g. `"300s"`). */
-  timeout?: string;
+  timeout?: string | undefined;
   /** Max concurrent requests per instance. `0` uses the server default. */
-  maxInstanceRequestConcurrency?: number;
+  maxInstanceRequestConcurrency?: number | undefined;
   /** Runtime service account email. Defaults to the project Compute SA. */
-  serviceAccount?: string;
+  serviceAccount?: string | undefined;
   /** Sandbox (`EXECUTION_ENVIRONMENT_GEN1` or `EXECUTION_ENVIRONMENT_GEN2`). */
-  executionEnvironment?: string;
+  executionEnvironment?: string | undefined;
   /** Enable session affinity. */
-  sessionAffinity?: boolean;
+  sessionAffinity?: boolean | undefined;
   /** Revision-level scaling. */
-  scaling?: RevisionScaling;
+  scaling?: RevisionScaling | undefined;
   /** Revision labels. */
-  labels?: Record<string, string>;
+  labels?: Record<string, string> | undefined;
   /** Revision annotations. */
-  annotations?: Record<string, string>;
+  annotations?: Record<string, string> | undefined;
   /** Direct VPC egress / connector. */
-  vpcAccess?: cloudrun.GoogleCloudRunV2VpcAccess;
+  vpcAccess?: cloudrun.GoogleCloudRunV2VpcAccess | undefined;
   /** Volumes available to containers. */
-  volumes?: cloudrun.GoogleCloudRunV2VolumeList;
+  volumes?: cloudrun.GoogleCloudRunV2VolumeList | undefined;
   /** CMEK used to encrypt the container image. */
-  encryptionKey?: string;
+  encryptionKey?: string | undefined;
   /** Unique revision name. Generated from the service name if omitted. */
-  revision?: string;
+  revision?: string | undefined;
 };
 
 export type TrafficTarget = {
   /** Allocation type (`TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST` or `_REVISION`). */
-  type?: string;
+  type?: string | undefined;
   /** Revision to send traffic to when allocating by revision. */
-  revision?: string;
+  revision?: string | undefined;
   /** Percent of traffic (0–100). */
-  percent?: number;
+  percent?: number | undefined;
   /** URI tag for this target. */
-  tag?: string;
+  tag?: string | undefined;
 };
 
 export type ServiceScaling = {
   /** Minimum instances across all revisions. */
-  minInstanceCount?: number;
+  minInstanceCount?: number | undefined;
   /** Maximum instances across all revisions. */
-  maxInstanceCount?: number;
+  maxInstanceCount?: number | undefined;
   /** `AUTOMATIC` or `MANUAL`. */
-  scalingMode?: string;
+  scalingMode?: string | undefined;
   /** Instance count in manual scaling mode. */
-  manualInstanceCount?: number;
+  manualInstanceCount?: number | undefined;
 };
 
 export type ServiceProps = PlatformProps & {
@@ -261,105 +267,107 @@ export type ServiceProps = PlatformProps & {
    * id. Must begin with a letter, not end with a hyphen, and be fewer than
    * 50 characters. Immutable — changing it replaces the service.
    */
-  serviceId?: string;
+  serviceId?: string | undefined;
   /**
    * Region (`us-central1`, `europe-west1`, …). Immutable — changing it
    * replaces the service. `US-CENTRAL1` is accepted and normalized to
    * `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
-  location?: string;
+  location?: string | undefined;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
    */
-  labels?: Record<string, string>;
+  labels?: Record<string, string> | undefined;
   /**
    * Unstructured annotations. Cloud Run rejects `run.googleapis.com` /
    * `cloud.googleapis.com` / Knative namespaces.
    */
-  annotations?: Record<string, string>;
+  annotations?: Record<string, string> | undefined;
   /**
    * Human-readable description (max 512 characters).
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * Ingress (`INGRESS_TRAFFIC_ALL`, `INGRESS_TRAFFIC_INTERNAL_ONLY`,
    * `INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER`, `INGRESS_TRAFFIC_NONE`).
    */
-  ingress?: cloudrun.GoogleCloudRunV2ServiceIngressEnum | (string & {});
+  ingress?: cloudrun.GoogleCloudRunV2ServiceIngressEnum | (string & {}) | undefined;
   /**
    * Disable the IAM invoker check (`run.routes.invoke`).
    * @default false
    */
-  invokerIamDisabled?: boolean;
+  invokerIamDisabled?: boolean | undefined;
   /**
    * Disable public resolution of the default `*.run.app` URI.
    * @default false
    */
-  defaultUriDisabled?: boolean;
+  defaultUriDisabled?: boolean | undefined;
   /**
    * Enable Identity-Aware Proxy on the service.
    */
-  iapEnabled?: boolean;
+  iapEnabled?: boolean | undefined;
   /**
    * Custom audiences encoded into ID tokens.
    */
-  customAudiences?: string[];
+  customAudiences?: string[] | undefined;
   /**
    * Service-level scaling.
    */
-  scaling?: ServiceScaling;
+  scaling?: ServiceScaling | undefined;
   /**
    * Traffic split. Empty / omitted sends 100% to the latest Ready
    * revision.
    */
-  traffic?: TrafficTarget[];
+  traffic?: TrafficTarget[] | undefined;
   /**
    * Revision template. If omitted, a single container runs the public
    * Cloud Run hello image. The Effect-native `main` form fills `image`
    * for you.
    */
-  template?: RevisionTemplate;
+  template?: RevisionTemplate | undefined;
   /**
    * Module entrypoint for an Effect-native service (typically
    * `import.meta.url`). Alchemy bundles the program, builds a container
    * image, pushes it to Artifact Registry, and deploys Cloud Run.
    * Bindings attach env + IAM onto the runtime service account.
    */
-  main?: string;
+  main?: string | undefined;
   /**
    * Named export to load from `main`.
    * @default "default"
    */
-  handler?: string;
+  handler?: string | undefined;
   /**
    * HTTP port the Effect-native program listens on (Cloud Run injects
    * `PORT`). Only used with `main`.
    * @default 8080
    */
-  port?: number;
+  port?: number | undefined;
   /**
    * Startup probe for the main container (`template.containers[0]`).
    * Shorthand for setting it on the container.
    */
-  startupProbe?: Probe;
+  startupProbe?: Probe | undefined;
   /**
    * Liveness probe for the main container (`template.containers[0]`).
    * Shorthand for setting it on the container.
    */
-  livenessProbe?: Probe;
+  livenessProbe?: Probe | undefined;
   /**
    * Additional environment variables for the Effect-native container.
    * Merged after binding-injected `env`.
    */
-  env?: Record<string, any>;
+  env?: Record<string, any> | undefined;
   /**
    * Bundler configuration for `main`. `install` lists packages
    * `npm install`ed into an unbundled Node program image (see
    * {@link extraFiles}); Next.js needs `next`. `cache` configures the image
    * build's BuildKit layer cache.
    */
-  build?: Bundle.BundleConfig & BuildCacheOptions & { install?: PackageInstall };
+  build?:
+    | (Bundle.BundleConfig & BuildCacheOptions & { install?: PackageInstall | undefined })
+    | undefined;
   /**
    * Host files or directories baked into the image next to `main`
    * (`dest` is relative to `/app`; `"."` merges into `/app`). When set on
@@ -368,7 +376,7 @@ export type ServiceProps = PlatformProps & {
    * so a changed file rolls out a new revision. `GCP.Website.*` uses this
    * to ship framework build output.
    */
-  extraFiles?: ReadonlyArray<ExtraFile>;
+  extraFiles?: ReadonlyArray<ExtraFile> | undefined;
 };
 
 export type Service = Resource<
@@ -1114,9 +1122,9 @@ const toAttrs = (
   project: string,
   region: string,
   extras: {
-    iamGrants?: AppliedIamGrant[];
-    codeHash?: string;
-    serviceAccountUniqueId?: string;
+    iamGrants?: AppliedIamGrant[] | undefined;
+    codeHash?: string | undefined;
+    serviceAccountUniqueId?: string | undefined;
   } = {},
 ): Service["Attributes"] => {
   const name = service.name ?? "";

@@ -39,7 +39,7 @@ export interface RoleProps {
   /**
    * Name of the role. If omitted, a unique name will be generated.
    */
-  roleName?: string;
+  roleName?: string | undefined;
   /**
    * Optional IAM path prefix for the role.
    * @default "/"
@@ -54,11 +54,11 @@ export interface RoleProps {
   /**
    * Managed policy ARNs to attach to the role.
    */
-  managedPolicyArns?: string[];
+  managedPolicyArns?: string[] | undefined;
   /**
    * Inline policies keyed by policy name.
    */
-  inlinePolicies?: Record<string, PolicyDocument>;
+  inlinePolicies?: Record<string, PolicyDocument> | undefined;
   /**
    * Optional description for the role.
    */
@@ -75,7 +75,7 @@ export interface RoleProps {
   /**
    * User-defined tags to apply to the role.
    */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
 }
 
 export interface Role extends Resource<
@@ -279,7 +279,7 @@ export const RoleProvider = () =>
   Provider.effect(
     Role,
     Effect.gen(function* () {
-      const toRoleName = (id: string, props: { roleName?: string } = {}) =>
+      const toRoleName = (id: string, props: { roleName?: string | undefined } = {}) =>
         props.roleName ? Effect.succeed(props.roleName) : createPhysicalName({ id, maxLength: 64 });
 
       const readInlinePolicies = Effect.fn(function* (roleName: string) {

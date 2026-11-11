@@ -13,17 +13,17 @@ import type { Providers } from "./Providers.ts";
 export type DataApiProps = (
   | {
       /** Branch resource or explicit identity, optionally carrying its selected database. */
-      branch: { projectId: string; branchId: string; databaseName?: string };
+      branch: { projectId: string; branchId: string; databaseName?: string | undefined };
       project?: never;
     }
   | {
       /** Project resource or explicit identity; selects the observed default branch. */
-      project: { projectId: string; databaseName?: string };
+      project: { projectId: string; databaseName?: string | undefined };
       branch?: never;
     }
 ) & {
   /** Database served by PostgREST. Infers the referenced resource's selected database, or the branch's only database; required when ambiguous. */
-  database?: string;
+  database?: string | undefined;
   /** Authentication mechanism. Changes replace the Data API. */
   authProvider?: "neon_auth" | "external";
   /** HTTPS JWKS endpoint required for external authentication. */

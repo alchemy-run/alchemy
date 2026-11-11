@@ -41,7 +41,7 @@ export type QueueProps = {
    * Queue names are unique per account across all jurisdictions.
    * @default ${app}-${stage}-${id}
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * Restrict where Cloudflare stores and processes the queue's messages.
    * Workers can still produce to and consume from it from any location.
@@ -50,26 +50,26 @@ export type QueueProps = {
    * queue must be in the same jurisdiction as its source queue.
    * @default undefined (global)
    */
-  jurisdiction?: QueueJurisdiction;
+  jurisdiction?: QueueJurisdiction | undefined;
   /**
    * Seconds an unconsumed message is kept before it is deleted. Cloudflare
    * allows 60 seconds to 14 days (1209600). Workers Free plans can't change it.
    * Removing it resets it to the default.
    * @default 345600 (4 days)
    */
-  messageRetentionPeriod?: number;
+  messageRetentionPeriod?: number | undefined;
   /**
    * Seconds to delay delivery of every message to consumers, from 0 to 86400 (24 hours).
    * Removing it resets it to the default.
    * @default 0
    */
-  deliveryDelay?: number;
+  deliveryDelay?: number | undefined;
   /**
    * Pause delivery of messages to consumers. Producers can still send.
    * Removing it resets it to the default.
    * @default false
    */
-  deliveryPaused?: boolean;
+  deliveryPaused?: boolean | undefined;
 };
 
 type QueueSettings = Pick<
@@ -467,17 +467,20 @@ export const ProviderLive = () =>
   });
 
 type ObservedQueue = {
-  queueId?: string | null;
-  queueName?: string | null;
-  jurisdiction?: string | null;
-  settings?: {
-    messageRetentionPeriod?: number | null;
-    deliveryDelay?: number | null;
-    deliveryPaused?: boolean | null;
-  } | null;
+  queueId?: string | null | undefined;
+  queueName?: string | null | undefined;
+  jurisdiction?: string | null | undefined;
+  settings?:
+    | {
+        messageRetentionPeriod?: number | null | undefined;
+        deliveryDelay?: number | null | undefined;
+        deliveryPaused?: boolean | null | undefined;
+      }
+    | null
+    | undefined;
 };
 
-const DEFAULT_SETTINGS: Required<QueueSettings> = {
+const DEFAULT_SETTINGS: Pick<Queue["Attributes"], keyof QueueSettings> = {
   messageRetentionPeriod: 345600,
   deliveryDelay: 0,
   deliveryPaused: false,
@@ -488,7 +491,7 @@ const DEFAULT_SETTINGS: Required<QueueSettings> = {
 const toJurisdiction = (jurisdiction: string | null | undefined) =>
   (jurisdiction || undefined) as QueueJurisdiction | undefined;
 
-const toSettings = (settings: ObservedQueue["settings"]): Required<QueueSettings> => ({
+const toSettings = (settings: ObservedQueue["settings"]): typeof DEFAULT_SETTINGS => ({
   messageRetentionPeriod:
     settings?.messageRetentionPeriod ?? DEFAULT_SETTINGS.messageRetentionPeriod,
   deliveryDelay: settings?.deliveryDelay ?? DEFAULT_SETTINGS.deliveryDelay,
@@ -513,7 +516,10 @@ const desiredSettings = (
 };
 
 const toAttributes = (
-  queue: ObservedQueue & { queueId?: string | null; queueName?: string | null },
+  queue: ObservedQueue & {
+    queueId?: string | null | undefined;
+    queueName?: string | null | undefined;
+  },
   accountId: string,
 ): Queue["Attributes"] => ({
   queueId: queue.queueId!,

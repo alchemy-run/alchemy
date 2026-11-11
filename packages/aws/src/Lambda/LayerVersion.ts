@@ -65,7 +65,7 @@ export interface LayerVersionProps {
   /**
    * Description of this version of the layer.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * Runtimes the layer is compatible with. Used to filter the layer in the
    * console; Lambda does not enforce it.
@@ -111,31 +111,31 @@ export interface LayerVersion extends Resource<
     /**
      * Base64-encoded SHA-256 of the layer archive, as reported by Lambda.
      */
-    codeSha256?: string;
+    codeSha256?: string | undefined;
     /**
      * Size of the layer archive in bytes.
      */
-    codeSize?: number;
+    codeSize?: number | undefined;
     /**
      * Date the version was created, in ISO-8601 format.
      */
-    createdDate?: string;
+    createdDate?: string | undefined;
     /**
      * Description of the version.
      */
-    description?: string;
+    description?: string | undefined;
     /**
      * Runtimes the layer is compatible with.
      */
-    compatibleRuntimes?: lambda.Runtime[];
+    compatibleRuntimes?: lambda.Runtime[] | undefined;
     /**
      * Architectures the layer is compatible with.
      */
-    compatibleArchitectures?: lambda.Architecture[];
+    compatibleArchitectures?: lambda.Architecture[] | undefined;
     /**
      * The layer's software license.
      */
-    licenseInfo?: string;
+    licenseInfo?: string | undefined;
   },
   never,
   Providers,

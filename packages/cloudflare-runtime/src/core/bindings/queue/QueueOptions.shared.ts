@@ -24,15 +24,15 @@ export interface QueueConsumer {
     readonly accountId: string;
   };
   /** Maximum number of messages per batch (0-100, default 5). */
-  readonly maxBatchSize?: number;
+  readonly maxBatchSize?: number | undefined;
   /** Maximum seconds to wait before flushing a partial batch (0-60, default 1). */
-  readonly maxBatchTimeout?: number;
+  readonly maxBatchTimeout?: number | undefined;
   /** Maximum number of retries before dropping/dead-lettering (0-100, default 2). */
-  readonly maxRetries?: number;
+  readonly maxRetries?: number | undefined;
   /** Name of the queue failed messages are moved to after `maxRetries`. */
-  readonly deadLetterQueue?: string;
+  readonly deadLetterQueue?: string | undefined;
   /** Default delay (seconds, 0-86400) applied to retried messages. */
-  readonly retryDelay?: number;
+  readonly retryDelay?: number | undefined;
 }
 
 /**
@@ -41,7 +41,7 @@ export interface QueueConsumer {
  */
 export interface QueueProducerEntry {
   readonly queueName: string;
-  readonly deliveryDelay?: number;
+  readonly deliveryDelay?: number | undefined;
 }
 
 /** Env binding names used inside the broker / entry workers. */

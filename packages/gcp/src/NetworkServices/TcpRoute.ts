@@ -38,9 +38,9 @@ export type TcpRouteRouteMatch = {
    * CIDR range to match (IPv4). Prefix length defaults to 32.
    * Examples: `10.0.0.1`, `10.0.0.0/8`, `0.0.0.0/0`.
    */
-  address?: string;
+  address?: string | undefined;
   /** Destination port to match. */
-  port?: string;
+  port?: string | undefined;
 };
 
 export type TcpRouteRouteDestination = {
@@ -48,12 +48,12 @@ export type TcpRouteRouteDestination = {
    * BackendService resource name to route to, e.g.
    * `projects/{project}/locations/global/backendServices/{service}`.
    */
-  serviceName?: string;
+  serviceName?: string | undefined;
   /**
    * Relative weight of this destination. If any destination has a
    * weight, all destinations must.
    */
-  weight?: number;
+  weight?: number | undefined;
 };
 
 export type TcpRouteRouteAction = {
@@ -62,17 +62,17 @@ export type TcpRouteRouteAction = {
    * `originalDestination` is true. Mutually exclusive with
    * `originalDestination`.
    */
-  destinations?: TcpRouteRouteDestination[];
+  destinations?: TcpRouteRouteDestination[] | undefined;
   /**
    * Use the original connection destination IP and port. Mutually
    * exclusive with `destinations`.
    * @default false
    */
-  originalDestination?: boolean;
+  originalDestination?: boolean | undefined;
   /**
    * Idle timeout (e.g. `"30s"`). Default 30s; `"0s"` disables it.
    */
-  idleTimeout?: string;
+  idleTimeout?: string | undefined;
 };
 
 export type TcpRouteRouteRule = {
@@ -81,7 +81,7 @@ export type TcpRouteRouteRule = {
    */
   matches?: TcpRouteRouteMatch[];
   /** Routing action applied when a match succeeds. */
-  action?: TcpRouteRouteAction;
+  action?: TcpRouteRouteAction | undefined;
 };
 
 export type TcpRouteProps = {

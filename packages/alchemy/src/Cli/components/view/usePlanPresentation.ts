@@ -1,5 +1,7 @@
 import { measureElement, useProgress, useTitle, type DOMElement } from "@alchemy.run/sigil";
 import { useLayoutEffect, useRef, useState } from "@alchemy.run/sigil/react";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import { useAlchemyStatus, useTerminalSize } from "../ui/index.ts";
 import type { PlanTree, PlanTreeState } from "./PlanTree.ts";
 
@@ -21,7 +23,7 @@ export const usePlanPresentation = (options: {
     mode === "apply"
       ? {
           state: outcome === "failure" || failures > 0 ? "error" : busy ? "normal" : "inactive",
-          value: total === 0 ? undefined : (completed / total) * 100,
+          ...(total !== 0 && { value: (completed / total) * 100 }),
         }
       : { state: "inactive" },
   );
@@ -37,7 +39,10 @@ export const usePlanPresentation = (options: {
       : busy
         ? {
             state: "working",
-            progress: total === 0 ? undefined : (completed / total) * 100,
+            ...Record.filterMap(
+              { progress: total === 0 ? undefined : (completed / total) * 100 },
+              Result.fromNullishOr(() => undefined),
+            ),
             msg: `${label}${titleDetail}`,
           }
         : { state: failed ? "error" : "done", msg: `${label}${titleDetail}` },

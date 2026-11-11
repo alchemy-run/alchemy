@@ -14,9 +14,11 @@ import { lastSegment, locationOf, locationParent, parentOf, sameJson } from "./o
 
 type AnalysisAnnotatorSelector = AnnotatorSelector & {
   /** Summarization annotator configuration. */
-  summarizationConfig?: cci.GoogleCloudContactcenterinsightsV1AnnotatorSelectorSummarizationConfig;
+  summarizationConfig?:
+    | cci.GoogleCloudContactcenterinsightsV1AnnotatorSelectorSummarizationConfig
+    | undefined;
   /** QA annotator configuration. */
-  qaConfig?: cci.GoogleCloudContactcenterinsightsV1AnnotatorSelectorQaConfig;
+  qaConfig?: cci.GoogleCloudContactcenterinsightsV1AnnotatorSelectorQaConfig | undefined;
 };
 
 export type ConversationsAnalysesProps = {

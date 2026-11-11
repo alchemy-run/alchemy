@@ -57,7 +57,7 @@ export type ServiceTokenDatabaseAccess =
 /** Properties for a service token scoped to one PlanetScale database. */
 export interface ServiceTokenProps {
   /** Name prefix. An instance suffix allows old and replacement tokens to coexist. */
-  name?: string;
+  name?: string | undefined;
   /**
    * Organization slug. Defaults to the database resource's organization, then
    * to the configured PlanetScale organization.

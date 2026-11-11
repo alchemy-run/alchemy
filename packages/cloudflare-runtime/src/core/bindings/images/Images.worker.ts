@@ -19,6 +19,8 @@
  *   target/secret headers itself, so requests are forwarded unmodified.
  */
 import { RpcTarget, WorkerEntrypoint } from "cloudflare:workers";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import {
   BINDING_IMAGES_LOOPBACK,
   BINDING_IMAGES_STORE,
@@ -114,11 +116,15 @@ class ImageHandleImpl extends RpcTarget {
       throw new Error(`Image not found: ${this.#imageId}`);
     }
 
+    const meta = options.metadata ?? existing.metadata.meta;
+    const creator = options.creator ?? existing.metadata.creator;
     const updatedMetadata: ImageMetadata = {
       ...existing.metadata,
       requireSignedURLs: options.requireSignedURLs ?? existing.metadata.requireSignedURLs,
-      meta: options.metadata ?? existing.metadata.meta,
-      creator: options.creator ?? existing.metadata.creator,
+      ...Record.filterMap(
+        { meta, creator },
+        Result.fromNullishOr(() => undefined),
+      ),
     };
 
     await this.#env[BINDING_IMAGES_STORE].put(this.#imageId, existing.value, {
@@ -167,7 +173,10 @@ export default class ImagesService extends WorkerEntrypoint<Env> {
       meta: options?.metadata ?? {},
       variants: ["public"],
       draft: false,
-      creator: options?.creator,
+      ...Record.filterMap(
+        { creator: options?.creator },
+        Result.fromNullishOr(() => undefined),
+      ),
     };
 
     await this.env[BINDING_IMAGES_STORE].put(id, buffer, { metadata });
@@ -182,7 +191,10 @@ export default class ImagesService extends WorkerEntrypoint<Env> {
     let kvCursor: string | undefined;
     do {
       const kvResult = await this.env[BINDING_IMAGES_STORE].list<ImageMetadata>({
-        cursor: kvCursor,
+        ...Record.filterMap(
+          { cursor: kvCursor },
+          Result.fromNullishOr(() => undefined),
+        ),
       });
       for (const key of kvResult.keys) {
         if (key.metadata) {
@@ -230,7 +242,7 @@ export default class ImagesService extends WorkerEntrypoint<Env> {
 
     return {
       images: resolvedPage,
-      cursor: hasMore && lastImage ? lastImage.id : undefined,
+      ...(hasMore && lastImage ? { cursor: lastImage.id } : {}),
       listComplete: !hasMore,
     };
   }

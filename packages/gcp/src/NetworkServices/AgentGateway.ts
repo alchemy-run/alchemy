@@ -40,7 +40,7 @@ export type AgentGatewayGoogleManaged = {
   /**
    * Operating mode of a Google-managed Agent Gateway.
    */
-  governedAccessPath?: AgentGatewayGovernedAccessPath;
+  governedAccessPath?: AgentGatewayGovernedAccessPath | undefined;
 };
 
 export type AgentGatewaySelfManaged = {
@@ -48,40 +48,40 @@ export type AgentGatewaySelfManaged = {
    * Existing Application Load Balancer or Secure Web Proxy resource URI
    * in the same project and location.
    */
-  resourceUri?: string;
+  resourceUri?: string | undefined;
 };
 
 export type AgentGatewayNetworkConfigEgress = {
   /** Network Attachment URI used for private VPC egress. */
-  networkAttachment?: string;
+  networkAttachment?: string | undefined;
 };
 
 export type AgentGatewayDnsPeeringConfig = {
   /** Domain names whose queries are forwarded to the target network. */
-  domains?: string[];
+  domains?: string[] | undefined;
   /** Project id that owns the target network. */
-  targetProject?: string;
+  targetProject?: string | undefined;
   /**
    * Target network in
    * `projects/{project}/global/networks/{network}` form.
    */
-  targetNetwork?: string;
+  targetNetwork?: string | undefined;
 };
 
 export type AgentGatewayNetworkConfig = {
   /** PSC-interface network attachment for private VPC connectivity. */
-  egress?: AgentGatewayNetworkConfigEgress;
+  egress?: AgentGatewayNetworkConfigEgress | undefined;
   /** DNS peering configuration for the user VPC. */
-  dnsPeeringConfig?: AgentGatewayDnsPeeringConfig;
+  dnsPeeringConfig?: AgentGatewayDnsPeeringConfig | undefined;
 };
 
 export type AgentGatewayOutputCard = {
   /** mTLS endpoint associated with this Agent Gateway. */
-  mtlsEndpoint?: string;
+  mtlsEndpoint?: string | undefined;
   /** Root certificates agents use to validate this Agent Gateway. */
-  rootCertificates?: string[];
+  rootCertificates?: string[] | undefined;
   /** Service account used by Service Extensions. */
-  serviceExtensionsServiceAccount?: string;
+  serviceExtensionsServiceAccount?: string | undefined;
 };
 
 export type AgentGatewayProps = {

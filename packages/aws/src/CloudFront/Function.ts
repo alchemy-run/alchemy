@@ -35,7 +35,7 @@ export interface FunctionProps {
   /**
    * Optional associated KeyValueStore ARNs.
    */
-  keyValueStoreArns?: string[];
+  keyValueStoreArns?: string[] | undefined;
 }
 
 export interface Function extends Resource<

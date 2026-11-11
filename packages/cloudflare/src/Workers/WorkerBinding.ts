@@ -64,20 +64,20 @@ export type DurableObjectNamespaceWorkerBinding = Extract<
   DistilledWorkerBinding,
   { type: "durable_object_namespace" }
 > & {
-  transferredFrom?: string | string[];
+  transferredFrom?: string | string[] | undefined;
   /**
    * The class this one was called before on the same Worker, for a
    * data-preserving `renamed_classes` migration; alchemy-only, never uploaded.
    */
-  renamedFrom?: string;
+  renamedFrom?: string | undefined;
   /** The class's declared storage backend; alchemy-only, never uploaded. */
-  storage?: "sqlite" | "legacy-kv";
+  storage?: "sqlite" | "legacy-kv" | undefined;
   /**
    * For a cross-script binding, the namespace id the host Worker has for
    * this class. Orders this Worker's deploy after a host that adds the
    * class; alchemy-only, never uploaded.
    */
-  hostNamespace?: string;
+  hostNamespace?: string | undefined;
 };
 
 /**
@@ -106,9 +106,9 @@ export interface SelfServiceWorkerBinding {
   type: "self_service";
   name: string;
   /** Named `WorkerEntrypoint` class to target; omitted → default export. */
-  entrypoint?: string;
+  entrypoint?: string | undefined;
   /** `ctx.props` delivered to the entrypoint. */
-  props?: Record<string, unknown>;
+  props?: Record<string, unknown> | undefined;
 }
 
 /**
@@ -163,7 +163,7 @@ export type K2WorkerBinding = Extract<DistilledWorkerBinding, { type: "k2" }>;
  * service adds it.
  */
 export type ServiceWorkerBinding = Extract<DistilledWorkerBinding, { type: "service" }> & {
-  props?: Record<string, unknown>;
+  props?: Record<string, unknown> | undefined;
 };
 
 /**

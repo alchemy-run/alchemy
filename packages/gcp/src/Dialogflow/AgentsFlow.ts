@@ -30,15 +30,17 @@ export type NluSettings = {
     | "MODEL_TYPE_UNSPECIFIED"
     | "MODEL_TYPE_STANDARD"
     | "MODEL_TYPE_ADVANCED"
-    | (string & {});
+    | (string & {})
+    | undefined;
   /** Classification threshold in `[0, 1]`. */
-  classificationThreshold?: number;
+  classificationThreshold?: number | undefined;
   /** Model training mode. */
   modelTrainingMode?:
     | "MODEL_TRAINING_MODE_UNSPECIFIED"
     | "MODEL_TRAINING_MODE_AUTOMATIC"
     | "MODEL_TRAINING_MODE_MANUAL"
-    | (string & {});
+    | (string & {})
+    | undefined;
 };
 
 export type AgentsFlowProps = {
@@ -59,7 +61,7 @@ export type AgentsFlowProps = {
    */
   location?: string;
   /** Human-readable name, unique within the agent. */
-  displayName?: string;
+  displayName?: string | undefined;
   /**
    * Description. Flows have no labels field, so Alchemy stamps
    * ownership into this field for `list` / nuke.

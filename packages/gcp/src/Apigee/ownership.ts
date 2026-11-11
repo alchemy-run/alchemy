@@ -118,16 +118,16 @@ export const commentsHaveOwnership = (comments: readonly string[] | undefined) =
   hasOwnershipMarker(comments?.find((comment) => comment.startsWith("[alchemy ")));
 
 export type Attribute = {
-  name?: string;
-  value?: string;
+  name?: string | undefined;
+  value?: string | undefined;
 };
 
 const isAttributeObject = (
-  value: readonly Attribute[] | { attribute?: readonly Attribute[] },
-): value is { attribute?: readonly Attribute[] } => !Array.isArray(value);
+  value: readonly Attribute[] | { attribute?: readonly Attribute[] | undefined },
+): value is { attribute?: readonly Attribute[] | undefined } => !Array.isArray(value);
 
 const attributeList = (
-  value: readonly Attribute[] | { attribute?: readonly Attribute[] } | undefined,
+  value: readonly Attribute[] | { attribute?: readonly Attribute[] | undefined } | undefined,
 ): Attribute[] => {
   if (value === undefined) return [];
   if (isAttributeObject(value)) return [...(value.attribute ?? [])];
@@ -135,7 +135,7 @@ const attributeList = (
 };
 
 export const fromAttributes = (
-  value: readonly Attribute[] | { attribute?: readonly Attribute[] } | undefined,
+  value: readonly Attribute[] | { attribute?: readonly Attribute[] | undefined } | undefined,
 ): {
   labels: Record<string, string>;
   attributes: Record<string, string>;
@@ -168,7 +168,7 @@ export const toAttributes = (
 };
 
 export const userAttributeList = (
-  value: readonly Attribute[] | { attribute?: readonly Attribute[] } | undefined,
+  value: readonly Attribute[] | { attribute?: readonly Attribute[] | undefined } | undefined,
 ): Attribute[] =>
   Object.entries(fromAttributes(value).attributes).map(([name, value]) => ({
     name,

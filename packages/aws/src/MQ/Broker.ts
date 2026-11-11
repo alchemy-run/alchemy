@@ -111,7 +111,7 @@ export interface BrokerProps {
    * Broker engine version (e.g. `"5.18"` for ActiveMQ, `"3.13"` for
    * RabbitMQ). Mutable — a change is applied as a pending broker update.
    */
-  engineVersion?: string;
+  engineVersion?: string | undefined;
   /**
    * Broker instance type, e.g. `"mq.t3.micro"` (the cheapest) or
    * `"mq.m5.large"`. Mutable — a change is applied as a pending broker

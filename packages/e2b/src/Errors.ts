@@ -11,7 +11,7 @@ export class TemplateBuildFailed extends Data.TaggedError("E2B.TemplateBuildFail
   readonly message: string;
   readonly templateId: string;
   readonly buildId: string;
-  readonly reason?: string;
+  readonly reason?: string | undefined;
   readonly logs?: ReadonlyArray<string>;
 }> {}
 

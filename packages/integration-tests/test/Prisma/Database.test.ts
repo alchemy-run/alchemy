@@ -16,7 +16,9 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
+import * as Record from "effect/Record";
 import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import { failureOf, forgetState, markCreating, patchStateAttr } from "./fixtures/Live.ts";
 import { expectFound } from "./lookup.ts";
@@ -516,7 +518,13 @@ const hostEnvironment = (() => {
         Layer.effect(
           Credentials,
           Effect.map(Prisma.PrismaEnvironment, (resolve) =>
-            Effect.map(resolve, (env) => ({ apiToken: env.serviceToken, apiBaseUrl: env.baseUrl })),
+            Effect.map(resolve, (env) => ({
+              ...Record.filterMap(
+                { apiToken: env.serviceToken },
+                Result.fromNullishOr(() => undefined),
+              ),
+              apiBaseUrl: env.baseUrl,
+            })),
           ),
         ),
         Layer.succeed(Retry.Retry, Retry.makeDefault),

@@ -78,12 +78,12 @@ export interface AlertProps {
    * stack, stage, and logical id. Create-only — changing it replaces the
    * alert. Max 256 characters.
    */
-  title?: string;
+  title?: string | undefined;
   /**
    * Type of alert to create.
    * @default "usage_threshold"
    */
-  alertType?: AlertType;
+  alertType?: AlertType | undefined;
   /**
    * Usage-threshold configuration. Create-only — changing `gte`, `meter`,
    * `recurrence`, or `filters` replaces the alert.
@@ -94,7 +94,7 @@ export interface AlertProps {
    * be reactivated). Destroy archives the alert (irreversible).
    * @default "active"
    */
-  status?: AlertDesiredStatus;
+  status?: AlertDesiredStatus | undefined;
 }
 
 export type Alert = Resource<
@@ -294,7 +294,10 @@ const findByTitle = Effect.fn(function* (title: string) {
 
 const isArchived = (alert: StripeBillingAlert): boolean => alert.status === "archived";
 
-const observe = Effect.fn(function* (input: { id?: string; title?: string }) {
+const observe = Effect.fn(function* (input: {
+  id?: string | undefined;
+  title?: string | undefined;
+}) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);
     if (byId !== undefined && !isArchived(byId)) return byId;

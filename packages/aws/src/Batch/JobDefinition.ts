@@ -73,13 +73,13 @@ export interface JobDefinitionProps extends PlatformProps {
    * Name (family) of the job definition. If omitted, a unique name is
    * generated. Content changes register a new revision under the same name.
    */
-  jobDefinitionName?: string;
+  jobDefinitionName?: string | undefined;
   /**
    * Container image the job runs (low-level form, e.g.
    * `public.ecr.aws/docker/library/busybox:latest`). Mutually exclusive
    * with `main`.
    */
-  image?: string;
+  image?: string | undefined;
   /**
    * Module entrypoint for an Effect-native run-to-completion job (typically
    * `import.meta.url` from an inline Effect program). Alchemy bundles the
@@ -87,83 +87,83 @@ export interface JobDefinitionProps extends PlatformProps {
    * repository, and provisions the job/execution IAM roles — mutually
    * exclusive with a caller-supplied `image`.
    */
-  main?: string;
+  main?: string | undefined;
   /**
    * Named export to load from `main`.
    * @default "default"
    */
-  handler?: string;
+  handler?: string | undefined;
   /**
    * Command to run in the container (low-level form). Overridable
    * per-submission via `containerOverrides.command`. The Effect-native form
    * bakes its entrypoint into the image instead.
    */
-  command?: string[];
+  command?: string[] | undefined;
   /**
    * Fargate vCPUs for the job. Must be a valid Fargate size (0.25, 0.5, 1,
    * 2, 4, 8, 16) compatible with `memory`.
    * @default 0.25
    */
-  vcpus?: number;
+  vcpus?: number | undefined;
   /**
    * Memory (MiB) for the job. Must be compatible with `vcpus` per the
    * Fargate size matrix.
    * @default 512
    */
-  memory?: number;
+  memory?: number | undefined;
   /**
    * Environment variables set in the job container.
    */
-  environment?: Record<string, string>;
+  environment?: Record<string, string> | undefined;
   /**
    * Additional environment variables for the Effect-native container.
    * Non-string values are JSON-encoded. (Capability bindings also inject
    * their variables here automatically.)
    */
-  env?: Record<string, any>;
+  env?: Record<string, any> | undefined;
   /**
    * IAM role assumed by the job's application code. For the Effect-native
    * form (`main`), Alchemy provisions and manages this role automatically
    * (binding policy statements attach to it).
    */
-  jobRoleArn?: string;
+  jobRoleArn?: string | undefined;
   /**
    * Execution role used by ECS/Fargate to pull the image and write logs.
    * Required for the low-level form; provisioned automatically for the
    * Effect-native form.
    */
-  executionRoleArn?: string;
+  executionRoleArn?: string | undefined;
   /**
    * Compute platforms that can run this definition. Use `EC2` for unmanaged
    * ECS compute environments.
    * @default ["FARGATE"]
    */
-  platformCapabilities?: ("EC2" | "FARGATE")[];
+  platformCapabilities?: ("EC2" | "FARGATE")[] | undefined;
   /**
    * Whether the Fargate task ENI gets a public IP. Required for image pulls
    * from public registries when running in public subnets.
    * @default "ENABLED"
    */
-  assignPublicIp?: "ENABLED" | "DISABLED";
+  assignPublicIp?: "ENABLED" | "DISABLED" | undefined;
   /**
    * Default parameter substitutions for `Ref::` placeholders in `command`.
    */
-  parameters?: Record<string, string>;
+  parameters?: Record<string, string> | undefined;
   /**
    * Number of times a failed job is retried (1-10).
    * @default 1
    */
-  retryAttempts?: number;
+  retryAttempts?: number | undefined;
   /**
    * Job execution timeout (minimum 60 seconds), e.g. `"15 minutes"` or
    * `Duration.minutes(15)`.
    */
-  timeout?: Duration.Input;
+  timeout?: Duration.Input | undefined;
   /**
    * Propagate job definition tags to the ECS task.
    * @default false
    */
-  propagateTags?: boolean;
+  propagateTags?: boolean | undefined;
   /**
    * Bundler configuration for the Effect-native entrypoint. Unused
    * code is tree-shaken. `effect`, alchemy, and `@distilled.cloud` are
@@ -171,30 +171,32 @@ export interface JobDefinitionProps extends PlatformProps {
    * packages with `pure.packages`, or disable with `pure: false`. `cache`
    * configures the image build's BuildKit layer cache.
    */
-  build?: Bundle.BundleConfig & BuildCacheOptions;
+  build?: (Bundle.BundleConfig & BuildCacheOptions) | undefined;
   /**
    * Docker image build for the Effect-native form: optional full
    * `dockerfile`. When omitted, Alchemy generates a Dockerfile for the
    * bundled `index.mjs`.
    */
-  docker?: {
-    /**
-     * Base image when Alchemy generates the Dockerfile.
-     * @default public.ecr.aws/docker/library/bun:1
-     */
-    base?: string;
-    /** Full Dockerfile content (replaces generated Dockerfile). */
-    dockerfile?: string;
-  };
+  docker?:
+    | {
+        /**
+         * Base image when Alchemy generates the Dockerfile.
+         * @default public.ecr.aws/docker/library/bun:1
+         */
+        base?: string | undefined;
+        /** Full Dockerfile content (replaces generated Dockerfile). */
+        dockerfile?: string | undefined;
+      }
+    | undefined;
   /**
    * Additional managed policy ARNs for the managed job role
    * (Effect-native form only).
    */
-  jobRoleManagedPolicyArns?: string[];
+  jobRoleManagedPolicyArns?: string[] | undefined;
   /**
    * User-defined tags to apply to the job definition.
    */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
 }
 
 export interface JobDefinition extends Resource<
@@ -401,7 +403,7 @@ export const JobDefinition: Platform<
   createRuntimeContext: createJobDefinitionRuntimeContext,
 });
 
-const observedTagsOf = (d: { tags?: { [key: string]: string | undefined } }) =>
+const observedTagsOf = (d: { tags?: { [key: string]: string | undefined } | undefined }) =>
   Object.fromEntries(
     Object.entries(d.tags ?? {}).filter((e): e is [string, string] => typeof e[1] === "string"),
   );
@@ -467,19 +469,19 @@ interface EffectiveContainer {
  * manages.
  */
 const fingerprint = (input: {
-  image?: string;
-  command?: string[];
-  vcpus?: string;
-  memory?: string;
-  environment?: Record<string, string>;
-  jobRoleArn?: string;
-  executionRoleArn?: string;
-  assignPublicIp?: string;
-  parameters?: Record<string, string>;
-  retryAttempts?: number;
-  timeoutSeconds?: number;
-  propagateTags?: boolean;
-  platformCapabilities?: ("EC2" | "FARGATE")[];
+  image?: string | undefined;
+  command?: string[] | undefined;
+  vcpus?: string | undefined;
+  memory?: string | undefined;
+  environment?: Record<string, string> | undefined;
+  jobRoleArn?: string | undefined;
+  executionRoleArn?: string | undefined;
+  assignPublicIp?: string | undefined;
+  parameters?: Record<string, string> | undefined;
+  retryAttempts?: number | undefined;
+  timeoutSeconds?: number | undefined;
+  propagateTags?: boolean | undefined;
+  platformCapabilities?: ("EC2" | "FARGATE")[] | undefined;
 }) =>
   JSON.stringify({
     image: input.image,
@@ -555,7 +557,7 @@ export const JobDefinitionProvider = () =>
         ALCHEMY_PHASE: "runtime",
       };
 
-      const toName = (id: string, props: { jobDefinitionName?: string } = {}) =>
+      const toName = (id: string, props: { jobDefinitionName?: string | undefined } = {}) =>
         props.jobDefinitionName
           ? Effect.succeed(props.jobDefinitionName)
           : createPhysicalName({ id, maxLength: 128 });
@@ -714,7 +716,7 @@ export const JobDefinitionProvider = () =>
       }: {
         id: string;
         roleName: string;
-        managedPolicyArns?: string[];
+        managedPolicyArns?: string[] | undefined;
       }) {
         const tags = yield* createInternalTags(id);
         const role = yield* iam

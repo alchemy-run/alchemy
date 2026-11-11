@@ -13,7 +13,7 @@ import type { User } from "./User.ts";
  * NOT exported from index.ts.
  */
 export const makeSqlInstanceHttpBinding = <
-  I extends { instance?: string; project?: string },
+  I extends { instance?: string | undefined; project?: string | undefined },
   A,
   E,
 >(options: {
@@ -51,10 +51,10 @@ export const makeSqlInstanceHttpBinding = <
 
 export const makeSqlUserHttpBinding = <
   I extends {
-    name?: string;
-    instance?: string;
-    project?: string;
-    host?: string;
+    name?: string | undefined;
+    instance?: string | undefined;
+    project?: string | undefined;
+    host?: string | undefined;
   },
   A,
   E,

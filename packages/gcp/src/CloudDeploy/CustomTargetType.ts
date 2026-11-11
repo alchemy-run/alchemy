@@ -31,70 +31,70 @@ import {
 
 export type SkaffoldGitSource = {
   /** Git repository URL. */
-  repo?: string;
+  repo?: string | undefined;
   /** Path relative to the repository root. */
-  path?: string;
+  path?: string | undefined;
   /** Git ref (branch, tag, or commit). */
-  ref?: string;
+  ref?: string | undefined;
 };
 
 export type SkaffoldGCBRepoSource = {
   /** Cloud Build 2nd gen repository resource name. */
-  repository?: string;
+  repository?: string | undefined;
   /** Path relative to the repository root. */
-  path?: string;
+  path?: string | undefined;
   /** Git ref (branch, tag, or commit). */
-  ref?: string;
+  ref?: string | undefined;
 };
 
 export type SkaffoldGCSSource = {
   /** Cloud Storage source URI. */
-  source?: string;
+  source?: string | undefined;
   /** Path relative to the source root. */
-  path?: string;
+  path?: string | undefined;
 };
 
 export type SkaffoldModules = {
   /** Configs to use from the module. */
-  configs?: string[];
+  configs?: string[] | undefined;
   /** Git source for the Skaffold configs. */
-  git?: SkaffoldGitSource;
+  git?: SkaffoldGitSource | undefined;
   /** Google Cloud Build repository source. */
-  googleCloudBuildRepo?: SkaffoldGCBRepoSource;
+  googleCloudBuildRepo?: SkaffoldGCBRepoSource | undefined;
   /** Cloud Storage source. */
-  googleCloudStorage?: SkaffoldGCSSource;
+  googleCloudStorage?: SkaffoldGCSSource | undefined;
 };
 
 export type CustomTargetSkaffoldActions = {
   /**
    * Skaffold custom action responsible for deploy operations.
    */
-  deployAction?: string;
+  deployAction?: string | undefined;
   /**
    * Skaffold custom action responsible for render operations. If omitted,
    * Cloud Deploy runs `skaffold render`.
    */
-  renderAction?: string;
+  renderAction?: string | undefined;
   /**
    * Skaffold modules Cloud Deploy includes before diagnose.
    */
-  includeSkaffoldModules?: SkaffoldModules[];
+  includeSkaffoldModules?: SkaffoldModules[] | undefined;
 };
 
 export type ContainerTask = {
   /** Container image to execute. */
-  image?: string;
+  image?: string | undefined;
   /** Container arguments. Overrides the image default. */
-  args?: string[];
+  args?: string[] | undefined;
   /** Environment variables set in the container. */
-  env?: Record<string, string>;
+  env?: Record<string, string> | undefined;
   /** Container entrypoint. Overrides the image default. */
-  command?: string[];
+  command?: string[] | undefined;
 };
 
 export type Task = {
   /** Container executed in the Cloud Build environment. */
-  container?: ContainerTask;
+  container?: ContainerTask | undefined;
 };
 
 export type CustomTargetTasks = {
@@ -102,11 +102,11 @@ export type CustomTargetTasks = {
    * Task responsible for render operations. If omitted, Cloud Deploy
    * performs its default render.
    */
-  render?: Task;
+  render?: Task | undefined;
   /**
    * Task responsible for deploy operations.
    */
-  deploy?: Task;
+  deploy?: Task | undefined;
 };
 
 export type CustomTargetTypeProps = {

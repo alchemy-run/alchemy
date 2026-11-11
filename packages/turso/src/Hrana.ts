@@ -16,7 +16,7 @@ import * as Redacted from "effect/Redacted";
  */
 export class HranaError extends Data.TaggedError("Turso::HranaError")<{
   message: string;
-  code?: string;
+  code?: string | undefined;
   cause?: unknown;
 }> {}
 

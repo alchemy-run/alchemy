@@ -30,18 +30,18 @@ export type ExternalVpnGatewayInterfaceProps = {
    * `0` and `1` for `TWO_IPS_REDUNDANCY`, `0`–`3` for
    * `FOUR_IPS_REDUNDANCY`.
    */
-  id?: number;
+  id?: number | undefined;
   /**
    * IPv4 address of the peer VPN gateway interface. Must not be a
    * Compute Engine IP. Immutable — changing it replaces the gateway.
    */
-  ipAddress?: string;
+  ipAddress?: string | undefined;
   /**
    * IPv6 address of the peer VPN gateway interface (RFC 4291). Must
    * not be a Compute Engine IP. Immutable — changing it replaces the
    * gateway.
    */
-  ipv6Address?: string;
+  ipv6Address?: string | undefined;
 };
 
 export type ExternalVpnGatewayInterface = {
@@ -228,9 +228,9 @@ const toInterfaces = (
 
 const interfaceKey = (
   interfaces: ReadonlyArray<{
-    id?: number;
-    ipAddress?: string;
-    ipv6Address?: string;
+    id?: number | undefined;
+    ipAddress?: string | undefined;
+    ipv6Address?: string | undefined;
   }>,
 ) =>
   interfaces

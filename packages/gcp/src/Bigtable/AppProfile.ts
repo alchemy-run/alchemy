@@ -34,12 +34,12 @@ export type MultiClusterRouting = {
   /**
    * Cluster ids to route to. Empty means every cluster in the instance.
    */
-  clusterIds?: string[];
+  clusterIds?: string[] | undefined;
 };
 
 export type StandardIsolation = {
   /** Request priority (`PRIORITY_LOW`, `PRIORITY_MEDIUM`, `PRIORITY_HIGH`). */
-  priority?: bigtable.StandardIsolationPriorityEnum | (string & {});
+  priority?: bigtable.StandardIsolationPriorityEnum | (string & {}) | undefined;
 };
 
 export type AppProfileProps = {
@@ -54,30 +54,30 @@ export type AppProfileProps = {
    * unique name is generated from the stack, stage, and logical id. Must
    * be 1-50 characters. Immutable — changing it replaces the app profile.
    */
-  appProfileId?: string;
+  appProfileId?: string | undefined;
   /**
    * Long-form description of the use case.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * Route all traffic to one cluster. Mutually exclusive with
    * `multiClusterRouting`.
    */
-  singleClusterRouting?: SingleClusterRouting;
+  singleClusterRouting?: SingleClusterRouting | undefined;
   /**
    * Route to the nearest eligible cluster. Default when neither routing
    * policy is set.
    */
-  multiClusterRouting?: MultiClusterRouting;
+  multiClusterRouting?: MultiClusterRouting | undefined;
   /**
    * Standard isolation (request priority).
    */
-  standardIsolation?: StandardIsolation;
+  standardIsolation?: StandardIsolation | undefined;
   /**
    * Ignore safety checks on create, update, and delete.
    * @default true
    */
-  ignoreWarnings?: boolean;
+  ignoreWarnings?: boolean | undefined;
 };
 
 export type AppProfile = Resource<

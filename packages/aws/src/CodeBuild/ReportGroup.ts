@@ -149,7 +149,7 @@ export const ReportGroup = Resource<ReportGroup>("AWS.CodeBuild.ReportGroup");
 
 /** Convert a CodeBuild wire tag list into a plain record. */
 const toTagRecord = (
-  tags: ReadonlyArray<{ key?: string; value?: string }> | undefined,
+  tags: ReadonlyArray<{ key?: string | undefined; value?: string | undefined }> | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
     (tags ?? [])

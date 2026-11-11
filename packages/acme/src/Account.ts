@@ -29,7 +29,7 @@ export interface AccountProps {
    * Contact URLs (`mailto:…`) the CA notifies about expiry and incidents.
    * Updated in place.
    */
-  contact?: string[];
+  contact?: string[] | undefined;
   /**
    * You must agree to the CA's terms of service. Explicit on purpose —
    * never defaulted.

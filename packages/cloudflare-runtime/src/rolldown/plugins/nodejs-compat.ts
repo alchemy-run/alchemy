@@ -2,6 +2,8 @@ import assert from "node:assert";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { getCloudflarePreset, nonPrefixedNodeModules } from "@cloudflare/unenv-preset";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import { defineEnv } from "unenv";
 import { createPlugin } from "../factory.ts";
 import { isSkippedEnvironment } from "../options.ts";
@@ -48,8 +50,13 @@ export const getUnenv = (options: BasePluginOptions) =>
   defineEnv({
     presets: [
       getCloudflarePreset({
-        compatibilityDate: options.compatibilityDate,
-        compatibilityFlags: options.compatibilityFlags,
+        ...Record.filterMap(
+          {
+            compatibilityDate: options.compatibilityDate,
+            compatibilityFlags: options.compatibilityFlags,
+          },
+          Result.fromNullishOr(() => undefined),
+        ),
       }),
     ],
   }).env;

@@ -54,7 +54,7 @@ export interface ServiceProps {
    * API-only (HTTP namespace) services. TTLs are mutable; changing the set
    * of record types replaces the service.
    */
-  dnsRecords?: ServiceDnsRecord[];
+  dnsRecords?: ServiceDnsRecord[] | undefined;
   /**
    * How Route 53 responds to DNS queries: `MULTIVALUE` returns up to eight
    * healthy records, `WEIGHTED` returns one. Create-only — changing it
@@ -95,11 +95,11 @@ export interface ServiceProps {
    * reconcile diffs the observed attributes against this map, upserting
    * changed keys and deleting keys no longer declared.
    */
-  attributes?: Record<string, string>;
+  attributes?: Record<string, string> | undefined;
   /**
    * Tags to apply to the service. Merged with internal Alchemy tags.
    */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
 }
 
 export interface Service extends Resource<

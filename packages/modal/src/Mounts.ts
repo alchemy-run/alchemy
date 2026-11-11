@@ -70,7 +70,7 @@ export interface BucketMount<
   S = Ref<{ readonly secretId: string }>,
 > extends BucketMountOptions {
   readonly bucket: B;
-  readonly secret?: S;
+  readonly secret?: S | undefined;
 }
 
 /** A mount in Stack props (`Modal.Function`, `Server`, `Sandbox`, `PersistentSandbox`). */
@@ -192,7 +192,9 @@ export const modalMountsOf = (
 export type MountContract = ReadonlyArray<Mount | MountCapability>;
 
 /** A host's binding data, for its `mounts` slice. */
-export type MountBindings = ReadonlyArray<{ readonly data: { readonly mounts?: MountContract } }>;
+export type MountBindings = ReadonlyArray<{
+  readonly data: { readonly mounts?: MountContract | undefined };
+}>;
 
 const isCapability = (entry: Mount | MountCapability): entry is MountCapability =>
   "install" in entry && "id" in entry;

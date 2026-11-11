@@ -23,7 +23,7 @@ import {
 
 export interface DopplerOptions {
   /** Project slug. Required with browser login or personal tokens. */
-  project?: string;
+  project?: string | undefined;
   /** Config slug, e.g. `dev` or `prd`. Required with browser login or personal tokens. */
   config?: string;
 }
@@ -31,9 +31,9 @@ export interface DopplerOptions {
 interface DopplerCredentials {
   readonly token: Redacted.Redacted<string>;
   /** Set when the token came from a stored Alchemy profile. */
-  readonly profileName?: string;
+  readonly profileName?: string | undefined;
   /** How the stored profile authenticated, when the token came from one. */
-  readonly method?: DopplerAuthConfig["method"];
+  readonly method?: DopplerAuthConfig["method"] | undefined;
 }
 
 /** Human description of which secrets were asked for, for error messages. */

@@ -44,7 +44,9 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Record from "effect/Record";
 import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
@@ -62,7 +64,7 @@ export interface FlociStandingFixtureOptions {
    * falls back to the pinned release and recreates the container, discarding
    * the fixtures and testing the wrong emulator.
    */
-  readonly image?: string;
+  readonly image?: string | undefined;
 }
 
 const NAME = "alchemy-floci-standing";
@@ -949,11 +951,14 @@ const listRecordSets = (zoneId: string) =>
       });
       records.push(...(response.ResourceRecordSets ?? []));
       if (!response.IsTruncated) break;
-      start = {
-        StartRecordName: response.NextRecordName,
-        StartRecordType: response.NextRecordType,
-        StartRecordIdentifier: response.NextRecordIdentifier,
-      };
+      start = Record.filterMap(
+        {
+          StartRecordName: response.NextRecordName,
+          StartRecordType: response.NextRecordType,
+          StartRecordIdentifier: response.NextRecordIdentifier,
+        },
+        Result.fromNullishOr(() => undefined),
+      );
     }
     return records;
   });

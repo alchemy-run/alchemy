@@ -34,52 +34,52 @@ const FALLBACK_ID = "exavault";
 
 export type ExascaleDbStorageDetails = {
   /** Total storage allocation in GB. Required on create. */
-  totalSizeGbs?: number;
+  totalSizeGbs?: number | undefined;
 };
 
 export type ExascaleDbStorageVaultPropertiesInput = {
   /** Additional flash cache as a percent of high-capacity storage. */
-  additionalFlashCachePercent?: number;
+  additionalFlashCachePercent?: number | undefined;
   /** Storage details. Required on create. */
-  exascaleDbStorageDetails?: ExascaleDbStorageDetails;
+  exascaleDbStorageDetails?: ExascaleDbStorageDetails | undefined;
   /** Vault description. */
-  description?: string;
+  description?: string | undefined;
 };
 
 export type ExascaleDbStorageVaultProps = {
   /**
    * Vault id. If omitted, a unique RFC1035 name is generated. Immutable.
    */
-  exascaleDbStorageVaultId?: string;
+  exascaleDbStorageVaultId?: string | undefined;
   /**
    * Region. Immutable.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
-  location?: string;
+  location?: string | undefined;
   /**
    * Display name. Required on create.
    */
-  displayName?: string;
+  displayName?: string | undefined;
   /**
    * GCP Oracle zone. Immutable.
    */
-  gcpOracleZone?: string;
+  gcpOracleZone?: string | undefined;
   /**
    * Exadata Infrastructure this vault is created on. Immutable.
    */
-  exadataInfrastructure?: string;
+  exadataInfrastructure?: string | undefined;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
    */
-  labels?: Record<string, string>;
+  labels?: Record<string, string> | undefined;
   /**
    * Vault properties.
    */
-  properties?: ExascaleDbStorageVaultPropertiesInput;
+  properties?: ExascaleDbStorageVaultPropertiesInput | undefined;
   /** Total size in GB. Convenience alias. */
-  totalSizeGbs?: number;
+  totalSizeGbs?: number | undefined;
   /** Vault description. Convenience alias. */
-  description?: string;
+  description?: string | undefined;
 };
 
 export type ExascaleDbStorageVault = Resource<

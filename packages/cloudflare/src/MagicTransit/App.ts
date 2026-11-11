@@ -188,10 +188,10 @@ export const MagicAppProvider = () =>
 
 interface ObservedApp {
   accountAppId: string;
-  name?: string | null;
-  type?: string | null;
-  hostnames?: string[] | null;
-  ipSubnets?: string[] | null;
+  name?: string | null | undefined;
+  type?: string | null | undefined;
+  hostnames?: string[] | null | undefined;
+  ipSubnets?: string[] | null | undefined;
 }
 
 const isAccountApp = (app: magicTransit.ListAppsResponse["result"][number]): app is ObservedApp =>

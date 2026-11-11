@@ -45,37 +45,37 @@ export type SqlServerUserDetails = {
   /**
    * Disable this SQL Server login.
    */
-  disabled?: boolean;
+  disabled?: boolean | undefined;
   /**
    * SQL Server server-level roles (`sysadmin`, `dbcreator`, …).
    */
-  serverRoles?: string[];
+  serverRoles?: string[] | undefined;
 };
 
 export type UserPasswordPolicy = {
   /**
    * Failed login attempts allowed before the user is locked.
    */
-  allowedFailedAttempts?: number;
+  allowedFailedAttempts?: number | undefined;
   /**
    * How long a password stays valid after it is set (duration string).
    */
-  passwordExpirationDuration?: string;
+  passwordExpirationDuration?: string | undefined;
   /**
    * Enable the failed-attempts lockout check.
    */
-  enableFailedAttemptsCheck?: boolean;
+  enableFailedAttemptsCheck?: boolean | undefined;
   /**
    * Require the current password when changing it. MySQL only.
    */
-  enablePasswordVerification?: boolean;
+  enablePasswordVerification?: boolean | undefined;
 };
 
 export type UserPasswordPolicyStatus = {
   /** Whether the user is locked out of login. */
-  locked?: boolean;
+  locked?: boolean | undefined;
   /** RFC3339 expiration of the current password. */
-  passwordExpirationTime?: string;
+  passwordExpirationTime?: string | undefined;
 };
 
 export type UserProps = {
@@ -97,7 +97,7 @@ export type UserProps = {
    * for PostgreSQL and SQL Server. Immutable — changing it replaces the
    * user. `"%"` allows any host.
    */
-  host?: string;
+  host?: string | undefined;
   /**
    * Password for `BUILT_IN` users. Write-only — never returned by the
    * API. Required for PostgreSQL built-in users. Omit for IAM user
@@ -119,7 +119,7 @@ export type UserProps = {
   /**
    * User-level password validation policy (MySQL).
    */
-  passwordPolicy?: UserPasswordPolicy;
+  passwordPolicy?: UserPasswordPolicy | undefined;
   /**
    * Dual password status (`NO_DUAL_PASSWORD`, `DUAL_PASSWORD`, …).
    */
@@ -160,7 +160,9 @@ export type User = Resource<
     /** Granted database roles. */
     databaseRoles: string[] | undefined;
     /** Password policy currently on the user. */
-    passwordPolicy: (UserPasswordPolicy & { status?: UserPasswordPolicyStatus }) | undefined;
+    passwordPolicy:
+      | (UserPasswordPolicy & { status?: UserPasswordPolicyStatus | undefined })
+      | undefined;
     /** Dual password status. */
     dualPasswordType: string | undefined;
     /** SQL Server details, if this is a SQL Server login. */
@@ -371,7 +373,7 @@ const getByName = (project: string, instance: string, userName: string, host: st
 const waitForOperation = (
   project: string,
   operation: sqladmin.Operation,
-  options?: { notFoundOk?: boolean },
+  options?: { notFoundOk?: boolean | undefined },
 ) =>
   waitForSqlOperation(project, operation, {
     budget: "10 minutes",

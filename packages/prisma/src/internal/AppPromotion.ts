@@ -33,8 +33,8 @@ export class AppPromotionNotConverged extends Data.TaggedError("AppPromotionNotC
 }> {}
 
 export interface AppDeploymentTargetObservationOptions {
-  readonly timeoutSeconds?: number;
-  readonly pollIntervalMs?: number;
+  readonly timeoutSeconds?: number | undefined;
+  readonly pollIntervalMs?: number | undefined;
 }
 
 const DEFAULT_TIMEOUT_SECONDS = 60;

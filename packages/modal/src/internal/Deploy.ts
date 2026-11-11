@@ -119,7 +119,7 @@ export interface RuntimeImageInput {
   readonly commands?: ReadonlyArray<string>;
   readonly handler?: string;
   readonly build?: Bundle.BundleConfig;
-  readonly isExternal?: boolean;
+  readonly isExternal?: boolean | undefined;
   readonly python?: string | false;
   readonly builderVersion?: string;
   readonly gpu?: string;
@@ -184,8 +184,8 @@ export const buildRuntimeImage = Effect.fn(function* (
     readonly python: string | false;
   },
   options: {
-    readonly builderVersion?: string;
-    readonly gpu?: string;
+    readonly builderVersion?: string | undefined;
+    readonly gpu?: string | undefined;
     readonly note?: (message: string) => Effect.Effect<void>;
   },
 ) {

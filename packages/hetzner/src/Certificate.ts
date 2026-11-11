@@ -29,11 +29,11 @@ export type CertificateType = "uploaded" | "managed";
 
 export type CertificateStatus = {
   /** Let's Encrypt issuance state. `undefined` for uploaded Certificates. */
-  issuance?: "pending" | "completed" | "failed" | (string & {});
+  issuance?: "pending" | "completed" | "failed" | (string & {}) | undefined;
   /** Let's Encrypt renewal state. `undefined` for uploaded Certificates. */
-  renewal?: "scheduled" | "pending" | "failed" | "unavailable" | (string & {});
+  renewal?: "scheduled" | "pending" | "failed" | "unavailable" | (string & {}) | undefined;
   /** Present when issuance or renewal is `failed`. */
-  error?: { code?: string; message?: string };
+  error?: { code?: string | undefined; message?: string | undefined } | undefined;
 };
 
 export type UploadedCertificateProps = {
@@ -208,7 +208,7 @@ export class CertificateIssuanceFailed extends Data.TaggedError(
   "Hetzner.CertificateIssuanceFailed",
 )<{
   certificateId: number;
-  code?: string;
+  code?: string | undefined;
   message: string;
 }> {}
 
@@ -274,7 +274,11 @@ const findByLabels = (labels: Record<string, string>) =>
     })
     .pipe(Effect.map(({ certificates }) => certificates[0]));
 
-const observe = Effect.fn(function* (input: { id?: number; name?: string; logicalId: string }) {
+const observe = Effect.fn(function* (input: {
+  id?: number | undefined;
+  name?: string;
+  logicalId: string;
+}) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);
     if (byId !== undefined) return byId;

@@ -32,7 +32,7 @@ export interface BuildProps extends CommandRunProps {
    * @see {@link MemoOptions}
    * @default true
    */
-  memo?: MemoOptions | boolean;
+  memo?: MemoOptions | boolean | undefined;
 }
 
 export interface Build extends Resource<

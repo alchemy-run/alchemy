@@ -65,7 +65,10 @@ const redact = (token: string | Redacted.Redacted<string> | null | undefined) =>
  * `denyOut` denies all other traffic.
  */
 export const denyUnlisted = <
-  N extends { allowOut?: ReadonlyArray<string>; denyOut?: ReadonlyArray<string> },
+  N extends {
+    allowOut?: ReadonlyArray<string> | undefined;
+    denyOut?: ReadonlyArray<string> | undefined;
+  },
 >(
   network: N,
 ): N =>
@@ -84,9 +87,9 @@ interface Reach {
 const reachOf = (
   info: {
     readonly sandboxID: string;
-    readonly envdAccessToken?: string | Redacted.Redacted<string>;
-    readonly trafficAccessToken?: string | Redacted.Redacted<string> | null;
-    readonly domain?: string | null;
+    readonly envdAccessToken?: string | Redacted.Redacted<string> | undefined;
+    readonly trafficAccessToken?: string | Redacted.Redacted<string> | null | undefined;
+    readonly domain?: string | null | undefined;
   },
   domain: string,
   trafficToken?: Redacted.Redacted<string>,

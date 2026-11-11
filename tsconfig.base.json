@@ -33,6 +33,7 @@
     "verbatimModuleSyntax": true,
     // Best practices
     "strict": true,
+    "exactOptionalPropertyTypes": true,
     "skipLibCheck": true,
     // Resolve project references (notably every `submodules/distilled/packages/*`)
     // through their emitted `lib/*.d.ts` instead of redirecting to their

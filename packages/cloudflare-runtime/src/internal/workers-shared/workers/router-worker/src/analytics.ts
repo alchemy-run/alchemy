@@ -19,8 +19,8 @@ export enum DISPATCH_TYPE {
 // When adding new columns please update the schema
 type Data = {
   // -- Indexes --
-  accountId?: number;
-  scriptId?: number;
+  accountId?: number | undefined;
+  scriptId?: number | undefined;
 
   // -- Doubles --
   // double1 - The time it takes for the whole request to complete in milliseconds
@@ -32,7 +32,7 @@ type Data = {
   // double4 - Colo tier (e.g. tier 1, tier 2, tier 3)
   coloTier?: number;
   // double5 - Run user worker ahead of assets
-  userWorkerAhead?: boolean;
+  userWorkerAhead?: boolean | undefined;
   // double6 - Routing performed based on the _routes.json (if provided)
   staticRoutingDecision?: STATIC_ROUTING_DECISION;
   // double7 - Whether the request was blocked by abuse mitigation or not
@@ -63,7 +63,7 @@ type Data = {
 
 export class Analytics {
   private data: Data = {};
-  private readyAnalytics?: ReadyAnalytics;
+  private readyAnalytics: ReadyAnalytics | undefined;
   private hasWritten: boolean = false;
 
   constructor(readyAnalytics?: ReadyAnalytics) {

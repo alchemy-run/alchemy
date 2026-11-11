@@ -186,7 +186,7 @@ export interface Key<Name extends string> {
  */
 export interface SendOptions {
   /** Idempotency key. A command with an already-seen id returns the original receipt. */
-  readonly commandId?: string;
+  readonly commandId?: string | undefined;
 }
 
 /**

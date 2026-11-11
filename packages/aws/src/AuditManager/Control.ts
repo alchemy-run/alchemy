@@ -23,12 +23,12 @@ export interface ControlSourceKeyword {
    * How the keyword is entered (`SELECT_FROM_LIST`, `UPLOAD_FILE`, or
    * `INPUT_TEXT`).
    */
-  keywordInputType?: auditmanager.KeywordInputType;
+  keywordInputType?: auditmanager.KeywordInputType | undefined;
   /**
    * The value of the keyword — e.g. a CloudTrail event name, a Config rule
    * name, or a Security Hub control name.
    */
-  keywordValue?: string;
+  keywordValue?: string | undefined;
 }
 
 /**
@@ -56,7 +56,7 @@ export interface ControlMappingSourceProps {
   /**
    * The keyword that scopes what evidence the source collects.
    */
-  sourceKeyword?: ControlSourceKeyword;
+  sourceKeyword?: ControlSourceKeyword | undefined;
   /**
    * How often automated evidence is collected (`DAILY`, `WEEKLY`, or
    * `MONTHLY`).
@@ -77,7 +77,7 @@ export interface ControlProps {
   /**
    * A description of the control's purpose.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * Steps for testing the control.
    */

@@ -2,6 +2,8 @@
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
 import { createExecutionContext } from "cloudflare:test";
 import { exports, env as runtimeEnv } from "cloudflare:workers";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import { describe, it, vi } from "vitest";
 import DefaultRouterEntrypoint, {
   RouterInnerEntrypoint,
@@ -512,7 +514,13 @@ describe("inner entrypoint unit tests", () => {
       ])(
         "$description",
         async ({ url, headers, userWorkerResponse, expectedStatus, expectedBody }, { expect }) => {
-          const request = new Request(url, { headers });
+          const request = new Request(
+            url,
+            Record.filterMap(
+              { headers },
+              Result.fromNullishOr(() => undefined),
+            ),
+          );
           const ctx = createExecutionContext();
 
           const env = {
@@ -593,7 +601,13 @@ describe("inner entrypoint unit tests", () => {
     ])(
       "$description",
       async ({ url, headers, userWorkerResponse, expectedStatus, expectedBody }, { expect }) => {
-        const request = new Request(url, { headers });
+        const request = new Request(
+          url,
+          Record.filterMap(
+            { headers },
+            Result.fromNullishOr(() => undefined),
+          ),
+        );
         const env = {
           CONFIG: {
             has_user_worker: true,

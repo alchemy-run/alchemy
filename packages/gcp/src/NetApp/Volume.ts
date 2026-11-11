@@ -38,61 +38,61 @@ const DEFAULT_CAPACITY_GIB = 100;
 
 export type ExportPolicyRule = {
   /** Access type (`READ_ONLY`, `READ_WRITE`, `READ_NONE`). */
-  accessType?: netapp.SimpleExportPolicyRuleAccessTypeEnum | (string & {});
+  accessType?: netapp.SimpleExportPolicyRuleAccessTypeEnum | (string & {}) | undefined;
   /** Squash mode. Takes precedence over `hasRootAccess`. */
-  squashMode?: netapp.SimpleExportPolicyRuleSquashModeEnum | (string & {});
+  squashMode?: netapp.SimpleExportPolicyRuleSquashModeEnum | (string & {}) | undefined;
   /** Comma-separated allowed client IPs or CIDRs. */
-  allowedClients?: string;
+  allowedClients?: string | undefined;
   /** Enable NFSv3. */
-  nfsv3?: boolean;
+  nfsv3?: boolean | undefined;
   /** Enable NFSv4. */
-  nfsv4?: boolean;
+  nfsv4?: boolean | undefined;
   /** Unix root access (`true` / `false`). */
-  hasRootAccess?: string;
+  hasRootAccess?: string | undefined;
   /** Anonymous user id when squash is ROOT_SQUASH or ALL_SQUASH. */
-  anonUid?: string;
-  kerberos5ReadOnly?: boolean;
-  kerberos5ReadWrite?: boolean;
-  kerberos5iReadOnly?: boolean;
-  kerberos5iReadWrite?: boolean;
-  kerberos5pReadOnly?: boolean;
-  kerberos5pReadWrite?: boolean;
+  anonUid?: string | undefined;
+  kerberos5ReadOnly?: boolean | undefined;
+  kerberos5ReadWrite?: boolean | undefined;
+  kerberos5iReadOnly?: boolean | undefined;
+  kerberos5iReadWrite?: boolean | undefined;
+  kerberos5pReadOnly?: boolean | undefined;
+  kerberos5pReadWrite?: boolean | undefined;
 };
 
 export type ExportPolicy = {
   /** Export policy rules. */
-  rules?: ExportPolicyRule[];
+  rules?: ExportPolicyRule[] | undefined;
 };
 
 export type SnapshotSchedule = {
-  snapshotsToKeep?: number;
-  minute?: number;
-  hour?: number;
-  day?: string;
-  daysOfMonth?: string;
+  snapshotsToKeep?: number | undefined;
+  minute?: number | undefined;
+  hour?: number | undefined;
+  day?: string | undefined;
+  daysOfMonth?: string | undefined;
 };
 
 export type SnapshotPolicy = {
-  enabled?: boolean;
-  hourlySchedule?: SnapshotSchedule;
-  dailySchedule?: SnapshotSchedule;
-  weeklySchedule?: SnapshotSchedule;
-  monthlySchedule?: SnapshotSchedule;
+  enabled?: boolean | undefined;
+  hourlySchedule?: SnapshotSchedule | undefined;
+  dailySchedule?: SnapshotSchedule | undefined;
+  weeklySchedule?: SnapshotSchedule | undefined;
+  monthlySchedule?: SnapshotSchedule | undefined;
 };
 
 export type BackupConfig = {
   /** Backup vault name or id. */
-  backupVault?: string;
+  backupVault?: string | undefined;
   /** Backup policy names. */
-  backupPolicies?: string[];
+  backupPolicies?: string[] | undefined;
   /** Enable scheduled backups. */
-  scheduledBackupEnabled?: boolean;
+  scheduledBackupEnabled?: boolean | undefined;
 };
 
 export type TieringPolicy = {
-  tierAction?: netapp.TieringPolicyTierActionEnum | (string & {});
-  coolingThresholdDays?: number;
-  hotTierBypassModeEnabled?: boolean;
+  tierAction?: netapp.TieringPolicyTierActionEnum | (string & {}) | undefined;
+  coolingThresholdDays?: number | undefined;
+  hotTierBypassModeEnabled?: boolean | undefined;
 };
 
 export type RestoreParameters = {
@@ -102,7 +102,7 @@ export type RestoreParameters = {
 
 export type BlockDevice = {
   osType?: netapp.BlockDeviceOsTypeEnum | (string & {});
-  name?: string;
+  name?: string | undefined;
   sizeGib?: number | string;
   hostGroups?: string[];
 };

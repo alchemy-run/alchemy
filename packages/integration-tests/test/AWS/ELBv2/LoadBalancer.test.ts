@@ -84,8 +84,9 @@ test.provider(
   },
 );
 
-const toRecord = (attributes: readonly { Key?: string; Value?: string }[] | undefined) =>
-  Object.fromEntries((attributes ?? []).map((a) => [a.Key ?? "", a.Value ?? ""]));
+const toRecord = (
+  attributes: readonly { Key?: string | undefined; Value?: string | undefined }[] | undefined,
+) => Object.fromEntries((attributes ?? []).map((a) => [a.Key ?? "", a.Value ?? ""]));
 
 // #1969: load balancer and listener attribute changes made outside alchemy are
 // detected as drift and repaired back to the declared values.

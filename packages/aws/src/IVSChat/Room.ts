@@ -26,7 +26,7 @@ export interface RoomMessageReviewHandler {
    * `ALLOW` delivers it, `DENY` drops it.
    * @default "ALLOW"
    */
-  fallbackResult?: "ALLOW" | "DENY";
+  fallbackResult?: "ALLOW" | "DENY" | undefined;
 }
 
 /**

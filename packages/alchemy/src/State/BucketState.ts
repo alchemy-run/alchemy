@@ -102,7 +102,7 @@ export interface BucketStateOptions {
   /** How errors name the store, e.g. `"S3"` or `"Cloud Storage"`. */
   readonly label: string;
   /** Key prefix within the bucket. A trailing `/` is added. */
-  readonly prefix?: string;
+  readonly prefix?: string | undefined;
   /**
    * The bucket's objects. Runs once, on the first state operation, and is
    * cached: ensure the bucket exists here, never at construction.

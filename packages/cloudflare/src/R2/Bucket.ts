@@ -37,21 +37,21 @@ export type BucketCustomDomain = {
    * from `domain`. Pass a zone ID string, a hostname in the zone, or any object
    * with a `zoneId` attribute such as `Cloudflare.Zone.Zone`.
    */
-  zone?: BucketCustomDomainZone;
+  zone?: BucketCustomDomainZone | undefined;
   /**
    * Whether public bucket access is enabled at this custom domain.
    * @default true
    */
-  enabled?: boolean;
+  enabled?: boolean | undefined;
   /**
    * Allowlist of TLS ciphers in BoringSSL format.
    */
-  ciphers?: string[];
+  ciphers?: string[] | undefined;
   /**
    * Minimum TLS version accepted by the custom domain.
    * @default "1.0"
    */
-  minTLS?: "1.0" | "1.1" | "1.2" | "1.3";
+  minTLS?: "1.0" | "1.1" | "1.2" | "1.3" | undefined;
 };
 
 export type BucketLifecycleCondition =
@@ -190,7 +190,7 @@ export type BucketProps = {
    * Name of the bucket. If omitted, a unique name will be generated.
    * @default ${app}-${stage}-${id}
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * Storage class for newly uploaded objects.
    * @default "Standard"
@@ -250,7 +250,7 @@ export type BucketProps = {
    * are left unmanaged. Pass an empty array, or drop `locks` after
    * declaring it, to remove every rule.
    */
-  locks?: BucketLockRule[];
+  locks?: BucketLockRule[] | undefined;
   /**
    * Whether R2 Local Uploads is enabled. Uploads from clients far from the
    * bucket's region are written near the client first and replicated to the
@@ -1770,11 +1770,11 @@ const r2BucketEndpointConsistencySchedule = Schedule.max([
 // API only ever returns the known variants, narrowed in `toCustomDomainAttributes`.
 type CustomDomainResponse = {
   domain: string;
-  zoneId?: string | null;
-  enabled?: boolean | null;
-  ciphers?: string[] | null;
-  minTLS?: string | null;
-  status?: { ownership: string; ssl: string } | null;
+  zoneId?: string | null | undefined;
+  enabled?: boolean | null | undefined;
+  ciphers?: string[] | null | undefined;
+  minTLS?: string | null | undefined;
+  status?: { ownership: string; ssl: string } | null | undefined;
 };
 
 const toCustomDomainAttributes = (domain: CustomDomainResponse): Bucket.CustomDomain => ({

@@ -187,7 +187,11 @@ const findByAlchemyLabels = (id: string) =>
     });
   });
 
-const observe = Effect.fn(function* (input: { id?: number; name?: string; logicalId: string }) {
+const observe = Effect.fn(function* (input: {
+  id?: number | undefined;
+  name?: string;
+  logicalId: string;
+}) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);
     if (byId !== undefined) return byId;

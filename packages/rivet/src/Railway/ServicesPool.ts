@@ -1,5 +1,7 @@
 import * as Railway from "@alchemy.run/railway";
 import * as Effect from "effect/Effect";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import {
   makeServicesLayer,
   servicesEnvironment,
@@ -46,7 +48,10 @@ export const ServicesPool = (id: string, options: ServicesPoolOptions = {}) =>
         project,
         image: nodes.image,
         publicDomain: false,
-        region: options.region,
+        ...Record.filterMap(
+          { region: options.region },
+          Result.fromNullishOr(() => undefined),
+        ),
         env: servicesEnvironment(nodes),
       });
     }),

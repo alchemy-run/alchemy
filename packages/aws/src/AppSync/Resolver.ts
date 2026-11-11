@@ -35,30 +35,30 @@ export interface ResolverProps {
    * Name of the data source a `UNIT` resolver targets. Not used by
    * `PIPELINE` resolvers.
    */
-  dataSourceName?: string;
+  dataSourceName?: string | undefined;
   /**
    * The resolver kind.
    * @default "UNIT"
    */
-  kind?: "UNIT" | "PIPELINE";
+  kind?: "UNIT" | "PIPELINE" | undefined;
   /**
    * `APPSYNC_JS` resolver code exporting `request(ctx)` and
    * `response(ctx)`. When set, the runtime defaults to APPSYNC_JS 1.0.0.
    */
-  code?: string;
+  code?: string | undefined;
   /** VTL request mapping template (legacy alternative to `code`). */
-  requestMappingTemplate?: string;
+  requestMappingTemplate?: string | undefined;
   /** VTL response mapping template (legacy alternative to `code`). */
-  responseMappingTemplate?: string;
+  responseMappingTemplate?: string | undefined;
   /**
    * Pipeline function IDs executed in order — required for `PIPELINE`
    * resolvers. Pass `fn.functionId` outputs from {@link Function}.
    */
-  pipelineFunctionIds?: string[];
+  pipelineFunctionIds?: string[] | undefined;
   /** Maximum batch size for batched Lambda invocations (0–2000). */
-  maxBatchSize?: number;
+  maxBatchSize?: number | undefined;
   /** Per-resolver caching config (requires an API cache). */
-  cachingConfig?: appsync.CachingConfig;
+  cachingConfig?: appsync.CachingConfig | undefined;
 }
 
 export interface AppSyncResolver extends Resource<
@@ -152,7 +152,7 @@ export interface ResolverInputProps extends Omit<
    * pass a raw `dataSourceName`.
    */
   dataSource?: AppSyncDataSource;
-  dataSourceName?: Input<string>;
+  dataSourceName?: Input<string> | undefined;
 }
 
 /**
@@ -202,15 +202,15 @@ export const ResolverProvider = () =>
       });
 
       const surface = (resolver: {
-        dataSourceName?: string;
-        kind?: string;
-        code?: string;
-        runtime?: appsync.AppSyncRuntime;
-        requestMappingTemplate?: string;
-        responseMappingTemplate?: string;
-        pipelineConfig?: appsync.PipelineConfig;
-        maxBatchSize?: number;
-        cachingConfig?: appsync.CachingConfig;
+        dataSourceName?: string | undefined;
+        kind?: string | undefined;
+        code?: string | undefined;
+        runtime?: appsync.AppSyncRuntime | undefined;
+        requestMappingTemplate?: string | undefined;
+        responseMappingTemplate?: string | undefined;
+        pipelineConfig?: appsync.PipelineConfig | undefined;
+        maxBatchSize?: number | undefined;
+        cachingConfig?: appsync.CachingConfig | undefined;
       }) =>
         JSON.parse(
           JSON.stringify({

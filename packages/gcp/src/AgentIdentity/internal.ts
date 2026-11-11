@@ -124,18 +124,18 @@ export const clipDescription = (description: string | undefined) => {
 };
 
 export type ThreeLeggedOAuthParams = {
-  clientId?: string;
-  clientSecret?: string;
-  authorizationUrl?: string;
-  tokenUrl?: string;
-  defaultContinueUri?: string;
-  enablePkce?: boolean;
+  clientId?: string | undefined;
+  clientSecret?: string | undefined;
+  authorizationUrl?: string | undefined;
+  tokenUrl?: string | undefined;
+  defaultContinueUri?: string | undefined;
+  enablePkce?: boolean | undefined;
 };
 
 export type TwoLeggedOAuthParams = {
-  clientId?: string;
-  clientSecret?: string;
-  tokenUrl?: string;
+  clientId?: string | undefined;
+  clientSecret?: string | undefined;
+  tokenUrl?: string | undefined;
 };
 
 export type ApiKeyParams = {
@@ -143,10 +143,10 @@ export type ApiKeyParams = {
 };
 
 export type AuthProviderTypeParams = {
-  threeLeggedOauth?: ThreeLeggedOAuthParams;
-  twoLeggedOauth?: TwoLeggedOAuthParams;
-  apiKey?: ApiKeyParams;
-  geAuthProvider?: Record<string, never> | {};
+  threeLeggedOauth?: ThreeLeggedOAuthParams | undefined;
+  twoLeggedOauth?: TwoLeggedOAuthParams | undefined;
+  apiKey?: ApiKeyParams | undefined;
+  geAuthProvider?: Record<string, never> | {} | undefined;
 };
 
 const publicThreeLegged = (value: ThreeLeggedOAuthParams | undefined) =>

@@ -27,6 +27,8 @@
  * (the plugin's node-side handler returns the latest entry URL).
  */
 import { DurableObject, RpcTarget, WorkerEntrypoint } from "cloudflare:workers";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import { assert, BlobStore, Timers } from "../../internal/shared.worker.ts";
 import {
   BINDING_STREAM_BLOBS,
@@ -229,7 +231,10 @@ function rowToStreamVideo(row: VideoRow, entryUrl: URL): StreamVideo {
     readyToStreamAt: row.ready_to_stream_at,
     status: {
       state: row.status_state,
-      pctComplete: row.status_pct_complete ?? undefined,
+      ...Record.filterMap(
+        { pctComplete: row.status_pct_complete },
+        Result.fromNullishOr(() => undefined),
+      ),
       errorReasonCode: row.status_error_reason_code,
       errorReasonText: row.status_error_reason_text,
     },
@@ -261,7 +266,7 @@ function rowToStreamCaption(row: CaptionRow): StreamCaption {
     language: row.language,
     label: row.label || row.language,
     generated: row.generated === 1,
-    status: row.status as StreamCaption["status"],
+    status: row.status as Exclude<StreamCaption["status"], undefined>,
   };
 }
 
@@ -290,7 +295,10 @@ function rowToStreamDownload(row: DownloadRow): {
     download: {
       percentComplete: row.percent_complete,
       status: row.status as StreamDownloadStatus,
-      url: row.url ?? undefined,
+      ...Record.filterMap(
+        { url: row.url },
+        Result.fromNullishOr(() => undefined),
+      ),
     },
   };
 }

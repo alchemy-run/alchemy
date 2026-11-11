@@ -39,12 +39,12 @@ export type SubscriptionRetryPolicy = {
    * Minimum delay between consecutive deliveries of a given message
    * (e.g. `"10s"`). Must be between 0 and 600 seconds.
    */
-  minimumBackoff?: string;
+  minimumBackoff?: string | undefined;
   /**
    * Maximum delay between consecutive deliveries of a given message
    * (e.g. `"600s"`). Must be between 0 and 600 seconds.
    */
-  maximumBackoff?: string;
+  maximumBackoff?: string | undefined;
 };
 
 export type SubscriptionDeadLetterPolicy = {
@@ -52,12 +52,12 @@ export type SubscriptionDeadLetterPolicy = {
    * Topic that receives dead-lettered messages, as
    * `projects/{project}/topics/{topic}`.
    */
-  deadLetterTopic?: string;
+  deadLetterTopic?: string | undefined;
   /**
    * Maximum delivery attempts before dead-lettering. Must be between 5 and
    * 100. `0` is treated as `5`.
    */
-  maxDeliveryAttempts?: number;
+  maxDeliveryAttempts?: number | undefined;
 };
 
 export type SubscriptionExpirationPolicy = {
@@ -66,14 +66,14 @@ export type SubscriptionExpirationPolicy = {
    * Omit `ttl` to never expire. If the whole policy is omitted, GCP
    * applies a 31-day default.
    */
-  ttl?: string;
+  ttl?: string | undefined;
 };
 
 export type SubscriptionOidcToken = {
   /** Service account email Pub/Sub uses to sign the JWT. */
-  serviceAccountEmail?: string;
+  serviceAccountEmail?: string | undefined;
   /** JWT audience. Defaults to the push endpoint. */
-  audience?: string;
+  audience?: string | undefined;
 };
 
 export type SubscriptionPushConfig = {
@@ -81,16 +81,16 @@ export type SubscriptionPushConfig = {
    * HTTPS endpoint that receives pushed messages
    * (e.g. `"https://example.com/push"`).
    */
-  pushEndpoint?: string;
+  pushEndpoint?: string | undefined;
   /**
    * Endpoint attributes. The only currently supported key is
    * `x-goog-version` (`v1` / `v1beta1` / `v1beta2`).
    */
-  attributes?: Record<string, string>;
+  attributes?: Record<string, string> | undefined;
   /**
    * Attach an OIDC JWT as `Authorization` on every push.
    */
-  oidcToken?: SubscriptionOidcToken;
+  oidcToken?: SubscriptionOidcToken | undefined;
 };
 
 export type SubscriptionBigQueryConfig = {
@@ -110,25 +110,25 @@ export type SubscriptionBigQueryConfig = {
    * Cannot be combined with `useTableSchema`.
    * @default false
    */
-  useTopicSchema?: boolean;
+  useTopicSchema?: boolean | undefined;
   /**
    * Write JSON message fields to the table's columns using the table's
    * schema. Cannot be combined with `useTopicSchema`.
    * @default false
    */
-  useTableSchema?: boolean;
+  useTableSchema?: boolean | undefined;
   /**
    * Also write `subscription_name`, `message_id`, `publish_time`, and
    * `attributes` to columns of the same names.
    * @default false
    */
-  writeMetadata?: boolean;
+  writeMetadata?: boolean | undefined;
   /**
    * With `useTopicSchema` or `useTableSchema`, drop message fields that
    * are not in the table schema instead of failing the write.
    * @default false
    */
-  dropUnknownFields?: boolean;
+  dropUnknownFields?: boolean | undefined;
   /**
    * Service account Pub/Sub writes to BigQuery as: an `IAM.ServiceAccount`'s
    * `email`, a referenced account's, or a literal email. Alchemy grants it
@@ -141,7 +141,7 @@ export type SubscriptionBigQueryConfig = {
    * Omit it and Alchemy creates an account for this subscription, deleted
    * with it.
    */
-  serviceAccountEmail?: string;
+  serviceAccountEmail?: string | undefined;
 };
 
 /** One IAM grant a subscription made, revoked once it is no longer needed. */
@@ -180,7 +180,7 @@ export type SubscriptionProps = {
    * unique name is generated from the stack, stage, and logical id.
    * Changing it replaces the subscription.
    */
-  subscriptionId?: string;
+  subscriptionId?: string | undefined;
   /**
    * Topic this subscription receives from. Accepts a full resource name
    * (`projects/{project}/topics/{topic}`) or a topic id. Immutable —
@@ -190,50 +190,50 @@ export type SubscriptionProps = {
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
    */
-  labels?: Record<string, string>;
+  labels?: Record<string, string> | undefined;
   /**
    * Approximate time Pub/Sub waits for an ack before redelivering, in
    * seconds. Minimum 10, maximum 600. `0` is treated as 10.
    * @default 10
    */
-  ackDeadlineSeconds?: number;
+  ackDeadlineSeconds?: number | undefined;
   /**
    * Retain acknowledged messages so they can be seeked until they fall
    * out of `messageRetentionDuration`.
    * @default false
    */
-  retainAckedMessages?: boolean;
+  retainAckedMessages?: boolean | undefined;
   /**
    * How long to retain unacknowledged messages (e.g. `"86400s"`). Cannot
    * be more than 31 days or less than 10 minutes. Defaults to 7 days.
    */
-  messageRetentionDuration?: string;
+  messageRetentionDuration?: string | undefined;
   /**
    * Deliver messages with the same ordering key in publish order.
    * Immutable — changing it replaces the subscription.
    * @default false
    */
-  enableMessageOrdering?: boolean;
+  enableMessageOrdering?: boolean | undefined;
   /**
    * Guarantee that an acknowledged message is not redelivered (best
    * effort; distinct publishes of the same payload still get distinct
    * `message_id`s).
    * @default false
    */
-  enableExactlyOnceDelivery?: boolean;
+  enableExactlyOnceDelivery?: boolean | undefined;
   /**
    * Pub/Sub filter language expression. Only matching messages are
    * delivered. Immutable — changing it replaces the subscription.
    */
-  filter?: string;
+  filter?: string | undefined;
   /**
    * When the subscription expires if idle. Omit for the 31-day default.
    */
-  expirationPolicy?: SubscriptionExpirationPolicy;
+  expirationPolicy?: SubscriptionExpirationPolicy | undefined;
   /**
    * Retry backoff after a NACK or ack-deadline exceed.
    */
-  retryPolicy?: SubscriptionRetryPolicy;
+  retryPolicy?: SubscriptionRetryPolicy | undefined;
   /**
    * Dead-letter topic and max delivery attempts. Omit to disable.
    *
@@ -244,17 +244,17 @@ export type SubscriptionProps = {
    * left in place on delete: the agent is shared by every subscription in
    * the project that dead-letters to that topic.
    */
-  deadLetterPolicy?: SubscriptionDeadLetterPolicy;
+  deadLetterPolicy?: SubscriptionDeadLetterPolicy | undefined;
   /**
    * Push delivery endpoint. Omit (or leave empty) for a pull
    * subscription.
    */
-  pushConfig?: SubscriptionPushConfig;
+  pushConfig?: SubscriptionPushConfig | undefined;
   /**
    * Write messages straight to a BigQuery table. Cannot be combined with
    * `pushConfig`.
    */
-  bigqueryConfig?: SubscriptionBigQueryConfig;
+  bigqueryConfig?: SubscriptionBigQueryConfig | undefined;
 };
 
 export type Subscription = Resource<
@@ -296,7 +296,7 @@ export type Subscription = Resource<
     /** BigQuery delivery, if this is a BigQuery subscription. */
     bigqueryConfig: SubscriptionBigQueryAttributes | undefined;
     /** IAM grants this subscription made for its BigQuery writer. */
-    iamGrants?: SubscriptionIamGrant[];
+    iamGrants?: SubscriptionIamGrant[] | undefined;
   },
   never,
   Providers,

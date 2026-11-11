@@ -305,6 +305,8 @@ overrides:
 
 patchedDependencies:
   "@astrojs/starlight@0.42.0": patches/@astrojs%2Fstarlight@0.42.0.patch
+  # The Effect SDK exports TS source; match its optional state/code handling under exactOptionalPropertyTypes.
+  "@rivetkit/effect@3.0.0": patches/@rivetkit__effect@3.0.0.patch
   miniflare@4.20260730.0: patches/miniflare@4.20260730.0.patch
   starlight-blog@0.29.0: patches/starlight-blog@0.29.0.patch
 

@@ -57,7 +57,7 @@ export interface ProgramExtraFile {
 export interface HostedProgramProps {
   readonly main: string;
   readonly handler?: string;
-  readonly isExternal?: boolean;
+  readonly isExternal?: boolean | undefined;
   readonly build?: ProgramBuildOptions;
   readonly extraFiles?: ReadonlyArray<ProgramExtraFile>;
 }

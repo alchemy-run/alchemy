@@ -21,11 +21,11 @@ export interface DeploymentComponentConfigurationUpdate {
    * A JSON-serialized object that the deployment merges into the component's
    * default configuration.
    */
-  merge?: string;
+  merge?: string | undefined;
   /**
    * Configuration paths to reset to their default values.
    */
-  reset?: string[];
+  reset?: string[] | undefined;
 }
 
 /**
@@ -40,7 +40,7 @@ export interface DeploymentComponent {
   /**
    * Configuration update the deployment applies to the component.
    */
-  configurationUpdate?: DeploymentComponentConfigurationUpdate;
+  configurationUpdate?: DeploymentComponentConfigurationUpdate | undefined;
 }
 
 export interface DeploymentProps {
@@ -79,13 +79,13 @@ export interface Deployment extends Resource<
     /** The ARN of the target core device or thing group. */
     targetArn: string;
     /** The revision of the deployment. */
-    revisionId?: string;
+    revisionId?: string | undefined;
     /** The current status of the deployment (`ACTIVE`, `COMPLETED`, ...). */
-    deploymentStatus?: string;
+    deploymentStatus?: string | undefined;
     /** The ID of the IoT job that rolls the deployment out to core devices. */
-    iotJobId?: string;
+    iotJobId?: string | undefined;
     /** The ARN of the IoT job that rolls the deployment out to core devices. */
-    iotJobArn?: string;
+    iotJobArn?: string | undefined;
   },
   never,
   Providers
@@ -166,7 +166,9 @@ const normalizeTags = (
  */
 interface ComparableComponentSpec {
   componentVersion?: string;
-  configurationUpdate?: { merge?: string; reset?: readonly string[] };
+  configurationUpdate?:
+    | { merge?: string | undefined; reset?: readonly string[] | undefined }
+    | undefined;
 }
 
 const canonicalComponents = (
@@ -273,10 +275,10 @@ export const DeploymentProvider = () =>
               deploymentId: string;
               deploymentArn: string;
               targetArn: string;
-              revisionId?: string;
-              deploymentStatus?: string;
-              iotJobId?: string;
-              iotJobArn?: string;
+              revisionId?: string | undefined;
+              deploymentStatus?: string | undefined;
+              iotJobId?: string | undefined;
+              iotJobArn?: string | undefined;
             }[] = [];
             for (const deployment of deployments) {
               if (deployment.deploymentId === undefined || deployment.targetArn === undefined) {

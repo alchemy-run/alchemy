@@ -93,7 +93,7 @@ export interface StackProps {
   /**
    * User-defined tags propagated to every resource in the stack.
    */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
 }
 
 export interface Stack extends Resource<

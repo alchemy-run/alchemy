@@ -13,7 +13,7 @@ export type Signal = "traces" | "logs" | "metrics";
 /** Where the relay forwards one batch: an OTLP/HTTP endpoint and the headers to send it. */
 export interface Destination {
   readonly url: string;
-  readonly headers?: Readonly<Record<string, string>>;
+  readonly headers?: Readonly<Record<string, string>> | undefined;
 }
 
 /** Options for {@link relay}. */

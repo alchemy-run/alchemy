@@ -44,11 +44,11 @@ export type MachineConfig = {
    * for PRIMARY instances.
    * @default 2
    */
-  cpuCount?: number;
+  cpuCount?: number | undefined;
   /**
    * Machine type (e.g. `n2-highmem-4`, `n2-highmem-8`).
    */
-  machineType?: string;
+  machineType?: string | undefined;
 };
 
 export type ReadPoolConfig = {

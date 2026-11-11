@@ -41,20 +41,20 @@ export type AudioFormat = "AUDIO_FORMAT_UNSPECIFIED" | "MULAW" | "MP3" | "OGG";
 
 export type AudioExportSettings = {
   /** GCS bucket that stores exported audio. */
-  gcsBucket?: string;
+  gcsBucket?: string | undefined;
   /** Filename pattern for exported audio. */
-  audioExportPattern?: string;
+  audioExportPattern?: string | undefined;
   /** Whether to redact exported audio. */
-  enableAudioRedaction?: boolean;
+  enableAudioRedaction?: boolean | undefined;
   /** Exported audio format. */
-  audioFormat?: AudioFormat | (string & {});
+  audioFormat?: AudioFormat | (string & {}) | undefined;
   /** Whether to also export synthesized TTS audio. */
-  storeTtsAudio?: boolean;
+  storeTtsAudio?: boolean | undefined;
 };
 
 export type InsightsExportSettings = {
   /** Whether to export conversations to Contact Center Insights. */
-  enableInsightsExport?: boolean;
+  enableInsightsExport?: boolean | undefined;
 };
 
 export type SecuritySettingProps = {

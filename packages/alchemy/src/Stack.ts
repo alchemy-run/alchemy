@@ -125,7 +125,7 @@ export interface StackProps<Req> {
   providers: Layer.Layer<Extract<Req, ProviderServices>, never, StackServices>;
   state: Layer.Layer<State, never, StackServices>;
   /** Opt in to secret providers. When omitted, existing configuration is preserved. */
-  secrets?: StackSecrets;
+  secrets?: StackSecrets | undefined;
 }
 
 /**
@@ -263,11 +263,11 @@ export const StackName = Stack.use((stack) => Effect.succeed(stack.name));
 export interface MakeStackProps<ROut = never> {
   name: string;
   /** Required; {@link make} dies with setup guidance when it is missing. */
-  providers?: Layer.Layer<ROut, never, StackServices>;
+  providers?: Layer.Layer<ROut, never, StackServices> | undefined;
   /** Required; {@link make} dies with setup guidance when it is missing. */
-  state?: Layer.Layer<State, never, StackServices>;
+  state?: Layer.Layer<State, never, StackServices> | undefined;
   /** Opt in to secret providers. When omitted, existing configuration is preserved. */
-  secrets?: StackSecrets;
+  secrets?: StackSecrets | undefined;
   /** @internal */
   stack?: StackSpec;
 }
@@ -369,7 +369,7 @@ export interface StackDefinition<ROut = never> {
   readonly stackName: string;
   readonly providers?: Layer.Layer<ROut, never, StackServices>;
   readonly state?: Layer.Layer<State, never, StackServices>;
-  readonly secrets?: StackSecrets;
+  readonly secrets?: StackSecrets | undefined;
 }
 
 export const CurrentStack = Effect.serviceOption(Stack)

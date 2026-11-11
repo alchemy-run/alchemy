@@ -26,16 +26,16 @@ import { waitForOperation } from "./operations.ts";
 const MAX_NAME_LENGTH = 60;
 
 export type FeaturestoreOnlineServingScaling = {
-  minNodeCount?: number;
-  maxNodeCount?: number;
-  cpuUtilizationTarget?: number;
+  minNodeCount?: number | undefined;
+  maxNodeCount?: number | undefined;
+  cpuUtilizationTarget?: number | undefined;
 };
 
 export type FeaturestoreOnlineServingConfig = {
   /** Fixed node count. `0` disables online serving. */
-  fixedNodeCount?: number;
+  fixedNodeCount?: number | undefined;
   /** Autoscaling. Mutually exclusive with `fixedNodeCount`. */
-  scaling?: FeaturestoreOnlineServingScaling;
+  scaling?: FeaturestoreOnlineServingScaling | undefined;
 };
 
 export type FeaturestoreProps = {

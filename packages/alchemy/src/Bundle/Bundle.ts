@@ -94,7 +94,7 @@ export interface BundleConfig extends BundleExtraOptions {
   /**
    * Rolldown input options overrides.
    */
-  readonly input?: Partial<rolldown.InputOptions>;
+  readonly input?: Partial<rolldown.InputOptions> | undefined;
   /**
    * Rolldown output options overrides.
    *
@@ -103,7 +103,7 @@ export interface BundleConfig extends BundleExtraOptions {
    * ships. Set `dir` or `file` to write it somewhere else; Alchemy never
    * clears a directory you choose.
    */
-  readonly output?: Partial<rolldown.OutputOptions>;
+  readonly output?: Partial<rolldown.OutputOptions> | undefined;
 }
 
 export interface BundleOutput {

@@ -3,6 +3,8 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import type { Sharp } from "sharp";
 // Alchemy modifications are licensed under Apache-2.0.
 // This file includes third-party code; see /THIRD_PARTY_LICENSES.md.
@@ -324,7 +326,14 @@ export async function readNodeRequest(req: NodeHttp.IncomingMessage, url: URL): 
     }
     body = Buffer.concat(chunks);
   }
-  return new Request(url.toString(), { method, headers, body });
+  return new Request(url.toString(), {
+    method,
+    headers,
+    ...Record.filterMap(
+      { body },
+      Result.fromNullishOr(() => undefined),
+    ),
+  });
 }
 
 interface Transform {

@@ -30,28 +30,28 @@ const DEFAULT_STORAGE_TYPE = "SSD";
 
 export type AutoscalingLimits = {
   /** Minimum nodes the autoscaler can scale down to. */
-  minServeNodes?: number;
+  minServeNodes?: number | undefined;
   /** Maximum nodes the autoscaler can scale up to. */
-  maxServeNodes?: number;
+  maxServeNodes?: number | undefined;
 };
 
 export type AutoscalingTargets = {
   /**
    * Target CPU utilization percent (`10`–`80`).
    */
-  cpuUtilizationPercent?: number;
+  cpuUtilizationPercent?: number | undefined;
   /**
    * Target storage utilization in GiB per node. SSD default `2560`;
    * HDD default `8192`.
    */
-  storageUtilizationGibPerNode?: number;
+  storageUtilizationGibPerNode?: number | undefined;
 };
 
 export type ClusterAutoscalingConfig = {
   /** Minimum and maximum node counts. */
-  autoscalingLimits?: AutoscalingLimits;
+  autoscalingLimits?: AutoscalingLimits | undefined;
   /** CPU and storage utilization targets. */
-  autoscalingTargets?: AutoscalingTargets;
+  autoscalingTargets?: AutoscalingTargets | undefined;
 };
 
 export type ClusterConfig = {

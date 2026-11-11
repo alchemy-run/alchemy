@@ -23,42 +23,42 @@ const MAX_SERVICE_ID_LENGTH = 63;
 
 export type GkeServiceIdentifier = {
   /** Project that owns the Kubernetes service. */
-  projectId?: string;
+  projectId?: string | undefined;
   /** Parent cluster name. */
-  clusterName?: string;
+  clusterName?: string | undefined;
   /** Parent namespace name. */
-  namespaceName?: string;
+  namespaceName?: string | undefined;
   /** Kubernetes service name. */
-  serviceName?: string;
+  serviceName?: string | undefined;
   /** Cluster location (zone or region). */
-  location?: string;
+  location?: string | undefined;
 };
 
 export type ClusterIstioIdentifier = {
   /** Istio destination service name. */
-  serviceName?: string;
+  serviceName?: string | undefined;
   /** Cluster location. */
-  location?: string;
+  location?: string | undefined;
   /** Kubernetes cluster name. */
-  clusterName?: string;
+  clusterName?: string | undefined;
   /** Istio destination service namespace. */
-  serviceNamespace?: string;
+  serviceNamespace?: string | undefined;
 };
 
 export type AppEngineIdentifier = {
   /** App Engine module id (`module_id` on `gae_app`). */
-  moduleId?: string;
+  moduleId?: string | undefined;
 };
 
 export type GkeNamespaceIdentifier = {
   /** Cluster location. */
-  location?: string;
+  location?: string | undefined;
   /** Parent cluster name. */
-  clusterName?: string;
+  clusterName?: string | undefined;
   /** Project that owns the namespace. */
-  projectId?: string;
+  projectId?: string | undefined;
   /** Namespace name. */
-  namespaceName?: string;
+  namespaceName?: string | undefined;
 };
 
 export type BasicServiceIdentifier = {
@@ -66,59 +66,59 @@ export type BasicServiceIdentifier = {
    * Well-known service type (`APP_ENGINE`, `CLOUD_RUN`,
    * `ISTIO_CANONICAL_SERVICE`, …).
    */
-  serviceType?: string;
+  serviceType?: string | undefined;
   /** Labels identifying the telemetry resource. */
-  serviceLabels?: Record<string, string>;
+  serviceLabels?: Record<string, string> | undefined;
 };
 
 export type MeshIstioIdentifier = {
   /** Istio destination service name. */
-  serviceName?: string;
+  serviceName?: string | undefined;
   /** Istio destination service namespace. */
-  serviceNamespace?: string;
+  serviceNamespace?: string | undefined;
   /** Mesh uid (`mesh_uid` metric label). */
-  meshUid?: string;
+  meshUid?: string | undefined;
 };
 
 export type IstioCanonicalServiceIdentifier = {
   /** Canonical service namespace. */
-  canonicalServiceNamespace?: string;
+  canonicalServiceNamespace?: string | undefined;
   /** Canonical service name. */
-  canonicalService?: string;
+  canonicalService?: string | undefined;
   /** Mesh uid. */
-  meshUid?: string;
+  meshUid?: string | undefined;
 };
 
 export type CloudRunIdentifier = {
   /** Cloud Run service name. */
-  serviceName?: string;
+  serviceName?: string | undefined;
   /** Region the service runs in. */
-  location?: string;
+  location?: string | undefined;
 };
 
 export type GkeWorkloadIdentifier = {
   /** Cluster location. */
-  location?: string;
+  location?: string | undefined;
   /** Workload kind (`Deployment`, `DaemonSet`, …). */
-  topLevelControllerType?: string;
+  topLevelControllerType?: string | undefined;
   /** Parent namespace name. */
-  namespaceName?: string;
+  namespaceName?: string | undefined;
   /** Parent cluster name. */
-  clusterName?: string;
+  clusterName?: string | undefined;
   /** Project that owns the workload. */
-  projectId?: string;
+  projectId?: string | undefined;
   /** Workload name. */
-  topLevelControllerName?: string;
+  topLevelControllerName?: string | undefined;
 };
 
 export type CloudEndpointsIdentifier = {
   /** Cloud Endpoints service name. */
-  service?: string;
+  service?: string | undefined;
 };
 
 export type ServiceTelemetry = {
   /** Full resource name of the telemetry source. */
-  resourceName?: string;
+  resourceName?: string | undefined;
 };
 
 export type ServiceProps = {
@@ -128,45 +128,45 @@ export type ServiceProps = {
    * is generated from the stack, stage, and logical id. Must match
    * `[a-z0-9-]`. Immutable — changing it replaces the service.
    */
-  serviceId?: string;
+  serviceId?: string | undefined;
   /**
    * Human-readable display name. If omitted, the service id is used.
    */
-  displayName?: string;
+  displayName?: string | undefined;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
    */
-  labels?: Record<string, string>;
+  labels?: Record<string, string> | undefined;
   /**
    * Custom service identifier. Used when no other identifier is set.
    */
-  custom?: Record<string, never>;
+  custom?: Record<string, never> | undefined;
   /**
    * Well-known basic service type and labels.
    */
-  basicService?: BasicServiceIdentifier;
+  basicService?: BasicServiceIdentifier | undefined;
   /** App Engine module identifier. */
-  appEngine?: AppEngineIdentifier;
+  appEngine?: AppEngineIdentifier | undefined;
   /** Cloud Run identifier. */
-  cloudRun?: CloudRunIdentifier;
+  cloudRun?: CloudRunIdentifier | undefined;
   /** Cloud Endpoints identifier. */
-  cloudEndpoints?: CloudEndpointsIdentifier;
+  cloudEndpoints?: CloudEndpointsIdentifier | undefined;
   /** GKE Service identifier. */
-  gkeService?: GkeServiceIdentifier;
+  gkeService?: GkeServiceIdentifier | undefined;
   /** GKE Namespace identifier. */
-  gkeNamespace?: GkeNamespaceIdentifier;
+  gkeNamespace?: GkeNamespaceIdentifier | undefined;
   /** GKE Workload identifier. */
-  gkeWorkload?: GkeWorkloadIdentifier;
+  gkeWorkload?: GkeWorkloadIdentifier | undefined;
   /** Cluster-scoped Istio identifier. */
-  clusterIstio?: ClusterIstioIdentifier;
+  clusterIstio?: ClusterIstioIdentifier | undefined;
   /** Mesh-scoped Istio identifier. */
-  meshIstio?: MeshIstioIdentifier;
+  meshIstio?: MeshIstioIdentifier | undefined;
   /** Canonical Istio service identifier. */
-  istioCanonicalService?: IstioCanonicalServiceIdentifier;
+  istioCanonicalService?: IstioCanonicalServiceIdentifier | undefined;
   /**
    * Telemetry resource to query for this service.
    */
-  telemetry?: ServiceTelemetry;
+  telemetry?: ServiceTelemetry | undefined;
 };
 
 export type Service = Resource<

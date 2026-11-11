@@ -213,7 +213,7 @@ export class EnvironmentProjectRequired extends Data.TaggedError(
 
 const toAttrs = (
   env: CloudEnvironment,
-  fallback?: { name?: string; projectId?: string },
+  fallback?: { name?: string; projectId?: string | undefined },
 ): Environment["Attributes"] => {
   const name = env.name || fallback?.name || "";
   const projectId = env.projectId || fallback?.projectId || "";
@@ -285,7 +285,7 @@ const readEnvironmentAttributes = Effect.fn(function* ({
 }: {
   id: string;
   olds?: EnvironmentProps;
-  output?: Partial<Environment["Attributes"]>;
+  output?: Partial<Environment["Attributes"]> | undefined;
 }) {
   const name = yield* resolveName(id, olds?.name, output?.name);
   const projectId =

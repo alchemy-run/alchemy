@@ -25,7 +25,7 @@ export interface FirewallRule {
    * Destination ports or ranges (e.g. `"22"`, `"80"`, `"8000-8080"`).
    * Only valid for `tcp` and `udp`. Omit to match every port.
    */
-  ports?: string[];
+  ports?: string[] | undefined;
 }
 
 export interface FirewallLogConfig {
@@ -37,7 +37,7 @@ export interface FirewallLogConfig {
   /**
    * Whether log entries include metadata. Only set when `enable` is true.
    */
-  metadata?: "EXCLUDE_ALL_METADATA" | "INCLUDE_ALL_METADATA";
+  metadata?: "EXCLUDE_ALL_METADATA" | "INCLUDE_ALL_METADATA" | undefined;
 }
 
 export type FirewallProps = {

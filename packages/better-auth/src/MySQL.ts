@@ -13,7 +13,7 @@ import { Database, type DatabaseService, type DirectDatabase } from "./Database.
 import { makeMigrateSupport, type SqlLayerOptions } from "./Postgres.ts";
 
 export interface MySQLOptions extends SqlLayerOptions {
-  readonly pool?: Omit<PoolOptions, "uri">;
+  readonly pool?: Omit<PoolOptions, "uri"> | undefined;
 }
 
 /**

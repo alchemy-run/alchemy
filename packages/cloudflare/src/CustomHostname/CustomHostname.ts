@@ -111,7 +111,7 @@ export interface Props {
    *
    * @default { method: "txt", type: "dv" }
    */
-  ssl?: Ssl;
+  ssl?: Ssl | undefined;
   /**
    * Unique key/value metadata for this hostname, available to Workers
    * via the request. Requires the Enterprise Cloudflare for SaaS
@@ -380,7 +380,7 @@ export const CustomHostnameProvider = () =>
       //    differs because patching it can trigger certificate
       //    reissuance.
       const patch: {
-        ssl?: ReturnType<typeof buildSslBody>;
+        ssl?: ReturnType<typeof buildSslBody> | undefined;
         customMetadata?: Record<string, unknown>;
         customOriginServer?: string;
         customOriginSni?: string;
@@ -467,48 +467,56 @@ const findByHostname = (zoneId: string, hostname: string) =>
   );
 
 interface ObservedSsl {
-  readonly status?: string;
-  readonly method?: string;
-  readonly type?: string;
-  readonly wildcard?: boolean;
-  readonly bundleMethod?: string;
-  readonly certificateAuthority?: string;
-  readonly settings?: {
-    readonly ciphers?: ReadonlyArray<string>;
-    readonly earlyHints?: string;
-    readonly http2?: string;
-    readonly minTlsVersion?: string;
-    readonly tls_1_3?: string;
-  };
-  readonly validationRecords?: ReadonlyArray<{
-    readonly cname?: string;
-    readonly cnameTarget?: string;
-    readonly emails?: string[];
-    readonly httpBody?: string;
-    readonly httpUrl?: string;
-    readonly status?: string;
-    readonly txtName?: string;
-    readonly txtValue?: string;
-  }>;
+  readonly status?: string | undefined;
+  readonly method?: string | undefined;
+  readonly type?: string | undefined;
+  readonly wildcard?: boolean | undefined;
+  readonly bundleMethod?: string | undefined;
+  readonly certificateAuthority?: string | undefined;
+  readonly settings?:
+    | {
+        readonly ciphers?: ReadonlyArray<string> | undefined;
+        readonly earlyHints?: string | undefined;
+        readonly http2?: string | undefined;
+        readonly minTlsVersion?: string | undefined;
+        readonly tls_1_3?: string | undefined;
+      }
+    | undefined;
+  readonly validationRecords?:
+    | ReadonlyArray<{
+        readonly cname?: string | undefined;
+        readonly cnameTarget?: string | undefined;
+        readonly emails?: string[] | undefined;
+        readonly httpBody?: string | undefined;
+        readonly httpUrl?: string | undefined;
+        readonly status?: string | undefined;
+        readonly txtName?: string | undefined;
+        readonly txtValue?: string | undefined;
+      }>
+    | undefined;
 }
 
 interface ObservedHostname {
   readonly id: string;
   readonly hostname: string;
-  readonly status?: string;
-  readonly customMetadata?: Record<string, unknown>;
-  readonly customOriginServer?: string;
-  readonly customOriginSni?: string;
-  readonly ownershipVerification?: {
-    readonly name?: string;
-    readonly type?: string;
-    readonly value?: string;
-  };
-  readonly ownershipVerificationHttp?: {
-    readonly httpBody?: string;
-    readonly httpUrl?: string;
-  };
-  readonly ssl?: ObservedSsl;
+  readonly status?: string | undefined;
+  readonly customMetadata?: Record<string, unknown> | undefined;
+  readonly customOriginServer?: string | undefined;
+  readonly customOriginSni?: string | undefined;
+  readonly ownershipVerification?:
+    | {
+        readonly name?: string | undefined;
+        readonly type?: string | undefined;
+        readonly value?: string | undefined;
+      }
+    | undefined;
+  readonly ownershipVerificationHttp?:
+    | {
+        readonly httpBody?: string | undefined;
+        readonly httpUrl?: string | undefined;
+      }
+    | undefined;
+  readonly ssl?: ObservedSsl | undefined;
 }
 
 const undef = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);

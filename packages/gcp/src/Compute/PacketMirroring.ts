@@ -28,7 +28,7 @@ export type PacketMirroringFilter = {
    * Traffic direction to copy (`INGRESS`, `EGRESS`, or `BOTH`).
    * @default "BOTH"
    */
-  direction?: PacketMirroringFilterDirection | (string & {});
+  direction?: PacketMirroringFilterDirection | (string & {}) | undefined;
   /**
    * IP protocols to copy (`tcp`, `udp`, `icmp`, `esp`, …). Empty (the
    * default) copies every protocol that matches `cidrRanges`.

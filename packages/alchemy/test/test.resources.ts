@@ -129,8 +129,8 @@ export const functionProvider = () =>
 
 export type BindingTargetProps = {
   name?: string;
-  string?: string;
-  replaceString?: string;
+  string?: string | undefined;
+  replaceString?: string | undefined;
 };
 
 export interface BindingTarget extends Resource<
@@ -309,12 +309,12 @@ export const artifactProbeProvider = () =>
 // TestResource
 
 export type TestResourceProps = {
-  string?: string;
+  string?: string | undefined;
   stringArray?: string[];
   object?: {
     string: string;
   };
-  replaceString?: string;
+  replaceString?: string | undefined;
   redacted?: Redacted.Redacted<string>;
   redactedArray?: Redacted.Redacted<string>[];
 };
@@ -639,7 +639,7 @@ export const overrideStablesResourceProvider = () =>
 
 export type PhasedTargetProps = {
   desired: string;
-  replaceKey?: string;
+  replaceKey?: string | undefined;
 };
 
 export interface PhasedTarget extends Resource<
@@ -951,7 +951,7 @@ export type DriftResourceProps = {
    * succeed — models a prop pointing at another cloud resource (an SNS
    * subscription's topic).
    */
-  dependsOn?: string[];
+  dependsOn?: string[] | undefined;
   /** Echoed into the `ref` attribute — e.g. an upstream's `arn`. */
   ref?: string;
 };
@@ -1157,7 +1157,7 @@ export const inDev = <A, E, R>(
 // file can filter to their own activity.
 
 export type ModalResourceProps = {
-  value?: string;
+  value?: string | undefined;
   /**
    * Changing this forces an ordinary (same-mode) replacement — used to
    * assert that `providerMode` survives provider-diff replacements and

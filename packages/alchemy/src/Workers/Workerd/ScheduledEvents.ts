@@ -15,7 +15,7 @@ import { inStorageTransaction } from "./internal/StorageTransaction.ts";
 export interface ScheduledEvent {
   id: string;
   runAt: Date;
-  repeatMs?: number;
+  repeatMs?: number | undefined;
   payload: unknown;
 }
 

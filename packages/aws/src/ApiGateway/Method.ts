@@ -17,43 +17,43 @@ export interface MethodIntegrationProps {
   /** Integration type: `AWS`, `AWS_PROXY`, `HTTP`, `HTTP_PROXY`, or `MOCK`. */
   type: ag.IntegrationType;
   /** HTTP method used to call the backend (always `POST` for Lambda integrations). */
-  integrationHttpMethod?: string;
+  integrationHttpMethod?: string | undefined;
   /** Integration endpoint URI (Lambda invocation ARN or HTTP URL). */
-  uri?: Input<string>;
+  uri?: Input<string> | undefined;
   /** `VPC_LINK` for private integrations, otherwise `INTERNET`. */
-  connectionType?: ag.ConnectionType;
+  connectionType?: ag.ConnectionType | undefined;
   /** ID of the `VpcLink` when `connectionType` is `VPC_LINK`. */
-  connectionId?: string;
+  connectionId?: string | undefined;
   /**
    * IAM role ARN used by API Gateway for integration credentials.
    *
    * This is not a secret value; API Gateway stores an ARN or passthrough marker.
    */
-  credentials?: string;
+  credentials?: string | undefined;
   /** Maps integration request parameters from method request parameters. */
-  requestParameters?: { [key: string]: string | undefined };
+  requestParameters?: { [key: string]: string | undefined } | undefined;
   /** Request body mapping templates keyed by content type. */
-  requestTemplates?: { [key: string]: string | undefined };
+  requestTemplates?: { [key: string]: string | undefined } | undefined;
   /** How unmapped content types pass through (`WHEN_NO_MATCH`, `WHEN_NO_TEMPLATES`, `NEVER`). */
-  passthroughBehavior?: string;
+  passthroughBehavior?: string | undefined;
   /** Cache namespace for integration responses. */
-  cacheNamespace?: string;
+  cacheNamespace?: string | undefined;
   /** Request parameters whose values form the cache key. */
-  cacheKeyParameters?: string[];
+  cacheKeyParameters?: string[] | undefined;
   /** Payload encoding conversion (`CONVERT_TO_BINARY` or `CONVERT_TO_TEXT`). */
-  contentHandling?: ag.ContentHandlingStrategy;
+  contentHandling?: ag.ContentHandlingStrategy | undefined;
   /**
    * Integration timeout (e.g. `"29 seconds"` or `Duration.seconds(29)`;
    * a bare number is milliseconds). Sent to the API in milliseconds
    * (`timeoutInMillis`).
    */
-  timeout?: Duration.Input;
+  timeout?: Duration.Input | undefined;
   /** TLS settings for HTTP integrations (e.g. `insecureSkipVerification`). */
-  tlsConfig?: ag.TlsConfig;
+  tlsConfig?: ag.TlsConfig | undefined;
   /** How the integration response is transferred to the client. */
-  responseTransferMode?: ag.ResponseTransferMode;
+  responseTransferMode?: ag.ResponseTransferMode | undefined;
   /** Target resource of the integration, where the API distinguishes one from `uri`. */
-  integrationTarget?: string;
+  integrationTarget?: string | undefined;
 }
 
 export interface MethodProps {
@@ -288,7 +288,7 @@ const putIntegrationRequest = (
   integrationTarget: integration.integrationTarget,
 });
 
-const putMethod = (news: Input.ResolveProps<MethodProps>) =>
+const putMethod = (news: MethodProps) =>
   ag.putMethod({
     restApiId: news.restApiId as string,
     resourceId: news.resourceId as string,
@@ -388,7 +388,7 @@ export const MethodProvider = () =>
         stables: ["restApiId", "resourceId", "httpMethod"] as const,
         diff: Effect.fn(function* ({ news: newsIn, olds }) {
           if (!isResolved(newsIn)) return;
-          const news = newsIn as Input.ResolveProps<MethodProps>;
+          const news = newsIn;
           if (
             news.restApiId !== olds.restApiId ||
             news.resourceId !== olds.resourceId ||
@@ -467,7 +467,7 @@ export const MethodProvider = () =>
           if (!isResolved(newsIn)) {
             return yield* Effect.die("Method props were not resolved");
           }
-          const news = newsIn as Input.ResolveProps<MethodProps>;
+          const news = newsIn;
           const authType = news.authorizationType ?? "NONE";
           // Methods are keyed by (restApiId, resourceId, httpMethod). All
           // three are stable across the resource's lifetime, so we read

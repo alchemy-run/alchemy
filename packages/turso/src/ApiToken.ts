@@ -42,7 +42,7 @@ export interface ApiTokenProps {
    * Restrict the token to one group of the organization (e.g.
    * `group.name`). Requires `scopes`. Omit for an organization-scoped token.
    */
-  group?: string;
+  group?: string | undefined;
   /**
    * Permissions of a group-scoped token. Required (and non-empty) when
    * `group` is set. `db:mint-token` issues new SQL tokens;

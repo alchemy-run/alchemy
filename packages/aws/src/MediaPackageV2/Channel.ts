@@ -55,7 +55,7 @@ export interface ChannelProps {
    * principals may push content to it (`mediapackagev2:PutObject`).
    * Omitting it removes any existing policy.
    */
-  policy?: string;
+  policy?: string | undefined;
   /**
    * User-defined tags for the channel. Merged with internal Alchemy tags.
    */
@@ -177,8 +177,8 @@ export const ChannelProvider = () =>
         Arn: string;
         ChannelName: string;
         ChannelGroupName: string;
-        IngestEndpoints?: mediapackagev2.IngestEndpoint[];
-        InputType?: mediapackagev2.InputType;
+        IngestEndpoints?: mediapackagev2.IngestEndpoint[] | undefined;
+        InputType?: mediapackagev2.InputType | undefined;
       }) => ({
         channelGroupName: channel.ChannelGroupName,
         channelName: channel.ChannelName,

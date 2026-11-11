@@ -37,25 +37,31 @@ export type ExampleConversationState =
 
 export type ExampleAction = {
   /** User utterance. */
-  userUtterance?: { text?: string };
+  userUtterance?: { text?: string | undefined } | undefined;
   /** Agent utterance. */
-  agentUtterance?: { text?: string };
+  agentUtterance?: { text?: string | undefined } | undefined;
   /** Tool use. */
-  toolUse?: {
-    tool?: string;
-    action?: string;
-    displayName?: string;
-  };
+  toolUse?:
+    | {
+        tool?: string | undefined;
+        action?: string | undefined;
+        displayName?: string | undefined;
+      }
+    | undefined;
   /** Playbook invocation. */
-  playbookInvocation?: {
-    playbook?: string;
-    displayName?: string;
-  };
+  playbookInvocation?:
+    | {
+        playbook?: string | undefined;
+        displayName?: string | undefined;
+      }
+    | undefined;
   /** Flow invocation. */
-  flowInvocation?: {
-    flow?: string;
-    displayName?: string;
-  };
+  flowInvocation?:
+    | {
+        flow?: string | undefined;
+        displayName?: string | undefined;
+      }
+    | undefined;
 };
 
 export type AgentsPlaybooksExampleProps = {

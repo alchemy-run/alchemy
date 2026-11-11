@@ -41,7 +41,7 @@ const uploadUrl = (input: {
   projectId: string;
   environmentId: string;
   serviceId: string;
-  message?: string;
+  message?: string | undefined;
 }): string => {
   const base = input.apiBaseUrl.replace(/\/+$/, "");
   const url = new URL(`${base}/project/${input.projectId}/environment/${input.environmentId}/up`);
@@ -61,7 +61,7 @@ export const uploadDeployTarball = Effect.fn(function* (input: {
   environmentId: string;
   serviceId: string;
   tarball: Uint8Array;
-  message?: string;
+  message?: string | undefined;
 }) {
   const env = yield* yield* RailwayEnvironment;
   const http = yield* HttpClient.HttpClient;

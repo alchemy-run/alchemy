@@ -151,7 +151,7 @@ export type ClusterProps = {
    * Primary worker count. `0` for single-node. Resizes in place.
    * @default 0
    */
-  workerNumInstances?: number;
+  workerNumInstances?: number | undefined;
   /**
    * Primary worker machine type short name or URI. Immutable.
    * @default "e2-standard-2"
@@ -684,11 +684,11 @@ const createCluster = (
   );
 
 const instanceGroup = (options: {
-  numInstances?: number;
-  machineType?: string;
-  bootDiskSizeGb?: number;
-  bootDiskType?: string;
-  preemptibility?: dataproc.InstanceGroupConfigPreemptibilityEnum | (string & {});
+  numInstances?: number | undefined;
+  machineType?: string | undefined;
+  bootDiskSizeGb?: number | undefined;
+  bootDiskType?: string | undefined;
+  preemptibility?: dataproc.InstanceGroupConfigPreemptibilityEnum | (string & {}) | undefined;
 }): dataproc.InstanceGroupConfig | undefined => {
   const group: dataproc.InstanceGroupConfig = {};
   if (options.numInstances !== undefined) {

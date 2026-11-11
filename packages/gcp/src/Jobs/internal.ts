@@ -197,11 +197,11 @@ export const updateMaskOf = (...fields: Array<string | undefined>) =>
   fields.filter((field): field is string => field !== undefined).join(",");
 
 export const replaceOnIdentity = (input: {
-  previousId?: string;
-  nextId?: string;
-  previousParent?: string;
-  nextParent?: string;
-  extra?: boolean;
+  previousId?: string | undefined;
+  nextId?: string | undefined;
+  previousParent?: string | undefined;
+  nextParent?: string | undefined;
+  extra?: boolean | undefined;
 }) => {
   if (input.extra === true) {
     return { action: "replace" as const, deleteFirst: false };

@@ -453,7 +453,9 @@ const retryConcurrentModification = <A, E extends { _tag: string }, R>(
     schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(5)]),
   });
 
-const toTagRecord = (tags: ReadonlyArray<{ Key: string; Value?: string }> | undefined) =>
+const toTagRecord = (
+  tags: ReadonlyArray<{ Key: string; Value?: string | undefined }> | undefined,
+) =>
   Object.fromEntries(
     (tags ?? [])
       .filter((tag): tag is { Key: string; Value: string } => typeof tag.Value === "string")

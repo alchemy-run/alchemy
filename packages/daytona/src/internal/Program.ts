@@ -28,7 +28,7 @@ export class ProgramStartFailed extends Data.TaggedError("Daytona.ProgramStartFa
 export interface ProgramSource {
   readonly main: string;
   readonly handler?: string;
-  readonly isExternal?: boolean;
+  readonly isExternal?: boolean | undefined;
   readonly build?: Bundle.BundleConfig;
 }
 

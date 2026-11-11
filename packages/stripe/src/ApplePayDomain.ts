@@ -175,7 +175,10 @@ const findByDomainName = Effect.fn(function* (domainName: string) {
   return matches[0];
 });
 
-const observe = Effect.fn(function* (input: { id?: string; domainName?: string }) {
+const observe = Effect.fn(function* (input: {
+  id?: string | undefined;
+  domainName?: string | undefined;
+}) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);
     if (byId !== undefined) return byId;

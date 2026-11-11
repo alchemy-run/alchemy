@@ -68,13 +68,13 @@ export interface ClusterTransport {
   /** The API server endpoint URL. */
   endpoint: string;
   /** Base64-encoded PEM certificate authority bundle. */
-  certificateAuthorityData?: string;
+  certificateAuthorityData?: string | undefined;
   /** Skip TLS verification (self-signed local clusters). */
-  insecureSkipTlsVerify?: boolean;
+  insecureSkipTlsVerify?: boolean | undefined;
   /** Mint the auth headers for one request. */
   headers: Effect.Effect<Record<string, string>, ProviderError>;
   /** PEM client certificate credentials for mutual TLS. */
-  clientCert?: { certificate: string; key: string };
+  clientCert?: { certificate: string; key: string } | undefined;
 }
 
 /**
@@ -211,7 +211,7 @@ export interface WorkloadIdentityResult {
   /** Extra container environment collected from bindings. */
   env: Record<string, any>;
   /** Annotations to stamp on the workload's ServiceAccount object. */
-  serviceAccountAnnotations?: Record<string, string>;
+  serviceAccountAnnotations?: Record<string, string> | undefined;
   /** Serializable state persisted on the workload's attributes. */
   // oxlint-disable-next-line typescript/no-redundant-type-constituents -- registry type is `never` until cloud packages augment it
   state: IdentityState | undefined;
@@ -235,9 +235,9 @@ export interface ImageRegistryResolveOptions {
   /** Target image platform (`linux/amd64` / `linux/arm64`). */
   platform: string;
   /** Port the generated Dockerfile exposes (`main` sources only). */
-  port?: number;
+  port?: number | undefined;
   /** True when `main` bundles as-is (no Effect bootstrap entry). */
-  isExternal?: boolean;
+  isExternal?: boolean | undefined;
   /** The generated-entry bootstrap wrapped around `main`. */
   bootstrap: (importPath: string) => string;
   /** Tags for registry-owned cloud resources. */
@@ -264,8 +264,8 @@ export interface ImageRegistryResult {
 export interface ImageRegistryHashOptions {
   source: WorkloadImageSource;
   platform: string;
-  port?: number;
-  isExternal?: boolean;
+  port?: number | undefined;
+  isExternal?: boolean | undefined;
   bootstrap: (importPath: string) => string;
 }
 

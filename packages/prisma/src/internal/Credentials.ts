@@ -8,6 +8,8 @@ import {
 } from "alchemy/Auth/Resolve";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import { PRISMA_AUTH_PROVIDER_NAME, type PrismaResolvedCredentials } from "../AuthProvider.ts";
 import { PrismaEnvironment } from "../PrismaEnvironment.ts";
 import { resolveBaseUrl } from "./BaseUrl.ts";
@@ -28,7 +30,10 @@ export const fromEnvironment = () =>
     Effect.gen(function* () {
       const environment = yield* PrismaEnvironment;
       return Effect.map(environment, (env) => ({
-        apiToken: env.serviceToken,
+        ...Record.filterMap(
+          { apiToken: env.serviceToken },
+          Result.fromNullishOr(() => undefined),
+        ),
         apiBaseUrl: env.baseUrl,
       }));
     }),

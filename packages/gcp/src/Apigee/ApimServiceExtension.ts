@@ -51,17 +51,20 @@ export type ApimExtension = {
   /**
    * Whether matching requests should fail open.
    */
-  failOpen?: boolean;
+  failOpen?: boolean | undefined;
   /**
    * CEL match condition.
    */
-  matchCondition?: string;
+  matchCondition?: string | undefined;
   /**
    * Supported events. Empty means all events.
    */
-  supportedEvents?: Array<
-    apigee.GoogleCloudApigeeV1ApimServiceExtensionExtensionSupportedEventsItemEnum | (string & {})
-  >;
+  supportedEvents?:
+    | Array<
+        | apigee.GoogleCloudApigeeV1ApimServiceExtensionExtensionSupportedEventsItemEnum
+        | (string & {})
+      >
+    | undefined;
 };
 
 export type ApimServiceExtensionProps = {

@@ -42,37 +42,39 @@ export type ContainerProps = PlatformProps &
      * Container image. Required unless `main` is set, in which case
      * Alchemy builds and pushes the image.
      */
-    image?: string;
+    image?: string | undefined;
     /**
      * Port the container listens on. A `main` program serves HTTP and
      * bound RPC on it; bound callers reach it on `localhost`.
      * @default 3000
      */
-    port?: number;
+    port?: number | undefined;
     /**
      * Region of the Artifact Registry repository a `main` image is pushed
      * to.
      * @default the stack's GCP region
      */
-    location?: string;
+    location?: string | undefined;
     /**
      * Module entrypoint for an Effect-native container (typically
      * `import.meta.url`). Alchemy bundles the program and builds its image.
      */
-    main?: string;
+    main?: string | undefined;
     /**
      * Named export to load from `main`.
      * @default "default"
      */
-    handler?: string;
+    handler?: string | undefined;
     /**
      * Environment variables. Merged after binding-injected `env`.
      */
-    env?: Record<string, any>;
+    env?: Record<string, any> | undefined;
     /** Bundler configuration for `main`, and the image build's layer `cache`. */
-    build?: Bundle.BundleConfig & BuildCacheOptions & { install?: PackageInstall };
+    build?:
+      | (Bundle.BundleConfig & BuildCacheOptions & { install?: PackageInstall | undefined })
+      | undefined;
     /** Host files or directories baked into the image next to `main`. */
-    extraFiles?: ReadonlyArray<ExtraFile>;
+    extraFiles?: ReadonlyArray<ExtraFile> | undefined;
   };
 
 export type Container = Resource<

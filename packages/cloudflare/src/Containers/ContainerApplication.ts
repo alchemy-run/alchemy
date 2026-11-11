@@ -100,7 +100,7 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
    * Human-readable application name. If omitted, Alchemy derives a deterministic
    * physical name from the stack, stage, and logical ID.
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * Name of the exported Durable Object class this container backs when the
    * Container is bound on an **async** Worker's `env`. Defaults to the
@@ -138,7 +138,7 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
   /**
    * Observability settings for the deployment.
    */
-  observability?: ContainerApplication.Observability;
+  observability?: ContainerApplication.Observability | undefined;
   /**
    * SSH public keys to install into the deployment.
    */
@@ -231,49 +231,51 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
    * // Repository: registry.cloudflare.com/<account-id>/<app.applicationName>
    * ```
    */
-  publish?: {
-    /**
-     * Destination repository name within the current Cloudflare account's
-     * container registry, for example `"web"`. This is not a source image,
-     * registry hostname, account ID, tag, or fully qualified image reference.
-     * Alchemy lowercases the name and adds the registry host and account ID:
-     * `registry.cloudflare.com/<account-id>/web` with the default `registryId`.
-     * The container application's name is independent of this repository name.
-     * Omitting `publish` uses the application's physical name instead and still
-     * enables caching. Generated names are scoped to the stage and resource
-     * instance; an explicit repository allows cross-stage reuse.
-     *
-     * For Dockerfile and Effect-native builds, Alchemy publishes a content-hash
-     * tag, then deploys an immutable manifest digest. The build hash and
-     * manifest digest are different identifiers. With `build.cache: true`,
-     * builds also keep their layers at this repository's `:buildcache` tag.
-     *
-     * Applications and stages in the same account can share `"web"`. Matching
-     * build inputs reuse the published image; changed inputs produce another
-     * hash tag in the same repository. Finished-image cache reuse applies to
-     * builds, not to re-publishing remote images. Pin base images and downloaded
-     * dependencies: changes outside the build context cannot invalidate its
-     * content hash.
-     *
-     * External remote images are re-published into this repository without
-     * building them. Images already in the target registry keep their existing
-     * repository; setting this option does not copy them into another one.
-     *
-     * @example
-     * ```typescript
-     * const app = yield* Cloudflare.Container("WebProduction", {
-     *   context: "./web",
-     *   publish: { repository: "web" },
-     * }).Application;
-     *
-     * // Published build:
-     * // registry.cloudflare.com/<account-id>/web:<build-hash>
-     * // Deployed image (app.configuration.image):
-     * // registry.cloudflare.com/<account-id>/web@sha256:<manifest-digest>
-     * ```
-     */
-    repository: string;
-  };
+  publish?:
+    | {
+        /**
+         * Destination repository name within the current Cloudflare account's
+         * container registry, for example `"web"`. This is not a source image,
+         * registry hostname, account ID, tag, or fully qualified image reference.
+         * Alchemy lowercases the name and adds the registry host and account ID:
+         * `registry.cloudflare.com/<account-id>/web` with the default `registryId`.
+         * The container application's name is independent of this repository name.
+         * Omitting `publish` uses the application's physical name instead and still
+         * enables caching. Generated names are scoped to the stage and resource
+         * instance; an explicit repository allows cross-stage reuse.
+         *
+         * For Dockerfile and Effect-native builds, Alchemy publishes a content-hash
+         * tag, then deploys an immutable manifest digest. The build hash and
+         * manifest digest are different identifiers. With `build.cache: true`,
+         * builds also keep their layers at this repository's `:buildcache` tag.
+         *
+         * Applications and stages in the same account can share `"web"`. Matching
+         * build inputs reuse the published image; changed inputs produce another
+         * hash tag in the same repository. Finished-image cache reuse applies to
+         * builds, not to re-publishing remote images. Pin base images and downloaded
+         * dependencies: changes outside the build context cannot invalidate its
+         * content hash.
+         *
+         * External remote images are re-published into this repository without
+         * building them. Images already in the target registry keep their existing
+         * repository; setting this option does not copy them into another one.
+         *
+         * @example
+         * ```typescript
+         * const app = yield* Cloudflare.Container("WebProduction", {
+         *   context: "./web",
+         *   publish: { repository: "web" },
+         * }).Application;
+         *
+         * // Published build:
+         * // registry.cloudflare.com/<account-id>/web:<build-hash>
+         * // Deployed image (app.configuration.image):
+         * // registry.cloudflare.com/<account-id>/web@sha256:<manifest-digest>
+         * ```
+         */
+        repository: string;
+      }
+    | undefined;
   /**
    * Environment variables passed to the container runtime.
    */
@@ -303,7 +305,7 @@ export interface EffectfulContainerProps extends ContainerApplicationPropsBase {
    *
    * @default `oven/bun:1` for `runtime: "bun"`, `node:22-slim` for `runtime: "node"`
    */
-  image?: string;
+  image?: string | undefined;
   /**
    * Inline environment Dockerfile content (typically `Dockerfile.inline`).
    * Replaces the generated `FROM` line — carry your own `FROM` plus any
@@ -425,11 +427,11 @@ export interface DurableObjectApplicationSettings {
    * SSH access to every instance of the application. Removing a previously
    * declared value disables SSH.
    */
-  ssh?: ContainerSshConfiguration;
+  ssh?: ContainerSshConfiguration | undefined;
   /** SSH public keys allowed to access instances. Removing this property clears previously managed keys. */
-  authorizedKeys?: Containers.UserSSHPublicKeyList;
+  authorizedKeys?: Containers.UserSSHPublicKeyList | undefined;
   /** Application-wide logging. Removing a previously declared value disables logs. Changes do not restart running containers. */
-  observability?: Containers.ContainerApplicationObservability;
+  observability?: Containers.ContainerApplicationObservability | undefined;
 }
 
 /**
@@ -464,7 +466,7 @@ export interface DurableObjectContainerProps
    * or `docker load`ed) is used as-is when the pull fails; build it with
    * `--platform linux/amd64`, the platform Cloudflare runs.
    */
-  image?: string;
+  image?: string | undefined;
   /**
    * Docker build context. Setting `context` or `dockerfile` builds the image;
    * `context` defaults to the current directory.
@@ -506,25 +508,25 @@ export interface AnyContainerApplicationProps extends Omit<
   ContainerApplicationPropsBase,
   "schedulingPolicy"
 > {
-  schedulingPolicy?: ContainerApplication.SchedulingPolicy;
-  ssh?: ContainerSshConfiguration;
-  authorizedKeys?: Containers.UserSSHPublicKeyList;
-  imagePreparationTimeout?: Duration.Input;
+  schedulingPolicy?: ContainerApplication.SchedulingPolicy | undefined;
+  ssh?: ContainerSshConfiguration | undefined;
+  authorizedKeys?: Containers.UserSSHPublicKeyList | undefined;
+  imagePreparationTimeout?: Duration.Input | undefined;
   /**
    * @internal Dockerfile lines contributed by mount bindings, folded in from
    * the bindings by the provider before the image is computed.
    */
-  imageInstall?: ReadonlyArray<string>;
-  main?: string;
-  image?: string;
-  context?: string;
-  dockerfile?: string | InlineDockerfile;
-  handler?: string;
-  runtime?: "bun" | "node";
-  external?: string[];
-  autoInstallExternals?: boolean;
+  imageInstall?: ReadonlyArray<string> | undefined;
+  main?: string | undefined;
+  image?: string | undefined;
+  context?: string | undefined;
+  dockerfile?: string | InlineDockerfile | undefined;
+  handler?: string | undefined;
+  runtime?: "bun" | "node" | undefined;
+  external?: string[] | undefined;
+  autoInstallExternals?: boolean | undefined;
   /** Bundler config for `main`; Docker build args and secrets for `context`; the layer cache for both. */
-  build?: Bundle.BundleConfig & DockerfileBuild;
+  build?: (Bundle.BundleConfig & DockerfileBuild) | undefined;
 }
 
 export type ContainerServices = ContainerApplication | PlatformServices | ProcessServices;
@@ -908,13 +910,13 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
     configuration: Partial<ContainerApplication.Configuration> &
       Containers.DurableObjectContainerConfiguration;
     /** Application-wide logging declared by a Durable Object-managed Container. */
-    observability?: Containers.ContainerApplicationObservability;
+    observability?: Containers.ContainerApplicationObservability | undefined;
     /**
      * The prepared, digest-pinned image of a Durable Object-managed Container,
      * or its local image key in `alchemy dev`. Unset when the Container
      * declares no image source.
      */
-    image?: string;
+    image?: string | undefined;
     /**
      * The Durable Object namespace attached to the application, if it is bound
      * to one.
@@ -937,11 +939,13 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
      * Internal hashes of the built image and desired application
      * configuration, used to skip unchanged builds and updates.
      */
-    hash?: {
-      image: string;
-      digest?: string;
-      configuration?: string;
-    };
+    hash?:
+      | {
+          image: string;
+          digest?: string | undefined;
+          configuration?: string | undefined;
+        }
+      | undefined;
     dev: DevContainerImage | undefined;
   },
   {
@@ -983,9 +987,9 @@ export declare namespace DevContainerImage {
   }
   export interface Build extends Base {
     readonly dockerfile: string;
-    readonly context?: string;
-    readonly buildArgs?: Record<string, string>;
-    readonly buildSecrets?: Record<string, string | Redacted.Redacted<string>>;
+    readonly context?: string | undefined;
+    readonly buildArgs?: Record<string, string> | undefined;
+    readonly buildSecrets?: Record<string, string | Redacted.Redacted<string>> | undefined;
   }
   export interface Pull extends Base {
     readonly imageUri: string;

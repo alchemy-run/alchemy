@@ -14,7 +14,8 @@ export const RpcServerNode = RpcServer.layerServer(
       host: "127.0.0.1",
       port: 0,
       // Refuse the upgrade (401) unless the URL carries the token.
-      verifyClient: (info: { req: { url?: string } }) => route(info.req.url) !== undefined,
+      verifyClient: (info: { req: { url?: string | undefined } }) =>
+        route(info.req.url) !== undefined,
     });
     const url = yield* Effect.callback<string>((resume) => {
       server.on("connection", (ws, req) => {

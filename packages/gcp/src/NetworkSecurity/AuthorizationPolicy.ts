@@ -32,34 +32,34 @@ export type AuthorizationPolicyAction =
 
 export type AuthorizationPolicySource = {
   /** Peer identities to match (exact, prefix, suffix, or `*`). */
-  principals?: string[];
+  principals?: string[] | undefined;
   /** Source IP CIDR ranges. */
-  ipBlocks?: string[];
+  ipBlocks?: string[] | undefined;
 };
 
 export type AuthorizationPolicyHttpHeaderMatch = {
   /** Regular expression matched against the header value. */
-  regexMatch?: string;
+  regexMatch?: string | undefined;
   /** HTTP header name (`:authority`, `:method`, `Host`, …). */
-  headerName?: string;
+  headerName?: string | undefined;
 };
 
 export type AuthorizationPolicyDestination = {
   /** Host names matched against the `:authority` header. */
-  hosts?: string[];
+  hosts?: string[] | undefined;
   /** Destination ports. */
-  ports?: number[];
+  ports?: number[] | undefined;
   /** HTTP methods. Must be omitted for gRPC. */
-  methods?: string[];
+  methods?: string[] | undefined;
   /** Optional HTTP header match. */
-  httpHeaderMatch?: AuthorizationPolicyHttpHeaderMatch;
+  httpHeaderMatch?: AuthorizationPolicyHttpHeaderMatch | undefined;
 };
 
 export type AuthorizationPolicyRule = {
   /** Source matchers. All sources must match. */
-  sources?: AuthorizationPolicySource[];
+  sources?: AuthorizationPolicySource[] | undefined;
   /** Destination matchers. All destinations must match. */
-  destinations?: AuthorizationPolicyDestination[];
+  destinations?: AuthorizationPolicyDestination[] | undefined;
 };
 
 export type AuthorizationPolicyProps = {

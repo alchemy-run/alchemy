@@ -104,7 +104,7 @@ export interface DurableObjectEngineOptions {
    *
    * @default undefined (no jurisdiction restriction)
    */
-  readonly jurisdiction?: DurableObjectJurisdiction;
+  readonly jurisdiction?: DurableObjectJurisdiction | undefined;
 }
 
 const engines = new Map<

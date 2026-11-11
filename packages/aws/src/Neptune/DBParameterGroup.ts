@@ -118,7 +118,7 @@ export interface DBParameterGroupLookup {
 export const DBParameterGroup = Resource<DBParameterGroup>("AWS.Neptune.DBParameterGroup");
 
 const toTagRecord = (
-  tags: Array<{ Key?: string; Value?: string }> | undefined,
+  tags: Array<{ Key?: string | undefined; Value?: string | undefined }> | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
     (tags ?? [])

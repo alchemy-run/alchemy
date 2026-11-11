@@ -22,17 +22,17 @@ export type SubnetworkSecondaryRange = {
 
 export type SubnetworkLogConfig = {
   /** Whether VPC flow logs are enabled. */
-  enable?: boolean;
+  enable?: boolean | undefined;
   /** Aggregation interval for flow logs. */
-  aggregationInterval?: compute.SubnetworkLogConfigAggregationIntervalEnum;
+  aggregationInterval?: compute.SubnetworkLogConfigAggregationIntervalEnum | undefined;
   /** Sampling rate in `[0, 1]`. */
-  flowSampling?: number;
+  flowSampling?: number | undefined;
   /** Metadata included in flow logs. */
-  metadata?: compute.SubnetworkLogConfigMetadataEnum;
+  metadata?: compute.SubnetworkLogConfigMetadataEnum | undefined;
   /** Extra metadata fields when `metadata` is `CUSTOM_METADATA`. */
-  metadataFields?: string[];
+  metadataFields?: string[] | undefined;
   /** Filter expression for exported flow logs. */
-  filterExpr?: string;
+  filterExpr?: string | undefined;
 };
 
 export type SubnetworkProps = {

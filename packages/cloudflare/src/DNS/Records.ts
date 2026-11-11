@@ -32,7 +32,7 @@ export interface RecordsProps {
    * domains; the deploy fails actionably when no zone matches. Every name in
    * the set lives in the one zone either way.
    */
-  zone?: ZoneReference;
+  zone?: ZoneReference | undefined;
   /**
    * Record type shared by every record in the set. Stable — changing it
    * replaces the set.
@@ -46,8 +46,9 @@ export interface RecordsProps {
   /**
    * Record names managed by this set. Names contributed through the binding
    * contract (see {@link RecordsBinding}) are merged in at reconcile time.
+   * Omitted or `undefined` names contribute no initial records.
    */
-  names?: string[];
+  names?: string[] | undefined;
   /**
    * Whether to send the records through Cloudflare's proxy.
    * @default false

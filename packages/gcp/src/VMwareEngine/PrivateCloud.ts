@@ -45,59 +45,59 @@ const DEFAULT_MANAGEMENT_CIDR = "192.168.1.0/24";
 
 export type StretchedClusterConfig = {
   /** Preferred zone that stays up if the inter-zone link is lost. */
-  preferredLocation?: string;
+  preferredLocation?: string | undefined;
   /** Additional zone for availability. */
-  secondaryLocation?: string;
+  secondaryLocation?: string | undefined;
 };
 
 export type NodeTypeConfig = {
   /** Custom core count per node. `0` uses the node type maximum. */
-  customCoreCount?: number;
+  customCoreCount?: number | undefined;
   /** Number of nodes of this type. */
-  nodeCount?: number;
+  nodeCount?: number | undefined;
 };
 
 export type ManagementCluster = {
   /** Stretched-cluster zones. Required for `STRETCHED` private clouds. */
-  stretchedClusterConfig?: StretchedClusterConfig;
+  stretchedClusterConfig?: StretchedClusterConfig | undefined;
   /**
    * Map of node type id to config. Keys are canonical node type ids
    * (`standard-72`, …).
    */
-  nodeTypeConfigs?: Record<string, NodeTypeConfig | undefined>;
+  nodeTypeConfigs?: Record<string, NodeTypeConfig | undefined> | undefined;
   /** User-provided cluster id for the management cluster. Immutable. */
-  clusterId?: string;
+  clusterId?: string | undefined;
 };
 
 export type NetworkConfig = {
   /** Management CIDR used by VMware appliances. Immutable. */
-  managementCidr?: string;
+  managementCidr?: string | undefined;
   /** VMware Engine network to attach. Immutable. */
-  vmwareEngineNetwork?: string;
+  vmwareEngineNetwork?: string | undefined;
   /** Output-only IP layout version. */
-  managementIpAddressLayoutVersion?: number;
+  managementIpAddressLayoutVersion?: number | undefined;
   /** Output-only DNS server IP. */
-  dnsServerIp?: string;
+  dnsServerIp?: string | undefined;
   /** Output-only canonical VMware Engine network name. */
-  vmwareEngineNetworkCanonical?: string;
+  vmwareEngineNetworkCanonical?: string | undefined;
 };
 
 export type EncryptionConfig = {
   /** KMS key for CMEK. */
-  cryptoKeyName?: string;
+  cryptoKeyName?: string | undefined;
   /** Encryption type (`CMEK`, `LEGACY_CMEK`, `OTHER`). */
-  type?: vmwareengine.EncryptionConfigTypeEnum | (string & {});
+  type?: vmwareengine.EncryptionConfigTypeEnum | (string & {}) | undefined;
 };
 
 export type Appliance = {
   /** Fully qualified domain name. */
-  fqdn?: string;
+  fqdn?: string | undefined;
   /** Internal IP address. */
-  internalIp?: string;
+  internalIp?: string | undefined;
   /** Appliance state. */
-  state?: string;
+  state?: string | undefined;
   /** Appliance version. */
-  version?: string;
+  version?: string | undefined;
 };
 
 export type PrivateCloudProps = {
@@ -106,38 +106,38 @@ export type PrivateCloudProps = {
    * `projects/{project}/locations/{location}/privateClouds/{privateCloud}`).
    * If omitted, a unique RFC1035 name is generated. Immutable.
    */
-  privateCloudId?: string;
+  privateCloudId?: string | undefined;
   /**
    * Location. `STANDARD` and `TIME_LIMITED` clouds are zonal
    * (`us-central1-a`); `STRETCHED` clouds are regional. Immutable.
    * @default "us-central1-a"
    */
-  location?: string;
+  location?: string | undefined;
   /**
    * Private cloud type.
    * @default "STANDARD"
    */
-  type?: vmwareengine.PrivateCloudTypeEnum | (string & {});
+  type?: vmwareengine.PrivateCloudTypeEnum | (string & {}) | undefined;
   /**
    * Management cluster. Required on create. `clusterId` and node type
    * identity are immutable.
    */
-  managementCluster?: ManagementCluster;
+  managementCluster?: ManagementCluster | undefined;
   /**
    * Consumer-project network configuration. `managementCidr` is
    * required on create. Immutable.
    */
-  networkConfig?: NetworkConfig;
+  networkConfig?: NetworkConfig | undefined;
   /**
    * Customer-managed encryption. Immutable.
    */
-  encryptionConfig?: EncryptionConfig;
+  encryptionConfig?: EncryptionConfig | undefined;
   /**
    * Human-readable description. Private clouds have no labels field, so
    * Alchemy stamps ownership into a `[alchemy …]` prefix and strips it
    * from attributes. Description is the only in-place update.
    */
-  description?: string;
+  description?: string | undefined;
 };
 
 export type PrivateCloud = Resource<

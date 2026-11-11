@@ -26,29 +26,29 @@ import {
 
 export type AnnotatorSelector = {
   /** Run the sentiment annotator. */
-  runSentimentAnnotator?: boolean;
+  runSentimentAnnotator?: boolean | undefined;
   /** Run the summarization annotator. */
-  runSummarizationAnnotator?: boolean;
+  runSummarizationAnnotator?: boolean | undefined;
   /** Run the QA annotator. */
-  runQaAnnotator?: boolean;
+  runQaAnnotator?: boolean | undefined;
   /** Run the silence annotator. */
-  runSilenceAnnotator?: boolean;
+  runSilenceAnnotator?: boolean | undefined;
   /** Run active phrase matcher annotators. */
-  runPhraseMatcherAnnotator?: boolean;
+  runPhraseMatcherAnnotator?: boolean | undefined;
   /** Run the entity annotator. */
-  runEntityAnnotator?: boolean;
+  runEntityAnnotator?: boolean | undefined;
   /** Run the intent annotator. */
-  runIntentAnnotator?: boolean;
+  runIntentAnnotator?: boolean | undefined;
   /** Run the interruption annotator. */
-  runInterruptionAnnotator?: boolean;
+  runInterruptionAnnotator?: boolean | undefined;
   /** Run the issue-model annotator. */
-  runIssueModelAnnotator?: boolean;
+  runIssueModelAnnotator?: boolean | undefined;
   /** Run the auto-labeling annotator. */
-  runAutoLabelingAnnotator?: boolean;
+  runAutoLabelingAnnotator?: boolean | undefined;
   /** Issue model resource names. Used when `runIssueModelAnnotator` is true. */
-  issueModels?: string[];
+  issueModels?: string[] | undefined;
   /** Phrase matcher resource names. Used when `runPhraseMatcherAnnotator` is true. */
-  phraseMatchers?: string[];
+  phraseMatchers?: string[] | undefined;
 };
 
 export type AnalysisRuleProps = {

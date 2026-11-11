@@ -85,42 +85,42 @@ export interface MagicSiteLanProps {
    * app, stage, and logical ID.
    * @default ${app}-${stage}-${id}
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * VLAN ID. Use zero for untagged.
    * @default 0
    */
-  vlanTag?: number;
+  vlanTag?: number | undefined;
   /**
    * Mark true to use this LAN for HA probing. Only works for sites with
    * HA turned on; only one LAN can be the ha_link. Create-only — changing
    * it triggers a replacement.
    */
-  haLink?: boolean;
+  haLink?: boolean | undefined;
   /**
    * Mark true to use this LAN for source-based breakout traffic.
    */
-  isBreakout?: boolean;
+  isBreakout?: boolean | undefined;
   /**
    * Mark true to use this LAN for source-based prioritized traffic.
    */
-  isPrioritized?: boolean;
+  isPrioritized?: boolean | undefined;
   /**
    * NAT configuration for the LAN.
    */
-  nat?: MagicSiteLanNat;
+  nat?: MagicSiteLanNat | undefined;
   /**
    * Subnets routed behind this LAN.
    */
-  routedSubnets?: MagicSiteLanRoutedSubnet[];
+  routedSubnets?: MagicSiteLanRoutedSubnet[] | undefined;
   /**
    * Static addressing configuration; omit to use DHCP.
    */
-  staticAddressing?: MagicSiteLanStaticAddressing;
+  staticAddressing?: MagicSiteLanStaticAddressing | undefined;
   /**
    * Bond identifier when the LAN is part of a link bond.
    */
-  bondId?: number;
+  bondId?: number | undefined;
 }
 
 export interface MagicSiteLanAttributes {
@@ -371,23 +371,24 @@ export const MagicSiteLanProvider = () =>
   });
 
 interface ObservedLan {
-  id?: string | null;
-  name?: string | null;
-  physport?: number | null;
-  vlanTag?: number | null;
-  haLink?: boolean | null;
-  isBreakout?: boolean | null;
-  isPrioritized?: boolean | null;
-  nat?: { staticPrefix?: string | null } | null;
+  id?: string | null | undefined;
+  name?: string | null | undefined;
+  physport?: number | null | undefined;
+  vlanTag?: number | null | undefined;
+  haLink?: boolean | null | undefined;
+  isBreakout?: boolean | null | undefined;
+  isPrioritized?: boolean | null | undefined;
+  nat?: { staticPrefix?: string | null | undefined } | null | undefined;
   routedSubnets?:
     | {
         nextHop: string;
         prefix: string;
-        nat?: { staticPrefix?: string | null } | null;
+        nat?: { staticPrefix?: string | null | undefined } | null | undefined;
       }[]
-    | null;
-  staticAddressing?: { address: string } | null;
-  bondId?: number | null;
+    | null
+    | undefined;
+  staticAddressing?: { address: string } | null | undefined;
+  bondId?: number | null | undefined;
 }
 
 /**

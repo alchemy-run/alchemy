@@ -39,7 +39,7 @@ export type BackendMetastore = {
   /**
    * Backend type (`BIGQUERY` or `DATAPROC_METASTORE`).
    */
-  metastoreType?: metastore.BackendMetastoreMetastoreTypeEnum | (string & {});
+  metastoreType?: metastore.BackendMetastoreMetastoreTypeEnum | (string & {}) | undefined;
 };
 
 export type FederationProps = {

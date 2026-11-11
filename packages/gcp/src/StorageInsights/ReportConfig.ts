@@ -297,7 +297,7 @@ const releaseServiceAgent = Effect.fn(function* (
   project: string,
   parent: string,
   self: string,
-  buckets: { source?: string; destination?: string },
+  buckets: { source?: string | undefined; destination?: string | undefined },
 ) {
   const others = (yield* listConfigs(parent)).filter((config) => config.name !== self);
   const { member } = yield* serviceAgentOf(project);

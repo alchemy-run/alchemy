@@ -53,48 +53,48 @@ export interface ScheduleRouteProps {
    * Optional schedule group the backing schedule is created in.
    * @default the AWS default group
    */
-  group?: ScheduleGroup;
+  group?: ScheduleGroup | undefined;
   /**
    * Optional description on the backing schedule.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * Desired schedule state (`ENABLED` / `DISABLED`).
    */
-  state?: string;
+  state?: string | undefined;
   /**
    * Timezone for cron or at expressions.
    */
-  timezone?: string;
+  timezone?: string | undefined;
   /**
    * Optional start date.
    */
-  startDate?: Date;
+  startDate?: Date | undefined;
   /**
    * Optional end date.
    */
-  endDate?: Date;
+  endDate?: Date | undefined;
   /**
    * Optional KMS key ARN.
    */
-  kmsKeyArn?: string;
+  kmsKeyArn?: string | undefined;
   /**
    * Flexible time window configuration.
    * @default { Mode: "OFF" }
    */
-  flexibleTimeWindow?: scheduler.FlexibleTimeWindow;
+  flexibleTimeWindow?: scheduler.FlexibleTimeWindow | undefined;
   /**
    * Action after a one-time schedule completes.
    */
-  actionAfterCompletion?: string;
+  actionAfterCompletion?: string | undefined;
   /**
    * Retry policy for failed invocations.
    */
-  retryPolicy?: scheduler.RetryPolicy;
+  retryPolicy?: scheduler.RetryPolicy | undefined;
   /**
    * Dead-letter queue for undeliverable invocations.
    */
-  deadLetterConfig?: scheduler.DeadLetterConfig;
+  deadLetterConfig?: scheduler.DeadLetterConfig | undefined;
 }
 
 export interface ScheduleDescriptor {
@@ -102,7 +102,7 @@ export interface ScheduleDescriptor {
    * Stable route id. Defaults to a hash of the schedule expression and the
    * host Function's logical id.
    */
-  id?: string;
+  id?: string | undefined;
   /**
    * Schedule expression: `rate(...)`, `cron(...)`, or `at(...)`.
    */

@@ -48,7 +48,7 @@ export type ServiceLbPolicyAutoCapacityDrain = {
    * if fewer than 25% of its endpoints are healthy. Never drains more
    * than 50% of configured backends.
    */
-  enable?: boolean;
+  enable?: boolean | undefined;
 };
 
 export type ServiceLbPolicyFailoverConfig = {
@@ -57,14 +57,14 @@ export type ServiceLbPolicyFailoverConfig = {
    * failover backends. Range 1-99. Defaults to 50 for classic global
    * external HTTP(S) and proxyless mesh, 70 otherwise.
    */
-  failoverHealthThreshold?: number;
+  failoverHealthThreshold?: number | undefined;
 };
 
 export type ServiceLbPolicyIsolationConfig = {
   /** Isolation granularity (`REGION`). */
-  isolationGranularity?: ServiceLbPolicyIsolationGranularity;
+  isolationGranularity?: ServiceLbPolicyIsolationGranularity | undefined;
   /** Isolation mode (`NEAREST` or `STRICT`). */
-  isolationMode?: ServiceLbPolicyIsolationMode;
+  isolationMode?: ServiceLbPolicyIsolationMode | undefined;
 };
 
 export type ServiceLbPolicyProps = {

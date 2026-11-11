@@ -332,11 +332,11 @@ export const DevicePostureIntegrationProvider = () =>
  * Structural shape shared by get/list/create/patch responses.
  */
 type ObservedIntegration = {
-  id?: string | null;
-  config?: { apiUrl: string; authUrl: string; clientId: string } | null;
-  interval?: string | null;
-  name?: string | null;
-  type?: (string & {}) | null;
+  id?: string | null | undefined;
+  config?: { apiUrl: string; authUrl: string; clientId: string } | null | undefined;
+  interval?: string | null | undefined;
+  name?: string | null | undefined;
+  type?: (string & {}) | null | undefined;
 };
 
 /**

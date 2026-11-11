@@ -6,7 +6,9 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
+import * as Record from "effect/Record";
 import * as Ref from "effect/Ref";
+import * as Result from "effect/Result";
 import { stripUnowned } from "./AdoptPolicy.ts";
 import {
   Artifacts,
@@ -129,7 +131,7 @@ const runDrift = (
   options: {
     readonly dryRun: boolean;
     /** Check and repair only these resources; the rest of the stage is untouched. */
-    readonly only?: ReadonlyArray<string>;
+    readonly only?: ReadonlyArray<string> | undefined;
   },
 ): Effect.Effect<DriftResult, any, State> =>
   Effect.gen(function* () {
@@ -416,13 +418,18 @@ const runDrift = (
             status: "fail",
             // The provider's own error, not the wrapper naming the resource:
             // the row already says which resource failed.
-            message: failureMessage(
-              Cause.map(cause, (error) =>
-                Predicate.isTagged(error, "DriftResourceError") &&
-                Predicate.hasProperty(error, "cause")
-                  ? error.cause
-                  : error,
-              ),
+            ...Record.filterMap(
+              {
+                message: failureMessage(
+                  Cause.map(cause, (error) =>
+                    Predicate.isTagged(error, "DriftResourceError") &&
+                    Predicate.hasProperty(error, "cause")
+                      ? error.cause
+                      : error,
+                  ),
+                ),
+              },
+              Result.fromNullishOr(() => undefined),
             ),
           });
         }

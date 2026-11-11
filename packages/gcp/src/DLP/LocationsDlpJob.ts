@@ -85,7 +85,7 @@ export type LocationsDlpJobProps = {
    * Risk-analysis job configuration. Mutually exclusive with
    * `inspectJob`. Immutable after create.
    */
-  riskJob?: RiskAnalysisJobConfig;
+  riskJob?: RiskAnalysisJobConfig | undefined;
 };
 
 export type LocationsDlpJob = Resource<
@@ -142,7 +142,7 @@ export interface LocationsDlpJobLookup {
   /**
    * Risk-analysis job configuration. Mutually exclusive with `inspectJob`.
    */
-  riskJob?: RiskAnalysisJobConfig;
+  riskJob?: RiskAnalysisJobConfig | undefined;
   /**
    * Project the resource lives in.
    * @default the ambient GCP project

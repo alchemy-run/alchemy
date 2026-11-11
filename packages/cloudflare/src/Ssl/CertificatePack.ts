@@ -42,19 +42,19 @@ export type CertificatePackValidityDays = 14 | 30 | 90 | 365;
  */
 export interface CertificatePackValidationRecord {
   /** Name of the TXT record to create (for `txt` validation). */
-  txtName?: string;
+  txtName?: string | undefined;
   /** Value of the TXT record (for `txt` validation). */
-  txtValue?: string;
+  txtValue?: string | undefined;
   /** URL that must serve `httpBody` (for `http` validation). */
-  httpUrl?: string;
+  httpUrl?: string | undefined;
   /** Body the `httpUrl` must respond with (for `http` validation). */
-  httpBody?: string;
+  httpBody?: string | undefined;
   /** Name of the CNAME record to create (for delegated DCV). */
-  cname?: string;
+  cname?: string | undefined;
   /** Target of the CNAME record (for delegated DCV). */
-  cnameTarget?: string;
+  cnameTarget?: string | undefined;
   /** Approver email addresses (for `email` validation). */
-  emails?: string[];
+  emails?: string[] | undefined;
 }
 
 export interface CertificatePackProps {
@@ -470,13 +470,13 @@ const keepLifecycle = (
 });
 
 const toRecord = (record: {
-  cname?: string | null;
-  cnameTarget?: string | null;
-  emails?: string[] | null;
-  httpBody?: string | null;
-  httpUrl?: string | null;
-  txtName?: string | null;
-  txtValue?: string | null;
+  cname?: string | null | undefined;
+  cnameTarget?: string | null | undefined;
+  emails?: string[] | null | undefined;
+  httpBody?: string | null | undefined;
+  httpUrl?: string | null | undefined;
+  txtName?: string | null | undefined;
+  txtValue?: string | null | undefined;
 }): CertificatePackValidationRecord => ({
   txtName: record.txtName ?? undefined,
   txtValue: record.txtValue ?? undefined,

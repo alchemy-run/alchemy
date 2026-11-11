@@ -32,7 +32,7 @@ export type NotificationChannelProps = {
    * from the stack, stage, and logical id. Limited to 512 Unicode
    * characters.
    */
-  displayName?: string;
+  displayName?: string | undefined;
   /**
    * Human-readable description. Limited to 1024 Unicode characters.
    */

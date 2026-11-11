@@ -28,14 +28,14 @@ import {
 
 export type DicomNotificationConfig = {
   /** Pub/Sub topic for DICOM change notifications. */
-  pubsubTopic?: string;
+  pubsubTopic?: string | undefined;
 };
 
 export type DicomLegacyNotificationConfig = {
   /** Pub/Sub topic for new DICOM instances. */
-  pubsubTopic?: string;
+  pubsubTopic?: string | undefined;
   /** Send notifications on bulk import. */
-  sendForBulkImport?: boolean;
+  sendForBulkImport?: boolean | undefined;
 };
 
 export type DatasetsDicomStoreProps = {
@@ -50,24 +50,24 @@ export type DatasetsDicomStoreProps = {
    * Region used when `dataset` is a bare id.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
-  location?: string;
+  location?: string | undefined;
   /**
    * DICOM store id. Any string up to 256 characters. Immutable —
    * changing it replaces the store.
    */
-  dicomStoreId?: string;
+  dicomStoreId?: string | undefined;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
    */
-  labels?: Record<string, string>;
+  labels?: Record<string, string> | undefined;
   /**
    * Destinations for change notifications.
    */
-  notificationConfigs?: DicomNotificationConfig[];
+  notificationConfigs?: DicomNotificationConfig[] | undefined;
   /**
    * Legacy single notification destination.
    */
-  notificationConfig?: DicomLegacyNotificationConfig;
+  notificationConfig?: DicomLegacyNotificationConfig | undefined;
 };
 
 export type DatasetsDicomStore = Resource<

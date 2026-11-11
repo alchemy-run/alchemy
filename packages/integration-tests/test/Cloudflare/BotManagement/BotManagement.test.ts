@@ -35,17 +35,17 @@ const forbiddenRetrySchedule = Schedule.exponential("500 millis");
  * bag of optional fields for assertions.
  */
 interface ObservedConfig {
-  readonly enableJs?: boolean | null;
-  readonly fightMode?: boolean | null;
-  readonly aiBotsProtection?: string | null;
-  readonly aiSearch?: string | null;
-  readonly aiUser?: string | null;
-  readonly aiTraining?: string | null;
-  readonly botPreferenceSyncEnabled?: boolean | null;
-  readonly sbfmDefinitelyAutomated?: string | null;
-  readonly sbfmVerifiedBots?: string | null;
-  readonly sbfmStaticResourceProtection?: boolean | null;
-  readonly optimizeWordpress?: boolean | null;
+  readonly enableJs?: boolean | null | undefined;
+  readonly fightMode?: boolean | null | undefined;
+  readonly aiBotsProtection?: string | null | undefined;
+  readonly aiSearch?: string | null | undefined;
+  readonly aiUser?: string | null | undefined;
+  readonly aiTraining?: string | null | undefined;
+  readonly botPreferenceSyncEnabled?: boolean | null | undefined;
+  readonly sbfmDefinitelyAutomated?: string | null | undefined;
+  readonly sbfmVerifiedBots?: string | null | undefined;
+  readonly sbfmStaticResourceProtection?: boolean | null | undefined;
+  readonly optimizeWordpress?: boolean | null | undefined;
 }
 
 const getConfig = (zoneId: string) =>

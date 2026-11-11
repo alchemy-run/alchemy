@@ -280,7 +280,12 @@ class SqlCursorImpl<T extends Record<string, SqlStorageValue>>
 
   get next(): SqlCursor<T>["next"] {
     const cursor = this.#cursor;
-    return defineCursorField(this, "next", () => Effect.sync(() => cursor.next()));
+    return defineCursorField(this, "next", () =>
+      Effect.sync(() => {
+        const result = cursor.next();
+        return result.done ? { done: true as const } : result;
+      }),
+    );
   }
 
   get toArray(): SqlCursor<T>["toArray"] {

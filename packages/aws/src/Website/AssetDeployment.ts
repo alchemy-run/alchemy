@@ -45,7 +45,7 @@ export interface AssetDeploymentProps {
   /**
    * Optional key prefix within the bucket.
    */
-  prefix?: string;
+  prefix?: string | undefined;
   /**
    * Remove old files under the prefix that are not part of the current deploy.
    * @default false
@@ -54,12 +54,12 @@ export interface AssetDeploymentProps {
   /**
    * Optional per-file overrides.
    */
-  fileOptions?: AssetFileOption[];
+  fileOptions?: AssetFileOption[] | undefined;
   /**
    * Character encoding applied to inferred text-based asset content types.
    * @default "utf-8"
    */
-  textEncoding?: WebsiteTextEncoding;
+  textEncoding?: WebsiteTextEncoding | undefined;
 }
 
 export interface AssetDeployment extends Resource<
@@ -102,7 +102,7 @@ export interface AssetDeployment extends Resource<
      * deployment, as observed. Lets `alchemy drift` detect objects added
      * out of band.
      */
-    strayKeys?: string[];
+    strayKeys?: string[] | undefined;
   },
   never,
   Providers

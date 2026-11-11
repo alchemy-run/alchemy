@@ -37,44 +37,46 @@ const COLLECTION = "securityGateways";
 
 export type SecurityGatewayInternetGateway = {
   /** IP addresses assigned to Cloud NAT. Output only. */
-  assignedIps?: string[];
+  assignedIps?: string[] | undefined;
 };
 
 export type SecurityGatewayHub = {
   /** Internet gateway configuration for the hub. */
-  internetGateway?: SecurityGatewayInternetGateway;
+  internetGateway?: SecurityGatewayInternetGateway | undefined;
 };
 
 export type SecurityGatewayServiceDiscovery = {
   /** External API-gateway discovery settings. */
-  apiGateway?: {
-    /** Path used to fetch resource-model updates. */
-    resourceOverride?: { path?: string };
-  };
+  apiGateway?:
+    | {
+        /** Path used to fetch resource-model updates. */
+        resourceOverride?: { path?: string | undefined } | undefined;
+      }
+    | undefined;
 };
 
 export type SecurityGatewayContextualHeaders = {
   /** Delegated device-info output type. */
-  deviceInfo?: { outputType?: string };
+  deviceInfo?: { outputType?: string | undefined } | undefined;
   /** Delegated user-info output type. */
-  userInfo?: { outputType?: string };
+  userInfo?: { outputType?: string | undefined } | undefined;
   /** Delegated group-info output type. */
-  groupInfo?: { outputType?: string };
+  groupInfo?: { outputType?: string | undefined } | undefined;
   /** Default output type for enabled headers. */
-  outputType?: string;
+  outputType?: string | undefined;
 };
 
 export type SecurityGatewayProxyProtocolConfig = {
   /** Allowed client header names. */
-  allowedClientHeaders?: string[];
+  allowedClientHeaders?: string[] | undefined;
   /** Custom metadata headers. */
-  metadataHeaders?: Record<string, string>;
+  metadataHeaders?: Record<string, string> | undefined;
   /** Gateway identity included in the proxy protocol. */
-  gatewayIdentity?: string;
+  gatewayIdentity?: string | undefined;
   /** Contextual header configuration. */
-  contextualHeaders?: SecurityGatewayContextualHeaders;
+  contextualHeaders?: SecurityGatewayContextualHeaders | undefined;
   /** Include the client IP when true. */
-  clientIp?: boolean;
+  clientIp?: boolean | undefined;
 };
 
 export type SecurityGatewayProps = {
@@ -85,7 +87,7 @@ export type SecurityGatewayProps = {
    * characters matching `[a-z]([a-z0-9-]{0,61}[a-z0-9])?`. Immutable —
    * changing it replaces the gateway.
    */
-  securityGatewayId?: string;
+  securityGatewayId?: string | undefined;
   /**
    * Location. Security gateways live in `global`. Immutable — changing
    * it replaces the gateway.

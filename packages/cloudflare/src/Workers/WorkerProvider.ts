@@ -1177,7 +1177,7 @@ interface WorkerMetadataHashInput {
    * rename, a custom-domain reorder) redeploy the Worker with the fresh
    * value even though props and binding data are unchanged.
    */
-  readonly selfUrl?: string;
+  readonly selfUrl?: string | undefined;
 }
 
 // The asset router config the resource declares (htmlHandling,
@@ -1629,9 +1629,9 @@ export const LiveWorkerProvider = () =>
         workersDev: ResolvedWorkersDev;
         domain: ResolvedWorkerDomain | undefined;
         /** the version uploaded by this deploy (self-rollout), if any */
-        uploadedVersionId?: string;
+        uploadedVersionId?: string | undefined;
         /** user-provided `version.alias` attached to the uploaded version */
-        uploadedVersionAlias?: string;
+        uploadedVersionAlias?: string | undefined;
       }) {
         const { workersDev, scriptName } = params;
         const urls = yield* computeStableWorkerUrls(params);
@@ -2353,7 +2353,7 @@ export const LiveWorkerProvider = () =>
         fqn: string,
         workerName: string,
         props: WorkerProps,
-        opts: { skipAssetsRead?: boolean; selfUrl?: string } = {},
+        opts: { skipAssetsRead?: boolean | undefined; selfUrl?: string | undefined } = {},
       ) =>
         Effect.gen(function* () {
           // Assets-only Worker: no entry module at all. The script PUT goes
@@ -3086,7 +3086,9 @@ export const LiveWorkerProvider = () =>
         // the props turns them off on an existing Preview.
         const resolvedObservability = yield* resolveObservability(news, bindings);
         // The Preview API takes no `null` sampling rate; omit it instead.
-        const sampled = <T extends { headSamplingRate?: number | null }>(settings: T) => ({
+        const sampled = <T extends { headSamplingRate?: number | null | undefined }>(
+          settings: T,
+        ) => ({
           ...settings,
           headSamplingRate: settings.headSamplingRate ?? undefined,
         });
@@ -3967,10 +3969,10 @@ export const LiveWorkerProvider = () =>
         let versionId: string | undefined;
         let deploymentId: string | undefined;
         let worker: {
-          id?: string | null;
-          logpush?: boolean | null;
+          id?: string | null | undefined;
+          logpush?: boolean | null | undefined;
           /** The immutable script id (Cloudflare's script "tag"). */
-          tag?: string | null;
+          tag?: string | null | undefined;
         };
         // A gradual rollout (`version.traffic` < 100) deploys through the
         // versions API instead of the full-cutover script PUT. That's only
@@ -5109,7 +5111,7 @@ export const LiveWorkerProvider = () =>
           );
           let durableObjectNamespaces = getDurableObjects(existingSettings?.bindings);
 
-          let placeholder: { tag?: string | null } | undefined;
+          let placeholder: { tag?: string | null | undefined } | undefined;
           if (existingSettings) {
             // Engine has already cleared this resource for write via
             // `observe` or `read` + AdoptPolicy. Either we own it (matching
@@ -5873,10 +5875,10 @@ const getPreviewDurableObjectNamespaces = (
   );
 
 type ObservedDurableObjectNamespace = {
-  id?: string | null;
+  id?: string | null | undefined;
   script: string;
   class: string;
-  useSqlite?: boolean;
+  useSqlite?: boolean | undefined;
 };
 
 /**

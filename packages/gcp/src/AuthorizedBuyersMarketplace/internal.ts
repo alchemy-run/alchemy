@@ -45,12 +45,12 @@ export const sameText = (left: string | undefined, right: string | undefined) =>
 export const normalizeEmail = (email: string | undefined) => (email ?? "").trim().toLowerCase();
 
 export const replaceOnIdentity = (input: {
-  previousParent?: string;
+  previousParent?: string | undefined;
   nextParent: string;
-  previousEmail?: string;
-  nextEmail?: string;
-  previousUserId?: string;
-  nextUserId?: string;
+  previousEmail?: string | undefined;
+  nextEmail?: string | undefined;
+  previousUserId?: string | undefined;
+  nextUserId?: string | undefined;
 }) => {
   if (
     input.previousParent !== undefined &&

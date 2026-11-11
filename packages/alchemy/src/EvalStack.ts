@@ -35,7 +35,7 @@ const platform = Layer.mergeAll(
   Layer.provide(CredentialsStoreLive, PlatformServices),
 );
 // override alchemy state store, CLI/reporting, state, and Config
-const alchemy = (overrides?: { dev?: boolean }) =>
+const alchemy = (overrides?: { dev?: boolean | undefined }) =>
   Layer.mergeAll(
     // optional
     overrides?.dev
@@ -54,7 +54,7 @@ export const evalStack = <S extends { services: Context.Context<any> }, B, Stack
   fn: (stack: S) => Effect.Effect<B, Err, Req>,
   options: {
     stage: string;
-    dev?: boolean;
+    dev?: boolean | undefined;
     /**
      * Optional caller-supplied scope. When provided, scoped resources
      * (e.g. the dev sidecar process) live until the caller closes this
@@ -64,7 +64,7 @@ export const evalStack = <S extends { services: Context.Context<any> }, B, Stack
      * private scope closed on completion. The state store never outlives
      * the call.
      */
-    scope?: Scope.Scope;
+    scope?: Scope.Scope | undefined;
   },
 ) => {
   const body = Effect.gen(function* () {

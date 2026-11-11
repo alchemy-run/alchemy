@@ -121,11 +121,11 @@ interface PollOptions<A, Req> {
   /** Worker id holding the leases. Must be unique per concurrent poller. */
   workerId: string;
   /** @default 100 */
-  maxRecords?: number;
+  maxRecords?: number | undefined;
   /** Sleep after an empty batch or a failed iteration. @default "1 second" */
-  idleBackoff?: Duration.Input;
+  idleBackoff?: Duration.Input | undefined;
   /** Extend the five-minute lease this often while the handler runs. @default "2 minutes" */
-  extendEvery?: Duration.Input;
+  extendEvery?: Duration.Input | undefined;
   /** Turn consumed records into the handler's elements (e.g. schema decode). */
   decode: (
     records: ReadonlyArray<ConsumedRecord>,
@@ -213,7 +213,7 @@ const pollForever = <A, Req>(
 
 /** Run `concurrency` pollers, each with its own worker id (`${workerId}-${i}`). */
 const pollSubscription = <A, Req>(
-  options: PollOptions<A, Req> & { concurrency?: number },
+  options: PollOptions<A, Req> & { concurrency?: number | undefined },
 ): Effect.Effect<void, never, Req | RuntimeContext> =>
   Effect.forEach(
     Array.from({ length: Math.max(1, options.concurrency ?? 1) }, (_, i) => i),

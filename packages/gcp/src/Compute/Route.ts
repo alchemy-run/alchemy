@@ -23,7 +23,7 @@ export type RouteProps = {
    * from the stack, stage, and logical id. Immutable — changing it replaces
    * the route.
    */
-  routeName?: string;
+  routeName?: string | undefined;
   /**
    * Destination range of outgoing packets this route applies to (IPv4 or
    * IPv6 CIDR). Immutable — changing it replaces the route.
@@ -41,41 +41,41 @@ export type RouteProps = {
    * in a `[alchemy …]` prefix for `list` / nuke. Immutable — changing the
    * user-facing description replaces the route.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * Priority used to break ties among equal-prefix matches. Lower wins.
    * Range `0`–`65535`.
    * @default 1000
    */
-  priority?: number;
+  priority?: number | undefined;
   /**
    * Instance tags this route applies to. Empty means every instance.
    * Immutable — changing it replaces the route.
    */
-  tags?: string[];
+  tags?: string[] | undefined;
   /**
    * Next hop gateway URL or `default-internet-gateway`. Exactly one next
    * hop must be set. Immutable.
    */
-  nextHopGateway?: string;
+  nextHopGateway?: string | undefined;
   /**
    * Next hop IP address (IPv4 or IPv6). Exactly one next hop must be set.
    * Immutable.
    */
-  nextHopIp?: string;
+  nextHopIp?: string | undefined;
   /**
    * Next hop instance URL. Exactly one next hop must be set. Immutable.
    */
-  nextHopInstance?: string;
+  nextHopInstance?: string | undefined;
   /**
    * Next hop VPN tunnel URL. Exactly one next hop must be set. Immutable.
    */
-  nextHopVpnTunnel?: string;
+  nextHopVpnTunnel?: string | undefined;
   /**
    * Next hop internal load balancer forwarding rule URL or IP. Exactly one
    * next hop must be set. Immutable.
    */
-  nextHopIlb?: string;
+  nextHopIlb?: string | undefined;
 };
 
 export type Route = Resource<
@@ -272,11 +272,11 @@ const gatewayUrl = (project: string, gateway: string) => {
 };
 
 const hopOf = (props: {
-  nextHopGateway?: string;
-  nextHopIp?: string;
-  nextHopInstance?: string;
-  nextHopVpnTunnel?: string;
-  nextHopIlb?: string;
+  nextHopGateway?: string | undefined;
+  nextHopIp?: string | undefined;
+  nextHopInstance?: string | undefined;
+  nextHopVpnTunnel?: string | undefined;
+  nextHopIlb?: string | undefined;
 }) => {
   if (props.nextHopGateway)
     return { kind: "gateway" as const, value: lastToken(props.nextHopGateway) };

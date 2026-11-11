@@ -126,7 +126,7 @@ export const ResourceProvider = () =>
         stables: ["resourceId", "restApiId", "parentId"] as const,
         diff: Effect.fn(function* ({ news: newsIn, olds }) {
           if (!isResolved(newsIn)) return;
-          const news = newsIn as Input.ResolveProps<ApiGatewayResourceProps>;
+          const news = newsIn;
           if (
             news.restApiId !== olds.restApiId ||
             news.pathPart !== olds.pathPart ||
@@ -192,7 +192,7 @@ export const ResourceProvider = () =>
           if (!isResolved(newsIn)) {
             return yield* Effect.die("Resource props were not resolved");
           }
-          const news = newsIn as Input.ResolveProps<ApiGatewayResourceProps>;
+          const news = newsIn;
           const restApiId = (output?.restApiId ?? news.restApiId) as string;
 
           // Observe — fetch the live resource if we have a cached id. We

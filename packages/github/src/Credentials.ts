@@ -8,7 +8,9 @@ import {
 import { lazyCredentials } from "alchemy/Auth/Resolve";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Record from "effect/Record";
 import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
 import {
   GITHUB_AUTH_PROVIDER_NAME,
   type GitHubResolvedCredentials,
@@ -48,7 +50,7 @@ export const config = (
  */
 export const fromToken = (
   token: string | Redacted.Redacted<string>,
-  options?: { readonly baseUrl?: string },
+  options?: { readonly baseUrl?: string | undefined },
 ) =>
   Layer.succeed(
     Credentials,
@@ -108,7 +110,14 @@ export const fromApp = (
   return Layer.unwrap(
     (baseUrl !== undefined ? normalizeGitHubBaseUrl(baseUrl) : Effect.undefined).pipe(
       Effect.map((apiBaseUrl) =>
-        App.installationCredentials({ ...app, apiBaseUrl, userAgent: USER_AGENT }),
+        App.installationCredentials({
+          ...app,
+          ...Record.filterMap(
+            { apiBaseUrl },
+            Result.fromNullishOr(() => undefined),
+          ),
+          userAgent: USER_AGENT,
+        }),
       ),
       Effect.orDie,
     ),
@@ -124,7 +133,7 @@ export const fromApp = (
  * whatever host the auth provider resolved from the profile config or
  * environment. `GitHub.providers({ baseUrl })` threads its option here.
  */
-export const fromAuthProvider = (options?: { readonly baseUrl?: string }) =>
+export const fromAuthProvider = (options?: { readonly baseUrl?: string | undefined }) =>
   Layer.effect(
     Credentials,
     Effect.gen(function* () {

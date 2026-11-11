@@ -13,7 +13,7 @@ export interface TaskRowProps {
   /** Status glyph. Ignored while `spinning`; defaults to the bullet glyph. */
   readonly icon?: string;
   /** Color for the glyph (and the spinner while `spinning`). */
-  readonly iconColor?: string;
+  readonly iconColor?: string | undefined;
   /** Render an animated spinner frame in the glyph slot. */
   readonly spinning?: boolean;
   readonly label: ReactNode;

@@ -15,7 +15,7 @@ export interface RecordListProps {
    * domains, so one list may span several zones (e.g. certificate
    * validation records for `example.com` and `example.org`).
    */
-  zone?: string;
+  zone?: string | undefined;
   /**
    * Records to publish. Always DNS-only (never proxied).
    *

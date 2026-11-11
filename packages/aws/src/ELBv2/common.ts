@@ -282,7 +282,7 @@ export interface ListenerRuleCondition {
     regexValues?: string[];
   };
   /** Match on query-string key/value pairs. Supports `*` and `?` wildcards. */
-  queryString?: { values: { key?: string; value: string }[] };
+  queryString?: { values: { key?: string | undefined; value: string }[] };
   /** Match on the HTTP request method (GET, POST, ...). */
   httpRequestMethod?: { values: string[]; regexValues?: string[] };
   /** Match on the source IP CIDR. */
@@ -360,7 +360,7 @@ export const serializeConditions = (conditions: ListenerRuleCondition[]): elbv2.
  */
 export const observedAttributes = (
   declared: Record<string, string> | undefined,
-  observed: readonly { Key?: string; Value?: string }[] | undefined,
+  observed: readonly { Key?: string | undefined; Value?: string | undefined }[] | undefined,
 ): Record<string, string> | undefined => {
   if (!declared || Object.keys(declared).length === 0) return undefined;
   const values = new Map(

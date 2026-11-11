@@ -383,7 +383,7 @@ const findByDomain = (
   );
 
 const observe = Effect.fn(function* (input: {
-  customDomainId?: string;
+  customDomainId?: string | undefined;
   projectId: string;
   environmentId: string;
   serviceId: string;

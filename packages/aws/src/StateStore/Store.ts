@@ -12,7 +12,7 @@ export interface StateOptions extends DynamoDBStateOptions {
    */
   backend?: "dynamodb" | "s3";
   /** With the S3 store: see {@link S3StateOptions.bucketName}. */
-  bucketName?: S3StateOptions["bucketName"];
+  bucketName?: S3StateOptions["bucketName"] | undefined;
   /** With the S3 store: see {@link S3StateOptions.prefix}. */
   prefix?: S3StateOptions["prefix"];
   /** With the S3 store: see {@link S3StateOptions.encryption}. */

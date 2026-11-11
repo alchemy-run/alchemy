@@ -51,7 +51,7 @@ export interface WebFunctionEndpointProps {
    * a new URL.
    * @default the logical ID
    */
-  endpointName?: string;
+  endpointName?: string | undefined;
   /**
    * Who may call the endpoint. `"ApplicationManaged"` forwards every request
    * (a public endpoint; authenticate in your application). `"IamAuth"`
@@ -65,18 +65,18 @@ export interface WebFunctionEndpointProps {
    * home Region and these Regions. Changing it recreates the endpoint, which
    * gets a new URL.
    */
-  regions?: string[];
+  regions?: string[] | undefined;
   /**
    * Maximum number of execution environments this endpoint uses per Region
    * (2–10,000). Endpoints scale independently. Changes apply in place.
    */
-  maxEnvironments?: number;
+  maxEnvironments?: number | undefined;
   /**
    * Maximum requests per second this endpoint accepts, enforced per Region.
    * Excess requests receive HTTP 429; `0` disables the endpoint. Changes
    * apply in place.
    */
-  rateLimit?: number;
+  rateLimit?: number | undefined;
   /**
    * Roll out deploys gradually on this endpoint: the revision a deploy
    * publishes gets `weight` percent of traffic and the revision the
@@ -84,11 +84,11 @@ export interface WebFunctionEndpointProps {
    * `canary`) to promote, or `0` to roll back. Independent of the function's
    * own `canary`.
    */
-  canary?: WebFunctionCanary;
+  canary?: WebFunctionCanary | undefined;
   /**
    * Description of the endpoint.
    */
-  description?: string;
+  description?: string | undefined;
 }
 
 export interface WebFunctionEndpoint extends Resource<
@@ -128,12 +128,12 @@ export interface WebFunctionEndpoint extends Resource<
      * Requests per second the endpoint allows, as observed. Lets
      * `alchemy drift` detect out-of-band changes.
      */
-    rateLimit?: number;
+    rateLimit?: number | undefined;
     /**
      * Cap on the endpoint's execution environments, as observed. Lets
      * `alchemy drift` detect out-of-band changes.
      */
-    maxEnvironments?: number;
+    maxEnvironments?: number | undefined;
   },
   never,
   Providers
@@ -248,7 +248,7 @@ export const WebFunctionEndpointProvider = () =>
   Provider.effect(
     WebFunctionEndpoint,
     Effect.gen(function* () {
-      const nameOf = (id: string, props: { endpointName?: string } | undefined) =>
+      const nameOf = (id: string, props: { endpointName?: string | undefined } | undefined) =>
         props?.endpointName ?? toEndpointName(id);
 
       const toAttributes = (

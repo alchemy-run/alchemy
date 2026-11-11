@@ -71,15 +71,15 @@ export const buildAndPushEcrImage = Effect.fn(function* (
     /** Docker build context directory. */
     context: string;
     /** Absolute path to the Dockerfile. Defaults to `Dockerfile` in `context`. */
-    dockerfile?: string;
+    dockerfile?: string | undefined;
     /** Target platform, e.g. `"linux/amd64"`. */
-    platform?: string;
+    platform?: string | undefined;
     /** Docker build arguments. */
-    buildArgs?: Record<string, string>;
+    buildArgs?: Record<string, string> | undefined;
     /** BuildKit layer cache; `true` keeps it at `<repositoryUri>:buildcache`. */
     cache?: BuildCacheOptions["cache"];
     /** Additional arguments appended to `docker image build`. */
-    args?: string[];
+    args?: string[] | undefined;
   },
 ) {
   const credentials = yield* getEcrRegistryCredentials;
@@ -137,7 +137,7 @@ export interface ImageProps {
   /**
    * Docker build arguments (`--build-arg`).
    */
-  buildArgs?: Record<string, string>;
+  buildArgs?: Record<string, string> | undefined;
   /**
    * Keep build layers in a remote cache so a fresh builder (a new CI runner)
    * skips unchanged steps. `true` keeps every stage's layers at the

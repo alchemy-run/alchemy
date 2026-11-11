@@ -28,7 +28,7 @@ const COLLECTION = "serverTlsPolicies";
 
 export type ServerTlsGrpcEndpoint = {
   /** gRPC endpoint URI. Only UDS paths starting with `unix:` are supported. */
-  targetUri?: string;
+  targetUri?: string | undefined;
 };
 
 export type ServerTlsCertificateProviderInstance = {
@@ -36,14 +36,14 @@ export type ServerTlsCertificateProviderInstance = {
    * Plugin instance name. Set to `google_cloud_private_spiffe` to use
    * Certificate Authority Service.
    */
-  pluginInstance?: string;
+  pluginInstance?: string | undefined;
 };
 
 export type ServerTlsCertificateProvider = {
   /** gRPC endpoint used to obtain the certificate and private key. */
-  grpcEndpoint?: ServerTlsGrpcEndpoint;
+  grpcEndpoint?: ServerTlsGrpcEndpoint | undefined;
   /** Certificate provider plugin instance loaded by the data plane. */
-  certificateProviderInstance?: ServerTlsCertificateProviderInstance;
+  certificateProviderInstance?: ServerTlsCertificateProviderInstance | undefined;
 };
 
 export type ServerTlsValidationCA = ServerTlsCertificateProvider;
@@ -58,18 +58,18 @@ export type ServerTlsMtlsPolicy = {
    * Certificate authorities used to validate the client certificate
    * (Traffic Director). Must be empty for Application Load Balancers.
    */
-  clientValidationCa?: ServerTlsValidationCA[];
+  clientValidationCa?: ServerTlsValidationCA[] | undefined;
   /**
    * Certificate Manager TrustConfig used for chain validation. Allowed
    * only with Application Load Balancers.
    */
-  clientValidationTrustConfig?: string;
+  clientValidationTrustConfig?: string | undefined;
   /**
    * How the load balancer handles a missing or invalid client
    * certificate. Required for Application Load Balancers; must be empty
    * for Traffic Director.
    */
-  clientValidationMode?: ServerTlsClientValidationMode;
+  clientValidationMode?: ServerTlsClientValidationMode | undefined;
 };
 
 export type ServerTlsPolicyProps = {

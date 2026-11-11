@@ -58,7 +58,7 @@ export interface CreatedToken {
   readonly grantedPermissionGroups: number;
   /** Echoed back by Cloudflare; may contain effects we never request. */
   readonly policies: ReadonlyArray<unknown>;
-  readonly verificationStatus?: string;
+  readonly verificationStatus?: string | undefined;
   readonly diagnostics: ReadonlyArray<Alchemist.Diagnostic>;
 }
 

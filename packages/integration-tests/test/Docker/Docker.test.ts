@@ -176,7 +176,7 @@ describe("Docker.image", (it) => {
     () =>
       Effect.gen(function* () {
         const docker = yield* Docker;
-        const notes: Array<{ message: string; kind?: string }> = [];
+        const notes: Array<{ message: string; kind?: string | undefined }> = [];
         const session = {
           note: (message: string, options?: { kind?: "status" | "output" }) =>
             Effect.sync(() => {

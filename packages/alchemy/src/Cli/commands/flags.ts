@@ -148,8 +148,8 @@ export const exclude = selectionFlag(
 );
 
 export const validateSelectionOptions = (options: {
-  readonly include?: ReadonlyArray<string>;
-  readonly exclude?: ReadonlyArray<string>;
+  readonly include?: ReadonlyArray<string> | undefined;
+  readonly exclude?: ReadonlyArray<string> | undefined;
   readonly destroy?: boolean;
   readonly detectDrift?: boolean;
 }) =>

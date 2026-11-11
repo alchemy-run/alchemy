@@ -45,13 +45,13 @@ export interface PrimaryIpProps {
    * Location (`nbg1-dc3` → `nbg1`). Cannot be changed after creation —
    * changing it triggers a replacement.
    */
-  datacenter?: string | number;
+  datacenter?: string | number | undefined;
   /**
    * Name of the Primary IP. Must be unique per Hetzner project. If
    * omitted, a unique name is generated from the stack, stage, and
    * logical ID.
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * If enabled, Hetzner deletes this Primary IP when its assigned
    * resource is deleted.
@@ -248,7 +248,7 @@ const samePlacement = (
 
 const toAttrs = (
   ip: CloudPrimaryIp,
-  extras?: { datacenter?: string | number },
+  extras?: { datacenter?: string | number | undefined },
 ): PrimaryIp["Attributes"] => ({
   id: ip.id,
   name: ip.name,
@@ -287,8 +287,8 @@ const observe = Effect.fn(function* ({
   outputId,
 }: {
   id: string;
-  name?: string;
-  outputId?: number;
+  name?: string | undefined;
+  outputId?: number | undefined;
 }) {
   // Identity is the numeric id (cached on `output`) or the unique
   // project-scoped name. Do NOT fall back to alchemy.* labels: a

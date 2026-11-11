@@ -43,7 +43,7 @@ export interface ContainerProps {
    * written to Alchemy state. Docker itself exposes the resolved values
    * through `docker inspect`, so treat env files as secrets.
    */
-  envFiles?: string[];
+  envFiles?: string[] | undefined;
   /** Host/container port mappings. */
   ports?: Container.PortMapping[];
   /** Volume or bind mounts. */
@@ -100,7 +100,7 @@ export interface ContainerProps {
    * Name of a preloaded AppArmor profile, e.g. `"docker-default"`.
    * Requires AppArmor support on the target host. `"unconfined"` disables it.
    */
-  appArmorProfile?: string;
+  appArmorProfile?: string | undefined;
   /** Docker user-namespace mode. `"host"` opts out of daemon user remapping. */
   userNamespace?: string;
   /** Supplementary Linux group names or numeric GIDs. */
@@ -228,11 +228,11 @@ export interface Container extends Resource<
      */
     ports: Record<string, number>;
     /** Configured network namespace, when reported by Docker. */
-    networkMode?: string;
+    networkMode?: string | undefined;
     /** Added Linux capabilities, when reported by Docker. */
-    capAdd?: string[];
+    capAdd?: string[] | undefined;
     /** Configured host devices, when reported by Docker. */
-    devices?: Container.DeviceMapping[];
+    devices?: Container.DeviceMapping[] | undefined;
   },
   never,
   Providers,

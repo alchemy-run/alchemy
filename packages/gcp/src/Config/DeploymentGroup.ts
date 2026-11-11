@@ -33,17 +33,17 @@ export type DeploymentUnit = {
   /**
    * Unit id. Must be unique within the deployment group.
    */
-  id?: string;
+  id?: string | undefined;
   /**
    * Existing deployment this unit points at, as
    * `projects/{project}/locations/{location}/deployments/{deployment}`
    * or a deployment id (expanded in the group's location).
    */
-  deployment?: string;
+  deployment?: string | undefined;
   /**
    * IDs of other units in this group that must finish first.
    */
-  dependencies?: string[];
+  dependencies?: string[] | undefined;
 };
 
 export type DeploymentGroupProps = {

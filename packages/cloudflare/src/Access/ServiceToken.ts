@@ -428,9 +428,9 @@ const differs = (desired: string | undefined, observed: string | null | undefine
 
 type ObservedToken = {
   id?: string;
-  clientId?: string | null;
+  clientId?: string | null | undefined;
   clientSecret?: string | null;
-  name?: string | null;
-  duration?: string | null;
-  expiresAt?: string | null;
+  name?: string | null | undefined;
+  duration?: string | null | undefined;
+  expiresAt?: string | null | undefined;
 };

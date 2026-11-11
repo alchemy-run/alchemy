@@ -63,7 +63,7 @@ export const ensurePresent = <T>(
  * Narrow a MediaLive resource body to one whose server-assigned `Id`/`Arn`
  * are present, failing with a typed error otherwise.
  */
-export const ensureIdentified = <T extends { Id?: string; Arn?: string }>(
+export const ensureIdentified = <T extends { Id?: string | undefined; Arn?: string | undefined }>(
   value: T | undefined,
   what: string,
 ): Effect.Effect<T & { Id: string; Arn: string }, MediaLiveIncompleteResponse> =>

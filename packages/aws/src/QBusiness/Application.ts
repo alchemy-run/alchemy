@@ -76,7 +76,7 @@ export interface ApplicationProps {
   /**
    * A description of the application.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * Encryption-at-rest configuration. Changing it replaces the application.
    */

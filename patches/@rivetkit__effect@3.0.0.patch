@@ -1,0 +1,58 @@
+diff --git a/src/internal/ActionDispatcher.ts b/src/internal/ActionDispatcher.ts
+index eae860841c0ad58defe6c03622c043ec5ec43bc1..59c794516abea30236ae0ea74c26eae9c706e110 100644
+--- a/src/internal/ActionDispatcher.ts
++++ b/src/internal/ActionDispatcher.ts
+@@ -5,6 +5,7 @@ import {
+ 	type Fiber,
+ 	Option,
+ 	Record,
++	Result,
+ 	Schema,
+ 	Tracer,
+ } from "effect";
+@@ -133,11 +134,14 @@ export const make = <
+ 									? encodedError.message
+ 									: `${action._tag} failed`,
+ 								{
+-									code: hasStringProperty("_tag")(
+-										encodedError,
+-									)
+-										? encodedError._tag
+-										: undefined,
++									...Record.filterMap(
++										{
++											code: hasStringProperty("_tag")(encodedError)
++												? encodedError._tag
++												: undefined,
++										},
++										Result.fromNullishOr(() => undefined),
++									),
+ 									metadata:
+ 										ActionErrorEnvelope.make(encodedError),
+ 								},
+diff --git a/src/internal/ActorInstanceManager.ts b/src/internal/ActorInstanceManager.ts
+index 2ca5f3c0708d01ab370c0fd6aa954d4411c5c2e4..39b9eaa93eb0b63bfb7a6d967062bc74948c1cb3 100644
+--- a/src/internal/ActorInstanceManager.ts
++++ b/src/internal/ActorInstanceManager.ts
+@@ -34,7 +34,7 @@ export type Instance<
+ 		options?: Effect.RunOptions,
+ 	) => Fiber.Fiber<A, E>;
+ 	readonly scope: Scope.Closeable;
+-	readonly state?: ActorStateAdapter.ActorState<StateDefinition>;
++	readonly state?: ActorStateAdapter.ActorState<StateDefinition> | undefined;
+ };
+ 
+ export const make = Effect.fnUntraced(function* <
+diff --git a/src/internal/ActorStateAdapter.ts b/src/internal/ActorStateAdapter.ts
+index 75c19c0b040073eea51a66d2b8cab8074e5e132b..f40388f07fb1db56194fc3739d13497726744c13 100644
+--- a/src/internal/ActorStateAdapter.ts
++++ b/src/internal/ActorStateAdapter.ts
+@@ -13,7 +13,7 @@ type StateInstance<StateDefinition extends StateOptions.Any> = {
+ 		effect: Effect.Effect<A, E, any>,
+ 		options?: Effect.RunOptions,
+ 	) => Fiber.Fiber<A, E>;
+-	readonly state?: ActorState<StateDefinition>;
++	readonly state?: ActorState<StateDefinition> | undefined;
+ };
+ 
+ export type Adapter<StateDefinition extends StateOptions.Any> = {

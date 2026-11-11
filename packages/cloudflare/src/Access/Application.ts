@@ -89,25 +89,29 @@ export type ApplicationDestination =
  */
 export interface OAuthConfiguration {
   /** Whether Access acts as the OAuth authorization server. */
-  enabled?: boolean;
+  enabled?: boolean | undefined;
   /** OAuth grant and token lifetimes. */
-  grant?: {
-    /** Lifetime of issued access tokens, as a Go-style duration. */
-    accessTokenLifetime?: string;
-    /** Lifetime of the authorization session, as a Go-style duration. */
-    sessionDuration?: string;
-  };
+  grant?:
+    | {
+        /** Lifetime of issued access tokens, as a Go-style duration. */
+        accessTokenLifetime?: string | undefined;
+        /** Lifetime of the authorization session, as a Go-style duration. */
+        sessionDuration?: string | undefined;
+      }
+    | undefined;
   /** Settings for OAuth dynamic client registration. */
-  dynamicClientRegistration?: {
-    /** Whether dynamic client registration is enabled. */
-    enabled?: boolean;
-    /** Explicit redirect URIs that dynamically registered clients may use. */
-    allowedUris?: ReadonlyArray<string>;
-    /** Whether any localhost redirect URI is allowed. */
-    allowAnyOnLocalhost?: boolean;
-    /** Whether any loopback-address redirect URI is allowed. */
-    allowAnyOnLoopback?: boolean;
-  };
+  dynamicClientRegistration?:
+    | {
+        /** Whether dynamic client registration is enabled. */
+        enabled?: boolean | undefined;
+        /** Explicit redirect URIs that dynamically registered clients may use. */
+        allowedUris?: ReadonlyArray<string> | undefined;
+        /** Whether any localhost redirect URI is allowed. */
+        allowAnyOnLocalhost?: boolean | undefined;
+        /** Whether any loopback-address redirect URI is allowed. */
+        allowAnyOnLoopback?: boolean | undefined;
+      }
+    | undefined;
 }
 
 /**
@@ -185,7 +189,7 @@ export interface ApplicationProps {
    * Human-readable display name. If omitted, a deterministic physical name
    * is generated from the app/stage/logical-id.
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * Primary hostname and path secured by Access. Required for `self_hosted`
    * apps; ignored on the request for `warp` (Cloudflare auto-fills it with
@@ -268,23 +272,23 @@ export interface ApplicationProps {
    *
    * @default "24h"
    */
-  sessionDuration?: string;
+  sessionDuration?: string | undefined;
   /**
    * Allowed identity-provider UUIDs. Defaults (on Cloudflare's side) to every
    * IdP configured for the account.
    */
-  allowedIdps?: string[];
+  allowedIdps?: string[] | undefined;
   /**
    * Skip the IdP picker when only one IdP is allowed. Requires `allowedIdps`
    * to contain exactly one entry.
    *
    * @default false
    */
-  autoRedirectToIdentity?: boolean;
+  autoRedirectToIdentity?: boolean | undefined;
   /**
    * Whether the app should be visible in the App Launcher dashboard.
    */
-  appLauncherVisible?: boolean;
+  appLauncherVisible?: boolean | undefined;
   /**
    * Tags applied to this application for filtering in the App Launcher.
    */
@@ -319,26 +323,28 @@ export interface ApplicationProps {
    * ]
    * ```
    */
-  policies?: ReadonlyArray<
-    | string
-    | { policyId: string }
-    | InlineApplicationPolicy
-    | { id: string; precedence?: number }
-    | {
-        id: string;
-        precedence?: number;
-        approvalRequired?: boolean;
-        isolationRequired?: boolean;
-        purposeJustificationRequired?: boolean;
-        purposeJustificationPrompt?: string;
-        sessionDuration?: string;
-        approvalGroups?: ReadonlyArray<{
-          approvalsNeeded: number;
-          emailAddresses?: ReadonlyArray<string>;
-          emailListUuid?: string;
-        }>;
-      }
-  >;
+  policies?:
+    | ReadonlyArray<
+        | string
+        | { policyId: string }
+        | InlineApplicationPolicy
+        | { id: string; precedence?: number }
+        | {
+            id: string;
+            precedence?: number;
+            approvalRequired?: boolean;
+            isolationRequired?: boolean;
+            purposeJustificationRequired?: boolean;
+            purposeJustificationPrompt?: string;
+            sessionDuration?: string;
+            approvalGroups?: ReadonlyArray<{
+              approvalsNeeded: number;
+              emailAddresses?: ReadonlyArray<string>;
+              emailListUuid?: string;
+            }>;
+          }
+      >
+    | undefined;
   /**
    * Adopt an existing app that already lives in Cloudflare (matched by
    * applicationId observation) instead of failing on conflict.
@@ -1007,22 +1013,22 @@ interface ObservedPolicy {
 interface ObservedApp {
   /** The decoded response, for carrying unmanaged settings through updates. */
   readonly raw: Readonly<Record<string, unknown>>;
-  readonly id?: string;
-  readonly aud?: string;
-  readonly name?: string;
-  readonly type?: ApplicationType;
-  readonly domain?: string;
-  readonly destinations?: ReadonlyArray<ApplicationDestination>;
-  readonly oauthConfiguration?: OAuthConfiguration;
-  readonly saasApp?: SaasApp;
-  readonly allowedIdps?: ReadonlyArray<string>;
-  readonly autoRedirectToIdentity?: boolean;
-  readonly appLauncherVisible?: boolean;
-  readonly sessionDuration?: string;
-  readonly tags?: ReadonlyArray<string>;
-  readonly policies?: ReadonlyArray<ObservedPolicy>;
-  readonly createdAt?: string;
-  readonly updatedAt?: string;
+  readonly id?: string | undefined;
+  readonly aud?: string | undefined;
+  readonly name?: string | undefined;
+  readonly type?: ApplicationType | undefined;
+  readonly domain?: string | undefined;
+  readonly destinations?: ReadonlyArray<ApplicationDestination> | undefined;
+  readonly oauthConfiguration?: OAuthConfiguration | undefined;
+  readonly saasApp?: SaasApp | undefined;
+  readonly allowedIdps?: ReadonlyArray<string> | undefined;
+  readonly autoRedirectToIdentity?: boolean | undefined;
+  readonly appLauncherVisible?: boolean | undefined;
+  readonly sessionDuration?: string | undefined;
+  readonly tags?: ReadonlyArray<string> | undefined;
+  readonly policies?: ReadonlyArray<ObservedPolicy> | undefined;
+  readonly createdAt?: string | undefined;
+  readonly updatedAt?: string | undefined;
 }
 
 const isComplete = (
@@ -1033,7 +1039,7 @@ const isComplete = (
 const toAttributes = (
   app: ObservedApp & { id: string; aud: string; type: ApplicationType },
   accountId: string,
-  fallback?: Partial<ApplicationAttributes>,
+  fallback?: { [K in keyof ApplicationAttributes]?: ApplicationAttributes[K] | undefined },
 ): ApplicationAttributes => ({
   applicationId: app.id,
   aud: app.aud,

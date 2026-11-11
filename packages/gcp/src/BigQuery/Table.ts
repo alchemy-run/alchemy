@@ -41,21 +41,21 @@ export type TableField = {
    * Field mode (`NULLABLE`, `REQUIRED`, `REPEATED`).
    * @default "NULLABLE"
    */
-  mode?: string;
+  mode?: string | undefined;
   /** Field description. Max 1,024 characters. */
-  description?: string;
+  description?: string | undefined;
   /** Nested fields when `type` is `RECORD` / `STRUCT`. */
-  fields?: TableField[];
+  fields?: TableField[] | undefined;
   /** Max UTF-8 length (`STRING`) or byte length (`BYTES`). */
-  maxLength?: string;
+  maxLength?: string | undefined;
   /** Precision for `NUMERIC` / `BIGNUMERIC`. */
-  precision?: string;
+  precision?: string | undefined;
   /** Scale for `NUMERIC` / `BIGNUMERIC`. */
-  scale?: string;
+  scale?: string | undefined;
   /** SQL expression for the column default. */
-  defaultValueExpression?: string;
+  defaultValueExpression?: string | undefined;
   /** Collation for `STRING` fields (`und:ci` or `""`). */
-  collation?: string;
+  collation?: string | undefined;
 };
 
 export type TableTimePartitioning = {
@@ -68,9 +68,9 @@ export type TableTimePartitioning = {
    * Partitioning column (`TIMESTAMP` or `DATE`). Omit to use
    * `_PARTITIONTIME`. Immutable — changing it replaces the table.
    */
-  field?: string;
+  field?: string | undefined;
   /** Partition expiration in milliseconds. */
-  expirationMs?: string;
+  expirationMs?: string | undefined;
 };
 
 export type TableClustering = {
@@ -95,18 +95,18 @@ export type TableHivePartitioningOptions = {
    * their types, `STRINGS` reads every key as `STRING`, and `CUSTOM`
    * takes keys and types from `sourceUriPrefix`.
    */
-  mode?: string;
+  mode?: string | undefined;
   /**
    * Prefix shared by every source URI, up to the first partition key
    * (`gs://bucket/events`). In `CUSTOM` mode it also declares the keys:
    * `gs://bucket/events/{day:DATE}`.
    */
-  sourceUriPrefix?: string;
+  sourceUriPrefix?: string | undefined;
   /**
    * Require a filter on a partition key in every query of the table.
    * @default false
    */
-  requirePartitionFilter?: boolean;
+  requirePartitionFilter?: boolean | undefined;
 };
 
 export type TableExternalDataConfiguration = {
@@ -121,9 +121,9 @@ export type TableExternalDataConfiguration = {
    * Infer the schema from the data. Self-describing formats such as
    * Parquet do not need it.
    */
-  autodetect?: boolean;
+  autodetect?: boolean | undefined;
   /** Hive partitioning of the source paths. */
-  hivePartitioningOptions?: TableHivePartitioningOptions;
+  hivePartitioningOptions?: TableHivePartitioningOptions | undefined;
 };
 
 export type TableProps = {
@@ -140,57 +140,57 @@ export type TableProps = {
    * Must contain only letters, numbers, and underscores; max 1,024
    * characters. Immutable — changing it replaces the table.
    */
-  tableId?: string;
+  tableId?: string | undefined;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
    */
-  labels?: Record<string, string>;
+  labels?: Record<string, string> | undefined;
   /**
    * Table schema. Adding columns updates in place; removing or changing
    * the type of an existing column is rejected by BigQuery.
    */
-  schema?: TableField[];
+  schema?: TableField[] | undefined;
   /** User-friendly description of this table. */
-  description?: string;
+  description?: string | undefined;
   /** Descriptive display name. */
-  friendlyName?: string;
+  friendlyName?: string | undefined;
   /**
    * Expiration time as milliseconds since the Unix epoch (string). Omit
    * for no expiration.
    */
-  expirationTime?: string;
+  expirationTime?: string | undefined;
   /**
    * Time-based partitioning. `type` and `field` are immutable.
    */
-  timePartitioning?: TableTimePartitioning;
+  timePartitioning?: TableTimePartitioning | undefined;
   /**
    * Clustering columns. Usually combined with time partitioning.
    */
-  clustering?: TableClustering;
+  clustering?: TableClustering | undefined;
   /**
    * Require a partition filter in queries that can be used for partition
    * elimination.
    * @default false
    */
-  requirePartitionFilter?: boolean;
+  requirePartitionFilter?: boolean | undefined;
   /**
    * Cloud KMS key used to encrypt table data, as
    * `projects/{project}/locations/{location}/keyRings/{keyRing}/cryptoKeys/{cryptoKey}`.
    * Immutable — changing it replaces the table.
    */
-  kmsKeyName?: string;
+  kmsKeyName?: string | undefined;
   /**
    * Make the table a logical view defined by a query. Mutually exclusive
    * with `externalDataConfiguration`. Switching between a native table, a
    * view, and an external table replaces the table.
    */
-  view?: TableView;
+  view?: TableView | undefined;
   /**
    * Make the table an external table over data outside BigQuery, such as
    * files in Cloud Storage. Mutually exclusive with `view`. Updates in
    * place; switching to or from a native table or a view replaces it.
    */
-  externalDataConfiguration?: TableExternalDataConfiguration;
+  externalDataConfiguration?: TableExternalDataConfiguration | undefined;
 };
 
 export type Table = Resource<

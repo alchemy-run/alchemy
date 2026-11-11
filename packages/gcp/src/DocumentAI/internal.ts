@@ -229,11 +229,11 @@ export const toPhysicalId = (
   });
 
 export const replaceOnIdentity = (input: {
-  previousId?: string;
-  nextId?: string;
-  previousLocation?: string;
-  nextLocation?: string;
-  extra?: boolean;
+  previousId?: string | undefined;
+  nextId?: string | undefined;
+  previousLocation?: string | undefined;
+  nextLocation?: string | undefined;
+  extra?: boolean | undefined;
 }) => {
   const previousLocation = normalizeLocation(input.previousLocation);
   const nextLocation = normalizeLocation(input.nextLocation);
@@ -374,7 +374,9 @@ export const listProjectSchemas = (project: string) =>
     return schemas;
   });
 
-export const findOwnedByDisplayName = <T extends { name?: string; displayName?: string }>(
+export const findOwnedByDisplayName = <
+  T extends { name?: string | undefined; displayName?: string | undefined },
+>(
   id: string,
   items: readonly T[],
 ) =>
@@ -387,8 +389,8 @@ export const findOwnedByDisplayName = <T extends { name?: string; displayName?: 
 
 export const findOwnedByLabels = <
   T extends {
-    name?: string;
-    labels?: Record<string, string | undefined> | null;
+    name?: string | undefined;
+    labels?: Record<string, string | undefined> | null | undefined;
   },
 >(
   id: string,

@@ -17,7 +17,7 @@ export interface GroupProps {
    * Explicit identity store ID.
    * If omitted, Alchemy resolves it from the selected Identity Center instance.
    */
-  identityStoreId?: string;
+  identityStoreId?: string | undefined;
   /**
    * Optional instance ARN used to discover the identity store ID.
    */
@@ -29,7 +29,7 @@ export interface GroupProps {
   /**
    * Optional group description.
    */
-  description?: string;
+  description?: string | undefined;
 }
 
 export interface Group extends Resource<

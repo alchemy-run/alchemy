@@ -21,7 +21,7 @@ export interface DBParameterGroupProps {
   /**
    * Name of the parameter group. If omitted, Alchemy generates one.
    */
-  dbParameterGroupName?: string;
+  dbParameterGroupName?: string | undefined;
   /**
    * Parameter group family, for example `aurora-postgresql16`.
    */
@@ -29,7 +29,7 @@ export interface DBParameterGroupProps {
   /**
    * Human-readable description.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * Instance parameter overrides, e.g. `{ time_zone: "Australia/Sydney" }`.
    *
@@ -44,7 +44,7 @@ export interface DBParameterGroupProps {
    * Static parameters are applied with `pending-reboot`, dynamic parameters
    * with `immediate`.
    */
-  parameters?: Record<string, string>;
+  parameters?: Record<string, string> | undefined;
   /**
    * User-defined tags.
    */

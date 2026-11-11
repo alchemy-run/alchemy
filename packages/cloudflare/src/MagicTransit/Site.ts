@@ -18,9 +18,9 @@ type TypeId = typeof TypeId;
  */
 export interface MagicSiteLocation {
   /** Latitude of the site. */
-  lat?: string;
+  lat?: string | undefined;
   /** Longitude of the site. */
-  lon?: string;
+  lon?: string | undefined;
 }
 
 export interface MagicSiteProps {
@@ -29,31 +29,31 @@ export interface MagicSiteProps {
    * app, stage, and logical ID.
    * @default ${app}-${stage}-${id}
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * An optional description of the site.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * Magic WAN Connector identifier tag to associate with this site.
    */
-  connectorId?: string;
+  connectorId?: string | undefined;
   /**
    * Secondary Magic WAN Connector identifier tag. Used when high
    * availability mode is on.
    */
-  secondaryConnectorId?: string;
+  secondaryConnectorId?: string | undefined;
   /**
    * Site high availability mode. If true, the site can have two connectors
    * and runs in high availability mode. Create-only — changing it triggers
    * a replacement.
    * @default false
    */
-  haMode?: boolean;
+  haMode?: boolean | undefined;
   /**
    * Location of the site in latitude and longitude.
    */
-  location?: MagicSiteLocation;
+  location?: MagicSiteLocation | undefined;
 }
 
 export interface MagicSiteAttributes {
@@ -289,13 +289,16 @@ export const MagicSiteProvider = () =>
   });
 
 interface ObservedSite {
-  id?: string | null;
-  name?: string | null;
-  description?: string | null;
-  connectorId?: string | null;
-  secondaryConnectorId?: string | null;
-  haMode?: boolean | null;
-  location?: { lat?: string | null; lon?: string | null } | null;
+  id?: string | null | undefined;
+  name?: string | null | undefined;
+  description?: string | null | undefined;
+  connectorId?: string | null | undefined;
+  secondaryConnectorId?: string | null | undefined;
+  haMode?: boolean | null | undefined;
+  location?:
+    | { lat?: string | null | undefined; lon?: string | null | undefined }
+    | null
+    | undefined;
 }
 
 /**

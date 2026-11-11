@@ -26,7 +26,7 @@ export interface ListDocumentsOptions {
   /** Maximum documents per page. */
   pageSize?: number;
   /** Page token from a previous `list`. */
-  pageToken?: string;
+  pageToken?: string | undefined;
 }
 
 export interface ListDocumentsResult {

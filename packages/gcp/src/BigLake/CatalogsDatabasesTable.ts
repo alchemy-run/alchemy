@@ -40,7 +40,7 @@ export type SerDeInfo = {
   /**
    * Fully qualified Java class name of the serialization library.
    */
-  serializationLib?: string;
+  serializationLib?: string | undefined;
 };
 
 export type StorageDescriptor = {
@@ -48,36 +48,36 @@ export type StorageDescriptor = {
    * Cloud Storage folder URI where the table data is stored, starting
    * with `gs://`.
    */
-  locationUri?: string;
+  locationUri?: string | undefined;
   /**
    * Fully qualified Java class name of the input format.
    */
-  inputFormat?: string;
+  inputFormat?: string | undefined;
   /**
    * Fully qualified Java class name of the output format.
    */
-  outputFormat?: string;
+  outputFormat?: string | undefined;
   /**
    * Serializer and deserializer information.
    */
-  serdeInfo?: SerDeInfo;
+  serdeInfo?: SerDeInfo | undefined;
 };
 
 export type HiveTableOptions = {
   /**
    * Hive table type (`MANAGED_TABLE`, `EXTERNAL_TABLE`, …).
    */
-  tableType?: string;
+  tableType?: string | undefined;
   /**
    * User-supplied Hive table parameters. Alchemy ownership keys
    * (`alchemy-stack`, `alchemy-stage`, `alchemy-id`) are merged in
    * automatically — BigLake tables have no labels field.
    */
-  parameters?: Record<string, string>;
+  parameters?: Record<string, string> | undefined;
   /**
    * Physical storage information of the data.
    */
-  storageDescriptor?: StorageDescriptor;
+  storageDescriptor?: StorageDescriptor | undefined;
 };
 
 export type CatalogsDatabasesTableProps = {

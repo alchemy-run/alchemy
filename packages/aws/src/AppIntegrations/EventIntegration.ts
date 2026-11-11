@@ -17,11 +17,11 @@ export interface EventIntegrationProps {
    * unique name is generated from the app, stage, and logical ID. Changing
    * the name replaces the event integration.
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * Description of the event integration (1-1000 characters).
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * The partner event source that pushes events to the EventBridge bus,
    * e.g. `aws.partner/examplepartner.com`. Changing the source replaces the
@@ -37,7 +37,7 @@ export interface EventIntegrationProps {
   /**
    * Tags to apply to the event integration. Merged with internal Alchemy tags.
    */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
 }
 
 export interface EventIntegration extends Resource<
@@ -120,7 +120,7 @@ export const EventIntegrationProvider = () =>
   Provider.effect(
     EventIntegration,
     Effect.gen(function* () {
-      const createName = Effect.fn(function* (id: string, props: { name?: string }) {
+      const createName = Effect.fn(function* (id: string, props: { name?: string | undefined }) {
         return props.name ?? (yield* createPhysicalName({ id, maxLength: 255 }));
       });
 

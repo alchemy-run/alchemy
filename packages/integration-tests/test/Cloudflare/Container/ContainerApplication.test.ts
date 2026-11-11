@@ -102,7 +102,10 @@ const waitForImage = (accountId: string, applicationId: string, image: string) =
   );
 
 /** `<repo>:<sourceHash>` — the mutable tag the provider pushed `app` as. */
-const taggedRefOf = (app: { configuration: { image?: string }; hash?: { image: string } }) => {
+const taggedRefOf = (app: {
+  configuration: { image?: string | undefined };
+  hash?: { image: string } | undefined;
+}) => {
   const digestRef = app.configuration.image!;
   return `${digestRef.slice(0, digestRef.indexOf("@"))}:${app.hash!.image}`;
 };

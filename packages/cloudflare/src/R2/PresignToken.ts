@@ -1,6 +1,8 @@
 import * as SigV4 from "@distilled.cloud/aws4signer";
 import * as Effect from "effect/Effect";
+import * as Record from "effect/Record";
 import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
 import { Worker, WorkerEnvironment } from "../Workers/Worker.ts";
 import type { Bucket } from "./Bucket.ts";
 import type { PresignError } from "./BucketTypes.ts";
@@ -45,9 +47,9 @@ export interface PresignR2UrlOptions {
   method: "GET" | "PUT";
   key: string;
   /** @default 900 */
-  expiresIn?: number;
+  expiresIn?: number | undefined;
   /** Headers the consumer must send verbatim (signed into the URL). */
-  headers?: Record<string, string>;
+  headers?: Record<string, string> | undefined;
   /** Extra query parameters signed into the URL (e.g. `response-content-type`). */
   query?: Record<string, string>;
 }
@@ -72,7 +74,10 @@ export const presignR2Url = (
     const signed = yield* SigV4.sign({
       method: options.method,
       url: url.toString(),
-      headers: options.headers,
+      ...Record.filterMap(
+        { headers: options.headers },
+        Result.fromNullishOr(() => undefined),
+      ),
       accessKeyId: credentials.accessKeyId,
       secretAccessKey: Redacted.make(credentials.secretAccessKey),
       service: "s3",

@@ -210,7 +210,7 @@ const desiredBody = (input: {
   name: string;
   description: string | undefined;
   news: AchievementConfigurationProps;
-  current?: gamesConfiguration.AchievementConfiguration;
+  current?: gamesConfiguration.AchievementConfiguration | undefined;
 }): gamesConfiguration.AchievementConfiguration => {
   const achievementType =
     input.news.achievementType ?? input.current?.achievementType ?? DEFAULT_ACHIEVEMENT_TYPE;

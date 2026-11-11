@@ -78,7 +78,7 @@ export interface FrameworkSiteProps {
   /** Application directory containing package.json and framework configuration. @default "." */
   rootDir?: string;
   /** Build input hashing options. Set false to rebuild on every deployment. @default true */
-  memo?: MemoOptions | boolean;
+  memo?: MemoOptions | boolean | undefined;
   /** Build, development, and runtime environment. Wrap secrets in Redacted; public framework variables can be compiled into browser assets. */
   env?: Record<string, string | Redacted.Redacted<string> | Output.Output<string | undefined>>;
   /** Origin static-file routing, using the same vocabulary as Fly and Railway websites. */
@@ -98,7 +98,7 @@ export interface FrameworkSiteProps {
    */
   domain?: WebsiteDomain;
   /** Compute region. Defaults to the project's default region, then us-east-1. */
-  regionId?: PrismaRegionId;
+  regionId?: PrismaRegionId | undefined;
   /** Existing branch ID. Mutually exclusive with branchGitName. */
   branchId?: string;
   /** Existing branch git name. Defaults to the project's default branch. */

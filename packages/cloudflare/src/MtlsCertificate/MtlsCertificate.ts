@@ -419,15 +419,15 @@ const unwrap = (value: Redacted.Redacted<string> | undefined): string | undefine
   value === undefined ? undefined : Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
 type CertificateShape = {
-  id?: string | null;
-  ca?: boolean | null;
-  name?: string | null;
-  issuer?: string | null;
-  serialNumber?: string | null;
-  signature?: string | null;
-  expiresOn?: string | null;
-  uploadedOn?: string | null;
-  type?: Type | null;
+  id?: string | null | undefined;
+  ca?: boolean | null | undefined;
+  name?: string | null | undefined;
+  issuer?: string | null | undefined;
+  serialNumber?: string | null | undefined;
+  signature?: string | null | undefined;
+  expiresOn?: string | null | undefined;
+  uploadedOn?: string | null | undefined;
+  type?: Type | null | undefined;
 };
 
 const toAttributes = (cert: CertificateShape, accountId: string, news?: Props): Attributes => ({

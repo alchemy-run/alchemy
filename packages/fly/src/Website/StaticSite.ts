@@ -29,7 +29,7 @@ const resolveRef = <T>(ref: Ref<T>) => (Effect.isEffect(ref) ? ref : Effect.succ
 
 export interface StaticSiteProps {
   /** Deployment strategy forwarded to the hosted Fly Service. */
-  deploy?: ServiceProps["deploy"];
+  deploy?: ServiceProps["deploy"] | undefined;
   /** Process shutdown policy for the generated server. */
   shutdown?: ServiceProps["shutdown"];
   /** Named Machine readiness checks. */

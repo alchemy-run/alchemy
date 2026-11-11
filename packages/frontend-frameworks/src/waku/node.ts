@@ -16,7 +16,6 @@ import * as NodePath from "node:path";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import type { Config as WakuConfig } from "waku/config";
 import { runBuildChild } from "../core/BuildChild.ts";
 import { DeployTargetError, makeDeployTarget } from "../core/index.ts";
 import {
@@ -97,7 +96,7 @@ const makeNodeAdapterTarget = (
 export interface WakuNodeBuildChildConfig {
   readonly rootDir: string;
   readonly config: WakuNodeTargetConfig | undefined;
-  readonly waku: WakuConfig | undefined;
+  readonly waku: WakuTargetBuildContext["waku"];
 }
 
 export const buildInChild = (config: WakuNodeBuildChildConfig) =>

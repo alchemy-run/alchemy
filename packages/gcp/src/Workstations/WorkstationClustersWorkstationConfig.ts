@@ -36,144 +36,144 @@ export type Container = {
    * Docker image that defines the workstation environment. Public images
    * or Artifact Registry images the host service account can pull.
    */
-  image?: string;
+  image?: string | undefined;
   /**
    * Environment variables passed to the container entrypoint.
    */
-  env?: Record<string, string>;
+  env?: Record<string, string> | undefined;
   /**
    * Override the image ENTRYPOINT.
    */
-  command?: string[];
+  command?: string[] | undefined;
   /**
    * Arguments passed to the entrypoint.
    */
-  args?: string[];
+  args?: string[] | undefined;
   /**
    * Override the image working directory.
    */
-  workingDir?: string;
+  workingDir?: string | undefined;
   /**
    * Run the container as this uid.
    */
-  runAsUser?: number;
+  runAsUser?: number | undefined;
 };
 
 export type ReadinessCheck = {
   /** Path the readiness probe requests. */
-  path?: string;
+  path?: string | undefined;
   /** Port the readiness probe requests. */
-  port?: number;
+  port?: number | undefined;
 };
 
 export type Accelerator = {
   /** Accelerator type (`nvidia-tesla-p100`, …). */
-  type?: string;
+  type?: string | undefined;
   /** Number of accelerator cards. */
-  count?: number;
+  count?: number | undefined;
 };
 
 export type GceShieldedInstanceConfig = {
   /** Enable Secure Boot. */
-  enableSecureBoot?: boolean;
+  enableSecureBoot?: boolean | undefined;
   /** Enable vTPM. */
-  enableVtpm?: boolean;
+  enableVtpm?: boolean | undefined;
   /** Enable integrity monitoring. */
-  enableIntegrityMonitoring?: boolean;
+  enableIntegrityMonitoring?: boolean | undefined;
 };
 
 export type GceConfidentialInstanceConfig = {
   /** Enable Confidential Compute. */
-  enableConfidentialCompute?: boolean;
+  enableConfidentialCompute?: boolean | undefined;
 };
 
 export type BoostConfig = {
   /** Boost configuration id. Required when listed. */
-  id?: string;
+  id?: string | undefined;
   /** Machine type for boosted VMs. */
-  machineType?: string;
+  machineType?: string | undefined;
   /** Idle boost VMs to keep ready. */
-  poolSize?: number;
+  poolSize?: number | undefined;
   /** Boot disk size in GB (minimum 30). */
-  bootDiskSizeGb?: number;
+  bootDiskSizeGb?: number | undefined;
   /** Enable nested virtualization on boosted VMs. */
-  enableNestedVirtualization?: boolean;
+  enableNestedVirtualization?: boolean | undefined;
   /** Accelerators attached to boosted VMs. */
-  accelerators?: Accelerator[];
+  accelerators?: Accelerator[] | undefined;
 };
 
 export type GceInstance = {
   /**
    * Machine type (`e2-standard-4`, …).
    */
-  machineType?: string;
+  machineType?: string | undefined;
   /**
    * Boot disk size in GB. Minimum 30, default 50.
    */
-  bootDiskSizeGb?: number;
+  bootDiskSizeGb?: number | undefined;
   /**
    * Idle VMs kept ready for fast start. Default 0.
    */
-  poolSize?: number;
+  poolSize?: number | undefined;
   /**
    * Disable public IPs. Requires Private Google Access or Cloud NAT.
    * @default false
    */
-  disablePublicIpAddresses?: boolean;
+  disablePublicIpAddresses?: boolean | undefined;
   /**
    * Disable SSH access to the VM.
    */
-  disableSsh?: boolean;
+  disableSsh?: boolean | undefined;
   /**
    * Enable nested virtualization (N1/N2 machine series only).
    */
-  enableNestedVirtualization?: boolean;
+  enableNestedVirtualization?: boolean | undefined;
   /**
    * Service account email for workstation VMs.
    */
-  serviceAccount?: string;
+  serviceAccount?: string | undefined;
   /**
    * Scopes granted to `serviceAccount`.
    */
-  serviceAccountScopes?: string[];
+  serviceAccountScopes?: string[] | undefined;
   /**
    * Network tags applied to workstation VMs.
    */
-  tags?: string[];
+  tags?: string[] | undefined;
   /**
    * Resource Manager tags bound to the VM
    * (`tagKeys/{id}` → `tagValues/{id}`).
    */
-  vmTags?: Record<string, string>;
+  vmTags?: Record<string, string> | undefined;
   /**
    * Custom instance metadata.
    */
-  instanceMetadata?: Record<string, string>;
+  instanceMetadata?: Record<string, string> | undefined;
   /**
    * GCS URI of a startup script (`gs://{bucket}/{object}`).
    */
-  startupScriptUri?: string;
+  startupScriptUri?: string | undefined;
   /**
    * Shielded VM options.
    */
-  shieldedInstanceConfig?: GceShieldedInstanceConfig;
+  shieldedInstanceConfig?: GceShieldedInstanceConfig | undefined;
   /**
    * Confidential VM options.
    */
-  confidentialInstanceConfig?: GceConfidentialInstanceConfig;
+  confidentialInstanceConfig?: GceConfidentialInstanceConfig | undefined;
   /**
    * Accelerators attached to the VM.
    */
-  accelerators?: Accelerator[];
+  accelerators?: Accelerator[] | undefined;
   /**
    * Boost configurations users may choose at start.
    */
-  boostConfigs?: BoostConfig[];
+  boostConfigs?: BoostConfig[] | undefined;
 };
 
 export type Host = {
   /** Compute Engine VM that backs workstations. */
-  gceInstance?: GceInstance;
+  gceInstance?: GceInstance | undefined;
 };
 
 export type CustomerEncryptionKey = {
@@ -182,32 +182,32 @@ export type CustomerEncryptionKey = {
    * (`projects/{project}/locations/{location}/keyRings/{keyRing}/cryptoKeys/{cryptoKey}`).
    * Immutable.
    */
-  kmsKey?: string;
+  kmsKey?: string | undefined;
   /**
    * Service account used with the KMS key. Immutable.
    */
-  kmsKeyServiceAccount?: string;
+  kmsKeyServiceAccount?: string | undefined;
 };
 
 export type GcePersistentDisk = {
   /** Source disk image. Mutually exclusive with `sourceSnapshot`. */
-  sourceImage?: string;
+  sourceImage?: string | undefined;
   /** Source snapshot. Mutually exclusive with `sourceImage`. */
-  sourceSnapshot?: string;
+  sourceSnapshot?: string | undefined;
   /** When true the disk is read-only and may be shared. */
-  readOnly?: boolean;
+  readOnly?: boolean | undefined;
   /**
    * Disk type.
    * @default "pd-standard"
    */
-  diskType?: string;
+  diskType?: string | undefined;
 };
 
 export type EphemeralDirectory = {
   /** Mount path inside the workstation. */
-  mountPath?: string;
+  mountPath?: string | undefined;
   /** Persistent-disk backing for the ephemeral directory. */
-  gcePd?: GcePersistentDisk;
+  gcePd?: GcePersistentDisk | undefined;
 };
 
 export type GceRegionalPersistentDisk = {
@@ -215,31 +215,34 @@ export type GceRegionalPersistentDisk = {
    * Capacity in GB (`10`, `50`, `100`, `200`, `500`, or `1000`).
    * Default 200.
    */
-  sizeGb?: number;
+  sizeGb?: number | undefined;
   /**
    * Disk type (`pd-standard`, `pd-balanced`, `pd-ssd`).
    * @default "pd-standard"
    */
-  diskType?: string;
+  diskType?: string | undefined;
   /**
    * File system type.
    * @default "ext4"
    */
-  fsType?: string;
+  fsType?: string | undefined;
   /**
    * Whether to delete the disk when the workstation is deleted.
    * @default "DELETE"
    */
-  reclaimPolicy?: workstations.GceRegionalPersistentDiskReclaimPolicyEnum | (string & {});
+  reclaimPolicy?:
+    | workstations.GceRegionalPersistentDiskReclaimPolicyEnum
+    | (string & {})
+    | undefined;
   /** Snapshot used as the disk source. */
-  sourceSnapshot?: string;
+  sourceSnapshot?: string | undefined;
   /**
    * Seconds to wait before archiving the disk as a snapshot (`"0s"`
    * disables archival).
    */
-  archiveTimeout?: string;
+  archiveTimeout?: string | undefined;
   /** Maximum resize size in GB. */
-  maxSizeGb?: number;
+  maxSizeGb?: number | undefined;
 };
 
 export type GceHyperdiskBalancedHighAvailability = {
@@ -247,38 +250,39 @@ export type GceHyperdiskBalancedHighAvailability = {
    * Capacity in GB (`10`, `50`, `100`, `200`, `500`, or `1000`).
    * Default 200.
    */
-  sizeGb?: number;
+  sizeGb?: number | undefined;
   /**
    * Whether to delete the disk when the workstation is deleted.
    * @default "DELETE"
    */
   reclaimPolicy?:
     | workstations.GceHyperdiskBalancedHighAvailabilityReclaimPolicyEnum
-    | (string & {});
+    | (string & {})
+    | undefined;
   /** Snapshot used as the disk source. */
-  sourceSnapshot?: string;
+  sourceSnapshot?: string | undefined;
   /**
    * Seconds to wait before archiving the disk as a snapshot.
    */
-  archiveTimeout?: string;
+  archiveTimeout?: string | undefined;
   /** Maximum resize size in GB. */
-  maxSizeGb?: number;
+  maxSizeGb?: number | undefined;
 };
 
 export type PersistentDirectory = {
   /** Mount path inside the workstation. */
-  mountPath?: string;
+  mountPath?: string | undefined;
   /** Regional persistent disk backing. */
-  gcePd?: GceRegionalPersistentDisk;
+  gcePd?: GceRegionalPersistentDisk | undefined;
   /** Hyperdisk Balanced HA backing. */
-  gceHd?: GceHyperdiskBalancedHighAvailability;
+  gceHd?: GceHyperdiskBalancedHighAvailability | undefined;
 };
 
 export type PortRange = {
   /** Inclusive start port (22, 80, or 1024-65535). */
-  first?: number;
+  first?: number | undefined;
   /** Inclusive end port (22, 80, or 1024-65535). */
-  last?: number;
+  last?: number | undefined;
 };
 
 export type WorkstationClustersWorkstationConfigProps = {
@@ -324,7 +328,7 @@ export type WorkstationClustersWorkstationConfigProps = {
    * Readiness checks that must return 200 before the workstation is
    * marked running.
    */
-  readinessChecks?: ReadinessCheck[];
+  readinessChecks?: ReadinessCheck[] | undefined;
   /**
    * Idle timeout before automatic stop (`"1200s"` default, `"0s"` never).
    */

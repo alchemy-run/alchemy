@@ -44,7 +44,7 @@ export interface BaseRuntimeContext {
    * instance (e.g. a Cloudflare Worker's `WebhookHost`), so user code
    * doesn't provide them itself.
    */
-  hostServices?: Layer.Layer<any, never, any>;
+  hostServices?: Layer.Layer<any, never, any> | undefined;
   /**
    * Telemetry exporter Layer registered during init via
    * `Telemetry.layer(...)` / `Telemetry.layerOtlp(...)` (see Telemetry.ts).

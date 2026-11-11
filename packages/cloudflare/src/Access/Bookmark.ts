@@ -26,7 +26,7 @@ export type BookmarkProps = {
    *
    * @default ${app}-${stage}-${id}
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * The domain the bookmark links to, e.g. `example.com` or
    * `wiki.example.com/path`.
@@ -268,9 +268,9 @@ const toAttrs = (observed: ObservedBookmark, accountId: string) => ({
 });
 
 type ObservedBookmark = {
-  id?: string;
-  name?: string | null;
-  domain?: string | null;
-  logoUrl?: string | null;
-  appLauncherVisible?: boolean | null;
+  id?: string | undefined;
+  name?: string | null | undefined;
+  domain?: string | null | undefined;
+  logoUrl?: string | null | undefined;
+  appLauncherVisible?: boolean | null | undefined;
 };

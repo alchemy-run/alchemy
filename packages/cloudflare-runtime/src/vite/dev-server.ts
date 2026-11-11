@@ -263,8 +263,8 @@ type ModuleFallbackRequest =
       protocol: "v1";
       type: "import" | "require";
       specifier: string;
-      rawSpecifier?: string;
-      referrer?: string;
+      rawSpecifier?: string | undefined;
+      referrer?: string | undefined;
     }
   | {
       protocol: "v2";

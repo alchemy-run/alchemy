@@ -35,7 +35,7 @@ export interface SubscriptionProps {
    * replaces the subscription.
    * @default "latest"
    */
-  startAt?: StartAt;
+  startAt?: StartAt | undefined;
 }
 
 export interface SubscriptionAttributes {

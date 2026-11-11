@@ -332,7 +332,7 @@ const makeProjectCloud = (initial: ApiProject[] = []) => {
 
   const makeDatabase = (
     project: ApiProject,
-    input: { region?: string; isDefault?: boolean },
+    input: { region?: string | undefined; isDefault?: boolean },
   ): ApiDatabase => {
     if (input.isDefault) {
       for (const [id, database] of databases) {

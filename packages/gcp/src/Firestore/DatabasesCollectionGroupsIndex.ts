@@ -31,9 +31,9 @@ export type IndexFieldArrayConfig =
 
 export type IndexVectorConfig = {
   /** Vector dimension this configuration applies to. */
-  dimension?: number;
+  dimension?: number | undefined;
   /** Flat (exhaustive) vector index. */
-  flat?: Record<string, never>;
+  flat?: Record<string, never> | undefined;
 };
 
 export type IndexField = {
@@ -41,13 +41,13 @@ export type IndexField = {
    * Field path to index. `__name__` is valid. For composite indexes
    * the API appends `__name__` when it is omitted as the last field.
    */
-  fieldPath?: string;
+  fieldPath?: string | undefined;
   /** Order for inequality / sort (`ASCENDING`, `DESCENDING`). */
-  order?: IndexFieldOrder;
+  order?: IndexFieldOrder | undefined;
   /** Array-contains indexing (`CONTAINS`). */
-  arrayConfig?: IndexFieldArrayConfig;
+  arrayConfig?: IndexFieldArrayConfig | undefined;
   /** Vector nearest-neighbor configuration. */
-  vectorConfig?: IndexVectorConfig;
+  vectorConfig?: IndexVectorConfig | undefined;
 };
 
 export type DatabasesCollectionGroupsIndexProps = {

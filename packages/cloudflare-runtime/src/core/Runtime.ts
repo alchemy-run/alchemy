@@ -5,6 +5,7 @@ import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Predicate from "effect/Predicate";
 import * as Queue from "effect/Queue";
+import * as Record from "effect/Record";
 import * as Result from "effect/Result";
 import * as Scope from "effect/Scope";
 import * as Docker from "./Docker.ts";
@@ -277,7 +278,10 @@ export const RuntimeLive = Layer.effect(
                         container,
                       };
                     }),
-                    durableObjectStorage: { localDisk: storage.name },
+                    durableObjectStorage: Record.filterMap(
+                      { localDisk: storage.name },
+                      Result.fromNullishOr(() => undefined),
+                    ),
                     containerEngine,
                     tails,
                     streamingTails,

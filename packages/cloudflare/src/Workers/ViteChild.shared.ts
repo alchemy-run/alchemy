@@ -7,7 +7,7 @@ import type {
 } from "@alchemy.run/cloudflare-runtime/core";
 import type { BundleOutput } from "alchemy/Bundle/Bundle";
 import type { FoldkitBuildMetadata } from "../Website/FoldkitBuild.ts";
-import type { WorkerAssetsConfig, WorkerSourceDescriptor } from "./Worker.ts";
+import type { ViteOptions, WorkerAssetsConfig, WorkerSourceDescriptor } from "./Worker.ts";
 import type { WorkerBinding } from "./WorkerBinding.ts";
 
 /**
@@ -25,23 +25,25 @@ export interface ViteChildConfig {
   storageDirectory: string;
   stack: { name: string; stage: string };
   env: Record<string, unknown>;
-  source?: {
-    descriptor: WorkerSourceDescriptor;
-    id: string;
-    fqn: string;
-    assets: WorkerAssetsConfig | undefined;
-  };
+  source?:
+    | {
+        descriptor: WorkerSourceDescriptor;
+        id: string;
+        fqn: string;
+        assets: WorkerAssetsConfig | undefined;
+      }
+    | undefined;
   worker: {
     name: string;
     compatibility: { date: string; flags: string[] };
     main: string | undefined;
-    viteEnvironments: { entry?: string; children?: string[] } | undefined;
+    viteEnvironments: ViteOptions["viteEnvironments"];
     hasAssets: boolean;
     bindingDescriptors: WorkerBinding[];
     /** Binding name → opt-out of local emulation (`Alchemy.remote()`). */
     devRemote: Record<string, boolean>;
     /** Simulated Cloudflare Access config (`dev: { access: ... }`). */
-    devAccess?: { aud?: string; identity?: Record<string, unknown> };
+    devAccess?: { aud?: string; identity?: Record<string, unknown> } | undefined;
     durableObjectNamespaces: (DurableObjectNamespace & {
       uniqueKey: string;
     })[];
@@ -81,10 +83,10 @@ export interface ViteBuildChildConfig {
    */
   env: Record<string, unknown>;
   main: string | undefined;
-  framework?: "foldkit";
+  framework?: "foldkit" | undefined;
   compatibilityDate: string | undefined;
   compatibilityFlags: string[] | undefined;
-  viteEnvironments: { entry?: string; children?: string[] } | undefined;
+  viteEnvironments: ViteOptions["viteEnvironments"];
   /** Absolute path the child writes the V8-serialized result to. */
   outputPath: string;
 }

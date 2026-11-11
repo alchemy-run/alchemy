@@ -77,7 +77,7 @@ export interface VirtualCluster extends Resource<
     /** The name of the EKS cluster backing the virtual cluster. */
     eksClusterName: string;
     /** The virtual cluster state (e.g. `RUNNING`, `TERMINATING`). */
-    state?: string;
+    state?: string | undefined;
   },
   {},
   Providers,

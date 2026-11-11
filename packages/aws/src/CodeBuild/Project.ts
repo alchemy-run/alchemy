@@ -368,7 +368,7 @@ export const Project = Resource<Project>("AWS.CodeBuild.Project");
 
 /** Convert a CodeBuild wire tag list into a plain record. */
 const toTagRecord = (
-  tags: ReadonlyArray<{ key?: string; value?: string }> | undefined,
+  tags: ReadonlyArray<{ key?: string | undefined; value?: string | undefined }> | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
     (tags ?? [])

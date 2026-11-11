@@ -7,6 +7,8 @@ import { sha256 } from "alchemy/Util/sha256";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as ChildProcess from "effect/process/ChildProcess";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import path from "pathe";
 import { convertPathToPattern, glob } from "tinyglobby";
 import type { SourceContext, SourceProvider } from "../Source.ts";
@@ -261,7 +263,7 @@ const orDefault = <A, B, R>(
 
 const globFiles = (
   patterns: string[],
-  options: { cwd: string; ignore?: string[]; dot?: boolean },
+  options: { cwd: string; ignore?: string[] | undefined; dot?: boolean },
 ) =>
   Effect.tryPromise({
     try: () =>
@@ -270,7 +272,10 @@ const globFiles = (
         onlyFiles: true,
         expandDirectories: false,
         dot: options.dot ?? false,
-        ignore: options.ignore,
+        ...Record.filterMap(
+          { ignore: options.ignore },
+          Result.fromNullishOr(() => undefined),
+        ),
       }),
     catch: (error) =>
       Bundle.BundleError.make({

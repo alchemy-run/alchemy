@@ -53,14 +53,14 @@ export interface StaticSiteProps {
   /**
    * Static site asset upload configuration.
    */
-  assets?: WebsiteAssetsConfig;
+  assets?: WebsiteAssetsConfig | undefined;
   /**
    * Optional custom domain. A string is shorthand for `{ name }`; `null`
    * explicitly clears a previously set domain. Set `domain.router` to
    * serve the site through an existing `AWS.Website.Router` instead of a
    * standalone CloudFront distribution.
    */
-  domain?: string | WebsiteDomainProps | null;
+  domain?: string | WebsiteDomainProps | null | undefined;
   /**
    * Serve the site at its CloudFront default domain
    * (`https://dxxxx.cloudfront.net`). The default domain cannot be removed
@@ -74,11 +74,11 @@ export interface StaticSiteProps {
    * distribution.
    * @default true
    */
-  cloudfrontUrl?: boolean;
+  cloudfrontUrl?: boolean | undefined;
   /**
    * Additional CloudFront Function customizations.
    */
-  edge?: WebsiteEdgeProps;
+  edge?: WebsiteEdgeProps | undefined;
   /**
    * Index page served for the site root.
    * @default "index.html"
@@ -97,31 +97,31 @@ export interface StaticSiteProps {
    * `404`; a SPA serves the app shell).
    * @default false
    */
-  spa?: boolean;
+  spa?: boolean | undefined;
   /**
    * Error page returned for 403/404 requests.
    * When set, CloudFront customErrorResponses are created and misses return
    * a real `404` status. Mutually exclusive with `spa`.
    */
-  errorPage?: string;
+  errorPage?: string | undefined;
   /**
    * Optional deterministic S3 bucket name for newly created buckets.
    */
-  bucketName?: string;
+  bucketName?: string | undefined;
   /**
    * Whether to delete uploaded objects before destroying created buckets.
    * @default false
    */
-  forceDestroy?: boolean;
+  forceDestroy?: boolean | undefined;
   /**
    * CloudFront invalidation behavior.
    * @default { paths: "all", wait: false }
    */
-  invalidation?: false | WebsiteInvalidationProps;
+  invalidation?: false | WebsiteInvalidationProps | undefined;
   /**
    * User-defined tags applied to created resources.
    */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
   /**
    * Local dev configuration. When `alchemy dev` runs, the build/upload is
    * skipped and `command` is spawned as a long-lived child process tied to
@@ -920,12 +920,14 @@ const buildRequestFunctionCode = ({
   hostRedirect,
 }: {
   kvNamespace: string;
-  userInjection?: string;
-  hostRedirect?: {
-    to: string;
-    hosts: string[];
-    cloudfrontDefault: boolean;
-  };
+  userInjection?: string | undefined;
+  hostRedirect?:
+    | {
+        to: string;
+        hosts: string[];
+        cloudfrontDefault: boolean;
+      }
+    | undefined;
 }) => `import cf from "cloudfront";
 async function handler(event) {
   ${userInjection ?? ""}

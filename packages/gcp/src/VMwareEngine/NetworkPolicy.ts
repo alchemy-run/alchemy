@@ -40,7 +40,7 @@ export type NetworkService = {
   /** Whether the service is enabled. */
   enabled?: boolean;
   /** Output-only service state. */
-  state?: string;
+  state?: string | undefined;
 };
 
 export type NetworkPolicyProps = {

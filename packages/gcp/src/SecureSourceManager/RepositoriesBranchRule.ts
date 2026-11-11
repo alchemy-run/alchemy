@@ -35,7 +35,7 @@ import {
 
 export type BranchRuleCheck = {
   /** Required status-check context (GitHub-style check name). */
-  context?: string;
+  context?: string | undefined;
 };
 
 export type RepositoriesBranchRuleProps = {

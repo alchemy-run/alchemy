@@ -16,7 +16,9 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Option from "effect/Option";
+import * as Record from "effect/Record";
 import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import type { Authorize, ObjectsRunner } from "./ArchilBindings.ts";
@@ -505,7 +507,16 @@ export const makeReadDiskClient = (
   list: (prefix, options) =>
     run.stream(
       Stream.unwrap(
-        Effect.map(ref, (r) => Objects.listObjects(r, prefix, { recursive: options?.recursive })),
+        Effect.map(ref, (r) =>
+          Objects.listObjects(
+            r,
+            prefix,
+            Record.filterMap(
+              { recursive: options?.recursive },
+              Result.fromNullishOr(() => undefined),
+            ),
+          ),
+        ),
       ),
     ),
   share: (key, expiresInSeconds = 3600) =>
@@ -665,12 +676,16 @@ const shellQuote = (value: string) => `'${value.replaceAll("'", `'"'"'`)}'`;
 const commandLine = (command: Command) =>
   typeof command === "string" ? command : command.map(shellQuote).join(" ");
 
-const runOptions = (options: StartOptions | undefined): Process.RunOptions => ({
-  cwd: options?.cwd,
-  env: options?.env === undefined ? undefined : { ...options.env },
-  timeoutSeconds:
-    options?.timeout === undefined ? undefined : Math.ceil(Duration.toSeconds(options.timeout)),
-});
+const runOptions = (options: StartOptions | undefined): Process.RunOptions =>
+  Record.filterMap(
+    {
+      cwd: options?.cwd,
+      env: options?.env === undefined ? undefined : { ...options.env },
+      timeoutSeconds:
+        options?.timeout === undefined ? undefined : Math.ceil(Duration.toSeconds(options.timeout)),
+    },
+    Result.fromNullishOr(() => undefined),
+  );
 
 const utf8 = new TextDecoder();
 
@@ -827,8 +842,13 @@ export const makeSandboxOps = (
       open: (options) =>
         awake((id) =>
           Process.run(id, commandLine(options.command ?? "bash"), {
-            cwd: options.cwd,
-            env: options.env === undefined ? undefined : { ...options.env },
+            ...Record.filterMap(
+              {
+                cwd: options.cwd,
+                env: options.env === undefined ? undefined : { ...options.env },
+              },
+              Result.fromNullishOr(() => undefined),
+            ),
             terminal: { cols: options.cols, rows: options.rows },
           }),
         ).pipe(

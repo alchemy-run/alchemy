@@ -23,7 +23,7 @@ export type RouterAdvertisedIpRange = {
   /** CIDR to advertise (for example `10.0.0.0/8`). */
   range: string;
   /** Optional description of this advertised range. */
-  description?: string;
+  description?: string | undefined;
 };
 
 export type RouterBgp = {
@@ -37,26 +37,26 @@ export type RouterBgp = {
    * `advertisedIpRanges`.
    * @default "DEFAULT"
    */
-  advertiseMode?: compute.RouterBgpAdvertiseModeEnum;
+  advertiseMode?: compute.RouterBgpAdvertiseModeEnum | undefined;
   /**
    * Prefix groups to advertise when `advertiseMode` is `CUSTOM`. The only
    * valid value today is `ALL_SUBNETS`.
    */
-  advertisedGroups?: string[];
+  advertisedGroups?: string[] | undefined;
   /**
    * Individual CIDRs to advertise when `advertiseMode` is `CUSTOM`.
    */
-  advertisedIpRanges?: RouterAdvertisedIpRange[];
+  advertisedIpRanges?: RouterAdvertisedIpRange[] | undefined;
   /**
    * Seconds between BGP keepalives (20–60). Hold time is 3× this value.
    * @default 20
    */
-  keepaliveInterval?: number;
+  keepaliveInterval?: number | undefined;
   /**
    * Link-local IPv4 `/30` or larger from `169.254.0.0/16` used as the BGP
    * identifier (router ID).
    */
-  identifierRange?: string;
+  identifierRange?: string | undefined;
 };
 
 export type RouterNatSubnetwork = {
@@ -67,12 +67,12 @@ export type RouterNatSubnetwork = {
    * `PRIMARY_IP_RANGE`, `LIST_OF_SECONDARY_IP_RANGES`).
    * @default ["ALL_IP_RANGES"]
    */
-  sourceIpRangesToNat?: compute.RouterNatSubnetworkToNatSourceIpRangesToNatItemEnum[];
+  sourceIpRangesToNat?: compute.RouterNatSubnetworkToNatSourceIpRangesToNatItemEnum[] | undefined;
   /**
    * Secondary range names to translate. Requires
    * `LIST_OF_SECONDARY_IP_RANGES` in `sourceIpRangesToNat`.
    */
-  secondaryIpRangeNames?: string[];
+  secondaryIpRangeNames?: string[] | undefined;
 };
 
 export type RouterNatLogConfig = {
@@ -82,7 +82,7 @@ export type RouterNatLogConfig = {
    * Which connections to log (`ERRORS_ONLY`, `TRANSLATIONS_ONLY`, `ALL`).
    * @default "ALL"
    */
-  filter?: compute.RouterNatLogConfigFilterEnum;
+  filter?: compute.RouterNatLogConfigFilterEnum | undefined;
 };
 
 export type RouterNat = {
@@ -95,53 +95,53 @@ export type RouterNat = {
    */
   sourceSubnetworkIpRangesToNat: compute.RouterNatSourceSubnetworkIpRangesToNatEnum;
   /** Subnetworks to translate when `LIST_OF_SUBNETWORKS` is selected. */
-  subnetworks?: RouterNatSubnetwork[];
+  subnetworks?: RouterNatSubnetwork[] | undefined;
   /**
    * `AUTO_ONLY` lets Google allocate external IPs; `MANUAL_ONLY` uses
    * `natIps`.
    * @default "AUTO_ONLY"
    */
-  natIpAllocateOption?: compute.RouterNatNatIpAllocateOptionEnum;
+  natIpAllocateOption?: compute.RouterNatNatIpAllocateOptionEnum | undefined;
   /**
    * Static external addresses (`GCP.Compute.Address` self links or names)
    * used with `MANUAL_ONLY`.
    */
-  natIps?: string[];
+  natIps?: string[] | undefined;
   /** Minimum ports allocated to each VM. */
-  minPortsPerVm?: number;
+  minPortsPerVm?: number | undefined;
   /** Maximum ports per VM when dynamic port allocation is enabled. */
-  maxPortsPerVm?: number;
+  maxPortsPerVm?: number | undefined;
   /** Enable dynamic port allocation. */
-  enableDynamicPortAllocation?: boolean;
+  enableDynamicPortAllocation?: boolean | undefined;
   /** Enable endpoint-independent mapping. */
-  enableEndpointIndependentMapping?: boolean;
+  enableEndpointIndependentMapping?: boolean | undefined;
   /** UDP idle timeout in seconds. */
-  udpIdleTimeoutSec?: number;
+  udpIdleTimeoutSec?: number | undefined;
   /** ICMP idle timeout in seconds. */
-  icmpIdleTimeoutSec?: number;
+  icmpIdleTimeoutSec?: number | undefined;
   /** TCP established-connection idle timeout in seconds. */
-  tcpEstablishedIdleTimeoutSec?: number;
+  tcpEstablishedIdleTimeoutSec?: number | undefined;
   /** TCP transitory-connection idle timeout in seconds. */
-  tcpTransitoryIdleTimeoutSec?: number;
+  tcpTransitoryIdleTimeoutSec?: number | undefined;
   /**
    * TCP TIME_WAIT timeout in seconds.
    * @default 120
    */
-  tcpTimeWaitTimeoutSec?: number;
+  tcpTimeWaitTimeoutSec?: number | undefined;
   /**
    * Network tier for automatically allocated NAT addresses (`PREMIUM` or
    * `STANDARD`).
    * @default the project's default network tier
    */
-  autoNetworkTier?: compute.RouterNatAutoNetworkTierEnum;
+  autoNetworkTier?: compute.RouterNatAutoNetworkTierEnum | undefined;
   /**
    * Endpoint types whose traffic is translated (`ENDPOINT_TYPE_VM`,
    * `ENDPOINT_TYPE_SWG`, `ENDPOINT_TYPE_MANAGED_PROXY_LB`).
    * @default ["ENDPOINT_TYPE_VM"]
    */
-  endpointTypes?: compute.RouterNatEndpointTypesItemEnum[];
+  endpointTypes?: compute.RouterNatEndpointTypesItemEnum[] | undefined;
   /** NAT logging. */
-  logConfig?: RouterNatLogConfig;
+  logConfig?: RouterNatLogConfig | undefined;
 };
 
 export type RouterProps = {
@@ -168,7 +168,7 @@ export type RouterProps = {
    * ownership (`alchemy-stack` / `alchemy-stage` / `alchemy-id`) is stored
    * in the description for `list` / nuke.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * BGP configuration. Omit when the router is NAT-only.
    */

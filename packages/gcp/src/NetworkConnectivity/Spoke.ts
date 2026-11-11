@@ -47,11 +47,11 @@ export type LinkedVpcNetwork = {
   /**
    * Subnet CIDRs excluded from export to the hub.
    */
-  excludeExportRanges?: ReadonlyArray<string>;
+  excludeExportRanges?: ReadonlyArray<string> | undefined;
   /**
    * Subnet CIDRs included when exporting to the hub.
    */
-  includeExportRanges?: ReadonlyArray<string>;
+  includeExportRanges?: ReadonlyArray<string> | undefined;
 };
 
 export type LinkedVpnTunnels = {
@@ -64,15 +64,15 @@ export type LinkedVpnTunnels = {
    * Enable site-to-site data transfer. Immutable — changing it replaces
    * the spoke.
    */
-  siteToSiteDataTransfer?: boolean;
+  siteToSiteDataTransfer?: boolean | undefined;
   /** Hub routes included when importing from the hub. */
-  includeImportRanges?: ReadonlyArray<string>;
+  includeImportRanges?: ReadonlyArray<string> | undefined;
   /** Hub routes excluded when importing from the hub. */
-  excludeImportRanges?: ReadonlyArray<string>;
+  excludeImportRanges?: ReadonlyArray<string> | undefined;
   /** Dynamic routes included when exporting to the hub. */
-  includeExportRanges?: ReadonlyArray<string>;
+  includeExportRanges?: ReadonlyArray<string> | undefined;
   /** Dynamic routes excluded when exporting to the hub. */
-  excludeExportRanges?: ReadonlyArray<string>;
+  excludeExportRanges?: ReadonlyArray<string> | undefined;
 };
 
 export type LinkedInterconnectAttachments = {
@@ -85,15 +85,15 @@ export type LinkedInterconnectAttachments = {
    * Enable site-to-site data transfer. Immutable — changing it replaces
    * the spoke.
    */
-  siteToSiteDataTransfer?: boolean;
+  siteToSiteDataTransfer?: boolean | undefined;
   /** Hub routes included when importing from the hub. */
-  includeImportRanges?: ReadonlyArray<string>;
+  includeImportRanges?: ReadonlyArray<string> | undefined;
   /** Hub routes excluded when importing from the hub. */
-  excludeImportRanges?: ReadonlyArray<string>;
+  excludeImportRanges?: ReadonlyArray<string> | undefined;
   /** Dynamic routes included when exporting to the hub. */
-  includeExportRanges?: ReadonlyArray<string>;
+  includeExportRanges?: ReadonlyArray<string> | undefined;
   /** Dynamic routes excluded when exporting to the hub. */
-  excludeExportRanges?: ReadonlyArray<string>;
+  excludeExportRanges?: ReadonlyArray<string> | undefined;
 };
 
 export type RouterApplianceInstance = {
@@ -113,15 +113,15 @@ export type LinkedRouterApplianceInstances = {
    * Enable site-to-site data transfer. Immutable — changing it replaces
    * the spoke.
    */
-  siteToSiteDataTransfer?: boolean;
+  siteToSiteDataTransfer?: boolean | undefined;
   /** Hub routes included when importing from the hub. */
-  includeImportRanges?: ReadonlyArray<string>;
+  includeImportRanges?: ReadonlyArray<string> | undefined;
   /** Hub routes excluded when importing from the hub. */
-  excludeImportRanges?: ReadonlyArray<string>;
+  excludeImportRanges?: ReadonlyArray<string> | undefined;
   /** Dynamic routes included when exporting to the hub. */
-  includeExportRanges?: ReadonlyArray<string>;
+  includeExportRanges?: ReadonlyArray<string> | undefined;
   /** Dynamic routes excluded when exporting to the hub. */
-  excludeExportRanges?: ReadonlyArray<string>;
+  excludeExportRanges?: ReadonlyArray<string> | undefined;
 };
 
 export type LinkedProducerVpcNetwork = {
@@ -136,9 +136,9 @@ export type LinkedProducerVpcNetwork = {
    */
   peering: string;
   /** Subnet CIDRs excluded from export to the hub. */
-  excludeExportRanges?: ReadonlyArray<string>;
+  excludeExportRanges?: ReadonlyArray<string> | undefined;
   /** Subnet CIDRs included when exporting to the hub. */
-  includeExportRanges?: ReadonlyArray<string>;
+  includeExportRanges?: ReadonlyArray<string> | undefined;
 };
 
 export type SpokeGatewayIpRangeReservation = {
@@ -154,12 +154,12 @@ export type SpokeGateway = {
    * Aggregate processing capacity. Immutable — changing it replaces the
    * spoke.
    */
-  capacity?: SpokeGatewayCapacity;
+  capacity?: SpokeGatewayCapacity | undefined;
   /**
    * CIDRs reserved for gateway infrastructure. Immutable — changing
    * them replaces the spoke.
    */
-  ipRangeReservations?: ReadonlyArray<SpokeGatewayIpRangeReservation>;
+  ipRangeReservations?: ReadonlyArray<SpokeGatewayIpRangeReservation> | undefined;
 };
 
 export type SpokeProps = {
@@ -171,7 +171,7 @@ export type SpokeProps = {
    * `[a-z]([-a-z0-9]*[a-z0-9])?`. Immutable — changing it replaces the
    * spoke.
    */
-  spokeId?: string;
+  spokeId?: string | undefined;
   /**
    * Location of the spoke. VPC and producer-VPC spokes must use
    * `global`; VPN, VLAN-attachment, router-appliance, and gateway
@@ -180,7 +180,7 @@ export type SpokeProps = {
    * the spoke.
    * @default "global"
    */
-  location?: string;
+  location?: string | undefined;
   /**
    * Hub this spoke attaches to — a full resource name
    * `projects/{project}/locations/global/hubs/{hub}` or a hub id.
@@ -191,40 +191,40 @@ export type SpokeProps = {
    * Group this spoke belongs to (star / hybrid-inspection topologies).
    * Immutable — changing it replaces the spoke.
    */
-  group?: string;
+  group?: string | undefined;
   /**
    * Human-readable description of the spoke.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
    */
-  labels?: Record<string, string>;
+  labels?: Record<string, string> | undefined;
   /**
    * VPC network associated with the spoke. Exactly one of the `linked*`
    * / `gateway` fields must be set.
    */
-  linkedVpcNetwork?: LinkedVpcNetwork;
+  linkedVpcNetwork?: LinkedVpcNetwork | undefined;
   /**
    * HA VPN tunnels associated with the spoke.
    */
-  linkedVpnTunnels?: LinkedVpnTunnels;
+  linkedVpnTunnels?: LinkedVpnTunnels | undefined;
   /**
    * VLAN attachments associated with the spoke.
    */
-  linkedInterconnectAttachments?: LinkedInterconnectAttachments;
+  linkedInterconnectAttachments?: LinkedInterconnectAttachments | undefined;
   /**
    * Router appliance VMs associated with the spoke.
    */
-  linkedRouterApplianceInstances?: LinkedRouterApplianceInstances;
+  linkedRouterApplianceInstances?: LinkedRouterApplianceInstances | undefined;
   /**
    * Producer VPC peered to a service-consumer VPC spoke.
    */
-  linkedProducerVpcNetwork?: LinkedProducerVpcNetwork;
+  linkedProducerVpcNetwork?: LinkedProducerVpcNetwork | undefined;
   /**
    * NCC gateway that inspects traffic.
    */
-  gateway?: SpokeGateway;
+  gateway?: SpokeGateway | undefined;
 };
 
 export type Spoke = Resource<
@@ -481,12 +481,12 @@ const gatewayKey = (gateway: SpokeGateway | undefined) =>
   });
 
 const linkedIdentity = (props: {
-  linkedVpcNetwork?: LinkedVpcNetwork;
-  linkedVpnTunnels?: LinkedVpnTunnels;
-  linkedInterconnectAttachments?: LinkedInterconnectAttachments;
-  linkedRouterApplianceInstances?: LinkedRouterApplianceInstances;
-  linkedProducerVpcNetwork?: LinkedProducerVpcNetwork;
-  gateway?: SpokeGateway;
+  linkedVpcNetwork?: LinkedVpcNetwork | undefined;
+  linkedVpnTunnels?: LinkedVpnTunnels | undefined;
+  linkedInterconnectAttachments?: LinkedInterconnectAttachments | undefined;
+  linkedRouterApplianceInstances?: LinkedRouterApplianceInstances | undefined;
+  linkedProducerVpcNetwork?: LinkedProducerVpcNetwork | undefined;
+  gateway?: SpokeGateway | undefined;
 }) => {
   if (props.linkedVpcNetwork) {
     return `vpc:${resourceKey(props.linkedVpcNetwork.uri)}`;

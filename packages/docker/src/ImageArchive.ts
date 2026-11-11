@@ -16,7 +16,7 @@ export interface ImageArchiveSource {
    * The Dockerfile, relative to the context unless absolute.
    * @default "Dockerfile"
    */
-  dockerfile?: string;
+  dockerfile?: string | undefined;
   /** The platform the archive's image is built for, e.g. `linux/amd64`. */
   platform: string;
 }

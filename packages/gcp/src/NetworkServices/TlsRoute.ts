@@ -52,12 +52,12 @@ export type TlsRouteRouteDestination = {
    * BackendService resource name to route to, e.g.
    * `projects/{project}/locations/global/backendServices/{service}`.
    */
-  serviceName?: string;
+  serviceName?: string | undefined;
   /**
    * Relative weight of this destination. Weights do not need to sum to
    * 100.
    */
-  weight?: number;
+  weight?: number | undefined;
 };
 
 export type TlsRouteRouteAction = {
@@ -66,14 +66,14 @@ export type TlsRouteRouteAction = {
   /**
    * Idle timeout (e.g. `"3600s"`). Default 1 hour; `"0s"` disables it.
    */
-  idleTimeout?: string;
+  idleTimeout?: string | undefined;
 };
 
 export type TlsRouteRouteRule = {
   /** Match predicates, OR-ed. At least one match is required. */
   matches?: TlsRouteRouteMatch[];
   /** Routing action applied when a match succeeds. */
-  action?: TlsRouteRouteAction;
+  action?: TlsRouteRouteAction | undefined;
 };
 
 export type TlsRouteProps = {

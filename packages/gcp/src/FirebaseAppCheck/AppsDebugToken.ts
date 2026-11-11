@@ -45,7 +45,7 @@ export type AppsDebugTokenProps = {
    * — never returned by get/list. Immutable — changing it replaces the
    * debug token. Each app may have at most 20 debug tokens.
    */
-  token?: string;
+  token?: string | undefined;
 };
 
 export type AppsDebugToken = Resource<

@@ -21,7 +21,7 @@ export interface DBProxyProps {
   /**
    * Proxy name. If omitted, Alchemy generates one.
    */
-  dbProxyName?: string;
+  dbProxyName?: string | undefined;
   /**
    * Engine family such as `POSTGRESQL`.
    */
@@ -50,19 +50,19 @@ export interface DBProxyProps {
    * Idle client timeout (e.g. `"30 minutes"` or `Duration.minutes(30)`).
    * Sent to the API in whole seconds.
    */
-  idleClientTimeout?: Duration.Input;
+  idleClientTimeout?: Duration.Input | undefined;
   /**
    * Enable debug logging.
    */
-  debugLogging?: boolean;
+  debugLogging?: boolean | undefined;
   /**
    * Endpoint network type.
    */
-  endpointNetworkType?: rds.EndpointNetworkType;
+  endpointNetworkType?: rds.EndpointNetworkType | undefined;
   /**
    * Target connection network type.
    */
-  targetConnectionNetworkType?: rds.TargetConnectionNetworkType;
+  targetConnectionNetworkType?: rds.TargetConnectionNetworkType | undefined;
   /**
    * User-defined tags.
    */

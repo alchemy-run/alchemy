@@ -160,7 +160,7 @@ export interface TaskDefinitionProps {
    * Instances capacity provider with `nitroEnclavesEnabled`.
    * @default { isolationMode: "SHARED" }
    */
-  trustedExecutionConfiguration?: ecs.TrustedExecutionConfiguration;
+  trustedExecutionConfiguration?: ecs.TrustedExecutionConfiguration | undefined;
 
   /**
    * User-defined tags applied to each registered revision.
@@ -526,7 +526,7 @@ export const TaskDefinitionProvider = () =>
 
       const attrsOf = (
         td: ecs.TaskDefinition,
-        logGroup: { logGroupName?: string; logGroupArn?: string } = {},
+        logGroup: { logGroupName?: string | undefined; logGroupArn?: string | undefined } = {},
       ): TaskDefinition["Attributes"] | undefined => {
         if (!td.taskDefinitionArn || !td.family || td.revision === undefined) {
           return undefined;
@@ -548,11 +548,7 @@ export const TaskDefinitionProvider = () =>
       const observedTagsOf = Effect.fn(function* (resourceArn: string) {
         const listed = yield* ecs
           .listTagsForResource({ resourceArn })
-          .pipe(
-            Effect.catchTag("ClientException", () =>
-              Effect.succeed({ tags: undefined } as { tags?: ecs.Tag[] }),
-            ),
-          );
+          .pipe(Effect.catchTag("ClientException", () => Effect.succeed({ tags: undefined })));
         return Object.fromEntries(
           (listed.tags ?? [])
             .filter(
@@ -674,7 +670,8 @@ export const TaskDefinitionProvider = () =>
               .deleteLogGroup({ logGroupName: output.logGroupName })
               .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           }
-          let logGroup: { logGroupName?: string; logGroupArn?: string } = {};
+          let logGroup: { logGroupName?: string | undefined; logGroupArn?: string | undefined } =
+            {};
           if (logGroupName !== undefined) {
             yield* logs
               .createLogGroup({ logGroupName, tags: desiredTags })

@@ -76,7 +76,7 @@ export interface IndexProps {
   /**
    * A description of the index.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * Encryption-at-rest configuration. Changing it replaces the index.
    */

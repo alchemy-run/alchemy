@@ -45,7 +45,7 @@ const listBranches = (projectId: string, gitName?: string) =>
  */
 export const desiredBranchId = Effect.fn(function* (
   projectId: string,
-  props: { branchId?: string; branchGitName?: string },
+  props: { branchId?: string | undefined; branchGitName?: string | undefined },
 ) {
   if (props.branchId !== undefined && !isPrismaDevId(props.branchId)) {
     return { resolved: true as const, id: props.branchId };

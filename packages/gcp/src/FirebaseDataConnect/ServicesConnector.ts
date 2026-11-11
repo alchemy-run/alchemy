@@ -39,13 +39,13 @@ export type ClientCache = {
    * When true, connector source is validated for client-side caching
    * (stricter aliases, etc.).
    */
-  strictValidationEnabled?: boolean;
+  strictValidationEnabled?: boolean | undefined;
   /**
    * When true, responses include entityIds in GraphQL extensions for
    * normalized client caching. Only enable when primary keys are not
    * sensitive.
    */
-  entityIdIncluded?: boolean;
+  entityIdIncluded?: boolean | undefined;
 };
 
 export type ServicesConnectorProps = {

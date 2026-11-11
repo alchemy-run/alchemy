@@ -57,7 +57,7 @@ export const RefsLive = HttpApiBuilder.group(AppApi, "refs", (h) =>
 export const mergePull = (
   git: Effect.Success<typeof Git.Engine>,
   params: { owner: string; repo: string; number: number },
-  input: { message?: string; expectedHeadOid?: string },
+  input: { message?: string | undefined; expectedHeadOid?: string | undefined },
 ) =>
   Effect.scoped(
     Effect.gen(function* () {

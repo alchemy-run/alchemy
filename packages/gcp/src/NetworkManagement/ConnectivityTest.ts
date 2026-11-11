@@ -38,58 +38,58 @@ export type ConnectivityTestNetworkType = networkmanagement.EndpointNetworkTypeE
 
 export type ConnectivityTestEndpoint = {
   /** IP address of the endpoint (internal or external). */
-  ipAddress?: string;
+  ipAddress?: string | undefined;
   /** TCP or UDP port. Ignored for other protocols. */
-  port?: number;
+  port?: number | undefined;
   /** Compute Engine instance URI. */
-  instance?: string;
+  instance?: string | undefined;
   /**
    * Forwarding rule URI. Destination only. Format
    * `projects/{project}/global/forwardingRules/{id}` or
    * `projects/{project}/regions/{region}/forwardingRules/{id}`.
    */
-  forwardingRule?: string;
+  forwardingRule?: string | undefined;
   /** GKE control-plane cluster URI. */
-  gkeMasterCluster?: string;
+  gkeMasterCluster?: string | undefined;
   /**
    * GKE control-plane DNS endpoint. Requires `gkeMasterCluster`.
    * Destination only; cannot be combined with `ipAddress` or `network`.
    */
-  fqdn?: string;
+  fqdn?: string | undefined;
   /** Cloud SQL instance URI. */
-  cloudSqlInstance?: string;
+  cloudSqlInstance?: string | undefined;
   /** Memorystore Redis instance URI. Destination only. */
-  redisInstance?: string;
+  redisInstance?: string | undefined;
   /** Memorystore Redis cluster URI. Destination only. */
-  redisCluster?: string;
+  redisCluster?: string | undefined;
   /** GKE Pod URI. */
-  gkePod?: string;
+  gkePod?: string | undefined;
   /**
    * Database Migration Service private connection. Format
    * `projects/{project}/locations/{location}/privateConnections/{privateConnection}`.
    */
-  dmsPrivateConnection?: string;
+  dmsPrivateConnection?: string | undefined;
   /** Cloud Function. Source only. */
-  cloudFunction?: { uri?: string };
+  cloudFunction?: { uri?: string | undefined } | undefined;
   /** App Engine service version. Source only. */
-  appEngineVersion?: { uri?: string };
+  appEngineVersion?: { uri?: string | undefined } | undefined;
   /** Cloud Run revision. Source only. */
-  cloudRunRevision?: { uri?: string };
+  cloudRunRevision?: { uri?: string | undefined } | undefined;
   /**
    * Cloud Run job URI. Source only. Format
    * `projects/{project}/locations/{location}/jobs/{job}`.
    */
-  cloudRunJob?: string;
+  cloudRunJob?: string | undefined;
   /**
    * VPC network URI. For sources, used with `networkType`. For
    * destinations, used when the source is external and the destination
    * is internal.
    */
-  network?: string;
+  network?: string | undefined;
   /** Type of network where the source endpoint lives. Source only. */
-  networkType?: ConnectivityTestNetworkType;
+  networkType?: ConnectivityTestNetworkType | undefined;
   /** Source endpoint project id. Source only. */
-  projectId?: string;
+  projectId?: string | undefined;
 };
 
 export type ConnectivityTestProps = {

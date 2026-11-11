@@ -37,7 +37,7 @@ export interface EdgeSessionOptions {
    * `{scriptName}.{subdomain}.workers.dev`. The script must already serve
    * that host.
    */
-  readonly route?: { readonly zoneId: string; readonly host: string };
+  readonly route?: { readonly zoneId: string; readonly host: string } | undefined;
 }
 
 /**

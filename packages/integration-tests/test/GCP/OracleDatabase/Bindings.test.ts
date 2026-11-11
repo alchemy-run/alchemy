@@ -98,7 +98,7 @@ const waitForDatabaseState = (state: string) =>
   );
 
 /** A read-only `Get*` binding: probe, compare with a direct read. */
-const describeGet = <A extends { name?: string }>(options: {
+const describeGet = <A extends { name?: string | undefined }>(options: {
   binding: string;
   route: string;
   role: string;

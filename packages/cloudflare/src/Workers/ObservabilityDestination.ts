@@ -103,7 +103,7 @@ export interface ObservabilityDestinationAttributes {
    * embeds the header values, including any credentials. Undefined when
    * Cloudflare omits it from the response.
    */
-  destinationConf?: Redacted.Redacted<string>;
+  destinationConf?: Redacted.Redacted<string> | undefined;
   /**
    * Names of the Worker scripts currently opted in to this destination.
    */

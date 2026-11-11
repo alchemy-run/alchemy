@@ -59,7 +59,7 @@ export type IntegrationsVersionProps = {
    * Trigger configurations. A draft with no tasks is valid; add an API
    * trigger to make the version executable.
    */
-  triggerConfigs?: TriggerConfig[];
+  triggerConfigs?: TriggerConfig[] | undefined;
   /**
    * When true, create a new integration if `integrationId` does not
    * exist. Ignored on update.

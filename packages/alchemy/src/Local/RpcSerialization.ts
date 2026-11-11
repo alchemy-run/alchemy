@@ -5,6 +5,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import { flow } from "effect/Function";
+import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
@@ -37,7 +38,7 @@ type RpcStreamHandler<Args extends Array<any>, Success, Error> = (
 type RpcWrappedStreamHandler<Args extends Array<any>, Success, Error> = (
   args: Args,
   parent?: TraceParent,
-) => RpcSerializedStream<Success, Error>;
+) => RpcSerializedStream<Success, Error> | PromiseLike<RpcSerializedStream<Success, Error>>;
 
 type RpcSerializedStream<Success, _Error> = ReadableStream<Success>;
 
@@ -50,13 +51,14 @@ type RpcSerializedCause<Error> =
   | { _tag: "Die"; defect: unknown }
   | { _tag: "Interrupt"; fiberId: number | undefined };
 
+// Both mappings preserve present-but-undefined members, just like the runtime walkers.
 export type RpcWrapped<T> =
   T extends RpcEffectHandler<infer Args, infer Success, infer Error>
     ? RpcWrappedEffectHandler<Args, Success, Error>
     : T extends RpcStreamHandler<infer Args, infer Success, infer Error>
       ? RpcWrappedStreamHandler<Args, Success, Error>
       : T extends Record<string, any>
-        ? { [K in keyof T]: RpcWrapped<T[K]> }
+        ? { [K in keyof T]: RpcWrapped<T[K]> | Extract<T[K], undefined> }
         : T;
 
 export type RpcUnwrapped<T> =
@@ -65,7 +67,7 @@ export type RpcUnwrapped<T> =
     : T extends RpcWrappedStreamHandler<infer Args, infer Success, infer Error>
       ? RpcStreamHandler<Args, Success, Error>
       : T extends Record<string, any>
-        ? { [K in keyof T]: RpcUnwrapped<T[K]> }
+        ? { [K in keyof T]: RpcUnwrapped<T[K]> | Extract<T[K], undefined> }
         : T;
 
 export const wrapRpcHandlers = <T extends Record<string, any>>(
@@ -282,19 +284,24 @@ const unwrapRpcEffectHandler = <Args extends Array<any>, Success, Error>(
 
 const unwrapRpcStreamHandler = <Args extends Array<any>, Success, Error>(
   handler: RpcWrappedStreamHandler<Args, Success, Error>,
-): RpcStreamHandler<Args, Success, Error> =>
-  flow(
+): RpcStreamHandler<Args, Success, Error> => {
+  const onError = (error: unknown) => error as Error;
+  return flow(
     (...args) => serializeRpcArgs(args) as Args,
     (args) =>
       Stream.unwrap(
-        Effect.map(currentTraceParent, (parent) =>
-          Stream.fromReadableStream({
-            evaluate: () => handler(args, parent),
-            onError: (error) => error as Error,
-          }),
-        ),
+        Effect.flatMap(currentTraceParent, (parent) => {
+          const source = handler(args, parent);
+          return Effect.map(
+            Predicate.isPromiseLike(source)
+              ? Effect.tryPromise({ try: () => source, catch: onError })
+              : Effect.succeed(source),
+            (readable) => Stream.fromReadableStream({ evaluate: () => readable, onError }),
+          );
+        }),
       ),
   );
+};
 
 const serializeRpcArgs = (value: unknown): unknown => {
   // `read` and `observe` answers: `Unresolved` is a symbol and `Unowned` a

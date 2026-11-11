@@ -48,7 +48,8 @@ export type ChannelPartnerLinksChannelPartnerRepricingConfigProps = {
    */
   rebillingBasis?:
     | cloudchannel.GoogleCloudChannelV1RepricingConfigRebillingBasisEnum
-    | (string & {});
+    | (string & {})
+    | undefined;
   /**
    * Markup or markdown percentage (`"1.00"` is +1%, `"-1.00"` is -1%,
    * `"0.00"` is pass-through). Ignored when `adjustment` is set.

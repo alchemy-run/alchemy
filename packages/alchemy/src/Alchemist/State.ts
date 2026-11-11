@@ -257,7 +257,10 @@ export const logs = Effect.fn("Alchemist.state.logs")(function* ({
   limit,
   since,
   ...source
-}: ProviderSource & { readonly limit?: number; readonly since?: Date }) {
+}: ProviderSource & {
+  readonly limit?: number | undefined;
+  readonly since?: Date | undefined;
+}) {
   const { run, options, context } = yield* lifecycleOperation(source, "logs");
   return yield* run({ ...options, limit, since }).pipe(Effect.provide(context), isolated);
 });

@@ -14,7 +14,9 @@ const { test } = Test.make({ providers: GCP.providers() });
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Deleted pools and providers are soft-deleted (state DELETED) for 30 days.
-const waitUntilDeleted = <R>(get: Effect.Effect<{ state?: string }, { _tag: string }, R>) =>
+const waitUntilDeleted = <R>(
+  get: Effect.Effect<{ state?: string | undefined }, { _tag: string }, R>,
+) =>
   get.pipe(
     Effect.map((resource) => (resource.state === "DELETED" ? "gone" : "found")),
     Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),

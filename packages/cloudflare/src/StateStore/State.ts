@@ -65,7 +65,7 @@ export type CloudflareStateOptions = {
    * its workers.dev URL, for networks that can't reach workers.dev. Bootstrap
    * attaches it to the store's Worker as a custom domain.
    */
-  readonly domain?: string;
+  readonly domain?: string | undefined;
   /**
    * The store's Worker name, for a store other than the account's default
    * `alchemy-state-store`: 1-54 lowercase letters, digits, `-` and `_`,
@@ -73,7 +73,7 @@ export type CloudflareStateOptions = {
    * `acme-state` keeps its token in `AlchemyStateStoreToken_acme_state`.
    * @default "alchemy-state-store"
    */
-  readonly workerName?: string;
+  readonly workerName?: string | undefined;
 };
 
 export const state = (options: CloudflareStateOptions = {}) =>
@@ -199,15 +199,15 @@ export const state = (options: CloudflareStateOptions = {}) =>
 
 export interface BootstrapOptions {
   /** @default "alchemy-state-store" */
-  workerName?: string;
+  workerName?: string | undefined;
   /** The account to deploy into. Defaults to the profile's account. */
-  accountId?: string;
+  accountId?: string | undefined;
   /** A hostname to serve the store on, attached as a custom domain. */
-  domain?: string;
+  domain?: string | undefined;
   /** @default false */
-  force?: boolean;
+  force?: boolean | undefined;
   /** @default "default" */
-  profile?: string;
+  profile?: string | undefined;
 }
 
 /**

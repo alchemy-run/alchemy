@@ -29,20 +29,20 @@ export interface ListenerProps {
    * `{ type: "forward" }` default action. Prefer {@link defaultActions} for the
    * full action surface. Mutually exclusive with `defaultActions`.
    */
-  targetGroupArn?: Input<TargetGroupArn> | TargetGroup;
+  targetGroupArn?: Input<TargetGroupArn> | TargetGroup | undefined;
   /**
    * The default actions for the listener (forward / redirect / fixedResponse /
    * authenticateOidc / authenticateCognito). Takes precedence over
    * {@link targetGroupArn}.
    */
-  defaultActions?: ListenerAction[];
+  defaultActions?: ListenerAction[] | undefined;
   /** The port on which the load balancer listens. Updated in place. */
   port: number;
   /**
    * The listener protocol.
    * @default "HTTP"
    */
-  protocol?: "HTTP" | "HTTPS" | "TCP" | "TLS" | "UDP" | "TCP_UDP";
+  protocol?: "HTTP" | "HTTPS" | "TCP" | "TLS" | "UDP" | "TCP_UDP" | undefined;
   /**
    * The default (and any additional SNI) certificate ARNs. The first entry is
    * the default certificate; the rest are attached as SNI certificates.
@@ -52,33 +52,35 @@ export interface ListenerProps {
    * `ListenerCertificate` attachments to manage SNI certificates
    * independently. Prefer this over the legacy single {@link certificateArn}.
    */
-  certificates?: string[];
+  certificates?: string[] | undefined;
   /**
    * The default certificate ARN (legacy single-cert form). Folded into
    * {@link certificates} as the default certificate.
    */
-  certificateArn?: string;
+  certificateArn?: string | undefined;
   /** The security policy that defines supported protocols and ciphers (HTTPS/TLS). */
-  sslPolicy?: string;
+  sslPolicy?: string | undefined;
   /** The ALPN policy for TLS listeners (e.g. `HTTP2Optional`). */
-  alpnPolicy?: string[];
+  alpnPolicy?: string[] | undefined;
   /** Mutual TLS (mTLS) configuration for HTTPS listeners. */
-  mutualAuthentication?: {
-    /** The mTLS mode. */
-    mode: "off" | "passthrough" | "verify";
-    /** The trust store ARN. Required when `mode` is `verify`. */
-    trustStoreArn?: string;
-    /** Whether to ignore expired client certificates. */
-    ignoreClientCertificateExpiry?: boolean;
-    /** Whether to advertise the trust-store CA names in the TLS handshake. */
-    advertiseTrustStoreCaNames?: "on" | "off";
-  };
+  mutualAuthentication?:
+    | {
+        /** The mTLS mode. */
+        mode: "off" | "passthrough" | "verify";
+        /** The trust store ARN. Required when `mode` is `verify`. */
+        trustStoreArn?: string | undefined;
+        /** Whether to ignore expired client certificates. */
+        ignoreClientCertificateExpiry?: boolean | undefined;
+        /** Whether to advertise the trust-store CA names in the TLS handshake. */
+        advertiseTrustStoreCaNames?: "on" | "off" | undefined;
+      }
+    | undefined;
   /**
    * Raw listener attributes, synced via `modifyListenerAttributes` — e.g.
    * `tcp.idle_timeout.seconds` (NLB TCP listeners) or
    * `routing.http.response.server.enabled` (ALB HTTP/HTTPS listeners).
    */
-  attributes?: Record<string, string>;
+  attributes?: Record<string, string> | undefined;
 }
 
 export interface Listener extends Resource<
@@ -99,7 +101,7 @@ export interface Listener extends Resource<
      * The live values of the keys declared in `attributes`. Undeclared
      * attributes are left out so AWS defaults never register as drift.
      */
-    attributes?: Record<string, string>;
+    attributes?: Record<string, string> | undefined;
     /**
      * Default actions, default certificate, TLS/ALPN policy, mutual TLS and
      * (when `certificates` is declared) the SNI certificates, as observed.
@@ -107,11 +109,11 @@ export interface Listener extends Resource<
      */
     configuration?: {
       defaultActions: unknown[];
-      certificateArn?: string;
-      sslPolicy?: string;
-      alpnPolicy?: string[];
+      certificateArn?: string | undefined;
+      sslPolicy?: string | undefined;
+      alpnPolicy?: string[] | undefined;
       mutualAuthentication?: unknown;
-      sniCertificateArns?: string[];
+      sniCertificateArns?: string[] | undefined;
     };
   },
   never,

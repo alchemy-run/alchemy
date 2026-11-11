@@ -26,21 +26,21 @@ export type ReportMetric = {
   /** Metric name, for example `message_count`. */
   name: string;
   /** Aggregate function, for example `sum`. */
-  function?: string;
+  function?: string | undefined;
 };
 
 export type ReportPropertyValue = {
   /** Attribute key. */
-  name?: string;
+  name?: string | undefined;
   /** Attribute value. */
-  value?: string;
+  value?: string | undefined;
 };
 
 export type ReportProperty = {
   /** Property name. */
-  property?: string;
+  property?: string | undefined;
   /** Property values. */
-  value?: ReportPropertyValue[];
+  value?: ReportPropertyValue[] | undefined;
 };
 
 export type ReportProps = {
@@ -92,7 +92,7 @@ export type ReportProps = {
   /**
    * Extra UI metadata properties.
    */
-  properties?: ReportProperty[];
+  properties?: ReportProperty[] | undefined;
   /**
    * User comments. Alchemy ownership is stored as a leading
    * `[alchemy …]` comment and stripped from attributes. Reports have no
@@ -226,11 +226,11 @@ const reportIdOf = (report: apigee.GoogleCloudApigeeV1CustomReport) =>
   lastSegment(report.name ?? "");
 
 const metricsOf = (
-  metrics: readonly { name?: string; function?: string }[] | undefined,
+  metrics: readonly { name?: string | undefined; function?: string | undefined }[] | undefined,
 ): ReportMetric[] => {
   const mapped = (metrics ?? DEFAULT_METRICS)
     .filter(
-      (metric): metric is { name: string; function?: string } =>
+      (metric): metric is { name: string; function?: string | undefined } =>
         metric.name !== undefined && metric.name.length > 0,
     )
     .map((metric) => ({

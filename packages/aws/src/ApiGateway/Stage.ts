@@ -496,7 +496,7 @@ const buildCanaryPatches = (
 
 const buildStagePatches = (
   prev: ApiGatewayStage["Attributes"],
-  news: Input.ResolveProps<StageProps>,
+  news: StageProps,
 ): ag.PatchOperation[] => {
   const patches: ag.PatchOperation[] = [];
   if (news.deploymentId !== prev.deploymentId) {
@@ -579,7 +579,7 @@ export const StageProvider = () =>
         stables: ["restApiId", "stageName"] as const,
         diff: Effect.fn(function* ({ news: newsIn, olds }) {
           if (!isResolved(newsIn)) return;
-          const news = newsIn as Input.ResolveProps<StageProps>;
+          const news = newsIn;
           if (news.restApiId !== olds.restApiId || news.stageName !== olds.stageName) {
             return { action: "replace" } as const;
           }
@@ -642,7 +642,7 @@ export const StageProvider = () =>
           if (!isResolved(newsIn)) {
             return yield* Effect.die("Stage props were not resolved");
           }
-          const news = newsIn as Input.ResolveProps<StageProps>;
+          const news = newsIn;
           const restApiId = (output?.restApiId ?? news.restApiId) as string;
           const stageName = output?.stageName ?? news.stageName;
           const internalTags = yield* createInternalTags(id);

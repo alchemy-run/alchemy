@@ -146,7 +146,7 @@ export interface PlanOptions {
    * Bootstrap wrapped around an Effect-native `main` (the host's virtual
    * entry). Omit it to bundle `main` as-is.
    */
-  readonly bootstrap?: (importPath: string) => string;
+  readonly bootstrap?: ((importPath: string) => string) | undefined;
   /** Credentials for pulling a private base image. */
   readonly pull?: ImageRegistry;
   /**

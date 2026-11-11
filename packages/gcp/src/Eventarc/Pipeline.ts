@@ -41,7 +41,7 @@ const COLLECTION = "pipelines";
 
 export type PipelinePayloadSchema = {
   /** Entire schema definition stored inline. */
-  schemaDefinition?: string;
+  schemaDefinition?: string | undefined;
 };
 
 export type PipelinePayloadFormat = {
@@ -57,31 +57,31 @@ export type PipelineTransformation = {
   /**
    * CEL expression template applied to transform messages.
    */
-  transformationTemplate?: string;
+  transformationTemplate?: string | undefined;
 };
 
 export type PipelineMediation = {
   /**
    * How the pipeline transforms messages. Currently the only mediation.
    */
-  transformation?: PipelineTransformation;
+  transformation?: PipelineTransformation | undefined;
 };
 
 export type PipelineRetryPolicy = {
   /**
    * Maximum delivery attempts (1-100). Default 5.
    */
-  maxAttempts?: number;
+  maxAttempts?: number | undefined;
   /**
    * Minimum wait between retries, as a duration string (e.g. `"5s"`).
    * 1-600 seconds. Default `"5s"`.
    */
-  minRetryDelay?: string;
+  minRetryDelay?: string | undefined;
   /**
    * Maximum wait between retries, as a duration string (e.g. `"60s"`).
    * 1-600 seconds. Default `"60s"`.
    */
-  maxRetryDelay?: string;
+  maxRetryDelay?: string | undefined;
 };
 
 export type PipelineDestinationNetworkConfig = {
@@ -90,7 +90,7 @@ export type PipelineDestinationNetworkConfig = {
    * VPC, as
    * `projects/{project}/regions/{region}/networkAttachments/{name}`.
    */
-  networkAttachment?: string;
+  networkAttachment?: string | undefined;
 };
 
 export type PipelineDestinationHttpEndpoint = {
@@ -101,7 +101,7 @@ export type PipelineDestinationHttpEndpoint = {
   /**
    * CEL expression that rewrites the destination-bound HTTP request.
    */
-  messageBindingTemplate?: string;
+  messageBindingTemplate?: string | undefined;
 };
 
 export type PipelineOauthToken = {
@@ -109,63 +109,63 @@ export type PipelineOauthToken = {
    * Service account email used to mint the OAuth token. The caller
    * needs `iam.serviceAccounts.actAs` on this account.
    */
-  serviceAccount?: string;
+  serviceAccount?: string | undefined;
   /**
    * OAuth scope. Defaults to `https://www.googleapis.com/auth/cloud-platform`.
    */
-  scope?: string;
+  scope?: string | undefined;
 };
 
 export type PipelineOidcToken = {
   /**
    * Service account email used to mint the OIDC token.
    */
-  serviceAccount?: string;
+  serviceAccount?: string | undefined;
   /**
    * Audience claim. Defaults to the destination URI.
    */
-  audience?: string;
+  audience?: string | undefined;
 };
 
 export type PipelineAuthenticationConfig = {
   /** Attach an OAuth2 access token as an `Authorization` header. */
-  oauthToken?: PipelineOauthToken;
+  oauthToken?: PipelineOauthToken | undefined;
   /** Attach a Google OIDC token as an `Authorization` header. */
-  googleOidc?: PipelineOidcToken;
+  googleOidc?: PipelineOidcToken | undefined;
 };
 
 export type PipelineDestination = {
   /**
    * HTTP endpoint destination. HTTPS only.
    */
-  httpEndpoint?: PipelineDestinationHttpEndpoint;
+  httpEndpoint?: PipelineDestinationHttpEndpoint | undefined;
   /**
    * Workflow whose executions are triggered by events, as
    * `projects/{project}/locations/{location}/workflows/{workflow}`.
    */
-  workflow?: string;
+  workflow?: string | undefined;
   /**
    * Pub/Sub topic to publish to, as `projects/{project}/topics/{topic}`.
    */
-  topic?: string;
+  topic?: string | undefined;
   /**
    * MessageBus to publish to, as
    * `projects/{project}/locations/{location}/messageBuses/{messageBus}`.
    */
-  messageBus?: string;
+  messageBus?: string | undefined;
   /**
    * VPC network config used to resolve and reach the destination.
    */
-  networkConfig?: PipelineDestinationNetworkConfig;
+  networkConfig?: PipelineDestinationNetworkConfig | undefined;
   /**
    * Authentication attached to destination requests.
    */
-  authenticationConfig?: PipelineAuthenticationConfig;
+  authenticationConfig?: PipelineAuthenticationConfig | undefined;
   /**
    * Message format delivered to the destination. Requires
    * `inputPayloadFormat` on the pipeline.
    */
-  outputPayloadFormat?: PipelinePayloadFormat;
+  outputPayloadFormat?: PipelinePayloadFormat | undefined;
 };
 
 export type PipelineProps = {

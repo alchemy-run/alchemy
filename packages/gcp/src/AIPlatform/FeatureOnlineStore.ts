@@ -27,28 +27,30 @@ const MAX_NAME_LENGTH = 60;
 
 export type FeatureOnlineStoreBigtableAutoScaling = {
   /** Minimum node count (>= 1). */
-  minNodeCount?: number;
+  minNodeCount?: number | undefined;
   /** Maximum node count (<= 10 * minNodeCount). */
-  maxNodeCount?: number;
+  maxNodeCount?: number | undefined;
   /** Target CPU percent (10–80). Defaults to 50. */
-  cpuUtilizationTarget?: number;
+  cpuUtilizationTarget?: number | undefined;
 };
 
 export type FeatureOnlineStoreBigtable = {
   /** Autoscaling applied to the backing Bigtable instance. */
-  autoScaling?: FeatureOnlineStoreBigtableAutoScaling;
+  autoScaling?: FeatureOnlineStoreBigtableAutoScaling | undefined;
   /** Allow direct Bigtable access. */
-  enableDirectBigtableAccess?: boolean;
+  enableDirectBigtableAccess?: boolean | undefined;
   /** Zone for the primary Bigtable cluster (e.g. `us-central1-a`). Immutable. */
-  zone?: string;
+  zone?: string | undefined;
 };
 
 export type FeatureOnlineStoreDedicatedServingEndpoint = {
   /** Private Service Connect config (Optimized storage only). */
-  privateServiceConnectConfig?: {
-    enablePrivateServiceConnect?: boolean;
-    projectAllowlist?: string[];
-  };
+  privateServiceConnectConfig?:
+    | {
+        enablePrivateServiceConnect?: boolean;
+        projectAllowlist?: string[] | undefined;
+      }
+    | undefined;
 };
 
 export type FeatureOnlineStoreProps = {
@@ -80,7 +82,7 @@ export type FeatureOnlineStoreProps = {
   /**
    * Dedicated serving endpoint (Optimized storage).
    */
-  dedicatedServingEndpoint?: FeatureOnlineStoreDedicatedServingEndpoint;
+  dedicatedServingEndpoint?: FeatureOnlineStoreDedicatedServingEndpoint | undefined;
   /**
    * Customer-managed encryption. Immutable.
    */
@@ -115,7 +117,7 @@ export type FeatureOnlineStore = Resource<
           privateServiceConnectConfig:
             | {
                 enablePrivateServiceConnect?: boolean;
-                projectAllowlist?: string[];
+                projectAllowlist?: string[] | undefined;
               }
             | undefined;
         }

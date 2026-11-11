@@ -1,6 +1,8 @@
 import { describe, expect, it } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Stream from "effect/Stream";
+import { unwrapRpcHandlers, wrapRpcHandlers } from "@/Local/RpcSerialization.ts";
 import { makeServerRpcSession, type ServerWebSocketLike } from "@/Local/RpcServerSession.ts";
 
 describe("Local.RpcServerSession", { tags: ["unit", "local"] }, () => {
@@ -14,6 +16,53 @@ describe("Local.RpcServerSession", { tags: ["unit", "local"] }, () => {
       };
       const result = yield* Effect.promise(() => remote.pong("hi"));
       expect(result).toBe("hi!");
+    }),
+  );
+
+  it.effect("wrapped streams round-trip ordered chunks over paired sessions", () =>
+    Effect.gen(function* () {
+      const wrapped = wrapRpcHandlers(
+        { tail: (prefix: string) => Stream.make(`${prefix}:1`, `${prefix}:2`, `${prefix}:3`) },
+        ["tail"],
+      );
+      const main = { getProvider: async () => wrapped };
+      const { a, b } = pairSessions(main, main);
+      const remote = a.session.getRemoteMain() as unknown as {
+        getProvider: () => Promise<typeof wrapped>;
+      };
+      const chunks = yield* Effect.promise(() => remote.getProvider()).pipe(
+        Effect.flatMap((wire) => {
+          const provider = unwrapRpcHandlers<typeof wrapped>(wire, ["tail"]);
+          return Stream.runCollect(provider.tail("remote"));
+        }),
+        Effect.ensuring(
+          Effect.sync(() => {
+            a.dispatch.close(1000, "done");
+            b.dispatch.close(1000, "done");
+          }),
+        ),
+      );
+      expect(chunks).toEqual(["remote:1", "remote:2", "remote:3"]);
+    }),
+  );
+
+  it.effect("in-process wrapped streams stay lazy and consume synchronous streams", () =>
+    Effect.gen(function* () {
+      let calls = 0;
+      const wrapped = wrapRpcHandlers(
+        {
+          tail: (prefix: string) => {
+            calls++;
+            return Stream.make(`${prefix}:1`, `${prefix}:2`);
+          },
+        },
+        ["tail"],
+      );
+      const provider = unwrapRpcHandlers<typeof wrapped>(wrapped, ["tail"]);
+      const stream = provider.tail("local");
+      expect(calls).toBe(0);
+      expect(yield* Stream.runCollect(stream)).toEqual(["local:1", "local:2"]);
+      expect(calls).toBe(1);
     }),
   );
 
@@ -59,7 +108,7 @@ describe("Local.RpcServerSession", { tags: ["unit", "local"] }, () => {
     Effect.gen(function* () {
       // mainB never resolves on the wire because we never deliver anything
       // back; the close event should reject the in-flight call.
-      const closes: Array<{ code?: number; reason?: string }> = [];
+      const closes: Array<{ code: number | undefined; reason: string | undefined }> = [];
       const ws: ServerWebSocketLike = {
         send: () => {
           // intentionally drop outbound traffic
@@ -92,7 +141,11 @@ const pairSessions = <A extends Record<string, any>, B extends Record<string, an
   mainA: A,
   mainB: B,
 ) => {
-  const closes: Array<{ side: "a" | "b"; code?: number; reason?: string }> = [];
+  const closes: Array<{
+    side: "a" | "b";
+    code: number | undefined;
+    reason: string | undefined;
+  }> = [];
   let a!: ReturnType<typeof makeServerRpcSession<A>>;
   let b!: ReturnType<typeof makeServerRpcSession<B>>;
 

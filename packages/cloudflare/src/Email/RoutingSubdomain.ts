@@ -186,7 +186,7 @@ const routingMxOf = (zoneId: string, name: string) =>
 
 const groupByName = (
   zoneId: string,
-  records: ReadonlyArray<{ readonly name: string; readonly content?: string | null }>,
+  records: ReadonlyArray<{ readonly name: string; readonly content?: string | null | undefined }>,
 ): RoutingSubdomainAttributes[] => {
   const byName = new Map<string, string[]>();
   for (const record of records) {

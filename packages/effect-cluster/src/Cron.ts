@@ -37,9 +37,9 @@ export interface CronProps extends HostedProps {
    * from when it finished.
    * @default false
    */
-  calculateNextRunFromPrevious?: boolean;
+  calculateNextRunFromPrevious?: boolean | undefined;
   /** Skip a run that is due longer ago than this, as after an outage. */
-  skipIfOlderThan?: Duration.Input;
+  skipIfOlderThan?: Duration.Input | undefined;
 }
 
 export interface ClusterCronResource extends HostedResource<CronTypeId, CronProps> {}

@@ -36,21 +36,21 @@ export type FeedCondition = {
    * CEL expression evaluated against a `TemporalAsset` named
    * `temporal_asset`. Example: `temporal_asset.deleted == true`.
    */
-  expression?: string;
+  expression?: string | undefined;
   /**
    * Short title shown in UIs that edit the expression.
    */
-  title?: string;
+  title?: string | undefined;
   /**
    * Longer description of the expression. Feeds have no labels field, so
    * Alchemy ownership is stored in a `[alchemy …]` prefix here and
    * stripped from attributes.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * Source location of the expression for error reporting.
    */
-  location?: string;
+  location?: string | undefined;
 };
 
 export type FeedProps = {

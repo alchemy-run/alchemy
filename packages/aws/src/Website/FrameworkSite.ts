@@ -37,7 +37,7 @@ export interface FrameworkSiteBaseProps {
    * Environment variables for the SSR server (Lambda environment).
    * Values accept `Output`s (e.g. `API_URL: api.url`).
    */
-  env?: Record<string, any>;
+  env?: Record<string, any> | undefined;
   /**
    * Maximum server request duration.
    * @default 30 seconds
@@ -46,7 +46,7 @@ export interface FrameworkSiteBaseProps {
   /**
    * Static asset upload configuration.
    */
-  assets?: WebsiteAssetsConfig;
+  assets?: WebsiteAssetsConfig | undefined;
   /**
    * Options for the local dev server that runs this site under
    * `alchemy dev`.
@@ -136,7 +136,7 @@ export interface FunctionServerProps {
    * Server instruction set architecture.
    * @default "x86_64"
    */
-  architecture?: "x86_64" | "arm64";
+  architecture?: "x86_64" | "arm64" | undefined;
   /**
    * Lambda runtime for the server function.
    * @default "nodejs24.x"
@@ -244,7 +244,7 @@ export interface FrameworkSiteConfig {
    * the index page for SPAs). Set by composites whose framework supports
    * a fully static output (Astro's `output: "static"`).
    */
-  static?: { spa?: boolean; errorPage?: string } | undefined;
+  static?: { spa?: boolean | undefined; errorPage?: string | undefined } | undefined;
 }
 
 /**

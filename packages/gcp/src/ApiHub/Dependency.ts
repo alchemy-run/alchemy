@@ -31,12 +31,12 @@ export type DependencyEntity = {
    * Operation resource name
    * `projects/{project}/locations/{location}/apis/{api}/versions/{version}/operations/{operation}`.
    */
-  operationResourceName?: string;
+  operationResourceName?: string | undefined;
   /**
    * External API resource name
    * `projects/{project}/locations/{location}/externalApis/{externalApi}`.
    */
-  externalApiResourceName?: string;
+  externalApiResourceName?: string | undefined;
 };
 
 export type DependencyProps = {

@@ -41,7 +41,7 @@ export type OnlineEvaluatorConfig = {
 
 export type MetricSource = {
   /** Registered metric resource name. */
-  metricResourceName?: string;
+  metricResourceName?: string | undefined;
 };
 
 export type CloudObservability = {

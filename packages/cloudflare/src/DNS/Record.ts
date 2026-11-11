@@ -84,7 +84,7 @@ export interface RecordCommonProps {
    *
    * @default "1"
    */
-  ttl?: number | "1";
+  ttl?: number | "1" | undefined;
   /**
    * Whether to send the record through Cloudflare's proxy (orange-clouded
    * in the dashboard). Only valid for proxiable record types
@@ -92,17 +92,17 @@ export interface RecordCommonProps {
    *
    * @default false
    */
-  proxied?: boolean;
+  proxied?: boolean | undefined;
   /**
    * Free-form comment shown in the dashboard. No effect on DNS responses.
    *
    * @default "Managed by Alchemy (<FQN>)"
    */
-  comment?: string;
+  comment?: string | undefined;
   /**
    * Custom tags shown in the dashboard. No effect on DNS responses.
    */
-  tags?: ReadonlyArray<string>;
+  tags?: ReadonlyArray<string> | undefined;
 }
 
 // Built from the known types: a `string` fallback here would also accept
@@ -168,7 +168,7 @@ export interface RecordAttributes {
   /** Formatted record value returned by Cloudflare. */
   content: string;
   /** Structured record components, when Cloudflare returns them. */
-  data?: RecordData;
+  data?: RecordData | undefined;
   /** Resolved TTL (Cloudflare echoes `1` for "automatic"). */
   ttl: number;
   /** Whether the record is proxied. */
@@ -517,9 +517,9 @@ const observeById = (zoneId: string, dnsRecordId: string) =>
  * records are all legitimate Cloudflare configurations.
  */
 interface RecordMatch {
-  readonly content?: string;
-  readonly data?: RecordData;
-  readonly priority?: number;
+  readonly content?: string | undefined;
+  readonly data?: RecordData | undefined;
+  readonly priority?: number | undefined;
 }
 
 /**
@@ -532,10 +532,10 @@ export class AmbiguousDnsRecordError extends Data.TaggedError("AmbiguousDnsRecor
   readonly recordName: string;
   readonly type: RecordType;
   readonly candidates: ReadonlyArray<{
-    readonly id?: string;
-    readonly content?: string;
-    readonly data?: RecordData;
-    readonly priority?: number;
+    readonly id?: string | undefined;
+    readonly content?: string | undefined;
+    readonly data?: RecordData | undefined;
+    readonly priority?: number | undefined;
   }>;
   readonly message: string;
 }> {}
@@ -632,35 +632,35 @@ const normalizeRecordName = (name: string, zoneName: string): string => {
 };
 
 interface ObservedRecord {
-  readonly id?: string;
-  readonly name?: string;
-  readonly type?: RecordType;
-  readonly content?: string;
-  readonly ttl?: number;
-  readonly proxied?: boolean;
-  readonly comment?: string;
-  readonly tags?: ReadonlyArray<string>;
-  readonly priority?: number;
-  readonly data?: RecordData;
-  readonly createdOn?: string;
-  readonly modifiedOn?: string;
+  readonly id?: string | undefined;
+  readonly name?: string | undefined;
+  readonly type?: RecordType | undefined;
+  readonly content?: string | undefined;
+  readonly ttl?: number | undefined;
+  readonly proxied?: boolean | undefined;
+  readonly comment?: string | undefined;
+  readonly tags?: ReadonlyArray<string> | undefined;
+  readonly priority?: number | undefined;
+  readonly data?: RecordData | undefined;
+  readonly createdOn?: string | undefined;
+  readonly modifiedOn?: string | undefined;
 }
 
 const undef = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
 
 const narrowRecord = (raw: {
-  id?: string | null;
-  name?: string | null;
-  type?: string | null;
-  content?: string | null;
-  ttl?: number | null;
-  proxied?: boolean | null;
-  comment?: string | null;
-  tags?: ReadonlyArray<string> | null;
-  priority?: number | null;
-  data?: Readonly<{ [key: string]: unknown }> | null;
-  createdOn?: string | null;
-  modifiedOn?: string | null;
+  id?: string | null | undefined;
+  name?: string | null | undefined;
+  type?: string | null | undefined;
+  content?: string | null | undefined;
+  ttl?: number | null | undefined;
+  proxied?: boolean | null | undefined;
+  comment?: string | null | undefined;
+  tags?: ReadonlyArray<string> | null | undefined;
+  priority?: number | null | undefined;
+  data?: Readonly<{ [key: string]: unknown }> | null | undefined;
+  createdOn?: string | null | undefined;
+  modifiedOn?: string | null | undefined;
 }): ObservedRecord => ({
   id: undef(raw.id),
   name: undef(raw.name),
@@ -711,10 +711,10 @@ interface RecordMutableBodyCommon {
   name: string;
   type: RecordType;
   ttl: number;
-  proxied?: boolean;
-  comment?: string;
-  tags?: string[];
-  priority?: number;
+  proxied?: boolean | undefined;
+  comment?: string | undefined;
+  tags?: string[] | undefined;
+  priority?: number | undefined;
 }
 
 type RecordMutableBody = RecordMutableBodyCommon &

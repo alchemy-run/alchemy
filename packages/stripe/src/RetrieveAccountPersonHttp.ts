@@ -37,7 +37,7 @@ export const RetrieveAccountPersonHttp = Layer.effect(
       const auth = host !== undefined ? authorizeWith(bound) : ambient.authorize;
 
       return Effect.fn(`Stripe.RetrieveAccountPerson(${person.LogicalId})`)(function* (request?: {
-        expand?: string[];
+        expand?: string[] | undefined;
       }) {
         return yield* auth(
           GetAccountPerson({

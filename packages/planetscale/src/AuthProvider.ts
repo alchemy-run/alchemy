@@ -150,7 +150,7 @@ export type PlanetscaleResolvedCredentials =
       organization: string;
       source: {
         type: PlanetscaleAuthConfig["method"] | "env";
-        details?: string;
+        details?: string | undefined;
       };
     }
   | {
@@ -160,7 +160,7 @@ export type PlanetscaleResolvedCredentials =
       organization: string;
       source: {
         type: PlanetscaleAuthConfig["method"] | "env";
-        details?: string;
+        details?: string | undefined;
       };
     };
 

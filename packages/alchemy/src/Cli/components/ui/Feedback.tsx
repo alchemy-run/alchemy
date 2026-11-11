@@ -97,7 +97,7 @@ export function KeyBar({
   } as const;
   return (
     <Box
-      width={inline ? undefined : "100%"}
+      {...(!inline && { width: "100%" })}
       flexWrap="wrap"
       marginTop={marginTop}
       paddingLeft={before === undefined ? theme.space.indent : 0}
@@ -149,7 +149,7 @@ export const useSpinnerFrame = (): string => {
  * Spinner-as-status-icon: one animated frame, colorable so it can stand in
  * for a status glyph in trees and progress rows.
  */
-type SpinnerGlyphProps = { readonly color?: string };
+type SpinnerGlyphProps = { readonly color?: string | undefined };
 
 export function SpinnerGlyph({ color }: SpinnerGlyphProps) {
   return <Text color={color ?? theme.color.info}>{useSpinnerFrame()}</Text>;
@@ -215,7 +215,7 @@ export function Tabs({ tabs, active }: TabsProps) {
           <Box
             key={tab.id}
             paddingX={1}
-            backgroundColor={selected ? theme.paint.interactive : undefined}
+            {...(selected && { backgroundColor: theme.paint.interactive })}
             aria-role="tab"
             aria-label={tab.label}
             aria-state={{ selected }}

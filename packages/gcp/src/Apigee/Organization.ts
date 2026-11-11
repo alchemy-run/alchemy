@@ -19,17 +19,17 @@ const ORGANIZATION_BUDGET = "60 minutes";
 
 export type OrganizationAddonsConfig = {
   /** API Security add-on. */
-  apiSecurityConfig?: { enabled?: boolean };
+  apiSecurityConfig?: { enabled?: boolean | undefined } | undefined;
   /** Monetization add-on. */
-  monetizationConfig?: { enabled?: boolean };
+  monetizationConfig?: { enabled?: boolean | undefined } | undefined;
   /** Connectors Platform add-on. */
-  connectorsPlatformConfig?: { enabled?: boolean };
+  connectorsPlatformConfig?: { enabled?: boolean | undefined } | undefined;
   /** Analytics add-on. */
-  analyticsConfig?: { enabled?: boolean };
+  analyticsConfig?: { enabled?: boolean | undefined } | undefined;
   /** Integration add-on. */
-  integrationConfig?: { enabled?: boolean };
+  integrationConfig?: { enabled?: boolean | undefined } | undefined;
   /** Advanced API Ops add-on. */
-  advancedApiOpsConfig?: { enabled?: boolean };
+  advancedApiOpsConfig?: { enabled?: boolean | undefined } | undefined;
 };
 
 export type OrganizationProps = {
@@ -104,7 +104,7 @@ export type OrganizationProps = {
   /**
    * Add-on configurations.
    */
-  addonsConfig?: OrganizationAddonsConfig;
+  addonsConfig?: OrganizationAddonsConfig | undefined;
 };
 
 export type Organization = Resource<

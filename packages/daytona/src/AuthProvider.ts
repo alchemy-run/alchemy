@@ -68,7 +68,7 @@ export interface DaytonaResolvedCredentials {
   token: Redacted.Redacted<string>;
   apiBaseUrl: string;
   /** Sent as `X-Daytona-Organization-ID`; an API key already belongs to one organization. */
-  organizationId?: string;
+  organizationId?: string | undefined;
   /** When a user access token expires (epoch ms). */
   expires?: number;
   source: { type: DaytonaAuthConfig["method"] | "env"; details?: string };

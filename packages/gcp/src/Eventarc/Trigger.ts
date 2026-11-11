@@ -39,7 +39,7 @@ export type EventFilter = {
    * Optional match operator. Allowed values: `path_pattern`,
    * `match-path-pattern`. Omitted means exact match.
    */
-  operator?: string;
+  operator?: string | undefined;
 };
 
 export type CloudRunDestination = {
@@ -55,7 +55,7 @@ export type CloudRunDestination = {
   /**
    * Relative path on the service events are sent to, e.g. `/events`.
    */
-  path?: string;
+  path?: string | undefined;
 };
 
 export type GkeDestination = {
@@ -78,7 +78,7 @@ export type GkeDestination = {
   /**
    * Relative path on the GKE service events are sent to.
    */
-  path?: string;
+  path?: string | undefined;
 };
 
 export type HttpEndpointDestination = {
@@ -101,24 +101,24 @@ export type Destination = {
   /**
    * Cloud Run service that receives events.
    */
-  cloudRun?: CloudRunDestination;
+  cloudRun?: CloudRunDestination | undefined;
   /**
    * GKE service that receives events.
    */
-  gke?: GkeDestination;
+  gke?: GkeDestination | undefined;
   /**
    * Workflow resource name
    * (`projects/{project}/locations/{location}/workflows/{workflow}`).
    */
-  workflow?: string;
+  workflow?: string | undefined;
   /**
    * Internal HTTP endpoint that receives events.
    */
-  httpEndpoint?: HttpEndpointDestination;
+  httpEndpoint?: HttpEndpointDestination | undefined;
   /**
    * VPC network config. Only valid with `httpEndpoint`.
    */
-  networkConfig?: NetworkConfig;
+  networkConfig?: NetworkConfig | undefined;
 };
 
 export type PubsubTransport = {
@@ -129,11 +129,11 @@ export type PubsubTransport = {
    * changing it replaces the trigger. Eventarc-managed topics are not
    * deleted with the trigger.
    */
-  topic?: string;
+  topic?: string | undefined;
   /**
    * Output only. Pub/Sub subscription Eventarc manages for delivery.
    */
-  subscription?: string;
+  subscription?: string | undefined;
 };
 
 export type Transport = {
@@ -148,7 +148,7 @@ export type RetryPolicy = {
    * Maximum delivery attempts. The only valid value is `1`. Cloud Run
    * destinations only.
    */
-  maxAttempts?: number;
+  maxAttempts?: number | undefined;
 };
 
 export type TriggerProps = {
@@ -167,7 +167,7 @@ export type TriggerProps = {
    * @default the stack's GCP region (`GCP.Region`, else the profile
    *   region, else `us-central1`)
    */
-  location?: string;
+  location?: string | undefined;
   /**
    * CloudEvents attribute filters. Every event must match all filters.
    * A `type` filter is required. Immutable — changing filters replaces
@@ -204,12 +204,12 @@ export type TriggerProps = {
    * MIME type expected in the CloudEvent `data` payload.
    * @default "application/json"
    */
-  eventDataContentType?: string;
+  eventDataContentType?: string | undefined;
   /**
    * Retry policy. Cloud Run destinations only; omit for the 24-hour
    * default.
    */
-  retryPolicy?: RetryPolicy;
+  retryPolicy?: RetryPolicy | undefined;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
    */

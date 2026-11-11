@@ -52,7 +52,7 @@ export interface NetworkConnectorProps {
    * interfaces in your VPC. The role needs `ec2:CreateNetworkInterface` and
    * the related describe/delete permissions.
    */
-  operatorRole?: string;
+  operatorRole?: string | undefined;
 
   /**
    * Tags to apply to the network connector. Tags are set at creation time and
@@ -85,31 +85,31 @@ export interface NetworkConnector extends Resource<
     /**
      * The ARN of the IAM operator role, if one was configured.
      */
-    operatorRole?: string;
+    operatorRole?: string | undefined;
     /**
      * The subnet IDs the connector provisions ENIs in.
      */
-    subnetIds?: string[];
+    subnetIds?: string[] | undefined;
     /**
      * The security group IDs applied to the connector's ENIs.
      */
-    securityGroupIds?: string[];
+    securityGroupIds?: string[] | undefined;
     /**
      * The IP addressing mode of the connector's egress path.
      */
-    networkProtocol?: lambdacore.NetworkProtocol;
+    networkProtocol?: lambdacore.NetworkProtocol | undefined;
     /**
      * The compute resource types associated with the connector.
      */
-    associatedComputeResourceTypes?: lambdacore.ComputeResourceType[];
+    associatedComputeResourceTypes?: lambdacore.ComputeResourceType[] | undefined;
     /**
      * The monotonic version of the connector, incremented on each update.
      */
-    version?: number;
+    version?: number | undefined;
     /**
      * The timestamp of the connector's most recent modification (ISO 8601).
      */
-    lastModified?: string;
+    lastModified?: string | undefined;
   },
   never,
   Providers,

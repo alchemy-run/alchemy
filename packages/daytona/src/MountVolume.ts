@@ -20,14 +20,14 @@ export interface VolumeMount {
   /** Absolute path in the sandbox. */
   readonly path: string;
   /** Mount only this directory of the volume. */
-  readonly subpath?: string;
+  readonly subpath?: string | undefined;
 }
 
 export interface MountVolumeOptions {
   /** Absolute path in the sandbox. */
   readonly path: string;
   /** Mount only this directory of the volume. */
-  readonly subpath?: string;
+  readonly subpath?: string | undefined;
 }
 
 /** The volume ID behind a mount entry. */

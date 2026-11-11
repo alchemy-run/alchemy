@@ -66,7 +66,10 @@ const delivery = Effect.fn(function* (options: {
 });
 
 /** Runs a request through the handler; returns the status and the events the handler saw. */
-const deliver = Effect.fn(function* (request: Request, options?: { readonly secret?: string }) {
+const deliver = Effect.fn(function* (
+  request: Request,
+  options?: { readonly secret?: string | undefined },
+) {
   const secret = options === undefined ? SECRET : options.secret;
   const seen: string[] = [];
   const response = yield* handleDelivery(

@@ -39,7 +39,7 @@ export interface ReleaseProps {
    * `Output<string>` at the call site via `Output.interpolate` to embed
    * resource attributes that are not yet resolved.
    */
-  body?: string;
+  body?: string | undefined;
 
   /**
    * Whether this is a draft release (not visible to users).
@@ -477,7 +477,7 @@ const attrsOf = (data: {
   node_id: string;
   tag_name: string;
   name: string | null;
-  body?: string | null;
+  body?: string | null | undefined;
   draft: boolean;
   prerelease: boolean;
   html_url: string;

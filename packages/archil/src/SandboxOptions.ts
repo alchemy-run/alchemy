@@ -73,21 +73,21 @@ export interface DiskMountOptions {
   /** Absolute directory to mount at. */
   readonly path: string;
   /** @default "exclusive" */
-  readonly mode?: MountMode;
+  readonly mode?: MountMode | undefined;
   /** Mount only this subdirectory of the disk. */
-  readonly subdirectory?: string;
+  readonly subdirectory?: string | undefined;
   /**
    * Milliseconds to wait for the disk's exclusive root delegation before
    * the mount fails. Only for `exclusive` mounts in an `Archil.Sandbox`.
    */
-  readonly queueMs?: number;
+  readonly queueMs?: number | undefined;
   /** Mount a branch of the disk instead of its root. FUSE client only. */
-  readonly branch?: string;
+  readonly branch?: string | undefined;
   /**
    * Take ownership of the root from a client that crashed without
    * unmounting; that client's outstanding writes are lost. FUSE client only.
    */
-  readonly force?: boolean;
+  readonly force?: boolean | undefined;
 }
 
 /** A disk mounted into a sandbox (`mounts`), or by `MountDisk`. */

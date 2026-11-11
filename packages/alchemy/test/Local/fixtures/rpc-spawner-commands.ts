@@ -1,5 +1,5 @@
-import { unwrapRpcHandlers } from "alchemy/Local/RpcSerialization";
-import type { RpcProxyApi } from "alchemy/Local/RpcServer";
+import { unwrapRpcHandlers, type RpcWrapped } from "alchemy/Local/RpcSerialization";
+import type { RpcProviderService, RpcProxyApi } from "alchemy/Local/RpcServer";
 import { encodeSessionEnvironment, SESSION_ENV_PARAM } from "alchemy/Local/RpcServerEnvironment";
 import { layerServer, RpcSpawner } from "alchemy/Local/RpcSpawner";
 import { PlatformServices, runMain } from "alchemy/Util/PlatformServices";
@@ -44,14 +44,16 @@ const program = Effect.gen(function* () {
     }),
   );
   const session = yield* Effect.sync(() => newWebSocketRpcSession<RpcProxyApi>(url.toString()));
-  const wrapped = yield* Effect.promise(
-    () =>
-      session.getProvider(
-        "Command.Dev",
-        new URL("../../../src/Command/Local.ts", import.meta.url).href,
-      ) as ReturnType<RpcProxyApi["getProvider"]>,
+  const wrapped = yield* Effect.promise(() =>
+    session.getProvider(
+      "Command.Dev",
+      new URL("../../../src/Command/Local.ts", import.meta.url).href,
+    ),
   );
-  const provider = unwrapRpcHandlers(wrapped, []);
+  const provider = unwrapRpcHandlers<Pick<RpcWrapped<RpcProviderService<any>>, "reconcile">>(
+    wrapped,
+    [],
+  );
   yield* Effect.forEach(
     input.commands,
     (news, index) =>

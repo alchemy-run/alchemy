@@ -170,11 +170,11 @@ export const AutomationRuleProvider = () =>
         );
 
       const buildAttrs = (r: {
-        RuleArn?: string;
-        RuleName?: string;
-        RuleOrder?: number;
-        RuleStatus?: string;
-        IsTerminal?: boolean;
+        RuleArn?: string | undefined;
+        RuleName?: string | undefined;
+        RuleOrder?: number | undefined;
+        RuleStatus?: string | undefined;
+        IsTerminal?: boolean | undefined;
       }) => ({
         ruleArn: r.RuleArn!,
         ruleName: r.RuleName ?? "",

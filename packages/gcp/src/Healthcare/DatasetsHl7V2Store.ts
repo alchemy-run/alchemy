@@ -28,18 +28,18 @@ import {
 
 export type Hl7V2NotificationConfig = {
   /** Pub/Sub topic for matching messages. */
-  pubsubTopic?: string;
+  pubsubTopic?: string | undefined;
   /** Optional filter restricting which messages notify. */
-  filter?: string;
+  filter?: string | undefined;
 };
 
 export type Hl7V2ParserConfig = {
   /** Allow messages with no header. */
-  allowNullHeader?: boolean;
+  allowNullHeader?: boolean | undefined;
   /**
    * Parser version. Immutable after create.
    */
-  version?: healthcare.ParserConfigVersionEnum | (string & {});
+  version?: healthcare.ParserConfigVersionEnum | (string & {}) | undefined;
 };
 
 export type DatasetsHl7V2StoreProps = {
@@ -77,7 +77,7 @@ export type DatasetsHl7V2StoreProps = {
   /**
    * Destinations for filtered message notifications.
    */
-  notificationConfigs?: Hl7V2NotificationConfig[];
+  notificationConfigs?: Hl7V2NotificationConfig[] | undefined;
 };
 
 export type DatasetsHl7V2Store = Resource<

@@ -22,7 +22,7 @@ export type ProbeOutcome<A> =
   | { readonly ok: true; readonly value: A }
   | {
       readonly ok: false;
-      readonly error: { readonly _tag: string; readonly message?: string };
+      readonly error: { readonly _tag: string; readonly message?: string | undefined };
     };
 
 export type Probe = Effect.Effect<unknown, { readonly _tag: string }, any>;

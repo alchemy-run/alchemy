@@ -158,12 +158,12 @@ export interface TaskDefinitionConfig {
    * Task-level data volumes (host / docker / EFS / FSx Windows / S3 /
    * configured-at-launch). Containers reference these via `mountPoints`.
    */
-  volumes?: ecs.Volume[];
+  volumes?: ecs.Volume[] | undefined;
   /**
    * Task definition placement constraints (`memberOf` expressions). Only
    * applies to EC2/EXTERNAL launch types.
    */
-  placementConstraints?: ecs.TaskDefinitionPlacementConstraint[];
+  placementConstraints?: ecs.TaskDefinitionPlacementConstraint[] | undefined;
   /**
    * CPU architecture and operating-system family the task runs on, e.g.
    * `{ cpuArchitecture: "ARM64", operatingSystemFamily: "LINUX" }`.
@@ -627,7 +627,7 @@ export const ensureTaskExecutionRole = Effect.fn(function* ({
 }: {
   id: string;
   roleName: string;
-  managedPolicyArns?: string[];
+  managedPolicyArns?: string[] | undefined;
 }) {
   const roleArn = yield* createTaskRoleIfNotExists({ id, roleName });
   const policies = [
@@ -925,11 +925,8 @@ export const syncTaskDefinitionTags = Effect.fn(function* ({
     (
       (yield* ecs
         .listTagsForResource({ resourceArn: revisionArn })
-        .pipe(
-          Effect.catchTag("ClientException", () =>
-            Effect.succeed({ tags: undefined } as { tags?: ecs.Tag[] }),
-          ),
-        )).tags ?? []
+        .pipe(Effect.catchTag("ClientException", () => Effect.succeed({ tags: undefined }))))
+        .tags ?? []
     )
       .filter(
         (t): t is { key: string; value: string } =>

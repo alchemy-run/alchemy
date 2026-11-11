@@ -27,13 +27,13 @@ export type GlobalNetworkEndpointType = "INTERNET_FQDN_PORT" | "INTERNET_IP_PORT
 
 export type GlobalNetworkEndpointSpec = {
   /** Fully qualified domain name. Required for `INTERNET_FQDN_PORT`. */
-  fqdn?: string;
+  fqdn?: string | undefined;
   /** IPv4 address. Required for `INTERNET_IP_PORT`. */
-  ipAddress?: string;
+  ipAddress?: string | undefined;
   /** IPv6 address. */
-  ipv6Address?: string;
+  ipv6Address?: string | undefined;
   /** Port. Omitted endpoints use the group's `defaultPort`. */
-  port?: number;
+  port?: number | undefined;
 };
 
 export type GlobalNetworkEndpointGroupProps = {
@@ -260,10 +260,10 @@ const toApiEndpoint = (endpoint: GlobalNetworkEndpointSpec): compute.NetworkEndp
 });
 
 const endpointKey = (endpoint: {
-  fqdn?: string;
-  ipAddress?: string;
-  ipv6Address?: string;
-  port?: number;
+  fqdn?: string | undefined;
+  ipAddress?: string | undefined;
+  ipv6Address?: string | undefined;
+  port?: number | undefined;
 }) =>
   [
     endpoint.fqdn ?? "",

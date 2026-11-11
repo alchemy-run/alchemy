@@ -178,8 +178,8 @@ export const alchemyRuntimeEnv = Effect.gen(function* () {
 });
 
 export interface ContainerEnvVar {
-  name?: string;
-  value?: string;
+  name?: string | undefined;
+  value?: string | undefined;
   valueSource?: unknown;
 }
 
@@ -221,13 +221,19 @@ export const CLOUD_SQL_VOLUME = "cloudsql";
 export const CLOUD_SQL_MOUNT_PATH = "/cloudsql";
 
 type CloudSqlTemplate = {
-  volumes?: Array<{
-    name?: string;
-    cloudSqlInstance?: { instances?: string[] };
-  }>;
-  containers?: Array<{
-    volumeMounts?: Array<{ name?: string; mountPath?: string }>;
-  }>;
+  volumes?:
+    | Array<{
+        name?: string | undefined;
+        cloudSqlInstance?: { instances?: string[] | undefined } | undefined;
+      }>
+    | undefined;
+  containers?:
+    | Array<{
+        volumeMounts?:
+          | Array<{ name?: string | undefined; mountPath?: string | undefined }>
+          | undefined;
+      }>
+    | undefined;
 };
 
 /**

@@ -39,11 +39,11 @@ export type AppsDomainMappingSslSettings = {
 
 export type AppsDomainMappingResourceRecord = {
   /** Resource record type (`A`, `AAAA`, `CNAME`). */
-  type?: appengine.ResourceRecordTypeEnum | (string & {});
+  type?: appengine.ResourceRecordTypeEnum | (string & {}) | undefined;
   /** Relative name of the object affected (CNAME only). */
-  name?: string;
+  name?: string | undefined;
   /** Record data. */
-  rrdata?: string;
+  rrdata?: string | undefined;
 };
 
 export type AppsDomainMappingProps = {

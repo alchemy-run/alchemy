@@ -8,6 +8,8 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as SchemaIssue from "effect/SchemaIssue";
 import * as SchemaTransformation from "effect/SchemaTransformation";
@@ -456,14 +458,16 @@ const EPOCH = new Date(0);
 const normalize = (header: TarHeader, size: number): TarHeader => ({
   name: header.name,
   size,
-  mode: header.mode,
+  ...Rec.filterMap(
+    { mode: header.mode, linkname: header.linkname },
+    Result.fromNullishOr(() => undefined),
+  ),
   type: header.type ?? "file",
   mtime: EPOCH,
   uid: 0,
   gid: 0,
   uname: "",
   gname: "",
-  ...(header.linkname !== undefined ? { linkname: header.linkname } : {}),
 });
 
 export interface PackedTarball {

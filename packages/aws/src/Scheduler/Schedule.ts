@@ -38,11 +38,11 @@ export interface ScheduleProps {
   /**
    * Schedule name. If omitted, Alchemy generates a deterministic name.
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * Optional schedule group. Defaults to the AWS default group.
    */
-  groupName?: Input<string>;
+  groupName?: Input<string> | undefined;
   /**
    * Required schedule expression, such as `rate(5 minutes)` or `cron(...)`.
    */
@@ -50,27 +50,27 @@ export interface ScheduleProps {
   /**
    * Optional start date.
    */
-  startDate?: Date;
+  startDate?: Date | undefined;
   /**
    * Optional end date.
    */
-  endDate?: Date;
+  endDate?: Date | undefined;
   /**
    * Optional description.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * Optional timezone for cron or at expressions.
    */
-  scheduleExpressionTimezone?: string;
+  scheduleExpressionTimezone?: string | undefined;
   /**
    * Desired schedule state.
    */
-  state?: string;
+  state?: string | undefined;
   /**
    * Optional KMS key ARN.
    */
-  kmsKeyArn?: Input<string>;
+  kmsKeyArn?: Input<string> | undefined;
   /**
    * Scheduler target configuration.
    */
@@ -78,11 +78,11 @@ export interface ScheduleProps {
   /**
    * Flexible time window configuration.
    */
-  flexibleTimeWindow?: Input<scheduler.FlexibleTimeWindow>;
+  flexibleTimeWindow?: Input<scheduler.FlexibleTimeWindow> | undefined;
   /**
    * Action after a one-time schedule completes.
    */
-  actionAfterCompletion?: string;
+  actionAfterCompletion?: string | undefined;
 }
 
 /**
@@ -169,15 +169,15 @@ export const Schedule = Resource<Schedule>("AWS.Scheduler.Schedule");
 
 /** The managed configuration of a schedule, as observed. */
 export interface ScheduleConfiguration {
-  scheduleExpression?: string;
-  scheduleExpressionTimezone?: string;
-  startDate?: string;
-  endDate?: string;
-  description?: string;
-  kmsKeyArn?: string;
-  target?: scheduler.Target;
-  flexibleTimeWindow?: scheduler.FlexibleTimeWindow;
-  actionAfterCompletion?: string;
+  scheduleExpression?: string | undefined;
+  scheduleExpressionTimezone?: string | undefined;
+  startDate?: string | undefined;
+  endDate?: string | undefined;
+  description?: string | undefined;
+  kmsKeyArn?: string | undefined;
+  target?: scheduler.Target | undefined;
+  flexibleTimeWindow?: scheduler.FlexibleTimeWindow | undefined;
+  actionAfterCompletion?: string | undefined;
 }
 
 /**

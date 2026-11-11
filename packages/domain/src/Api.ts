@@ -115,7 +115,7 @@ export type ReadError<D> =
   | RpcClientError.RpcClientError;
 
 interface CallOptions {
-  readonly headers?: Headers.Input;
+  readonly headers?: Headers.Input | undefined;
 }
 
 /** The typed client of a view exposed in an Api. */
@@ -144,7 +144,7 @@ export interface ViewClient<V extends View.Any> {
   readonly events: (
     key: Key.IdOf<View.KeyOf<V>>,
     options?: CallOptions & {
-      readonly after?: number;
+      readonly after?: number | undefined;
       readonly where?: Filter<View.EventOf<V>>;
     },
   ) => Stream.Stream<
@@ -160,7 +160,7 @@ export interface ViewClient<V extends View.Any> {
       readonly where?: Filter<View.EventOf<V>>;
       readonly order?: "asc" | "desc";
       readonly take?: number;
-      readonly after?: number;
+      readonly after?: number | undefined;
     },
   ) => Effect.Effect<
     View.Page<View.Entry<View.StateOf<V>, View.EventOf<V>, Key.IdOf<View.KeyOf<V>>>>,
@@ -215,7 +215,7 @@ export interface StreamClient<S extends DomainStream.Any> {
   readonly events: (
     key: Key.IdOf<DomainStream.KeyOf<S>>,
     options?: CallOptions & {
-      readonly after?: number;
+      readonly after?: number | undefined;
       readonly where?: Filter<DomainStream.EventOf<S>>;
     },
   ) => Stream.Stream<
@@ -229,7 +229,7 @@ export interface StreamClient<S extends DomainStream.Any> {
       readonly where?: Filter<DomainStream.EventOf<S>>;
       readonly order?: "asc" | "desc";
       readonly take?: number;
-      readonly after?: number;
+      readonly after?: number | undefined;
     },
   ) => Effect.Effect<
     View.Page<DomainStream.Entry<DomainStream.EventOf<S>, Key.IdOf<DomainStream.KeyOf<S>>>>,
@@ -297,11 +297,11 @@ export interface QueryOptions extends CallOptions {
    * Wait until the query's projections have handled this write (a
    * command's receipt), or each of these writes, one receipt per command.
    */
-  readonly atLeast?: Query.AtLeastInput;
+  readonly atLeast?: Query.AtLeastInput | undefined;
   /** The cursor of the previous page, for a paged query. */
-  readonly after?: string;
+  readonly after?: string | undefined;
   /** Rows per page, for a paged query; capped by the query Layer's `take.max`. */
-  readonly take?: number;
+  readonly take?: number | undefined;
 }
 
 /** One entry of a paged query's pages. */
@@ -821,7 +821,7 @@ const liveReads = (
     {
       readonly rpc: Rpc.AnyWithProps;
       readonly mode: "watch" | "events";
-      readonly store?: ViewStore | StreamStore;
+      readonly store: ViewStore | StreamStore | undefined;
     }
   >();
   for (const entry of entries) {

@@ -28,21 +28,21 @@ const DEFAULT_RESOURCE_TYPE = "uptime_url";
 
 export type BasicAuthentication = {
   /** Username for HTTP basic auth. */
-  username?: string;
+  username?: string | undefined;
   /** Password for HTTP basic auth. */
-  password?: string;
+  password?: string | undefined;
 };
 
 export type PingConfig = {
   /** Number of ICMP pings to send with the check (max 3). */
-  pingsCount?: number;
+  pingsCount?: number | undefined;
 };
 
 export type ResponseStatusCode = {
   /** Exact HTTP status code to accept. */
-  statusValue?: number;
+  statusValue?: number | undefined;
   /** HTTP status class to accept (`STATUS_CLASS_2XX`, …). */
-  statusClass?: string;
+  statusClass?: string | undefined;
 };
 
 export type HttpCheck = {
@@ -54,7 +54,7 @@ export type HttpCheck = {
   /**
    * TCP port. Defaults to 443 when `useSsl` is true, otherwise 80.
    */
-  port?: number;
+  port?: number | undefined;
   /**
    * When true, probe over HTTPS.
    * @default true
@@ -67,48 +67,48 @@ export type HttpCheck = {
    */
   validateSsl?: boolean;
   /** HTTP method. Defaults to GET. */
-  requestMethod?: string;
+  requestMethod?: string | undefined;
   /** Extra request headers. */
-  headers?: Record<string, string>;
+  headers?: Record<string, string> | undefined;
   /** When true, encrypt stored header values. */
-  maskHeaders?: boolean;
+  maskHeaders?: boolean | undefined;
   /** HTTP basic authentication. */
-  authInfo?: BasicAuthentication;
+  authInfo?: BasicAuthentication | undefined;
   /** Attach an OIDC token from the Monitoring service agent. */
-  serviceAgentAuthentication?: { type?: string };
+  serviceAgentAuthentication?: { type?: string | undefined } | undefined;
   /** Content-Type for POST checks. */
-  contentType?: string;
+  contentType?: string | undefined;
   /** Custom Content-Type when `contentType` is `USER_PROVIDED`. */
-  customContentType?: string;
+  customContentType?: string | undefined;
   /** POST body. Ignored for GET. */
-  body?: string;
+  body?: string | undefined;
   /** ICMP pings sent alongside the HTTP probe. */
-  pingConfig?: PingConfig;
+  pingConfig?: PingConfig | undefined;
   /** Accepted HTTP status codes. Empty means 2xx. */
-  acceptedResponseStatusCodes?: ResponseStatusCode[];
+  acceptedResponseStatusCodes?: ResponseStatusCode[] | undefined;
 };
 
 export type TcpCheck = {
   /** TCP port to probe. Required for TCP checks. */
-  port?: number;
+  port?: number | undefined;
   /** ICMP pings sent alongside the TCP probe. */
-  pingConfig?: PingConfig;
+  pingConfig?: PingConfig | undefined;
 };
 
 export type JsonPathMatcher = {
   /** JSONPath into the response body. */
-  jsonPath?: string;
+  jsonPath?: string | undefined;
   /** Match type (`EXACT_MATCH` or `REGEX_MATCH`). */
-  jsonMatcher?: string;
+  jsonMatcher?: string | undefined;
 };
 
 export type ContentMatcher = {
   /** String, regex, or JSON value to match. */
-  content?: string;
+  content?: string | undefined;
   /** Matcher (`CONTAINS_STRING`, `MATCHES_REGEX`, …). */
-  matcher?: string;
+  matcher?: string | undefined;
   /** JSONPath matcher, used with `MATCHES_JSON_PATH`. */
-  jsonPathMatcher?: JsonPathMatcher;
+  jsonPathMatcher?: JsonPathMatcher | undefined;
 };
 
 export type MonitoredResource = {
@@ -116,7 +116,7 @@ export type MonitoredResource = {
    * Monitored resource type (`uptime_url`, `gce_instance`, `gae_app`,
    * `k8s_service`, `cloud_run_revision`, …).
    */
-  type?: string;
+  type?: string | undefined;
   /**
    * Resource labels. For `uptime_url`, set `host` (and optionally
    * `project_id`).
@@ -126,14 +126,14 @@ export type MonitoredResource = {
 
 export type ResourceGroup = {
   /** Group id (not the full resource name). */
-  groupId?: string;
+  groupId?: string | undefined;
   /** Member resource type (`INSTANCE` or `AWS_ELB_LOAD_BALANCER`). */
-  resourceType?: string;
+  resourceType?: string | undefined;
 };
 
 export type SyntheticMonitorTarget = {
   /** Cloud Functions v2 target. */
-  cloudFunctionV2?: { name?: string };
+  cloudFunctionV2?: { name?: string | undefined } | undefined;
 };
 
 export type UptimeCheckConfigProps = {
@@ -141,7 +141,7 @@ export type UptimeCheckConfigProps = {
    * Human-readable display name. If omitted, a unique name is generated
    * from the stack, stage, and logical id.
    */
-  displayName?: string;
+  displayName?: string | undefined;
   /**
    * Probe timeout. Must be between 1s and 60s.
    * @default "10s"
@@ -162,7 +162,7 @@ export type UptimeCheckConfigProps = {
    * TCP probe. Mutually exclusive with `httpCheck` and
    * `syntheticMonitor`.
    */
-  tcpCheck?: TcpCheck;
+  tcpCheck?: TcpCheck | undefined;
   /**
    * Synthetic monitor (Cloud Functions v2) target.
    */

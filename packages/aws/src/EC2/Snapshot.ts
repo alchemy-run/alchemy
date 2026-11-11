@@ -82,7 +82,7 @@ export interface Snapshot extends Resource<
     /**
      * The progress of the snapshot, as a percentage (e.g. `"100%"`).
      */
-    progress?: string;
+    progress?: string | undefined;
 
     /**
      * Whether the snapshot is encrypted.
@@ -92,12 +92,12 @@ export interface Snapshot extends Resource<
     /**
      * The KMS key used to protect the snapshot, if encrypted.
      */
-    kmsKeyId?: string;
+    kmsKeyId?: string | undefined;
 
     /**
      * The ID of the AWS account that owns the snapshot.
      */
-    ownerId?: string;
+    ownerId?: string | undefined;
   },
   never,
   Providers,
@@ -329,7 +329,7 @@ const toSnapshotAttributes = (
 class SnapshotPending extends Data.TaggedError("SnapshotPending")<{
   snapshotId: string;
   state: string;
-  progress?: string;
+  progress?: string | undefined;
 }> {}
 
 /**

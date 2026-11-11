@@ -62,7 +62,7 @@ const allSchedulesArnPattern = Effect.gen(function* () {
  * the runtime half injects the group's name as the request's `GroupName`.
  */
 export const makeScheduleGroupScopedHttpBinding = <
-  I extends { GroupName?: string },
+  I extends { GroupName?: string | undefined },
   A,
   E,
   R,
@@ -133,7 +133,7 @@ export const makeScheduleGroupScopedHttpBinding = <
  */
 export const makeScheduleWriteHttpBinding = <
   I extends {
-    GroupName?: string;
+    GroupName?: string | undefined;
     Target: scheduler.Target;
     FlexibleTimeWindow: scheduler.FlexibleTimeWindow;
   },
@@ -181,8 +181,8 @@ export const makeScheduleWriteHttpBinding = <
       }
       return Effect.fn(`${options.tag}(${executionRole.LogicalId})`)(function* (
         request: Omit<I, "GroupName" | "Target" | "FlexibleTimeWindow"> & {
-          Target: Omit<scheduler.Target, "RoleArn"> & { RoleArn?: string };
-          FlexibleTimeWindow?: scheduler.FlexibleTimeWindow;
+          Target: Omit<scheduler.Target, "RoleArn"> & { RoleArn?: string | undefined };
+          FlexibleTimeWindow?: scheduler.FlexibleTimeWindow | undefined;
         },
       ) {
         const roleArn = yield* RoleArn;

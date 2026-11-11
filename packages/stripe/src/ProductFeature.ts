@@ -173,9 +173,9 @@ const listAlchemyProducts = Effect.fn(function* () {
 });
 
 const observe = Effect.fn(function* (input: {
-  product?: string;
-  id?: string;
-  entitlementFeature?: string;
+  product?: string | undefined;
+  id?: string | undefined;
+  entitlementFeature?: string | undefined;
 }) {
   if (input.product !== undefined && input.id !== undefined) {
     const byId = yield* getById(input.product, input.id);

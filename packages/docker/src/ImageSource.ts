@@ -55,7 +55,7 @@ export interface BundledImageSource {
    * program change doesn't reinstall them. Hosts fold these in from their
    * bindings; users don't set them.
    */
-  install?: ReadonlyArray<string>;
+  install?: ReadonlyArray<string> | undefined;
   /**
    * Environment image: used as the generated Dockerfile's `FROM`. Any
    * registry ref works (private non-ECR registries require docker
@@ -63,7 +63,7 @@ export interface BundledImageSource {
    * bun runtime. Exclusive with {@link dockerfile} / {@link context}.
    * @default "oven/bun:1"
    */
-  image?: string;
+  image?: string | undefined;
   /**
    * Environment Dockerfile: a string is a PATH (built in {@link context},
    * then the bundle is layered on top in a second stage); an
@@ -72,17 +72,17 @@ export interface BundledImageSource {
    * The resulting environment must be able to run the bun runtime.
    * Exclusive with {@link image}.
    */
-  dockerfile?: string | InlineDockerfile;
+  dockerfile?: string | InlineDockerfile | undefined;
   /**
    * Build context for a path {@link dockerfile} environment. Exclusive
    * with {@link image} and inline dockerfiles.
    */
-  context?: string;
+  context?: string | undefined;
   /**
    * Named export to load from `main`.
    * @default "default"
    */
-  handler?: string;
+  handler?: string | undefined;
   /**
    * Bundler configuration for the entrypoint. Unused code is tree-shaken.
    * `effect`, alchemy, and `@distilled.cloud` are marked pure so unused
@@ -90,7 +90,7 @@ export interface BundledImageSource {
    * `pure.packages`, or disable with `pure: false`. `cache` configures the
    * image build's BuildKit layer cache.
    */
-  build?: Bundle.BundleConfig & BuildCacheOptions;
+  build?: (Bundle.BundleConfig & BuildCacheOptions) | undefined;
 }
 
 /**
@@ -104,7 +104,7 @@ export interface DockerfileBuild extends BuildCacheOptions {
    * image. Never pass secrets here: build args are visible in the image
    * history. Use {@link secrets} instead.
    */
-  args?: Record<string, string>;
+  args?: Record<string, string> | undefined;
   /**
    * BuildKit secrets, keyed by id. Mount one in a `RUN` step with
    * `--mount=type=secret,id=<id>` and read it from `/run/secrets/<id>`, or
@@ -114,13 +114,13 @@ export interface DockerfileBuild extends BuildCacheOptions {
    * Secrets are left out of the image's content hash, so rotating one does
    * not rebuild the image.
    */
-  secrets?: Record<string, Redacted.Redacted<string>>;
+  secrets?: Record<string, Redacted.Redacted<string>> | undefined;
 }
 
 /** The `build` prop of a source built from the user's own Dockerfile. */
 export interface DockerfileBuildOptions {
   /** Build arguments, BuildKit secrets and the layer cache for the Dockerfile build. */
-  build?: DockerfileBuild;
+  build?: DockerfileBuild | undefined;
 }
 
 /**
@@ -132,14 +132,14 @@ export interface DockerfileImageSource extends DockerfileBuildOptions {
    * Docker build context directory. Optional when {@link dockerfile} is
    * inline content (which builds with an empty context).
    */
-  context?: string;
+  context?: string | undefined;
   /**
    * Path to the Dockerfile relative to the cwd (NOT the context), or
    * {@link InlineDockerfile} content. The Dockerfile must define its own
    * `CMD`/`ENTRYPOINT` (no program is injected).
    * @default `${context}/Dockerfile`
    */
-  dockerfile?: string | InlineDockerfile;
+  dockerfile?: string | InlineDockerfile | undefined;
 }
 
 /**
@@ -162,15 +162,15 @@ export type ImageSourceProps = BundledImageSource | DockerfileImageSource | Regi
 
 /** Loose bag shape used to sniff which source variant a props object is. */
 export interface ImageSourceLike {
-  main?: string;
-  handler?: string;
+  main?: string | undefined;
+  handler?: string | undefined;
   /** Bundler config for `main`; Docker build args and secrets for `context`. */
-  build?: Bundle.BundleConfig & DockerfileBuild;
-  context?: string;
-  dockerfile?: string | InlineDockerfile;
-  image?: string;
+  build?: (Bundle.BundleConfig & DockerfileBuild) | undefined;
+  context?: string | undefined;
+  dockerfile?: string | InlineDockerfile | undefined;
+  image?: string | undefined;
   /** @internal Mount-binding install lines (see {@link BundledImageSource.install}). */
-  install?: ReadonlyArray<string>;
+  install?: ReadonlyArray<string> | undefined;
 }
 
 export type ImageSourceKind = "main" | "context" | "image";
@@ -214,7 +214,11 @@ export class DockerfileBuildConflict extends Data.TaggedError("DockerfileBuildCo
  */
 export const validateDockerfileBuild = (
   id: string,
-  source: { main?: string; image?: string; build?: DockerfileBuild },
+  source: {
+    main?: string | undefined;
+    image?: string | undefined;
+    build?: DockerfileBuild | undefined;
+  },
 ): Effect.Effect<void> =>
   (source.main !== undefined || source.image !== undefined) &&
   (source.build?.args !== undefined || source.build?.secrets !== undefined)
@@ -293,17 +297,17 @@ export interface ResolveContainerImageOptions {
    * Target image platform.
    * @default "linux/amd64"
    */
-  platform?: string;
+  platform?: string | undefined;
   /**
    * Port the generated Dockerfile should `ENV PORT=` + `EXPOSE`
    * (`main` source only).
    */
-  port?: number;
+  port?: number | undefined;
   /**
    * True when the resource was declared without an inline Effect impl —
    * `main` is then bundled as-is without the virtual-entry bootstrap.
    */
-  isExternal?: boolean;
+  isExternal?: boolean | undefined;
   /**
    * The virtual-entry bootstrap wrapped around `main` for Effect-native
    * programs: receives the resolved entry import path and returns the
@@ -320,7 +324,7 @@ export interface ResolveContainerImageOptions {
  */
 const resolveContextPaths = Effect.fn(function* (source: {
   context: string | undefined;
-  dockerfile?: string;
+  dockerfile?: string | undefined;
 }) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -438,7 +442,7 @@ export const mainBundleOptions = (
  */
 export const bundleMainProgram = Effect.fn(function* (options: {
   source: BundledImageSource;
-  isExternal?: boolean;
+  isExternal?: boolean | undefined;
   bootstrap: (importPath: string) => string;
 }) {
   const { source } = options;
@@ -490,9 +494,9 @@ export const makeContainerImageSource = Effect.gen(function* () {
    */
   const computeMainCodeHash = Effect.fn(function* (options: {
     source: BundledImageSource;
-    isExternal?: boolean;
+    isExternal?: boolean | undefined;
     bootstrap: (importPath: string) => string;
-    port?: number;
+    port?: number | undefined;
     platform: string;
   }) {
     const bundled = yield* bundleMainProgram({
@@ -600,9 +604,9 @@ export const makeContainerImageSource = Effect.gen(function* () {
     options: {
       imageUri: string;
       context: string;
-      dockerfile?: string;
-      platform?: string;
-      build?: DockerfileBuild;
+      dockerfile?: string | undefined;
+      platform?: string | undefined;
+      build?: DockerfileBuild | undefined;
     },
   ) {
     const credentials = yield* target.credentials;
@@ -817,9 +821,9 @@ export const makeContainerImageSource = Effect.gen(function* () {
    */
   const hash = Effect.fn(function* (options: {
     source: ImageSourceLike;
-    platform?: string;
-    port?: number;
-    isExternal?: boolean;
+    platform?: string | undefined;
+    port?: number | undefined;
+    isExternal?: boolean | undefined;
     bootstrap: (importPath: string) => string;
   }) {
     const platform = options.platform ?? "linux/amd64";
@@ -850,7 +854,7 @@ export const makeContainerImageSource = Effect.gen(function* () {
    */
   const watchMain = Effect.fn(function* (options: {
     source: BundledImageSource;
-    isExternal?: boolean;
+    isExternal?: boolean | undefined;
     bootstrap: (importPath: string) => string;
   }) {
     const realMain = yield* resolveMainPath(options.source.main);

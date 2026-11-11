@@ -12,7 +12,7 @@ export interface OrganizationApiKeyProps {
   /** Organization that owns the key. Changes replace the key. */
   orgId: string;
   /** Restrict access to this project. Omission grants organization-wide access. Changes replace the key. */
-  projectId?: string;
+  projectId?: string | undefined;
   /** Immutable key label. Defaults to an instance-qualified physical name. Adding, changing, or removing an explicit label replaces the key. */
   name?: string;
 }

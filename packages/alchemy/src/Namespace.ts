@@ -4,7 +4,7 @@ import * as Option from "effect/Option";
 
 export interface NamespaceNode {
   Id: string;
-  Parent?: NamespaceNode;
+  Parent?: NamespaceNode | undefined;
 }
 
 export class Namespace extends Context.Service<Namespace, NamespaceNode>()("Alchemy/Namespace") {}

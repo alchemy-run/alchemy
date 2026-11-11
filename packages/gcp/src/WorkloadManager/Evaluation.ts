@@ -36,7 +36,7 @@ export type GceInstanceFilter = {
    * Service accounts whose associated Compute Engine instances are
    * included in the evaluation.
    */
-  serviceAccounts?: string[];
+  serviceAccounts?: string[] | undefined;
 };
 
 export type ResourceFilter = {
@@ -45,7 +45,7 @@ export type ResourceFilter = {
    * or `organizations/{organization}`. Bare project ids are expanded.
    * Defaults to the current project.
    */
-  scopes?: string[];
+  scopes?: string[] | undefined;
   /**
    * Labels that must exist on a resource for it to be included
    * (for example VM instance labels).
@@ -54,23 +54,23 @@ export type ResourceFilter = {
   /**
    * Filter Compute Engine instances by service account.
    */
-  gceInstanceFilter?: GceInstanceFilter;
+  gceInstanceFilter?: GceInstanceFilter | undefined;
   /**
    * Resource-id patterns. A pattern of `prod-cluster` matches resources
    * whose id contains that substring.
    */
-  resourceIdPatterns?: string[];
+  resourceIdPatterns?: string[] | undefined;
 };
 
 export type BigQueryDestination = {
   /**
    * Destination dataset for evaluation results.
    */
-  destinationDataset?: string;
+  destinationDataset?: string | undefined;
   /**
    * When true, a new results table is created for each Execution.
    */
-  createNewResultsTable?: boolean;
+  createNewResultsTable?: boolean | undefined;
 };
 
 export type EvaluationType = workloadmanager.EvaluationEvaluationTypeEnum | (string & {});

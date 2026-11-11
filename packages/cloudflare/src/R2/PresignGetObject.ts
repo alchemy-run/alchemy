@@ -18,7 +18,7 @@ export interface PresignGetObjectRequest {
    * `Content-Type` the object is served with, signed into the URL as a
    * `response-content-type` override. The downloader sends nothing extra.
    */
-  contentType?: string;
+  contentType?: string | undefined;
   /**
    * `Content-Disposition` the object is served with (e.g.
    * `attachment; filename="report.pdf"`), signed into the URL as a

@@ -56,23 +56,23 @@ export interface RadarValueListProps {
    * omitted, a unique alias is generated from the stack, stage, and
    * logical id. Create-only — changing it replaces the list.
    */
-  alias?: string;
+  alias?: string | undefined;
   /**
    * Human-readable name shown in the Stripe Dashboard. If omitted, a unique
    * name is generated from the stack, stage, and logical id. Mutable.
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * Type of items stored in this list. Immutable after create.
    * @default "string"
    */
-  itemType?: RadarValueListItemType;
+  itemType?: RadarValueListItemType | undefined;
   /**
    * User-defined metadata. Alchemy ownership keys (`alchemy_stack` /
    * `alchemy_stage` / `alchemy_id`) are merged in automatically. Keys may
    * not contain `:`. Mutable.
    */
-  metadata?: Record<string, string>;
+  metadata?: Record<string, string> | undefined;
 }
 
 export type RadarValueList = Resource<
@@ -264,7 +264,11 @@ const findByAlchemyId = Effect.fn(function* (id: string) {
   return matches[0];
 });
 
-const observe = Effect.fn(function* (input: { id?: string; logicalId: string; alias?: string }) {
+const observe = Effect.fn(function* (input: {
+  id?: string | undefined;
+  logicalId: string;
+  alias?: string | undefined;
+}) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);
     if (byId !== undefined) return byId;

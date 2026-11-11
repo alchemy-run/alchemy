@@ -61,7 +61,7 @@ export type BillingSinkProps = {
    * no labels field, so Alchemy ownership is stored in a `[alchemy …]`
    * prefix and stripped from attributes.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * When true, the sink exists but does not export any log entries.
    * @default false

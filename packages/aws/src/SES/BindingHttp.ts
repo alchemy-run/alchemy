@@ -142,7 +142,7 @@ const isEmailIdentityRef = (
  * request and added to the grant.
  */
 export const makeVerificationScopedHttpBinding = <
-  I extends { ConfigurationSetName?: string },
+  I extends { ConfigurationSetName?: string | undefined },
   A,
   E,
   R,
@@ -241,7 +241,7 @@ export const makeVerificationScopedHttpBinding = <
  *   bound configuration set's name.
  */
 export const makeSendScopedHttpBinding = <
-  I extends { FromEmailAddress?: string; ConfigurationSetName?: string },
+  I extends { FromEmailAddress?: string | undefined; ConfigurationSetName?: string | undefined },
   A,
   E,
   R,

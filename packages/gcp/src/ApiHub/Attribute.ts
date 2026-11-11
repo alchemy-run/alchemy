@@ -27,13 +27,13 @@ import {
 
 export type AllowedValue = {
   /** Allowed value id. Generated from the display name when omitted. */
-  id?: string;
+  id?: string | undefined;
   /** Display name. Required. */
   displayName: string;
   /** Description of the allowed value. */
-  description?: string;
+  description?: string | undefined;
   /** When true, the value cannot be updated or deleted. */
-  immutable?: boolean;
+  immutable?: boolean | undefined;
 };
 
 export type AttributeProps = {
@@ -43,13 +43,13 @@ export type AttributeProps = {
    * omitted, a unique id is generated. Immutable — changing it replaces
    * the attribute.
    */
-  attributeId?: string;
+  attributeId?: string | undefined;
   /**
    * Location (`us-central1`, …). Immutable — changing it replaces the
    * attribute.
    * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
    */
-  location?: string;
+  location?: string | undefined;
   /**
    * Display name. Required.
    */
@@ -59,7 +59,7 @@ export type AttributeProps = {
    * Alchemy stamps ownership into a `[alchemy …]` prefix and strips it
    * from attributes.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * Data type. Immutable — changing it replaces the attribute.
    */
@@ -85,11 +85,11 @@ export type AttributeProps = {
    * Cardinality can only be increased.
    * @default 1
    */
-  cardinality?: number;
+  cardinality?: number | undefined;
   /**
    * Allowed values when `dataType` is `ENUM`.
    */
-  allowedValues?: AllowedValue[];
+  allowedValues?: AllowedValue[] | undefined;
 };
 
 export type Attribute = Resource<

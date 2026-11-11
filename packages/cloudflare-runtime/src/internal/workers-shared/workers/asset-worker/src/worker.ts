@@ -52,7 +52,7 @@ export type Env = {
   COLO_METADATA: ColoMetadata;
   UNSAFE_PERFORMANCE: UnsafePerformanceTimer;
   VERSION_METADATA: WorkerVersionMetadata;
-  ACCOUNT_COHORT_QUERIER?: AccountCohortQuerierBinding;
+  ACCOUNT_COHORT_QUERIER?: AccountCohortQuerierBinding | undefined;
 };
 
 export type AssetWorkerEntrypointProps = {

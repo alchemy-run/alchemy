@@ -17,9 +17,9 @@ export interface NetworkIpamConfig {
   /** IPv4 or IPv6 CIDR network prefix, without host bits. */
   subnet: string;
   /** Gateway address in the subnet's address family. Docker chooses one when omitted. */
-  gateway?: string;
+  gateway?: string | undefined;
   /** CIDR sub-range from which Docker allocates container addresses. */
-  ipRange?: string;
+  ipRange?: string | undefined;
   /** Map of reservation names to IP addresses in the subnet's address family. */
   auxAddresses?: Record<string, string>;
 }
@@ -59,9 +59,9 @@ export interface NetworkProps {
   /** Enable IPv6 on the network. @default false */
   enableIPv6?: boolean;
   /** Network-driver-specific key/value options, as passed to Docker `--opt`. */
-  driverOpts?: Record<string, string>;
+  driverOpts?: Record<string, string> | undefined;
   /** Explicit IPAM configuration. Docker allocates missing subnet/gateway values. */
-  ipam?: NetworkIpam;
+  ipam?: NetworkIpam | undefined;
   /** User labels. The `alchemy::*` prefix is reserved for resource ownership. */
   labels?: Record<string, string>;
   /**

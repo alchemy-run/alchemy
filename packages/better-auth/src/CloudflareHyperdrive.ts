@@ -20,7 +20,7 @@ export interface CloudflareHyperdriveOptions {
    * (e.g. Neon `branch.connectionUri`) or leave unset to skip migrations.
    */
   readonly migrate?: MigrateSource;
-  readonly pool?: PostgresOptions["pool"] | MySQLOptions["pool"];
+  readonly pool?: PostgresOptions["pool"] | MySQLOptions["pool"] | undefined;
 }
 
 /**

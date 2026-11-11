@@ -354,8 +354,8 @@ const desiredMemberships = (
 const narrowMemberships = (
   memberships:
     | readonly {
-        identifier?: string | null;
-        kind?: string | null;
+        identifier?: string | null | undefined;
+        kind?: string | null | undefined;
       }[]
     | null
     | undefined,

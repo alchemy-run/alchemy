@@ -20,11 +20,11 @@ import {
 
 export type DocumentContent = {
   /** MIME type of `rawBytes` or the object at `uri`. */
-  mimeType?: string;
+  mimeType?: string | undefined;
   /** GCS URI (`gs://bucket/path`). */
-  uri?: string;
+  uri?: string | undefined;
   /** Base64-encoded bytes. Max 1,000,000 bytes. */
-  rawBytes?: string;
+  rawBytes?: string | undefined;
 };
 
 export type CollectionsDataStoresBranchesDocumentProps = {

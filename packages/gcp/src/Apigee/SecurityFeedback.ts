@@ -175,8 +175,8 @@ const feedbackIdOf = (feedback: apigee.GoogleCloudApigeeV1SecurityFeedback) =>
 const contextsOf = (
   contexts:
     | readonly {
-        attribute?: SecurityFeedbackContext["attribute"];
-        values?: readonly string[];
+        attribute?: SecurityFeedbackContext["attribute"] | undefined;
+        values?: readonly string[] | undefined;
       }[]
     | undefined,
 ): SecurityFeedbackContext[] =>
@@ -186,7 +186,7 @@ const contextsOf = (
         context,
       ): context is {
         attribute: SecurityFeedbackContext["attribute"];
-        values?: readonly string[];
+        values?: readonly string[] | undefined;
       } => context.attribute !== undefined,
     )
     .map((context) => ({

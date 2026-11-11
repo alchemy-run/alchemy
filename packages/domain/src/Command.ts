@@ -103,7 +103,7 @@ interface Options {
   readonly middleware?: Middleware.List;
   readonly events?: ReadonlyArray<Event.Any>;
   readonly rejects?: ReadonlyArray<Rejection.Any>;
-  readonly reply?: Fields;
+  readonly reply?: Fields | undefined;
 }
 
 const build = (tag: string, options: Options, rpc: Rpc.Any, annotations: Annotations): unknown => {

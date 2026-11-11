@@ -56,9 +56,9 @@ export interface HttpApiProps {
    * (`TimeoutInMillis`).
    * @default 30 seconds
    */
-  timeout?: Input<Duration.Input>;
+  timeout?: Input<Duration.Input> | undefined;
   /** User-defined tags for the API and stage. */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
 }
 
 /**

@@ -32,7 +32,7 @@ export type FunctionTarget = Function | FunctionRef;
 export class FunctionCallFailed extends Data.TaggedError("Modal.FunctionCallFailed")<{
   readonly status: string;
   readonly message: string;
-  readonly traceback?: string;
+  readonly traceback?: string | undefined;
 }> {}
 
 /** Calling a function: looking it up, sending inputs, reading outputs, and the call's own failure. */

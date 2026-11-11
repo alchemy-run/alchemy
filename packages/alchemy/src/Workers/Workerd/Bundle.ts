@@ -9,6 +9,8 @@ import * as Effect from "effect/Effect";
 import type * as FileSystem from "effect/FileSystem";
 import { flow } from "effect/Function";
 import type * as Path from "effect/Path";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import type * as rolldown from "rolldown";
 import * as Bundle from "../../Bundle/Bundle.ts";
@@ -205,7 +207,10 @@ export const makeWorkerBundle = <Options extends WorkerBundleOptions, ModuleRule
         }),
       });
       const inputOptions: rolldown.InputOptions = {
-        preserveEntrySignatures: options.extraOptions?.preserveEntrySignatures,
+        ...Record.filterMap(
+          { preserveEntrySignatures: options.extraOptions?.preserveEntrySignatures },
+          Result.fromNullishOr(() => undefined),
+        ),
         // Forever-devtool native modules that vite/chokidar reference behind
         // runtime guards. Rolldown resolves before tree-shaking, so the dead
         // `require('../pkg')` (lightningcss < 1.32) and `require('fsevents')`

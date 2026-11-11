@@ -88,7 +88,7 @@ export const propertiesKey = (
 
 export const desiredBody = (input: {
   kind: string;
-  ancestor?: string;
+  ancestor?: string | undefined;
   properties: IndexedProperty[];
 }): datastore.GoogleDatastoreAdminV1Index => ({
   kind: input.kind,
@@ -100,7 +100,7 @@ export const matchesDesired = (
   index: datastore.GoogleDatastoreAdminV1Index,
   input: {
     kind: string;
-    ancestor?: string;
+    ancestor?: string | undefined;
     properties: IndexedProperty[];
   },
 ) => {

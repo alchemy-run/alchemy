@@ -267,7 +267,10 @@ const getByName = (project: string, zoneName: string) =>
     .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /** Cloud DNS operations and changes report `status: "pending" | "done"`. */
-const asLongRunning = (value: { id?: string; status?: string }): LongRunningOperation => ({
+const asLongRunning = (value: {
+  id?: string | undefined;
+  status?: string | undefined;
+}): LongRunningOperation => ({
   name: value.id,
   done: isDone(value.status),
 });

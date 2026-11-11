@@ -22,6 +22,7 @@ import type {
 
 type WakuVitePluginsModule = typeof WakuVitePlugins;
 type ResolvedWakuConfig = ReturnType<WakuVitePluginsModule["unstable_resolveConfig"]>;
+type WakuConfigInput = { [K in keyof WakuConfig]: WakuConfig[K] | undefined };
 
 /**
  * Waku's rsc-environment worker entry, relative to the installed `waku`
@@ -145,7 +146,7 @@ export interface WakuTarget<Config = unknown> extends DeployTarget<Config> {
  * process boundary.
  */
 export interface WakuTargetBuildContext extends DeployTargetBuildContext {
-  readonly waku?: WakuConfig | undefined;
+  readonly waku?: WakuConfigInput | undefined;
 }
 
 /**
@@ -208,7 +209,7 @@ export interface WakuFrameworkOptions {
    * {@link mergeUserWakuConfig}). `unstable_adapter` is owned by the deploy
    * target and must not be set here or in the config file.
    */
-  readonly waku?: WakuConfig | undefined;
+  readonly waku?: WakuConfigInput | undefined;
   /** Project root. Defaults to the process working directory. */
   readonly root?: string | undefined;
   /**
@@ -230,7 +231,7 @@ export const WAKU_CONFIG_FILES = ["waku.config.ts", "waku.config.js"] as const;
 
 /** Strip `undefined`-valued keys so an inline options object with explicit
  * `undefined` entries cannot clobber values from the user's config file. */
-const definedConfig = (config: WakuConfig | undefined): WakuConfig | undefined => {
+const definedConfig = (config: WakuConfigInput | undefined): WakuConfig | undefined => {
   if (config === undefined) {
     return undefined;
   }
@@ -241,9 +242,9 @@ const definedConfig = (config: WakuConfig | undefined): WakuConfig | undefined =
 /** Inputs for {@link mergeUserWakuConfig} (exported for testing). */
 export interface MergeUserWakuConfigInputs {
   /** The natively loaded `waku.config.ts`/`waku.config.js` default export. */
-  readonly file: WakuConfig | undefined;
+  readonly file: WakuConfigInput | undefined;
   /** The integration's inline waku options ({@link WakuFrameworkOptions.waku}). */
-  readonly inline: WakuConfig | undefined;
+  readonly inline: WakuConfigInput | undefined;
   /** vite's `mergeConfig` (from the project's vite installation). */
   readonly mergeViteConfig: (
     defaults: ViteModule.UserConfig,

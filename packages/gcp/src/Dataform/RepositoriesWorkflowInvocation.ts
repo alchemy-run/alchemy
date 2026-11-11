@@ -39,7 +39,7 @@ export type RepositoriesWorkflowInvocationProps = {
    * (`.../repositories/{repository}/compilationResults/{result}`).
    * Mutually exclusive with `workflowConfig`. Immutable.
    */
-  compilationResult?: string;
+  compilationResult?: string | undefined;
   /**
    * Workflow config to invoke
    * (`.../repositories/{repository}/workflowConfigs/{workflowConfig}`).

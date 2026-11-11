@@ -14,7 +14,10 @@ import { currentConsoleSettings } from "./GlobalLog.ts";
  */
 export const present = (
   text: string,
-  options: { readonly resource?: string; readonly level?: LogLevel.Severity } = {},
+  options: {
+    readonly resource?: string | undefined;
+    readonly level?: LogLevel.Severity | undefined;
+  } = {},
 ): Effect.Effect<void> =>
   Effect.flatMap(currentConsoleSettings, ({ format, floor }) =>
     format === "json" || !LogLevel.isGreaterThanOrEqualTo(options.level ?? "Info", floor)

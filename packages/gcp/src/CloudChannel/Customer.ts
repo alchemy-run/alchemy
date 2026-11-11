@@ -42,11 +42,11 @@ export type CustomerProps = {
    * Primary domain. Must match `primaryContactInfo.email`'s domain. If
    * omitted, a unique `{name}.example.com` domain is generated.
    */
-  domain?: string;
+  domain?: string | undefined;
   /**
    * Organization postal address. A US address is used when omitted.
    */
-  orgPostalAddress?: cloudchannel.GoogleTypePostalAddress;
+  orgPostalAddress?: cloudchannel.GoogleTypePostalAddress | undefined;
   /**
    * Primary contact. Email defaults to `admin@{domain}`.
    */

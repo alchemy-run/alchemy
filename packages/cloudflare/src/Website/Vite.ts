@@ -18,7 +18,7 @@ export interface ViteProps<Bindings extends WorkerBindingProps = {}>
    * Optional configuration for static asset routing behavior.
    * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.
    */
-  assets?: AssetsConfig;
+  assets?: AssetsConfig | undefined;
 }
 
 /**
@@ -292,7 +292,7 @@ export const Vite: {
           | InputProps<ViteProps<Bindings>>
           | Effect.Effect<InputProps<ViteProps<Bindings>>, never, Req>,
       ) => effectClass(Vite(id, propsEff))
-    : Worker(
+    : Worker<Bindings, WorkerAssetsConfig, Req>(
         id,
         Effect.map(Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff), (props) => ({
           ...props,

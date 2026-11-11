@@ -53,56 +53,56 @@ export type TransferJobProps = {
    * with `transferJobs/OPI` unless this is a POSIX transfer). Immutable
    * — changing it replaces the job.
    */
-  jobId?: string;
+  jobId?: string | undefined;
   /**
    * User description (max 1024 bytes). Transfer jobs have no labels
    * field, so Alchemy ownership is stored in a `[alchemy …]` prefix and
    * stripped from attributes.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * Transfer specification (source, sink, filters, options). Required
    * unless `replicationSpec` is set. Updates in place; a complete spec
    * must be provided on each update.
    */
-  transferSpec?: TransferSpec;
+  transferSpec?: TransferSpec | undefined;
   /**
    * Cross-bucket replication specification. Mutually exclusive with
    * `transferSpec`. Immutable after create — changing it replaces the
    * job.
    */
-  replicationSpec?: ReplicationSpec;
+  replicationSpec?: ReplicationSpec | undefined;
   /**
    * Recurring or one-time schedule. Optional; omit to create a job that
    * never auto-runs (invoke `RunTransferJob` instead). Immutable after
    * create — changing it replaces the job.
    */
-  schedule?: Schedule;
+  schedule?: Schedule | undefined;
   /**
    * Event-driven transfer stream. When set, `schedule` is ignored.
    * Immutable after create — changing it replaces the job.
    */
-  eventStream?: EventStream;
+  eventStream?: EventStream | undefined;
   /**
    * Pub/Sub notification configuration. Updates in place.
    */
-  notificationConfig?: NotificationConfig;
+  notificationConfig?: NotificationConfig | undefined;
   /**
    * Cloud Logging configuration. Updates in place.
    */
-  loggingConfig?: LoggingConfig;
+  loggingConfig?: LoggingConfig | undefined;
   /**
    * Job status. Must be `ENABLED` or `DISABLED` on create (the API
    * rejects `STATUS_UNSPECIFIED`). `DELETED` is applied by delete.
    * @default "ENABLED"
    */
-  status?: TransferJobStatus;
+  status?: TransferJobStatus | undefined;
   /**
    * User-managed service account that receives bucket permissions
    * instead of the Transfer Service agent. Email or unique id. Immutable
    * after create — changing it replaces the job.
    */
-  serviceAccount?: string;
+  serviceAccount?: string | undefined;
 };
 
 export type TransferJob = Resource<
@@ -271,11 +271,11 @@ const replaceOnImmutable = (
   previous: TransferJobProps | undefined,
   output:
     | {
-        jobId?: string;
-        schedule?: Schedule;
-        eventStream?: EventStream;
-        serviceAccount?: string;
-        replicationSpec?: ReplicationSpec;
+        jobId?: string | undefined;
+        schedule?: Schedule | undefined;
+        eventStream?: EventStream | undefined;
+        serviceAccount?: string | undefined;
+        replicationSpec?: ReplicationSpec | undefined;
       }
     | undefined,
 ) => {

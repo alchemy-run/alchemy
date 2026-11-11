@@ -1,5 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import { DiskKeyAccess } from "./ArchilBindings.ts";
 import { makeReadDiskClient, makeWriteDiskClient, presignedShare } from "./Clients.ts";
 import type { Disk } from "./Disk.ts";
@@ -9,7 +11,13 @@ import { WriteDisk } from "./WriteDisk.ts";
 
 const diskRef = Effect.fn(function* (disk: Disk, options: DiskObjectsOptions | undefined) {
   const diskId = yield* disk.diskId;
-  return Effect.map(diskId, (id) => ({ disk: id, branch: options?.branch }));
+  return Effect.map(diskId, (id) => ({
+    disk: id,
+    ...Record.filterMap(
+      { branch: options?.branch },
+      Result.fromNullishOr(() => undefined),
+    ),
+  }));
 });
 
 /**

@@ -26,7 +26,7 @@ export interface AccessPolicyProps {
   /**
    * A human-readable description of the policy.
    */
-  description?: string;
+  description?: string | undefined;
 }
 
 export interface AccessPolicy extends Resource<
@@ -48,7 +48,7 @@ export interface AccessPolicy extends Resource<
     /**
      * Description of the access policy.
      */
-    description?: string;
+    description?: string | undefined;
   },
   {},
   Providers

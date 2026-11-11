@@ -62,7 +62,7 @@ export interface AssetsConfig {
    *
    * @default false
    */
-  runWorkerFirst?: boolean | string[];
+  runWorkerFirst?: boolean | string[] | undefined;
   /**
    * Legacy routing flag predating `runWorkerFirst`.
    */
@@ -121,7 +121,7 @@ export interface AssetsProps extends AssetsConfig {
    * @default undefined (assets are served from the origin root)
    * @see https://developers.cloudflare.com/workers/static-assets/routing/advanced/serving-a-subdirectory/
    */
-  base?: string;
+  base?: string | undefined;
 }
 
 /**

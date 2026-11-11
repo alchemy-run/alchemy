@@ -24,29 +24,29 @@ export interface PodIdentityServiceAccountProps {
   /** Namespace name or namespace helper result. */
   namespace: string | { name: string } | ClusterObjectRef;
   /** Optional explicit service account name. Defaults to the logical id. */
-  serviceAccountName?: string;
+  serviceAccountName?: string | undefined;
   /** Existing IAM role ARN to use for pod identity. */
-  roleArn?: string;
+  roleArn?: string | undefined;
   /** Optional role name when Alchemy creates the IAM role. */
-  roleName?: string;
+  roleName?: string | undefined;
   /** Managed policy ARNs to attach when creating the IAM role. */
-  managedPolicyArns?: string[];
+  managedPolicyArns?: string[] | undefined;
   /** Inline policies to attach when creating the IAM role. */
-  inlinePolicies?: Record<string, PolicyDocument>;
+  inlinePolicies?: Record<string, PolicyDocument> | undefined;
   /** Optional role description when Alchemy creates the IAM role. */
-  description?: string;
+  description?: string | undefined;
   /** Disable session tags for the pod identity association. */
-  disableSessionTags?: boolean;
+  disableSessionTags?: boolean | undefined;
   /** Optional target role ARN for chained role assumption. */
-  targetRoleArn?: string;
+  targetRoleArn?: string | undefined;
   /** Optional inline session policy JSON. */
-  policy?: string;
+  policy?: string | undefined;
   /** Labels applied to the Kubernetes service account. */
-  labels?: Record<string, string>;
+  labels?: Record<string, string> | undefined;
   /** Annotations applied to the Kubernetes service account. */
-  annotations?: Record<string, string>;
+  annotations?: Record<string, string> | undefined;
   /** Tags applied to AWS resources. */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
 }
 
 export interface PodIdentityServiceAccountResources {

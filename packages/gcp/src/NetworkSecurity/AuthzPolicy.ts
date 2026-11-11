@@ -79,7 +79,7 @@ export type AuthzPolicyRequestResource = {
 export type AuthzPolicyRequestSource = {
   principals?: AuthzPolicyPrincipal[];
   ipBlocks?: AuthzPolicyIpBlock[];
-  resources?: AuthzPolicyRequestResource[];
+  resources?: AuthzPolicyRequestResource[] | undefined;
 };
 
 export type AuthzPolicyRuleFrom = {
@@ -97,18 +97,18 @@ export type AuthzPolicyTarget = {
   /**
    * Forwarding rules, Secure Web Proxy gateways, or Agent Gateways.
    */
-  resources?: string[];
+  resources?: string[] | undefined;
   /**
    * Load balancing scheme shared by every targeted forwarding rule.
    */
-  loadBalancingScheme?: AuthzPolicyLoadBalancingScheme;
+  loadBalancingScheme?: AuthzPolicyLoadBalancingScheme | undefined;
 };
 
 export type AuthzPolicyCustomProvider = {
   /** Empty object enables Cloud IAP. Mutually exclusive with `authzExtension`. */
-  cloudIap?: Record<string, never>;
+  cloudIap?: Record<string, never> | undefined;
   /** Service-extension resources (limited to 1). */
-  authzExtension?: { resources?: string[] };
+  authzExtension?: { resources?: string[] | undefined } | undefined;
 };
 
 export type AuthzPolicyProps = {

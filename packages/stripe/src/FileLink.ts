@@ -204,7 +204,11 @@ const findByAlchemyId = Effect.fn(function* (id: string, links: ReadonlyArray<St
   return matches[0];
 });
 
-const observe = Effect.fn(function* (input: { id?: string; logicalId: string; file?: string }) {
+const observe = Effect.fn(function* (input: {
+  id?: string | undefined;
+  logicalId: string;
+  file?: string;
+}) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);
     if (byId !== undefined && !byId.expired) return byId;

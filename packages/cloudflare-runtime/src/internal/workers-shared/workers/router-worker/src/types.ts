@@ -14,8 +14,8 @@ export interface ColoMetadata {
 }
 
 export interface ReadyAnalyticsEvent {
-  accountId?: number;
-  indexId?: string;
+  accountId?: number | undefined;
+  indexId?: string | undefined;
   version?: number;
   doubles?: Array<number | undefined>;
   blobs?: Array<string | undefined>;

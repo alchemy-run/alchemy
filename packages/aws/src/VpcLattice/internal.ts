@@ -27,7 +27,7 @@ export const retryOnConflict = <A, E extends { readonly _tag: string }, R>(
  * Bounded; explicit return annotation for the declaration-emit reason above.
  */
 export const waitUntilStable = <
-  A extends { status?: string },
+  A extends { status?: string | undefined },
   E extends { readonly _tag: string },
   R,
 >(

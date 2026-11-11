@@ -24,69 +24,69 @@ const DEFAULT_ROLLING_PERIOD = "86400s";
 
 export type LatencyCriteria = {
   /** Requests at or below this latency count as good. */
-  threshold?: string;
+  threshold?: string | undefined;
 };
 
 export type BasicSli = {
   /** Locations this SLI applies to. Omitted means all. */
-  location?: string[];
+  location?: string[] | undefined;
   /** Availability SLI (successful request count). */
-  availability?: Record<string, never>;
+  availability?: Record<string, never> | undefined;
   /** Latency SLI against `threshold`. */
-  latency?: LatencyCriteria;
+  latency?: LatencyCriteria | undefined;
   /** RPC methods this SLI applies to. Omitted means all. */
-  method?: string[];
+  method?: string[] | undefined;
   /** API versions this SLI applies to. Omitted means all. */
-  version?: string[];
+  version?: string[] | undefined;
 };
 
 export type ValueRange = {
   /** Inclusive maximum. Omit (or use Infinity) for an open upper bound. */
-  max?: number;
+  max?: number | undefined;
   /** Inclusive minimum. Omit (or use -Infinity) for an open lower bound. */
-  min?: number;
+  min?: number | undefined;
 };
 
 export type MetricRange = {
   /** Range of values considered good. */
-  range?: ValueRange;
+  range?: ValueRange | undefined;
   /** Monitoring filter selecting a GAUGE INT64 or DOUBLE time series. */
-  timeSeries?: string;
+  timeSeries?: string | undefined;
 };
 
 export type DistributionCut = {
   /** Range of distribution bucket values considered good. */
-  range?: ValueRange;
+  range?: ValueRange | undefined;
   /**
    * Monitoring filter selecting a DISTRIBUTION DELTA or CUMULATIVE
    * time series.
    */
-  distributionFilter?: string;
+  distributionFilter?: string | undefined;
 };
 
 export type TimeSeriesRatio = {
   /** Filter quantifying good service. */
-  goodServiceFilter?: string;
+  goodServiceFilter?: string | undefined;
   /** Filter quantifying bad service. */
-  badServiceFilter?: string;
+  badServiceFilter?: string | undefined;
   /** Filter quantifying total demanded service. */
-  totalServiceFilter?: string;
+  totalServiceFilter?: string | undefined;
 };
 
 export type RequestBasedSli = {
   /** Good service is the count of distribution values in `range`. */
-  distributionCut?: DistributionCut;
+  distributionCut?: DistributionCut | undefined;
   /** Good / total ratio from a pair of time series. */
-  goodTotalRatio?: TimeSeriesRatio;
+  goodTotalRatio?: TimeSeriesRatio | undefined;
 };
 
 export type PerformanceThreshold = {
   /** Window is good when performance is at least this fraction. */
-  threshold?: number;
+  threshold?: number | undefined;
   /** Request-based SLI used to judge the window. */
-  performance?: RequestBasedSli;
+  performance?: RequestBasedSli | undefined;
   /** Basic SLI used to judge the window. */
-  basicSliPerformance?: BasicSli;
+  basicSliPerformance?: BasicSli | undefined;
 };
 
 export type WindowsBasedSli = {
@@ -94,24 +94,24 @@ export type WindowsBasedSli = {
    * Window duration. Must be an integer fraction of a day and at least
    * 60s.
    */
-  windowPeriod?: string;
+  windowPeriod?: string | undefined;
   /** Window is good when the summed metric is in `range`. */
-  metricSumInRange?: MetricRange;
+  metricSumInRange?: MetricRange | undefined;
   /** BOOL time series; the window is good if any true value appears. */
-  goodBadMetricFilter?: string;
+  goodBadMetricFilter?: string | undefined;
   /** Window is good when performance is above `threshold`. */
-  goodTotalRatioThreshold?: PerformanceThreshold;
+  goodTotalRatioThreshold?: PerformanceThreshold | undefined;
   /** Window is good when the mean metric is in `range`. */
-  metricMeanInRange?: MetricRange;
+  metricMeanInRange?: MetricRange | undefined;
 };
 
 export type ServiceLevelIndicator = {
   /** Basic SLI on a well-known service type. */
-  basicSli?: BasicSli;
+  basicSli?: BasicSli | undefined;
   /** Windows-based SLI. */
-  windowsBased?: WindowsBasedSli;
+  windowsBased?: WindowsBasedSli | undefined;
   /** Request-based SLI. */
-  requestBased?: RequestBasedSli;
+  requestBased?: RequestBasedSli | undefined;
 };
 
 export type CalendarPeriod = "DAY" | "WEEK" | "FORTNIGHT" | "MONTH" | (string & {});

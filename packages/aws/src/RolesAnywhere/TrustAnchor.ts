@@ -48,7 +48,7 @@ export interface TrustAnchorNotificationSetting {
    * both AWS Health Dashboard and email.
    * @default "ALL"
    */
-  channel?: string;
+  channel?: string | undefined;
 }
 
 export interface TrustAnchorProps {
@@ -79,7 +79,7 @@ export interface TrustAnchorProps {
    * their AWS default notification; a setting previously managed by this
    * resource and later removed is reset to the AWS default.
    */
-  notificationSettings?: TrustAnchorNotificationSetting[];
+  notificationSettings?: TrustAnchorNotificationSetting[] | undefined;
   /**
    * User-defined tags for the trust anchor.
    */
@@ -201,7 +201,7 @@ const desiredSource = Effect.fn(function* (props: TrustAnchorProps) {
 });
 
 /** The key AWS uses to identify a notification setting. */
-const notificationKey = (setting: { event: string; channel?: string }) =>
+const notificationKey = (setting: { event: string; channel?: string | undefined }) =>
   `${setting.event}|${setting.channel ?? "ALL"}`;
 
 const toWireNotificationSettings = (

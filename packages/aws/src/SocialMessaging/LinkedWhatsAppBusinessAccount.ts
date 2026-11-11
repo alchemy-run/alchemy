@@ -32,7 +32,7 @@ export interface LinkedWhatsAppBusinessAccountEventDestination {
    * ARN of an IAM role the service assumes to publish to the topic. Omit to
    * publish with a service principal.
    */
-  roleArn?: string;
+  roleArn?: string | undefined;
 }
 
 export interface LinkedWhatsAppBusinessAccountProps {

@@ -44,14 +44,14 @@ export type RegionalEndpointProps = {
    * `[-a-z0-9]([-a-z0-9]{0,44})[a-z0-9]`. Immutable — changing it
    * replaces the endpoint.
    */
-  regionalEndpointId?: string;
+  regionalEndpointId?: string | undefined;
   /**
    * Location (`us-central1`, …). Immutable — changing it replaces the
    * endpoint. `US-CENTRAL1` is accepted and normalized to `us-central1`.
    * @default the stack's GCP region (`GCP.Region`, else the profile
    *   region, else `us-central1`)
    */
-  location?: string;
+  location?: string | undefined;
   /**
    * Service endpoint this private regional endpoint connects to, e.g.
    * `"storage.us-central1.p.rep.googleapis.com"`. Immutable — changing
@@ -68,26 +68,26 @@ export type RegionalEndpointProps = {
    * (`projects/{project}/global/networks/{network}` or a Compute
    * self-link). Immutable — changing it replaces the endpoint.
    */
-  network?: string;
+  network?: string | undefined;
   /**
    * Subnetwork used to allocate the IP
    * (`projects/{project}/regions/{region}/subnetworks/{subnetwork}` or a
    * Compute self-link). Immutable — changing it replaces the endpoint.
    */
-  subnetwork?: string;
+  subnetwork?: string | undefined;
   /**
    * IP address or Address resource URI. When omitted, an IP is allocated
    * from `subnetwork`. Immutable — changing it replaces the endpoint.
    */
-  address?: string;
+  address?: string | undefined;
   /**
    * Human-readable description. Set at create; the API has no update.
    */
-  description?: string;
+  description?: string | undefined;
   /**
    * User labels. Alchemy ownership labels are merged in automatically.
    */
-  labels?: Record<string, string>;
+  labels?: Record<string, string> | undefined;
 };
 
 export type RegionalEndpoint = Resource<
@@ -206,11 +206,11 @@ const resourceName = (project: string, location: string, regionalEndpointId: str
   `projects/${project}/locations/${location}/regionalEndpoints/${regionalEndpointId}`;
 
 const identityKey = (props: {
-  targetGoogleApi?: string;
-  accessType?: string;
-  network?: string;
-  subnetwork?: string;
-  address?: string;
+  targetGoogleApi?: string | undefined;
+  accessType?: string | undefined;
+  network?: string | undefined;
+  subnetwork?: string | undefined;
+  address?: string | undefined;
 }) =>
   JSON.stringify({
     targetGoogleApi: (props.targetGoogleApi ?? "").toLowerCase(),

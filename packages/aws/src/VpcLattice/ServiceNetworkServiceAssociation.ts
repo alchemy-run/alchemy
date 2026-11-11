@@ -53,15 +53,15 @@ export interface ServiceNetworkServiceAssociation extends Resource<
     /**
      * ID of the associated lattice service.
      */
-    serviceId?: string;
+    serviceId?: string | undefined;
     /**
      * ID of the service network.
      */
-    serviceNetworkId?: string;
+    serviceNetworkId?: string | undefined;
     /**
      * DNS name clients in associated VPCs resolve the service by.
      */
-    dnsName?: string;
+    dnsName?: string | undefined;
     /**
      * Current tags reported for the association.
      */

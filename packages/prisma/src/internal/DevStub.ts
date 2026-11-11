@@ -49,7 +49,12 @@ export const attrOrRedactedString = (value: unknown, key: string) => {
 export const devProvider = <R extends ResourceLike>(
   resource: ResourceClass<R>,
   stables: Extract<keyof R["Attributes"], string>[],
-  attrs: (input: { id: string; fqn: string; news: DevRecord; output?: DevRecord }) => DevRecord,
+  attrs: (input: {
+    id: string;
+    fqn: string;
+    news: DevRecord;
+    output?: DevRecord | undefined;
+  }) => DevRecord,
 ) =>
   Provider.succeed(resource, {
     stables,

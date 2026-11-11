@@ -40,7 +40,7 @@ export interface CloudflareVitePluginOptions<
   B extends BindingHooks = BindingHooks,
 > extends BasePluginOptions {
   worker?: Omit<RuntimeWorker<B>, "compatibilityDate" | "compatibilityFlags" | "modules">;
-  context?: Context.Context<RuntimeServices>;
+  context?: Context.Context<RuntimeServices> | undefined;
   dev?: CloudflareVitePluginDevOptions;
   /**
    * Named entrypoints the Worker binds to itself. workerd resolves those

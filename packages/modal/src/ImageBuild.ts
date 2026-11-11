@@ -24,9 +24,9 @@ export class ImageBuildTimeout extends Data.TaggedError("Modal.ImageBuildTimeout
 /** What an image is built from, after Dockerfile lowering. */
 export interface ImageBuildSpec {
   /** A registry image to start from (`FROM <ref>`). */
-  readonly dockerTag?: string;
+  readonly dockerTag?: string | undefined;
   /** A Modal image to start from. */
-  readonly baseImageId?: string;
+  readonly baseImageId?: string | undefined;
   /**
    * Dockerfile commands. With `dockerTag`/`baseImageId` they follow the
    * generated `FROM`; otherwise they are a whole Dockerfile.
@@ -37,30 +37,34 @@ export interface ImageBuildSpec {
    * as a mount owned by the app, so their size isn't limited by Modal's
    * 2 MB cap on an image definition.
    */
-  readonly contextFiles?: ReadonlyArray<{
-    readonly filename: string;
-    readonly data: Uint8Array;
-    /** Permission bits. @default 0o644 */
-    readonly mode?: number;
-  }>;
+  readonly contextFiles?:
+    | ReadonlyArray<{
+        readonly filename: string;
+        readonly data: Uint8Array;
+        /** Permission bits. @default 0o644 */
+        readonly mode?: number;
+      }>
+    | undefined;
   /**
    * A mount whose files the commands `COPY` (e.g. Modal's standalone
    * Python). Not combined with {@link contextFiles}.
    */
-  readonly contextMountId?: string;
+  readonly contextMountId?: string | undefined;
   /** Build arguments (`ARG` values). */
-  readonly buildArgs?: Readonly<Record<string, string>>;
+  readonly buildArgs?: Readonly<Record<string, string>> | undefined;
   /** Secrets (ids) the build steps see as environment variables. */
-  readonly secretIds?: ReadonlyArray<string>;
+  readonly secretIds?: ReadonlyArray<string> | undefined;
   /** Credentials to pull a private base image. */
-  readonly registry?: {
-    readonly authType: "aws" | "gcp" | "static";
-    readonly secretId: string;
-  };
+  readonly registry?:
+    | {
+        readonly authType: "aws" | "gcp" | "static";
+        readonly secretId: string;
+      }
+    | undefined;
   /** Run the build on a GPU (`"A10G"`, `"H100"`, ...). */
-  readonly gpu?: string;
-  readonly builderVersion?: string;
-  readonly forceBuild?: boolean;
+  readonly gpu?: string | undefined;
+  readonly builderVersion?: string | undefined;
+  readonly forceBuild?: boolean | undefined;
 }
 
 const AUTH_TYPE = {
@@ -154,7 +158,7 @@ export const buildImage = Effect.fn(function* (
   ops: ImageBuildOps,
   appId: string,
   spec: ImageBuildSpec,
-  options: { readonly note?: (message: string) => Effect.Effect<void> } = {},
+  options: { readonly note?: ((message: string) => Effect.Effect<void>) | undefined } = {},
 ) {
   const from = spec.baseImageId
     ? { baseImages: [{ imageId: spec.baseImageId, dockerTag: "base" }], first: ["FROM base"] }

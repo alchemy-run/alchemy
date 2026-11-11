@@ -15,7 +15,7 @@ export const isActiveStatus = (status: string | undefined): boolean =>
  * malformed entries.
  */
 export const toTagRecord = (
-  tags: ReadonlyArray<{ Key?: string; Value?: string }> | undefined,
+  tags: ReadonlyArray<{ Key?: string | undefined; Value?: string | undefined }> | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
     (tags ?? [])

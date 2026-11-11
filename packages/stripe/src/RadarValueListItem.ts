@@ -190,7 +190,11 @@ const listAlchemyValueLists = Effect.fn(function* () {
   return lists.filter((list) => tagRecord(list.metadata)[alchemyMetadataKeys.stack] !== undefined);
 });
 
-const observe = Effect.fn(function* (input: { id?: string; valueList?: string; value?: string }) {
+const observe = Effect.fn(function* (input: {
+  id?: string | undefined;
+  valueList?: string | undefined;
+  value?: string | undefined;
+}) {
   if (input.id !== undefined) {
     const byId = yield* getById(input.id);
     if (byId !== undefined) return byId;

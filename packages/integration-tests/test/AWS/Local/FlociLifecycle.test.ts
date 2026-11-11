@@ -42,7 +42,11 @@ const isRunning = (name: string) =>
  * managed-container path even when the runner exports
  * `ALCHEMY_FLOCI_EXTERNAL=1` for the shared gateway.
  */
-const isolated = (name: string, port: number, overrides?: Floci.FlociConfig) =>
+const isolated = (
+  name: string,
+  port: number,
+  overrides?: Floci.FlociConfig & { containerName?: string },
+) =>
   Effect.gen(function* () {
     const containerName = `floci-lifecycle-${name}`;
     yield* Floci.destroyFloci(containerName).pipe(Effect.ignore);

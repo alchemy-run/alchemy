@@ -114,7 +114,7 @@ export interface Rule extends Resource<
     /** The state of the retention rule (`pending` or `available`). */
     status: rbin.RuleStatus;
     /** The lock state of the retention rule, if lockable. */
-    lockState?: rbin.LockState;
+    lockState?: rbin.LockState | undefined;
   },
   never,
   Providers

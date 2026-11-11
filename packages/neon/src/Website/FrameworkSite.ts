@@ -23,7 +23,7 @@ export interface FrameworkSiteOptions {
   /** Application directory containing package.json and framework configuration. @default "." */
   rootDir?: string;
   /** Build input hashing. Set false to rebuild every deployment. @default true */
-  memo?: MemoOptions | boolean;
+  memo?: MemoOptions | boolean | undefined;
   /** Build, development, and runtime values. Public framework prefixes are browser-visible; Redacted does not prevent build tools from embedding a value. */
   env?: Record<string, string | Redacted.Redacted<string> | Output.Output<string | undefined>>;
   /** Static-file routing within the Function, not a separate CDN. */

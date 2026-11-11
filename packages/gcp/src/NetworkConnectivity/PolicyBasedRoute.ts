@@ -43,17 +43,17 @@ export type PolicyBasedRouteFilter = {
    * L4 protocol this route matches (`TCP`, `UDP`, or `ALL`).
    * @default "ALL"
    */
-  ipProtocol?: string;
+  ipProtocol?: string | undefined;
   /**
    * Source CIDR of matching packets. Defaults to `0.0.0.0/0` for IPv4
    * and `::/0` for IPv6.
    */
-  srcRange?: string;
+  srcRange?: string | undefined;
   /**
    * Destination CIDR of matching packets. Defaults to `0.0.0.0/0` for
    * IPv4 and `::/0` for IPv6.
    */
-  destRange?: string;
+  destRange?: string | undefined;
 };
 
 export type PolicyBasedRouteVirtualMachine = {

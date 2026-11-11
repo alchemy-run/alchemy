@@ -54,12 +54,12 @@ export interface EntityProps extends PlatformProps {
    * message starts it again.
    * @default the runner's default (1 minute)
    */
-  maxIdleTime?: Duration.Input;
+  maxIdleTime?: Duration.Input | undefined;
   /**
    * How many of an instance's messages run at once.
    * @default 1
    */
-  concurrency?: number | "unbounded";
+  concurrency?: number | "unbounded" | undefined;
 }
 
 export interface EntityAttributes {

@@ -27,34 +27,37 @@ export type EnterprisesEnrollmentTokenProps = {
    * (`enterprises/{enterprise}/policies/{policy}` or `{policy}`).
    * Immutable — changing it replaces the token.
    */
-  policyName?: string;
+  policyName?: string | undefined;
   /**
    * Whether personal usage is allowed on a device provisioned with this
    * token. Immutable — changing it replaces the token.
    */
-  allowPersonalUsage?: androidmanagement.EnrollmentTokenAllowPersonalUsageEnum | (string & {});
+  allowPersonalUsage?:
+    | androidmanagement.EnrollmentTokenAllowPersonalUsageEnum
+    | (string & {})
+    | undefined;
   /**
    * Google authentication options during enrollment. Immutable —
    * changing them replaces the token.
    */
-  googleAuthenticationOptions?: androidmanagement.GoogleAuthenticationOptions;
+  googleAuthenticationOptions?: androidmanagement.GoogleAuthenticationOptions | undefined;
   /**
    * One-time-use token. Immutable — changing it replaces the token.
    */
-  oneTimeOnly?: boolean;
+  oneTimeOnly?: boolean | undefined;
   /**
    * Token lifetime as a duration string (for example `3600s`). Defaults
    * to ten years so the resource stays usable until deleted.
    * Immutable — changing it replaces the token.
    * @default "315360000s"
    */
-  duration?: string;
+  duration?: string | undefined;
   /**
    * Arbitrary data exposed on the Device after enrollment (max 1024
    * characters). List/get return only a partial view and omit this
    * field. Immutable — changing it replaces the token.
    */
-  additionalData?: string;
+  additionalData?: string | undefined;
 };
 
 export type EnterprisesEnrollmentToken = Resource<
@@ -135,12 +138,12 @@ const toAttrs = (
   token: androidmanagement.EnrollmentToken,
   project: string,
   extras?: {
-    parent?: string;
-    policyName?: string;
-    googleAuthenticationOptions?: androidmanagement.GoogleAuthenticationOptions;
-    oneTimeOnly?: boolean;
-    duration?: string;
-    additionalData?: string;
+    parent?: string | undefined;
+    policyName?: string | undefined;
+    googleAuthenticationOptions?: androidmanagement.GoogleAuthenticationOptions | undefined;
+    oneTimeOnly?: boolean | undefined;
+    duration?: string | undefined;
+    additionalData?: string | undefined;
   },
 ) => {
   const name = token.name ?? "";

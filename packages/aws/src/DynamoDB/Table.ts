@@ -120,7 +120,7 @@ export interface GlobalSecondaryIndexProps {
    * Attributes projected from the table into the index.
    */
   projection: DynamoDB.Projection;
-  provisionedThroughput?: DynamoDB.ProvisionedThroughput;
+  provisionedThroughput?: DynamoDB.ProvisionedThroughput | undefined;
   onDemandThroughput?: DynamoDB.OnDemandThroughput;
   warmThroughput?: DynamoDB.WarmThroughput;
 }
@@ -176,9 +176,9 @@ export type TableProps = {
    * whole days on the wire).
    */
   pointInTimeRecoverySpecification?: PointInTimeRecoverySpecification;
-  provisionedThroughput?: DynamoDB.ProvisionedThroughput;
+  provisionedThroughput?: DynamoDB.ProvisionedThroughput | undefined;
   sseSpecification?: DynamoDB.SSESpecification;
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
   timeToLiveSpecification?: DynamoDB.TimeToLiveSpecification;
   warmThroughput?: DynamoDB.WarmThroughput;
   tableClass?: DynamoDB.TableClass;
@@ -193,7 +193,7 @@ export type TableProps = {
    * Changing the stream disables the old destination before enabling the
    * new one; removing the property disables streaming.
    */
-  kinesisStreamingDestination?: KinesisStreamingDestination;
+  kinesisStreamingDestination?: KinesisStreamingDestination | undefined;
   /**
    * Enables CloudWatch Contributor Insights (table-level rule) for the
    * table, surfacing the most-accessed and most-throttled keys.
@@ -243,15 +243,17 @@ export interface Table extends Resource<
      * Table-level provisioned capacity (PROVISIONED tables only), as
      * observed. Lets `alchemy drift` detect out-of-band changes.
      */
-    provisionedThroughput?: {
-      ReadCapacityUnits?: number;
-      WriteCapacityUnits?: number;
-    };
+    provisionedThroughput?:
+      | {
+          ReadCapacityUnits?: number | undefined;
+          WriteCapacityUnits?: number | undefined;
+        }
+      | undefined;
     /**
      * Table-level on-demand maximums, observed when `onDemandThroughput` is
      * set. Lets `alchemy drift` detect out-of-band changes.
      */
-    onDemandThroughput?: DynamoDB.OnDemandThroughput;
+    onDemandThroughput?: DynamoDB.OnDemandThroughput | undefined;
     /**
      * Whether deletion protection is enabled, as observed. Lets
      * `alchemy drift` detect out-of-band changes.
@@ -262,10 +264,12 @@ export interface Table extends Resource<
      * uses the default AWS owned key). Lets `alchemy drift` detect
      * out-of-band changes.
      */
-    sseDescription?: {
-      sseType?: string;
-      kmsMasterKeyArn?: string;
-    };
+    sseDescription?:
+      | {
+          sseType?: string | undefined;
+          kmsMasterKeyArn?: string | undefined;
+        }
+      | undefined;
     /**
      * Table class, as observed. Lets `alchemy drift` detect out-of-band
      * changes.
@@ -275,20 +279,22 @@ export interface Table extends Resource<
      * Time-to-live attribute when TTL is enabled, as observed. Lets
      * `alchemy drift` detect out-of-band changes.
      */
-    timeToLiveAttributeName?: string;
+    timeToLiveAttributeName?: string | undefined;
     /**
      * Resource-based policy document attached to the table (canonical JSON),
      * as observed. Lets `alchemy drift` detect out-of-band changes.
      */
-    resourcePolicy?: string;
+    resourcePolicy?: string | undefined;
     /**
      * Active Kinesis streaming destinations, as observed. Lets
      * `alchemy drift` detect out-of-band changes.
      */
-    kinesisStreamingDestinations?: {
-      streamArn: string;
-      approximateCreationDateTimePrecision: string;
-    }[];
+    kinesisStreamingDestinations?:
+      | {
+          streamArn: string;
+          approximateCreationDateTimePrecision: string;
+        }[]
+      | undefined;
     /**
      * Whether Contributor Insights is enabled, as observed. Lets
      * `alchemy drift` detect out-of-band changes.
@@ -1514,7 +1520,9 @@ export const TableProvider = () =>
       // `ProvisionedThroughput: undefined` (which AWS rejects with
       // ValidationException).
       const normalizeProvisioned = (
-        pt: { ReadCapacityUnits?: number; WriteCapacityUnits?: number } | undefined,
+        pt:
+          | { ReadCapacityUnits?: number | undefined; WriteCapacityUnits?: number | undefined }
+          | undefined,
       ) => {
         if (!pt || ((pt.ReadCapacityUnits ?? 0) === 0 && (pt.WriteCapacityUnits ?? 0) === 0)) {
           return undefined;
@@ -1528,8 +1536,8 @@ export const TableProvider = () =>
       const normalizeOnDemand = (
         od:
           | {
-              MaxReadRequestUnits?: number;
-              MaxWriteRequestUnits?: number;
+              MaxReadRequestUnits?: number | undefined;
+              MaxWriteRequestUnits?: number | undefined;
             }
           | undefined,
       ) => {
@@ -1543,7 +1551,9 @@ export const TableProvider = () =>
       };
 
       const normalizeWarm = (
-        wt: { ReadUnitsPerSecond?: number; WriteUnitsPerSecond?: number } | undefined,
+        wt:
+          | { ReadUnitsPerSecond?: number | undefined; WriteUnitsPerSecond?: number | undefined }
+          | undefined,
       ) => {
         if (!wt || ((wt.ReadUnitsPerSecond ?? 0) === 0 && (wt.WriteUnitsPerSecond ?? 0) === 0)) {
           return undefined;

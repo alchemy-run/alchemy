@@ -22,7 +22,7 @@ export type BucketNotification = {
    * Object or delete-marker version ID. Pass as GetObject's VersionId to read
    * the exact data version; delete markers are not readable objects.
    */
-  versionId?: string;
+  versionId?: string | undefined;
   /** Ordering token for events affecting the same key, when supplied. */
   sequencer?: string;
 };

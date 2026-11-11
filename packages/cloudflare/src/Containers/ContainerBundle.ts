@@ -10,7 +10,9 @@ import { Stack } from "alchemy/Stack";
 import { sha256Object } from "alchemy/Util/sha256";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
+import * as Record from "effect/Record";
 import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
 import type * as rolldown from "rolldown";
 import type { AnyContainerApplicationProps } from "./ContainerApplication.ts";
 
@@ -291,10 +293,10 @@ export const bundleContainerProgram = Effect.fn(function* ({
   main: string;
   runtime: "bun" | "node";
   handler?: string | undefined;
-  isExternal?: boolean;
-  external?: string[];
-  outdir?: string;
-  build?: Bundle.BundleConfig;
+  isExternal?: boolean | undefined;
+  external?: string[] | undefined;
+  outdir?: string | undefined;
+  build?: Bundle.BundleConfig | undefined;
 }) {
   const stack = yield* Stack;
   const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
@@ -329,7 +331,10 @@ export const bundleContainerProgram = Effect.fn(function* ({
         format: "esm",
         sourcemap: build?.output?.sourcemap ?? false,
         minify: build?.output?.minify ?? false,
-        dir: outdir,
+        ...Record.filterMap(
+          { dir: outdir },
+          Result.fromNullishOr(() => undefined),
+        ),
         entryFileNames: "index.mjs",
       },
       build,

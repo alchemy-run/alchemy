@@ -68,7 +68,7 @@ export interface BuildCacheOptions {
    * }
    * ```
    */
-  cache?: boolean | BuildCache;
+  cache?: boolean | BuildCache | undefined;
 }
 
 /**
@@ -104,7 +104,7 @@ export const imageBuildCacheOptions = (
 ): {
   "cache-from"?: string[];
   "cache-to"?: string[];
-  credentials?: RegistryCredentials;
+  credentials?: RegistryCredentials | undefined;
 } =>
   options?.cache
     ? { ...resolveBuildCache(options.cache, buildCacheRef(imageUri)), credentials }

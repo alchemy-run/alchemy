@@ -14,7 +14,7 @@ export interface BranchProps {
    * generated from the stack, stage, and logical ID. Changing it replaces
    * the branch.
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * Name of the committed checkpoint the branch starts from (e.g.
    * `checkpoint.name`). Changing it replaces the branch.
@@ -123,7 +123,7 @@ export const ensureBranch = Effect.fn(function* (input: {
   disk: string;
   name: string;
   fromCheckpoint: string;
-  fromBranch?: string;
+  fromBranch?: string | undefined;
 }) {
   const existing = yield* getBranch(input.disk, input.name);
   if (existing) return existing;

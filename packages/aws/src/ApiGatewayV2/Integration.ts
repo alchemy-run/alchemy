@@ -176,7 +176,7 @@ export const IntegrationResource = Resource<IntegrationType>("AWS.ApiGatewayV2.I
 
 export interface IntegrationInputProps extends Omit<
   {
-    [K in keyof IntegrationProps]?: Input<IntegrationProps[K]>;
+    [K in keyof IntegrationProps]?: Input<IntegrationProps[K]> | undefined;
   },
   "apiId" | "integrationType"
 > {

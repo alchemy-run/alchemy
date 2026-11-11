@@ -47,7 +47,7 @@ export interface NetworkInterfaceProps {
    * The primary private IPv4 address to assign. If omitted, AWS selects one
    * from the subnet range. Changing it replaces the interface.
    */
-  privateIpAddress?: string;
+  privateIpAddress?: string | undefined;
 
   /**
    * Additional (secondary) private IPv4 addresses to assign at creation.
@@ -111,7 +111,7 @@ export interface NetworkInterface extends Resource<
     /**
      * The primary private IPv4 address.
      */
-    privateIpAddress?: string;
+    privateIpAddress?: string | undefined;
 
     /**
      * All private IPv4 addresses assigned to the interface.
@@ -121,7 +121,7 @@ export interface NetworkInterface extends Resource<
     /**
      * The MAC address of the interface.
      */
-    macAddress?: string;
+    macAddress?: string | undefined;
 
     /**
      * The security groups associated with the interface.
@@ -141,7 +141,7 @@ export interface NetworkInterface extends Resource<
     /**
      * The ID of the AWS account that owns the interface.
      */
-    ownerId?: string;
+    ownerId?: string | undefined;
   },
   never,
   Providers,

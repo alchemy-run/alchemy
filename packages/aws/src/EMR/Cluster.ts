@@ -176,19 +176,21 @@ export interface ClusterProps {
    * place.
    * @default 1
    */
-  stepConcurrencyLevel?: number;
+  stepConcurrencyLevel?: number | undefined;
   /**
    * Auto-termination policy — the cluster terminates itself after being idle
    * for the configured duration (60 seconds to 7 days). Updateable in place;
    * removing the prop detaches the policy.
    */
-  autoTerminationPolicy?: {
-    /**
-     * Idle time after which the cluster auto-terminates — e.g. `"1 hour"` or
-     * `Duration.hours(1)`. Sent to AWS as whole seconds.
-     */
-    idleTimeout: Duration.Input;
-  };
+  autoTerminationPolicy?:
+    | {
+        /**
+         * Idle time after which the cluster auto-terminates — e.g. `"1 hour"` or
+         * `Duration.hours(1)`. Sent to AWS as whole seconds.
+         */
+        idleTimeout: Duration.Input;
+      }
+    | undefined;
   /**
    * User-defined tags for the cluster.
    */
@@ -304,7 +306,7 @@ const ACTIVE_STATES = ["STARTING", "BOOTSTRAPPING", "RUNNING", "WAITING"] as con
 const TERMINAL_STATES = new Set(["TERMINATING", "TERMINATED", "TERMINATED_WITH_ERRORS"]);
 
 const toTagRecord = (
-  tags: ReadonlyArray<{ Key?: string; Value?: string }> | undefined,
+  tags: ReadonlyArray<{ Key?: string | undefined; Value?: string | undefined }> | undefined,
 ): Record<string, string> =>
   Object.fromEntries(
     (tags ?? [])

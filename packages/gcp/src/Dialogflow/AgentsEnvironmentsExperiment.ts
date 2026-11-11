@@ -27,18 +27,20 @@ export type ExperimentVariant = {
   /** Flow version resource name. */
   version: string;
   /** Traffic fraction in `[0, 1]`. */
-  trafficAllocation?: number;
+  trafficAllocation?: number | undefined;
   /** Whether this variant is the control group. */
-  isControlGroup?: boolean;
+  isControlGroup?: boolean | undefined;
 };
 
 export type ExperimentDefinition = {
   /** Condition selecting sessions that enter the experiment. */
-  condition?: string;
+  condition?: string | undefined;
   /** Version variants and traffic split. */
-  versionVariants?: {
-    variants?: ExperimentVariant[];
-  };
+  versionVariants?:
+    | {
+        variants?: ExperimentVariant[] | undefined;
+      }
+    | undefined;
 };
 
 export type AgentsEnvironmentsExperimentProps = {
@@ -54,7 +56,7 @@ export type AgentsEnvironmentsExperimentProps = {
    */
   experimentId?: string;
   /** Human-readable name, unique within the environment. */
-  displayName?: string;
+  displayName?: string | undefined;
   /**
    * Description. Experiments have no labels field, so Alchemy stamps
    * ownership into this field for `list` / nuke.

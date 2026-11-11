@@ -40,7 +40,7 @@ export type AccountTypesUserListProps = {
    * changing it replaces the user list. If omitted, constructed from
    * `accountType` and `account`.
    */
-  parent?: string;
+  parent?: string | undefined;
   /**
    * Product account type (`GOOGLE_ADS`, `DISPLAY_VIDEO_ADVERTISER`, …).
    * Used with `account` when `parent` is omitted. Immutable.

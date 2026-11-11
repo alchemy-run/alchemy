@@ -351,9 +351,9 @@ const findGroupByName = (acct: string, name: string) =>
   );
 
 type ObservedGroup = {
-  id?: string | null;
-  name?: string | null;
-  isDefault?: boolean | null;
+  id?: string | null | undefined;
+  name?: string | null | undefined;
+  isDefault?: boolean | null | undefined;
 };
 
 const toObserved = (g: ObservedGroup): ObservedGroup => ({

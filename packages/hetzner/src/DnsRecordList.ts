@@ -20,7 +20,7 @@ export interface RecordListProps {
    * omitted, each record's zone is inferred from its name by walking its
    * parent domains, so one list may span several zones.
    */
-  zone?: string;
+  zone?: string | undefined;
   /**
    * Records to publish. Each value is added to the name's RRSet alongside
    * values published by anyone else (the RRSet is created when missing);
@@ -33,7 +33,7 @@ export interface RecordListProps {
    * hostnames bound through the `{ names }` binding contract (see
    * {@link RecordListBinding}).
    */
-  names?: string[];
+  names?: string[] | undefined;
   /** CNAME target of {@link names} and bound hostnames. */
   target?: string;
 }

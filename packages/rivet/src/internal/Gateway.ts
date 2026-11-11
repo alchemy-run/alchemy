@@ -5,6 +5,8 @@
  *
  * @internal
  */
+import * as Record from "effect/Record";
+import * as Result from "effect/Result";
 import type { NativeFetcher } from "./Fetcher.ts";
 
 export interface GatewayTarget {
@@ -60,7 +62,10 @@ export const gatewayFetcher = (target: GatewayTarget): NativeFetcher => ({
     return fetch(gatewayUrl(target, url.pathname, url.search), {
       method: request.method,
       headers,
-      body: body === undefined || body.byteLength === 0 ? undefined : body,
+      ...Record.filterMap(
+        { body: body === undefined || body.byteLength === 0 ? undefined : body },
+        Result.fromNullishOr(() => undefined),
+      ),
       signal: request.signal,
     });
   },
@@ -83,6 +88,9 @@ export const gatewaySend = (
   fetch(url, {
     method: init.method,
     headers: { ...init.headers, [TOKEN_HEADER]: token },
-    body: init.body as BodyInit | undefined,
+    ...Record.filterMap(
+      { body: init.body as BodyInit | undefined },
+      Result.fromNullishOr(() => undefined),
+    ),
     signal: init.signal,
   });

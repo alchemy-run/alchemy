@@ -44,7 +44,7 @@ export interface BucketEncryption {
    * Whether to use an S3 Bucket Key for SSE-KMS to reduce KMS request costs.
    * @default false
    */
-  bucketKeyEnabled?: boolean;
+  bucketKeyEnabled?: boolean | undefined;
   /**
    * Encryption types to block for new object writes. Currently supports SSE-C
    * (server-side encryption with customer-provided keys).
@@ -53,7 +53,7 @@ export interface BucketEncryption {
    * Removing this property resets the blocklist to its default.
    * @default []
    */
-  blockedEncryptionTypes?: "SSE-C"[];
+  blockedEncryptionTypes?: "SSE-C"[] | undefined;
 }
 
 /**
@@ -133,94 +133,94 @@ export interface BucketProps {
    * Name of the bucket. If omitted, a unique name will be generated.
    * Must be lowercase and between 3-63 characters.
    */
-  bucketName?: string;
+  bucketName?: string | undefined;
   /**
    * Indicates whether this bucket has Object Lock enabled.
    * Once enabled, cannot be disabled.
    */
-  objectLockEnabled?: boolean;
+  objectLockEnabled?: boolean | undefined;
   /**
    * Whether to delete all objects when the bucket is destroyed.
    * @default false
    */
-  forceDestroy?: boolean;
+  forceDestroy?: boolean | undefined;
   /**
    * Tags to apply to the bucket.
    */
-  tags?: Record<string, string>;
+  tags?: Record<string, string> | undefined;
   /**
    * Object versioning status. `"Enabled"` keeps every version of an object;
    * `"Suspended"` stops accruing new versions (existing versions are kept).
    */
-  versioning?: "Enabled" | "Suspended";
+  versioning?: "Enabled" | "Suspended" | undefined;
   /**
    * MFA-delete status. Rarely used — enabling it requires an MFA serial and
    * the root account, so it cannot be toggled through normal credentials.
    */
-  mfaDelete?: "Enabled" | "Disabled";
+  mfaDelete?: "Enabled" | "Disabled" | undefined;
   /**
    * Default server-side encryption for new objects. Omission restores AES256,
    * no KMS key, bucket keys disabled, and no encryption types blocked.
    * Existing objects are not re-encrypted. External changes are repaired on deploy.
    */
-  encryption?: BucketEncryption;
+  encryption?: BucketEncryption | undefined;
   /**
    * Block-public-access settings. Applied before any ACL or policy that
    * grants public access.
    */
-  publicAccessBlock?: BucketPublicAccessBlock;
+  publicAccessBlock?: BucketPublicAccessBlock | undefined;
   /**
    * Cross-origin resource sharing (CORS) rules.
    */
-  cors?: s3.CORSRule[];
+  cors?: s3.CORSRule[] | undefined;
   /**
    * Object lifecycle rules (expiration, transition, abort-incomplete-MPU…).
    */
-  lifecycleRules?: s3.LifecycleRule[];
+  lifecycleRules?: s3.LifecycleRule[] | undefined;
   /**
    * Object ownership control. `"BucketOwnerEnforced"` disables ACLs entirely.
    */
-  objectOwnership?: "BucketOwnerPreferred" | "ObjectWriter" | "BucketOwnerEnforced";
+  objectOwnership?: "BucketOwnerPreferred" | "ObjectWriter" | "BucketOwnerEnforced" | undefined;
   /**
    * Canned ACL to apply. Only valid when object ownership is not
    * `BucketOwnerEnforced`.
    */
-  acl?: s3.BucketCannedACL;
+  acl?: s3.BucketCannedACL | undefined;
   /**
    * Access-logging configuration.
    */
-  logging?: BucketLogging;
+  logging?: BucketLogging | undefined;
   /**
    * S3 Transfer Acceleration status.
    */
-  transferAcceleration?: "Enabled" | "Suspended";
+  transferAcceleration?: "Enabled" | "Suspended" | undefined;
   /**
    * Who pays for requests and data transfer. `"Requester"` enables
    * requester-pays.
    */
-  requestPayer?: "BucketOwner" | "Requester";
+  requestPayer?: "BucketOwner" | "Requester" | undefined;
   /**
    * Static-website hosting configuration.
    */
-  website?: BucketWebsite;
+  website?: BucketWebsite | undefined;
   /**
    * Replication configuration. Requires `versioning: "Enabled"` and an
    * IAM role.
    */
-  replication?: BucketReplication;
+  replication?: BucketReplication | undefined;
   /**
    * S3 Intelligent-Tiering configurations (id-keyed).
    */
-  intelligentTiering?: s3.IntelligentTieringConfiguration[];
+  intelligentTiering?: s3.IntelligentTieringConfiguration[] | undefined;
   /**
    * Default object-lock retention. Requires `objectLockEnabled: true`.
    */
-  objectLockConfiguration?: BucketObjectLockConfiguration;
+  objectLockConfiguration?: BucketObjectLockConfiguration | undefined;
   /**
    * Explicit bucket policy as policy statements. Merged with any
    * policy statements contributed via bindings.
    */
-  policy?: PolicyStatement[];
+  policy?: PolicyStatement[] | undefined;
 }
 
 export interface Bucket extends Resource<
@@ -255,85 +255,97 @@ export interface Bucket extends Resource<
      * Notification configuration requested through bindings, retained for drift
      * detection when binding outputs are unresolved during planning.
      */
-    managedNotificationConfiguration?: s3.NotificationConfiguration;
+    managedNotificationConfiguration?: s3.NotificationConfiguration | undefined;
     // The attributes below record the bucket's configuration as observed on
     // S3, so `alchemy drift` detects out-of-band changes. Settings whose prop
     // is unset are not managed and are not observed.
     /** Tags on the bucket, as observed. */
-    tags?: Record<string, string>;
+    tags?: Record<string, string> | undefined;
     /** Bucket policy document (explicit statements plus bindings), as observed. */
     policy?: unknown;
     /** Default encryption, as observed. */
-    encryption?: {
-      sseAlgorithm?: string;
-      kmsMasterKeyId?: string;
-      bucketKeyEnabled: boolean;
-      blockedEncryptionTypes: string[];
-    };
+    encryption?:
+      | {
+          sseAlgorithm?: string | undefined;
+          kmsMasterKeyId?: string | undefined;
+          bucketKeyEnabled: boolean;
+          blockedEncryptionTypes: string[];
+        }
+      | undefined;
     /**
      * Event notification targets Alchemy owns (`<id>:<target>` keys), and
      * whether it owns EventBridge delivery, as observed.
      */
-    notifications?: {
-      lambdaFunctions: string[];
-      queues: string[];
-      topics: string[];
-      eventBridge: boolean;
-    };
+    notifications?:
+      | {
+          lambdaFunctions: string[];
+          queues: string[];
+          topics: string[];
+          eventBridge: boolean;
+        }
+      | undefined;
     /** Versioning status, observed when `versioning` is set. */
-    versioning?: string;
+    versioning?: string | undefined;
     /** MFA-delete status, observed when `mfaDelete` is set. */
-    mfaDelete?: string;
+    mfaDelete?: string | undefined;
     /** Block-public-access settings, observed when `publicAccessBlock` is set. */
-    publicAccessBlock?: Required<BucketPublicAccessBlock>;
+    publicAccessBlock?: Required<BucketPublicAccessBlock> | undefined;
     /** CORS rules, observed when `cors` is set. */
-    cors?: s3.CORSRule[];
+    cors?: s3.CORSRule[] | undefined;
     /** Lifecycle rules (sorted by id), observed when `lifecycleRules` is set. */
-    lifecycleRules?: s3.LifecycleRule[];
+    lifecycleRules?: s3.LifecycleRule[] | undefined;
     /** Object ownership, observed when `objectOwnership` is set. */
-    objectOwnership?: string;
+    objectOwnership?: string | undefined;
     /**
      * Non-owner ACL grants (`<grantee>:<permission>`), observed when `acl`
      * is set.
      */
-    aclGrants?: string[];
+    aclGrants?: string[] | undefined;
     /** Access logging, observed when `logging` is set. */
-    logging?: {
-      targetBucket?: string;
-      targetPrefix?: string;
-      targetGrants?: s3.TargetGrant[];
-    };
+    logging?:
+      | {
+          targetBucket?: string | undefined;
+          targetPrefix?: string | undefined;
+          targetGrants?: s3.TargetGrant[] | undefined;
+        }
+      | undefined;
     /** Transfer acceleration status, observed when `transferAcceleration` is set. */
-    transferAcceleration?: string;
+    transferAcceleration?: string | undefined;
     /** Request payer, observed when `requestPayer` is set. */
-    requestPayer?: string;
+    requestPayer?: string | undefined;
     /** Website hosting configuration, observed when `website` is set. */
-    website?: {
-      indexDocument?: s3.IndexDocument;
-      errorDocument?: s3.ErrorDocument;
-      redirectAllRequestsTo?: s3.RedirectAllRequestsTo;
-      routingRules?: s3.RoutingRule[];
-    };
+    website?:
+      | {
+          indexDocument?: s3.IndexDocument | undefined;
+          errorDocument?: s3.ErrorDocument | undefined;
+          redirectAllRequestsTo?: s3.RedirectAllRequestsTo | undefined;
+          routingRules?: s3.RoutingRule[] | undefined;
+        }
+      | undefined;
     /** Replication configuration, observed when `replication` is set. */
-    replication?: {
-      role?: string;
-      rules: s3.ReplicationRule[];
-    };
+    replication?:
+      | {
+          role?: string | undefined;
+          rules: s3.ReplicationRule[];
+        }
+      | undefined;
     /**
      * The declared Intelligent-Tiering configurations (sorted by id;
      * `undefined` for one that no longer exists), observed when
      * `intelligentTiering` is set.
      */
-    intelligentTiering?: (s3.IntelligentTieringConfiguration | undefined)[];
+    intelligentTiering?: (s3.IntelligentTieringConfiguration | undefined)[] | undefined;
     /**
      * Default Object Lock retention, observed when `objectLockConfiguration`
      * is set.
      */
-    objectLockConfiguration?: {
-      mode?: string;
-      days?: number;
-      years?: number;
-    };
+    objectLockConfiguration?:
+      | {
+          mode?: string | undefined;
+          days?: number | undefined;
+          years?: number | undefined;
+        }
+      | undefined;
   },
   {
     /**
@@ -808,7 +820,7 @@ export const BucketProvider = () =>
       }: {
         bucketName: string;
         oldTags?: Record<string, string>;
-        newTags?: Record<string, string>;
+        newTags?: Record<string, string> | undefined;
         session: ScopedPlanStatusSession;
         operation: "create" | "update";
         /** The last observed projection (`output`); a divergence forces the write. */
@@ -890,7 +902,7 @@ export const BucketProvider = () =>
         bucketName: string;
         session: ScopedPlanStatusSession;
         bindings: ResourceBinding<Bucket["Binding"]>[];
-        explicitStatements?: PolicyStatement[];
+        explicitStatements?: PolicyStatement[] | undefined;
         operation: "create" | "update";
         /** The last observed projection (`output`); a divergence forces the write. */
         previous?: unknown;
@@ -1282,8 +1294,8 @@ export const BucketProvider = () =>
         previous,
       }: {
         bucketName: string;
-        versioning?: "Enabled" | "Suspended";
-        mfaDelete?: "Enabled" | "Disabled";
+        versioning?: "Enabled" | "Suspended" | undefined;
+        mfaDelete?: "Enabled" | "Disabled" | undefined;
         session: ScopedPlanStatusSession;
         /** The last observed projection (`output`); a divergence forces the write. */
         previous?: unknown;
@@ -1334,7 +1346,7 @@ export const BucketProvider = () =>
         previous,
       }: {
         bucketName: string;
-        publicAccessBlock?: BucketPublicAccessBlock;
+        publicAccessBlock?: BucketPublicAccessBlock | undefined;
         session: ScopedPlanStatusSession;
         /** The last observed projection (`output`); a divergence forces the write. */
         previous?: unknown;
@@ -1385,7 +1397,7 @@ export const BucketProvider = () =>
         previous,
       }: {
         bucketName: string;
-        cors?: s3.CORSRule[];
+        cors?: s3.CORSRule[] | undefined;
         session: ScopedPlanStatusSession;
         /** The last observed projection (`output`); a divergence forces the write. */
         previous?: unknown;
@@ -1430,7 +1442,7 @@ export const BucketProvider = () =>
         previous,
       }: {
         bucketName: string;
-        lifecycleRules?: s3.LifecycleRule[];
+        lifecycleRules?: s3.LifecycleRule[] | undefined;
         session: ScopedPlanStatusSession;
         /** The last observed projection (`output`); a divergence forces the write. */
         previous?: unknown;
@@ -1467,7 +1479,11 @@ export const BucketProvider = () =>
         previous,
       }: {
         bucketName: string;
-        objectOwnership?: "BucketOwnerPreferred" | "ObjectWriter" | "BucketOwnerEnforced";
+        objectOwnership?:
+          | "BucketOwnerPreferred"
+          | "ObjectWriter"
+          | "BucketOwnerEnforced"
+          | undefined;
         session: ScopedPlanStatusSession;
         /** The last observed projection (`output`); a divergence forces the write. */
         previous?: unknown;
@@ -1513,7 +1529,7 @@ export const BucketProvider = () =>
         previous,
       }: {
         bucketName: string;
-        acl?: s3.BucketCannedACL;
+        acl?: s3.BucketCannedACL | undefined;
         session: ScopedPlanStatusSession;
         /** The last observed projection (`output`); a divergence forces the write. */
         previous?: unknown;
@@ -1552,7 +1568,7 @@ export const BucketProvider = () =>
         previous,
       }: {
         bucketName: string;
-        logging?: BucketLogging;
+        logging?: BucketLogging | undefined;
         session: ScopedPlanStatusSession;
         /** The last observed projection (`output`); a divergence forces the write. */
         previous?: unknown;
@@ -1589,7 +1605,7 @@ export const BucketProvider = () =>
         previous,
       }: {
         bucketName: string;
-        transferAcceleration?: "Enabled" | "Suspended";
+        transferAcceleration?: "Enabled" | "Suspended" | undefined;
         session: ScopedPlanStatusSession;
         /** The last observed projection (`output`); a divergence forces the write. */
         previous?: unknown;
@@ -1616,7 +1632,7 @@ export const BucketProvider = () =>
         previous,
       }: {
         bucketName: string;
-        requestPayer?: "BucketOwner" | "Requester";
+        requestPayer?: "BucketOwner" | "Requester" | undefined;
         session: ScopedPlanStatusSession;
         /** The last observed projection (`output`); a divergence forces the write. */
         previous?: unknown;
@@ -1657,7 +1673,7 @@ export const BucketProvider = () =>
         previous,
       }: {
         bucketName: string;
-        website?: BucketWebsite;
+        website?: BucketWebsite | undefined;
         session: ScopedPlanStatusSession;
         /** The last observed projection (`output`); a divergence forces the write. */
         previous?: unknown;
@@ -1717,7 +1733,7 @@ export const BucketProvider = () =>
         previous,
       }: {
         bucketName: string;
-        replication?: BucketReplication;
+        replication?: BucketReplication | undefined;
         session: ScopedPlanStatusSession;
         /** The last observed projection (`output`); a divergence forces the write. */
         previous?: unknown;
@@ -1772,8 +1788,8 @@ export const BucketProvider = () =>
         session,
       }: {
         bucketName: string;
-        intelligentTiering?: s3.IntelligentTieringConfiguration[];
-        oldIntelligentTiering?: s3.IntelligentTieringConfiguration[];
+        intelligentTiering?: s3.IntelligentTieringConfiguration[] | undefined;
+        oldIntelligentTiering?: s3.IntelligentTieringConfiguration[] | undefined;
         session: ScopedPlanStatusSession;
       }) {
         if (intelligentTiering === undefined) return undefined;
@@ -1840,7 +1856,7 @@ export const BucketProvider = () =>
         previous,
       }: {
         bucketName: string;
-        objectLockConfiguration?: BucketObjectLockConfiguration;
+        objectLockConfiguration?: BucketObjectLockConfiguration | undefined;
         session: ScopedPlanStatusSession;
         /** The last observed projection (`output`); a divergence forces the write. */
         previous?: unknown;

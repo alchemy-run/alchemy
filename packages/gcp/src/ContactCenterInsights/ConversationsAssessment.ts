@@ -23,35 +23,41 @@ import {
 
 type AgentInfo = {
   /** User-specified agent identifier. */
-  agentId?: string;
+  agentId?: string | undefined;
   /**
    * Agent display name. Assessments have no labels field, so Alchemy
    * ownership is stored in a `[alchemy …]` prefix on this field and
    * stripped from attributes.
    */
-  displayName?: string;
+  displayName?: string | undefined;
   /** Agent type (`HUMAN_AGENT`, `AUTOMATED_AGENT`, …). */
-  agentType?: "ROLE_UNSPECIFIED" | "HUMAN_AGENT" | "AUTOMATED_AGENT" | "END_USER" | "ANY_AGENT";
+  agentType?:
+    | "ROLE_UNSPECIFIED"
+    | "HUMAN_AGENT"
+    | "AUTOMATED_AGENT"
+    | "END_USER"
+    | "ANY_AGENT"
+    | undefined;
   /** Deprecated team string. Prefer `teams`. */
-  team?: string;
+  team?: string | undefined;
   /** Team names. */
-  teams?: string[];
+  teams?: string[] | undefined;
   /** Agent location. */
-  location?: string;
+  location?: string | undefined;
   /** Outcome of the agent's segment of the call. */
-  dispositionCode?: string;
+  dispositionCode?: string | undefined;
   /** Automated-agent deployment id. */
-  deploymentId?: string;
+  deploymentId?: string | undefined;
   /** Automated-agent deployment display name. */
-  deploymentDisplayName?: string;
+  deploymentDisplayName?: string | undefined;
   /** Automated-agent version id. */
-  versionId?: string;
+  versionId?: string | undefined;
   /** Automated-agent version display name. */
-  versionDisplayName?: string;
+  versionDisplayName?: string | undefined;
   /** Entry subagent id. */
-  entrySubagentId?: string;
+  entrySubagentId?: string | undefined;
   /** Entry subagent display name. */
-  entrySubagentDisplayName?: string;
+  entrySubagentDisplayName?: string | undefined;
 };
 
 export type ConversationsAssessmentProps = {

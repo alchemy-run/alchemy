@@ -294,7 +294,7 @@ const normalizeUriPattern = (pattern: string) => {
 };
 
 export const matchesUriPattern = (
-  site: { providedUriPattern?: string; generatedUriPattern?: string },
+  site: { providedUriPattern?: string | undefined; generatedUriPattern?: string | undefined },
   pattern: string,
 ) => {
   const observed = site.providedUriPattern ?? site.generatedUriPattern ?? "";

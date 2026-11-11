@@ -26,7 +26,7 @@ export interface SigningKeyProps {
    *
    * @default ${app}-${stage}-${id}
    */
-  name?: string;
+  name?: string | undefined;
 }
 
 export interface SigningKeyAttributes {
@@ -193,7 +193,7 @@ export const SigningKeyProvider = () =>
     }),
   });
 
-type ObservedKey = { name?: string | null; value?: string | null };
+type ObservedKey = { name?: string | null | undefined; value?: string | null | undefined };
 
 /**
  * Find a signing key by exact name in the account's key list. Returns

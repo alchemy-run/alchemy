@@ -108,7 +108,7 @@ export interface SandboxProps extends PlatformProps {
    * image or a pinned digest. Exclusive with `baseImage`. Changing it
    * replaces the sandbox.
    */
-  image?: string;
+  image?: string | undefined;
   /**
    * Public OCI image reference with a `linux/amd64` manifest. Exclusive
    * with `image`. Changing it replaces the sandbox.
@@ -134,7 +134,7 @@ export interface SandboxProps extends PlatformProps {
    * and a change restarts it. Without `main`, every process in the sandbox
    * gets them, and a change replaces the sandbox.
    */
-  env?: Record<string, string | Redacted.Redacted<string>>;
+  env?: Record<string, string | Redacted.Redacted<string>> | undefined;
   /** Outbound network policy. Updated in place. */
   network?: { egress?: SandboxEgress };
   /**

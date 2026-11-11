@@ -23,13 +23,13 @@ export interface TargetGroupAttachmentProps {
    * group port. Not applicable to `lambda` targets. Changing it replaces the
    * attachment.
    */
-  port?: number;
+  port?: number | undefined;
   /**
    * The Availability Zone of the target. Set to `all` to register an IP
    * target outside the target group's VPC (e.g. an on-prem address). Changing
    * it replaces the attachment.
    */
-  availabilityZone?: string;
+  availabilityZone?: string | undefined;
 }
 
 export interface TargetGroupAttachment extends Resource<
@@ -117,8 +117,8 @@ const retryThroughPermissionPropagation = <A, E extends { _tag: string }, R>(
 
 const wireTarget = (props: {
   targetId: string;
-  port?: number;
-  availabilityZone?: string;
+  port?: number | undefined;
+  availabilityZone?: string | undefined;
 }): elbv2.TargetDescription => ({
   Id: props.targetId,
   Port: props.port,

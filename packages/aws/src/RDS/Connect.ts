@@ -18,9 +18,9 @@ export type ConnectResource = DBCluster | DBInstance | DBProxy | DBProxyEndpoint
 export interface ConnectionInfo {
   host: string;
   port: number;
-  database?: string;
-  username?: string;
-  password?: string;
+  database?: string | undefined;
+  username?: string | undefined;
+  password?: string | undefined;
   ssl: boolean;
   /**
    * RFC-3986 connection URL — feeds `Drizzle.Postgres` / a Hyperdrive
@@ -39,7 +39,7 @@ export interface ConnectionInfo {
    * new physical connection authenticates with a fresh token instead of a
    * token minted at pool construction.
    */
-  refreshPassword?: Effect.Effect<Redacted.Redacted<string>, Presign.PresignError>;
+  refreshPassword?: Effect.Effect<Redacted.Redacted<string>, Presign.PresignError> | undefined;
 }
 
 interface ConnectOptionsBase {
