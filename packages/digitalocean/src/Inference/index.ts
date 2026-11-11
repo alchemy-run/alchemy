@@ -35,3 +35,4 @@ export * from "./ListBatchesHttp.ts";
 export * from "./ListModels.ts";
 export * from "./ListModelsHttp.ts";
 export { InferenceKeyMissing, type InferenceOptions } from "./InferenceBinding.ts";
+export * from "./DedicatedInference.ts";

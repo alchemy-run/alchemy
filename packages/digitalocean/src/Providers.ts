@@ -21,6 +21,7 @@ import { Firewall, FirewallProvider } from "./Firewall.ts";
 import * as Functions from "./Functions/index.ts";
 import * as GenAI from "./GenAI/index.ts";
 import { Image, ImageProvider } from "./Image.ts";
+import * as Inference from "./Inference/index.ts";
 import * as Insights from "./Insights/index.ts";
 import * as Kubernetes from "./Kubernetes/index.ts";
 import { LoadBalancer, LoadBalancerProvider } from "./LoadBalancer.ts";
@@ -147,6 +148,8 @@ export const providers = () =>
       Agents.Template,
       ActionGateway.Toolbelt,
       ActionGateway.McpServer,
+      Monitoring.Destination,
+      Inference.DedicatedInference,
     ]),
   ).pipe(
     Layer.provide(
@@ -212,6 +215,8 @@ export const providers = () =>
         Agents.TemplateProvider(),
         ActionGateway.ToolbeltProvider(),
         ActionGateway.McpServerProvider(),
+        Monitoring.DestinationProvider(),
+        Inference.DedicatedInferenceProvider(),
       ),
     ),
     // Spaces' S3 API signs with Spaces keys, not the token.

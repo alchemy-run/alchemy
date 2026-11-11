@@ -30,7 +30,8 @@ export type TriggerProps = {
   prompt: string;
   /**
    * The environment each run starts a fresh session from: an agent manifest
-   * (YAML text, or an object sent as JSON). Updates in place.
+   * (YAML text, or an object sent as JSON). A headless run cannot ask, so
+   * the manifest needs `spec.permissions`. Updates in place.
    */
   session: string | Record<string, unknown>;
   /** Where each run's output goes. @default { mode: "none" } */
@@ -75,7 +76,7 @@ export type TriggerAttributes = Trigger["Attributes"];
  *   session: {
  *     apiVersion: "agents.digitalocean.com/v1alpha1",
  *     kind: "Agent",
- *     spec: { runtime: { adapter: "opencode" } },
+ *     spec: { runtime: { adapter: "opencode" }, permissions: { defaultAction: "allow" } },
  *   },
  *   output: { mode: "email", email: "team@example.com" },
  * });

@@ -23,7 +23,11 @@ const resources = (adapter: string, cron: string) =>
     const trigger = yield* DigitalOcean.Agents.Trigger("Nightly", {
       cron: { expression: cron, timeZone: "UTC" },
       prompt: "Say hello.",
-      session: manifest(adapter),
+      // A headless run needs a permission policy; nothing is allowed here.
+      session: {
+        ...manifest(adapter),
+        spec: { runtime: { adapter }, permissions: { defaultAction: "deny" } },
+      },
       enabled: false,
     });
     return { configId: env.configId, triggerId: trigger.triggerId };

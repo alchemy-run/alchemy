@@ -64,10 +64,10 @@ export interface AgentFunction {
   namespaceId: string;
   /** The function's name in the namespace (a `Functions.Action`'s `name`). */
   function: string;
-  /** JSON Schema of the parameters. */
-  inputSchema?: Record<string, unknown>;
-  /** JSON Schema of the result. */
-  outputSchema?: Record<string, unknown>;
+  /** The parameters the model passes, sent to the function as query parameters. */
+  parameters?: { name: string; type: string; required?: boolean; description?: string }[];
+  /** The fields of the function's result. */
+  returns?: { name: string; type: string; description?: string }[];
 }
 
 /** A hand-off to another agent. */
@@ -287,9 +287,24 @@ export const AgentProvider = () =>
           function_name: fn.name,
           description: fn.description,
           faas_namespace: fn.namespaceId,
-          faas_name: fn.function,
-          input_schema: fn.inputSchema ?? { type: "object", properties: {} },
-          output_schema: fn.outputSchema ?? { type: "object", properties: {} },
+          // The platform addresses a function as `package/name`.
+          faas_name: fn.function.includes("/") ? fn.function : `default/${fn.function}`,
+          input_schema: {
+            parameters: (fn.parameters ?? []).map((p) => ({
+              name: p.name,
+              in: "query",
+              schema: { type: p.type },
+              required: p.required ?? false,
+              description: p.description ?? p.name,
+            })),
+          },
+          output_schema: {
+            properties: (fn.returns ?? []).map((r) => ({
+              name: r.name,
+              type: r.type,
+              description: r.description ?? r.name,
+            })),
+          },
         };
         const current = observedFunctions.get(fn.name);
         if (current?.uuid === undefined) {
@@ -297,7 +312,7 @@ export const AgentProvider = () =>
         } else if (
           current.description !== fn.description ||
           current.faas_namespace !== fn.namespaceId ||
-          current.faas_name !== fn.function ||
+          current.faas_name !== wire.faas_name ||
           JSON.stringify(current.input_schema ?? {}) !== JSON.stringify(wire.input_schema) ||
           JSON.stringify(current.output_schema ?? {}) !== JSON.stringify(wire.output_schema)
         ) {

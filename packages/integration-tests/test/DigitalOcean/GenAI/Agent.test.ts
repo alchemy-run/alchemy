@@ -50,11 +50,8 @@ const resources = (instruction: string, attach: boolean) =>
               description: "Returns the forecast for a city.",
               namespaceId: fns.namespaceId,
               function: weather.name,
-              inputSchema: {
-                type: "object",
-                properties: { city: { type: "string" } },
-                required: ["city"],
-              },
+              parameters: [{ name: "city", type: "string", required: true }],
+              returns: [{ name: "forecast", type: "string" }],
             },
           ]
         : [],

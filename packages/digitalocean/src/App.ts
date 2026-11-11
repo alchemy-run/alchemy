@@ -49,6 +49,22 @@ export type AppRegion =
   | "tor"
   | "atl";
 
+/** An App Platform alert and where it is sent. */
+export interface AppAlert {
+  /** What to alert on, for example `DEPLOYMENT_FAILED` or `CPU_UTILIZATION`. */
+  rule: DO.AppAlertSpecRule;
+  /** Comparison for metric rules. */
+  operator?: DO.AppAlertSpecOperator;
+  /** Threshold for metric rules, for example `80` (percent). */
+  value?: number;
+  /** Window for metric rules, for example `FIVE_MINUTES`. */
+  window?: DO.AppAlertSpecWindow;
+  /** Email addresses to notify. They must belong to the team. */
+  emails?: string[];
+  /** Slack incoming webhooks to notify. */
+  slackWebhooks?: { url: string; channel: string }[];
+}
+
 export interface AppProps extends PlatformProps {
   /**
    * App name, unique within the team: 2 to 32 lowercase letters, digits and
@@ -93,6 +109,11 @@ export interface AppProps extends PlatformProps {
    * @default a TCP check on `port`
    */
   healthCheckPath?: string;
+  /**
+   * Alerts on the app, each sent to email addresses and Slack webhooks. A
+   * rule may appear once. Updates in place.
+   */
+  alerts?: AppAlert[];
   /** Environment variables, merged after the ones bindings add. */
   env?: Record<string, any>;
   /**
@@ -215,6 +236,31 @@ export const App: Platform<App, AppServices, AppShape, AppRuntimeContext> = Plat
       }),
   },
 );
+
+// Alert destinations are assigned per alert once the spec has created them.
+const syncAlertDestinations = Effect.fn(function* (appId: string, alerts: AppAlert[]) {
+  if (alerts.length === 0) return;
+  const { alerts: observed } = yield* DO.listAppAlerts({ app_id: appId });
+  for (const alert of alerts) {
+    const current = (observed ?? []).find(
+      (a) => a.spec?.rule === alert.rule && a.component_name === undefined,
+    );
+    if (current?.id === undefined) continue;
+    const emails = [...(alert.emails ?? [])].sort();
+    const slack = (alert.slackWebhooks ?? []).map((w) => ({ url: w.url, channel: w.channel }));
+    const same =
+      JSON.stringify([...(current.emails ?? [])].sort()) === JSON.stringify(emails) &&
+      JSON.stringify((current.slack_webhooks ?? []).map((w) => w.channel).sort()) ===
+        JSON.stringify(slack.map((w) => w.channel).sort());
+    if (same) continue;
+    yield* DO.assignAppAlertDestinations({
+      app_id: appId,
+      alert_id: current.id,
+      emails,
+      slack_webhooks: slack,
+    });
+  }
+});
 
 /** A registry by name, the `Registry` resource, or the Effect that declares it. */
 export type RegistryRef = { readonly name: string } | Effect.Effect<Registry, never, Providers>;
@@ -531,6 +577,12 @@ export const AppProvider = () =>
           const spec = {
             name,
             region: news.region ?? "nyc",
+            alerts: (news.alerts ?? []).map((alert) => ({
+              rule: alert.rule,
+              operator: alert.operator,
+              value: alert.value,
+              window: alert.window,
+            })),
             services: [
               {
                 name: "web",
@@ -573,6 +625,7 @@ export const AppProvider = () =>
               DO.updateApp({ id: existing.id, spec }).pipe(Effect.map((r) => r.app)),
           });
           const live = yield* waitUntilLive(app.id, tag);
+          yield* syncAlertDestinations(app.id, news.alerts ?? []);
           return {
             appId: live.id,
             urn: `do:app:${live.id}`,
