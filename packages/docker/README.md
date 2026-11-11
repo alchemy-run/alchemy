@@ -30,6 +30,7 @@ export default Alchemy.Stack(
     const postgres = yield* Docker.Container("Db", {
       image,
       environment: { POSTGRES_PASSWORD: password },
+      sharedMemorySize: "256m",
       ports: [{ external: 15432, internal: 5432 }],
       volumes: [{ hostPath: data.name, containerPath: "/var/lib/postgresql/data" }],
       networks: [{ name: network.name, aliases: ["postgres"] }],
@@ -58,6 +59,46 @@ const internalNetwork = yield* Docker.Network("InternalNetwork", {
 ```
 
 Without `ipam`, Docker picks the subnet and gateway. Network settings are fixed at creation, so changing one replaces the network. See [local services](https://alchemy.run/docker/local-services) for dual-stack networks and driver options.
+
+Container network attachments reuse the same `Network` resource. Endpoint-specific settings belong on `Docker.Container`, not on the network:
+
+```typescript
+yield* Docker.Container("Api", {
+  image: "nginx:alpine",
+  hostname: "api",
+  networks: [{
+    name: internalNetwork.name,
+    aliases: ["api"],
+    ipv4Address: "10.50.0.10",
+  }],
+  start: true,
+});
+```
+
+`ipv4Address`, `ipv6Address`, `gatewayPriority` and `endpointDriverOpts` configure each attachment. Changing an attachment reconnects it; changing container DNS or hostname recreates the container.
+
+## Container runtime options
+
+`sharedMemorySize: "256m"` sets `/dev/shm` independently of the `memory` limit.
+The container must use a private or shareable IPC namespace.
+
+```typescript
+yield* Docker.Container("Worker", {
+  image: "alpine:3.22",
+  platform: "linux/amd64",
+  entrypoint: "/bin/sh",
+  command: ["-c", "echo ready"],
+  workingDirectory: "/workspace",
+  ipcNamespace: "private",
+  sysctls: { "net.ipv4.ip_unprivileged_port_start": "1024" },
+  keepStdinOpen: true,
+  allocatePseudoTerminal: true,
+});
+```
+
+`pidNamespace`, `gpuDevices` and `privileged` are optional host-dependent
+controls. Changing create-time settings replaces the container; keep
+persistent data in volumes.
 
 ## Learn more
 

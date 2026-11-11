@@ -5,7 +5,7 @@ This example provisions PostgreSQL 18 Alpine with Docker resources:
 - `Docker.RemoteImage` pulls `postgres:18-alpine`
 - `Docker.Network` creates an app network
 - `Docker.Volume` creates persistent database storage
-- `Docker.Container` starts PostgreSQL with a redacted password, a network alias, a named volume, and a host port
+- `Docker.Container` starts PostgreSQL with a redacted password, a 256 MiB `/dev/shm` mount, a network alias, a named volume, and a host port
 - `Docker.inspectContainer` returns the bound host port
 
 Docker resources use the active Docker CLI context. That can be Docker Desktop, a remote Docker host, an SSH context, or a CI runner daemon.

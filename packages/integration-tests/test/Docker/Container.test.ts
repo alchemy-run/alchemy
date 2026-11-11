@@ -5,7 +5,9 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import { Action } from "alchemy/Action";
 import * as Provider from "alchemy/Provider";
 import { inMemoryState, isResourceState, State, type ResourceState } from "alchemy/State";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
@@ -218,6 +220,172 @@ test.provider(
 );
 
 test.provider(
+  "applies container creation options and replaces the container when they change",
+  (stack) =>
+    Effect.gen(function* () {
+      const docker = yield* Docker.Docker;
+      const name = `alchemy-test-container-creation-options-${stack.stage}`;
+      yield* stack.destroy();
+      yield* Effect.addFinalizer(() => stack.destroy().pipe(Effect.ignore));
+
+      const deploy = (sharedMemorySize: string) =>
+        Docker.Container("creation-options", {
+          name,
+          image: "alpine:3.22",
+          platform: "linux/amd64",
+          entrypoint: "/bin/sh",
+          command: ["-c", "echo ready"],
+          workingDirectory: "/workspace",
+          ipcNamespace: "private",
+          pidNamespace: "host",
+          sysctls: { "net.ipv4.ip_unprivileged_port_start": "1024" },
+          sharedMemorySize,
+          gpuDevices: "all",
+          privileged: true,
+          keepStdinOpen: true,
+          allocatePseudoTerminal: true,
+          start: false, // GPU requests are inspected, not executed on hosts without GPUs.
+        });
+
+      const first = yield* stack.deploy(deploy("128m"));
+      const inspect = yield* docker.container.inspect(name);
+      expect(inspect.Config.Entrypoint).toEqual(["/bin/sh"]);
+      expect(inspect.Config.Cmd).toEqual(["-c", "echo ready"]);
+      expect(inspect.Config.WorkingDir).toBe("/workspace");
+      expect(inspect.Config.Tty).toBe(true);
+      expect(inspect.Config.OpenStdin).toBe(true);
+      expect(inspect.HostConfig.IpcMode).toBe("private");
+      expect(inspect.HostConfig.PidMode).toBe("host");
+      expect(inspect.HostConfig.Sysctls).toMatchObject({
+        "net.ipv4.ip_unprivileged_port_start": "1024",
+      });
+      expect(inspect.HostConfig.ShmSize).toBe(134217728);
+      expect(inspect.HostConfig.Privileged).toBe(true);
+      expect(inspect.HostConfig.DeviceRequests).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            Count: -1,
+            Capabilities: [["gpu"]],
+          }),
+        ]),
+      );
+
+      expect((yield* stack.plan(deploy("128m"))).resources["creation-options"]?.action).toBe(
+        "noop",
+      );
+      expect((yield* stack.deploy(deploy("128m"))).id).toBe(first.id);
+      expect((yield* stack.plan(deploy("256m"))).resources["creation-options"]).toMatchObject({
+        action: "replace",
+        deleteFirst: true,
+      });
+      const second = yield* stack.deploy(deploy("256m"));
+      expect(second.id).not.toBe(first.id);
+      expect((yield* docker.container.inspect(name)).HostConfig.ShmSize).toBe(268435456);
+
+      yield* stack.destroy();
+      expect((yield* docker.container.inspect(name).pipe(Effect.flip))._tag).toBe("PlatformError");
+    }),
+  { tags: ["provider:docker", "provider:docker:container", "local"] },
+);
+
+test.provider(
+  "runs a container with its custom entrypoint, working directory, shared memory, and sysctls",
+  (stack) =>
+    Effect.gen(function* () {
+      const docker = yield* Docker.Docker;
+      const name = `alchemy-test-container-execution-options-${stack.stage}`;
+      yield* stack.destroy();
+      yield* Effect.addFinalizer(() => stack.destroy().pipe(Effect.ignore));
+
+      const instance = yield* stack.deploy(
+        Docker.Container("execution-options", {
+          name,
+          image: "alpine:3.22",
+          entrypoint: "/bin/sh",
+          command: ["-c", "sleep 120"],
+          workingDirectory: "/workspace",
+          ipcNamespace: "private",
+          sharedMemorySize: "128m",
+          sysctls: { "net.ipv4.ip_unprivileged_port_start": "1024" },
+          start: true,
+        }),
+      );
+      expect(instance.status).toBe("running");
+      const { stdout } = yield* docker.run([
+        "container",
+        "exec",
+        name,
+        "sh",
+        "-c",
+        "pwd; cat /proc/sys/net/ipv4/ip_unprivileged_port_start",
+      ]);
+      expect(stdout.trim().split("\n")).toEqual(["/workspace", "1024"]);
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:docker", "provider:docker:container", "local"] },
+);
+
+const findInvalidContainerOptions = (cause: Cause.Cause<unknown>) =>
+  cause.reasons
+    .filter(Cause.isFailReason)
+    .map((reason) => reason.error)
+    .find(
+      (value): value is Docker.InvalidContainerOptions =>
+        typeof value === "object" &&
+        value !== null &&
+        "_tag" in value &&
+        value._tag === "InvalidContainerOptions",
+    );
+
+test.provider(
+  "rejects invalid create-time runtime changes without deleting the existing container",
+  (stack) =>
+    Effect.gen(function* () {
+      const docker = yield* Docker.Docker;
+      const name = `alchemy-test-container-invalid-creation-update-${stack.stage}`;
+      yield* stack.destroy();
+      yield* Effect.addFinalizer(() => stack.destroy().pipe(Effect.ignore));
+
+      const deploy = (options: Partial<Docker.ContainerProps> = {}) =>
+        Docker.Container("invalid-creation-update", {
+          image: "alpine:3.22",
+          name,
+          ...options,
+        });
+      const first = yield* stack.deploy(deploy({ sharedMemorySize: "128m" }));
+      for (const { options, reason } of [
+        { options: { sharedMemorySize: "garbage" }, reason: "sharedMemorySize" },
+        { options: { sharedMemorySize: "0" }, reason: "sharedMemorySize" },
+        { options: { sharedMemorySize: "-1m" }, reason: "sharedMemorySize" },
+        { options: { workingDirectory: "relative" }, reason: "workingDirectory" },
+        { options: { pidNamespace: "private" }, reason: "pidNamespace" },
+        { options: { ipcNamespace: "invalid" }, reason: "ipcNamespace" },
+        { options: { sharedMemorySize: "128m", ipcNamespace: "host" }, reason: "sharedMemorySize" },
+      ]) {
+        const resource = deploy(options);
+        const planned = yield* stack.plan(resource).pipe(
+          Effect.as(undefined),
+          Effect.catchCause((cause) => Effect.succeed(findInvalidContainerOptions(cause))),
+        );
+        expect(planned?._tag).toBe("InvalidContainerOptions");
+        expect(planned?.message).toContain(reason);
+        const deployed = yield* stack.deploy(resource).pipe(
+          Effect.as(undefined),
+          Effect.catchCause((cause) => Effect.succeed(findInvalidContainerOptions(cause))),
+        );
+        expect(deployed?._tag).toBe("InvalidContainerOptions");
+        expect(deployed?.message).toContain(reason);
+        expect((yield* docker.container.inspect(name)).Id).toBe(first.id);
+      }
+      yield* stack.destroy();
+      expect((yield* docker.container.inspect(name).pipe(Effect.flip)).reason._tag).toBe(
+        "NotFound",
+      );
+    }),
+  { tags: ["provider:docker", "provider:docker:container", "local"] },
+);
+
+test.provider(
   "recreates an adopted container before claiming its hardening settings",
   (stack) =>
     Effect.gen(function* () {
@@ -303,6 +471,36 @@ test.provider(
           id: "empty-memory-limit",
           props: { memory: "" },
           reason: "memory cannot be empty",
+        },
+        {
+          id: "empty-shared-memory",
+          props: { sharedMemorySize: "" },
+          reason: "sharedMemorySize cannot be empty",
+        },
+        {
+          id: "empty-entrypoint",
+          props: { entrypoint: " " },
+          reason: "entrypoint cannot be empty",
+        },
+        {
+          id: "empty-image-platform",
+          props: { platform: "" },
+          reason: "platform cannot be empty",
+        },
+        {
+          id: "empty-gpu-request",
+          props: { gpuDevices: " " },
+          reason: "gpuDevices cannot be empty",
+        },
+        {
+          id: "empty-pid-mode",
+          props: { pidNamespace: " " },
+          reason: "pidNamespace cannot be empty",
+        },
+        {
+          id: "invalid-sysctl",
+          props: { sysctls: { "net.ipv4.ip_unprivileged_port_start": "" } },
+          reason: "sysctls contains an invalid setting",
         },
         {
           id: "empty-user",
@@ -607,6 +805,360 @@ describe(
           expect(aliases).not.toContain("old-alias");
         }),
       { tags: ["provider:docker:network"] },
+    );
+
+    test.provider("attaches a container to a dual-stack Docker.Network with custom DNS", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        yield* stack.destroy();
+        yield* Effect.addFinalizer(() => stack.destroy().pipe(Effect.ignore));
+        const resource = Effect.gen(function* () {
+          const network = yield* Docker.Network("dual-stack-endpoint-network", {
+            enableIPv6: true,
+            ipam: {
+              config: [
+                { subnet: "10.57.48.0/24", gateway: "10.57.48.1" },
+                { subnet: "fd57:48::/64", gateway: "fd57:48::1" },
+              ],
+            },
+          });
+          const secondary = yield* Docker.Network("secondary-endpoint-network", {
+            ipam: { config: [{ subnet: "10.57.49.0/24" }] },
+          });
+          const container = yield* Docker.Container("dual-stack-endpoint-container", {
+            image: "nginx:alpine",
+            hostname: "api",
+            dns: ["1.1.1.1"],
+            dnsSearch: ["internal.example"],
+            dnsOptions: ["ndots:1"],
+            networks: [
+              {
+                name: network.name,
+                aliases: ["api"],
+                ipv4Address: "10.57.48.10",
+                ipv6Address: "fd57:48::10",
+                gatewayPriority: 1,
+              },
+              { name: secondary.name, gatewayPriority: -1 },
+            ],
+            start: true,
+          });
+          return { container, network, secondary };
+        });
+        const first = yield* stack.deploy(resource);
+        const info = yield* docker.container.inspect(first.container.name);
+        const endpoint = info.NetworkSettings.Networks?.[first.network.name];
+        expect(info.Config.Hostname).toBe("api");
+        expect(info.HostConfig.Dns).toEqual(["1.1.1.1"]);
+        expect(info.HostConfig.DnsSearch).toEqual(["internal.example"]);
+        expect(info.HostConfig.DnsOptions).toEqual(["ndots:1"]);
+        expect(endpoint?.IPAddress).toBe("10.57.48.10");
+        expect(endpoint?.GlobalIPv6Address).toBe("fd57:48::10");
+        expect(endpoint?.IPAMConfig).toMatchObject({
+          IPv4Address: "10.57.48.10",
+          IPv6Address: "fd57:48::10",
+        });
+        expect(endpoint?.GwPriority).toBe(1);
+        expect(endpoint?.Aliases).toContain("api");
+        expect(info.NetworkSettings.Networks?.[first.secondary.name]?.GwPriority).toBe(-1);
+        const route = yield* docker.run([
+          "exec",
+          first.container.name,
+          "ip",
+          "route",
+          "show",
+          "default",
+        ]);
+        expect(route.stdout).toContain("10.57.48.1");
+        expect(
+          (yield* stack.plan(resource)).resources["dual-stack-endpoint-container"]?.action,
+        ).toBe("noop");
+        const second = yield* stack.deploy(resource);
+        expect(second.container.id).toBe(first.container.id);
+        yield* stack.destroy();
+        const gone = yield* docker.container.inspect(first.container.id).pipe(Effect.flip);
+        expect(gone.reason._tag).toBe("NotFound");
+      }),
+    );
+
+    test.provider(
+      "reconciles endpoint IP, alias and gateway priority without container replacement",
+      (stack) =>
+        Effect.gen(function* () {
+          const docker = yield* Docker.Docker;
+          yield* stack.destroy();
+          yield* Effect.addFinalizer(() => stack.destroy().pipe(Effect.ignore));
+          const resource = (
+            ipv4Address: string | undefined,
+            alias: string,
+            gatewayPriority: number,
+          ) =>
+            Effect.gen(function* () {
+              const network = yield* Docker.Network("reconfigured-endpoint-network", {
+                ipam: { config: [{ subnet: "10.57.50.0/24" }] },
+              });
+              const container = yield* Docker.Container("reconfigured-endpoint-container", {
+                image: "nginx:alpine",
+                networks: [{ name: network.name, aliases: [alias], ipv4Address, gatewayPriority }],
+                start: true,
+              });
+              return { container, network };
+            });
+          const first = yield* stack.deploy(resource("10.57.50.10", "old-api", 0));
+          expect(
+            (yield* stack.plan(resource("10.57.50.11", "new-api", 1))).resources[
+              "reconfigured-endpoint-container"
+            ]?.action,
+          ).toBe("update");
+          const second = yield* stack.deploy(resource("10.57.50.11", "new-api", 1));
+          expect(second.container.id).toBe(first.container.id);
+          const updated = (yield* docker.container.inspect(second.container.name)).NetworkSettings
+            .Networks?.[second.network.name];
+          expect(updated?.IPAddress).toBe("10.57.50.11");
+          expect(updated?.Aliases).toContain("new-api");
+          expect(updated?.Aliases).not.toContain("old-api");
+          expect(updated?.GwPriority).toBe(1);
+          expect(
+            (yield* stack.plan(resource("10.57.50.11", "new-api", 1))).resources[
+              "reconfigured-endpoint-container"
+            ]?.action,
+          ).toBe("noop");
+          const third = yield* stack.deploy(resource(undefined, "new-api", 0));
+          expect(third.container.id).toBe(first.container.id);
+          const dynamic = (yield* docker.container.inspect(third.container.name)).NetworkSettings
+            .Networks?.[third.network.name];
+          expect(dynamic?.IPAMConfig?.IPv4Address).toBeFalsy();
+          expect(dynamic?.GwPriority).toBe(0);
+          // Lost managed endpoints should be reconciled even when inputs did not change.
+          yield* docker.network.disconnect({
+            network: third.network.name,
+            container: third.container.id,
+          });
+          expect(
+            (yield* stack.plan(resource(undefined, "new-api", 0))).resources[
+              "reconfigured-endpoint-container"
+            ]?.action,
+          ).toBe("update");
+          const recovered = yield* stack.deploy(resource(undefined, "new-api", 0));
+          expect(recovered.container.id).toBe(first.container.id);
+          expect(
+            (yield* docker.container.inspect(recovered.container.name)).NetworkSettings.Networks?.[
+              recovered.network.name
+            ],
+          ).toBeDefined();
+          yield* stack.destroy();
+          const gone = yield* docker.container.inspect(first.container.id).pipe(Effect.flip);
+          expect(gone.reason._tag).toBe("NotFound");
+        }),
+    );
+
+    test.provider(
+      "applies endpoint driver options without changing the network resource",
+      (stack) =>
+        Effect.gen(function* () {
+          const docker = yield* Docker.Docker;
+          yield* stack.destroy();
+          yield* Effect.addFinalizer(() => stack.destroy().pipe(Effect.ignore));
+          const options = {
+            "com.docker.network.endpoint.sysctls": "net.ipv4.conf.IFNAME.log_martians=1",
+          };
+          const resource = Effect.gen(function* () {
+            const network = yield* Docker.Network("endpoint-options-network");
+            const container = yield* Docker.Container("endpoint-options-container", {
+              image: "nginx:alpine",
+              networks: [{ name: network.name, endpointDriverOpts: options }],
+            });
+            return { container, network };
+          });
+          const first = yield* stack.deploy(resource);
+          const info = yield* docker.container.inspect(first.container.id);
+          expect(info.NetworkSettings.Networks?.[first.network.name]?.DriverOpts).toMatchObject(
+            options,
+          );
+          expect(
+            (yield* stack.plan(resource)).resources["endpoint-options-container"]?.action,
+          ).toBe("noop");
+          const second = yield* stack.deploy(resource);
+          expect(second.container.id).toBe(first.container.id);
+          yield* stack.destroy();
+          const gone = yield* docker.container.inspect(first.container.id).pipe(Effect.flip);
+          expect(gone.reason._tag).toBe("NotFound");
+        }),
+    );
+
+    test.provider("recreates a container when its DNS settings change", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        yield* stack.destroy();
+        yield* Effect.addFinalizer(() => stack.destroy().pipe(Effect.ignore));
+        const resource = (dnsOptions: string[]) =>
+          Docker.Container("dns-container", {
+            image: "nginx:alpine",
+            hostname: "dns-api",
+            dns: ["1.1.1.1"],
+            dnsSearch: ["internal.example"],
+            dnsOptions,
+          });
+        const first = yield* stack.deploy(resource(["ndots:1"]));
+        expect((yield* stack.plan(resource(["ndots:1"]))).resources["dns-container"]?.action).toBe(
+          "noop",
+        );
+        expect((yield* stack.plan(resource(["ndots:2"]))).resources["dns-container"]?.action).toBe(
+          "replace",
+        );
+        const second = yield* stack.deploy(resource(["ndots:2"]));
+        expect(second.id).not.toBe(first.id);
+        yield* stack.destroy();
+        const gone = yield* docker.container.inspect(second.id).pipe(Effect.flip);
+        expect(gone.reason._tag).toBe("NotFound");
+      }),
+    );
+
+    test.provider("recreates an adopted container that lacks requested DNS and hostname", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        yield* stack.destroy();
+        const name = `alchemy-test-legacy-dns-container-${stack.stage}`;
+        yield* docker.container.remove(name, true).pipe(Effect.ignore);
+        yield* Effect.addFinalizer(() => docker.container.remove(name, true).pipe(Effect.ignore));
+        yield* Effect.addFinalizer(() => stack.destroy().pipe(Effect.ignore));
+        const { stdout: foreignId } = yield* docker.run([
+          "container",
+          "create",
+          "--name",
+          name,
+          "nginx:alpine",
+        ]);
+        const adopted = yield* stack.deploy(
+          Docker.Container("legacy-dns-container", {
+            name,
+            image: "nginx:alpine",
+            hostname: "custom-hostname",
+            dns: ["1.1.1.1"],
+            dnsSearch: ["svc.internal"],
+            dnsOptions: ["ndots:1"],
+          }),
+        );
+        expect(adopted.id).not.toBe(foreignId.trim());
+        const current = yield* docker.container.inspect(adopted.name);
+        expect(current.Config.Hostname).toBe("custom-hostname");
+        expect(current.HostConfig.Dns).toEqual(["1.1.1.1"]);
+        expect(current.HostConfig.DnsSearch).toEqual(["svc.internal"]);
+        expect(current.HostConfig.DnsOptions).toEqual(["ndots:1"]);
+        yield* stack.destroy();
+        const gone = yield* docker.container.inspect(adopted.id).pipe(Effect.flip);
+        expect(gone.reason._tag).toBe("NotFound");
+      }),
+    );
+
+    test.provider("removes a newly created container if endpoint attachment fails", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const name = `alchemy-test-bad-network-endpoint-${stack.stage}`;
+        yield* stack.destroy();
+        yield* Effect.addFinalizer(() => stack.destroy().pipe(Effect.ignore));
+        yield* Effect.addFinalizer(() => docker.container.remove(name, true).pipe(Effect.ignore));
+        const resource = Effect.gen(function* () {
+          const network = yield* Docker.Network("failed-initial-endpoint-network", {
+            ipam: { config: [{ subnet: "10.57.51.0/24" }] },
+          });
+          return yield* Docker.Container("failed-initial-endpoint-container", {
+            name,
+            image: "nginx:alpine",
+            networks: [{ name: network.name, ipv4Address: "10.57.52.10" }],
+          });
+        });
+        yield* stack.deploy(resource).pipe(Effect.flip);
+        const gone = yield* docker.container.inspect(name).pipe(Effect.flip);
+        expect(gone.reason._tag).toBe("NotFound");
+        yield* stack.destroy();
+      }),
+    );
+
+    test.provider("restores a previous endpoint after a rejected address change", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        yield* stack.destroy();
+        yield* Effect.addFinalizer(() => stack.destroy().pipe(Effect.ignore));
+        const resource = (ipv4Address: string, alias: string) =>
+          Effect.gen(function* () {
+            const network = yield* Docker.Network("failed-endpoint-update-network", {
+              ipam: { config: [{ subnet: "10.57.53.0/24" }] },
+            });
+            const container = yield* Docker.Container("failed-endpoint-update-container", {
+              image: "nginx:alpine",
+              networks: [{ name: network.name, ipv4Address, aliases: [alias] }],
+              start: true,
+            });
+            return { container, network };
+          });
+        const first = yield* stack.deploy(resource("10.57.53.10", "before"));
+        const initialInfo = yield* docker.container.inspect(first.container.id);
+        expect(initialInfo.NetworkSettings.Networks?.[first.network.name]?.IPAddress).toBe(
+          "10.57.53.10",
+        );
+        const rejected = yield* Effect.exit(stack.deploy(resource("10.57.54.10", "after")));
+        expect(Exit.isFailure(rejected)).toBe(true);
+        const info = yield* docker.container.inspect(first.container.id);
+        expect(Object.keys(info.NetworkSettings.Networks ?? {})).toContain(first.network.name);
+        const endpoint = info.NetworkSettings.Networks?.[first.network.name];
+        expect(endpoint?.IPAddress).toBe("10.57.53.10");
+        expect(endpoint?.IPAMConfig?.IPv4Address).toBe("10.57.53.10");
+        expect(endpoint?.Aliases).toContain("before");
+        expect(endpoint?.Aliases).not.toContain("after");
+        yield* stack.destroy();
+        const gone = yield* docker.container.inspect(first.container.id).pipe(Effect.flip);
+        expect(gone.reason._tag).toBe("NotFound");
+      }),
+    );
+
+    test.provider("reconciles attachments referenced by network ID", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        yield* stack.destroy();
+        yield* Effect.addFinalizer(() => stack.destroy().pipe(Effect.ignore));
+        const resource = (attached: boolean) =>
+          Effect.gen(function* () {
+            const network = yield* Docker.Network("network-id-attachment-network");
+            const container = yield* Docker.Container("network-id-attachment-container", {
+              image: "nginx:alpine",
+              networks: attached ? [{ name: network.id, aliases: ["by-id"] }] : [],
+              start: true,
+            });
+            return { container, network };
+          });
+        const first = yield* stack.deploy(resource(true));
+        const initial = yield* docker.container.inspect(first.container.id);
+        expect(initial.NetworkSettings.Networks?.[first.network.name]?.Aliases).toContain("by-id");
+
+        // Docker reports endpoints under their names, although callers can
+        // reference those same networks by ID.
+        yield* docker.network.disconnect({
+          network: first.network.id,
+          container: first.container.id,
+        });
+        expect(
+          (yield* stack.plan(resource(true))).resources["network-id-attachment-container"]?.action,
+        ).toBe("update");
+        const repaired = yield* stack.deploy(resource(true));
+        expect(repaired.container.id).toBe(first.container.id);
+        expect(
+          (yield* docker.container.inspect(repaired.container.id)).NetworkSettings.Networks?.[
+            first.network.name
+          ]?.Aliases,
+        ).toContain("by-id");
+
+        const detached = yield* stack.deploy(resource(false));
+        expect(detached.container.id).toBe(first.container.id);
+        expect(
+          (yield* docker.container.inspect(detached.container.id)).NetworkSettings.Networks?.[
+            first.network.name
+          ],
+        ).toBeUndefined();
+        yield* stack.destroy();
+        const gone = yield* docker.container.inspect(first.container.id).pipe(Effect.flip);
+        expect(gone.reason._tag).toBe("NotFound");
+      }),
     );
 
     test.provider("replaces the container when published ports change", (stack) =>
@@ -1180,6 +1732,26 @@ describe(
         "networks",
         { networkMode: "container:alchemy-missing-donor", networks: [{ name: "bridge" }] },
       ],
+      ["invalid network IPv4", { networks: [{ name: "bridge", ipv4Address: "not-an-ip" }] }],
+      ["network IPv6 supplied as IPv4", { networks: [{ name: "bridge", ipv4Address: "::1" }] }],
+      [
+        "network IPv4 supplied as IPv6",
+        { networks: [{ name: "bridge", ipv6Address: "127.0.0.1" }] },
+      ],
+      ["invalid gateway priority", { networks: [{ name: "bridge", gatewayPriority: 0.5 }] }],
+      [
+        "duplicate networks",
+        { networks: [{ name: "bridge" }, { name: "bridge", aliases: ["second"] }] },
+      ],
+      [
+        "invalid endpoint driver options",
+        { networks: [{ name: "bridge", endpointDriverOpts: { "": "value" } }] },
+      ],
+      ["empty network alias", { networks: [{ name: "bridge", aliases: [""] }] }],
+      ["invalid DNS server", { dns: ["not-an-ip"] }],
+      ["empty DNS search", { dnsSearch: [""] }],
+      ["empty DNS option", { dnsOptions: [""] }],
+      ["empty hostname", { hostname: " " }],
       [
         "conflicting device targets",
         {

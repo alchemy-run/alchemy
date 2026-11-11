@@ -122,6 +122,32 @@ another network can still reach out. Every network setting is fixed at
 creation, so changing one replaces the network, and Docker refuses to remove
 it while containers are attached.
 
+### Container network attachments
+
+Containers reference a managed network by name and can request fixed addresses:
+
+```typescript
+const api = yield* Docker.Container("api", {
+  image: "nginx:alpine",
+  hostname: "api",
+  networks: [{
+    name: dualStack.name,
+    aliases: ["api"],
+    ipv4Address: "10.51.0.10",
+    ipv6Address: "fd51:3456:789a::10",
+    gatewayPriority: 1,
+  }],
+  start: true,
+});
+```
+
+Docker checks address availability. `gatewayPriority` chooses the preferred
+default route; `endpointDriverOpts` configures an attachment rather than
+the network driver. All endpoint options are optional. Alchemy reconnects
+changed attachments without recreating the container and attempts to restore
+the old connection if Docker rejects the update. Changing `hostname` or
+container-level DNS settings instead recreates the container.
+
 ## A Redacted password
 
 ```typescript
@@ -156,6 +182,7 @@ const postgres = yield* Docker.Container("postgres", {
     POSTGRES_USER: "alchemy",
     POSTGRES_PASSWORD: password,
   },
+  sharedMemorySize: "256m",
   ports: [{ external: 15432, internal: 5432 }],
   volumes: [
     { hostPath: data.name, containerPath: "/var/lib/postgresql/data" },
@@ -179,6 +206,10 @@ healthcheck intervals take Effect `Duration` strings like
 `"5 seconds"`, and `start: true` actually runs the container
 (the default creates it stopped).
 
+`sharedMemorySize` controls `/dev/shm`, not the RAM limit (`memory`).
+Alchemy validates positive Docker byte sizes before replacement. Host and
+container-shared IPC namespaces cannot have their shared memory resized.
+
 ## Read the bound ports
 
 ```typescript
@@ -198,6 +229,33 @@ container by name, bound host ports included.
 The following examples show optional runtime controls on separate
 worker containers. Check your image's filesystem and user requirements
 before applying them to the Postgres container above.
+
+## Customize the process and namespaces
+
+```typescript
+const job = yield* Docker.Container("job", {
+  image: "alpine:3.22",
+  platform: "linux/amd64",
+  entrypoint: "/bin/sh",
+  command: ["-c", "pwd && echo ready"],
+  workingDirectory: "/workspace",
+  ipcNamespace: "private",
+  sysctls: { "net.ipv4.ip_unprivileged_port_start": "1024" },
+  keepStdinOpen: true,
+  allocatePseudoTerminal: true,
+  start: true,
+});
+```
+
+`entrypoint` selects the executable, `command` supplies its arguments,
+and `workingDirectory` must be absolute. `platform` selects the image
+architecture; `keepStdinOpen` and `allocatePseudoTerminal` enable interactive
+input. `ipcNamespace` and `pidNamespace` select process namespaces, while
+`sysctls` applies namespace-compatible kernel settings.
+
+`gpuDevices: "all"` requires GPU support on the Docker host.
+`privileged: true` weakens container isolation; avoid it for ordinary
+services. Changing these creation settings replaces the container.
 
 ## Limit memory, CPU, and processes
 
