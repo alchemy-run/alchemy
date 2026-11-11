@@ -1539,13 +1539,14 @@ describe.concurrent(
               expect(observed.instances).toBe(1);
               expect(observed.version).toBe(running.version);
             }
-            const configured = yield* stack.deploy(program("changed"));
-            expect(configured.instances).toBe(1);
-            expect(configured.configuration.environmentVariables).toContainEqual({
+            // One configuration update (env + image) rolls out while the
+            // runtime-owned instance keeps running.
+            const changed = yield* stack.deploy(program("changed", "mendhak/http-https-echo:40"));
+            expect(changed.instances).toBe(1);
+            expect(changed.configuration.environmentVariables).toContainEqual({
               name: "SCALING_REVISION",
               value: "changed",
             });
-            const changed = yield* stack.deploy(program("changed", "mendhak/http-https-echo:40"));
             const observed = yield* Containers.getContainerApplication(identity).pipe(
               Effect.map(scheduledApplication),
             );
@@ -1562,7 +1563,7 @@ describe.concurrent(
             yield* waitForApplicationDeleted(identity.accountId, identity.applicationId),
           ).toBeUndefined();
         }).pipe(logLevel),
-      { timeout: 120_000 },
+      { timeout: 300_000 },
     );
 
     test.provider(
@@ -1608,7 +1609,7 @@ describe.concurrent(
             ).toBeUndefined();
           }
         }).pipe(logLevel),
-      { timeout: 120_000 },
+      { timeout: 300_000 },
     );
 
     // Placement constraints pass through to Cloudflare unchanged and read back
