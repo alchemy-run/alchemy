@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import { CronProvider, CronResource } from "./Cron.ts";
 import { EntityProvider, EntityResource } from "./Entity.ts";
 import { Pool, PoolProvider } from "./Pool.ts";
+import { ProcessRunners, ProcessRunnersProvider } from "./Process/ProcessPool.ts";
 import { ShardGroups, ShardGroupsProvider } from "./ShardGroups.ts";
 import { SingletonProvider, SingletonResource } from "./Singleton.ts";
 import { WorkflowProvider, WorkflowResource } from "./Workflow.ts";
@@ -31,6 +32,7 @@ export const providers = () =>
       SingletonResource,
       CronResource,
       Pool,
+      ProcessRunners,
       ShardGroups,
       Random,
     ]),
@@ -42,6 +44,7 @@ export const providers = () =>
         SingletonProvider(),
         CronProvider(),
         PoolProvider(),
+        ProcessRunnersProvider(),
         ShardGroupsProvider(),
         RandomProvider(),
       ),
