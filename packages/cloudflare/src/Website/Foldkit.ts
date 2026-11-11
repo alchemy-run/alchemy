@@ -35,7 +35,15 @@ export interface FoldkitProps<Bindings extends WorkerBindingProps = {}> extends 
    * Defaults to non-gitignored project files and the nearest lockfile, with
    * imported workspaces detected from the build.
    */
-  memo?: MemoOptions;
+  memo?: MemoOptions & {
+    /**
+     * Additional workspace directories to hash (relative to `rootDir`).
+     * By default (`"auto"`), workspaces are auto-detected from the build's
+     * module graph; an explicit array pins them.
+     * @default "auto"
+     */
+    workspaces?: "auto" | Array<MemoOptions & { cwd: string }>;
+  };
   /**
    * Overrides static asset routing defaults. Client-only apps, including
    * any app with a custom {@link main}, use

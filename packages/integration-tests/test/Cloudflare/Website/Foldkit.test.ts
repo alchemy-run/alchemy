@@ -476,5 +476,106 @@ export default defineConfig({
         }).pipe(logLevel),
       { timeout: 120_000 },
     );
+
+    // The app imports a sibling package's source. The build detects it, so
+    // editing only that package rebuilds (#744); deleting it rebuilds instead
+    // of failing the plan (#2606); `memo.workspaces` pins the set.
+    test.provider(
+      "Foldkit: sibling workspace edits, deletes and pins drive the build memo",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+
+          yield* stack.destroy();
+
+          yield* fs.makeDirectory(tempRoot, { recursive: true });
+          const parent = yield* fs.makeTempDirectory({
+            prefix: "alchemy-foldkit-ws-",
+            directory: tempRoot,
+          });
+          yield* Effect.addFinalizer(
+            Exit.match({
+              onSuccess: () => Effect.ignore(fs.remove(parent, { recursive: true })),
+              onFailure: () => Effect.void,
+            }),
+          );
+          const rootDir = yield* cloneFixture(fixtureDir, {
+            prefix: "app-",
+            tempRoot: parent,
+            entries: fixtureEntries,
+          });
+          const sharedDir = path.join(parent, "shared");
+          const writeShared = (marker: string) =>
+            fs.writeFileString(
+              path.join(sharedDir, "src/message.ts"),
+              `export const message = ${JSON.stringify(marker)};\n`,
+            );
+          yield* fs.makeDirectory(path.join(sharedDir, "src"), { recursive: true });
+          yield* fs.writeFileString(
+            path.join(sharedDir, "package.json"),
+            JSON.stringify({ name: "alchemy-foldkit-workspace-shared", private: true }),
+          );
+          yield* writeShared("foldkit-ws-1");
+          const entry = path.join(rootDir, "src/entry.ts");
+          const original = yield* fs.readFileString(entry);
+          yield* fs.writeFileString(
+            entry,
+            `import { message } from "../../shared/src/message.ts";\nconsole.log(message);\n${original}`,
+          );
+
+          const deploy = (memo?: { workspaces: Array<{ cwd: string }> }) =>
+            stack.deploy(
+              Effect.gen(function* () {
+                return yield* Cloudflare.Website.Foldkit("FixFoldkitWorkspace", {
+                  ...foldkitProps(rootDir),
+                  memo: { include: memoInclude, ...memo },
+                });
+              }),
+            );
+
+          // ── auto-detected: the build records the sibling package ─────────
+          const site1 = yield* deploy();
+          expect(site1.hash?.additionalWorkspaces).toEqual(["../shared"]);
+          yield* expectUrlContains(`${site1.url!}/`, "Foldkit Fixture", {
+            timeout: "30 seconds",
+            label: "foldkit workspace v1",
+          });
+
+          // ── edit ONLY the sibling package ⇒ rebuild (#744) ───────────────
+          yield* writeShared("foldkit-ws-2");
+          const site2 = yield* deploy();
+          expect(site2.hash?.input).not.toEqual(site1.hash?.input);
+          expect(site2.hash?.assets).not.toEqual(site1.hash?.assets);
+
+          // ── unchanged ⇒ memo hit ─────────────────────────────────────────
+          const site3 = yield* deploy();
+          expect(site3.hash?.input).toEqual(site2.hash?.input);
+
+          // ── delete the sibling package ⇒ rebuild, not a failed plan (#2606)
+          yield* fs.writeFileString(entry, original);
+          yield* fs.remove(sharedDir, { recursive: true });
+          const site4 = yield* deploy();
+          expect(site4.hash?.input).not.toEqual(site3.hash?.input);
+          expect(site4.hash?.additionalWorkspaces).toEqual([]);
+          const site5 = yield* deploy();
+          expect(site5.hash?.input).toEqual(site4.hash?.input);
+
+          // ── pinned memo.workspaces: hashed though nothing imports it ─────
+          yield* fs.makeDirectory(path.join(sharedDir, "src"), { recursive: true });
+          yield* writeShared("foldkit-ws-pinned-1");
+          const pinned = { workspaces: [{ cwd: "../shared" }] };
+          const site6 = yield* deploy(pinned);
+          expect(site6.hash?.additionalWorkspaces).toBeUndefined();
+          yield* writeShared("foldkit-ws-pinned-2");
+          const site7 = yield* deploy(pinned);
+          expect(site7.hash?.input).not.toEqual(site6.hash?.input);
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(site1.workerName, accountId);
+        }).pipe(logLevel),
+      { timeout: 240_000 },
+    );
   },
 );
