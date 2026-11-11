@@ -6,9 +6,7 @@ import { destroy as destroyStack } from "alchemy/Destroy";
 import * as Plan from "alchemy/Plan";
 import { Stage } from "alchemy/Stage";
 import { State, inMemoryState } from "alchemy/State";
-import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
@@ -652,7 +650,7 @@ describe.sequential(
     );
 
     test(
-      "recovers a missing application only with its recorded exact attachment",
+      "recovers a missing application attached to the namespace its Worker reports",
       Effect.gen(function* () {
         const first = yield* stack;
         const namespaceId = first.app.durableObjects?.namespaceId;
@@ -680,25 +678,27 @@ describe.sequential(
               },
             });
           });
-        yield* Effect.gen(function* () {
+        // Delete an application out of band and wait until neither the list
+        // nor a read by id still reports it.
+        const deleteOutOfBand = Effect.fn(function* (applicationId: string) {
           yield* Containers.deleteContainerApplication({
             accountId: first.app.accountId,
-            applicationId: first.app.applicationId,
+            applicationId,
           });
           const remaining = yield* Containers.listContainerApplications({
             accountId: first.app.accountId,
           }).pipe(
             Effect.repeat({
               schedule: Schedule.spaced("1 second"),
-              until: (apps) => apps.every((app) => app.id !== first.app.applicationId),
+              until: (apps) => apps.every((app) => app.id !== applicationId),
               times: 8,
             }),
           );
-          expect(remaining.some((app) => app.id === first.app.applicationId)).toBe(false);
+          expect(remaining.some((app) => app.id === applicationId)).toBe(false);
           // Reconcile observes by id first; list deletion can propagate earlier.
           const deleted = yield* Containers.getContainerApplication({
             accountId: first.app.accountId,
-            applicationId: first.app.applicationId,
+            applicationId,
           }).pipe(
             Effect.tap((app) =>
               Effect.logInfo(
@@ -713,35 +713,44 @@ describe.sequential(
             }),
           );
           expect(deleted).toBeUndefined();
-          for (const missing of [undefined, {}]) {
-            yield* corruptProjection(missing);
-            const failed = yield* deploy(AttachmentStack).pipe(Effect.exit);
-            assert(Exit.isFailure(failed));
-            expect(Cause.pretty(failed.cause)).toContain("unresolved Durable Object namespace");
+        });
+        yield* Effect.gen(function* () {
+          // The Worker's projection is stale, so it updates first and reports
+          // its namespace; the Container waits for it and attaches the new
+          // application to that observed namespace, whatever its own record
+          // says. It never creates the application unattached.
+          let live = first.app.applicationId;
+          let url = first.url;
+          for (const recorded of [undefined, {}, { namespaceId }]) {
+            yield* deleteOutOfBand(live);
+            yield* corruptProjection(recorded);
+            const recovered = yield* deploy(AttachmentStack);
+            expect(recovered.worker.durableObjectNamespaces).toEqual(
+              first.worker.durableObjectNamespaces,
+            );
+            expect(recovered.app.applicationId).not.toBe(live);
+            expect(recovered.app.durableObjects).toEqual({ namespaceId });
+            const observed = yield* readAttachmentApplication(
+              first.app.accountId,
+              recovered.app.applicationId,
+            );
+            expect(observed.durableObjects).toEqual({ namespaceId });
+            expect(observed.maxInstances).toBe(2);
             const applications = yield* Containers.listContainerApplications({
               accountId: first.app.accountId,
             });
-            expect(applications.some((app) => app.name === first.app.applicationName)).toBe(false);
+            expect(
+              applications.filter((app) => app.name === first.app.applicationName),
+            ).toHaveLength(1);
+            live = recovered.app.applicationId;
+            url = recovered.url;
           }
-          yield* corruptProjection({ namespaceId });
-          const recovered = yield* deploy(AttachmentStack);
-          expect(recovered.worker.durableObjectNamespaces).toEqual(
-            first.worker.durableObjectNamespaces,
-          );
-          expect(recovered.app.applicationId).not.toBe(first.app.applicationId);
-          expect(recovered.app.durableObjects).toEqual({ namespaceId });
-          const observed = yield* readAttachmentApplication(
-            first.app.accountId,
-            recovered.app.applicationId,
-          );
-          expect(observed.durableObjects).toEqual({ namespaceId });
-          expect(observed.maxInstances).toBe(2);
           const other = yield* readAttachmentApplication(
             first.otherApp.accountId,
             first.otherApp.applicationId,
           );
           expect(other.durableObjects).toEqual(first.otherApp.durableObjects);
-          const response = yield* fetchReady(new URL("/hello", recovered.url), "method", 8);
+          const response = yield* fetchReady(new URL("/hello", url), "method", 8);
           expect(JSON.parse(response).method).toBe("GET");
         }).pipe(
           Effect.ensuring(
@@ -786,7 +795,7 @@ describe.sequential(
           ),
         );
       }).pipe(Effect.provide(services)),
-      { timeout: 120_000, retry: 0 },
+      { timeout: 180_000, retry: 0 },
     );
 
     // Runs last: detaching recreates the application under a new id.
