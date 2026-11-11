@@ -2,16 +2,20 @@ import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Headers from "effect/http/Headers";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/http/HttpClientResponse";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as HttpTraceContext from "effect/http/HttpTraceContext";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Scope from "effect/Scope";
 import * as Sink from "effect/Sink";
 import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
+import * as Tracer from "effect/Tracer";
+import * as Cbor from "./Cbor.ts";
 import type { HttpEffect } from "./Http.ts";
 
 export type Rpc<Shape> = {
@@ -509,15 +513,254 @@ export const asEffectOrStream = (
 };
 
 // ---------------------------------------------------------------------------
+// Protocol. Every RPC call carries a version and an open metadata map (the
+// caller's trace context today), on every transport: request headers over
+// HTTP, an envelope over native RPC. A callee ignores metadata keys it
+// doesn't know and refuses a version it doesn't speak, so a later version can
+// add metadata or change the body without silently breaking older runtimes.
+// ---------------------------------------------------------------------------
+
+/** The protocol version this runtime speaks. */
+export const RPC_PROTOCOL_VERSION = 1;
+
+/**
+ * Request header naming the protocol version a call speaks; on a response,
+ * the version the callee speaks.
+ */
+export const RPC_PROTOCOL_HEADER = "x-alchemy-rpc";
+
+/**
+ * Response header listing the body encodings a callee accepts. A caller sends
+ * CBOR only after its peer listed it, so an older callee never receives a
+ * body it can't read.
+ */
+export const RPC_ACCEPT_HEADER = "x-alchemy-rpc-accept";
+
+/**
+ * A call's metadata: lowercase string keys, string values. Unknown keys are
+ * ignored by every callee. Over HTTP each entry travels as its own
+ * {@link RPC_META_HEADER_PREFIX} header, never a standard one: a proxy on the
+ * path (an ingress that traces requests) may rewrite `traceparent`, but
+ * leaves these alone.
+ */
+export type RpcMeta = Readonly<Record<string, string>>;
+
+/** Prefix of the request headers that carry a call's {@link RpcMeta} over HTTP. */
+export const RPC_META_HEADER_PREFIX = "x-alchemy-meta-";
+
+/** The request headers carrying `meta`. */
+export const rpcMetaHeaders = (meta: RpcMeta): Record<string, string> => {
+  const headers: Record<string, string> = {};
+  for (const [key, value] of Object.entries(meta))
+    headers[`${RPC_META_HEADER_PREFIX}${key}`] = value;
+  return headers;
+};
+
+/** The {@link RpcMeta} a request's headers carry. */
+export const rpcMetaFromHeaders = (
+  headers: Readonly<Record<string, string | undefined>>,
+): RpcMeta => {
+  const meta: Record<string, string> = {};
+  for (const [name, value] of Object.entries(headers)) {
+    if (value !== undefined && name.toLowerCase().startsWith(RPC_META_HEADER_PREFIX)) {
+      meta[name.toLowerCase().slice(RPC_META_HEADER_PREFIX.length)] = value;
+    }
+  }
+  return meta;
+};
+
+/** One call on a transport without headers (Cloudflare native RPC). */
+export interface RpcRequest {
+  readonly v: number;
+  readonly method: string;
+  readonly args: ReadonlyArray<unknown>;
+  readonly meta: RpcMeta;
+}
+
+/** A call in a protocol version the callee doesn't speak. */
+export class RpcUnsupportedVersion extends Data.TaggedError("RpcUnsupportedVersion")<{
+  readonly version: number;
+  readonly supported: ReadonlyArray<number>;
+}> {
+  override get message() {
+    return `RPC protocol version ${this.version} is not supported (supported: ${this.supported.join(", ")})`;
+  }
+}
+
+/** The versions {@link RPC_PROTOCOL_VERSION} callees accept. */
+export const SUPPORTED_RPC_VERSIONS: ReadonlyArray<number> = [1];
+
+/**
+ * The metadata the current fiber sends with a call: the W3C `traceparent` of
+ * its span, so the callee's spans join the caller's trace under every OTLP
+ * exporter. Empty without a span or with propagation disabled.
+ */
+const emptyMeta: RpcMeta = {};
+
+export const currentRpcMeta: Effect.Effect<RpcMeta> = Effect.gen(function* () {
+  if (yield* Tracer.DisablePropagation) return emptyMeta;
+  const span = yield* Effect.currentParentSpan.pipe(Effect.option);
+  if (Option.isNone(span)) return emptyMeta;
+  const { traceId, spanId, sampled } = span.value;
+  const meta: RpcMeta = {
+    traceparent: `00-${traceId.padStart(32, "0")}-${spanId}-${sampled ? "01" : "00"}`,
+  };
+  return meta;
+});
+
+/** The caller's span a call's metadata names, if any. */
+export const rpcParentOf = (meta: RpcMeta): Option.Option<Tracer.ExternalSpan> =>
+  meta.traceparent === undefined
+    ? Option.none()
+    : HttpTraceContext.w3c(Headers.fromRecordUnsafe({ traceparent: meta.traceparent }));
+
+/**
+ * The parent a call's method runs under. A call's own metadata names the
+ * caller's span outright. Without it, a bare `traceparent` header (an older
+ * caller, or plain HTTP) applies only when the callee has no span of its own:
+ * its HTTP server may already have opened one from that same header.
+ */
+export interface RpcParent {
+  readonly span: Tracer.ExternalSpan;
+  /** Parent even under a span the callee already has. */
+  readonly force: boolean;
+}
+
+/** The {@link RpcParent} of a call that carries `meta`, falling back to a bare `traceparent`. */
+export const rpcParentFrom = (meta: RpcMeta, traceparent?: string): Option.Option<RpcParent> => {
+  const own = rpcParentOf(meta);
+  if (Option.isSome(own)) return Option.some({ span: own.value, force: true });
+  return Option.map(rpcParentOf(traceparent === undefined ? {} : { traceparent }), (span) => ({
+    span,
+    force: false,
+  }));
+};
+
+/** Run a call's effect under its {@link RpcParent}. */
+export const withRpcParent =
+  (parent: Option.Option<RpcParent>) =>
+  <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> => {
+    if (Option.isNone(parent)) return effect;
+    const { span, force } = parent.value;
+    if (force) return Effect.withParentSpan(effect, span);
+    return Effect.flatMap(Effect.currentParentSpan.pipe(Effect.option), (current) =>
+      Option.isSome(current) ? effect : Effect.withParentSpan(effect, span),
+    );
+  };
+
+/** {@link withRpcParent} for a streamed result. */
+export const withRpcParentStream =
+  (parent: Option.Option<RpcParent>) =>
+  <A, E, R>(stream: Stream.Stream<A, E, R>): Stream.Stream<A, E, R> => {
+    if (Option.isNone(parent)) return stream;
+    const { span, force } = parent.value;
+    const parented = stream.pipe(Stream.provideService(Tracer.ParentSpan, span));
+    if (force) return parented;
+    return Stream.unwrap(
+      Effect.map(Effect.currentParentSpan.pipe(Effect.option), (current) =>
+        Option.isSome(current) ? stream : parented,
+      ),
+    );
+  };
+
+/**
+ * Validate a native-RPC {@link RpcRequest} envelope: its version must be one
+ * this callee speaks.
+ */
+export const checkRpcRequest = (
+  request: RpcRequest,
+): Effect.Effect<RpcRequest, RpcUnsupportedVersion> =>
+  SUPPORTED_RPC_VERSIONS.includes(request.v)
+    ? Effect.succeed(request)
+    : Effect.fail(
+        new RpcUnsupportedVersion({ version: request.v, supported: SUPPORTED_RPC_VERSIONS }),
+      );
+
+/** Whether `value` is an {@link RpcRequest} envelope. */
+export const isRpcRequest = (value: unknown): value is RpcRequest =>
+  typeof value === "object" &&
+  value !== null &&
+  typeof (value as RpcRequest).v === "number" &&
+  typeof (value as RpcRequest).method === "string" &&
+  Array.isArray((value as RpcRequest).args) &&
+  typeof (value as RpcRequest).meta === "object" &&
+  (value as RpcRequest).meta !== null;
+
+/**
+ * The reserved native-RPC method every Alchemy bridge (Durable Object, Worker
+ * entrypoint) serves: it takes one {@link RpcRequest}. A bridge that predates
+ * it rejects the call as an unknown method instead of running anything.
+ */
+export const RPC_REQUEST_METHOD = "~alchemy/rpc";
+
+// ---------------------------------------------------------------------------
+// CBOR stream codec for the `fetch` transport: a CBOR sequence (RFC 8742)
+// with raw byte strings, no base64. Used when the request was CBOR, so the
+// caller is known to read it.
+// ---------------------------------------------------------------------------
+
+/** Encode a `Stream` as a lazy CBOR sequence for an HTTP response body. */
+export const encodeRpcResponseStreamCbor = (
+  stream: Stream.Stream<any, any, any>,
+): Stream.Stream<Uint8Array, never, any> =>
+  stream.pipe(
+    Stream.map((value) => Cbor.encodeUnsafe(value)),
+    Stream.catchCause((cause) => {
+      const failReason = cause.reasons.find(Cause.isFailReason);
+      const error = failReason ? encodeRpcError(failReason.error) : undefined;
+      return Stream.succeed(
+        Cbor.encodeUnsafe({ _tag: StreamErrorTag, error } satisfies RpcStreamErrorMarker),
+      );
+    }),
+  );
+
+/** Decode a CBOR sequence produced by {@link encodeRpcResponseStreamCbor}. */
+export const decodeRpcResponseStreamCbor = <E>(
+  bytes: Stream.Stream<Uint8Array, E>,
+): Stream.Stream<any, E | RpcDecodeError | RpcRemoteStreamError> =>
+  Stream.suspend(() => {
+    const decoder = Cbor.makeSequenceDecoder();
+    const values = bytes.pipe(
+      Stream.mapEffect((chunk) =>
+        Effect.try({
+          try: () => decoder.push(chunk),
+          catch: (cause) => new RpcDecodeError({ cause }),
+        }),
+      ),
+      Stream.concat(
+        Stream.fromEffect(
+          Effect.try({
+            try: () => (decoder.end(), [] as ReadonlyArray<unknown>),
+            catch: (cause) => new RpcDecodeError({ cause }),
+          }),
+        ),
+      ),
+      Stream.flattenIterable,
+    );
+    return values.pipe(
+      Stream.flatMap((value) =>
+        isRpcStreamErrorMarker(value)
+          ? Stream.fail(new RpcRemoteStreamError({ error: value.error }))
+          : Stream.succeed(value),
+      ),
+    );
+  });
+
+// ---------------------------------------------------------------------------
 // `fetch` transport: a transport-agnostic RPC over plain HTTP. Each method is
-// a `POST {RPC_PATH_PREFIX}{name}` whose request body is the JSON-encoded
-// argument array; the response is either a JSON value, a JSON error envelope,
-// or a streamed body (NDJSON / raw bytes) flagged by response headers.
+// a `POST {RPC_PATH_PREFIX}{name}` whose body is the argument array (JSON, or
+// CBOR once the callee advertised it) and whose headers carry the protocol
+// version and the call's metadata. The response is a value, an error envelope,
+// or a streamed body flagged by {@link RPC_STREAM_HEADER} (NDJSON for a JSON
+// request, a CBOR sequence for a CBOR one).
 // ---------------------------------------------------------------------------
 
 /** Path prefix under which RPC methods are dispatched. */
 export const RPC_PATH_PREFIX = "/__rpc__/";
-/** Response header flag marking an NDJSON streamed body (vs a JSON value). */
+/**
+ * Response header flagging a streamed body, valued with its encoding
+ * (`ndjson` or `cbor`).
+ */
 export const RPC_STREAM_HEADER = "x-alchemy-rpc-stream";
 
 /**
@@ -541,12 +784,27 @@ export const rpcMethodOf = (request: { readonly url: string }): string | undefin
   return decodeURIComponent(url.slice(prefixAt + RPC_PATH_PREFIX.length, end));
 };
 
+const isCbor = (contentType: string | undefined) =>
+  contentType !== undefined && contentType.split(";")[0]!.trim().toLowerCase() === Cbor.contentType;
+
+const acceptsCbor = (accept: string | undefined) =>
+  accept !== undefined &&
+  accept
+    .split(",")
+    .map((encoding) => encoding.trim().toLowerCase())
+    .includes("cbor");
+
 /**
  * Build a typed RPC stub over a plain `fetch` transport. Any property that
  * isn't an own property of `base` is treated as a remote method: calling it
- * `POST`s `{baseUrl}{RPC_PATH_PREFIX}{name}` with the JSON-encoded arguments
- * and decodes the response into an {@link asEffectOrStream} value (so value
- * methods `yield*` as `Effect`s and streaming methods pipe as `Stream`s).
+ * `POST`s `{baseUrl}{RPC_PATH_PREFIX}{name}` with the encoded arguments and
+ * the call's metadata, and decodes the response into an
+ * {@link asEffectOrStream} value (so value methods `yield*` as `Effect`s and
+ * streaming methods pipe as `Stream`s).
+ *
+ * The first call sends JSON. Once a response advertises CBOR
+ * ({@link RPC_ACCEPT_HEADER}), later calls through this stub send CBOR, with
+ * no extra request to find out.
  */
 export const makeFetchRpcStub = <Shape>(options: {
   readonly fetch: (
@@ -558,6 +816,8 @@ export const makeFetchRpcStub = <Shape>(options: {
 }): Shape => {
   const baseUrl = options.baseUrl ?? "http://alchemy-rpc";
   const target: Record<string, unknown> = options.base ?? {};
+  // Learned from this peer's responses: whether it reads CBOR bodies.
+  let peerReadsCbor = false;
 
   return new Proxy(target, {
     get: (obj, prop) => {
@@ -566,12 +826,30 @@ export const makeFetchRpcStub = <Shape>(options: {
       return (...args: unknown[]) =>
         asEffectOrStream(
           Effect.gen(function* () {
+            const meta = yield* currentRpcMeta;
+            const cbor = peerReadsCbor;
+            const body = yield* Effect.try({
+              try: () =>
+                cbor
+                  ? HttpClientRequest.bodyUint8Array(Cbor.encodeUnsafe(args), Cbor.contentType)
+                  : HttpClientRequest.bodyText(JSON.stringify(args), "application/json"),
+              catch: (cause) => new RpcCallError({ method: prop, cause }),
+            });
             const request = HttpClientRequest.post(
               `${baseUrl}${RPC_PATH_PREFIX}${encodeURIComponent(prop)}`,
-            ).pipe(HttpClientRequest.bodyText(JSON.stringify(args), "application/json"));
+            ).pipe(
+              HttpClientRequest.setHeaders({
+                ...rpcMetaHeaders(meta),
+                [RPC_PROTOCOL_HEADER]: String(RPC_PROTOCOL_VERSION),
+              }),
+              body,
+            );
             const response = yield* options
               .fetch(request)
               .pipe(Effect.mapError((cause) => new RpcCallError({ method: prop, cause })));
+
+            const headers = response.headers as Record<string, string | undefined>;
+            if (acceptsCbor(headers[RPC_ACCEPT_HEADER])) peerReadsCbor = true;
 
             if (response.status < 200 || response.status >= 300) {
               return yield* new RpcCallError({
@@ -581,14 +859,21 @@ export const makeFetchRpcStub = <Shape>(options: {
               });
             }
 
-            const headers = response.headers as Record<string, string | undefined>;
-            if (headers[RPC_STREAM_HEADER] !== undefined) {
-              return decodeRpcResponseStream(response.stream);
+            const streamEncoding = headers[RPC_STREAM_HEADER];
+            if (streamEncoding !== undefined) {
+              return streamEncoding === "cbor"
+                ? decodeRpcResponseStreamCbor(response.stream)
+                : decodeRpcResponseStream(response.stream);
             }
 
-            const value = yield* response.json.pipe(
-              Effect.mapError((cause) => new RpcCallError({ method: prop, cause })),
-            );
+            const value = isCbor(headers["content-type"])
+              ? yield* response.arrayBuffer.pipe(
+                  Effect.flatMap((buffer) => Cbor.decode(new Uint8Array(buffer))),
+                  Effect.mapError((cause) => new RpcCallError({ method: prop, cause })),
+                )
+              : yield* response.json.pipe(
+                  Effect.mapError((cause) => new RpcCallError({ method: prop, cause })),
+                );
             return yield* decodeRpcResult(value);
           }),
         );
@@ -596,12 +881,20 @@ export const makeFetchRpcStub = <Shape>(options: {
   }) as Shape;
 };
 
+/** Response headers every RPC response carries: the callee's capabilities. */
+const capabilityHeaders = {
+  [RPC_PROTOCOL_HEADER]: String(RPC_PROTOCOL_VERSION),
+  [RPC_ACCEPT_HEADER]: "cbor, json",
+};
+
 /**
  * Serve the RPC methods on `shape` over the {@link RPC_PATH_PREFIX} route,
  * delegating every other request to `fallback`. The mirror of {@link
- * makeFetchRpcStub}: method arguments are read from the JSON request body, the
- * method is invoked, and the result is encoded as a JSON value, a JSON error
- * envelope, or a streamed body (flagged via {@link RPC_STREAM_HEADER}).
+ * makeFetchRpcStub}: arguments are read from the request body (JSON or CBOR,
+ * by `content-type`), the method runs as a child of the caller's span named in
+ * the request's `traceparent`, and the result is encoded in the request's
+ * encoding as a value, an error envelope, or a streamed body. Every response
+ * advertises the protocol version and the encodings this callee reads.
  */
 export const serveRpc = <Req = never>(
   shape: Record<string, unknown>,
@@ -613,6 +906,16 @@ export const serveRpc = <Req = never>(
     if (name === undefined) {
       return yield* fallback;
     }
+    const headers = request.headers as Record<string, string | undefined>;
+
+    const version = headers[RPC_PROTOCOL_HEADER];
+    if (version !== undefined && !SUPPORTED_RPC_VERSIONS.includes(Number(version))) {
+      const error = new RpcUnsupportedVersion({
+        version: Number(version),
+        supported: SUPPORTED_RPC_VERSIONS,
+      });
+      return HttpServerResponse.text(error.message, { status: 400, headers: capabilityHeaders });
+    }
 
     // A name like `constructor`, `toString` or `__proto__` must not reach
     // `Object.prototype`.
@@ -620,38 +923,81 @@ export const serveRpc = <Req = never>(
     if (typeof method !== "function") {
       return HttpServerResponse.text(`Unknown RPC method "${name}"`, {
         status: 404,
+        headers: capabilityHeaders,
       });
     }
 
-    const text = yield* request.text;
+    const cbor = isCbor(headers["content-type"]);
     // Keep arg-decode failures out of the handler's error channel — a
     // malformed argument payload is a client error, so answer 400.
     const argsResult = yield* Effect.result(
-      Effect.try({
-        try: () => (text.length > 0 ? (JSON.parse(text) as unknown[]) : []),
-        catch: (cause) => new RpcDecodeError({ cause }),
-      }),
+      cbor
+        ? request.arrayBuffer.pipe(
+            Effect.flatMap((buffer) =>
+              buffer.byteLength === 0 ? Effect.succeed([]) : Cbor.decode(new Uint8Array(buffer)),
+            ),
+            Effect.mapError((cause) => new RpcDecodeError({ cause })),
+          )
+        : request.text.pipe(
+            Effect.mapError((cause) => new RpcDecodeError({ cause })),
+            Effect.flatMap((text) =>
+              Effect.try({
+                try: () => (text.length > 0 ? (JSON.parse(text) as unknown) : []),
+                catch: (cause) => new RpcDecodeError({ cause }),
+              }),
+            ),
+          ),
     );
-    if (Result.isFailure(argsResult)) {
-      return HttpServerResponse.text(
-        `Invalid RPC arguments for "${name}": ${argsResult.failure.message}`,
-        { status: 400 },
-      );
+    if (Result.isFailure(argsResult) || !Array.isArray(argsResult.success)) {
+      const reason = Result.isFailure(argsResult)
+        ? argsResult.failure.message
+        : "the body is not an argument array";
+      return HttpServerResponse.text(`Invalid RPC arguments for "${name}": ${reason}`, {
+        status: 400,
+        headers: capabilityHeaders,
+      });
     }
-    const args = argsResult.success;
+    const args = argsResult.success as unknown[];
+    const parent = rpcParentFrom(rpcMetaFromHeaders(headers), headers.traceparent);
 
     const invoked = (method as (...a: unknown[]) => unknown)(...args);
 
-    // Fully-lazy NDJSON body: nothing is held open across the
-    // handler→body-streaming boundary, so the stream isn't truncated. The
-    // body's requirements are the shape method's phantom `R` (e.g.
-    // `RuntimeContext`), satisfied by the surrounding runtime; erase it for
-    // the response constructor.
+    // Fully-lazy body: nothing is held open across the handler→body-streaming
+    // boundary, so the stream isn't truncated. The body's requirements are the
+    // shape method's phantom `R` (e.g. `RuntimeContext`), satisfied by the
+    // surrounding runtime; erase it for the response constructor.
     const streamResponse = (stream: Stream.Stream<unknown, unknown, unknown>) =>
       HttpServerResponse.stream(
-        encodeRpcResponseStream(stream) as Stream.Stream<Uint8Array, never>,
-        { headers: { [RPC_STREAM_HEADER]: "ndjson" } },
+        (cbor
+          ? encodeRpcResponseStreamCbor(stream.pipe(withRpcParentStream(parent)))
+          : encodeRpcResponseStream(stream.pipe(withRpcParentStream(parent)))) as Stream.Stream<
+          Uint8Array,
+          never
+        >,
+        {
+          headers: { ...capabilityHeaders, [RPC_STREAM_HEADER]: cbor ? "cbor" : "ndjson" },
+          contentType: cbor ? "application/cbor-seq" : "application/x-ndjson",
+        },
       );
+
+    const valueResponse = (value: unknown) =>
+      cbor
+        ? Cbor.encode(value ?? null).pipe(
+            Effect.map((bytes) =>
+              HttpServerResponse.uint8Array(bytes, {
+                contentType: Cbor.contentType,
+                headers: capabilityHeaders,
+              }),
+            ),
+            // A result CBOR can't hold (a cycle) is a server error, as an
+            // unserializable JSON result is.
+            Effect.catchTag("CborEncodeError", (error) =>
+              Effect.succeed(
+                HttpServerResponse.text(error.message, { status: 500, headers: capabilityHeaders }),
+              ),
+            ),
+          )
+        : HttpServerResponse.json(value ?? null, { headers: capabilityHeaders });
 
     // A *genuine* `Stream` (not an Effect) is encoded directly. A nested-RPC
     // value built by {@link asEffectOrStream} is BOTH an Effect and a Stream —
@@ -663,16 +1009,18 @@ export const serveRpc = <Req = never>(
       return streamResponse(invoked);
     }
 
-    const result = yield* Effect.result(invoked as Effect.Effect<unknown, unknown>);
+    const result = yield* Effect.result(
+      (invoked as Effect.Effect<unknown, unknown>).pipe(withRpcParent(parent)),
+    );
     if (Result.isSuccess(result)) {
       // The resolved value may itself be a `Stream` (e.g. a forwarded nested
       // *streaming* RPC, where the inner call resolves to a `Stream`) — encode
       // that as a stream body too.
       return Stream.isStream(result.success)
         ? streamResponse(result.success)
-        : yield* HttpServerResponse.json(result.success ?? null);
+        : yield* valueResponse(result.success);
     }
-    return yield* HttpServerResponse.json({
+    return yield* valueResponse({
       _tag: ErrorTag,
       error: encodeRpcError(result.failure),
     } satisfies RpcErrorEnvelope);

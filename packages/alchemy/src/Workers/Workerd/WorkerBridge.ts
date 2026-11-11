@@ -21,6 +21,14 @@ import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
+import * as Option from "effect/Option";
+import {
+  isRpcRequest,
+  RPC_REQUEST_METHOD,
+  rpcParentOf,
+  RpcUnsupportedVersion,
+  SUPPORTED_RPC_VERSIONS,
+} from "../../Rpc.ts";
 import {
   getWorkerExport,
   handleRpcExit,
@@ -97,8 +105,40 @@ export const makeWorkerBridge = <Runtime extends WorkerRuntimeContextLike>(
       public readonly env: any,
     ) {
       super(ctx, env);
+      // The protocol's envelope method: one call carrying its method,
+      // arguments and metadata, so the caller's trace context never mixes
+      // into the arguments.
+      const request = (envelope: unknown) => {
+        if (!isRpcRequest(envelope)) {
+          return Promise.reject(new Error(`"${RPC_REQUEST_METHOD}" takes one RpcRequest`));
+        }
+        if (!SUPPORTED_RPC_VERSIONS.includes(envelope.v)) {
+          return Promise.reject(
+            new RpcUnsupportedVersion({ version: envelope.v, supported: SUPPORTED_RPC_VERSIONS }),
+          );
+        }
+        // The caller's span parents the method outright: any span the
+        // event already has is this callee's own, not one derived from it.
+        const parent = rpcParentOf(envelope.meta);
+        return this.event(
+          (built) =>
+            [
+              Option.match(parent, {
+                onNone: () => dispatchRpcMethod(built.shape(), envelope.method, envelope.args),
+                onSome: (span) =>
+                  Effect.withParentSpan(
+                    dispatchRpcMethod(built.shape(), envelope.method, envelope.args),
+                    span,
+                  ),
+              }),
+              Context.empty(),
+            ] as const,
+          handleRpcExit,
+        );
+      };
       return new Proxy(this, {
         get: (target, prop) => {
+          if (prop === RPC_REQUEST_METHOD) return request;
           if (typeof prop !== "string" || prop in target) return (target as any)[prop];
           return (...args: unknown[]) =>
             target.event(

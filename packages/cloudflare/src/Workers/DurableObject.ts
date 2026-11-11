@@ -23,7 +23,7 @@ import type { Container } from "../Containers/Container.ts";
 import { DurableObjectState, fromDurableObjectState } from "./DurableObjectState.ts";
 import { makeRpcStub, type RpcErrorClass } from "./Rpc.ts";
 import { type WebSocket } from "./WebSocket.ts";
-import { isWorker, Worker, WorkerEnvironment, type WorkerServices } from "./Worker.ts";
+import { isSelf, isWorker, Worker, WorkerEnvironment, type WorkerServices } from "./Worker.ts";
 
 export { isDurableObjectExport, type DurableObjectExport } from "alchemy/Workers/DurableObject";
 
@@ -1490,6 +1490,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
       scriptName?: Input<string>,
       transferredFrom?: DurableObjectTransferSource | DurableObjectTransferSource[],
       errors?: ReadonlyArray<RpcErrorClass>,
+      protocol: "envelope" | "direct" = scriptName === undefined ? "envelope" : "direct",
     ) =>
       Effect.gen(function* () {
         const worker = yield* Worker;
@@ -1518,11 +1519,12 @@ export const DurableObject: DurableObjectClass = taggedFunction(
         // A function because `jurisdiction` wraps the sub-namespace it returns.
         // The return annotation checks the value against the interface, so a
         // method missing here is a compile error.
-        // Without a `scriptName` the class is hosted by this Worker, so its
-        // `DurableObjectBridge` ships in this bundle and strips the trace
-        // context a stub appends. A class in another script may be plain JS
-        // or an older deploy, so its calls carry only the caller's arguments.
-        const stubOptions = { errors, traceContext: scriptName === undefined };
+        // Calls carry their metadata (the caller's trace context) in the
+        // protocol envelope only to a host known to run Alchemy's bridge: this
+        // Worker's own classes, or an Effect Worker this stack deploys. Any
+        // other host may be plain JS, so its calls carry only the caller's
+        // arguments.
+        const stubOptions = { errors, protocol };
         const makeNamespace = (ns: cf.DurableObjectNamespace | undefined): DurableObject<any> => ({
           // `kind` + `scriptName`/`transferredFrom` let a namespace passed in
           // a Worker's `env` bind as the `durable_object_namespace` it is.
@@ -1632,9 +1634,19 @@ export const DurableObject: DurableObjectClass = taggedFunction(
           const resolved: Effect.Effect<Worker | string, any, any> =
             typeof worker === "string" ? Effect.succeed(worker) : asEffect(worker);
 
+          // An Effect Worker class (or `Self`) hosts this class through its
+          // Effect implementation, so its bridge reads the protocol envelope.
+          // A script name, a `Config`, or an async-form Worker may host it as
+          // plain JS.
+          const protocol = typeof worker === "function" || isSelf(worker) ? "envelope" : "direct";
           return resolved.pipe(
             Effect.flatMap((w) =>
-              binding(typeof w === "string" ? w : w.workerName, undefined, classProps?.errors),
+              binding(
+                typeof w === "string" ? w : w.workerName,
+                undefined,
+                classProps?.errors,
+                protocol,
+              ),
             ),
           );
         };

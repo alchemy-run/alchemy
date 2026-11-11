@@ -295,6 +295,8 @@ export const bindWorker = Effect.fn(function* <Shape, Req = never>(
       cloudflare_workers.pipe(
         Effect.map(({ exports }) => (exports as Record<string, unknown>).default),
       ),
+      // The loopback is this Worker's own bundle.
+      { protocol: "envelope" },
     );
   }
   // Worker classes and regular Effects are both yieldable here.
@@ -318,5 +320,9 @@ export const bindWorker = Effect.fn(function* <Shape, Req = never>(
   const stubEff = WorkerEnvironment.pipe(
     Effect.map((env) => (env as Record<string, unknown>)[worker.LogicalId]),
   );
-  return makeRpcStub<Shape>(stubEff);
+  // An Effect Worker class serves its RPC surface through Alchemy's bridge,
+  // which reads the protocol envelope; any other Worker may be plain JS.
+  return makeRpcStub<Shape>(stubEff, {
+    protocol: typeof workerEff === "function" ? "envelope" : "direct",
+  });
 });

@@ -1,3 +1,4 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as GCP from "@alchemy.run/gcp";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
@@ -6,13 +7,19 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { OtelCollector, waitForRpcLink, withCollectorUrl } from "../../Utils/Telemetry.ts";
 import InvokeCallee from "./fixtures/invoke-callee.ts";
 import InvokeCaller from "./fixtures/invoke-caller.ts";
 import PublicRpc from "./fixtures/invoke-public-rpc.ts";
+import TracedCallee from "./fixtures/traced-rpc-callee.ts";
+import TracedCaller from "./fixtures/traced-rpc-caller.ts";
 
-const { test } = Test.make({ providers: GCP.providers() });
+const { test } = Test.make({
+  providers: Layer.mergeAll(GCP.providers(), Cloudflare.providers()),
+});
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
@@ -160,4 +167,49 @@ test.provider(
       yield* stack.destroy();
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:run", "live"], timeout: 180_000 },
+);
+
+test.provider(
+  "a private service's RPC method joins the caller's trace",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      // A tag per attempt, so spans from an earlier attempt can't match.
+      const tag = `gcp-rpc-${Date.now().toString(36)}`;
+      const collector = yield* stack.deploy(OtelCollector());
+      const caller = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            yield* OtelCollector();
+            yield* TracedCallee;
+            return yield* TracedCaller;
+          }),
+        )
+        .pipe(withCollectorUrl(collector.url!));
+
+      const text = yield* getUntil(
+        `${caller.uri}/rpc-traced?tag=${tag}`,
+        (status, body) => (status === 200 ? body : ""),
+        (body) => body === `traced ${tag}`,
+      );
+      expect(text).toBe(`traced ${tag}`);
+      expect(yield* waitForRpcLink(collector.url!, tag)).toEqual({
+        found: true,
+        sameTrace: true,
+        belowCaller: true,
+      });
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:gcp",
+      "provider:gcp:run",
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 900_000,
+  },
 );

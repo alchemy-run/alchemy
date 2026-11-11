@@ -13,7 +13,13 @@ import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import { testName } from "../names.ts";
-import { doWork, OtelCollector, waitForWorkSpan, withCollectorUrl } from "../Utils/Telemetry.ts";
+import {
+  doWork,
+  OtelCollector,
+  waitForRpcLink,
+  waitForWorkSpan,
+  withCollectorUrl,
+} from "../Utils/Telemetry.ts";
 import Api from "./fixtures/api.ts";
 import ChecksApi, { ChecksSite } from "./fixtures/checks-api.ts";
 import { ECHO_BODY, Echo } from "./fixtures/echo.ts";
@@ -29,6 +35,8 @@ import RpcUsers, { USERS } from "./fixtures/rpc-users.ts";
 import SecureGateway from "./fixtures/secure-gateway.ts";
 import SecureUsers, { SECURE_USERS_BODY } from "./fixtures/secure-users.ts";
 import { API_PORT, MARKER, Site, VOLUME_PATH } from "./fixtures/shared.ts";
+import TracedCallee from "./fixtures/traced-rpc-callee.ts";
+import TracedCaller from "./fixtures/traced-rpc-caller.ts";
 import TracedApi, { TracedSite } from "./fixtures/traced.ts";
 import UnhealthyApi, { UnhealthySite } from "./fixtures/unhealthy-api.ts";
 import { flyApi } from "./limit.ts";
@@ -1029,6 +1037,40 @@ describe.concurrent("Service", () => {
     {
       tags: [...ownedTags, "provider:cloudflare", "provider:cloudflare:worker"],
       timeout: 300_000,
+    },
+  );
+
+  test.provider(
+    "a bound Service's RPC method joins the caller's trace",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        // A tag per attempt, so spans from an earlier attempt can't match.
+        const tag = `fly-rpc-${Date.now().toString(36)}`;
+        const collector = yield* stack.deploy(OtelCollector());
+        const caller = yield* stack
+          .deploy(
+            Effect.gen(function* () {
+              yield* OtelCollector();
+              yield* TracedCallee;
+              return yield* TracedCaller;
+            }),
+          )
+          .pipe(withCollectorUrl(collector.url!));
+
+        expect(yield* getText(`${caller.url}/rpc-traced?tag=${tag}`)).toEqual(`traced ${tag}`);
+        expect(yield* waitForRpcLink(collector.url!, tag)).toEqual({
+          found: true,
+          sameTrace: true,
+          belowCaller: true,
+        });
+
+        yield* stack.destroy();
+      }).pipe(logLevel),
+    {
+      tags: [...ownedTags, "provider:cloudflare", "provider:cloudflare:worker"],
+      timeout: 400_000,
     },
   );
 });

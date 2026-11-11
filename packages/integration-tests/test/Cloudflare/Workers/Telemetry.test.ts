@@ -14,6 +14,8 @@ import { expectUrlContains } from "../Utils/Http.ts";
 import type { OtelSink } from "./fixtures/otel-collector-worker.ts";
 import OtelCustomWorker from "./fixtures/otel-custom-worker.ts";
 import OtelEventFlushWorker from "./fixtures/otel-event-flush-worker.ts";
+import OtelRpcCaller from "./fixtures/otel-rpc/caller.ts";
+import OtelRpcHostLive, { OtelRpcHost } from "./fixtures/otel-rpc/host.ts";
 import OtelTracedWorker from "./fixtures/otel-traced-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -100,14 +102,16 @@ describe(
           // test body runs, so layer the just-learned collector URL on top of
           // the current provider for this deploy only.
           const currentConfig = yield* ConfigProvider.ConfigProvider;
-          const { traced, custom, flush } = yield* stack
+          const { traced, custom, flush, rpcCaller } = yield* stack
             .deploy(
               Effect.gen(function* () {
                 yield* collectorWorker();
                 const traced = yield* OtelTracedWorker;
                 const custom = yield* OtelCustomWorker;
                 const flush = yield* OtelEventFlushWorker;
-                return { traced, custom, flush };
+                yield* OtelRpcHost.pipe(Effect.provide(OtelRpcHostLive));
+                const rpcCaller = yield* OtelRpcCaller;
+                return { traced, custom, flush, rpcCaller };
               }),
             )
             .pipe(
@@ -231,6 +235,56 @@ describe(
           );
           expect(rpcCallers.length).toBeGreaterThan(0);
           expect(rpcCallers.every((name) => name === "otel-event-flush.worker")).toBe(true);
+
+          // Across scripts: a Durable Object another Worker hosts
+          // (`.from(OtelRpcHost)`) and that Worker's RPC method
+          // (`bindWorker(OtelRpcHost)`) both run as children of the calling
+          // span, carried in the protocol envelope.
+          const rpcCallerUrl = rpcCaller.url as string;
+          yield* expectUrlContains(`${rpcCallerUrl}/object`, "caller-saw:pong", {
+            timeout: "180 seconds",
+            label: "cross-script Durable Object RPC",
+          });
+          yield* expectUrlContains(`${rpcCallerUrl}/service`, "caller-saw:hello rpc", {
+            timeout: "120 seconds",
+            label: "service-binding RPC",
+          });
+          const parentOf = (
+            all: ReadonlyArray<{
+              readonly name: string;
+              readonly traceId: string;
+              readonly spanId: string;
+              readonly parentSpanId?: string | undefined;
+            }>,
+            name: string,
+          ) =>
+            all
+              .filter((span) => span.name === name)
+              .map(
+                (span) =>
+                  all.find(
+                    (caller) =>
+                      caller.traceId === span.traceId && caller.spanId === span.parentSpanId,
+                  )?.name,
+              );
+          const crossScript = yield* spans.pipe(
+            Effect.map((all) => ({
+              object: parentOf(all, "otel-rpc.object.ping"),
+              service: parentOf(all, "otel-rpc.host.greet"),
+            })),
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: ({ object, service }) =>
+                object.length > 0 &&
+                service.length > 0 &&
+                [...object, ...service].every((name) => name !== undefined),
+              times: 30,
+            }),
+          );
+          expect(crossScript.object.every((name) => name === "otel-rpc.caller.object")).toBe(true);
+          expect(crossScript.service.every((name) => name === "otel-rpc.caller.service")).toBe(
+            true,
+          );
 
           // A streamed body's span ends after the handler returned; it still
           // reaches the collector because the body owns the event's

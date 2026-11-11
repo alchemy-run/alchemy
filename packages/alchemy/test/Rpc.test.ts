@@ -399,3 +399,187 @@ describe("Rpc method addressing", { tags: ["unit", "local"] }, () => {
     }),
   );
 });
+
+// ---------------------------------------------------------------------------
+// The versioned protocol: metadata headers, encoding negotiation, and
+// compatibility with callers and callees that predate it.
+// ---------------------------------------------------------------------------
+
+/** A loopback that records every request the stub sends. */
+const withRecordedRpc = <A, E>(
+  methods: Record<string, unknown>,
+  use: (stub: any, sent: Request[]) => Effect.Effect<A, E, any>,
+): Effect.Effect<A, E> => {
+  const sent: Request[] = [];
+  const webHandler = HttpEffect.toWebHandler(safeHttpEffect(Rpc.serveRpc(methods, fallback)));
+  const fetchImpl = ((url: any, init?: any) => {
+    const request = new Request(url, init);
+    sent.push(request.clone());
+    return webHandler(request);
+  }) as typeof globalThis.fetch;
+  return Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    const stub = Rpc.makeFetchRpcStub<any>({
+      fetch: (request) => client.execute(request),
+      baseUrl: "http://rpc",
+    });
+    return yield* use(stub, sent);
+  }).pipe(
+    Effect.provide(FetchHttpClient.layer),
+    Effect.provideService(FetchHttpClient.Fetch, fetchImpl),
+  ) as Effect.Effect<A, E>;
+};
+
+/** Call the RPC route with a raw request, as a runtime that predates the protocol would. */
+const rawCall = (methods: Record<string, unknown>, init: RequestInit & { path: string }) =>
+  Effect.promise(() =>
+    HttpEffect.toWebHandler(safeHttpEffect(Rpc.serveRpc(methods, fallback)))(
+      new Request(`http://rpc${init.path}`, { method: "POST", ...init }),
+    ),
+  );
+
+describe("Rpc protocol", { tags: ["unit", "local"] }, () => {
+  const methods = {
+    echo: (value: unknown) => Effect.succeed(value),
+    parent: () =>
+      Effect.map(Effect.currentParentSpan, (span) => ({
+        traceId: span.traceId,
+        spanId: span.spanId,
+      })),
+    rows: (n: number) => Stream.range(1, n).pipe(Stream.map((i) => ({ i }))),
+    blobs: () => Stream.fromIterable([new Uint8Array([1, 2]), new Uint8Array(70_000).fill(9)]),
+  };
+
+  it.effect("sends JSON first, then CBOR once the callee advertised it", () =>
+    withRecordedRpc(methods, (stub, sent) =>
+      Effect.gen(function* () {
+        expect(yield* stub.echo("one")).toBe("one");
+        expect(yield* stub.echo("two")).toBe("two");
+        expect(sent.map((request) => request.headers.get("content-type"))).toEqual([
+          "application/json",
+          "application/cbor",
+        ]);
+        expect(sent.every((request) => request.headers.get("x-alchemy-rpc") === "1")).toBe(true);
+      }),
+    ),
+  );
+
+  it.effect("CBOR carries values JSON would change", () =>
+    withRecordedRpc(methods, (stub) =>
+      Effect.gen(function* () {
+        yield* stub.echo(null); // learn the callee's encodings
+        const value = {
+          bytes: new Uint8Array([0, 255]),
+          big: 2n ** 70n,
+          when: new Date("2026-11-09T00:00:00.000Z"),
+          map: new Map([[1, "one"]]),
+          missing: undefined,
+        };
+        expect(yield* stub.echo(value)).toEqual(value);
+      }),
+    ),
+  );
+
+  it.effect("a CBOR stream carries rows and raw bytes", () =>
+    withRecordedRpc(methods, (stub) =>
+      Effect.gen(function* () {
+        yield* stub.echo(null);
+        expect(Array.from(yield* Stream.runCollect(stub.rows(3)))).toEqual([
+          { i: 1 },
+          { i: 2 },
+          { i: 3 },
+        ]);
+        const blobs = Array.from(yield* Stream.runCollect(stub.blobs())) as Uint8Array[];
+        expect(blobs.map((blob) => blob.length)).toEqual([2, 70_000]);
+        expect(blobs[1]![69_999]).toBe(9);
+      }),
+    ),
+  );
+
+  it.effect("the callee runs the method as a child of the caller's span", () =>
+    withRecordedRpc(methods, (stub, sent) =>
+      Effect.gen(function* () {
+        const caller = yield* Effect.currentSpan;
+        const seen = (yield* stub.parent()) as { traceId: string; spanId: string };
+        expect(seen).toEqual({ traceId: caller.traceId, spanId: caller.spanId });
+        // The call's own header, which proxies leave alone.
+        expect(sent[0]!.headers.get("x-alchemy-meta-traceparent")).toBe(
+          `00-${caller.traceId}-${caller.spanId}-01`,
+        );
+      }).pipe(Effect.withSpan("caller")),
+    ),
+  );
+
+  it.effect("a proxy rewriting traceparent doesn't move the parent", () =>
+    Effect.gen(function* () {
+      const response = yield* rawCall(methods, {
+        path: "/__rpc__/parent",
+        body: "[]",
+        headers: {
+          "content-type": "application/json",
+          "x-alchemy-rpc": "1",
+          traceparent: "00-11111111111111111111111111111111-2222222222222222-01",
+          "x-alchemy-meta-traceparent": "00-33333333333333333333333333333333-4444444444444444-01",
+        },
+      });
+      expect(yield* Effect.promise(() => response.json())).toEqual({
+        traceId: "33333333333333333333333333333333",
+        spanId: "4444444444444444",
+      });
+    }),
+  );
+
+  it.effect("a caller that predates the protocol is parented by its bare traceparent", () =>
+    Effect.gen(function* () {
+      const response = yield* rawCall(methods, {
+        path: "/__rpc__/parent",
+        body: "[]",
+        headers: {
+          "content-type": "application/json",
+          traceparent: "00-11111111111111111111111111111111-2222222222222222-01",
+        },
+      });
+      expect(yield* Effect.promise(() => response.json())).toEqual({
+        traceId: "11111111111111111111111111111111",
+        spanId: "2222222222222222",
+      });
+    }),
+  );
+
+  it.effect("a caller that predates the protocol still gets a JSON answer", () =>
+    Effect.gen(function* () {
+      const response = yield* rawCall(methods, {
+        path: "/__rpc__/echo",
+        body: JSON.stringify([{ a: 1 }]),
+        headers: { "content-type": "application/json" },
+      });
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toContain("application/json");
+      expect(response.headers.get("x-alchemy-rpc-accept")).toBe("cbor, json");
+      expect(yield* Effect.promise(() => response.json())).toEqual({ a: 1 });
+    }),
+  );
+
+  it.effect("a version the callee doesn't speak is refused, not guessed at", () =>
+    Effect.gen(function* () {
+      const response = yield* rawCall(methods, {
+        path: "/__rpc__/echo",
+        body: JSON.stringify([1]),
+        headers: { "content-type": "application/json", "x-alchemy-rpc": "2" },
+      });
+      expect(response.status).toBe(400);
+      expect(yield* Effect.promise(() => response.text())).toContain("version 2 is not supported");
+    }),
+  );
+
+  it.effect("a body that isn't an argument array is a 400", () =>
+    Effect.gen(function* () {
+      const response = yield* rawCall(methods, {
+        path: "/__rpc__/echo",
+        body: JSON.stringify({ not: "an array" }),
+        headers: { "content-type": "application/json" },
+      });
+      expect(response.status).toBe(400);
+    }),
+  );
+});

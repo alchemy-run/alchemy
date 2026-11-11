@@ -13,6 +13,13 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import type * as Tracer from "effect/Tracer";
 import type { CallbackFactory } from "../../Callback.ts";
+import {
+  isRpcRequest,
+  RPC_REQUEST_METHOD,
+  rpcParentOf,
+  RpcUnsupportedVersion,
+  SUPPORTED_RPC_VERSIONS,
+} from "../../Rpc.ts";
 import type { DurableObjectExport } from "../DurableObject.ts";
 import { makeDurableObjectInstance, type DurableObjectInstance } from "../DurableObjectBridge.ts";
 import type { Pin, WorkerBuild } from "../Worker.ts";
@@ -99,12 +106,31 @@ export const makeDurableObjectBridge =
           gate: (run) => state.blockConcurrencyWhile(run),
         });
         void this.#core.instance.catch(() => {});
-        if (dispatch === "static") return this;
+        // The protocol's envelope method: one call carrying its method,
+        // arguments and metadata, so the caller's trace context never mixes
+        // into the arguments.
+        const request = (envelope: unknown) => {
+          if (!isRpcRequest(envelope)) {
+            return Promise.reject(new Error(`"${RPC_REQUEST_METHOD}" takes one RpcRequest`));
+          }
+          if (!SUPPORTED_RPC_VERSIONS.includes(envelope.v)) {
+            return Promise.reject(
+              new RpcUnsupportedVersion({ version: envelope.v, supported: SUPPORTED_RPC_VERSIONS }),
+            );
+          }
+          const parent = Option.getOrUndefined(rpcParentOf(envelope.meta));
+          return this.#core.dispatch(envelope.method, parent)(...envelope.args);
+        };
+        if (dispatch === "static") {
+          Reflect.set(this, RPC_REQUEST_METHOD, request);
+          return this;
+        }
 
         return new Proxy(this, {
           get: (target, prop) => {
             const bind = (member: any) =>
               typeof member === "function" ? member.bind(target) : member;
+            if (prop === RPC_REQUEST_METHOD) return request;
             if (typeof prop !== "string" || prop in target) return bind((target as any)[prop]);
             if (adapter.rpcArgs === undefined) return this.#core.dispatch(prop);
             return (...callArgs: unknown[]) => {

@@ -8,8 +8,12 @@ import {
   PRIVATE_HOST_SUFFIX,
   RPC_ERROR_TAG,
   RPC_PATH_PREFIX,
+  RPC_PROTOCOL_HEADER,
+  RPC_PROTOCOL_VERSION,
   RPC_TOKEN_ENV,
   RPC_TOKEN_HEADER,
+  RPC_TRACEPARENT_HEADER,
+  withCallerSpan,
 } from "./rpc-token.ts";
 
 const header = (headers: Record<string, string | undefined>, name: string): string =>
@@ -87,6 +91,13 @@ export const serveRailwayRpc = <Req = never>(
       return unauthorized;
     }
 
+    const version = header(headers, RPC_PROTOCOL_HEADER);
+    if (version.length > 0 && Number(version) !== RPC_PROTOCOL_VERSION) {
+      return HttpServerResponse.text(`RPC protocol version ${version} is not supported`, {
+        status: 400,
+      });
+    }
+
     let name = request.url.slice(prefixAt + RPC_PATH_PREFIX.length);
     const queryAt = name.indexOf("?");
     if (queryAt !== -1) name = name.slice(0, queryAt);
@@ -116,8 +127,15 @@ export const serveRailwayRpc = <Req = never>(
     if (!Effect.isEffect(invoked)) {
       return yield* HttpServerResponse.json(invoked ?? null);
     }
-    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- RPC methods are pre-provided service Effects
-    const result = yield* Effect.result(invoked as Effect.Effect<unknown, unknown>);
+    const result = yield* Effect.result(
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- RPC methods are pre-provided service Effects
+      (invoked as Effect.Effect<unknown, unknown>).pipe(
+        withCallerSpan(
+          header(headers, RPC_TRACEPARENT_HEADER) || undefined,
+          header(headers, "traceparent") || undefined,
+        ),
+      ),
+    );
     if (Result.isSuccess(result)) {
       return yield* HttpServerResponse.json(result.success ?? null);
     }

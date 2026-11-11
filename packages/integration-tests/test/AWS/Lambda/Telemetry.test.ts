@@ -11,8 +11,10 @@ import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
+import { OtelCollector, waitForRpcLink, withCollectorUrl } from "../../Utils/Telemetry.ts";
 import type { OtelSink } from "./fixtures/otel-collector-worker.ts";
 import { OtelTestFunction, OtelTestFunctionLive } from "./fixtures/otel-handler.ts";
+import TracedInvokeCallerLive, { TracedInvokeCaller } from "./fixtures/traced-invoke/caller.ts";
 
 const { test } = Test.make({ providers: Layer.mergeAll(AWS.providers(), Cloudflare.providers()) });
 
@@ -241,5 +243,56 @@ describe(
         }),
       { timeout: 600_000 },
     );
+  },
+);
+
+test.provider(
+  "a synchronous Invoke carries the caller's span to the invoked function",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      // A tag per attempt, so spans from an earlier attempt can't match.
+      const tag = `lambda-invoke-${Date.now().toString(36)}`;
+
+      const collector = yield* stack.deploy(OtelCollector());
+      const caller = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            yield* OtelCollector();
+            return yield* TracedInvokeCaller.pipe(Effect.provide(TracedInvokeCallerLive));
+          }),
+        )
+        .pipe(withCollectorUrl(collector.url!));
+
+      const text = yield* HttpClient.get(
+        `${caller.functionUrl!.replace(/\/$/, "")}/rpc-traced?tag=${tag}`,
+      ).pipe(
+        Effect.flatMap((response) =>
+          response.status === 200
+            ? response.text
+            : Effect.flatMap(response.text, (body) =>
+                Effect.fail(new Error(`caller answered ${response.status}: ${body}`)),
+              ),
+        ),
+        Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 20 }),
+      );
+      expect(text).toBe(`traced ${tag}`);
+      expect(yield* waitForRpcLink(collector.url!, tag)).toEqual({
+        found: true,
+        sameTrace: true,
+        belowCaller: true,
+      });
+
+      yield* stack.destroy();
+    }),
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:lambda",
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 600_000,
   },
 );
