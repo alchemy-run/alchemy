@@ -121,7 +121,7 @@ export type InstancesTablesAuthorizedView = Resource<
 export class AuthorizedViewDeletionProtected extends Data.TaggedError(
   "GCP.Bigtable.AuthorizedViewDeletionProtected",
 )<{
-  readonly name: string;
+  readonly resourceName: string;
   readonly message: string;
 }> {}
 
@@ -464,7 +464,7 @@ export const InstancesTablesAuthorizedViewProvider = () =>
       if (current.deletionProtection === true) {
         if (force !== true) {
           return yield* new AuthorizedViewDeletionProtected({
-            name: output.name,
+            resourceName: output.name,
             message: `Bigtable authorized view '${output.name}' has deletion protection on. Set \`deletionProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
           });
         }

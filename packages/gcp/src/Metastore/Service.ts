@@ -211,7 +211,7 @@ export type Service = Resource<
 export class ServiceDeletionProtected extends Data.TaggedError(
   "GCP.Metastore.ServiceDeletionProtected",
 )<{
-  readonly name: string;
+  readonly resourceName: string;
   readonly message: string;
 }> {}
 
@@ -586,7 +586,7 @@ export const ServiceProvider = () =>
       if (existing.deletionProtection === true) {
         if (force !== true) {
           return yield* new ServiceDeletionProtected({
-            name: output.name,
+            resourceName: output.name,
             message: `Dataproc Metastore service '${output.name}' has deletion protection on. Set \`deletionProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
           });
         }

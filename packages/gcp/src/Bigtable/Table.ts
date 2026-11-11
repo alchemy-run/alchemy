@@ -130,7 +130,7 @@ export type Table = Resource<
 export class TableDeletionProtected extends Data.TaggedError(
   "GCP.Bigtable.TableDeletionProtected",
 )<{
-  readonly name: string;
+  readonly resourceName: string;
   readonly message: string;
 }> {}
 
@@ -508,7 +508,7 @@ export const TableProvider = () =>
       if (current.deletionProtection === true) {
         if (force !== true) {
           return yield* new TableDeletionProtected({
-            name: output.name,
+            resourceName: output.name,
             message: `Bigtable table '${output.name}' has deletion protection on. Set \`deletionProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
           });
         }

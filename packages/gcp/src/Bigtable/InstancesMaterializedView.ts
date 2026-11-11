@@ -91,7 +91,7 @@ export type InstancesMaterializedView = Resource<
 export class MaterializedViewDeletionProtected extends Data.TaggedError(
   "GCP.Bigtable.MaterializedViewDeletionProtected",
 )<{
-  readonly name: string;
+  readonly resourceName: string;
   readonly message: string;
 }> {}
 
@@ -389,7 +389,7 @@ export const InstancesMaterializedViewProvider = () =>
       if (current.deletionProtection === true) {
         if (force !== true) {
           return yield* new MaterializedViewDeletionProtected({
-            name: output.name,
+            resourceName: output.name,
             message: `Bigtable materialized view '${output.name}' has deletion protection on. Set \`deletionProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
           });
         }

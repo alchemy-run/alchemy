@@ -363,7 +363,7 @@ export type Instance = Resource<
 export class InstanceDeletionProtected extends Data.TaggedError(
   "GCP.Filestore.InstanceDeletionProtected",
 )<{
-  readonly name: string;
+  readonly resourceName: string;
   readonly message: string;
 }> {}
 
@@ -1232,7 +1232,7 @@ export const InstanceProvider = () =>
       if (existing.deletionProtectionEnabled === true) {
         if (force !== true) {
           return yield* new InstanceDeletionProtected({
-            name: output.name,
+            resourceName: output.name,
             message: `Filestore instance '${output.name}' has deletion protection on. Set \`deletionProtectionEnabled: false\` and deploy (or turn it off outside the stack) before deleting it.`,
           });
         }

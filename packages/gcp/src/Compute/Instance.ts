@@ -242,7 +242,7 @@ export type Instance = Resource<
 export class InstanceDeletionProtected extends Data.TaggedError(
   "GCP.Compute.InstanceDeletionProtected",
 )<{
-  readonly name: string;
+  readonly resourceName: string;
   readonly message: string;
 }> {}
 
@@ -1021,7 +1021,7 @@ export const InstanceProvider = () =>
       if (current.deletionProtection === true) {
         if (force !== true) {
           return yield* new InstanceDeletionProtected({
-            name: instance,
+            resourceName: instance,
             message: `Compute Engine instance '${instance}' has deletion protection on. Set \`deletionProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
           });
         }

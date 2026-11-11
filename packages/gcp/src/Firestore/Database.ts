@@ -191,7 +191,7 @@ export type Database = Resource<
 export class DatabaseDeletionProtected extends Data.TaggedError(
   "GCP.Firestore.DatabaseDeletionProtected",
 )<{
-  readonly name: string;
+  readonly resourceName: string;
   readonly message: string;
 }> {}
 
@@ -600,7 +600,7 @@ export const DatabaseProvider = () =>
       ) {
         if (force !== true) {
           return yield* new DatabaseDeletionProtected({
-            name: output.name,
+            resourceName: output.name,
             message: `Firestore database '${output.name}' has delete protection on. Set \`deleteProtectionState: "DELETE_PROTECTION_DISABLED"\` and deploy (or turn it off outside the stack) before deleting it.`,
           });
         }

@@ -158,7 +158,7 @@ export type Database = Resource<
  * (or turn it off in the console) before deleting it.
  */
 export class DatabaseDropProtected extends Data.TaggedError("GCP.Spanner.DatabaseDropProtected")<{
-  readonly name: string;
+  readonly resourceName: string;
   readonly message: string;
 }> {}
 
@@ -639,7 +639,7 @@ export const DatabaseProvider = () =>
       if (current.enableDropProtection === true) {
         if (force !== true) {
           return yield* new DatabaseDropProtected({
-            name: output.name,
+            resourceName: output.name,
             message: `Spanner database '${output.name}' has drop protection on. Set \`enableDropProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
           });
         }

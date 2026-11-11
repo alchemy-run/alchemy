@@ -88,7 +88,7 @@ export type InstancesLogicalView = Resource<
 export class LogicalViewDeletionProtected extends Data.TaggedError(
   "GCP.Bigtable.LogicalViewDeletionProtected",
 )<{
-  readonly name: string;
+  readonly resourceName: string;
   readonly message: string;
 }> {}
 
@@ -369,7 +369,7 @@ export const InstancesLogicalViewProvider = () =>
       if (current.deletionProtection === true) {
         if (force !== true) {
           return yield* new LogicalViewDeletionProtected({
-            name: output.name,
+            resourceName: output.name,
             message: `Bigtable logical view '${output.name}' has deletion protection on. Set \`deletionProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
           });
         }
