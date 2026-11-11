@@ -1,5 +1,6 @@
 import * as BuildPlan from "@alchemy.run/docker/BuildPlan";
 import * as archil from "@distilled.cloud/archil";
+import * as Process from "@distilled.cloud/archil/Process";
 import { Unowned } from "alchemy/AdoptPolicy";
 import * as Bundle from "alchemy/Bundle/Bundle";
 import { deepEqual, isResolved } from "alchemy/Diff";
@@ -19,6 +20,8 @@ import {
   type ServerHost,
 } from "alchemy/Runtime/Process";
 import { Stack } from "alchemy/Stack";
+import { sha256Object } from "alchemy/Util/sha256";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import type { Disk } from "./Disk.ts";
@@ -65,6 +68,19 @@ import {
 } from "./SandboxOptions.ts";
 
 /** A disk a binding mounts into a program sandbox (`MountDisk` inside one). */
+
+/** A sandbox's `run` command exited non-zero. */
+export class SandboxSetupFailed extends Data.TaggedError("Archil.SandboxSetupFailed")<{
+  readonly sandbox: string;
+  readonly command: string;
+  readonly exitCode: number;
+  readonly stderr: string;
+}> {
+  override get message() {
+    return `\`${this.command}\` exited ${this.exitCode} in sandbox ${this.sandbox}: ${this.stderr.slice(-2000)}`;
+  }
+}
+
 export interface SandboxMountBinding extends DiskMountOptions {
   readonly diskId: string;
 }
@@ -140,6 +156,14 @@ export interface SandboxProps extends PlatformProps {
   /** Concurrent processes allowed. Changing it replaces the sandbox. */
   maxConcurrentExecs?: number;
   /**
+   * Shell commands run in the sandbox, in order, once it is created: clone
+   * a repository, install packages, warm a cache. A non-zero exit fails the
+   * deploy with `SandboxSetupFailed`. Changing them replaces the sandbox,
+   * so it starts again from its image and runs the new commands. Fork the
+   * result at run time with `Archil.CreateSandbox(sandbox)`.
+   */
+  run?: string[];
+  /**
    * A program to run in the sandbox. In the Effect form, `import.meta.url`
    * (the file is both the bundle entry and the program). In the async form,
    * a path to a module whose default export has `fetch(request, env)`.
@@ -202,6 +226,8 @@ export interface SandboxAttributes {
    * lines its bindings contribute), when it needed one.
    */
   derivedImage: { imageId: string; hash: string } | undefined;
+  /** Hash of the `run` commands the sandbox was set up with. */
+  setupHash: string | undefined;
 }
 
 export type Sandbox = Resource<
@@ -287,6 +313,19 @@ export type SandboxShape = Main<ServerHost>;
  *   const image = yield* AgentImage;
  *   return yield* Archil.Sandbox("Agent", { image: image.imageId });
  * });
+ * ```
+ *
+ * ### Setting Up at Deploy and Forking at Run Time
+ * **Example:** Clone a repository once, then fork the sandbox per task
+ * ```typescript
+ * export const Golden = Archil.Sandbox("Golden", {
+ *   run: ["git clone --depth 1 https://github.com/sindresorhus/is /work/is"],
+ * });
+ *
+ * // in a Worker or program:
+ * const sandboxes = yield* Archil.CreateSandbox(Golden);
+ * const task = yield* sandboxes.create({ name: "task-1" });
+ * const result = yield* task.exec("git log -1", { cwd: "/work/is" });
  * ```
  *
  * ### Running a Program
@@ -443,10 +482,24 @@ export type SandboxShape = Main<ServerHost>;
  * });
  * ```
  *
- * ### Websites
- * **Example:** A framework site runs in its own sandbox
+ * **Example:** Forward an API's requests to a Worker gateway that adds the key
  * ```typescript
- * const site = yield* Archil.Website.Astro("Site", { sandbox: { vcpuCount: 2 } });
+ * const gateway = yield* MyGateway;
+ * const sandbox = yield* Archil.Sandbox("MySandbox", {
+ *   network: {
+ *     egress: {
+ *       default: "deny",
+ *       allow: [
+ *         {
+ *           target: "api.example.com",
+ *           // proves to the gateway that the request came through this policy
+ *           headers: { "X-Gateway-Token": Config.Redacted("GATEWAY_TOKEN") },
+ *           forwardUrl: gateway.url.as<string>(),
+ *         },
+ *       ],
+ *     },
+ *   },
+ * });
  * ```
  *
  * ### Using a Sandbox at Run Time
@@ -519,6 +572,7 @@ export const toSandboxAttributes = (
     port: program?.port,
     code: program?.code,
     derivedImage: derivedImage && { imageId: derivedImage.imageId, hash: derivedImage.hash },
+    setupHash: undefined,
   };
 };
 
@@ -752,6 +806,7 @@ const createOnly = (props: SandboxProps | undefined) => ({
   env: props?.main === undefined ? toEnv(props?.env) : undefined,
   maxTtlSeconds: props?.maxTtlSeconds,
   maxConcurrentExecs: props?.maxConcurrentExecs,
+  run: props?.run ?? [],
 });
 
 /** Exclusive mounts in props whose disks are known: one sandbox at a time holds each. */
@@ -801,7 +856,21 @@ export const SandboxProvider = () =>
             .map((sandbox) => toSandboxAttributes(sandbox, []));
         }),
         diff: Effect.fn(function* ({ id, olds, news, output, newBindings }) {
-          if (!isResolved(news)) return undefined;
+          if (!isResolved(news)) {
+            // A program class's props hold its implementation (`exports`),
+            // unresolved at plan. The bundle depends only on `main`,
+            // `handler` and `build`, which are plain, so a code change still
+            // redeploys the program in place.
+            const program = news as SandboxProps;
+            if (typeof program.main === "string" && output !== undefined) {
+              const { hash } = yield* bundleProgram(
+                program as SandboxProps & { main: string },
+                virtualEntryPlugin,
+              );
+              if (hash !== output.code?.hash) return { action: "update" } as const;
+            }
+            return undefined;
+          }
           const name = output?.name ?? (yield* sandboxName(id, olds?.name));
           if (news.name !== undefined && news.name !== name) {
             return { action: "replace" } as const;
@@ -859,7 +928,10 @@ export const SandboxProvider = () =>
             output?.port !== undefined && output.code !== undefined
               ? { port: output.port, code: output.code }
               : undefined;
-          const attrs = yield* observeSandbox(sandbox, program, output?.derivedImage);
+          const attrs = {
+            ...(yield* observeSandbox(sandbox, program, output?.derivedImage)),
+            setupHash: output?.setupHash,
+          };
           if (output === undefined && olds?.name !== undefined && !isAlchemyName(sandbox.name)) {
             return Unowned(attrs);
           }
@@ -926,6 +998,26 @@ export const SandboxProvider = () =>
           ) {
             yield* archil.setSandboxTimeout({ sid, idle_ttl_seconds: news.idleTtlSeconds });
           }
+          // Setup: run once, on the sandbox as created. A change replaces the
+          // sandbox (see `createOnly`), so the commands always start clean.
+          const run = news.run ?? [];
+          const setupHash = run.length > 0 ? yield* sha256Object(run) : undefined;
+          if (setupHash !== undefined && setupHash !== output?.setupHash) {
+            for (const command of run) {
+              yield* session.note(`Running \`${command}\` in sandbox ${name}...`);
+              const result = yield* Process.exec(sid, command);
+              if (result.exitCode !== 0) {
+                return yield* new SandboxSetupFailed({
+                  sandbox: name,
+                  command,
+                  exitCode: result.exitCode ?? -1,
+                  stderr: result.stderr,
+                });
+              }
+            }
+            // Flush to disk, so a fork or a cold start sees what the commands wrote.
+            yield* Process.exec(sid, "sync");
+          }
           let program: { port: number; code: { hash: string } } | undefined;
           if (hosted) {
             const bindingEnv = activeBindings(bindings).reduce<Record<string, unknown>>(
@@ -962,7 +1054,7 @@ export const SandboxProvider = () =>
           }
           // Return
           const final = yield* getSandbox(sid);
-          return yield* observeSandbox(final ?? sandbox, program, derivedImage);
+          return { ...(yield* observeSandbox(final ?? sandbox, program, derivedImage)), setupHash };
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* deleteSandbox(output.sandboxId);

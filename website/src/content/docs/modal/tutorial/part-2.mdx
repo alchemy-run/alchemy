@@ -1,100 +1,91 @@
 ---
-title: "Part 2: Add a Sandbox"
-description: Create a sandbox from a Worker and give each user a volume.
+title: "Part 2: Start Sandboxes from It"
+description: A Cloudflare Worker that starts a Modal sandbox from the warm image for each command, and reads back its output.
 sidebar:
   order: 2
 ---
 
-## Bake the repo into a warm base
-
-```diff lang="typescript"
-// src/Sandbox.ts
-export const Node = Modal.Image("Node", {
-  app: Coder,
-  image: "node:22-bookworm",
-  commands: ["RUN apt-get update && apt-get install -y git"],
-});
-+
-+export const Warm = Modal.Image("Warm", {
-+  app: Coder,
-+  from: Node,
-+  run: ["git clone --depth 1 https://github.com/sindresorhus/is /work"],
-+});
-```
-
-`run` executes in a sandbox once at deploy, then saves the sandbox's files as an image.
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 ## Bind sandboxes and volumes in a Worker
 
-```typescript
-// src/Api.ts
+```typescript title="src/Api.ts"
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Modal from "@alchemy.run/modal";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import { Agents, Warm } from "./Sandbox.ts";
+import { MyEnv, Warm } from "./Sandbox.ts";
 
 export default class Api extends Cloudflare.Worker<Api>()(
   "Api",
   { main: import.meta.url, compatibility: { flags: ["nodejs_compat"] } },
   Effect.gen(function* () {
     const sandboxes = yield* Modal.CreateSandbox(Warm);
-    const volumes = yield* Modal.CreateVolume(Agents);
-    return {
-      fetch: Effect.succeed(HttpServerResponse.text("ok")),
-    };
+    const volumes = yield* Modal.CreateVolume(MyEnv);
+    return {};
   }).pipe(Effect.provide(Layer.mergeAll(Modal.CreateSandboxHttp, Modal.CreateVolumeHttp))),
 ) {}
 ```
 
-`CreateSandbox(Warm)` boots sandboxes from the warm base. `CreateVolume(Agents)` creates volumes by name in the environment.
+`CreateSandbox(Warm)` boots every sandbox from the warm image. `CreateVolume(MyEnv)` creates volumes by name in the environment.
 
-## Save a user's notes
+## Run a command in a fresh sandbox
 
 ```diff lang="typescript"
 // src/Api.ts
--      fetch: Effect.succeed(HttpServerResponse.text("ok")),
+    const volumes = yield* Modal.CreateVolume(MyEnv);
++
++    const run = Effect.fn("run")(function* (user: string, command: string) {
++      const home = yield* volumes.getOrCreate(`home-${user}`);
++      const sandbox = yield* sandboxes.create({
++        command: ["sh", "-c", `cd /work && { ${command}; } > /home/user/.output 2>&1`],
++        mounts: [{ volume: home, path: "/home/user" }],
++        timeout: "5 minutes",
++      });
++      const { exitCode } = yield* sandbox.wait("50 seconds");
++      return { exitCode, output: yield* home.readFileString("/.output") };
++    });
+```
+
+The repository is already there: the sandbox boots from the image, so nothing clones at request time. The sandbox runs the command as its program and stops when it exits. A Worker can't stream a sandbox's output yet, so the command writes it to the user's volume, mounted at `/home/user`, and the Worker reads it back.
+
+## Serve it
+
+```diff lang="typescript"
+// src/Api.ts
+-    return {};
++    return {
 +      fetch: Effect.gen(function* () {
 +        const request = yield* HttpServerRequest;
 +        const url = new URL(request.url, "http://api");
-+        const user = url.searchParams.get("user") ?? "anonymous";
-+        const home = yield* volumes.getOrCreate(`home-${user}`);
-+        if (request.method === "PUT") {
-+          yield* home.writeFile("/notes.txt", yield* request.text);
++        const user = /^\/users\/([a-z0-9-]+)\/run$/.exec(url.pathname)?.[1];
++        if (request.method === "POST" && user !== undefined) {
++          return yield* HttpServerResponse.json(yield* run(user, yield* request.text));
 +        }
-+        const notes = yield* home.readFileString("/notes.txt").pipe(
-+          Effect.catchTag("VolumeFileNotFound", () => Effect.succeed("")),
-+        );
-+        return HttpServerResponse.text(notes);
++        return HttpServerResponse.text("not found", { status: 404 });
 +      }).pipe(Effect.orDie),
++    };
 ```
 
-The Worker writes the file straight to the volume. No sandbox runs.
-
-## Read them from a sandbox
+## Deploy it
 
 ```diff lang="typescript"
-// src/Api.ts
-+        if (url.pathname === "/run") {
-+          const sandbox = yield* sandboxes.create({
-+            mounts: [{ volume: home, path: "/home/user" }],
-+            timeout: "5 minutes",
-+          });
-+          const result = yield* sandbox
-+            .exec("ls /work && cat /home/user/notes.txt")
-+            .pipe(Effect.ensuring(Effect.ignore(sandbox.terminate())));
-+          return yield* HttpServerResponse.json(result);
-+        }
+// alchemy.run.ts
+  Effect.gen(function* () {
+    const warm = yield* Warm;
+-    return { image: warm.imageId };
++    const api = yield* Api;
++    return { url: api.url.as<string>(), image: warm.imageId };
+  }),
 ```
 
-The sandbox mounts the user's volume at `/home/user` and stops when the request is done.
+<PackageManagers
+  script={`{run} alchemy deploy
+curl -X POST "$URL/users/ada/run" -d 'git log -1 --format=%s'`}
+/>
 
-## Try it
+The images are unchanged, so this deploy only adds the Worker.
 
-```sh
-curl -X PUT "$URL/notes?user=ada" -d "hello from ada"
-curl "$URL/run?user=ada"
-```
+## Next
 
-The second call prints the repo's files and `hello from ada`.
+[Part 3](/modal/tutorial/part-3) gives each user files of their own.

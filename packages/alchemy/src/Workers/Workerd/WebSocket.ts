@@ -121,17 +121,20 @@ export const fromWebSocket = (ws: RawWebSocket): WebSocket => ({
   deserializeAttachment: () => ws.deserializeAttachment() as any,
 });
 
-/** A state that can accept a hibernatable WebSocket. */
-export interface WebSocketAcceptor {
-  acceptWebSocket(ws: WebSocket, tags?: string[]): Effect.Effect<void, never, any>;
+/**
+ * A state that can accept a hibernatable WebSocket. `R` is what accepting
+ * requires, so it reaches the caller of {@link acceptWebSocketPair}.
+ */
+export interface WebSocketAcceptor<R = never> {
+  acceptWebSocket(ws: WebSocket, tags?: string[]): Effect.Effect<void, never, R>;
 }
 
 /**
  * Accept a hibernatable WebSocket on a workerd-style `WebSocketPair` and
  * build the `101 Switching Protocols` response for it.
  */
-export const acceptWebSocketPair = Effect.fn(function* (
-  state: WebSocketAcceptor,
+export const acceptWebSocketPair = Effect.fn(function* <R>(
+  state: WebSocketAcceptor<R>,
   tags?: ReadonlyArray<string>,
 ) {
   const _Response = Response as any as typeof cf.Response;

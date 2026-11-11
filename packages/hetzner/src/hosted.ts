@@ -405,7 +405,7 @@ WantedBy=multi-user.target
         yield* Hetzner.volumeActions
           .attachVolume({
             id: volumeId,
-            server: input.serverId,
+            assignee: { id: input.serverId, type: "server" },
             // No automount: Hetzner would mount the device at
             // `/mnt/HC_Volume_{id}`, and a device mounted elsewhere makes
             // our own `mount` at the service path fail with

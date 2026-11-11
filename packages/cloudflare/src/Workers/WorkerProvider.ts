@@ -233,6 +233,24 @@ export const resolvePreviewParentName = (preview: WorkerProps["preview"]): strin
   return typeof workerName === "string" ? workerName : undefined;
 };
 
+/**
+ * Whether a Preview's observed observability already holds every field the
+ * desired settings set. A desired `false` also matches an absent field, so
+ * a Preview that never had traces is not patched to turn them off.
+ */
+const observabilityCovered = (desired: unknown, observed: unknown): boolean => {
+  if (desired === undefined) return true;
+  if (desired === false) return observed === undefined || observed === null || observed === false;
+  if (Array.isArray(desired)) return JSON.stringify(desired) === JSON.stringify(observed ?? []);
+  if (desired !== null && typeof desired === "object") {
+    const fields = (observed ?? {}) as Record<string, unknown>;
+    return Object.entries(desired).every(([key, value]) =>
+      observabilityCovered(value, fields[key]),
+    );
+  }
+  return desired === observed;
+};
+
 const toPreviewWireKey = (key: string) => key.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
 
 const toPreviewWire = (value: unknown): unknown => {
@@ -3058,7 +3076,29 @@ export const LiveWorkerProvider = () =>
             }),
           );
 
-        const previewResource =
+        // Cloudflare keeps observability per Preview, independent of the
+        // parent, and a new Preview starts with it off. It must be on the
+        // Preview before the deployment is created: a deployment created
+        // first is not recorded, even after a later PATCH. An omitted
+        // section is turned off explicitly, so removing traces or logs from
+        // the props turns them off on an existing Preview.
+        const resolvedObservability = yield* resolveObservability(news, bindings);
+        // The Preview API takes no `null` sampling rate; omit it instead.
+        const sampled = <T extends { headSamplingRate?: number | null }>(settings: T) => ({
+          ...settings,
+          headSamplingRate: settings.headSamplingRate ?? undefined,
+        });
+        const observability = {
+          ...sampled(resolvedObservability),
+          logs: resolvedObservability.logs
+            ? sampled(resolvedObservability.logs)
+            : { enabled: false },
+          traces: resolvedObservability.traces
+            ? sampled(resolvedObservability.traces)
+            : { enabled: false },
+        };
+
+        const createdPreview =
           existingPreview ??
           (yield* workers
             .createPreview({
@@ -3066,6 +3106,7 @@ export const LiveWorkerProvider = () =>
               workerId: parentName,
               name: previewName,
               ignoreBaseConfig: true,
+              observability,
             })
             .pipe(
               Effect.catchTag("PreviewAlreadyExists", () =>
@@ -3087,6 +3128,17 @@ export const LiveWorkerProvider = () =>
                 ),
               ),
             ));
+
+        // Sync against the observed settings: an existing (or raced)
+        // Preview may carry different or no observability.
+        const previewResource = observabilityCovered(observability, createdPreview.observability)
+          ? createdPreview
+          : yield* workers.updatePreview({
+              accountId,
+              workerId: parentName,
+              previewId: createdPreview.id,
+              observability,
+            });
 
         const accountSubdomain = yield* getAccountSubdomain(accountId);
         const parentAttrs =
@@ -4367,10 +4419,17 @@ export const LiveWorkerProvider = () =>
             ? yield* reconcileCrons(name, desiredCrons, previousCrons, session)
             : [];
         if (!dispatchNamespace && versionId === undefined) {
-          const { deployments } = yield* workers.listScriptDeployments({
-            accountId,
-            scriptName: name,
-          });
+          // Same eventual-consistency window as `setWorkerSubdomain`: on a
+          // Worker's first deploy, GET /deployments can still return
+          // `WorkerNotFound` (code 10007) after `putScript` succeeded (#2999).
+          const { deployments } = yield* workers
+            .listScriptDeployments({ accountId, scriptName: name })
+            .pipe(
+              Effect.retry({
+                while: (error) => error._tag === "WorkerNotFound",
+                schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(8)]),
+              }),
+            );
           const active = deployments[0];
           deploymentId = active?.id;
           versionId = active?.versions.find((version) => version.percentage === 100)?.versionId;
@@ -4789,7 +4848,12 @@ export const LiveWorkerProvider = () =>
             (yield* hasChanged(
               id,
               fqn,
-              news,
+              // `stripEffects` keeps plain data only, so it drops the hook
+              // functions and RegExp filters of `build` plugins. Hashing
+              // builds the bundle, which needs them as written.
+              (desired as WorkerProps).build === undefined
+                ? news
+                : { ...news, build: (desired as WorkerProps).build },
               output,
               Array.isArray(newBindings)
                 ? (newBindings as ResourceBinding<Worker["Binding"]>[])

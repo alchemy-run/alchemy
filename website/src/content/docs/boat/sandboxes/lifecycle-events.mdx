@@ -14,12 +14,12 @@ A sandbox fires an event as it becomes ready, gets its files back, stops, fails,
 
 <StateMachine
   states={[
-    { id: "error", label: "sandbox.error", type: "failed", col: 1, row: 0, end: true, tone: "danger" },
-    { id: "ready", label: "sandbox.ready", col: 0, row: 1, start: true, tone: "accent" },
-    { id: "hydrated", label: "sandbox.hydrated", type: "files restored", col: 1, row: 1 },
-    { id: "archived", label: "sandbox.archived", type: "stopped", col: 2, row: 1, end: true },
-    { id: "degraded", label: "sandbox.degraded", type: "unreachable", col: 0, row: 2, tone: "warn" },
-    { id: "recovered", label: "sandbox.recovered", col: 1, row: 2 },
+    { id: "ready", label: "sandbox.ready", col: 0, row: 0, start: true, tone: "accent" },
+    { id: "hydrated", label: "sandbox.hydrated", type: "files restored", col: 1, row: 0 },
+    { id: "degraded", label: "sandbox.degraded", type: "unreachable", col: 0, row: 1, tone: "warn" },
+    { id: "archived", label: "sandbox.archived", type: "stopped", col: 1, row: 1, end: true },
+    { id: "recovered", label: "sandbox.recovered", col: 0, row: 2 },
+    { id: "error", label: "sandbox.error", type: "failed", col: 1, row: 2, end: true, tone: "danger" },
   ]}
   transitions={[
     { from: "ready", to: "error" },
