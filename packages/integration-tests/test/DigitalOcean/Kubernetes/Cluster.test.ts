@@ -2,7 +2,11 @@ import * as DigitalOcean from "@alchemy.run/digitalocean";
 import * as Kubernetes from "@alchemy.run/kubernetes";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
-import { getKubernetesCluster, getKubernetesNodePool } from "@distilled.cloud/digitalocean";
+import {
+  getKubernetesCluster,
+  getKubernetesNodePool,
+  getMonitoringSink,
+} from "@distilled.cloud/digitalocean";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { TestRegistry } from "../fixtures/app/shared.ts";
@@ -17,7 +21,7 @@ const LIVE_TAGS = ["provider:digitalocean", "provider:digitalocean:kubernetes", 
 const LIVE_TIMEOUT = 2_400_000;
 
 test.provider.skipIf(skipSlow)(
-  "cluster: create, apply a manifest through its connection, add and scale a node pool, enable the registry, destroy",
+  "cluster: create, apply a manifest, forward its logs, add and scale a node pool, enable the registry, destroy",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -46,7 +50,20 @@ test.provider.skipIf(skipSlow)(
               data: { greeting: value },
             },
           });
-          return { cluster, pool };
+          // The cluster's logs, forwarded to an external OpenSearch endpoint
+          // (DigitalOcean stores it without connecting).
+          const logs = yield* DigitalOcean.Monitoring.Destination("Logs", {
+            opensearch: {
+              endpoint: "https://opensearch.example.com:9200",
+              username: "alchemy",
+              password: "not-a-real-password",
+            },
+          });
+          const sink = yield* DigitalOcean.Monitoring.Sink("LogSink", {
+            destinationId: logs.destinationId,
+            resources: [{ urn: cluster.urn, name: "k8s" }],
+          });
+          return { cluster, pool, sinkId: sink.sinkId };
         });
 
       const created = yield* stack.deploy(declare(1, "hello", false));
@@ -57,6 +74,8 @@ test.provider.skipIf(skipSlow)(
         clusterId: created.cluster.clusterId,
       });
       expect(created.pool.count).toEqual(1);
+      const sink = yield* getMonitoringSink({ sink_uuid: created.sinkId });
+      expect(sink.sink.resources?.[0]?.urn).toEqual(created.cluster.urn);
 
       const scaled = yield* stack.deploy(declare(2, "hi", true));
       expect(scaled.pool.nodePoolId).toEqual(created.pool.nodePoolId);
@@ -74,6 +93,7 @@ test.provider.skipIf(skipSlow)(
       expect(yield* isGone(getKubernetesCluster({ cluster_id: created.cluster.clusterId }))).toBe(
         true,
       );
+      expect(yield* isGone(getMonitoringSink({ sink_uuid: created.sinkId }))).toBe(true);
     }).pipe(logLevel),
   // The team's one registry is declared here, so hold the registry lock.
   { tags: LIVE_TAGS, timeout: LIVE_TIMEOUT, exclusive: "digitalocean:registry" },

@@ -1,7 +1,20 @@
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Bundle from "alchemy/Bundle/Bundle";
+import {
+  normalizeInstallTargets,
+  resolvePackageInstallIdentity,
+  type PackageInstall,
+} from "alchemy/Bundle/InstalledPackages";
 import { findCwdForBundle, getStableContextDir, resolveMainPath } from "alchemy/Bundle/TempRoot";
-import { copyExtraFiles, hashExtraFiles, type ExtraFile } from "alchemy/Util/extraFiles";
+import {
+  contextRootOf,
+  copyExtraFiles,
+  hashExtraFiles,
+  posixRelUnder,
+  resolveExtraSource,
+  type ExtraFile,
+} from "alchemy/Util/extraFiles";
+import { sha256 } from "alchemy/Util/sha256";
 import { sha256Object } from "alchemy/Util/sha256";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -101,6 +114,12 @@ export interface BundledImageSource {
    * content hash.
    */
   extraFiles?: ReadonlyArray<ExtraFile>;
+  /**
+   * Packages `npm install`ed into an unbundled Node program's image instead
+   * of bundled (native modules such as Next.js's `sharp`), at the versions
+   * the project resolves. Only for an external `main` with `extraFiles`.
+   */
+  packages?: PackageInstall;
 }
 
 /**
@@ -183,7 +202,44 @@ export interface ImageSourceLike {
   install?: ReadonlyArray<string>;
   /** Files copied next to a bundled `main` (see {@link BundledImageSource.extraFiles}). */
   extraFiles?: ReadonlyArray<ExtraFile>;
+  /** Packages installed into an unbundled Node program's image (see {@link BundledImageSource.packages}). */
+  packages?: PackageInstall;
 }
+
+/**
+ * An unbundled Node program: an external `main` (already a complete
+ * server) shipped with its `extraFiles` tree as built, so relative imports
+ * between its chunks keep working.
+ */
+export const isNodeProgram = (source: ImageSourceLike, isExternal: boolean | undefined) =>
+  isExternal === true && source.main !== undefined && source.extraFiles !== undefined;
+
+const NODE_PROGRAM_BASE_IMAGE = "node:22-slim";
+
+const nodeProgramDockerfile = (options: {
+  image: string | undefined;
+  entry: string;
+  install: boolean;
+  port: number | undefined;
+}) => {
+  const lines = [
+    `FROM ${options.image ?? NODE_PROGRAM_BASE_IMAGE}`,
+    `WORKDIR /app`,
+    `ENV NODE_ENV=production`,
+  ];
+  if (options.install) {
+    lines.push(
+      `COPY package.json /app/package.json`,
+      `RUN npm install --omit=dev --no-fund --no-audit && npm cache clean --force`,
+    );
+  }
+  lines.push(`COPY . /app`, `ENV HOST=0.0.0.0`);
+  if (options.port !== undefined) {
+    lines.push(`ENV PORT=${String(options.port)}`, `EXPOSE ${String(options.port)}`);
+  }
+  lines.push(`ENTRYPOINT ["node", ${JSON.stringify(`/app/${options.entry}`)}]`);
+  return `${lines.join("\n")}\n`;
+};
 
 export type ImageSourceKind = "main" | "context" | "image";
 
@@ -492,6 +548,54 @@ export const makeContainerImageSource = Effect.gen(function* () {
   const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
 
   /**
+   * Lay out an unbundled Node program and compute its content-addressed
+   * code hash: the entry, the extra-files tree, the pinned packages (and
+   * the lockfile they resolve from), the Dockerfile, and the platform.
+   */
+  const computeNodeProgram = Effect.fn(function* (options: {
+    source: BundledImageSource;
+    port?: number;
+    platform: string;
+  }) {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const { source } = options;
+    const realMain = yield* resolveMainPath(source.main);
+    const extras = source.extraFiles ?? [];
+    const root = contextRootOf(realMain, extras, path, (file) => resolveExtraSource(file, path));
+    const entry = posixRelUnder(root, realMain, path) || path.basename(realMain);
+    const requested = yield* normalizeInstallTargets(source.packages);
+    const identity =
+      Object.keys(requested).length > 0
+        ? yield* resolvePackageInstallIdentity({
+            cwd: yield* findCwdForBundle(realMain),
+            requested,
+          })
+        : undefined;
+    const packageJson =
+      identity !== undefined && Object.keys(identity.resolved).length > 0
+        ? `${JSON.stringify({ private: true, type: "module", dependencies: identity.resolved }, null, 2)}\n`
+        : undefined;
+    const dockerfile = nodeProgramDockerfile({
+      image: source.image,
+      entry,
+      install: packageJson !== undefined,
+      port: options.port,
+    });
+    const mainBytes = yield* fs.readFile(realMain);
+    const codeHash = (yield* sha256Object({
+      main: yield* sha256(mainBytes),
+      entry,
+      dockerfile,
+      packageJson,
+      lockfile: identity?.lockfile,
+      extraFiles: yield* hashExtraFiles(extras),
+      platform: options.platform,
+    })).slice(0, 16);
+    return { realMain, mainBytes, entry, dockerfile, packageJson, codeHash };
+  });
+
+  /**
    * Bundle a `main` source and compute its content-addressed code hash.
    *
    * The hash covers the FULL image identity: the bundle output (which
@@ -664,6 +768,45 @@ export const makeContainerImageSource = Effect.gen(function* () {
     yield* validateImageSource(id, source);
 
     const repositoryUri = yield* target.repositoryUri;
+
+    if (kind === "main" && isNodeProgram(source, options.isExternal)) {
+      yield* session.note(`Packaging ${id} program...`);
+      const program = yield* computeNodeProgram({
+        source: source as BundledImageSource,
+        port: options.port,
+        platform,
+      });
+      const imageUri = `${repositoryUri}:${program.codeHash}`;
+      if (yield* target.hasTag(program.codeHash)) {
+        return { imageUri, repositoryUri, codeHash: program.codeHash };
+      }
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const contextDir = yield* getStableContextDir(program.realMain, dotAlchemy, `${id}-image`);
+      // The context is the program tree; start clean so no earlier build's
+      // files ship with this one.
+      yield* fs.remove(contextDir, { recursive: true }).pipe(Effect.ignore);
+      yield* copyExtraFiles(contextDir, (source as BundledImageSource).extraFiles);
+      yield* docker.materialize({
+        context: contextDir,
+        dockerfile: program.dockerfile,
+        files: [
+          { path: program.entry, content: program.mainBytes },
+          ...(program.packageJson !== undefined
+            ? [{ path: "package.json", content: program.packageJson }]
+            : []),
+        ],
+      });
+      yield* session.note(`Building container image ${imageUri}...`);
+      yield* buildAndPush(target, {
+        imageUri,
+        context: contextDir,
+        platform,
+        build: { cache: (source as BundledImageSource).build?.cache },
+      });
+      yield* session.note(`Pushed ${imageUri}`);
+      return { imageUri, repositoryUri, codeHash: program.codeHash };
+    }
 
     if (kind === "main") {
       // Bundle → hash → (skip if pushed) → materialize generated Dockerfile
@@ -850,6 +993,14 @@ export const makeContainerImageSource = Effect.gen(function* () {
     bootstrap: (importPath: string) => string;
   }) {
     const platform = options.platform ?? "linux/amd64";
+    if (isNodeProgram(options.source, options.isExternal)) {
+      const { codeHash } = yield* computeNodeProgram({
+        source: options.source as BundledImageSource,
+        port: options.port,
+        platform,
+      });
+      return codeHash;
+    }
     if (imageSourceKind(options.source) === "main") {
       // Unresolved inline environment content (an Output) can't be hashed
       // at plan time — return undefined so the diff defers to reconcile.

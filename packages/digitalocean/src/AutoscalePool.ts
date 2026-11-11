@@ -83,7 +83,8 @@ export type AutoscalePoolAttributes = AutoscalePool["Attributes"];
  * ### Scaling Droplets
  * **Example:** Two to ten web droplets around 60% CPU
  * ```typescript
- * const key = yield* DigitalOcean.SshKey("deploy", { publicKey: yield* Config.string("SSH_KEY") });
+ * const publicKey = yield* Config.string("SSH_KEY");
+ * const key = yield* DigitalOcean.SshKey("deploy", { publicKey });
  * const pool = yield* DigitalOcean.AutoscalePool("web", {
  *   scaling: { minInstances: 2, maxInstances: 10, targetCpuUtilization: 0.6 },
  *   droplet: {

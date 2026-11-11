@@ -39,12 +39,12 @@ export interface ConnectClient {
  *       fetch: Effect.gen(function* () {
  *         const url = yield* conn.httpEndpoint;
  *         const key = yield* conn.apiKey;
- *         const client = yield* Effect.promise(() =>
- *           weaviate.connectToWeaviateCloud(url, {
+ *         const live = yield* Effect.tryPromise(async () => {
+ *           const client = await weaviate.connectToWeaviateCloud(url, {
  *             authCredentials: new weaviate.ApiKey(Redacted.value(key)),
- *           }),
- *         );
- *         const live = yield* Effect.promise(() => client.isLive());
+ *           });
+ *           return client.isLive();
+ *         });
  *         return HttpServerResponse.text(String(live));
  *       }).pipe(Effect.orDie),
  *     };

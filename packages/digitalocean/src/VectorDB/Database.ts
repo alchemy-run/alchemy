@@ -141,10 +141,11 @@ export const DatabaseProvider = () =>
     nuke: { skip: true },
     read: Effect.fn(function* ({ id, olds, output }) {
       const byId = output === undefined ? Option.none() : yield* observeById(output.databaseId);
+      const generatedName = yield* physicalName(id);
       const observed = Option.isSome(byId)
         ? byId
         : olds.name === undefined
-          ? yield* observeByName(yield* physicalName(id))
+          ? yield* observeByName(generatedName)
           : Option.none<VectordbVectorDB>();
       if (Option.isNone(observed)) return undefined;
       const apiKey = output?.apiKey ?? (yield* credentialsOf(observed.value.id));

@@ -82,7 +82,9 @@ export interface StaticSiteProps extends Pick<
 /**
  * A DigitalOcean App that serves static files built by a shell command
  * (Hugo, Jekyll, Eleventy, a hand-written `dist/`). The output is baked
- * into the App's image with a small static-file server.
+ * into the App's image with a small static-file server. It runs as an App
+ * service because Spaces has no index documents or single-page fallback,
+ * and App Platform's static sites build only from a git repository.
  *
  * For Vite-based projects, prefer {@link Vite | DigitalOcean.Website.Vite}.
  *

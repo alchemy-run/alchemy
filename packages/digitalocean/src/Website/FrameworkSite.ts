@@ -128,7 +128,13 @@ export const appProps = (
 /**
  * Shared implementation behind the DigitalOcean framework website
  * composites: build through the Node deploy target, then run the server as
- * an App Platform service, with the client assets baked into its image.
+ * an App Platform service. The image is the build's server tree as built
+ * (never re-bundled, so relative imports between its chunks hold) plus the
+ * client assets, on a Node base.
+ *
+ * Every site, static ones included, runs as an App service: Spaces serves
+ * objects but has no index documents or single-page fallback, and App
+ * Platform's own static sites build only from a git repository.
  *
  * During `alchemy dev` the site is the framework's own dev server and no
  * cloud resources are declared; `Alchemy.remote()` opts back into the App.
@@ -163,7 +169,8 @@ const runFrameworkSite = Effect.fn("DigitalOcean.Website.FrameworkSite")(functio
 
   if (isLocal) return { url: build.url, app: undefined } satisfies Website;
 
-  // The build runs at apply time, so its attributes are Outputs here.
+  // The build runs at apply time, so its attributes are Outputs here; the
+  // resource's attribute types don't carry that, hence the casts.
   const buildOut = Output.mapEffect(
     ([serverEntry, distDir]: [string | undefined, string | undefined]) =>
       Effect.gen(function* () {
@@ -199,10 +206,13 @@ const runFrameworkSite = Effect.fn("DigitalOcean.Website.FrameworkSite")(functio
     ),
   )(buildOut);
 
+  // `main` and `extraFiles` are Outputs of the build, resolved by the engine
+  // before the App reconciles; the props type has no Output-of-array form.
   const app = yield* App(id, {
     ...appProps(props, port),
     main: main as unknown as string,
     extraFiles: extraFiles as unknown as Array<{ source: string; dest: string }>,
+    packages: config.install,
     env: { ...unwrapEnv(props.env), PORT: String(port) },
   });
   return { url: app.url, app } satisfies Website;

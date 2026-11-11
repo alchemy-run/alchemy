@@ -129,6 +129,11 @@ export interface AppProps extends PlatformProps {
    */
   standalone?: boolean;
   /**
+   * @internal Packages installed into a `standalone` program's image
+   * instead of bundled (Next.js needs `next`, `react`, `react-dom`).
+   */
+  packages?: ReadonlyArray<string>;
+  /**
    * Container Registry the image is pushed to, by name or as the
    * `DigitalOcean.Registry` that declares it. App Platform pulls from it
    * with the team's own access.
