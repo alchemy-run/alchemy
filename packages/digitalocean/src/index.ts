@@ -1,3 +1,4 @@
+export * as GenAI from "./GenAI/index.ts";
 export * as Monitoring from "./Monitoring/index.ts";
 export * as Spaces from "./Spaces/index.ts";
 export * from "./AuthProvider.ts";

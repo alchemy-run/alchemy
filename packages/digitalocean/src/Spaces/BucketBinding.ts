@@ -71,7 +71,11 @@ const grantOnBucket = Effect.fn(function* (
   yield* runtime.set(envKey(bucket, access, "region"), bucket.region);
 });
 
-/** Reads the bound key back inside the running host. */
+/**
+ * Reads the bound key back inside the running host. Runs in the binding's
+ * construction phase, where the host's runtime context is present; request
+ * handlers close over the result.
+ */
 const scopeOf = Effect.fn(function* (bucket: Bucket, access: SpacesAccess) {
   const runtime = yield* CurrentRuntimeContext;
   const read = (field: string) =>
@@ -88,7 +92,7 @@ const scopeOf = Effect.fn(function* (bucket: Bucket, access: SpacesAccess) {
     bucketName === undefined ||
     region === undefined
   ) {
-    return yield* new SpacesBindingNotConfigured({ bucket: bucket.LogicalId });
+    return undefined;
   }
   const plain = (value: string | Redacted.Redacted<string>) =>
     typeof value === "string" ? value : Redacted.value(value);
@@ -132,10 +136,14 @@ export const makeSpacesBinding = <I extends { Bucket: string }, A, E>(options: {
     const SpacesKey = globalThis.__ALCHEMY_RUNTIME__ ? undefined : yield* Key;
     return Effect.fn(function* (bucket: Bucket) {
       if (SpacesKey !== undefined) yield* grantOnBucket(SpacesKey, bucket, options.access);
+      const bound = globalThis.__ALCHEMY_RUNTIME__
+        ? yield* scopeOf(bucket, options.access)
+        : undefined;
       const call = Effect.fn(`${options.tag}(${bucket.LogicalId})`)(function* (
         request: Omit<I, "Bucket">,
       ) {
-        const scope = yield* scopeOf(bucket, options.access);
+        const scope =
+          bound ?? (yield* new SpacesBindingNotConfigured({ bucket: bucket.LogicalId }));
         return yield* options
           .operation({ ...request, Bucket: scope.bucketName } as I)
           .pipe(Effect.provide(signedWith(scope)));

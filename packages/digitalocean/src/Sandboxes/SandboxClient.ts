@@ -85,13 +85,18 @@ export const makeSandboxesBinding = Effect.succeed(
       }
     }
 
+    // Read in the construction phase, where the host's runtime context is
+    // present; request handlers close over the values.
+    const runtime = globalThis.__ALCHEMY_RUNTIME__ ? yield* CurrentRuntimeContext : undefined;
+    const boundToken =
+      runtime === undefined
+        ? undefined
+        : yield* runtime.get<string | Redacted.Redacted<string>>(TOKEN_ENV);
+    const boundBaseValue = runtime === undefined ? undefined : yield* runtime.get<string>(BASE_ENV);
+
     const resolve = Effect.gen(function* () {
-      const runtime = yield* CurrentRuntimeContext;
-      const token =
-        runtime === undefined
-          ? undefined
-          : yield* runtime.get<string | Redacted.Redacted<string>>(TOKEN_ENV);
-      const boundBase = runtime === undefined ? undefined : yield* runtime.get<string>(BASE_ENV);
+      const token = boundToken;
+      const boundBase = boundBaseValue;
       if (token === undefined || boundBase === undefined)
         return yield* new SandboxBindingNotConfigured();
       const credentials = fromApiKey({

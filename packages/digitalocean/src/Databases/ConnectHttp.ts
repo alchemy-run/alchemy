@@ -30,21 +30,23 @@ export const ConnectHttp = Layer.succeed(
         yield* runtime.set(keys.private, target.privateUri);
       }
     }
-    const read = (key: string) =>
-      Effect.gen(function* () {
-        const runtime = yield* CurrentRuntimeContext;
-        const value =
-          runtime === undefined
-            ? undefined
-            : yield* runtime.get<string | Redacted.Redacted<string>>(key);
-        if (value === undefined || value === "") {
-          return yield* new ConnectionStringMissing({ resourceName: target.LogicalId });
-        }
-        return typeof value === "string" ? Redacted.make(value) : value;
-      });
+    // Read in the construction phase, where the host's runtime context is
+    // present; request handlers close over the values.
+    const runtime = globalThis.__ALCHEMY_RUNTIME__ ? yield* CurrentRuntimeContext : undefined;
+    const lookup = Effect.fn(function* (key: string) {
+      return runtime === undefined
+        ? undefined
+        : yield* runtime.get<string | Redacted.Redacted<string>>(key);
+    });
+    const boundPublic = yield* lookup(keys.public);
+    const boundPrivate = yield* lookup(keys.private);
+    const read = (value: string | Redacted.Redacted<string> | undefined) =>
+      value === undefined || value === ""
+        ? Effect.fail(new ConnectionStringMissing({ resourceName: target.LogicalId }))
+        : Effect.succeed(typeof value === "string" ? Redacted.make(value) : value);
     return {
-      connectionString: read(keys.public),
-      privateConnectionString: read(keys.private),
+      connectionString: read(boundPublic),
+      privateConnectionString: read(boundPrivate),
     } satisfies ConnectClient;
   }),
 );
