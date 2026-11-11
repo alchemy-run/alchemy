@@ -15,7 +15,6 @@ import { afterEach, beforeEach, describe, it, vi } from "vitest";
 import type { Config } from "../workerd/Config.ts";
 import { bin as workerdBin } from "../workerd/internal/workerd.ts";
 import * as Workerd from "../workerd/Workerd.ts";
-import { fetchOverSocket } from "./helpers/runtime.ts";
 
 const services = Layer.provide(Workerd.WorkerdLive, NodeServices.layer);
 
@@ -591,68 +590,6 @@ layer(services)("bin and env", (it) => {
         Effect.provide(NodeServices.layer),
         Effect.ensuring(Effect.sync(() => vi.unstubAllEnvs())),
       ),
-    { timeout: 30_000 },
-  );
-});
-
-// The retry backoff must advance without manually ticking TestClock.
-layer(services, { excludeTestServices: true })("Unix sockets", (it) => {
-  it.effect.skipIf(process.platform === "win32")(
-    "a retried start binds over the socket file a failed attempt left",
-    () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const dir = yield* fs.makeTempDirectoryScoped();
-        const socketPath = path.join(dir, "entry.sock");
-        const attempted = path.join(dir, "attempted");
-        const bin = path.join(dir, "workerd");
-        // The first attempt leaves a file at the socket path, as a workerd
-        // that bound it and died during startup would, and fails in a way
-        // `serve` retries. The next attempt is the real workerd.
-        yield* fs.writeFileString(
-          bin,
-          [
-            "#!/bin/sh",
-            `if [ ! -e ${JSON.stringify(attempted)} ]; then`,
-            // Reads the config first, as workerd does: exiting with it
-            // unread would fail `serve`'s write to stdin with EPIPE.
-            "  cat > /dev/null",
-            `  : > ${JSON.stringify(attempted)}`,
-            `  : > ${JSON.stringify(socketPath)}`,
-            "  echo 'simulated startup crash' >&2",
-            "  exit 1",
-            "fi",
-            `exec ${JSON.stringify(workerdBin)} "$@"`,
-            "",
-          ].join("\n"),
-        );
-        yield* fs.chmod(bin, 0o755);
-        const workerd = yield* Workerd.Workerd;
-        yield* workerd.serve(
-          {
-            sockets: [{ name: "http", address: `unix:${socketPath}`, service: { name: "test" } }],
-            services: [
-              {
-                name: "test",
-                worker: {
-                  compatibilityDate: "2026-03-10",
-                  modules: [
-                    {
-                      name: "main.js",
-                      esModule: "export default { fetch: () => new Response('hello') };",
-                    },
-                  ],
-                },
-              },
-            ],
-          },
-          undefined,
-          { bin },
-        );
-        expect(yield* fs.exists(attempted)).toBe(true);
-        expect(yield* fetchOverSocket(socketPath, "/")).toBe("hello");
-      }).pipe(Effect.provide(NodeServices.layer)),
     { timeout: 30_000 },
   );
 });

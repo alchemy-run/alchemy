@@ -79,11 +79,6 @@ export class Workerd extends Context.Service<
   Workerd,
   {
     readonly compatibilityDate: string;
-    /**
-     * Starts a workerd process for `config`. A file at a `unix:` listen
-     * address is removed before each spawn: workerd never removes the socket
-     * files it listens on, and won't bind over one.
-     */
     readonly serve: (
       config: Config,
       args?: Record<string, string | number | boolean>,

@@ -230,11 +230,9 @@ export const RuntimeLive = Layer.effect(
               ]),
           ...config.sockets,
         ];
-        // workerd never removes its Unix socket file; `Workerd.serve` clears a
-        // stale one before each process starts, and this removes it once the
-        // runtime stops. Registered before the process scopes, it runs after
-        // they have killed workerd.
-        const entrySocketPath = worker.entrySocketPath;
+        // workerd never removes its socket file. Registered before the
+        // process scopes, this runs after they kill workerd.
+        const { entrySocketPath } = worker;
         if (entrySocketPath !== undefined) {
           yield* Effect.addFinalizer(() =>
             Effect.sync(() => {

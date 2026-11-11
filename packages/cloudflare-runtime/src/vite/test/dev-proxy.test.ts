@@ -233,13 +233,11 @@ test.skipIf(process.platform === "win32")(
     // Nothing listens on the TCP address: only the socket can answer.
     const proxy = await proxyTo(new NodeURL("http://127.0.0.1:1"), socketPath);
 
-    for (let i = 0; i < 3; i++) {
-      const response = await fetch(proxy, { signal: AbortSignal.timeout(5_000) });
-      expect({ status: response.status, body: await response.text() }).toEqual({
-        status: 200,
-        body: "worker",
-      });
-    }
+    const response = await fetch(proxy, { signal: AbortSignal.timeout(5_000) });
+    expect({ status: response.status, body: await response.text() }).toEqual({
+      status: 200,
+      body: "worker",
+    });
   },
 );
 

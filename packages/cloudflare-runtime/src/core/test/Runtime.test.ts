@@ -9,9 +9,6 @@ import * as WorkerProxy from "../proxy/WorkerProxy.ts";
 import * as Runtime from "../Runtime.ts";
 import { fetchOverSocket, localRuntimeLayer, PredicateFailed } from "./helpers/runtime.ts";
 
-const socketPathFor = (test: string) =>
-  NodePath.join(NodeOs.tmpdir(), `alchemy-${test}-test-${process.pid}.sock`);
-
 const HELLO_SCRIPT = `
 export default {
   fetch(request) {
@@ -49,9 +46,9 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime", (it) => {
 
   it.effect.skipIf(process.platform === "win32")(
     "serves the entry on a Unix socket, over a stale file, and removes it on close",
-    () =>
-      Effect.gen(function* () {
-        const socketPath = socketPathFor("runtime");
+    () => {
+      const socketPath = NodePath.join(NodeOs.tmpdir(), `alchemy-runtime-test-${process.pid}.sock`);
+      return Effect.gen(function* () {
         // A file left at the path by an earlier process, which workerd won't
         // bind over.
         yield* Effect.sync(() => NodeFs.writeFileSync(socketPath, ""));
@@ -71,11 +68,8 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime", (it) => {
           expect(yield* Effect.promise(() => hello.text())).toBe("hello");
         }).pipe(Effect.scoped);
         expect(NodeFs.existsSync(socketPath)).toBe(false);
-      }).pipe(
-        Effect.ensuring(
-          Effect.sync(() => NodeFs.rmSync(socketPathFor("runtime"), { force: true })),
-        ),
-      ),
+      }).pipe(Effect.ensuring(Effect.sync(() => NodeFs.rmSync(socketPath, { force: true }))));
+    },
     { timeout: 30_000 },
   );
 

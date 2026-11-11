@@ -171,13 +171,9 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
    */
   readonly beforeServe?: Effect.Effect<void>;
   /**
-   * Also serve the Worker on a Unix socket at this path, next to the TCP
-   * address `start` returns. A Unix socket uses no ephemeral port and leaves
-   * nothing in TIME_WAIT, so a proxy can open a connection per request without
-   * exhausting the port range (#3194). Whatever is at the path is removed
-   * before each workerd process starts, and again when the runtime stops, so
-   * the path must belong to this runtime alone. workerd listens on Unix
-   * sockets only on macOS and Linux.
+   * Also serve the Worker on a Unix socket at this path (macOS and Linux
+   * only). The file is removed before each workerd start and when the runtime
+   * stops, so the path must belong to this runtime alone.
    */
   readonly entrySocketPath?: string;
   readonly unsafe?: Partial<WorkerdConfig.Worker>;

@@ -217,6 +217,17 @@ export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
           : undefined;
       };
 
+      const forward: vite.Connect.NextHandleFunction = (req, res, next) =>
+        forwardWorkerRequest(
+          req,
+          res,
+          workerRequestUrl(req.originalUrl ?? req.url, address),
+          socketPath,
+          proxySharedSecret,
+          server.config.logger,
+          next,
+        );
+
       /**
        * Replaces the Worker runtime so it is regenerated for `exportTypes`.
        * workerd needs a named export for every entrypoint, Durable Object, and
@@ -311,16 +322,7 @@ export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
           ) {
             return next();
           }
-          const url = workerRequestUrl(req.originalUrl ?? req.url, address);
-          forwardWorkerRequest(
-            req,
-            res,
-            url,
-            socketPath,
-            proxySharedSecret,
-            server.config.logger,
-            next,
-          );
+          forward(req, res, next);
         });
       }
 
@@ -329,16 +331,7 @@ export function dev(options: CloudflareVitePluginOptions): Array<vite.Plugin> {
           // The Worker's own `ASSETS` calls run through Vite's middleware;
           // one Vite didn't serve must not come back to the Worker.
           if (VITE_ASSET_REQUEST in req) return next();
-          const url = workerRequestUrl(req.originalUrl ?? req.url, address);
-          forwardWorkerRequest(
-            req,
-            res,
-            url,
-            socketPath,
-            proxySharedSecret,
-            server.config.logger,
-            next,
-          );
+          forward(req, res, next);
         });
         if (options.dev?.middlewareOrder === "pre" && middlewareBoundary !== undefined) {
           // Move the proxy middleware from the end of the stack to directly

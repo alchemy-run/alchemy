@@ -75,14 +75,9 @@ export function forwardWorkerRequest(
   if (client.destroyed) {
     return;
   }
-  // A connection per request: workerd closes an idle connection 5 s after it
-  // sends a response, while Node's pool keeps one 5 s after it reads it, so on
-  // a busy event loop a pooled connection may already be closed and its next
-  // request answers 502 (#1869). Over TCP every connection takes an ephemeral
-  // port that TIME_WAIT holds for up to a minute after it closes, and under
-  // load the proxy runs out of them (#3194, 30 s on macOS, 16,384 ports). A
-  // Unix socket has neither, so the runtime's socket is used where there is
-  // one.
+  // A connection per request, since pooled ones race workerd's 5 s idle close
+  // (#1869). Over TCP each one holds an ephemeral port in TIME_WAIT, which
+  // runs out under load (#3194), so the runtime's Unix socket is preferred.
   //
   // A request with a body asks workerd for `100 Continue` first, and the body
   // is only forwarded once workerd sends it, which it does when the Worker
