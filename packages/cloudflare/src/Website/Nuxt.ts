@@ -331,7 +331,6 @@ export const Nuxt: {
             devMode: "server",
             rootDir: props?.rootDir,
             options: {
-              rootDir: props?.rootDir,
               main: props?.main,
               memo: props?.memo,
               nuxt: props?.nuxt,

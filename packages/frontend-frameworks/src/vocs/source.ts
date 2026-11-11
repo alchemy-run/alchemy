@@ -1,6 +1,10 @@
 import * as Effect from "effect/Effect";
 import * as FrameworkCore from "../core/index.ts";
-import { makeSourceModule, type SourceProvider } from "../core/WorkerSource.ts";
+import {
+  makeSourceModule,
+  type SourceModuleContext,
+  type SourceProvider,
+} from "../core/WorkerSource.ts";
 import {
   makeWakuSourceProvider,
   type WakuBuildChildConfig,
@@ -12,7 +16,6 @@ import { make as vocsFrameworkLayer } from "./Vocs.ts";
 const PROVIDER = "@alchemy.run/frontend-frameworks/vocs/source";
 
 export interface VocsSourceOptions {
-  readonly rootDir?: string;
   /** Vocs build output directory, used to exclude generated files from the input hash. */
   readonly outDir?: string;
   readonly memo?: WakuSourceOptions["memo"];
@@ -36,19 +39,19 @@ export const buildInChild = (config: WakuBuildChildConfig) =>
     ),
   );
 
-export const makeVocsSourceProvider = (options: VocsSourceOptions): SourceProvider =>
-  makeWakuSourceProvider(
-    { ...options, distDir: options.outDir },
-    {
-      provider: PROVIDER,
-      framework: "vocs",
-      displayName: "Vocs",
-      layer: ({ root, target }) =>
-        vocsFrameworkLayer({
-          root,
-          target: vocsCloudflareTarget({ worker: target.config }),
-        }),
-    },
-  );
+export const makeVocsSourceProvider = (
+  options: VocsSourceOptions,
+  context: SourceModuleContext,
+): SourceProvider =>
+  makeWakuSourceProvider({ ...options, distDir: options.outDir }, context, {
+    provider: PROVIDER,
+    framework: "vocs",
+    displayName: "Vocs",
+    layer: ({ root, target }) =>
+      vocsFrameworkLayer({
+        root,
+        target: vocsCloudflareTarget({ worker: target.config }),
+      }),
+  });
 
 export default makeSourceModule(PROVIDER, makeVocsSourceProvider);

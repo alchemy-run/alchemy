@@ -6,7 +6,6 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
-import * as Semaphore from "effect/Semaphore";
 import type * as ViteModule from "vite";
 import type { Config as WakuConfig } from "waku/config";
 import type * as WakuVitePlugins from "waku/vite-plugins";
@@ -398,45 +397,6 @@ export const makeWakuConfigInput = (inputs: WakuConfigInputs): WakuConfig => {
  */
 const INITIAL_NODE_ENV = process.env.NODE_ENV;
 
-/**
- * Serializes cwd swaps across concurrent builds in one process (the same
- * discipline as the source provider's dev-server startup lock).
- */
-const cwdLock = Semaphore.makeUnsafe(1);
-
-/**
- * Run `effect` with `process.cwd()` set to the project root, restoring the
- * previous cwd afterwards. Waku's toolchain assumes cwd == root: the
- * html-shell plugin declares a cwd-relative `index.html` client input (a
- * root outside the cwd makes `vite:build-html` emit an invalid
- * `../index.html` asset name) and reads the html shell with bare relative
- * paths. A no-op when the cwd already is the root.
- */
-const withRootCwd = <A, E, R>(
-  root: string,
-  effect: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E, R> =>
-  Effect.flatMap(
-    Effect.sync(() => process.cwd() === NodePath.resolve(root)),
-    (isRoot) =>
-      isRoot
-        ? effect
-        : Semaphore.withPermits(
-            cwdLock,
-            1,
-          )(
-            Effect.acquireUseRelease(
-              Effect.sync(() => {
-                const previous = process.cwd();
-                process.chdir(root);
-                return previous;
-              }),
-              () => effect,
-              (previous) => Effect.sync(() => process.chdir(previous)),
-            ),
-          ),
-  );
-
 const PREVIEW_SERVER_GLOBAL = "__WAKU_START_PREVIEW_SERVER__";
 
 /** The shape waku's `unstable_startPreviewServer` expects the global to produce. */
@@ -732,11 +692,10 @@ export const make = (
               ? FrameworkCore.selectEntryByFacade(userEntry)
               : (chunk) => chunk.name === WAKU_SERVER_ENTRY_MODULE,
         }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
-        // The whole build runs under the project root cwd: waku's
-        // html-shell plugin declares a cwd-relative `index.html` client
-        // input and reads the shell with bare relative paths (see
-        // withRootCwd).
-        yield* withRootCwd(
+        // Waku resolves its html shell and relative inputs from the cwd,
+        // which the build child sets to the project root.
+        yield* FrameworkCore.inProjectCwd(
+          "waku",
           root,
           Effect.tryPromise({
             try: async () => {
@@ -808,11 +767,11 @@ export const make = (
         const explicitPort = devOptions?.port || options?.port;
         const port = yield* FrameworkCore.resolveViteDevPort(project.vite.version, explicitPort);
         const host = devOptions?.host;
-        // The dev server *starts* under the project root cwd (waku
-        // resolves its html shell and relative inputs from the cwd at
-        // startup); the cwd is restored once the server is listening.
+        // Waku resolves its html shell and relative inputs from the cwd,
+        // which the dev child sets to the project root.
         const server = yield* Effect.acquireRelease(
-          withRootCwd(
+          FrameworkCore.inProjectCwd(
+            "waku",
             root,
             Effect.tryPromise({
               try: async () => {
@@ -854,35 +813,7 @@ export const make = (
       }),
     });
 
-    // Waku's toolchain assumes `cwd === root` at dev startup (the html shell
-    // and relative inputs resolve from the cwd), so its startup window
-    // chdirs — which must not happen in a process hosting other sites' dev
-    // servers (the alchemy dev sidecar). Run the dev server in a dedicated
-    // child whose cwd IS the root instead (see core/DevChild.ts). Inside
-    // that child — or when the options cannot cross the process boundary
-    // (e.g. a deploy-target VALUE from the e2e harness) — the in-process
-    // path runs directly.
-    const dev: FrameworkCore.Framework["Service"]["dev"] = (devOptions) => {
-      if (FrameworkCore.isInsideDevChild() || !FrameworkCore.isJsonSerializable(options)) {
-        return inProcess.dev(devOptions);
-      }
-      const root = devOptions?.root ?? options?.root ?? process.cwd();
-      const port = devOptions?.port ?? options?.port;
-      return FrameworkCore.runDevChild({
-        framework: "waku",
-        module: "@alchemy.run/frontend-frameworks/waku",
-        callerUrl: import.meta.url,
-        rootDir: root,
-        makeOptions: { ...options, root },
-        devOptions: {
-          root,
-          ...(port !== undefined ? { port } : {}),
-          ...(devOptions?.host !== undefined ? { host: devOptions.host } : {}),
-        },
-      });
-    };
-
-    return FrameworkCore.Framework.of({ build: inProcess.build, dev });
+    return inProcess;
   });
 
 /**

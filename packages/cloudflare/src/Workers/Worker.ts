@@ -1171,12 +1171,13 @@ export interface WorkerSourceDescriptor {
    */
   readonly devMode: "server" | "bundle";
   /**
-   * The framework project root. Server-mode dev children are spawned with
-   * this directory as their working directory — some framework dev servers
-   * (e.g. `next dev`, which 404s every route when `process.cwd()` differs
-   * from its `dir`) require cwd to be the project root. Relative paths
-   * resolve against the engine's working directory. Defaults to the
-   * engine's working directory.
+   * The framework project root. The only place a source's root is set:
+   * the engine resolves it once and hands it to the module's `make`, and
+   * server-mode dev children are spawned with it as their working
+   * directory — some framework dev servers (e.g. `next dev`, which 404s
+   * every route when `process.cwd()` differs from its `dir`) require cwd to
+   * be the project root. Relative paths resolve against the engine's
+   * working directory. Defaults to the engine's working directory.
    */
   readonly rootDir?: string;
   /**
@@ -1188,7 +1189,7 @@ export interface WorkerSourceDescriptor {
    */
   readonly runtime?: "node";
   /**
-   * Provider-specific options (rootDir, memo, framework config, ...).
+   * Provider-specific options (memo, framework config, ...).
    * Must be JSON-serializable AND JSON-stable: the descriptor persists
    * in state and participates in the metadata hash, so non-deterministic
    * values here cause perpetual redeploys.

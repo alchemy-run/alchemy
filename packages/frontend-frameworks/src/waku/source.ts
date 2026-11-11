@@ -4,6 +4,7 @@ import * as FrameworkCore from "../core/index.ts";
 import {
   makeSourceModule,
   makeWorkerSource,
+  type SourceModuleContext,
   SourceProviderError,
   type MemoOptions,
   type ServerDevHandle,
@@ -28,8 +29,6 @@ export {
  * in alchemy state and participates in the Worker metadata hash.
  */
 export interface WakuSourceOptions {
-  /** Project root. Defaults to the process working directory. */
-  readonly rootDir?: string | undefined;
   /**
    * The user's own worker entry (the user-entry seam,
    * `DeployTarget.entry`): a module that wraps waku's handler — imported
@@ -108,12 +107,12 @@ export const buildInChild = (config: WakuBuildChildConfig) =>
 /**
  * Waku assumes `process.cwd()` is the project root (its html-shell input and
  * rolldown's relative inputs resolve against it), like its CLI. The build
- * runs in a child rooted there; the dev server, whose inputs are live
- * objects, starts in-process and holds the project cwd only while it starts
- * (see `withRootCwd` in `Waku.ts`).
+ * child and alchemy's dev child both run with the project root as their
+ * working directory.
  */
 export const makeWakuSourceProvider = (
   options: WakuSourceOptions,
+  { rootDir }: SourceModuleContext,
   integration: WakuLikeSourceIntegration = {
     provider: PROVIDER,
     framework: "waku",
@@ -126,7 +125,7 @@ export const makeWakuSourceProvider = (
     provider: integration.provider,
     framework: integration.framework,
     displayName: integration.displayName,
-    rootDir: options.rootDir,
+    rootDir,
     memo: options.memo,
     outputDirs: [options.distDir ?? "dist"],
     // A changed user entry or waku layout must bust the memo.

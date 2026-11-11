@@ -140,6 +140,13 @@ export interface ServerProps {
    */
   dev?: ServerDevProps;
   /**
+   * The JS runtime the dev server's child process runs under. Some
+   * framework dev servers are runtime-sensitive (Vocs's Vite dev server
+   * exhausts memory under Bun), so the composite can pin the child to
+   * `"node"`. Defaults to the engine's runtime.
+   */
+  runtime?: "node";
+  /**
    * Environment variables for the framework server. On deploy the
    * composite sets these on the Lambda; during `alchemy dev` they are
    * applied to the dev server's process environment (the dev sidecar and
@@ -205,8 +212,9 @@ export interface Server extends Resource<
  * The framework toolchain half of a website: on `alchemy deploy` it
  * runs the framework's production build with a platform deploy target and
  * tracks the on-disk output in state; on `alchemy dev` it runs the
- * framework's OWN dev server (native HMR via the framework's kit) in the
- * dev sidecar and exposes its local URL. Shared by AWS, Fly, Hetzner, and
+ * framework's OWN dev server (native HMR via the framework's kit) in a
+ * child process of the dev sidecar, rooted at the project, and exposes its
+ * local URL. Shared by AWS, Fly, Hetzner, and
  * Railway website composites.
  *
  * The framework package and the target module are loaded from *your*
@@ -475,8 +483,9 @@ const normalizeAdvertisedUrl = (url: string) =>
 
 /**
  * The `alchemy dev` variant: runs the framework's own dev server (native
- * HMR through the framework's kit — nuxt, astro, ...) inside the dev
- * sidecar, so it survives user-code hot reloads. Restarts when the
+ * HMR through the framework's kit — nuxt, astro, ...) in a child process of
+ * the dev sidecar, rooted at the project, so it survives user-code hot
+ * reloads. Restarts when the
  * framework/target/root/options config changes.
  */
 export const ServerProviderLocal = () =>
@@ -485,7 +494,6 @@ export const ServerProviderLocal = () =>
     import.meta.resolve(`./ServerLocal${moduleExtension(import.meta.url)}`, import.meta.url),
     Effect.gen(function* () {
       const path = yield* Path.Path;
-      const fs = yield* FileSystem.FileSystem;
       return {
         start: Effect.fn(function* ({ news: props }) {
           // External mode: an external dev server (run out-of-band by the
@@ -518,10 +526,6 @@ export const ServerProviderLocal = () =>
               }
             });
           }
-          const service = yield* makeFramework(props, root).pipe(
-            Effect.provideService(FileSystem.FileSystem, fs),
-            Effect.provideService(Path.Path, path),
-          );
           // Resolve the port BEFORE handing off to the framework: probe
           // the preferred port, fail on `strictPort`, otherwise walk
           // forward to the next free port. Without a preferred port the
@@ -535,11 +539,36 @@ export const ServerProviderLocal = () =>
                   strictPort: dev.strictPort ?? false,
                 })
               : undefined;
-          // `dev` is scoped: the server lives in the instance scope the
-          // LocalProvider helper provides and is torn down on
-          // restart/delete. It resolves at readiness with the local URL.
+          // The dev server runs in its own child process rooted at the
+          // project, never in the sidecar: framework toolchains read the
+          // cwd and keep process-wide caches. The child is scoped: it lives
+          // in the instance scope the LocalProvider helper provides and is
+          // stopped on restart/delete. It resolves at readiness with the
+          // local URL.
+          const { runDevChild } = yield* Effect.tryPromise({
+            try: () => import("@alchemy.run/frontend-frameworks/core"),
+            catch: (cause) =>
+              new FrameworkServerError({
+                framework: props.framework,
+                message:
+                  'Failed to import "@alchemy.run/frontend-frameworks/core". ' +
+                  "Install @alchemy.run/frontend-frameworks in your project to run a website in dev.",
+                cause,
+              }),
+          });
           const { url } = yield* Effect.mapError(
-            service.dev({ root, port, host: dev?.host }),
+            runDevChild({
+              runtime: props.runtime,
+              framework: props.framework,
+              module: props.framework,
+              rootDir: root,
+              makeOptions: { ...props.options, root, target: props.target },
+              devOptions: {
+                root,
+                ...(port !== undefined ? { port } : {}),
+                ...(dev?.host !== undefined ? { host: dev.host } : {}),
+              },
+            }),
             (cause) =>
               new FrameworkServerError({
                 framework: props.framework,

@@ -613,34 +613,7 @@ export const make: (
       return { url };
     });
 
-    // Constructing the SvelteKit plugin loads the project's `@sveltejs/kit`
-    // module graph, which misbehaves when several projects load it
-    // concurrently in one process (partially-initialized module bindings —
-    // `Cannot access 'kit_options' before initialization`). A process hosting
-    // many sites' dev servers (the alchemy dev sidecar) hits exactly that, so
-    // run the dev server in a dedicated child process instead (see
-    // core/DevChild.ts). Inside that child — or when the options cannot cross
-    // the process boundary (deploy-target VALUES, live vite plugins from the
-    // e2e harness) — the in-process path runs directly.
-    const dev: Framework["Service"]["dev"] = (devOptions) => {
-      if (FrameworkCore.isInsideDevChild() || !FrameworkCore.isJsonSerializable(options)) {
-        return devInProcess(devOptions);
-      }
-      const root = devOptions?.root ?? baseRoot;
-      const port = devOptions?.port ?? options?.dev?.port;
-      return FrameworkCore.runDevChild({
-        framework: "sveltekit",
-        module: "@alchemy.run/frontend-frameworks/sveltekit",
-        callerUrl: import.meta.url,
-        rootDir: root,
-        makeOptions: { ...options, root },
-        devOptions: {
-          root,
-          ...(port !== undefined ? { port } : {}),
-          ...(devOptions?.host !== undefined ? { host: devOptions.host } : {}),
-        },
-      });
-    };
+    const dev = devInProcess;
 
     return Framework.of({ build, dev });
   });

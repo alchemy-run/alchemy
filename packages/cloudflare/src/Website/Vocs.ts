@@ -187,7 +187,6 @@ export const Vocs: {
             // The dev child runs in the project root, as Vocs expects.
             rootDir: props?.rootDir,
             options: {
-              rootDir: props?.rootDir,
               outDir: props?.outDir,
               memo: props?.memo,
             },

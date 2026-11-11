@@ -244,7 +244,6 @@ export const Octane: {
             devMode: "server",
             rootDir: props?.rootDir,
             options: {
-              rootDir: props?.rootDir,
               memo: props?.memo,
             },
           },

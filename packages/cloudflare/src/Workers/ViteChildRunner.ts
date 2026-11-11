@@ -68,7 +68,9 @@ const program = Effect.scoped(
     } = config.worker;
     const source = config.source;
     const provider = source
-      ? yield* loadSource(source.descriptor).pipe(
+      ? // The child runs in the root: hand the source the parent's absolute
+        // root so a relative `rootDir` is not resolved a second time.
+        yield* loadSource({ ...source.descriptor, rootDir: config.rootDir }).pipe(
           // `loadSource` is typed against the full `SourceServices` union
           // (which includes the per-run Artifacts cache the live provider
           // supplies); the dev child has no run-scoped cache, so hand the

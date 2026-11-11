@@ -23,6 +23,7 @@ import { resolveViteDevPort } from "../core/DevPort.ts";
 import {
   makeSourceModule,
   makeWorkerSource,
+  type SourceModuleContext,
   SourceProviderError,
   type MemoOptions,
   type ServerDevHandle,
@@ -68,7 +69,6 @@ export type VinextSourceError = SourceError;
 export type VinextMemoOptions = MemoOptions;
 
 export interface VinextSourceOptions {
-  readonly rootDir?: string | undefined;
   readonly main?: string | undefined;
   readonly memo?: VinextMemoOptions | undefined;
   readonly viteEnvironments?: {
@@ -392,13 +392,16 @@ const seedVinextPrerenderCache = (
     );
   }) as Effect.Effect<void>;
 
-export const makeVinextSourceProvider = (options: VinextSourceOptions): SourceProvider => {
+export const makeVinextSourceProvider = (
+  options: VinextSourceOptions,
+  { rootDir }: SourceModuleContext,
+): SourceProvider => {
   const source = makeWorkerSource({
     provider: PROVIDER,
     framework: "vinext",
     displayName: "vinext",
     runtime: "node",
-    rootDir: options.rootDir,
+    rootDir,
     memo: options.memo,
     outputDirs: ["dist"],
     // A changed user entry or Vite environment layout must bust the memo.
@@ -483,10 +486,7 @@ export const makeVinextSourceProvider = (options: VinextSourceOptions): SourcePr
     // After the shared build: seed vinext's prerender cache from the build output.
     build: Effect.fn(function* (ctx) {
       const output = yield* source.build(ctx);
-      yield* seedVinextPrerenderCache(
-        options.rootDir ?? process.cwd(),
-        yield* resolveVinextCacheEnv(ctx.env ?? {}),
-      );
+      yield* seedVinextPrerenderCache(rootDir, yield* resolveVinextCacheEnv(ctx.env ?? {}));
       return output;
     }),
   };

@@ -294,7 +294,6 @@ export const Waku: {
             devMode: "server",
             rootDir: props?.rootDir,
             options: {
-              rootDir: props?.rootDir,
               // Custom worker entry (wraps waku's handler via
               // `virtual:waku/server-entry`); resolved against `rootDir`
               // by the source provider.

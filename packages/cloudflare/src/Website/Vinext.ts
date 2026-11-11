@@ -238,7 +238,6 @@ export const Vinext: {
               rootDir: props.rootDir,
               options: {
                 main: main ?? DEFAULT_WORKER_ENTRY,
-                rootDir: props.rootDir,
                 memo: props.memo,
                 viteEnvironments: props.viteEnvironments ?? { entry: "rsc", children: ["ssr"] },
               },

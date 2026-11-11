@@ -20,6 +20,7 @@ import * as Redacted from "effect/Redacted";
 import {
   makeSourceModule,
   makeWorkerSource,
+  type SourceModuleContext,
   SourceProviderError,
   type AssetReadResult,
   type BundleFile,
@@ -62,11 +63,6 @@ const PROVIDER = "@alchemy.run/frontend-frameworks/sveltekit/source";
 export type SvelteKitMemoOptions = MemoOptions;
 
 export interface SvelteKitSourceOptions {
-  /**
-   * SvelteKit project root. Relative paths resolve from the process working
-   * directory. @default process.cwd()
-   */
-  readonly rootDir?: string | undefined;
   /** Narrows the rebuild-detection input hash. */
   readonly memo?: SvelteKitMemoOptions | undefined;
   /**
@@ -130,13 +126,16 @@ export const buildInChild = (config: SvelteKitBuildChildConfig) =>
     return yield* framework.build({ root: config.rootDir });
   });
 
-export const makeSvelteKitSource = (options: SvelteKitSourceOptions): SourceProvider =>
+export const makeSvelteKitSource = (
+  options: SvelteKitSourceOptions,
+  { rootDir }: SourceModuleContext,
+): SourceProvider =>
   makeWorkerSource({
     requireClient: true,
     provider: PROVIDER,
     framework: "sveltekit",
     displayName: "SvelteKit",
-    rootDir: options.rootDir,
+    rootDir,
     memo: options.memo,
     // kit's build tree; the adapter writes the client output to a temp dir.
     outputDirs: [".svelte-kit"],

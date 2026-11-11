@@ -17,6 +17,7 @@ import * as Effect from "effect/Effect";
 import {
   makeSourceModule,
   makeWorkerSource,
+  type SourceModuleContext,
   SourceProviderError,
   type MemoOptions,
   type ServerDevHandle,
@@ -48,12 +49,6 @@ export type OctaneMemoOptions = MemoOptions;
  * participate in the Worker's metadata hash.
  */
 export interface OctaneSourceOptions {
-  /**
-   * Octane project root (the directory containing `vite.config.ts` and
-   * `octane.config.ts`). Relative paths resolve from the process working
-   * directory. @default process.cwd()
-   */
-  readonly rootDir?: string | undefined;
   /** Narrows the rebuild-detection input hash. */
   readonly memo?: OctaneMemoOptions | undefined;
 }
@@ -76,14 +71,17 @@ export const buildInChild = (config: OctaneBuildChildConfig) =>
     return yield* framework.build({ root: config.rootDir });
   });
 
-export const makeOctaneSource = (options: OctaneSourceOptions): SourceProvider =>
+export const makeOctaneSource = (
+  options: OctaneSourceOptions,
+  { rootDir }: SourceModuleContext,
+): SourceProvider =>
   makeWorkerSource({
     // Octane always emits `dist/client`; a build without it is broken.
     requireClient: true,
     provider: PROVIDER,
     framework: "octane",
     displayName: "Octane",
-    rootDir: options.rootDir,
+    rootDir,
     memo: options.memo,
     // Octane's default `build.outDir`.
     outputDirs: ["dist"],

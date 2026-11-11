@@ -121,6 +121,8 @@ export interface FrameworkSiteProps extends WebsiteServiceProps {
 
 /** Per-framework wiring for {@link makeFrameworkSite}. */
 export interface FrameworkSiteConfig {
+  /** The JS runtime the dev server's child process runs under. @default the engine's runtime */
+  runtime?: "node";
   /** Display name used in error messages (e.g. `"SvelteKit"`). */
   name: string;
   /** Framework-integration module specifier. */
@@ -234,6 +236,7 @@ const runFrameworkSite = Effect.fn("GCP.Website.FrameworkSite")(function* (
   const build = yield* FrameworkServer("Build", {
     framework: config.framework,
     target: config.target,
+    runtime: config.runtime,
     root: props.rootDir,
     env: websiteEnv(props.env),
     options: config.options,

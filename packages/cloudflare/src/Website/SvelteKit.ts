@@ -220,7 +220,6 @@ export const SvelteKit: {
             devMode: "server",
             rootDir: props?.rootDir,
             options: {
-              rootDir: props?.rootDir,
               memo: props?.memo,
               kit: props?.kit,
               // The adapter's build-time page GENERATION (404.html /

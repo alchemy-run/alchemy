@@ -119,6 +119,14 @@ export type SourceError = SourceProviderError | PlatformError;
 
 export type SourceRequirements = FileSystem.FileSystem | Path.Path;
 
+/**
+ * What alchemy hands a source module's `make` besides its options: the
+ * descriptor's `rootDir`, resolved to an absolute path once by the engine.
+ */
+export interface SourceModuleContext {
+  readonly rootDir: string;
+}
+
 export interface SourceProvider {
   readonly ownsAssets: boolean;
   readonly devAssetsBinding?: boolean;
@@ -257,7 +265,8 @@ export interface WorkerSourceSpec<Config> {
   /** Run the build child under Node instead of the current runtime. */
   readonly runtime?: "node" | undefined;
   /** Project root. @default process.cwd() */
-  readonly rootDir: string | undefined;
+  /** Absolute project root, from the module context. */
+  readonly rootDir: string;
   readonly memo: MemoOptions | undefined;
   /** Build output directories relative to the root, excluded from the input hash. */
   readonly outputDirs: ReadonlyArray<string>;
@@ -285,7 +294,6 @@ export interface WorkerSourceSpec<Config> {
  * covers the project tree, the workspaces it imports and the lockfile.
  */
 export const makeWorkerSource = <Config>(spec: WorkerSourceSpec<Config>): SourceProvider => {
-  const rootDirOf = (path: Path.Path) => path.resolve(spec.rootDir ?? process.cwd());
   const input = (rootDir: string, workspaces: Iterable<string>) =>
     hashInput({
       rootDir,
@@ -301,7 +309,7 @@ export const makeWorkerSource = <Config>(spec: WorkerSourceSpec<Config>): Source
 
     build: Effect.fn(function* (ctx) {
       const path = yield* Path.Path;
-      const rootDir = rootDirOf(path);
+      const rootDir = spec.rootDir;
       const output = yield* runBuildChild({
         module: import.meta.resolve(spec.provider),
         rootDir,
@@ -370,18 +378,11 @@ export const makeWorkerSource = <Config>(spec: WorkerSourceSpec<Config>): Source
 
     // Rebuild-free: re-hash the tree over the previously discovered workspaces.
     hash: Effect.fn(function* (_ctx, previous) {
-      const path = yield* Path.Path;
-      const { hash, workspaces } = yield* input(
-        rootDirOf(path),
-        previous?.additionalWorkspaces ?? [],
-      );
+      const { hash, workspaces } = yield* input(spec.rootDir, previous?.additionalWorkspaces ?? []);
       return { input: hash, additionalWorkspaces: workspaces };
     }),
 
-    dev: Effect.fn(function* (ctx) {
-      const path = yield* Path.Path;
-      return yield* spec.dev(ctx, { rootDir: rootDirOf(path) });
-    }),
+    dev: (ctx) => spec.dev(ctx, { rootDir: spec.rootDir }),
   };
 };
 
@@ -391,9 +392,12 @@ export const makeWorkerSource = <Config>(spec: WorkerSourceSpec<Config>): Source
  */
 export const makeSourceModule = <Options>(
   provider: string,
-  make: (options: Options) => SourceProvider,
+  make: (options: Options, context: SourceModuleContext) => SourceProvider,
 ) => ({
-  make: (options: unknown): Effect.Effect<SourceProvider, SourceProviderError> =>
+  make: (
+    options: unknown,
+    context: SourceModuleContext,
+  ): Effect.Effect<SourceProvider, SourceProviderError> =>
     options !== undefined && (typeof options !== "object" || options === null)
       ? Effect.fail(
           new SourceProviderError({
@@ -401,5 +405,5 @@ export const makeSourceModule = <Options>(
             message: `Invalid options for ${provider}: expected an object, got ${typeof options}`,
           }),
         )
-      : Effect.succeed(make((options ?? {}) as Options)),
+      : Effect.succeed(make((options ?? {}) as Options, context)),
 });

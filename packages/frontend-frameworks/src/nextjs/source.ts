@@ -34,6 +34,7 @@ import {
   type SourceContext,
   type SourceError,
   type SourceHash,
+  type SourceModuleContext,
   type SourceProvider,
   type SourceRequirements,
 } from "../core/WorkerSource.ts";
@@ -72,8 +73,6 @@ export type NextjsMemoOptions = MemoOptions;
  * descriptor persists in state and participates in the Worker metadata hash.
  */
 export interface NextjsSourceOptions {
-  /** The Next.js project root. Defaults to the process working directory. */
-  readonly root?: string | undefined;
   /** Rebuild-scope configuration (which files bust the build memo). */
   readonly memo?: NextjsMemoOptions | undefined;
   /** Optional explicit config; otherwise discover `open-next.config.ts`, falling back to generated defaults. */
@@ -187,9 +186,10 @@ export const buildInChild = (config: NextjsBuildChildConfig) =>
 // The provider
 // ─────────────────────────────────────────────────────────────────────
 
-export const makeNextjsSourceProvider = (options: NextjsSourceOptions): NextjsSourceProvider => {
-  const rootDirOf = (path: Path.Path) => path.resolve(options.root ?? process.cwd());
-
+export const makeNextjsSourceProvider = (
+  options: NextjsSourceOptions,
+  { rootDir: root }: SourceModuleContext,
+): NextjsSourceProvider => {
   /**
    * The shared input hash, plus the OpenNext config file (path and content)
    * in the salt and the runtime directory, when under the root, among the
@@ -247,7 +247,7 @@ export const makeNextjsSourceProvider = (options: NextjsSourceOptions): NextjsSo
 
     build: Effect.fn(function* (ctx) {
       const path = yield* Path.Path;
-      const rootDir = rootDirOf(path);
+      const rootDir = root;
       const output = yield* runBuildChild({
         module: import.meta.resolve(PROVIDER),
         rootDir,
@@ -309,9 +309,8 @@ export const makeNextjsSourceProvider = (options: NextjsSourceOptions): NextjsSo
 
     // Rebuild-free: re-hash the tree over the previously discovered workspaces.
     hash: Effect.fn(function* (ctx, previous) {
-      const path = yield* Path.Path;
       const { hash, workspaces } = yield* input(
-        rootDirOf(path),
+        root,
         ctx.dotAlchemy,
         previous?.additionalWorkspaces ?? [],
       );
@@ -327,11 +326,9 @@ export const makeNextjsSourceProvider = (options: NextjsSourceOptions): NextjsSo
     // proxied through cloudflare-runtime's platform proxy onto OpenNext's
     // getCloudflareContext() contract.
     dev: Effect.fn(function* (ctx) {
-      const path = yield* Path.Path;
-      const root = rootDirOf(path);
       const queueConsumers = yield* ctx.worker.queueConsumers;
       const devOptions: Nextjs.NextjsFrameworkOptions = {
-        root: options.root,
+        root,
         nextjs: {
           configPath: options.configPath,
           cache: options.cache,
@@ -380,7 +377,10 @@ export const makeNextjsSourceProvider = (options: NextjsSourceOptions): NextjsSo
  * the returned provider keeps its narrower `hash()` context and arrays are
  * still rejected.
  */
-const make = (options: unknown): Effect.Effect<NextjsSourceProvider, SourceProviderError> =>
+const make = (
+  options: unknown,
+  context: SourceModuleContext,
+): Effect.Effect<NextjsSourceProvider, SourceProviderError> =>
   options !== undefined &&
   (typeof options !== "object" || options === null || Array.isArray(options))
     ? Effect.fail(
@@ -389,6 +389,6 @@ const make = (options: unknown): Effect.Effect<NextjsSourceProvider, SourceProvi
           message: "Invalid source options: expected a plain JSON object (NextjsSourceOptions)",
         }),
       )
-    : Effect.succeed(makeNextjsSourceProvider((options ?? {}) as NextjsSourceOptions));
+    : Effect.succeed(makeNextjsSourceProvider((options ?? {}) as NextjsSourceOptions, context));
 
 export default { make };

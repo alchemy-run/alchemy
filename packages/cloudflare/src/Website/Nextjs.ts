@@ -350,7 +350,6 @@ export const Nextjs: {
             // route 404s until `.next` is warm) — pin the dev child to node.
             runtime: "node",
             options: {
-              root: props?.rootDir,
               memo: props?.memo,
               cache: props?.isr ? "kv" : "static-assets",
               ...props?.openNext,

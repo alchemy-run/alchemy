@@ -20,6 +20,7 @@ import * as Redacted from "effect/Redacted";
 import {
   makeSourceModule,
   makeWorkerSource,
+  type SourceModuleContext,
   SourceProviderError,
   type MemoOptions,
   type ServerDevHandle,
@@ -52,11 +53,6 @@ const PROVIDER = "@alchemy.run/frontend-frameworks/nuxt/source";
 export type NuxtMemoOptions = MemoOptions;
 
 export interface NuxtSourceOptions {
-  /**
-   * Nuxt project root (the directory containing `nuxt.config.ts`). Relative
-   * paths resolve from the process working directory. @default process.cwd()
-   */
-  readonly rootDir?: string | undefined;
   /** Narrows the rebuild-detection input hash. */
   readonly memo?: NuxtMemoOptions | undefined;
   /**
@@ -122,13 +118,16 @@ export const buildInChild = (config: NuxtBuildChildConfig) =>
     return yield* framework.build({ root: config.rootDir });
   });
 
-export const makeNuxtSource = (options: NuxtSourceOptions): SourceProvider =>
+export const makeNuxtSource = (
+  options: NuxtSourceOptions,
+  { rootDir }: SourceModuleContext,
+): SourceProvider =>
   makeWorkerSource({
     requireClient: true,
     provider: PROVIDER,
     framework: "nuxt",
     displayName: "Nuxt",
-    rootDir: options.rootDir,
+    rootDir,
     memo: options.memo,
     // nitro's output, nuxt's buildDir, and nitro's dev/build scratch dir.
     outputDirs: [".output", ".nuxt", ".nitro"],

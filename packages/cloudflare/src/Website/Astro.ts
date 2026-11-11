@@ -396,7 +396,6 @@ export const Astro: {
               devMode: "server",
               rootDir: props.rootDir,
               options: {
-                rootDir: props.rootDir,
                 main: props.main,
                 memo: props.memo,
                 // Passed through verbatim (including `false`) so the

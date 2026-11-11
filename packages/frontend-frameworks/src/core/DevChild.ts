@@ -1,22 +1,20 @@
 import * as NodeChildProcess from "node:child_process";
+import * as NodePath from "node:path";
 import { fileURLToPath } from "node:url";
 /**
  * Child-process isolation for framework DEV servers.
  *
- * Several framework toolchains require `cwd === project root` at dev-server
- * startup (SolidStart resolves the app from the cwd at config-load time,
- * Waku resolves its html shell and relative inputs from the cwd), so their
- * integrations `process.chdir` around startup — and SvelteKit's plugin
- * construction races when several projects load `@sveltejs/kit` graphs
- * concurrently in one process. None of that may run in a process hosting
- * MANY dev servers (the alchemy dev sidecar serves every website of a run):
- * concurrent chdir windows interleave, cwd-relative reads and spawns race,
- * and a transient chdir into a since-deleted temp root breaks unrelated
- * sites. The same class of problem production builds solved with
- * `core/BuildChild.ts` (and Next.js dev solved with its `next dev` child).
- *
- * Instead, each such dev server runs in a DEDICATED child process whose
- * working directory IS the project root — no chdir anywhere, no lock:
+ * Framework toolchains assume `cwd === project root` at dev-server startup
+ * (SolidStart resolves the app from the cwd at config-load time, Waku its
+ * html shell and relative inputs), and some race when several projects load
+ * in one process (SvelteKit's plugin construction, Nuxt's kit caches). The
+ * process that hosts dev servers (the alchemy dev sidecar serves every
+ * website of a run) must never run them itself. So the CALLER runs each dev
+ * server in a dedicated child process whose working directory IS the
+ * project root, and framework integrations always serve in-process, in a
+ * cwd that is already their root — no chdir anywhere, no lock. The same
+ * rule holds for builds (`core/BuildChild.ts`) and for Cloudflare Worker
+ * sources (alchemy's Vite child).
  *
  * - The **parent** ({@link runDevChild}) spawns the shared
  *   `core/DevChildRunner.ts` entry with `cwd = rootDir`, forwards the dev
@@ -25,11 +23,8 @@ import { fileURLToPath } from "node:url";
  *   ambient Scope — the same lifetime an in-process dev handle has — and
  *   is stopped (SIGTERM, then SIGKILL) when that scope closes.
  * - The **child** (`DevChildRunner`) imports the framework-integration
- *   module (a bare specifier, self-resolved within this package), calls
- *   `make(config.makeOptions).dev(config.devOptions)`, prints the marker,
- *   and serves until SIGTERM interrupts it. The runner sets
- *   {@link DEV_CHILD_ENV_KEY} so the integration's `dev` takes its
- *   in-process path inside the child instead of recursing.
+ *   module, calls `make(config.makeOptions).dev(config.devOptions)`, prints
+ *   the marker, and serves until SIGTERM interrupts it.
  */
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -40,14 +35,30 @@ import { makeChildOutput } from "./ChildOutput.ts";
 import { FrameworkError, type FrameworkDevServer } from "./Framework.ts";
 
 /**
- * Set on the spawned runner (and inherited by its descendants) so a
- * framework integration's `dev` runs the dev server IN-PROCESS when it is
- * already inside a dev child.
+ * Run `effect` only when the process is already in the project root. For
+ * toolchains that resolve inputs from `process.cwd()` (Waku, SolidStart):
+ * their callers run them in a build or dev child rooted at the project, so
+ * a different cwd is a caller bug, reported instead of papered over with a
+ * process-wide `chdir`.
  */
-export const DEV_CHILD_ENV_KEY = "ALCHEMY_FRAMEWORK_DEV_CHILD";
-
-/** `true` when this process IS a spawned dev child (or one of its children). */
-export const isInsideDevChild = (): boolean => process.env[DEV_CHILD_ENV_KEY] === "1";
+export const inProjectCwd = <A, E, R>(
+  framework: string,
+  root: string,
+  effect: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E | FrameworkError, R> =>
+  Effect.suspend((): Effect.Effect<A, E | FrameworkError, R> => {
+    const cwd = process.cwd();
+    return cwd === NodePath.resolve(root)
+      ? effect
+      : Effect.fail(
+          new FrameworkError({
+            framework,
+            message:
+              `${framework} must run with its project root (${root}) as the working ` +
+              `directory, in a build or dev child process; the working directory is ${cwd}`,
+          }),
+        );
+  });
 
 /** The runner's `argv[2]` payload (JSON). */
 export interface DevChildPayload {
@@ -130,13 +141,13 @@ export interface DevChildOptions {
   /** Bare module specifier the runner imports (see {@link DevChildPayload}). */
   readonly module: string;
   /**
-   * `import.meta.url` of the CALLING framework module. The shared runner
-   * entry is resolved as `../core/DevChildRunner.*` relative to it — which
-   * lands on the stable entry file in both layouts
-   * (`src/{fw}/X.ts` → `src/core/DevChildRunner.ts`,
+   * A module URL the shared runner entry is resolved against, as
+   * `../core/DevChildRunner.*` — which lands on the stable entry file in
+   * both layouts (`src/{fw}/X.ts` → `src/core/DevChildRunner.ts`,
    * `dist/_chunks/X.js` → `dist/core/DevChildRunner.js`).
+   * @default this module's own URL
    */
-  readonly callerUrl: string;
+  readonly callerUrl?: string | undefined;
   /** Project root — becomes the child's working directory. */
   readonly rootDir: string;
   /** JSON-serializable options for the module's `make(...)`. */
@@ -167,10 +178,10 @@ export const runDevChild = (
 
     const entry = fileURLToPath(
       new URL(
-        options.callerUrl.endsWith(".ts")
+        (options.callerUrl ?? import.meta.url).endsWith(".ts")
           ? "../core/DevChildRunner.ts"
           : "../core/DevChildRunner.js",
-        options.callerUrl,
+        options.callerUrl ?? import.meta.url,
       ),
     );
     const isBun =
@@ -200,7 +211,6 @@ export const runDevChild = (
             cwd: options.rootDir,
             stdio: ["ignore", "pipe", "pipe"],
             detached: false,
-            env: { ...process.env, [DEV_CHILD_ENV_KEY]: "1" },
           });
           const handle: DevChildHandle = { child, exited: false, output: "" };
           child.on("error", (cause) => {

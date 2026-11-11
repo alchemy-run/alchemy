@@ -20,6 +20,7 @@ import { hashInput, sha256Object, type MemoOptions } from "../core/InputHash.ts"
 import {
   makeSourceModule,
   makeWorkerSource,
+  type SourceModuleContext,
   SourceProviderError,
   type ServerDevHandle,
   type SourceProvider,
@@ -52,8 +53,6 @@ export {
  * participate in the Worker's metadata hash).
  */
 export interface AstroSourceOptions {
-  /** Astro project root. Defaults to the process working directory. */
-  readonly rootDir?: string;
   /**
    * The user's own Worker entry (the user-entry seam): a module that wraps
    * the Astro handler — imported from
@@ -259,14 +258,17 @@ const hashPinnedWorkspaces = Effect.fn(function* (
   return hashes.sort();
 });
 
-const makeAstroSourceProvider = (options: AstroSourceOptions): SourceProvider => {
+const makeAstroSourceProvider = (
+  options: AstroSourceOptions,
+  { rootDir }: SourceModuleContext,
+): SourceProvider => {
   const workspaces = options.memo?.workspaces;
   const pinned = Array.isArray(workspaces) ? workspaces : undefined;
   const source = makeWorkerSource({
     provider: PROVIDER,
     framework: "astro",
     displayName: "Astro",
-    rootDir: options.rootDir,
+    rootDir,
     memo: options.memo,
     outputDirs: [options.astro?.outDir ?? "dist", ".astro"],
     hashOptions: {
@@ -354,11 +356,7 @@ const makeAstroSourceProvider = (options: AstroSourceOptions): SourceProvider =>
   // so the base `input` covers the root alone; fold in each pinned
   // workspace's hash (under its own memo options).
   const withPinned = Effect.fn(function* (rootInput: string | undefined) {
-    const path = yield* Path.Path;
-    const workspaces = yield* hashPinnedWorkspaces(
-      path.resolve(options.rootDir ?? process.cwd()),
-      pinned,
-    );
+    const workspaces = yield* hashPinnedWorkspaces(rootDir, pinned);
     return yield* sha256Object({ root: rootInput, workspaces });
   });
   return {

@@ -1,4 +1,3 @@
-import * as NodePath from "node:path";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -6,7 +5,6 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
-import * as Semaphore from "effect/Semaphore";
 import * as FrameworkCore from "../core/index.ts";
 import {
   Framework,
@@ -153,69 +151,6 @@ const fail = (message: string, cause?: unknown) =>
   new FrameworkError({ framework: "solidstart", message, cause });
 
 /**
- * Serializes cwd swaps across concurrent dev-server starts in one process (the
- * same discipline as the Waku framework's lock). Without it two interleaved
- * acquire/release pairs leave the process cwd pointing at the wrong project:
- * A chdir(/orig -> /a); B captures previous=/a, chdir(/b); A restores /orig;
- * B restores /a.
- */
-const cwdLock = Semaphore.makeUnsafe(1);
-
-/**
- * Run `effect` with the process working directory set to the project root,
- * restoring it afterwards. A no-op (and lock-free) when the cwd already is the
- * root — the case for the isolated build child process.
- *
- * SolidStart 2's `solidStart()` plugin resolves the app root, the route
- * directory, and the `~` alias from `process.cwd()` at config-load time —
- * not from vite's `root` — so it only finds the app when the process is IN
- * the project. Production builds are already isolated in a child process
- * whose cwd IS the root (see `aws.ts`), which makes this a no-op there; the
- * dev server runs in the caller's process (alchemy's dev sidecar), so the
- * cwd is aligned only across the window in which vite evaluates the config
- * module, and restored immediately after.
- *
- * Consequence, upstream and unavoidable while the plugin keys off the cwd:
- * one process can host the dev server of ONE SolidStart project at a time.
- */
-const inProjectCwd = <A, E, R>(
-  root: string,
-  effect: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E | FrameworkError, R> =>
-  Effect.flatMap(
-    Effect.sync(() => process.cwd() === NodePath.resolve(root)),
-    (isRoot) =>
-      isRoot
-        ? effect
-        : Semaphore.withPermits(
-            cwdLock,
-            1,
-          )(
-            Effect.acquireUseRelease(
-              Effect.try({
-                try: () => {
-                  const previous = process.cwd();
-                  process.chdir(root);
-                  return previous;
-                },
-                catch: (error) => fail(`Failed to enter the project directory ${root}`, error),
-              }),
-              () => effect,
-              (previous) =>
-                Effect.sync(() => {
-                  try {
-                    if (process.cwd() !== previous) {
-                      process.chdir(previous);
-                    }
-                  } catch {
-                    // restoring the cwd is best-effort
-                  }
-                }),
-            ),
-          ),
-  );
-
-/**
  * Build the `Framework` service implementation for a SolidStart project.
  *
  * - `build` resolves the deploy target, then either delegates wholesale
@@ -341,7 +276,8 @@ export const make: (
         nitro.nitroV2Plugin(nitroConfig),
       ]);
 
-      yield* inProjectCwd(
+      yield* FrameworkCore.inProjectCwd(
+        "solidstart",
         root,
         Effect.tryPromise({
           try: async () => {
@@ -400,7 +336,8 @@ export const make: (
       const host = devOptions?.host;
 
       const server = yield* Effect.acquireRelease(
-        inProjectCwd(
+        FrameworkCore.inProjectCwd(
+          "solidstart",
           root,
           Effect.tryPromise({
             try: async () => {
@@ -452,32 +389,7 @@ export const make: (
       return { url };
     });
 
-    // SolidStart's `solidStart()` plugin resolves the app from `process.cwd()`
-    // at config-load time, so its startup needs `cwd === root`. That must not
-    // happen in a process hosting other sites (the alchemy dev sidecar) — run
-    // the dev server in a dedicated child whose cwd IS the root instead (see
-    // core/DevChild.ts). Inside that child (or when the options cannot cross
-    // the process boundary, e.g. a deploy-target VALUE from the e2e harness)
-    // the in-process path runs directly.
-    const dev: Framework["Service"]["dev"] = (devOptions) => {
-      const root = devOptions?.root ?? baseRoot;
-      const port = devOptions?.port ?? options?.dev?.port;
-      if (FrameworkCore.isInsideDevChild() || !FrameworkCore.isJsonSerializable(options)) {
-        return devInProcess(devOptions);
-      }
-      return FrameworkCore.runDevChild({
-        framework: "solidstart",
-        module: "@alchemy.run/frontend-frameworks/solidstart",
-        callerUrl: import.meta.url,
-        rootDir: root,
-        makeOptions: { ...options, root },
-        devOptions: {
-          root,
-          ...(port !== undefined ? { port } : {}),
-          ...(devOptions?.host !== undefined ? { host: devOptions.host } : {}),
-        },
-      });
-    };
+    const dev = devInProcess;
 
     return Framework.of({ build, dev });
   });
