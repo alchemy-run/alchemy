@@ -40,7 +40,7 @@ Pick **API key** to paste one from the dashboard's **API Keys** tab. Deploying c
 
 ## Work in an organization
 
-An organization has its own plan, its own wallet and its own shared environments. You work in one the way the dashboard's organization select or `boat --org` do: the sandboxes you create bill it, and the environments you manage are its shared ones.
+An organization has its own plan, its own wallet, and its own shared environments and credential profiles. You work in one the way the dashboard's organization select or `boat --org` do: the sandboxes you create bill it, and the environments and [credential profiles](/boat/security/credential-profiles) you manage are its shared ones.
 
 When you sign in, Alchemy picks your organization; it asks only when your account belongs to more than one. It stores the organization's id, so renaming the organization doesn't break the profile. Every call sends it, and so do the hosts Alchemy deploys.
 
@@ -57,7 +57,7 @@ export default Alchemy.Stack(
   "Team",
   { providers: Boat.providers({ org: "acme" }) },
   Effect.gen(function* () {
-    yield* Boat.Environment("Agents", { passSandboxCredentials: false });
+    yield* Boat.Environment("Shared", { env: { REGION: "us" } });
     yield* Boat.Sandbox("TeamBox", { noEnv: true, visibility: "shared" });
   }),
 );
@@ -65,7 +65,7 @@ export default Alchemy.Stack(
 
 A sandbox's wallet is fixed when it is created, so changing the organization later leaves existing sandboxes where they are; their `org` attribute says which. An environment belongs to one organization for life, so changing the organization replaces it.
 
-`visibility: "shared"` lets every member use a sandbox. Sharing one that holds your logins wipes them at its next start, so share sandboxes with `noEnv`, or with an environment that passes nothing.
+`visibility: "shared"` lets every member use a sandbox. Sharing one that holds your logins wipes them at its next start, so share sandboxes with `noEnv`, or on an environment that passes none of your credentials, which is how a declared one starts.
 
 Creating organizations, inviting members and buying seats stay on the dashboard and `boat org`. Boat doesn't offer them in its public API.
 

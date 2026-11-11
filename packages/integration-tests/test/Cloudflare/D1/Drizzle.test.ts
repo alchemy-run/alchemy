@@ -120,6 +120,16 @@ test(
     expect(rel.user.id).toBe(user.id);
     expect(rel.user.posts.map((p) => p.title)).toContain("hello world");
 
+    // a CTE built at Construction phase, its columns in an aggregate and a join
+    const countsRes = yield* untilOk(HttpClient.get(`${url}/users/post-counts`));
+    const counted = (yield* countsRes.json) as {
+      sql: string;
+      counts: Array<{ id: number; posts: number }>;
+    };
+    expect(counted.sql).toContain('count("written"."id")');
+    expect(counted.sql).toContain('on "written"."user_id" = "users"."id"');
+    expect(counted.counts).toContainEqual({ id: user.id, posts: 1 });
+
     // raw @effect/sql-d1 tagged-template client
     const sqlRes = yield* untilOk(HttpClient.get(`${url}/sql/users`));
     const { rows } = (yield* sqlRes.json) as {

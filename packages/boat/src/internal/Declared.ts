@@ -1,6 +1,7 @@
 import type { PropsInput } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import { isResource } from "alchemy/Resource";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import type { Providers } from "../Providers.ts";
@@ -38,9 +39,15 @@ const isPlain = (value: unknown): value is Record<string, unknown> =>
   value !== null &&
   (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null);
 
-/** A declaration still to be yielded: an Effect that isn't an Output or a resource. */
-const isDeclaration = (value: unknown): value is Effect.Effect<unknown, never, Providers> =>
-  Effect.isEffect(value) && !Output.isOutput(value) && !isResource(value);
+/**
+ * A declaration still to be yielded: an Effect that isn't an Output, a
+ * resource, or a Config (which the engine resolves as a prop value).
+ */
+export const isDeclaration = (value: unknown): value is Effect.Effect<unknown, never, Providers> =>
+  Effect.isEffect(value) &&
+  !Output.isOutput(value) &&
+  !isResource(value) &&
+  !Config.isConfig(value);
 
 const hasDeclarations = (value: unknown): boolean =>
   isDeclaration(value) ||

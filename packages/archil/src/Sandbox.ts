@@ -482,6 +482,26 @@ export type SandboxShape = Main<ServerHost>;
  * });
  * ```
  *
+ * **Example:** Forward an API's requests to a Worker gateway that adds the key
+ * ```typescript
+ * const gateway = yield* MyGateway;
+ * const sandbox = yield* Archil.Sandbox("MySandbox", {
+ *   network: {
+ *     egress: {
+ *       default: "deny",
+ *       allow: [
+ *         {
+ *           target: "api.example.com",
+ *           // proves to the gateway that the request came through this policy
+ *           headers: { "X-Gateway-Token": Config.Redacted("GATEWAY_TOKEN") },
+ *           forwardUrl: gateway.url.as<string>(),
+ *         },
+ *       ],
+ *     },
+ *   },
+ * });
+ * ```
+ *
  * ### Using a Sandbox at Run Time
  * **Example:** Run a command and fork a preview from a Worker
  * ```typescript
