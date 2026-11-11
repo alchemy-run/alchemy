@@ -6,6 +6,7 @@ import * as redis from "@distilled.cloud/gcp/redis_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { interruptDestroy } from "../../interruptDestroy.ts";
 import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -55,7 +56,7 @@ test.provider(
 );
 
 test.provider.skipIf(!runLifecycle)(
-  "create, update, and delete a redis instance",
+  "create, update, and delete a redis instance through an interrupted destroy",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -118,6 +119,14 @@ test.provider.skipIf(!runLifecycle)(
       expect(refetched.labels?.env).toEqual("prod");
       expect(refetched.labels?.role).toEqual("cache");
 
+      // The destroy is interrupted while the instance is DELETING. The next
+      // destroy has to wait for the delete already running.
+      yield* interruptDestroy(stack, {
+        status: redis
+          .getProjectsLocationsInstances({ name: created.name })
+          .pipe(Effect.map((instance) => instance.state)),
+        deleting: "DELETING",
+      });
       yield* stack.destroy();
 
       const gone = yield* waitUntilGone(created.name);

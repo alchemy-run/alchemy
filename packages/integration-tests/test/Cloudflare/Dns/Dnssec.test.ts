@@ -4,6 +4,7 @@ import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as dns from "@distilled.cloud/cloudflare/dns";
+import * as Drift from "alchemy/Drift";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -171,6 +172,57 @@ describe.sequential(
           yield* stack.destroy();
           const after = yield* getDnssec(zoneId);
           expect(family(after.status)).toEqual("disabled");
+        }).pipe(logLevel),
+      { timeout: 300_000 },
+    );
+
+    // #3182: Cloudflare moving `modified_on` with nothing else changed is
+    // not drift, and redeploying the same program plans no update.
+    test.provider(
+      "a moved modifiedOn is not drift and plans no update",
+      (stack) =>
+        Effect.gen(function* () {
+          const zoneId = yield* resolveZoneId;
+
+          yield* stack.destroy();
+          yield* normalizeDisabled(zoneId);
+
+          const program = Effect.gen(function* () {
+            return yield* Cloudflare.DNS.Dnssec("ZoneDnssec", { zoneId });
+          });
+          const deployed = yield* stack.deploy(program);
+
+          // Move `modified_on` for real: turn DNSSEC off and back on out of
+          // band. Cloudflare keeps the zone's key, so the DS record and every
+          // other attribute end where they started; only the timestamp moves.
+          yield* normalizeDisabled(zoneId);
+          yield* dns.patchDnssec({ zoneId, status: "active" });
+          const live = yield* getDnssec(zoneId).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (o) => family(o.status) === "active",
+              times: 15,
+            }),
+          );
+          expect(live.modifiedOn).not.toEqual(deployed.modifiedOn);
+          expect(live.ds).toEqual(deployed.ds);
+          expect(live.status).toEqual(deployed.status);
+
+          const drift = yield* Drift.detect(stack).pipe(Effect.provide(stack.state));
+          expect(drift.resources.ZoneDnssec?.action).toBe("unchanged");
+
+          yield* stack.deploy(program);
+          const plan = yield* stack.plan(program);
+          expect(plan.resources.ZoneDnssec?.action).toBe("noop");
+
+          yield* stack.destroy();
+          yield* getDnssec(zoneId).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (o) => family(o.status) === "disabled",
+              times: 15,
+            }),
+          );
         }).pipe(logLevel),
       { timeout: 300_000 },
     );

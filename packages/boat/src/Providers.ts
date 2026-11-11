@@ -3,8 +3,10 @@ import { ProfileStoreLive } from "alchemy/Auth/Profile";
 import * as Provider from "alchemy/Provider";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
+import { AiProxy, AiProxyProvider } from "./AiProxy.ts";
 import { ApiKey, ApiKeyProvider } from "./ApiKey.ts";
 import { BoatAuth } from "./AuthProvider.ts";
+import { CredentialProfile, CredentialProfileProvider } from "./CredentialProfile.ts";
 import * as Credentials from "./Credentials.ts";
 import { Environment, EnvironmentProvider } from "./Environment.ts";
 import { Sandbox, SandboxProvider } from "./Sandbox.ts";
@@ -39,11 +41,21 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 export const providers = (options?: { readonly org?: string }) =>
   Layer.effect(
     Providers,
-    Provider.collection([ApiKey, Environment, Sandbox, Snapshot, Webhook]),
+    Provider.collection([
+      AiProxy,
+      ApiKey,
+      CredentialProfile,
+      Environment,
+      Sandbox,
+      Snapshot,
+      Webhook,
+    ]),
   ).pipe(
     Layer.provide(
       Layer.mergeAll(
+        AiProxyProvider(),
         ApiKeyProvider(),
+        CredentialProfileProvider(),
         EnvironmentProvider(),
         SandboxProvider(),
         SnapshotProvider(),

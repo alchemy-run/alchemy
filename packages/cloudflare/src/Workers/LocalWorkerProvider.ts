@@ -12,6 +12,7 @@ import {
 } from "@alchemy.run/cloudflare-runtime/core";
 import type { ContainerImage as RuntimeContainerImage } from "@alchemy.run/cloudflare-runtime/core/Docker";
 import * as WorkerProxy from "@alchemy.run/cloudflare-runtime/core/proxy/WorkerProxy";
+import { hashDockerBuildInputs, selectDockerBuildContext } from "@alchemy.run/docker/BuildHash";
 import { dotAlchemyDirectory } from "alchemy/AlchemyContext";
 import {
   Artifacts as AlchemyArtifacts,
@@ -25,7 +26,6 @@ import { unwrapRedacted } from "alchemy/Util";
 import { isPathWithin } from "alchemy/Util/isPathWithin";
 import { LogAnnotation } from "alchemy/Util/LogAnnotation";
 import { makeResourceLogger, makeResourceOutput } from "alchemy/Util/ResourceOutput";
-import { sha256 } from "alchemy/Util/sha256";
 import { terminalStyle } from "alchemy/Util/Terminal";
 import { theme } from "alchemy/Util/Theme";
 import * as Cause from "effect/Cause";
@@ -657,6 +657,9 @@ export const LocalWorkerProvider = () =>
        * serve produced DUPLICATES whose simultaneous restarts storm the
        * instance until the DO's container link breaks.
        */
+      /** Directory names the container-context watcher never looks into. */
+      const WATCH_SKIPPED_NAMES = [".git", "node_modules"];
+
       const containerWatchers = new Map<string, { key: string; fiber: Fiber.Fiber<void> }>();
 
       const stopContainerWatcher = (id: string) =>
@@ -680,9 +683,10 @@ export const LocalWorkerProvider = () =>
        * rewrites its bundle there on every plan, which would loop; that
        * variant reloads through the config's `containerHashes` instead.
        *
-       * Events are debounced and gated on a content fingerprint
-       * (`node_modules`/`.git` skipped), so editor double-saves and
-       * metadata-only churn don't bounce the instance.
+       * Events are debounced and gated on the Docker build hash
+       * (`.dockerignore` applied; `.alchemy`, `.git` and `node_modules`
+       * skipped), so editor double-saves, ignored files, git, installs and
+       * Alchemy's own state/log writes don't bounce the instance.
        */
       const ensureContainerWatcher = (
         worker: RunnableWorkerConfig,
@@ -721,37 +725,70 @@ export const LocalWorkerProvider = () =>
           }
           if (watched.size === 0) return;
 
-          const fingerprint = Effect.gen(function* () {
-            const hashes: string[] = [];
-            const walk = (dir: string): Effect.Effect<void, any> =>
-              Effect.gen(function* () {
-                const entries = yield* fs.readDirectory(dir);
-                for (const entry of entries.sort()) {
-                  if (entry === "node_modules" || entry === ".git") continue;
-                  const file = path.join(dir, entry);
-                  const stat = yield* fs.stat(file);
-                  if (stat.type === "Directory") {
-                    yield* walk(file);
-                  } else {
-                    hashes.push(`${file}:${yield* fs.readFile(file).pipe(Effect.flatMap(sha256))}`);
-                  }
-                }
-              });
-            for (const [context, { dockerfile }] of watched) {
-              yield* walk(context);
-              if (dockerfile !== undefined && !dockerfile.startsWith(context)) {
-                hashes.push(
-                  `${dockerfile}:${yield* fs.readFile(dockerfile).pipe(Effect.flatMap(sha256))}`,
-                );
-              }
-            }
-            return yield* sha256(hashes.join("\n"));
-          }).pipe(Effect.orElseSucceed(() => undefined));
+          // Fingerprint what Docker receives — the same hash the container
+          // provider tags the image with — so `.dockerignore`d paths and
+          // Alchemy's own `.alchemy` writes (logs, local state) inside a
+          // `context: "."` never restart the instance. `.git` and
+          // `node_modules` (at any depth) are left out too, as the watcher
+          // always did: git rewrites its index on every `git status` an
+          // editor runs, and re-hashing installed dependencies on every edit
+          // costs far more than it catches — a dependency change also
+          // changes a manifest or lockfile, and the next plan's image hash
+          // (which keeps Docker's semantics) still sees it.
+          const fingerprint = Effect.forEach([...watched.entries()], ([context, { dockerfile }]) =>
+            hashDockerBuildInputs(
+              {
+                context,
+                dockerfile: dockerfile ?? path.join(context, "Dockerfile"),
+                platform: "local",
+              },
+              "effective",
+              { excludeNames: WATCH_SKIPPED_NAMES },
+            ),
+          ).pipe(
+            Effect.map((hashes) => hashes.join("\n")),
+            Effect.orElseSucceed(() => undefined),
+          );
 
+          // Drop events for paths the fingerprint skips before they reach
+          // the debounce, so a stream of `.alchemy` log writes never
+          // re-hashes the context.
+          const contextEvents = (context: string, dockerfile: string | undefined) =>
+            fs.watch(context, { recursive: true }).pipe(
+              Stream.filterEffect((event) => {
+                const changed = path.resolve(context, event.path);
+                if (
+                  isPathWithin(dotAlchemy, changed, runtimeBase) ||
+                  path
+                    .relative(context, changed)
+                    .split(path.sep)
+                    .some((segment) => WATCH_SKIPPED_NAMES.includes(segment))
+                ) {
+                  return Effect.succeed(false);
+                }
+                return selectDockerBuildContext({
+                  context,
+                  dockerfile: dockerfile ?? path.join(context, "Dockerfile"),
+                }).pipe(
+                  Effect.map((selection) => selection.includes(path.relative(context, changed))),
+                  Effect.orElseSucceed(() => true),
+                );
+              }),
+            );
+          const dockerfileEvents = (dockerfile: string) =>
+            fs
+              .watch(path.dirname(dockerfile))
+              .pipe(
+                Stream.filter((event) =>
+                  [dockerfile, `${dockerfile}.dockerignore`].includes(
+                    path.resolve(path.dirname(dockerfile), event.path),
+                  ),
+                ),
+              );
           const streams = [...watched.entries()].flatMap(([context, { dockerfile }]) => [
-            fs.watch(context, { recursive: true }),
-            ...(dockerfile !== undefined && !dockerfile.startsWith(context)
-              ? [fs.watch(path.dirname(dockerfile))]
+            contextEvents(context, dockerfile),
+            ...(dockerfile !== undefined && !isPathWithin(context, dockerfile, runtimeBase)
+              ? [dockerfileEvents(dockerfile)]
               : []),
           ]);
           const watchLoop = Effect.gen(function* () {
