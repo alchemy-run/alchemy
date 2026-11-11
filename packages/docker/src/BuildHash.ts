@@ -176,6 +176,14 @@ const containedRuntimeDirectory = Effect.fn(function* (context: string) {
 export const hashDockerBuildInputs = Effect.fn(function* (
   source: DockerBuildSource,
   mode: DockerBuildHashMode,
+  options: {
+    /**
+     * Context-relative directories left out of the hash on top of
+     * `.dockerignore` and `.alchemy` — e.g. `.git` for a dev watcher that
+     * must not restart on git's own index writes.
+     */
+    readonly exclude?: ReadonlyArray<string>;
+  } = {},
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -220,20 +228,26 @@ export const hashDockerBuildInputs = Effect.fn(function* (
   // would give the image a new tag on every deploy. A context inside
   // `.alchemy` (a generated one) is still hashed in full.
   const runtimeDirectory = yield* containedRuntimeDirectory(context);
+  const excluded = new Set(
+    [runtimeDirectory, ...(options.exclude ?? []).map(normalizeRelativePath)].filter(
+      (entry): entry is string => entry !== undefined && entry.length > 0,
+    ),
+  );
   const listDirectory = yield* listFileSystemDirectory(context);
   // Walk one level at a time so an excluded directory is discarded before
   // its contents are read; entries come back sorted, preserving hash order.
   const entries = yield* walkIgnoring({
     list:
-      runtimeDirectory === undefined
+      excluded.size === 0
         ? listDirectory
         : (directory: string) =>
             listDirectory(directory).pipe(
               Effect.map((children) =>
                 children.filter(
                   (child) =>
-                    (directory.length === 0 ? child.name : `${directory}/${child.name}`) !==
-                    runtimeDirectory,
+                    !excluded.has(
+                      directory.length === 0 ? child.name : `${directory}/${child.name}`,
+                    ),
                 ),
               ),
             ),

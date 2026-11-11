@@ -308,4 +308,28 @@ layer(BunServices.layer)("Docker build hash traversal", (test) => {
       }),
     { tags: ["unit", "provider:docker", "local"] },
   );
+
+  test.effect(
+    "leaves `exclude` directories out of the hash and never reads them",
+    () =>
+      Effect.gen(function* () {
+        const { root, fs, path } = yield* makeContext();
+        yield* fs.makeDirectory(path.join(root, ".git", "objects"), { recursive: true });
+        yield* fs.writeFileString(path.join(root, ".git", "index"), "v1");
+        const source = sourceFor(root);
+        const { guarded } = guardedReadDirectories(fs, path, root, [".git"]);
+        const hash = hashDockerBuildInputs(source, "effective", { exclude: [".git"] }).pipe(
+          Effect.provideService(FileSystem.FileSystem, guarded),
+        );
+        const before = yield* hash;
+        yield* fs.writeFileString(path.join(root, ".git", "index"), "v2");
+        expect(yield* hash).toBe(before);
+        // Without `exclude`, Docker's own semantics hash `.git` like any file.
+        const all = hashDockerBuildInputs(source, "effective");
+        const withGit = yield* all;
+        yield* fs.writeFileString(path.join(root, ".git", "index"), "v3");
+        expect(yield* all).not.toBe(withGit);
+      }),
+    { tags: ["unit", "provider:docker", "local"] },
+  );
 });
