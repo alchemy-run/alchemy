@@ -1,12 +1,10 @@
+// `@alchemy.run/cloudflare` is an optional peer — its value import is
+// deferred to the call so `@alchemy.run/drizzle` resolves without it.
 import type { D1DatabaseSource } from "@alchemy.run/cloudflare/D1/SQL";
 import * as D1Client from "@effect/sql-d1/D1Client";
-import { makeExecutionMemo } from "alchemy/Runtime/ExecutionMemo";
-import { proxyChain } from "alchemy/Util/proxy-chain";
 import type { AnyRelations, EmptyRelations } from "drizzle-orm";
-import type { EffectSQLiteD1Database } from "drizzle-orm/effect-d1";
 import * as SQLiteD1Drizzle from "drizzle-orm/effect-d1";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 
 /**
  * Open a Drizzle database over a Cloudflare D1 binding using the
@@ -14,11 +12,8 @@ import * as Layer from "effect/Layer";
  * `@effect/sql-d1`'s `D1Client`).
  *
  * Accepts the client returned by `Cloudflare.D1.QueryDatabase(db)` — or its
- * `raw` effect directly — and returns a chainable Proxy over
- * `EffectSQLiteD1Database` (via `proxyChain`): every property read records a
- * step, every call records args, and the chain is replayed against the
- * resolved drizzle db when it's finally yielded as an Effect. Callers don't
- * need a separate `yield* conn` step:
+ * `raw` effect directly. Resolve it once at Construction phase and use it
+ * from any handler:
  *
  * ```typescript
  * const d1 = yield* Cloudflare.D1.QueryDatabase(Db);
@@ -29,49 +24,30 @@ import * as Layer from "effect/Layer";
  * });
  * ```
  *
- * The client build is deferred until the first query and memoized on the
- * current execution's `Scope` (via {@link makeExecutionMemo}), so the
- * `D1Client` (and its prepared-statement cache) is built at most once per
- * execution — a Worker `fetch`/`queue`/`scheduled` event, a Durable Object
- * call, or a Workflow run — and reused across every query in that execution.
- * Resolving the binding is likewise deferred, so deploy / plan-time
- * invocations (where `WorkerEnvironment` isn't provided) never touch D1.
+ * The database is a real `EffectSQLiteD1Database`. Queries, subqueries, CTEs
+ * and `sql` fragments are built by drizzle's own code, without the binding.
+ * Running a query resolves the binding. The `D1Client` over it (and its
+ * prepared-statement cache) is built at most once per execution — a Worker
+ * `fetch`/`queue`/`scheduled` event, a Durable Object call, or a Workflow
+ * run — and reused by every query in it. Deploy / plan-time invocations
+ * (where `WorkerEnvironment` isn't provided) never touch D1.
  *
- * The client is built against that same execution scope, so its finalizer
- * fires when the scope closes — when the request / run settles, not when the
- * Worker's isolate-lifetime init completes. Wrapping queries in a nested
- * `Effect.scoped` narrows both the memo and the client's lifetime to that
- * block: memo key and finalizer target are always the same scope object, so
- * they cannot disagree.
+ * The client belongs to the execution's `Scope` and is released when the
+ * request / run settles. Wrapping queries in a nested `Effect.scoped` gives
+ * that block its own client, released when the block ends.
  *
  * @binding
  */
-export const D1 = <TRelations extends AnyRelations = EmptyRelations, E = never, R = never>(
+export const D1 = Effect.fn(function* <
+  TRelations extends AnyRelations = EmptyRelations,
+  E = never,
+  R = never,
+>(
   database: D1DatabaseSource<E, R>,
   config?: SQLiteD1Drizzle.EffectDrizzleSQLiteD1Config<TRelations>,
-) =>
-  Effect.map(
-    makeExecutionMemo(
-      Effect.gen(function* () {
-        const db = yield* Effect.isEffect(database) ? database : database.raw;
-        const d1Ctx = yield* Layer.build(D1Client.layer({ db }));
-        return yield* SQLiteD1Drizzle.makeWithDefaults(
-          config ?? ({} as SQLiteD1Drizzle.EffectDrizzleSQLiteD1Config<TRelations>),
-        ).pipe(Effect.provideContext(d1Ctx));
-      }),
-    ),
-    (db) =>
-      proxyChain<
-        EffectSQLiteD1Database<TRelations> & {
-          $client: D1Client.D1Client;
-        }
-      >(
-        db as Effect.Effect<
-          EffectSQLiteD1Database<TRelations> & {
-            $client: D1Client.D1Client;
-          },
-          any,
-          any
-        >,
-      ),
-  );
+) {
+  const SQL = yield* Effect.promise(() => import("@alchemy.run/cloudflare/D1/SQL"));
+  return yield* SQLiteD1Drizzle.makeWithDefaults(
+    config ?? ({} as SQLiteD1Drizzle.EffectDrizzleSQLiteD1Config<TRelations>),
+  ).pipe(Effect.provideServiceEffect(D1Client.D1Client, SQL.D1(database)));
+});

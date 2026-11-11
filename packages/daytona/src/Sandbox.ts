@@ -121,7 +121,13 @@ export interface SandboxProps extends PlatformProps {
   networkAllowList?: string[];
   /** Domains outbound traffic may reach (at most 100). Updated in place. */
   domainAllowList?: string[];
-  /** Route outbound traffic through this proxy. Changing it replaces the sandbox. */
+  /**
+   * A forward proxy for the sandbox's HTTP(S) traffic, set as `HTTP_PROXY`
+   * and `HTTPS_PROXY` in the sandbox, and enforced at the network only with a
+   * `domainAllowList`. HTTPS reaches it as `CONNECT` tunnels, so a Cloudflare
+   * Worker can't serve it. The sandbox can read the URL. Changing it
+   * replaces the sandbox.
+   */
   outboundProxyUrl?: string;
   /** Region. Changing it replaces the sandbox. */
   target?: string;

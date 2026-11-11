@@ -113,6 +113,60 @@ test.provider(
 );
 
 test.provider(
+  "an egress proxy changes in place, and a host mask or HTTPS ports replace the sandbox",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const program = (network: E2B.SandboxNetwork) =>
+        Effect.gen(function* () {
+          return yield* E2B.Sandbox("Proxied", { template: Base, network });
+        });
+      const proxy = (address: string, password: string) => ({
+        address,
+        username: "sandbox",
+        password: Redacted.make(password),
+        tls: { enabled: true },
+      });
+
+      const box = yield* stack.deploy(program({ egressProxy: proxy("192.0.2.10:1080", "first") }));
+      const created = yield* observe(box.sandboxId);
+      expect(created?.network?.egressProxy?.address).toBe("192.0.2.10:1080");
+      expect(created?.network?.egressProxy?.username).toBe("sandbox");
+      expect(created?.network?.egressProxy?.tls?.enabled).toBe(true);
+
+      // A new address or password reaches the running sandbox.
+      const moved = yield* stack.deploy(
+        program({ egressProxy: proxy("192.0.2.11:1080", "second") }),
+      );
+      expect(moved.sandboxId).toBe(box.sandboxId);
+      expect((yield* observe(box.sandboxId))?.network?.egressProxy?.address).toBe(
+        "192.0.2.11:1080",
+      );
+      const plan = yield* stack.plan(program({ egressProxy: proxy("192.0.2.11:1080", "second") }));
+      expect(plan.resources.Proxied.action).toBe("noop");
+
+      // Dropping the proxy clears it, still in place.
+      const direct = yield* stack.deploy(program({}));
+      expect(direct.sandboxId).toBe(box.sandboxId);
+      expect((yield* observe(box.sandboxId))?.network?.egressProxy ?? undefined).toBeUndefined();
+
+      // E2B takes a host mask and HTTPS ports only at create.
+      const masked = yield* stack.deploy(
+        program({ maskRequestHost: "localhost:${PORT}", httpsPorts: [8443] }),
+      );
+      expect(masked.sandboxId).not.toBe(box.sandboxId);
+      yield* expectGone(box.sandboxId);
+      const observed = yield* observe(masked.sandboxId);
+      expect(observed?.network?.maskRequestHost).toBe("localhost:${PORT}");
+      expect(observed?.network?.httpsPorts).toEqual([8443]);
+
+      yield* stack.destroy();
+      yield* expectGone(masked.sandboxId);
+    }),
+  { tags, timeout: 240_000 },
+);
+
+test.provider(
   "a paused sandbox resumes to take a new timeout, and a missing one is recreated",
   (stack) =>
     Effect.gen(function* () {
