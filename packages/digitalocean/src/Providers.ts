@@ -7,6 +7,7 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import { App, AppProvider } from "./App.ts";
 import { DigitalOceanAuth } from "./AuthProvider.ts";
+import { AutoscalePool, AutoscalePoolProvider } from "./AutoscalePool.ts";
 import { Certificate, CertificateProvider } from "./Certificate.ts";
 import * as Credentials from "./Credentials.ts";
 import * as Databases from "./Databases/index.ts";
@@ -18,6 +19,8 @@ import { Image, ImageProvider } from "./Image.ts";
 import * as Kubernetes from "./Kubernetes/index.ts";
 import { LoadBalancer, LoadBalancerProvider } from "./LoadBalancer.ts";
 import * as Monitoring from "./Monitoring/index.ts";
+import { NatGateway, NatGatewayProvider } from "./NatGateway.ts";
+import { Nfs, NfsProvider } from "./Nfs.ts";
 import { Project, ProjectProvider } from "./Project.ts";
 import { ProjectResources, ProjectResourcesProvider } from "./ProjectResources.ts";
 import { Registry, RegistryProvider } from "./Registry.ts";
@@ -111,6 +114,9 @@ export const providers = () =>
       App,
       Sandboxes.Template,
       Sandboxes.Sandbox,
+      NatGateway,
+      Nfs,
+      AutoscalePool,
       KeyPair,
     ]),
   ).pipe(
@@ -153,6 +159,9 @@ export const providers = () =>
         AppProvider(),
         Sandboxes.TemplateProvider(),
         Sandboxes.SandboxProvider(),
+        NatGatewayProvider(),
+        NfsProvider(),
+        AutoscalePoolProvider(),
         KeyPairProvider(),
       ),
     ),

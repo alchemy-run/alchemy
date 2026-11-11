@@ -30,3 +30,6 @@ export * from "./App.ts";
 export type { InferEnv } from "./InferEnv.ts";
 export * as Sandboxes from "./Sandboxes/index.ts";
 export * from "./Cron.ts";
+export * from "./NatGateway.ts";
+export * from "./Nfs.ts";
+export * from "./AutoscalePool.ts";
