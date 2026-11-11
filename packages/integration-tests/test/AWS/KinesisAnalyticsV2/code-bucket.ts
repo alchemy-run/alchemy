@@ -9,8 +9,7 @@
  * cannot find it. Instead each test uses a DETERMINISTIC bucket name,
  * provisions it with a delete-if-exists pre-clean, and guarantees teardown
  * via an idempotent `Effect.ensuring` finalizer (empty + delete, tolerating
- * NoSuchBucket) — the same pattern as `test/AWS/SNS/Topic.test.ts` and
- * `test/AWS/RDSData/reap.ts`.
+ * NoSuchBucket) — the same pattern as `test/AWS/SNS/Topic.test.ts`.
  */
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
 import type { BucketLocationConstraint } from "@distilled.cloud/aws/s3";

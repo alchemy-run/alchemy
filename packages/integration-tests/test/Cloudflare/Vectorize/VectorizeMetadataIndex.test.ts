@@ -207,10 +207,17 @@ describe.skipIf(!!process.env.FAST)(
 
           const { accountId } = yield* yield* CloudflareEnvironment;
           yield* waitForMetadata(accountId, index.indexName, [meta]);
-          const all = yield* provider.list().pipe(Effect.timeout("20 seconds"));
-
-          const entry = all.find(
-            (x) => x.indexName === index.indexName && x.propertyName === "category",
+          // The account-wide index listing lags a direct read of the index.
+          const entry = yield* provider.list().pipe(
+            Effect.timeout("20 seconds"),
+            Effect.map((all) =>
+              all.find((x) => x.indexName === index.indexName && x.propertyName === "category"),
+            ),
+            Effect.repeat({
+              schedule: Schedule.spaced("3 seconds"),
+              until: (found) => found !== undefined,
+              times: 10,
+            }),
           );
           expect(entry?.indexType).toBe("string");
           expect(entry?.accountId).toBeDefined();
