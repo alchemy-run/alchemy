@@ -7,3 +7,4 @@ export * from "./Slugs.ts";
 export * from "./SshKey.ts";
 export * from "./Volume.ts";
 export * from "./VolumeAttachment.ts";
+export * from "./Vpc.ts";

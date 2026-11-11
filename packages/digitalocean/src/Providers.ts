@@ -11,6 +11,7 @@ import { Firewall, FirewallProvider } from "./Firewall.ts";
 import { SshKey, SshKeyProvider } from "./SshKey.ts";
 import { Volume, VolumeProvider } from "./Volume.ts";
 import { VolumeAttachment, VolumeAttachmentProvider } from "./VolumeAttachment.ts";
+import { Vpc, VpcProvider } from "./Vpc.ts";
 
 export class Providers extends Provider.ProviderCollection<Providers>()("DigitalOcean") {}
 
@@ -48,7 +49,7 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 export const providers = () =>
   Layer.effect(
     Providers,
-    Provider.collection([Droplet, Firewall, SshKey, Volume, VolumeAttachment, KeyPair]),
+    Provider.collection([Droplet, Firewall, SshKey, Volume, VolumeAttachment, Vpc, KeyPair]),
   ).pipe(
     Layer.provide(
       Layer.mergeAll(
@@ -57,6 +58,7 @@ export const providers = () =>
         SshKeyProvider(),
         VolumeProvider(),
         VolumeAttachmentProvider(),
+        VpcProvider(),
         KeyPairProvider(),
       ),
     ),

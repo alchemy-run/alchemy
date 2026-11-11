@@ -141,3 +141,32 @@ test.provider(
     }).pipe(logLevel),
   { tags: LIVE_TAGS, timeout: LIVE_TIMEOUT },
 );
+
+test.provider(
+  "a volume with a chosen name is deleted before its replacement takes the name",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const name = testName(stack.stage, "volume-named");
+
+      const created = yield* stack.deploy(
+        DigitalOcean.Volume("Named", { name, region: REGION, sizeGigabytes: 2 }),
+      );
+      const planned = yield* stack.plan(
+        DigitalOcean.Volume("Named", { name, region: REGION, sizeGigabytes: 1 }),
+      );
+      expect(planned.resources.Named).toMatchObject({ action: "replace", deleteFirst: true });
+
+      const replaced = yield* stack.deploy(
+        DigitalOcean.Volume("Named", { name, region: REGION, sizeGigabytes: 1 }),
+      );
+      expect(replaced.volumeId).not.toEqual(created.volumeId);
+      expect(replaced.name).toEqual(name);
+      expect(yield* isVolumeGone(created.volumeId)).toBe(true);
+
+      yield* stack.destroy();
+
+      expect(yield* isVolumeGone(replaced.volumeId)).toBe(true);
+    }).pipe(logLevel),
+  { tags: LIVE_TAGS, timeout: LIVE_TIMEOUT },
+);

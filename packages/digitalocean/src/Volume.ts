@@ -355,7 +355,9 @@ export const VolumeProvider = () =>
       const changed =
         REPLACING_VALUES.some((prop) => news[prop] !== olds[prop]) ||
         news.sizeGigabytes < olds.sizeGigabytes;
-      if (changed) return { action: "replace" } as const;
+      // Names are unique within a region, so a chosen name frees up before
+      // the new volume takes it.
+      if (changed) return { action: "replace", deleteFirst: news.name !== undefined } as const;
     }),
     reconcile: Effect.fn(function* ({ id, fqn, instanceId, news, output }) {
       yield* rejectReservedTags(news.tags, (tag) => new VolumeTagReserved({ tag }));
