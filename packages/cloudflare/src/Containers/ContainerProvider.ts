@@ -25,7 +25,7 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
-import { isLiveId } from "../LocalRuntime.ts";
+import { generateLocalId, isLiveId } from "../LocalRuntime.ts";
 import { CloudflareLogs, type TelemetryFilter } from "../Logs.ts";
 import type {
   AnyContainerApplicationProps,
@@ -1431,8 +1431,8 @@ export const LiveContainerProvider = () =>
           }
         }),
         observe: Effect.fn(function* ({ id, news = {}, previous }) {
-          // Precreate creates — or adopts and updates — the application
-          // named here; ownership follows `read`.
+          // Reconcile after precreate creates — or adopts and updates — the
+          // application named here; ownership follows `read`.
           if (!isResolved(nameOf(news))) return Unresolved;
           const name = yield* createApplicationName(id, nameOf(news));
           const existing = yield* findApplicationByName(name);
@@ -1477,27 +1477,25 @@ export const LiveContainerProvider = () =>
             configuration,
           );
 
-          // Precreate intentionally omits the Durable Object attachment so the
-          // worker can bind to this application id and break the circular
-          // dependency. The final create step recreates the application with the
-          // resolved namespace when needed.
-          const result = yield* createApplication({
-            id,
-            news,
-            // Precreate runs before the engine resolves bindings (that is what
-            // breaks the worker <-> container cycle), so binding-injected env
-            // lands on the following reconcile.
-            bindings: [],
-            name,
-            configuration,
-            durableObjects: undefined,
-            session: {
-              ...session,
-              note: (message) => session.note(message.replace("Creating", "Pre-creating")),
-            },
-          });
+          // Precreate publishes the image but creates no application: the
+          // Worker needs only the image, and Cloudflare rejects a default
+          // application created without its Durable Object binding ("This
+          // account requires a Durable Object binding when creating a default
+          // application."). The `dev:` id is never live, so reconcile creates
+          // the application once, with the namespace the Worker resolved.
           return {
-            ...("applicationId" in result ? result : toAttributes(result)),
+            applicationId: generateLocalId(),
+            applicationName: name,
+            accountId,
+            schedulingPolicy: news.schedulingPolicy ?? "default",
+            instances: undefined,
+            maxInstances: undefined,
+            constraints: undefined,
+            affinities: undefined,
+            configuration: {},
+            durableObjects: undefined,
+            createdAt: "",
+            version: undefined,
             hash: {
               image: imageHash,
               digest: published.digest,

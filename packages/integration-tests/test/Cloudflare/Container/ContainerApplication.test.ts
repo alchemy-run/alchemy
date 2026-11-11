@@ -2,6 +2,7 @@ import * as NodeZlib from "node:zlib";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { ContainerPlatform } from "@alchemy.run/cloudflare/Containers/ContainerPlatform";
+import { isLiveId } from "@alchemy.run/cloudflare/LocalRuntime";
 import { Docker } from "@alchemy.run/docker/Docker";
 import { assert, describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
@@ -10,6 +11,7 @@ import * as Deploy from "alchemy/Deploy";
 import * as Destroy from "alchemy/Destroy";
 import * as Drift from "alchemy/Drift";
 import * as Provider from "alchemy/Provider";
+import { noopSession } from "alchemy/Report";
 import { Stack } from "alchemy/Stack";
 import { State, type ResourceState } from "alchemy/State";
 import * as Cause from "effect/Cause";
@@ -1510,6 +1512,34 @@ describe.concurrent(
 
         yield* stack.destroy();
       }).pipe(logLevel),
+    );
+
+    // Cloudflare rejects a default application created without its Durable
+    // Object binding ("This account requires a Durable Object binding when
+    // creating a default application."), and a cycle precreates before the
+    // Worker has a namespace. So precreate publishes the image and creates no
+    // application; reconcile creates it once, with the namespace (#3264).
+    test.provider(
+      "precreate publishes the image and creates no application",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const provider = yield* Provider.findProvider(Cloudflare.Container);
+          const precreated = yield* provider.precreate!({
+            id: "PrecreateOnly",
+            fqn: "PrecreateOnly",
+            instanceId: "precreate-only-test",
+            news: { image: "mendhak/http-https-echo:41", maxInstances: 1 },
+            bindings: [],
+            session: { ...noopSession, note: () => Effect.void },
+          });
+          expect(isLiveId(precreated.applicationId)).toBe(false);
+          expect(precreated.hash?.digest).toBeDefined();
+          const apps = yield* Containers.listContainerApplications({ accountId });
+          expect(apps.map((app) => app.name)).not.toContain(precreated.applicationName);
+        }).pipe(logLevel),
+      { timeout: 300_000 },
     );
 
     // Placement constraints pass through to Cloudflare unchanged and read back
