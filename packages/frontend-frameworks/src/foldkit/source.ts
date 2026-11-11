@@ -8,6 +8,7 @@ import { resolveBuildEnv } from "../core/BuildChild.ts";
 import {
   makeSourceModule,
   makeWorkerSource,
+  type SourceModuleContext,
   SourceProviderError,
   type MemoOptions,
   type ServerDevHandle,
@@ -31,8 +32,6 @@ const PROVIDER = "@alchemy.run/frontend-frameworks/foldkit/source";
  * participate in the Worker's metadata hash.
  */
 export interface FoldkitSourceOptions {
-  /** Project root. @default process.cwd() */
-  readonly rootDir?: string | undefined;
   /**
    * Custom Worker entry for a client-only app, relative to the root. Cannot
    * be combined with Foldkit's `ssr.build`.
@@ -63,12 +62,15 @@ export const buildInChild = (config: FoldkitBuildChildConfig) =>
     return yield* framework.build({ root: config.rootDir });
   });
 
-export const makeFoldkitSource = (options: FoldkitSourceOptions): SourceProvider =>
+export const makeFoldkitSource = (
+  options: FoldkitSourceOptions,
+  { rootDir }: SourceModuleContext,
+): SourceProvider =>
   makeWorkerSource({
     provider: PROVIDER,
     framework: "foldkit",
     displayName: "Foldkit",
-    rootDir: options.rootDir,
+    rootDir,
     memo: options.memo,
     outputDirs: ["dist"],
     // A changed custom entry must bust the memo.

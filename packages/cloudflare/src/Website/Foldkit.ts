@@ -230,7 +230,7 @@ export const Foldkit: {
               provider: FOLDKIT_SOURCE_PROVIDER,
               devMode: "server",
               rootDir,
-              options: { rootDir, main, memo },
+              options: { main, memo },
             },
           };
         }),
