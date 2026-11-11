@@ -27,6 +27,7 @@
   "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
+    "./Databases": "./src/Databases/index.ts",
     "./Monitoring": "./src/Monitoring/index.ts",
     "./Spaces": "./src/Spaces/index.ts",
     "./*": "./src/*.ts",
@@ -39,6 +40,12 @@
         "bun": "./src/index.ts",
         "worker": "./src/index.ts",
         "default": "./lib/index.js"
+      },
+      "./Databases": {
+        "types": "./lib/Databases/index.d.ts",
+        "bun": "./src/Databases/index.ts",
+        "worker": "./src/Databases/index.ts",
+        "default": "./lib/Databases/index.js"
       },
       "./Monitoring": {
         "types": "./lib/Monitoring/index.d.ts",
@@ -68,19 +75,33 @@
     "build:package": "node scripts/build.ts"
   },
   "dependencies": {
+    "@alchemy.run/sql": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/digitalocean": "workspace:*",
     "@distilled.cloud/s3": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "catalog:",
+    "@types/pg": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",
+    "mysql2": "catalog:",
+    "pg": "catalog:",
     "typescript": "catalog:"
   },
   "peerDependencies": {
     "alchemy": "workspace:*",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "mysql2": "catalog:",
+    "pg": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "pg": {
+      "optional": true
+    },
+    "mysql2": {
+      "optional": true
+    }
   },
   "alchemy": {
     "contributes": [

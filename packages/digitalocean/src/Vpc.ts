@@ -77,8 +77,12 @@ export type VpcAttributes = Vpc["Attributes"];
  *
  * A VPC has no tags. Alchemy owns a VPC whose name it generated, or whose
  * id it recorded. A VPC that already has the chosen name is `Unowned` and
- * needs `--adopt`. Alchemy never makes a VPC the region's default, and a
- * default VPC cannot be deleted.
+ * needs `--adopt`.
+ *
+ * DigitalOcean makes the first VPC in a region the region's default, and a
+ * default VPC cannot be deleted (`VpcIsDefault`). Declare VPCs in regions
+ * that already have a default VPC (any region where the team has run a
+ * droplet), or expect the first one to stay.
  *
  * ### Creating a VPC
  * **Example:** A VPC with a chosen range

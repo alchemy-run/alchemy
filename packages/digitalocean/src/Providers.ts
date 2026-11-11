@@ -8,22 +8,31 @@ import * as Layer from "effect/Layer";
 import { DigitalOceanAuth } from "./AuthProvider.ts";
 import { Certificate, CertificateProvider } from "./Certificate.ts";
 import * as Credentials from "./Credentials.ts";
+import * as Databases from "./Databases/index.ts";
 import { Domain, DomainProvider } from "./Domain.ts";
 import { DomainRecord, DomainRecordProvider } from "./DomainRecord.ts";
 import { Droplet, DropletProvider } from "./Droplet.ts";
 import { Firewall, FirewallProvider } from "./Firewall.ts";
+import { Image, ImageProvider } from "./Image.ts";
 import { LoadBalancer, LoadBalancerProvider } from "./LoadBalancer.ts";
 import * as Monitoring from "./Monitoring/index.ts";
 import { Project, ProjectProvider } from "./Project.ts";
 import { ProjectResources, ProjectResourcesProvider } from "./ProjectResources.ts";
+import { Registry, RegistryProvider } from "./Registry.ts";
 import { ReservedIp, ReservedIpProvider } from "./ReservedIp.ts";
 import { ReservedIpAssignment, ReservedIpAssignmentProvider } from "./ReservedIpAssignment.ts";
+import { ReservedIpv6, ReservedIpv6Provider } from "./ReservedIpv6.ts";
+import {
+  ReservedIpv6Assignment,
+  ReservedIpv6AssignmentProvider,
+} from "./ReservedIpv6Assignment.ts";
 import * as Spaces from "./Spaces/index.ts";
 import { SshKey, SshKeyProvider } from "./SshKey.ts";
 import { Tag, TagProvider } from "./Tag.ts";
 import { Volume, VolumeProvider } from "./Volume.ts";
 import { VolumeAttachment, VolumeAttachmentProvider } from "./VolumeAttachment.ts";
 import { Vpc, VpcProvider } from "./Vpc.ts";
+import { VpcPeering, VpcPeeringProvider } from "./VpcPeering.ts";
 
 export class Providers extends Provider.ProviderCollection<Providers>()("DigitalOcean") {}
 
@@ -83,6 +92,11 @@ export const providers = () =>
       Monitoring.AlertPolicy,
       Monitoring.UptimeAlert,
       Monitoring.UptimeCheck,
+      ReservedIpv6,
+      ReservedIpv6Assignment,
+      VpcPeering,
+      Registry,
+      Image,
       KeyPair,
     ]),
   ).pipe(
@@ -109,6 +123,17 @@ export const providers = () =>
         Monitoring.AlertPolicyProvider(),
         Monitoring.UptimeAlertProvider(),
         Monitoring.UptimeCheckProvider(),
+        Databases.ClusterProvider(),
+        Databases.ConnectionPoolProvider(),
+        Databases.DatabaseProvider(),
+        Databases.FirewallProvider(),
+        Databases.ReplicaProvider(),
+        Databases.UserProvider(),
+        ReservedIpv6Provider(),
+        ReservedIpv6AssignmentProvider(),
+        VpcPeeringProvider(),
+        RegistryProvider(),
+        ImageProvider(),
         KeyPairProvider(),
       ),
     ),
