@@ -28,6 +28,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./Databases": "./src/Databases/index.ts",
+    "./Kubernetes": "./src/Kubernetes/index.ts",
     "./Monitoring": "./src/Monitoring/index.ts",
     "./Spaces": "./src/Spaces/index.ts",
     "./*": "./src/*.ts",
@@ -46,6 +47,12 @@
         "bun": "./src/Databases/index.ts",
         "worker": "./src/Databases/index.ts",
         "default": "./lib/Databases/index.js"
+      },
+      "./Kubernetes": {
+        "types": "./lib/Kubernetes/index.d.ts",
+        "bun": "./src/Kubernetes/index.ts",
+        "worker": "./src/Kubernetes/index.ts",
+        "default": "./lib/Kubernetes/index.js"
       },
       "./Monitoring": {
         "types": "./lib/Monitoring/index.d.ts",
@@ -75,6 +82,7 @@
     "build:package": "node scripts/build.ts"
   },
   "dependencies": {
+    "@alchemy.run/kubernetes": "workspace:*",
     "@alchemy.run/sql": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/digitalocean": "workspace:*",

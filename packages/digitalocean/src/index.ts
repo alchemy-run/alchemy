@@ -25,3 +25,4 @@ export * from "./VolumeAttachment.ts";
 export * from "./Vpc.ts";
 export * from "./VpcPeering.ts";
 export * as Databases from "./Databases/index.ts";
+export * as Kubernetes from "./Kubernetes/index.ts";

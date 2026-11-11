@@ -14,6 +14,7 @@ import { DomainRecord, DomainRecordProvider } from "./DomainRecord.ts";
 import { Droplet, DropletProvider } from "./Droplet.ts";
 import { Firewall, FirewallProvider } from "./Firewall.ts";
 import { Image, ImageProvider } from "./Image.ts";
+import * as Kubernetes from "./Kubernetes/index.ts";
 import { LoadBalancer, LoadBalancerProvider } from "./LoadBalancer.ts";
 import * as Monitoring from "./Monitoring/index.ts";
 import { Project, ProjectProvider } from "./Project.ts";
@@ -97,6 +98,14 @@ export const providers = () =>
       VpcPeering,
       Registry,
       Image,
+      Databases.Cluster,
+      Databases.ConnectionPool,
+      Databases.Database,
+      Databases.Firewall,
+      Databases.Replica,
+      Databases.User,
+      Kubernetes.Cluster,
+      Kubernetes.NodePool,
       KeyPair,
     ]),
   ).pipe(
@@ -134,10 +143,14 @@ export const providers = () =>
         VpcPeeringProvider(),
         RegistryProvider(),
         ImageProvider(),
+        Kubernetes.ClusterProvider(),
+        Kubernetes.NodePoolProvider(),
         KeyPairProvider(),
       ),
     ),
     // Spaces' S3 API signs with Spaces keys, not the token.
+    // `Kubernetes.*` workloads on a DigitalOcean cluster resolve this adapter.
+    Layer.provideMerge(Kubernetes.DoksKubernetesAdapter()),
     Layer.provideMerge(layerS3Keys()),
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(DigitalOceanAuth),

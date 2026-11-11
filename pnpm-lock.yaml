@@ -9345,6 +9345,9 @@ importers:
 
   packages/digitalocean:
     dependencies:
+      '@alchemy.run/kubernetes':
+        specifier: workspace:*
+        version: link:../kubernetes
       '@alchemy.run/sql':
         specifier: workspace:*
         version: link:../sql

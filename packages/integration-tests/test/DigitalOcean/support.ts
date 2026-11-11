@@ -63,8 +63,12 @@ export const forgetAttributes = Effect.fn(function* (address: {
 }) {
   const state = yield* yield* State;
   const stored = yield* state.get(address);
-  if (!stored || isActionState(stored) || stored.status !== "created") {
-    return yield* Effect.die(new Error(`Expected a created row for ${address.fqn}`));
+  if (
+    !stored ||
+    isActionState(stored) ||
+    (stored.status !== "created" && stored.status !== "updated")
+  ) {
+    return yield* Effect.die(new Error(`Expected a deployed row for ${address.fqn}`));
   }
   const { attr: _attr, ...creating } = stored;
   yield* state.set({ ...address, value: { ...creating, status: "creating" } });
