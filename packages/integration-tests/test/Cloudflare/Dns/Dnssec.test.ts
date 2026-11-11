@@ -6,7 +6,6 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import * as Drift from "alchemy/Drift";
 import * as Provider from "alchemy/Provider";
-import { State, type ResourceState } from "alchemy/State";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -177,9 +176,10 @@ describe.sequential(
       { timeout: 300_000 },
     );
 
-    // #3182: a newer `modified_on` with nothing else changed is not drift.
+    // #3182: Cloudflare moving `modified_on` with nothing else changed is
+    // not drift, and redeploying the same program plans no update.
     test.provider(
-      "drift ignores a bumped modifiedOn",
+      "a moved modifiedOn is not drift and plans no update",
       (stack) =>
         Effect.gen(function* () {
           const zoneId = yield* resolveZoneId;
@@ -187,28 +187,33 @@ describe.sequential(
           yield* stack.destroy();
           yield* normalizeDisabled(zoneId);
 
-          yield* stack.deploy(
-            Effect.gen(function* () {
-              return yield* Cloudflare.DNS.Dnssec("ZoneDnssec", { zoneId });
+          const program = Effect.gen(function* () {
+            return yield* Cloudflare.DNS.Dnssec("ZoneDnssec", { zoneId });
+          });
+          const deployed = yield* stack.deploy(program);
+
+          // Move `modified_on` for real: turn DNSSEC off and back on out of
+          // band. Cloudflare keeps the zone's key, so the DS record and every
+          // other attribute end where they started; only the timestamp moves.
+          yield* normalizeDisabled(zoneId);
+          yield* dns.patchDnssec({ zoneId, status: "active" });
+          const live = yield* getDnssec(zoneId).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (o) => family(o.status) === "active",
+              times: 15,
             }),
           );
+          expect(live.modifiedOn).not.toEqual(deployed.modifiedOn);
+          expect(live.ds).toEqual(deployed.ds);
+          expect(live.status).toEqual(deployed.status);
 
-          // Cloudflare moves `modified_on` on its own (e.g. pending → active
-          // once the registrar has the DS record), which a test zone never
-          // does. Age the recorded timestamp instead: the live config is
-          // unchanged, only `modifiedOn` differs.
-          const state = yield* yield* State;
-          const key = { stack: stack.name, stage: stack.stage, fqn: "ZoneDnssec" };
-          const row = (yield* state.get(key)) as ResourceState | undefined;
-          expect(row?.status).toBe("created");
-          if (row?.status !== "created") return;
-          yield* state.set({
-            ...key,
-            value: { ...row, attr: { ...row.attr, modifiedOn: "2000-01-01T00:00:00Z" } },
-          });
-
-          const drift = yield* Drift.detect({ name: stack.name, stage: stack.stage });
+          const drift = yield* Drift.detect(stack).pipe(Effect.provide(stack.state));
           expect(drift.resources.ZoneDnssec?.action).toBe("unchanged");
+
+          yield* stack.deploy(program);
+          const plan = yield* stack.plan(program);
+          expect(plan.resources.ZoneDnssec?.action).toBe("noop");
 
           yield* stack.destroy();
           yield* getDnssec(zoneId).pipe(
