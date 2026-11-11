@@ -253,7 +253,11 @@ const FAILED_PHASES = new Set(["ERROR", "CANCELED", "SUPERSEDED"]);
 
 const physicalName = (id: string) => createPhysicalName({ id, lowercase: true, maxLength: 32 });
 
-const repositoryName = (id: string) => createPhysicalName({ id, lowercase: true, maxLength: 100 });
+// App Platform rejects a DOCR image whose `registry/repository` path is
+// long (a 63-character registry with a 100-character repository fails,
+// misreported as "App name already exists"). A 63-character registry with a
+// 64-character repository is accepted.
+const repositoryName = (id: string) => createPhysicalName({ id, lowercase: true, maxLength: 64 });
 
 /** The generated entry for an Effect `main`: the bootstrap plus the user's module. */
 const effectBootstrap =

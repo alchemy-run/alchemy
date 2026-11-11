@@ -9,7 +9,7 @@ export const Echo = Effect.gen(function* () {
   const project = yield* AgentProject;
   return yield* DigitalOcean.GenAI.Agent("Echo", {
     projectId: project.projectId,
-    model: "OpenAI GPT-oss-120b",
+    model: "Ministral 3 14B",
     instruction: "Reply with exactly the word the user asks for, in lowercase, and nothing else.",
   });
 });

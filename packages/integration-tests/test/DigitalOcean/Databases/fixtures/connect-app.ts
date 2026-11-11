@@ -16,7 +16,8 @@ export default class ConnectApp extends DigitalOcean.App<ConnectApp>()(
   "ConnectApp",
   { main: import.meta.url, registry: TestRegistry, region: "nyc" },
   Effect.gen(function* () {
-    const conn = yield* DigitalOcean.Databases.Connect(yield* Db);
+    const db = yield* Db;
+    const conn = yield* DigitalOcean.Databases.Connect(db);
     return {
       fetch: Effect.gen(function* () {
         const uri = yield* conn.connectionString;

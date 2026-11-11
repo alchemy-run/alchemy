@@ -23,7 +23,7 @@ export type AgentProps = {
   name?: string;
   /**
    * The model, by its UUID or its name in the GenAI model catalog (for
-   * example `"OpenAI GPT-oss-120b"`). Updates in place.
+   * example `"Ministral 3 14B"`). Updates in place.
    */
   model: string;
   /** System instructions the agent follows. Updates in place. */
@@ -81,7 +81,7 @@ export type AgentAttributes = Agent["Attributes"];
  * });
  * const agent = yield* DigitalOcean.GenAI.Agent("support", {
  *   projectId: project.projectId,
- *   model: "OpenAI GPT-oss-120b",
+ *   model: "Ministral 3 14B",
  *   instruction: "Answer questions about Example Corp. using the docs.",
  *   knowledgeBaseIds: [docs.knowledgeBaseId],
  * });

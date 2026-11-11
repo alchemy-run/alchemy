@@ -14,7 +14,7 @@ import { isGone, logLevel, skipSlow } from "../support.ts";
 const { test } = Test.make({ providers: DigitalOcean.providers() });
 
 const LIVE_TAGS = ["provider:digitalocean", "provider:digitalocean:genai", "live"];
-const MODEL = "OpenAI GPT-oss-120b";
+const MODEL = "Ministral 3 14B";
 
 const resources = (instruction: string, attach: boolean) =>
   Effect.gen(function* () {

@@ -4,10 +4,12 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { ignoreNotFound, noneIfNotFound } from "../internal/notFound.ts";
+import { pollUntil, type PollBudget } from "../internal/poll.ts";
 import type { Providers } from "../Providers.ts";
 import { resolveModel } from "./Agent.ts";
 
@@ -131,6 +133,24 @@ export type KnowledgeBaseAttributes = KnowledgeBase["Attributes"];
  * @category AI
  */
 export const KnowledgeBase = Resource<KnowledgeBase>("DigitalOcean.GenAI.KnowledgeBase");
+
+export class KnowledgeBaseWaitTimedOut extends Data.TaggedError(
+  "DigitalOcean.GenAI.KnowledgeBaseWaitTimedOut",
+)<{
+  readonly knowledgeBaseId: string;
+  readonly lastStatus: string | undefined;
+}> {
+  override get message() {
+    return `Knowledge base ${this.knowledgeBaseId} timed out waiting for its database (last status: ${this.lastStatus ?? "missing"}).`;
+  }
+}
+
+// Agents can attach a knowledge base only once its OpenSearch database is
+// online, which takes several minutes after create (≈ 25 min budget).
+const ONLINE_POLL: PollBudget = { maxDelay: "20 seconds", times: 80 };
+
+const databaseStatus = (id: string) =>
+  DO.getGenaiKnowledgeBase({ uuid: id }).pipe(Effect.map((r) => r.database_status));
 
 const physicalName = (id: string) => createPhysicalName({ id, lowercase: true, maxLength: 63 });
 
@@ -292,6 +312,13 @@ export const KnowledgeBaseProvider = () =>
           data_source_uuids: added,
         });
       }
+
+      yield* pollUntil(databaseStatus(kb.uuid), {
+        ...ONLINE_POLL,
+        until: (status) => status === "ONLINE",
+        onTimeout: (status) =>
+          new KnowledgeBaseWaitTimedOut({ knowledgeBaseId: kb.uuid, lastStatus: status }),
+      });
 
       const final = yield* observeById(kb.uuid);
       return toAttrs(
