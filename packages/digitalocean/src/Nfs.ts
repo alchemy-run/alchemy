@@ -24,12 +24,19 @@ export type NfsProps = {
   name?: string;
   /** Region slug. A change replaces the share. */
   region: RegionSlug;
-  /** Size in GiB, at least 50. Growing resizes in place; shrinking replaces the share. */
+  /**
+   * Size in GiB: at least 50 on the standard tier, 500 on the high tier.
+   * Growing resizes in place; shrinking replaces the share.
+   */
   sizeGib: number;
   /** VPCs whose droplets and clusters mount the share. Updates in place. */
   vpcIds: string[];
-  /** Performance tier slug. */
-  performanceTier?: string;
+  /**
+   * Performance tier.
+   *
+   * @default "standard"
+   */
+  performanceTier?: "standard" | "high";
 };
 
 export type Nfs = Resource<
@@ -164,7 +171,7 @@ export const NfsProvider = () =>
             region: news.region,
             size_gib: news.sizeGib,
             vpc_ids: news.vpcIds,
-            performance_tier: news.performanceTier,
+            performance_tier: news.performanceTier ?? "standard",
           }).pipe(Effect.map((r) => r.share)),
         onSome: Effect.succeed,
       });
