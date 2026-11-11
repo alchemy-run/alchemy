@@ -457,8 +457,14 @@ export const NatGatewayProvider = () =>
       });
 
       // Find NAT Gateway by alchemy tags when we don't have the ID
-      const findNatGatewayByTags = Effect.fn(function* (id: string) {
-        const filters = yield* createAlchemyTagFilters(id);
+      const findNatGatewayByTags = Effect.fn(function* (id: string, subnetId: string | undefined) {
+        // A NAT gateway never changes subnet: one tagged with this logical id
+        // in another subnet belongs to another resource (e.g. in another
+        // namespace), never to an interrupted create of this one.
+        const filters = [
+          ...(yield* createAlchemyTagFilters(id)),
+          ...(subnetId ? [{ Name: "subnet-id", Values: [subnetId] }] : []),
+        ];
         // Find a NAT Gateway that's not deleted and has matching tags
         return yield* ec2.describeNatGateways
           .items({ Filter: filters })
@@ -488,14 +494,17 @@ export const NatGatewayProvider = () =>
           return yield* toAttrs(match);
         }),
 
-        read: Effect.fn(function* ({ id, output }) {
+        read: Effect.fn(function* ({ id, olds, output }) {
           if (output) {
             // We have the NAT Gateway ID, use it directly
             return yield* toAttrs(yield* describeNatGateway(output.natGatewayId));
           }
 
           // No output - try to find by tags (recovery from incomplete create)
-          const gw = yield* findNatGatewayByTags(id);
+          const gw = yield* findNatGatewayByTags(
+            id,
+            typeof olds?.subnetId === "string" ? olds.subnetId : undefined,
+          );
           if (gw) {
             return yield* toAttrs(gw);
           }
@@ -552,7 +561,7 @@ export const NatGatewayProvider = () =>
               );
             gw = lookup.NatGateways?.[0];
           } else {
-            gw = yield* findNatGatewayByTags(id);
+            gw = yield* findNatGatewayByTags(id, news.subnetId);
           }
 
           // Treat a deleted/deleting NAT as if it doesn't exist so we recreate.

@@ -8,8 +8,9 @@ import * as Output from "alchemy/Output";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import { railwayApi } from "./limit.ts";
 
-const { test } = Test.make({ providers: Railway.providers() });
+const { test } = Test.make({ limit: railwayApi, providers: Railway.providers() });
 
 const tags = ["provider:railway", "provider:railway:project", "live"];
 

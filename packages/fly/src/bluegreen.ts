@@ -444,7 +444,10 @@ export const reconcileBlueGreen = Effect.fn(function* (
           .pipe(
             Retry.none,
             Effect.timeout("30 seconds"),
-            Effect.catchTag(["Conflict", "GatewayTimeout", "TimeoutError"], () => readback),
+            Effect.catchTag(
+              ["Conflict", "GatewayTimeout", "TimeoutError", "StorageHostCapacity"],
+              () => readback,
+            ),
             Effect.catchReason("HttpClientError", "TransportError", () => readback),
           );
       }
