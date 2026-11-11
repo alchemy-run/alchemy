@@ -2,7 +2,7 @@ import { listenConfig } from "@alchemy.run/effect-cluster/internal/Bootstrap";
 import { GATEWAY_PORT, RUNNER_PORT } from "@alchemy.run/effect-cluster/internal/Gateway";
 import { describe, expect, test } from "@alchemy.run/test";
 
-describe("Effect Cluster runner listen config", () => {
+describe("Effect Cluster runner listen config", { tags: ["provider:cluster", "unit"] }, () => {
   test("keeps today's ports and addresses when the environment sets none", () => {
     expect(listenConfig({})).toEqual({
       runnerPort: RUNNER_PORT,
