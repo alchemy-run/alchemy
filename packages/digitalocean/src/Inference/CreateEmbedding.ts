@@ -15,9 +15,9 @@ import type { InferenceKeyMissing, InferenceOptions } from "./InferenceBinding.t
  *   { main: import.meta.url },
  *   Effect.gen(function* () {
  *     const key = yield* Config.Redacted("DO_MODEL_KEY");
+ *     const embed = yield* DigitalOcean.Inference.CreateEmbedding({ key });
  *     return {
  *       fetch: Effect.gen(function* () {
- *         const embed = yield* DigitalOcean.Inference.CreateEmbedding({ key });
  *         const out = yield* embed({ model: "qwen3-embedding-0.6b", input: "hello" });
  *         return yield* HttpServerResponse.json(out);
  *       }).pipe(Effect.orDie),

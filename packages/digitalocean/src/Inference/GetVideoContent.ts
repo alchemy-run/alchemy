@@ -15,9 +15,9 @@ import type { InferenceKeyMissing, InferenceOptions } from "./InferenceBinding.t
  *   { main: import.meta.url },
  *   Effect.gen(function* () {
  *     const key = yield* Config.Redacted("DO_MODEL_KEY");
+ *     const download = yield* DigitalOcean.Inference.GetVideoContent({ key });
  *     return {
  *       fetch: Effect.gen(function* () {
- *         const download = yield* DigitalOcean.Inference.GetVideoContent({ key });
  *         const video = yield* download({ video_id });
  *         return yield* HttpServerResponse.json(out);
  *       }).pipe(Effect.orDie),

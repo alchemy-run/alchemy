@@ -43,6 +43,11 @@ const cases: ReadonlyArray<{
   marker: string;
   /** Next.js is installed as a standalone app outside the repo; see prepareNextjsFixture. */
   standalone?: boolean;
+  /**
+   * Built where it is: the example's tsconfig extends a repo path, and its
+   * toolchain resolves only from its own node_modules.
+   */
+  inPlace?: boolean;
 }> = [
   {
     name: "Astro",
@@ -116,6 +121,14 @@ const cases: ReadonlyArray<{
     marker: "Foldkit Fixture",
   },
   {
+    name: "Vinext",
+    site: DigitalOcean.Website.Vinext,
+    fixture: pathe.resolve(import.meta.dirname, "../../../../../examples/fly-website-vinext"),
+    path: "/",
+    marker: "Hello from vinext",
+    inPlace: true,
+  },
+  {
     name: "Vocs",
     site: DigitalOcean.Website.Vocs,
     fixture: pathe.resolve(import.meta.dirname, "../../../../../examples/cloudflare-website-vocs"),
@@ -134,11 +147,13 @@ for (const c of cases) {
         yield* stack.destroy();
         const fs = yield* FileSystem.FileSystem;
         const entries = (yield* fs.readDirectory(c.fixture)).filter((name) => !SKIP.has(name));
-        const rootDir = yield* cloneFixture(c.fixture, {
-          prefix: `alchemy-${c.name.toLowerCase().replaceAll(/[^a-z]/g, "")}-digitalocean-`,
-          tempRoot: c.standalone ? undefined : tempRoot,
-          entries,
-        });
+        const rootDir = c.inPlace
+          ? c.fixture
+          : yield* cloneFixture(c.fixture, {
+              prefix: `alchemy-${c.name.toLowerCase().replaceAll(/[^a-z]/g, "")}-digitalocean-`,
+              tempRoot: c.standalone ? undefined : tempRoot,
+              entries,
+            });
         if (c.standalone) yield* prepareNextjsFixture(rootDir);
         const deployed = yield* stack.deploy(
           Effect.gen(function* () {

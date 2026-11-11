@@ -15,9 +15,9 @@ import type { InferenceKeyMissing, InferenceOptions } from "./InferenceBinding.t
  *   { main: import.meta.url },
  *   Effect.gen(function* () {
  *     const key = yield* Config.Redacted("DO_MODEL_KEY");
+ *     const message = yield* DigitalOcean.Inference.CreateMessage({ key });
  *     return {
  *       fetch: Effect.gen(function* () {
- *         const message = yield* DigitalOcean.Inference.CreateMessage({ key });
  *         const out = yield* message({
  *           model: "mistral-3-14B",
  *           max_tokens: 256,

@@ -15,9 +15,9 @@ import type { InferenceKeyMissing, InferenceOptions } from "./InferenceBinding.t
  *   { main: import.meta.url },
  *   Effect.gen(function* () {
  *     const key = yield* Config.Redacted("DO_MODEL_KEY");
+ *     const invoke = yield* DigitalOcean.Inference.CreateAsyncInvoke({ key });
  *     return {
  *       fetch: Effect.gen(function* () {
- *         const invoke = yield* DigitalOcean.Inference.CreateAsyncInvoke({ key });
  *         const job = yield* invoke({ model_id: "fal-ai/flux/schnell", input: { prompt: "a lighthouse" } });
  *         return yield* HttpServerResponse.json(out);
  *       }).pipe(Effect.orDie),

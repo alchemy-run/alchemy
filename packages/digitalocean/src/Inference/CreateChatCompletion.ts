@@ -15,9 +15,9 @@ import type { InferenceKeyMissing, InferenceOptions } from "./InferenceBinding.t
  *   { main: import.meta.url },
  *   Effect.gen(function* () {
  *     const key = yield* Config.Redacted("DO_MODEL_KEY");
+ *     const chat = yield* DigitalOcean.Inference.CreateChatCompletion({ key });
  *     return {
  *       fetch: Effect.gen(function* () {
- *         const chat = yield* DigitalOcean.Inference.CreateChatCompletion({ key });
  *         const out = yield* chat({
  *           model: "mistral-3-14B",
  *           messages: [{ role: "user", content: "Say hello" }],

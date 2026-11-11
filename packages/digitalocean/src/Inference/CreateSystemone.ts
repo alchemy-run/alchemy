@@ -15,9 +15,9 @@ import type { InferenceKeyMissing, InferenceOptions } from "./InferenceBinding.t
  *   { main: import.meta.url },
  *   Effect.gen(function* () {
  *     const key = yield* Config.Redacted("DO_MODEL_KEY");
+ *     const systemone = yield* DigitalOcean.Inference.CreateSystemone({ key });
  *     return {
  *       fetch: Effect.gen(function* () {
- *         const systemone = yield* DigitalOcean.Inference.CreateSystemone({ key });
  *         const out = yield* systemone({});
  *         return yield* HttpServerResponse.json(out);
  *       }).pipe(Effect.orDie),

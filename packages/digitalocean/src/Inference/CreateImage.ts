@@ -15,9 +15,9 @@ import type { InferenceKeyMissing, InferenceOptions } from "./InferenceBinding.t
  *   { main: import.meta.url },
  *   Effect.gen(function* () {
  *     const key = yield* Config.Redacted("DO_MODEL_KEY");
+ *     const draw = yield* DigitalOcean.Inference.CreateImage({ key });
  *     return {
  *       fetch: Effect.gen(function* () {
- *         const draw = yield* DigitalOcean.Inference.CreateImage({ key });
  *         const out = yield* draw({ model: "stable-diffusion-3.5-large", prompt: "a lighthouse" });
  *         return yield* HttpServerResponse.json(out);
  *       }).pipe(Effect.orDie),
