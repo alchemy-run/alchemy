@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import * as Effect from "effect/Effect";
 import { describe, expect, it } from "vitest";
 import { hashInput, type MemoOptions } from "../InputHash.ts";
-import { makeWorkerSource, type SourceContext } from "../WorkerSource.ts";
+import { makeWorkerSource, type SourceContext, type SourceHash } from "../WorkerSource.ts";
 import { makeProject, run } from "./helpers.ts";
 
 /**
@@ -154,21 +154,17 @@ describe("makeWorkerSource hash", () => {
       dev: () => Effect.die("unused"),
     });
     const ctx = {} as SourceContext;
-    const recorded = await run(
-      source.hash(ctx, { additionalWorkspaces: ["../lib"] }) as Effect.Effect<{
-        input?: string;
-        additionalWorkspaces?: Array<string>;
-      }>,
-    );
+    const previous: SourceHash = {
+      bundle: undefined,
+      assets: undefined,
+      input: undefined,
+      additionalWorkspaces: ["../lib"],
+    };
+    const recorded = await run(source.hash(ctx, previous) as Effect.Effect<Partial<SourceHash>>);
     expect(recorded.additionalWorkspaces).toEqual(["../lib"]);
 
     await NodeFsPromises.rm(lib, { recursive: true });
-    const next = await run(
-      source.hash(ctx, { additionalWorkspaces: ["../lib"] }) as Effect.Effect<{
-        input?: string;
-        additionalWorkspaces?: Array<string>;
-      }>,
-    );
+    const next = await run(source.hash(ctx, previous) as Effect.Effect<Partial<SourceHash>>);
     expect(next.additionalWorkspaces).toEqual([]);
     expect(next.input).not.toBe(recorded.input);
   });
