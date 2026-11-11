@@ -263,7 +263,7 @@ export const CertificatePackProvider = () =>
       // 1. Observe — the pack id cached on `output` is a hint, not a
       //    guarantee: a missing pack falls through to the host-set scan
       //    and then to a fresh order.
-      let observed = output?.certificatePackId
+      let observed: ObservedPack | undefined = output?.certificatePackId
         ? yield* getPack(zoneId, output.certificatePackId)
         : undefined;
 
@@ -292,10 +292,13 @@ export const CertificatePackProvider = () =>
       // 4. Sync — diff each mutable aspect of the observed pack against
       //    the desired props; skip the API entirely on a no-op. A freshly
       //    ordered pack already matches, so both checks fall through.
-      if (
-        news.cloudflareBranding !== undefined &&
-        (observed.cloudflareBranding ?? false) !== news.cloudflareBranding
-      ) {
+      // The order response does not echo `cloudflare_branding`; a fresh
+      // order carries the desired value.
+      const observedBranding =
+        "cloudflareBranding" in observed
+          ? (observed.cloudflareBranding ?? false)
+          : news.cloudflareBranding;
+      if (news.cloudflareBranding !== undefined && observedBranding !== news.cloudflareBranding) {
         observed = yield* ssl.patchCertificatePack({
           zoneId,
           certificatePackId: observed.id,
@@ -495,6 +498,10 @@ const toAttributes = (
   certificateAuthority: pack.certificateAuthority ?? "",
   validationMethod: validationMethod ?? pack.validationMethod ?? undefined,
   validityDays: pack.validityDays ?? undefined,
-  validationRecords: pack.validationRecords?.map(toRecord) ?? undefined,
-  dcvDelegationRecords: pack.dcvDelegationRecords?.map(toRecord) ?? undefined,
+  validationRecords:
+    "validationRecords" in pack ? (pack.validationRecords?.map(toRecord) ?? undefined) : undefined,
+  dcvDelegationRecords:
+    "dcvDelegationRecords" in pack
+      ? (pack.dcvDelegationRecords?.map(toRecord) ?? undefined)
+      : undefined,
 });

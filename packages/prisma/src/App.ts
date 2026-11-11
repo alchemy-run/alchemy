@@ -238,11 +238,16 @@ const findAppByLogicalId = Effect.fn(function* (
   return apps.find((app) => app.logicalId === logicalId && app.branchId === branch.id);
 });
 
+export class PrismaAppLogicalIdTaken extends Data.TaggedError("PrismaAppLogicalIdTaken")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 const logicalIdTaken = (logicalId: string, branchId: string, projectId: string, cause: unknown) =>
-  new Error(
-    `Prisma App logical ID '${logicalId}' is already used by another App on branch '${branchId}' in project '${projectId}'. Logical IDs are unique per branch; choose a different logicalId or remove it from the other App.`,
-    { cause },
-  );
+  new PrismaAppLogicalIdTaken({
+    message: `Prisma App logical ID '${logicalId}' is already used by another App on branch '${branchId}' in project '${projectId}'. Logical IDs are unique per branch; choose a different logicalId or remove it from the other App.`,
+    cause,
+  });
 
 const attrsFrom = (app: ObservedApp): App["Attributes"] => ({
   appId: app.id,
@@ -429,9 +434,7 @@ const ProviderLive = () =>
               Effect.catchTag("Conflict", (conflict) =>
                 Effect.gen(function* () {
                   if ((yield* findAppByLogicalId(projectId, logicalId, news)) !== undefined) {
-                    return yield* Effect.fail(
-                      logicalIdTaken(logicalId, branch.id, projectId, conflict),
-                    );
+                    return yield* logicalIdTaken(logicalId, branch.id, projectId, conflict);
                   }
                   const app = yield* findApp(projectId, displayName, news);
                   if (app && output?.appId !== undefined && app.id === output.appId) {

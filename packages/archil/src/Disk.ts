@@ -388,27 +388,18 @@ export const ensureDisk = Effect.fn(function* (
   if (found?.status === "deleting") yield* waitForDiskGone(found.id);
   const observed = found?.status === "deleting" ? undefined : found;
   if (observed) return yield* waitForDisk(observed.id);
-  const created = yield* archil
-    .createDisk({ name, mounts: storage ? [toMountConfig(storage)] : undefined })
-    .pipe(
-      Effect.map(({ data }) => data.diskId),
-      // A concurrent create of the same name won the race.
-      Effect.catchTag("DiskAlreadyExists", () =>
-        findDiskByName(name).pipe(Effect.map((disk) => disk?.id)),
-      ),
-    );
-  const id = created ?? (yield* findDiskByName(name))?.id;
-  if (!id) {
-    return yield* new archil.DiskNotFound({
-      error: `Archil created disk ${name} but returned no id`,
-    });
-  }
-  return yield* waitForDisk(id);
+  // Archil answers a create of an existing name with that disk's id, so a
+  // concurrent create of the same name needs no special case.
+  const { data } = yield* archil.createDisk({
+    name,
+    mounts: storage ? [toMountConfig(storage)] : undefined,
+  });
+  return yield* waitForDisk(data.diskId);
 });
 
 /** Delete a disk and wait until it is gone. Deleting a missing disk succeeds. */
 export const deleteDisk = Effect.fn(function* (id: string) {
-  yield* archil.deleteDisk({ id }).pipe(Effect.catchTag("DiskNotFound", () => Effect.void));
+  yield* archil.deleteDisk({ id }).pipe(Effect.catchTag("NotFound", () => Effect.void));
   yield* waitForDiskGone(id);
 });
 

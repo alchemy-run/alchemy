@@ -24,6 +24,7 @@ import * as Cause from "effect/Cause";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
@@ -859,6 +860,40 @@ lifecycle(9, process.env.RDS_TEST_LIFECYCLE)(
         action: "update",
       });
       // A second storage modification must wait for AWS's optimization cooldown.
+      yield* stack.destroy();
+      yield* assertInstanceGone(created.dbInstanceIdentifier);
+    }),
+  {
+    tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"],
+    timeout: INSTANCE_TIMEOUT,
+  },
+);
+
+// A destroy interrupted while it waits for RDS leaves the instance `deleting`
+// and still in state. RDS rejects a second delete of it, so the next destroy
+// has to wait for the one already running.
+lifecycle(9, process.env.RDS_TEST_LIFECYCLE)(
+  "delete: a destroy interrupted mid-delete finishes on the next destroy",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const created = yield* stack.deploy(storageProgram({}));
+      const statusOf = rds
+        .describeDBInstances({ DBInstanceIdentifier: created.dbInstanceIdentifier })
+        .pipe(Effect.map((response) => response.DBInstances?.[0]?.DBInstanceStatus));
+
+      const destroying = yield* stack.destroy().pipe(Effect.forkChild);
+      const status = yield* statusOf.pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          times: 30,
+          until: (status) => status === "deleting",
+        }),
+      );
+      expect(status).toBe("deleting");
+      yield* Fiber.interrupt(destroying);
+      expect(yield* statusOf).toBe("deleting");
+
       yield* stack.destroy();
       yield* assertInstanceGone(created.dbInstanceIdentifier);
     }),

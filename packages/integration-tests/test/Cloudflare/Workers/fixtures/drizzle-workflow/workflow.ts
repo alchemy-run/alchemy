@@ -21,8 +21,8 @@ import { relations, Widgets } from "./schema.ts";
 export default class DrizzleWorkflow extends Cloudflare.Workflow<DrizzleWorkflow>()(
   "DrizzleWorkflow",
   Effect.gen(function* () {
-    // `proxyChain` defers the connect to the first query, so the pool opens
-    // inside a step — where `ExecutionContext` is provided — not here at init.
+    // The database connects on its first query, so the pool opens inside a
+    // step — where `ExecutionContext` is provided — not here at init.
     const conn = yield* Cloudflare.Hyperdrive.Connect(Hyperdrive);
     const db = yield* Drizzle.Postgres(conn.connectionString, { relations });
 

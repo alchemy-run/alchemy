@@ -31,7 +31,7 @@ Every sandbox has an outbound policy. Archil enforces it outside the microVM, so
 ## Deny everything but a list of hosts
 
 ```typescript title="src/agent.ts"
-export const Agent = Archil.Sandbox("Agent", {
+export const MySandbox = Archil.Sandbox("MySandbox", {
   network: {
     egress: { default: "deny", allow: ["registry.npmjs.org", "*.github.com"] },
   },
@@ -45,7 +45,7 @@ Deny entries win over allow entries. A wildcard matches subdomains, not the apex
 An allow entry can set headers on matching HTTPS requests. The sandbox never sees the value:
 
 ```typescript title="src/agent.ts"
-export const Agent = Archil.Sandbox("Agent", {
+export const MySandbox = Archil.Sandbox("MySandbox", {
   network: {
     egress: {
       default: "deny",

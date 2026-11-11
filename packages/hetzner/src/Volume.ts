@@ -467,7 +467,7 @@ export const VolumeProvider = () =>
         if (desiredServerId !== undefined) {
           const { action } = yield* Hetzner.volumeActions.attachVolume({
             id: current.id,
-            server: desiredServerId,
+            assignee: { id: desiredServerId, type: "server" },
             automount: news.automount,
           });
           yield* settleAction(action);

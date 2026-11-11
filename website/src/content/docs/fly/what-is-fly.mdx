@@ -3,33 +3,32 @@ title: What is Fly?
 description: The concepts behind Fly.io — organizations, Apps, Machines, regions, the Fly proxy, private networking, Volumes, managed data, secrets and certificates — and how @alchemy.run/fly models each of them.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import Tree from "../../../components/diagrams/Tree.astro";
+
 
 Fly.io runs your programs as small virtual machines in data centers around the world. You choose the regions, Fly starts the machines there, and its proxy sends each request to the nearest one that's running. It's a whole server per instance, with a disk if you want one, close to your users.
 
 Take one small app: an API Service in two regions that stores files on a Volume and keeps its data in Postgres. Everything in an organization shares one private network. The App's Machines run in two regions, each with its own Volume, and reach Postgres over the private network. Fly's proxy sends each request to the nearest Machine.
 
-<DAG
+<Tree
   nodes={[
-    { id: "proxy", label: "Fly proxy", type: "anycast · api.fly.dev", col: 0, row: 0 },
-    { id: "volIad", label: "data", type: "Volume · iad", col: 1, row: 0 },
-    { id: "iad", label: "Machine", type: "iad", tone: "accent", col: 2, row: 0 },
-    { id: "volLhr", label: "data", type: "Volume · lhr", col: 1, row: 1 },
-    { id: "lhr", label: "Machine", type: "lhr", tone: "accent", col: 2, row: 1 },
-    { id: "pg", label: "Postgres", type: "Managed Postgres", col: 3, row: 0 },
+    { id: "org", label: "acme", type: "organization · private network", icon: "brand:fly", areas: ["app", "pg"] },
+    { id: "app", label: "api", type: "app", parent: "org", dashed: true, icon: "app-window", areas: ["riad rlhr"], colGap: 1 },
+    { id: "riad", label: "iad", type: "region · Ashburn", parent: "app", dashed: true, icon: "map-pin", areas: ["iad volIad"], phoneAreas: ["iad volIad"], colGap: 3 },
+    { id: "iad", label: "Machine", type: "runs api", parent: "riad", tone: "accent", icon: "server" },
+    { id: "volIad", label: "data", type: "Volume", parent: "riad", icon: "hard-drive" },
+    { id: "rlhr", label: "lhr", type: "region · London", parent: "app", dashed: true, icon: "map-pin", areas: ["lhr volLhr"], phoneAreas: ["lhr volLhr"], colGap: 3 },
+    { id: "lhr", label: "Machine", type: "runs api", parent: "rlhr", tone: "accent", icon: "server" },
+    { id: "volLhr", label: "data", type: "Volume", parent: "rlhr", icon: "hard-drive" },
+    { id: "pg", label: "Postgres", type: "Managed Postgres", parent: "org", icon: "brand:postgresql" },
   ]}
-  groups={[
-    { id: "org", label: "Organization acme · private network", nodes: ["pg"] },
-    { id: "app", label: "App api", parent: "org", nodes: ["volIad", "iad", "volLhr", "lhr"], dashed: true },
-  ]}
-  edges={[
-    { from: "proxy", to: "app", label: "nearest" },
+  links={[
     { from: "iad", to: "volIad", label: "mounts" },
     { from: "lhr", to: "volLhr", label: "mounts" },
     { from: "iad", to: "pg" },
-    { from: "lhr", to: "pg", exit: "side" },
+    { from: "lhr", to: "pg" },
   ]}
-  caption="An organization's apps share one private network over WireGuard. Each Machine runs in one region, with its own Volume there. The proxy sends each request to the nearest Machine."
+  caption="An organization's apps share one private network over WireGuard. Each Machine runs in one region, with its own Volume there. Fly's anycast proxy sends each request for api.fly.dev to the nearest Machine, and both Machines reach Postgres over the private network."
 />
 
 ## Organizations

@@ -5,12 +5,13 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import type { PlatformError } from "effect/PlatformError";
 import * as ChildProcess from "effect/process/ChildProcess";
 import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 import * as Redacted from "effect/Redacted";
 import type { Scope } from "effect/Scope";
 import * as Stream from "effect/Stream";
-import { normalizeEntrypoint } from "./ComputeArchive.ts";
+import { type ComputeArchiveInvalidProps, normalizeEntrypoint } from "./ComputeArchive.ts";
 
 export class ComputeBuildInvalidProps extends Data.TaggedError("ComputeBuildInvalidProps")<{
   readonly message: string;
@@ -21,6 +22,13 @@ export class ComputeBuildError extends Data.TaggedError("ComputeBuildError")<{
   readonly message: string;
   readonly cause?: unknown;
 }> {}
+
+/** Every failure a Compute build or artifact staging step can produce. */
+type ComputeBuildFailure =
+  | ComputeBuildError
+  | ComputeBuildInvalidProps
+  | ComputeArchiveInvalidProps
+  | PlatformError;
 
 // `@vercel/nft` is an optional peer dependency — loaded lazily so importing
 // the Prisma provider never requires it unless a NestJS artifact is traced.
@@ -165,11 +173,11 @@ export interface ComputeStaticBuildOptions {
 
 interface BuildStrategy {
   name: Exclude<ComputeAutoBuildFramework, "auto">;
-  canBuild: (appPath: string) => Effect.Effect<boolean, unknown, BuildServices>;
+  canBuild: (appPath: string) => Effect.Effect<boolean, ComputeBuildFailure, BuildServices>;
   execute: (
     options: Required<Pick<ComputeAutoBuildOptions, "appPath">> &
       Omit<ComputeAutoBuildOptions, "appPath">,
-  ) => Effect.Effect<ComputeBuildArtifact, unknown, BuildServices>;
+  ) => Effect.Effect<ComputeBuildArtifact, ComputeBuildFailure, BuildServices>;
 }
 
 interface DirectoryEntry {
@@ -220,8 +228,8 @@ interface StagingBudget {
   readonly deadline: number;
 }
 
-const collectBoundedOutput = (
-  stream: Stream.Stream<Uint8Array, unknown>,
+const collectBoundedOutput = <E>(
+  stream: Stream.Stream<Uint8Array, E>,
   label: string,
   limit: number,
 ) =>
@@ -946,7 +954,7 @@ const copyDirectoryWithinRoots: (
   allowedRoots: readonly string[],
   targetRoot: string,
   budget: StagingBudget,
-) => Effect.Effect<void, unknown, FileSystem.FileSystem | Path.Path> = Effect.fn(
+) => Effect.Effect<void, ComputeBuildFailure, FileSystem.FileSystem | Path.Path> = Effect.fn(
   function* (sourceDir, targetDir, allowedRoots, targetRoot, budget) {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -1415,7 +1423,7 @@ const makeStagingBudget = (): StagingBudget => ({
 const withStagingDeadline = <A, E, R>(
   effect: Effect.Effect<A, E, R>,
   budget: StagingBudget,
-): Effect.Effect<A, E | Error, R> =>
+): Effect.Effect<A, E | ComputeBuildError, R> =>
   effect.pipe(
     Effect.timeoutOption(Duration.millis(Math.max(1, budget.deadline - Date.now()))),
     Effect.flatMap((result) =>
@@ -1560,7 +1568,7 @@ const validateStagedDirectory = Effect.fn(function* (root: string, budget: Stagi
 
   const visit: (
     directory: string,
-  ) => Effect.Effect<void, unknown, FileSystem.FileSystem | Path.Path> = Effect.fn(
+  ) => Effect.Effect<void, ComputeBuildFailure, FileSystem.FileSystem | Path.Path> = Effect.fn(
     function* (directory) {
       yield* assertRealPathWithinRoots(directory, [realRoot]);
       const entries = (yield* readDirectoryEntries(directory)).sort((a, b) =>

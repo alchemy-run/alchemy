@@ -7,18 +7,31 @@ import Tree from "../../../components/diagrams/Tree.astro";
 
 E2B runs sandboxes: Linux microVMs for code you don't trust. Each **sandbox** boots from a **template**, an image E2B builds and snapshots once, so a new sandbox starts in well under a second with its files and processes already in place. A sandbox runs until its timeout, then E2B kills it or pauses it with its memory. Everything belongs to a **team**: its templates, sandboxes, volumes, secrets and API keys, and the bill.
 
-Take one small app: an `Agent` template with Node.js and git, and a `Warm` snapshot of it with a repository already cloned and installed. For each user, a Cloudflare Worker creates a volume for their files, `home-42`, then creates a sandbox from `Warm` with that volume mounted at `/home/user`, and runs the agent's commands there.
+Take one small app: a `MyTemplate` template with Node.js and git, and a `Warm` snapshot of it with a repository already cloned and installed. For each user, a Cloudflare Worker creates a volume for their files, `home-42`, then creates a sandbox from `Warm` with that volume mounted at `/home/user`, and runs the agent's commands there.
 
 <Tree
   nodes={[
-    { id: "team", label: "acme", type: "team", icon: "brand:e2b" },
-    { id: "agent", label: "Agent", type: "template", parent: "team", icon: "package" },
-    { id: "warm", label: "Warm", type: "snapshot of Agent", parent: "team", icon: "camera" },
-    { id: "sandbox", label: "user-42", type: "sandbox", parent: "team", wide: true, tone: "accent", icon: "box", specs: [["boots", "Warm"], ["/home/user", "home-42"]] },
-    { id: "home", label: "home-42", type: "volume", parent: "team", side: true, icon: "hard-drive" },
-    { id: "github", label: "GitHubToken", type: "secret", parent: "team", side: true, icon: "key-round" },
+    { id: "worker", label: "Api", type: "your Cloudflare Worker", icon: "square-function" },
+    {
+      id: "team", label: "acme", type: "team", icon: "brand:e2b", colGap: 4.5,
+      areas: ["template warm github", "home sandbox sandbox"],
+      phoneAreas: ["template github", "warm sandbox", "home home"],
+    },
+    { id: "template", label: "MyTemplate", type: "template", parent: "team", icon: "package" },
+    { id: "warm", label: "Warm", type: "snapshot", parent: "team", icon: "camera" },
+    { id: "github", label: "GitHubToken", type: "secret", parent: "team", icon: "key-round" },
+    { id: "home", label: "home-42", type: "volume", parent: "team", icon: "hard-drive" },
+    { id: "sandbox", label: "user-42", type: "sandbox", parent: "team", tone: "accent", icon: "box" },
   ]}
-  caption="Everything belongs to the team acme. The sandbox boots from the Warm snapshot of the Agent template, with the home-42 volume mounted at /home/user. A Cloudflare Worker outside E2B creates the volume and the sandbox through E2B's API."
+  areas={["worker", "team"]}
+  links={[
+    { from: "worker", to: "team", label: "creates one per person" },
+    { from: "template", to: "warm", label: "snapshot" },
+    { from: "warm", to: "sandbox", label: "boots" },
+    { from: "github", to: "sandbox", label: "github.com" },
+    { from: "home", to: "sandbox", label: "/home/user" },
+  ]}
+  caption="Your Worker creates a volume and a sandbox for each person using your app, like user 42, as many as you need. Each sandbox boots from the one Warm snapshot of MyTemplate, with that person's volume at /home/user. E2B adds GitHubToken to the sandbox's requests to github.com, so code inside never sees it. Everything belongs to the team acme."
 />
 
 ## Teams: who owns and pays
@@ -38,7 +51,7 @@ See [Team & API keys](/e2b/api-keys).
 A **template** is the image a sandbox boots from. E2B builds it on its side, from a registry image, a Dockerfile or another template, then boots it once, runs its start command, and snapshots the running microVM. Every sandbox from it starts from that snapshot.
 
 ```typescript
-export const Agent = E2B.Template("Agent", { image: "node:22-bookworm" });
+export const MyTemplate = E2B.Template("MyTemplate", { image: "node:22-bookworm" });
 ```
 
 See [Templates](/e2b/templates).
@@ -58,7 +71,7 @@ See [Sandboxes](/e2b/sandboxes).
 A **snapshot** captures a running sandbox, memory and disk, as a template of its own. Sandboxes from it start where the original was: a repository cloned, dependencies installed, a server listening. A **fork** snapshots a sandbox and starts copies of it straight away, while the original keeps running.
 
 ```typescript
-export const Warm = E2B.Snapshot("Warm", { template: Agent, run: ["npm ci"] });
+export const Warm = E2B.Snapshot("Warm", { template: MyTemplate, run: ["npm ci"] });
 ```
 
 See [Snapshots & forks](/e2b/snapshots).

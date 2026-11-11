@@ -190,7 +190,12 @@ const liveTags = [
   "live",
 ];
 
-describe.skipIf(!!process.env.FAST)(
+// These serve the hostname through public DNS and a real certificate. Under
+// the emulator (`ALCHEMY_TEST_DEV=1`) a local Function composes no domain, as
+// documented on `domain`, and nothing public can reach the emulator.
+const emulator = process.env.ALCHEMY_TEST_DEV === "1";
+
+describe.skipIf(!!process.env.FAST || emulator)(
   "AWS.Lambda.Function domain (live, slow)",
   { tags: liveTags },
   () => {

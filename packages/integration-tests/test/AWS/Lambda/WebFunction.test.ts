@@ -1,5 +1,6 @@
 import { fileURLToPath } from "node:url";
 import * as AWS from "@alchemy.run/aws";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Logs from "@distilled.cloud/aws/cloudwatch-logs";
@@ -14,8 +15,10 @@ import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { doWork, OtelCollector, waitForWorkSpan, withCollectorUrl } from "../../Utils/Telemetry.ts";
 import EffectWebFunctionLive, { EffectWebFunction } from "./fixtures/web/effect-web.ts";
 import {
   BackgroundLoopWeb,
@@ -24,11 +27,14 @@ import {
   EventSourceWebLive,
 } from "./fixtures/web/not-http.ts";
 import RdsWebFunctionLive, { RdsWebFunction, RdsWebInfra } from "./fixtures/web/rds-web.ts";
+import TracedWebFunctionLive, { TracedWebFunction } from "./fixtures/web/traced-web.ts";
 
 const asyncServerMain = fileURLToPath(new URL("./fixtures/web/async-server.ts", import.meta.url));
 const prebuiltMain = fileURLToPath(new URL("./fixtures/web/prebuilt/server.mjs", import.meta.url));
 
-const { test } = Test.make({ providers: AWS.providers() });
+const { test } = Test.make({
+  providers: Layer.mergeAll(AWS.providers(), Cloudflare.providers()),
+});
 
 const tags = ["provider:aws", "provider:aws:iam", "provider:aws:lambda", "live"];
 
@@ -721,4 +727,31 @@ test.provider(
       expect(ok.resources.Invalid).toMatchObject({ action: "create" });
     }),
   { tags, timeout: 60_000 },
+);
+
+test.provider(
+  "Effect fetch handler exports spans to the bound OTLP destination",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      // The traced program binds the collector url at deploy, so it deploys first.
+      const collector = yield* stack.deploy(OtelCollector());
+      const fn = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            yield* OtelCollector();
+            return yield* TracedWebFunction.pipe(Effect.provide(TracedWebFunctionLive));
+          }),
+        )
+        .pipe(withCollectorUrl(collector.url!));
+
+      expect(yield* doWork(fn.url, "lambdaweb")).toBe("did work lambdaweb");
+      const traces = yield* waitForWorkSpan(collector.url!, "lambdaweb");
+      expect(traces).toContain("work:lambdaweb");
+      expect(traces).toContain("lambda-web-e2e");
+
+      yield* stack.destroy();
+    }),
+  { tags: [...tags, "provider:cloudflare", "provider:cloudflare:worker"], timeout: 300_000 },
 );
