@@ -339,6 +339,22 @@ export const authorized =
         : HttpServerResponse.empty({ status: 401 });
     });
 
+/**
+ * One Debug line per call. A runner serves every call through its gateway,
+ * so the router's default Info logger (four lines a call) floods its log.
+ * A call that fails still logs at Warning, with its cause.
+ */
+export const logged = <E, R>(app: Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>) =>
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const call = `${request.method} ${request.url.split("?")[0]}`;
+    const exit = yield* Effect.exit(app);
+    yield* exit._tag === "Success"
+      ? Effect.logDebug(`${call} ${exit.value.status}`)
+      : Effect.logWarning(`${call} failed`, exit.cause);
+    return yield* exit;
+  });
+
 /** The gateway a runner serves: every hosted entity's RPCs, behind the token. */
 export function gatewayLayer(
   entities: ReadonlyArray<AnyEntity>,
@@ -361,6 +377,10 @@ export function gatewayLayer(
       Layer.provide(handlers),
       Layer.provide(RpcSerialization.layerJson),
     ),
-    { disableListenLog: true, middleware: authorized(token) },
+    {
+      disableListenLog: true,
+      disableLogger: true,
+      middleware: (app) => app.pipe(authorized(token), logged),
+    },
   );
 }
