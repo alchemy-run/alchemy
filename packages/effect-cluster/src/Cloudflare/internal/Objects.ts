@@ -24,15 +24,19 @@ import {
   EntityAddress,
   EntityId,
   EntityType,
-  Envelope,
   RunnerAddress,
   Sharding,
   ShardId,
   Snowflake,
 } from "effect/cluster";
-import { CurrentAddress, CurrentRunnerAddress } from "effect/cluster/Entity";
+import {
+  AlreadyProcessingMessage,
+  MailboxFull,
+  PersistenceError,
+} from "effect/cluster/ClusterError";
 import * as Context from "effect/Context";
 import * as Cron from "effect/Cron";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
@@ -40,16 +44,30 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Headers from "effect/http/Headers";
-import * as PrimaryKey from "effect/PrimaryKey";
-import * as Queue from "effect/Queue";
+import * as Predicate from "effect/Predicate";
 import { Rpc, RpcClient, RpcSchema } from "effect/rpc";
-import * as Schema from "effect/Schema";
-import * as Scope from "effect/Scope";
-import * as Semaphore from "effect/Semaphore";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { HostedCron } from "../../Cron.ts";
 import type { HostedEntity } from "../../Entity.ts";
 import type { HostedSingleton } from "../../Singleton.ts";
+import { makeEntityRuntime, type NativeStorage } from "./EntityRuntime.ts";
+import {
+  type Call,
+  chunkCodec,
+  DEFECT,
+  decode,
+  encode,
+  entityObjectName,
+  exitCodec,
+  type Frame,
+  parseEntityObjectName,
+  payloadCodec,
+  type Rejection,
+  type Reply,
+} from "./Wire.ts";
+
+export { entityObjectName } from "./Wire.ts";
 
 type AnyEntity = EffectEntity.Entity<string, Rpc.Any>;
 
@@ -71,18 +89,6 @@ export const registry = {
 
 // ---------------------------------------------------------------- names
 
-/** `(type, id)` as one object name, length-prefixed like Effect's: `7:Counter` + id. */
-export const entityObjectName = (type: string, id: string) => `${type.length}:${type}${id}`;
-
-const parseEntityObjectName = (name: string) => {
-  const colon = name.indexOf(":");
-  const length = Number(name.slice(0, colon));
-  return {
-    type: name.slice(colon + 1, colon + 1 + length),
-    id: name.slice(colon + 1 + length),
-  };
-};
-
 /** The object a workflow execution runs in: `${class}:${executionId}`. */
 const workflowObjectName = (className: string, executionId: string) =>
   `${className}:${executionId}`;
@@ -93,37 +99,6 @@ export const scheduledObjectName = (kind: "singleton" | "cron", name: string) =>
 const objectName = (state: Cloudflare.DurableObjectState["Service"]) => state.id.name ?? "";
 
 // ---------------------------------------------------------------- wire
-
-/** One call to an entity, as it crosses to the entity's object. */
-interface Call {
-  readonly requestId: string;
-  readonly tag: string;
-  readonly payload: unknown;
-  readonly headers: Record<string, string>;
-}
-
-/** A failure of the object itself, returned as data: Workers RPC hides thrown errors. */
-const DEFECT = "~cluster/defect";
-
-const json = <S extends Schema.Top>(schema: S) =>
-  Schema.toCodecJson(schema) as unknown as Schema.Codec<unknown, unknown>;
-
-const payloadCodec = (rpc: Rpc.AnyWithProps) => json(rpc.payloadSchema);
-const exitCodec = (rpc: Rpc.AnyWithProps) => json(Rpc.exitSchema(rpc as Rpc.Any));
-const chunkCodec = (rpc: Rpc.AnyWithProps) =>
-  json(RpcSchema.isStreamSchema(rpc.successSchema) ? rpc.successSchema.success : Schema.Unknown);
-
-const encode = (codec: Schema.Codec<unknown, unknown>, value: unknown) =>
-  Schema.encodeUnknownEffect(codec)(value).pipe(Effect.orDie);
-const decode = (codec: Schema.Codec<unknown, unknown>, value: unknown) =>
-  Schema.decodeUnknownEffect(codec)(value).pipe(Effect.orDie);
-
-const rpcOf = (entity: AnyEntity, tag: string) => {
-  const rpc = entity.protocol.requests.get(tag) as Rpc.AnyWithProps | undefined;
-  return rpc === undefined
-    ? Effect.die(new NotHosted({ message: `Entity '${entity.type}' has no RPC '${tag}'.` }))
-    : Effect.succeed(rpc);
-};
 
 /** Call an object, turning a defect it returned as data back into a defect. */
 const call = <A>(effect: Effect.Effect<unknown, unknown>): Effect.Effect<A> =>
@@ -145,55 +120,135 @@ const reportDefects = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 
 interface EntityObjectStub {
   readonly ask: (call: string) => Effect.Effect<string, unknown>;
-  readonly tell: (call: string) => Effect.Effect<void, unknown>;
+  readonly tell: (call: string) => Effect.Effect<string, unknown>;
   readonly stream: (call: string) => Stream.Stream<string, unknown>;
+  readonly interrupt: (requestId: string) => Effect.Effect<void, unknown>;
 }
 
 interface Namespace<Stub> {
   readonly getByName: (name: string) => Stub;
 }
 
-let requests = 0;
+/**
+ * Whether a failed call to an object can be sent again: workerd marks a
+ * transient failure `retryable`, and an `overloaded` object wants less
+ * traffic, not more.
+ */
+const isRetryable = (error: unknown) =>
+  Predicate.hasProperty(error, "cause") &&
+  Predicate.hasProperty(error.cause, "retryable") &&
+  error.cause.retryable === true &&
+  !(Predicate.hasProperty(error.cause, "overloaded") && error.cause.overloaded === true);
+
+/** A rejection the object answered with, as Effect Cluster's error. */
+const rejectionError = (address: EntityAddress.EntityAddress, rejection: Rejection) => {
+  switch (rejection._tag) {
+    case "MailboxFull":
+      return MailboxFull.make({ address });
+    case "AlreadyProcessingMessage":
+      return AlreadyProcessingMessage.make({ address, envelopeId: Snowflake.Snowflake(0) });
+    case "PersistenceError":
+      return PersistenceError.make({ cause: rejection.message });
+  }
+};
 
 /**
  * A client for one entity instance: each RPC is sent to the entity's object
  * and answered by it, with the caller's headers, as Effect Cluster's own
  * client sends it to the runner that owns the entity.
+ *
+ * A call the object never answered fails with `PersistenceError`; a
+ * persisted one is sent again first, to a fresh stub, since the object
+ * stores it under the same request id and runs it once. Interrupting a call
+ * interrupts its handler.
  */
 const clientOf = (
   entity: AnyEntity,
   entityId: string,
   objects: () => Namespace<EntityObjectStub>,
 ) => {
+  const address = EntityAddress.make({
+    shardId: ShardId.make("cloudflare", 1),
+    entityType: EntityType.make(entity.type),
+    entityId: EntityId.make(entityId),
+  });
+  const stub = () => objects().getByName(entityObjectName(entity.type, entityId));
+  const hosted = Effect.suspend(() =>
+    registry.entities.has(entity.type)
+      ? Effect.void
+      : Effect.die(
+          new NotHosted({ message: `This pool hosts no Cluster.Entity '${entity.type}'.` }),
+        ),
+  );
   const methods: Record<string, unknown> = {};
   for (const [tag, rpc_] of entity.protocol.requests) {
     const rpc = rpc_ as unknown as Rpc.AnyWithProps;
+    const persisted = Context.get(rpc.annotations, ClusterSchema.Persisted);
     const message = Effect.fn(function* (
       payload: unknown,
       options?: { readonly headers?: Headers.Input },
     ) {
+      yield* hosted;
       const headers = Headers.merge(
         yield* RpcClient.CurrentHeaders,
         Headers.fromInput(options?.headers ?? {}),
       );
-      return JSON.stringify({
-        requestId: `${yield* Clock.currentTimeMillis}-${requests++}`,
+      const sent: Call = {
+        requestId: SecureRandom.uuidV4Unsafe(),
         tag,
         payload: yield* encode(payloadCodec(rpc), payload),
         headers: Object.fromEntries(Object.entries(headers)),
-      } satisfies Call);
+      };
+      return sent;
     });
-    const stub = () => objects().getByName(entityObjectName(entity.type, entityId));
+    /** Send `sent`, again on a fresh stub while a persisted call's failure is transient. */
+    const send = <A>(
+      method: (target: EntityObjectStub) => Effect.Effect<A, unknown>,
+    ): Effect.Effect<A, PersistenceError> =>
+      Effect.suspend(() => method(stub())).pipe(
+        Effect.retry({
+          while: (error) => persisted && isRetryable(error),
+          schedule: Schedule.exponential("100 millis"),
+          times: 3,
+        }),
+        Effect.mapError((cause) => PersistenceError.make({ cause })),
+      );
+    /** Interrupting the caller interrupts the handler. */
+    const interruptible = <A, E>(sent: Call, effect: Effect.Effect<A, E>) =>
+      Effect.onInterrupt(effect, () => Effect.ignore(stub().interrupt(sent.requestId)));
+    const answer = (reply: Reply) =>
+      Effect.gen(function* () {
+        if (DEFECT in reply) return yield* Effect.die(new Error(reply[DEFECT]));
+        if ("rejected" in reply) return yield* rejectionError(address, reply.rejected);
+        const exit = (yield* decode(exitCodec(rpc), reply.exit)) as Exit.Exit<unknown, unknown>;
+        return yield* exit;
+      });
     methods[tag] = RpcSchema.isStreamSchema(rpc.successSchema)
       ? (payload: unknown, options?: { readonly headers?: Headers.Input }) =>
           Stream.unwrap(
             Effect.map(message(payload, options), (sent) =>
               stub()
-                .stream(sent)
+                .stream(JSON.stringify(sent))
                 .pipe(
-                  Stream.orDie,
-                  Stream.mapEffect((frame) => decodeFrame(rpc, frame)),
+                  Stream.mapError((cause) => PersistenceError.make({ cause })),
+                  Stream.mapEffect((frame) =>
+                    Effect.gen(function* () {
+                      const parsed = JSON.parse(frame) as Frame;
+                      if ("chunk" in parsed) {
+                        return yield* Effect.forEach(parsed.chunk, (value) =>
+                          decode(chunkCodec(rpc), value),
+                        );
+                      }
+                      yield* answer(parsed);
+                      return [];
+                    }),
+                  ),
                   Stream.flatMap((values) => Stream.fromIterable(values)),
+                  Stream.onExit((exit) =>
+                    Exit.hasInterrupts(exit)
+                      ? Effect.ignore(stub().interrupt(sent.requestId))
+                      : Effect.void,
+                  ),
                 ),
             ),
           )
@@ -203,29 +258,24 @@ const clientOf = (
         ) =>
           Effect.gen(function* () {
             const sent = yield* message(payload, options);
-            if (options?.discard === true) return yield* call<void>(stub().tell(sent));
-            const reply = yield* call<string>(stub().ask(sent));
-            const exit = (yield* decode(exitCodec(rpc), JSON.parse(reply))) as Exit.Exit<
-              unknown,
-              unknown
-            >;
-            return yield* exit;
+            const text = JSON.stringify(sent);
+            if (options?.discard === true) {
+              const reply = yield* send((target) => call<string>(target.tell(text)));
+              const parsed = JSON.parse(reply) as Partial<Extract<Reply, { rejected: Rejection }>>;
+              if (parsed.rejected !== undefined) {
+                return yield* rejectionError(address, parsed.rejected);
+              }
+              return;
+            }
+            const reply = yield* interruptible(
+              sent,
+              send((target) => call<string>(target.ask(text))),
+            );
+            return yield* answer(JSON.parse(reply) as Reply);
           });
   }
   return methods;
 };
-
-/** A stream frame: `{ chunk }` values, or the stream's `{ exit }`. */
-const decodeFrame = Effect.fn(function* (rpc: Rpc.AnyWithProps, frame: string) {
-  const parsed = JSON.parse(frame) as { chunk?: unknown[]; exit?: unknown; [DEFECT]?: string };
-  if (parsed[DEFECT] !== undefined) return yield* Effect.die(new Error(parsed[DEFECT]));
-  if (parsed.chunk !== undefined) {
-    return yield* Effect.forEach(parsed.chunk, (value) => decode(chunkCodec(rpc), value));
-  }
-  const exit = (yield* decode(exitCodec(rpc), parsed.exit)) as Exit.Exit<unknown, unknown>;
-  yield* exit;
-  return [];
-});
 
 const notOnCloudflare = (operation: string) =>
   Effect.die(new NotHosted({ message: `Sharding.${operation} is not used on Durable Objects.` }));
@@ -278,24 +328,9 @@ const sqlOf = (
 
 // ---------------------------------------------------------------- entities
 
-/** How long a persisted message waits before its object replays it, after a restart. */
-const REPLAY_AFTER = 30_000;
-
 /**
- * How often an instance's alarm wakes its object while the instance may not
- * stop yet: Cloudflare evicts an object idle for about ten seconds, and the
- * instance's state with it.
- */
-const KEEP_AWAKE = 5_000;
-
-/**
- * Every entity instance: one object per `(type, id)`. The first message
- * builds the instance's handlers; messages run one at a time unless the
- * entity allows more. A persisted message is stored before it runs and its
- * reply after, so a primary key runs once, and one cut short by a restart
- * runs again when the object's alarm fires. Like on runners, an instance
- * keeps its state until it has been idle for `maxIdleTime`: its alarm keeps
- * the object awake until then.
+ * Every entity instance: one object per `(type, id)`, running the instance
+ * as Effect Cluster's runners do (see `EntityRuntime.ts`).
  */
 export const EntityObject = Cloudflare.DurableObject<EntityObjectStub>()(
   "ClusterEntity",
@@ -310,192 +345,24 @@ export const EntityObject = Cloudflare.DurableObject<EntityObjectStub>()(
           new NotHosted({ message: `This Worker hosts no Cluster.Entity '${type}'.` }),
         );
       }
-      const { query, setAlarm } = sqlOf(state, runtime);
-      yield* query(
-        "CREATE TABLE IF NOT EXISTS cluster_messages (request_id TEXT PRIMARY KEY, call TEXT NOT NULL, exit TEXT)",
-      );
-
-      const address = EntityAddress.make({
-        shardId: ShardId.make("cloudflare", 1),
-        entityType: EntityType.make(type),
-        entityId: EntityId.make(id),
+      const entity = yield* makeEntityRuntime({
+        hosted,
+        address: EntityAddress.make({
+          shardId: ShardId.make("cloudflare", 1),
+          entityType: EntityType.make(type),
+          entityId: EntityId.make(id),
+        }),
+        runnerAddress: RunnerAddress.make(objectName(state), 0),
+        context: Context.merge(withSharding(hosted.context), runtime),
+        storage: state.raw.storage as unknown as NativeStorage,
+        waitUntil: (effect) => state.waitUntil(effect).pipe(Effect.provideContext(runtime)),
       });
-      const context = Context.add(withSharding(hosted.context), CurrentAddress, address);
-      // The instance lives as long as its object; workerd has no teardown hook.
-      const instanceScope = Scope.makeUnsafe();
-      const handlers = yield* Effect.cached(
-        hosted.instance.pipe(
-          Effect.provideService(Scope.Scope, instanceScope),
-          Effect.provideService(CurrentRunnerAddress, RunnerAddress.make(objectName(state), 0)),
-          Effect.provideContext(Context.merge(context, runtime)),
-        ) as Effect.Effect<Record<string, (request: unknown) => unknown>>,
-      );
-      const maxIdle = Duration.toMillis(
-        Duration.fromInputUnsafe(hosted.options.maxIdleTime ?? "1 minute"),
-      );
-      let lastActive = yield* Clock.currentTimeMillis;
-      let armedAt = 0;
-      /** Wake the object at `at`, unless it already wakes sooner. */
-      const arm = (at: number) =>
-        Effect.flatMap(Clock.currentTimeMillis, (now) => {
-          if (armedAt > now && armedAt <= at) return Effect.void;
-          armedAt = at;
-          return setAlarm(at);
-        });
-      /** A message arrived: keep the instance until it has been idle for `maxIdleTime`. */
-      const touch = Effect.flatMap(Clock.currentTimeMillis, (now) => {
-        lastActive = now;
-        return arm(lastActive + KEEP_AWAKE);
-      });
-      const concurrency = hosted.options.concurrency ?? 1;
-      const permits = Semaphore.makeUnsafe(
-        concurrency === "unbounded" ? Number.MAX_SAFE_INTEGER : concurrency,
-      );
-
-      /** The handler's result for `request`, with the RPC's middleware around it. */
-      const handle = Effect.fn(function* (rpc: Rpc.AnyWithProps, request: Call, payload: unknown) {
-        const handler = (yield* handlers)[rpc._tag];
-        const headers = Headers.fromInput(request.headers);
-        const requestId = Snowflake.Snowflake(BigInt(requests++));
-        const envelope = Envelope.makeRequest<Rpc.Any>({
-          requestId,
-          address,
-          tag: rpc._tag as never,
-          payload: payload as never,
-          headers,
-        });
-        return { result: handler!(envelope), requestId, headers };
-      });
-
-      const withMiddleware = <A, E, R>(
-        rpc: Rpc.AnyWithProps,
-        effect: Effect.Effect<A, E, R>,
-        options: { readonly requestId: Snowflake.Snowflake; readonly headers: Headers.Headers },
-        payload: unknown,
-      ) => {
-        let wrapped = effect as Effect.Effect<any, any, any>;
-        for (const middleware of rpc.middlewares) {
-          const run = Context.getUnsafe(context, middleware) as (
-            effect: Effect.Effect<any, any, any>,
-            options: object,
-          ) => Effect.Effect<any, any, any>;
-          wrapped = run(wrapped, {
-            rpc,
-            client: new Rpc.ServerClient(0),
-            requestId: options.requestId,
-            headers: options.headers,
-            payload,
-          });
-        }
-        return wrapped.pipe(Effect.provideContext(Context.merge(context, runtime)));
-      };
-
-      /** Run one call to an Effect RPC and encode its exit. */
-      const run = Effect.fn(function* (request: Call) {
-        yield* touch;
-        const rpc = yield* rpcOf(hosted.entity, request.tag);
-        const payload = yield* decode(payloadCodec(rpc), request.payload);
-        const persisted = Context.get(rpc.annotations, ClusterSchema.Persisted);
-        const key = PrimaryKey.isPrimaryKey(payload)
-          ? `${rpc._tag}/${PrimaryKey.value(payload)}`
-          : request.requestId;
-        if (persisted) {
-          const [stored] = yield* query<{ exit: string | null }>(
-            "SELECT exit FROM cluster_messages WHERE request_id = ?",
-            key,
-          );
-          if (stored?.exit != null) return stored.exit;
-          if (stored === undefined) {
-            yield* query(
-              "INSERT INTO cluster_messages (request_id, call) VALUES (?, ?)",
-              key,
-              JSON.stringify(request),
-            );
-          }
-          yield* arm((yield* Clock.currentTimeMillis) + REPLAY_AFTER);
-        }
-        const { result, requestId, headers } = yield* handle(rpc, request, payload);
-        const exit = yield* Effect.exit(
-          withMiddleware(
-            rpc,
-            result as Effect.Effect<unknown, unknown>,
-            { requestId, headers },
-            payload,
-          ),
-        );
-        const encoded = JSON.stringify(yield* encode(exitCodec(rpc), exit));
-        if (persisted) {
-          yield* query("UPDATE cluster_messages SET exit = ? WHERE request_id = ?", encoded, key);
-        }
-        return encoded;
-      });
-
-      /** Run one call to a streaming RPC, framing its values and its end. */
-      const stream = (request: Call) =>
-        Stream.callback<string>((queue) =>
-          Effect.gen(function* () {
-            yield* touch;
-            const rpc = yield* rpcOf(hosted.entity, request.tag);
-            const payload = yield* decode(payloadCodec(rpc), request.payload);
-            const { result, requestId, headers } = yield* handle(rpc, request, payload);
-            const values = Effect.isEffect(result)
-              ? // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- a streaming handler returns its RPC's stream, or an Effect of it
-                Stream.unwrap(result as Effect.Effect<Stream.Stream<unknown, unknown>>)
-              : (result as Stream.Stream<unknown, unknown>);
-            const forward = Stream.runForEachArray(values, (chunk) =>
-              Effect.flatMap(
-                Effect.forEach(chunk, (value) => encode(chunkCodec(rpc), value)),
-                (encoded) => Queue.offer(queue, JSON.stringify({ chunk: encoded })),
-              ),
-            );
-            const exit = yield* Effect.exit(
-              withMiddleware(rpc, forward, { requestId, headers }, payload),
-            );
-            const encoded = yield* encode(exitCodec(rpc), Exit.asVoid(exit));
-            yield* Queue.offer(queue, JSON.stringify({ exit: encoded }));
-            yield* Queue.end(queue);
-          }).pipe(
-            permits.withPermits(1),
-            Effect.catchCause((cause) =>
-              Effect.andThen(
-                Queue.offer(queue, JSON.stringify({ [DEFECT]: Cause.pretty(cause) })),
-                Queue.end(queue),
-              ),
-            ),
-          ),
-        );
-
-      /**
-       * Replay the persisted messages a restart cut short, then wake again
-       * while the instance may not stop yet, or while messages wait.
-       */
-      const wake = Effect.gen(function* () {
-        armedAt = 0;
-        const pending = yield* query<{ call: string }>(
-          "SELECT call FROM cluster_messages WHERE exit IS NULL",
-        );
-        for (const row of pending) {
-          yield* run(JSON.parse(row.call) as Call).pipe(permits.withPermits(1), Effect.ignore);
-        }
-        const now = yield* Clock.currentTimeMillis;
-        if (now - lastActive < maxIdle) return yield* arm(now + KEEP_AWAKE);
-        const [waiting] = yield* query("SELECT 1 FROM cluster_messages WHERE exit IS NULL LIMIT 1");
-        if (waiting !== undefined) yield* arm(now + REPLAY_AFTER);
-      });
-
       return {
-        ask: (message: string) =>
-          reportDefects(run(JSON.parse(message) as Call).pipe(permits.withPermits(1))),
-        // The caller doesn't wait: the call runs after this returns, and the
-        // object stays alive until it finishes.
-        tell: (message: string) =>
-          reportDefects(
-            state.waitUntil(
-              run(JSON.parse(message) as Call).pipe(permits.withPermits(1), Effect.ignore),
-            ),
-          ),
-        stream: (message: string) => stream(JSON.parse(message) as Call),
-        alarm: () => wake.pipe(Effect.ignoreCause),
+        ask: (message: string) => reportDefects(entity.ask(JSON.parse(message) as Call)),
+        tell: (message: string) => reportDefects(entity.tell(JSON.parse(message) as Call)),
+        stream: (message: string) => entity.stream(JSON.parse(message) as Call),
+        interrupt: (requestId: string) => entity.interrupt(requestId),
+        alarm: () => entity.alarm,
       };
     });
   }),

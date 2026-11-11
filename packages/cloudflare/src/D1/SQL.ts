@@ -77,7 +77,7 @@ export const D1 = Effect.fn(function* <E = never, R = never>(
     // on the first statement of an execution.
     config: { ...config } as D1Client.D1ClientConfig,
     batch,
-  }) as D1Client.D1Client;
+  }) as unknown as D1Client.D1Client & Sql.SqlClient;
 });
 
 /**
