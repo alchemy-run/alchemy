@@ -6,13 +6,17 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as logpush from "@distilled.cloud/cloudflare/logpush";
 import * as user from "@distilled.cloud/cloudflare/user";
 import * as Output from "alchemy/Output";
+import type * as Plan from "alchemy/Plan";
 import * as Provider from "alchemy/Provider";
+import { isActionState, State } from "alchemy/State/State";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
+
+const actionOf = (plan: Plan.Plan, fqn: string) => plan.resources[fqn]?.action;
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
@@ -143,6 +147,45 @@ test.provider(
       expect(Redacted.value(initial.job.destinationConf)).toContain(
         `r2://${initial.bucket.bucketName}/alchemy/{DATE}`,
       );
+
+      // The secret never reaches outputs, and an unchanged redeploy plans
+      // nothing.
+      expect(JSON.stringify(initial.job)).not.toContain(creds.secretAccessKey);
+      const unchanged = program(creds, {
+        dataset: "workers_trace_events",
+        enabled: false,
+      });
+      expect(actionOf(yield* stack.plan(unchanged), "Job")).toBe("noop");
+
+      // State written by earlier versions holds `destinationConf` as a
+      // plain string. The next deploy rewrites it as `Redacted`.
+      yield* Effect.gen(function* () {
+        const state = yield* yield* State;
+        const address = { stack: stack.name, stage: stack.stage, fqn: "Job" };
+        const stored = yield* state.get(address);
+        if (
+          !stored ||
+          isActionState(stored) ||
+          (stored.status !== "created" && stored.status !== "updated")
+        ) {
+          return yield* Effect.die(new Error("Expected a settled Logpush job row"));
+        }
+        yield* state.set({
+          ...address,
+          value: {
+            ...stored,
+            attr: {
+              ...stored.attr,
+              destinationConf: Redacted.value(initial.job.destinationConf),
+            },
+          },
+        });
+      }).pipe(Effect.provide(stack.state));
+      expect(actionOf(yield* stack.plan(unchanged), "Job")).toBe("update");
+      const migrated = yield* retryAuthBlip(stack.deploy(unchanged));
+      expect(migrated.job.jobId).toEqual(initial.job.jobId);
+      expect(Redacted.isRedacted(migrated.job.destinationConf)).toBe(true);
+      expect(actionOf(yield* stack.plan(unchanged), "Job")).toBe("noop");
 
       const live = yield* getJob(accountId, initial.job.jobId);
       expect(live.id).toEqual(initial.job.jobId);

@@ -224,7 +224,8 @@ export type Job = Resource<TypeId, JobProps, JobAttributes, never, Providers>;
  * ### Pushing Workers trace events to R2
  * **Example:** Account-scoped job writing to an R2 bucket
  * The R2 destination authenticates with S3-compatible credentials embedded
- * in the destination URI, so no ownership challenge is required.
+ * in the destination URI, so no ownership challenge is required. Wrap the
+ * URI in `Redacted` so the secret key never shows in plans or outputs.
  * ```typescript
  * const bucket = yield* Cloudflare.R2.Bucket("logs", {});
  *
