@@ -684,22 +684,7 @@ export const DBClusterProvider = () =>
               DBClusterIdentifier: output.dbClusterIdentifier,
               SkipFinalSnapshot: true,
             })
-            .pipe(
-              Effect.catchTags({
-                DBClusterNotFoundFault: () => Effect.void,
-                // A cluster already `deleting` rejects a second delete: an
-                // interrupted destroy, or a delete started outside the stack.
-                // The delete is under way either way, so wait for it below.
-                InvalidDBClusterStateFault: (error) =>
-                  readCluster(output.dbClusterIdentifier).pipe(
-                    Effect.flatMap((cluster) =>
-                      cluster === undefined || cluster.Status === "deleting"
-                        ? Effect.void
-                        : Effect.fail(error),
-                    ),
-                  ),
-              }),
-            );
+            .pipe(Effect.catchTag("DBClusterNotFoundFault", () => Effect.void));
           // Block until the cluster is fully gone. Neptune deletion is async;
           // if we return while it is still `deleting`, a dependent
           // (DBSubnetGroup or VPC) is torn down next and AWS rejects it.

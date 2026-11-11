@@ -8,7 +8,6 @@ import { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
@@ -606,16 +605,6 @@ const waitUntilRunnable = (project: string, instanceName: string) =>
     }),
   );
 
-/** The delete operation still running on an instance, if there is one. */
-const findRunningDelete = (project: string, instance: string) =>
-  sqladmin.listOperations.items({ project, instance }).pipe(
-    Stream.filter((operation) => operation.operationType === "DELETE"),
-    Stream.filter((operation) => operation.status !== "DONE"),
-    Stream.runHead,
-    Effect.map(Option.getOrUndefined),
-    Effect.catchTag("NotFound", () => Effect.undefined),
-  );
-
 const waitUntilGone = (project: string, instanceName: string) =>
   getByName(project, instanceName).pipe(
     Effect.flatMap((instance) =>
@@ -1023,18 +1012,7 @@ export const InstanceProvider = () =>
           instance: instanceName,
         })
         .pipe(
-          Effect.catchTags({
-            NotFound: () => Effect.undefined,
-            // An instance already being deleted rejects a second delete for
-            // as long as the first runs: an interrupted destroy, or a delete
-            // started outside the stack. Wait for that operation instead.
-            Conflict: (error) =>
-              findRunningDelete(env.project, instanceName).pipe(
-                Effect.flatMap((running) =>
-                  running === undefined ? Effect.fail(error) : Effect.succeed(running),
-                ),
-              ),
-          }),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

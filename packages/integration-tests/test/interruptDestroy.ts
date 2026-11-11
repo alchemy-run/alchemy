@@ -9,8 +9,8 @@ import * as Schedule from "effect/Schedule";
  * Starts `stack.destroy()` and interrupts it once the cloud reports the
  * resource as `deleting`. That is what a destroy cancelled mid-wait leaves
  * behind: a delete the cloud is still running, on a resource the stack still
- * holds in state. The next `stack.destroy()` has to finish that delete, where
- * most delete APIs reject a second call for as long as the first runs.
+ * holds in state. The next `stack.destroy()` has to finish that delete, and
+ * many delete APIs reject a second call for as long as the first runs.
  *
  * `status` reads the resource's status out-of-band. It is polled every
  * `spaced` (2 seconds by default), at most `times` times (30 by default); a

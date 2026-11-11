@@ -2,8 +2,10 @@ import * as AWS from "@alchemy.run/aws";
 import { DBClusterEndpoint } from "@alchemy.run/aws/RDS";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import * as rds from "@distilled.cloud/aws/rds";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
+import { interruptDestroy } from "../../interruptDestroy.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -36,7 +38,7 @@ test.provider(
 // Run with AWS_TEST_RDS_DBCLUSTER_ENDPOINT=1 on an account willing to pay the
 // provisioning cost.
 test.provider.skipIf(!process.env.AWS_TEST_RDS_DBCLUSTER_ENDPOINT)(
-  "list enumerates the deployed custom cluster endpoint",
+  "list enumerates the deployed custom cluster endpoint, then destroy through an interruption",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -62,7 +64,24 @@ test.provider.skipIf(!process.env.AWS_TEST_RDS_DBCLUSTER_ENDPOINT)(
         all.some((e) => e.dbClusterEndpointIdentifier === endpoint.dbClusterEndpointIdentifier),
       ).toBe(true);
 
+      // The destroy is interrupted while the endpoint is deleting. RDS
+      // rejects a second delete of it, so the next destroy has to wait for
+      // the one already running.
+      yield* interruptDestroy(stack, {
+        status: rds
+          .describeDBClusterEndpoints({
+            DBClusterEndpointIdentifier: endpoint.dbClusterEndpointIdentifier,
+          })
+          .pipe(Effect.map((response) => response.DBClusterEndpoints?.[0]?.Status)),
+        deleting: "deleting",
+        spaced: "1 second",
+      });
       yield* stack.destroy();
+
+      const remaining = yield* rds.describeDBClusterEndpoints({
+        DBClusterEndpointIdentifier: endpoint.dbClusterEndpointIdentifier,
+      });
+      expect(remaining.DBClusterEndpoints ?? []).toEqual([]);
     }),
-  { tags: ["provider:aws", "provider:aws:rds", "live"] },
+  { tags: ["provider:aws", "provider:aws:rds", "live"], timeout: 1_800_000 },
 );

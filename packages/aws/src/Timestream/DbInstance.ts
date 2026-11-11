@@ -478,10 +478,10 @@ export const DbInstanceProvider = () =>
           yield* influxdb.deleteDbInstance({ identifier: output.id }).pipe(
             Effect.catchTags({
               ResourceNotFoundException: () => Effect.void,
-              // An instance already DELETING rejects a second delete: an
-              // interrupted destroy, or a delete started outside the stack.
-              // Wait for that delete below.
-              ConflictException: (error) =>
+              // An instance already DELETING rejects a second delete with
+              // "not in a deletable state": an interrupted destroy, or a
+              // delete started outside the stack. Wait for that delete below.
+              ValidationException: (error) =>
                 influxdb.getDbInstance({ identifier: output.id }).pipe(
                   Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
                   Effect.flatMap((instance) =>

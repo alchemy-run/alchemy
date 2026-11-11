@@ -929,7 +929,7 @@ export const InstanceProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const existing = yield* getByName(output.name).pipe(
+      yield* getByName(output.name).pipe(
         Effect.filterOrFail(
           (instance) => instance === undefined || (instance.state ?? "") !== "CREATING",
           () => new InstanceOperationPending({ operation: output.name }),
@@ -939,13 +939,6 @@ export const InstanceProvider = () =>
           ...LONG_POLL,
         }),
       );
-      if (existing === undefined) return;
-      // An instance already DELETING rejects a second delete: an interrupted
-      // destroy, or a delete started outside the stack. Wait for that delete.
-      if (existing.state === "DELETING") {
-        yield* waitUntilGone(output.name);
-        return;
-      }
       const operation = yield* redis.deleteProjectsLocationsInstances({ name: output.name }).pipe(
         Effect.catchTag("NotFound", () => Effect.undefined),
         Effect.retry({

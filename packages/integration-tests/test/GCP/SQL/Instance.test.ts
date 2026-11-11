@@ -8,11 +8,8 @@ import type { StackServices } from "alchemy/Stack";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
-import { interruptDestroy } from "../../interruptDestroy.ts";
 import { expectFound } from "../lookup.ts";
 import { withNetworkSlot } from "../networkQuota.ts";
 
@@ -65,7 +62,7 @@ test.provider(
 );
 
 test.provider.skipIf(!runLifecycle)(
-  "create, update, and delete a sql instance through an interrupted destroy",
+  "create, update, and delete a sql instance",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -124,20 +121,6 @@ test.provider.skipIf(!runLifecycle)(
       expect(refetched.settings?.userLabels?.env).toEqual("prod");
       expect(refetched.settings?.userLabels?.role).toEqual("db");
 
-      // The destroy is interrupted while Cloud SQL runs the delete. A second
-      // delete is rejected for as long as the first runs, so the next destroy
-      // has to wait for the operation already running.
-      yield* interruptDestroy(stack, {
-        status: sqladmin.listOperations
-          .items({ project: created.project, instance: created.instanceName })
-          .pipe(
-            Stream.filter((operation) => operation.operationType === "DELETE"),
-            Stream.filter((operation) => operation.status !== "DONE"),
-            Stream.runHead,
-            Effect.map((running) => (Option.isSome(running) ? "DELETING" : "IDLE")),
-          ),
-        deleting: "DELETING",
-      });
       yield* stack.destroy();
 
       const gone = yield* waitUntilGone(created.project, created.instanceName);

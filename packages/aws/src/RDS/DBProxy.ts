@@ -391,21 +391,7 @@ export const DBProxyProvider = () =>
             .deleteDBProxy({
               DBProxyName: output.dbProxyName,
             })
-            .pipe(
-              Effect.catchTags({
-                DBProxyNotFoundFault: () => Effect.void,
-                // A proxy already `deleting` rejects a second delete: an
-                // interrupted destroy, or a delete started outside the stack.
-                InvalidDBProxyStateFault: (error) =>
-                  readProxy(output.dbProxyName).pipe(
-                    Effect.flatMap((proxy) =>
-                      proxy === undefined || proxy.Status === "deleting"
-                        ? Effect.void
-                        : Effect.fail(error),
-                    ),
-                  ),
-              }),
-            );
+            .pipe(Effect.catchTag("DBProxyNotFoundFault", () => Effect.void));
         }),
       };
     }),

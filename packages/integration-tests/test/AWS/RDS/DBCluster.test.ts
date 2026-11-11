@@ -326,8 +326,8 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
 );
 
 // A destroy interrupted while it waits for RDS leaves the cluster `deleting`
-// and still in state. RDS rejects a second delete of it, so the next destroy
-// has to wait for the one already running.
+// and still in state. RDS accepts a second delete of a deleting cluster; this
+// pins that the next destroy finishes it.
 test.provider.skipIf(!!process.env.FAST)(
   "delete: a destroy interrupted mid-delete finishes on the next destroy",
   (stack) =>

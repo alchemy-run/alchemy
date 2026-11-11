@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 
@@ -324,6 +325,15 @@ export const DBClusterEndpointProvider = () =>
                   ),
               }),
             );
+          // Wait until the endpoint is gone, so a destroy interrupted here
+          // leaves it in state and the next destroy finishes the delete.
+          yield* readEndpoint(output.dbClusterEndpointIdentifier).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("5 seconds"),
+              until: (endpoint) => endpoint === undefined,
+              times: 36,
+            }),
+          );
         }),
       };
     }),

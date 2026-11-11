@@ -181,8 +181,9 @@ test.provider.skipIf(!!process.env.FAST)(
 
       // Destroy immediately — instances bill while they exist. The destroy is
       // interrupted twice on the way, once while the instance is deleting and
-      // once while the cluster is: Neptune rejects a second delete of either,
-      // so each next destroy has to wait for the one already running.
+      // once while the cluster is. Neptune rejects a second delete of the
+      // instance, so the next destroy has to wait for the one already running;
+      // a second delete of the cluster is accepted.
       yield* interruptDestroy(stack, {
         status: neptune
           .describeDBInstances({ DBInstanceIdentifier: instance.dbInstanceIdentifier })

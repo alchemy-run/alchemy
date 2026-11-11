@@ -506,7 +506,7 @@ const waitUntilReady = (name: string) =>
     }),
   );
 
-const untilGone = (name: string, times: number) =>
+const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((instance) =>
       instance === undefined
@@ -515,16 +515,10 @@ const untilGone = (name: string, times: number) =>
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Memcache.InstanceStillExists",
-      times,
+      times: 10,
       schedule: Schedule.spaced("8 seconds"),
     }),
   );
-
-/** After this provider's delete operation finished: the read catches up. */
-const waitUntilGone = (name: string) => untilGone(name, 10);
-
-/** A delete this provider has no operation for: wait out the whole delete. */
-const waitUntilDeleted = (name: string) => untilGone(name, 150);
 
 const toCreateBody = (
   news: InstanceProps,
@@ -752,14 +746,6 @@ export const InstanceProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const existing = yield* getByName(output.name);
-      if (existing === undefined) return;
-      // An instance already DELETING rejects a second delete: an interrupted
-      // destroy, or a delete started outside the stack. Wait for that delete.
-      if (existing.state === "DELETING") {
-        yield* waitUntilDeleted(output.name);
-        return;
-      }
       const operation = yield* memcache
         .deleteProjectsLocationsInstances({ name: output.name })
         .pipe(

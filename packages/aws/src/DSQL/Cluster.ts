@@ -176,11 +176,6 @@ export const Cluster = Resource<Cluster>("AWS.DSQL.Cluster");
 
 const activeStatuses = new Set(["ACTIVE", "IDLE"]);
 
-// DeleteCluster was accepted. A multi-Region cluster stays PENDING_DELETE
-// until its peers are deleted too.
-const isDeleting = (status: string | undefined) =>
-  status === "DELETING" || status === "PENDING_DELETE" || status === "DELETED";
-
 export const ClusterProvider = () =>
   Provider.effect(
     Cluster,
@@ -369,10 +364,7 @@ export const ClusterProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           const identifier = output.clusterId;
           const existing = yield* readCluster(identifier);
-          // A cluster already deleting rejects an update and a second delete
-          // with ConflictException: an interrupted destroy, or a delete
-          // started outside the stack.
-          if (existing === undefined || isDeleting(existing.status)) return;
+          if (existing === undefined) return;
           // Deletion protection blocks delete — disable it first.
           if (existing.deletionProtectionEnabled) {
             yield* dsql
@@ -383,17 +375,7 @@ export const ClusterProvider = () =>
               .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
           }
           yield* dsql.deleteCluster({ identifier }).pipe(
-            Effect.catchTags({
-              ResourceNotFoundException: () => Effect.void,
-              ConflictException: (error) =>
-                readCluster(identifier).pipe(
-                  Effect.flatMap((cluster) =>
-                    cluster === undefined || isDeleting(cluster.status)
-                      ? Effect.void
-                      : Effect.fail(error),
-                  ),
-                ),
-            }),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             // A cluster still CREATING rejects delete with ConflictException;
             // retry briefly until it settles into a deletable state.
             Effect.retry({

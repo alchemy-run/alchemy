@@ -1049,14 +1049,6 @@ export const ClusterProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const existing = yield* getByName(output.name);
-      if (existing === undefined) return;
-      // A cluster already DELETING rejects a second delete: an interrupted
-      // destroy, or a delete started outside the stack. Wait for that delete.
-      if (existing.state === "DELETING") {
-        yield* waitUntilGone(output.name);
-        return;
-      }
       const operation = yield* alloydb
         .deleteProjectsLocationsClusters({
           name: output.name,
