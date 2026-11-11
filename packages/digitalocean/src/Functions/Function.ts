@@ -124,7 +124,7 @@ export type FunctionAttributes = Function["Attributes"];
  *   "Api",
  *   { main: import.meta.url, namespace: Fns },
  *   Effect.gen(function* () {
- *     const stripe = yield* DigitalOcean.Security.ReadSecret(yield* Stripe);
+ *     const stripe = yield* DigitalOcean.Security.ReadSecret(Stripe);
  *     return {
  *       fetch: Effect.gen(function* () {
  *         const key = yield* stripe.get("STRIPE_KEY");

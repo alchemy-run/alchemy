@@ -92,7 +92,7 @@ test.provider.skipIf(skipSlow)(
       expect(schedule.indexing_info?.time).toEqual("04:00");
       const kb = (yield* getGenaiKnowledgeBase({ uuid: created.docs.knowledgeBaseId }))
         .knowledge_base;
-      expect(kb.database_id).toBeDefined();
+      expect(kb.database_id).toMatch(/^[0-9a-f-]{36}$/);
       const keys = yield* listGenaiAgentApiKeys
         .items({ agent_uuid: created.agent.agentId })
         .pipe(Stream.runCollect);

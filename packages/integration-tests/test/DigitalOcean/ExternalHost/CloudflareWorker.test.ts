@@ -114,7 +114,7 @@ describe(
         const body = yield* call("/insights");
         expectOk(body);
         expect(body.result.metrics.status).toBe("success");
-        expect(body.result.logs).toBeDefined();
+        expect(body.result.logs).toHaveProperty("pagination");
       }),
       { timeout: 240_000 },
     );
