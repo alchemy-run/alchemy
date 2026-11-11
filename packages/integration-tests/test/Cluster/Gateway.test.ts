@@ -12,7 +12,7 @@ import type * as LogLevel from "effect/LogLevel";
 import * as References from "effect/References";
 
 // The gateway serves every call a runner gets, so it must not log each one at Info.
-describe("Effect Cluster gateway", () => {
+describe("Effect Cluster gateway", { tags: ["provider:cluster", "unit"] }, () => {
   it.live("logs a call as one Debug line", () => {
     const logs: Array<{ level: LogLevel.LogLevel; message: string }> = [];
     const capture = Logger.make(({ logLevel, message }) => {
