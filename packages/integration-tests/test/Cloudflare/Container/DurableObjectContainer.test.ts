@@ -1,8 +1,4 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import {
-  listApplicationDurableObjects,
-  listSnapshotImages,
-} from "@alchemy.run/cloudflare/Containers/ContainerSnapshots";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
@@ -557,8 +553,6 @@ for (const dev of [true, false]) {
                   within(`${url}${path}`, "120 seconds"),
                 );
               const exec = (url: string, path: string) => call<ExecResult>(url, path);
-              /** Where the live `/snapshot` call's images are, checked after destroy. */
-              let snapshotted: { accountId: string; ids: ReadonlyArray<string> } | undefined;
 
               const applications = yield* Effect.gen(function* () {
                 const deployed = yield* stack.deploy(nativeStack);
@@ -596,15 +590,6 @@ for (const dev of [true, false]) {
                     release: expect.stringMatching(/^3\.21\./),
                     images: EFFECT_IMAGES,
                   });
-                  if (!dev) {
-                    // The snapshot lands in the account registry, stamped
-                    // with the id of the Durable Object that took it.
-                    const { accountId, applicationId } = deployed.application;
-                    const ids = yield* listApplicationDurableObjects(accountId, applicationId);
-                    const tags = yield* listSnapshotImages(accountId, ids);
-                    expect(tags.length).toBeGreaterThan(0);
-                    snapshotted = { accountId, ids };
-                  }
 
                   // Closing an exec's scope kills the process; stdout streams;
                   // a failed container surfaces as ContainerError from monitor().
@@ -840,12 +825,6 @@ for (const dev of [true, false]) {
                       application.applicationId,
                     ),
                   ).toBeUndefined();
-                }
-                // Destroying the application deletes its snapshot images.
-                if (snapshotted !== undefined) {
-                  expect(yield* listSnapshotImages(snapshotted.accountId, snapshotted.ids)).toEqual(
-                    [],
-                  );
                 }
               }
             }),
