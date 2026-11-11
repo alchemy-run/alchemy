@@ -855,10 +855,11 @@ for (const dev of [true, false]) {
               const deployed = yield* stack.deploy(selectableStack);
               const url = deployed.worker.url!;
               yield* waitUntilReady(url);
-              // A cold image start, then the program's port, can take a while.
+              // A cold image start, then the program's port, can take a while,
+              // after the object waits out the placeholder of a fresh deploy.
               const run = (box: BoxName) =>
                 getJson<RunResult>(url, `/run?box=${box}`).pipe(
-                  within(`/run?box=${box}`, "90 seconds"),
+                  within(`/run?box=${box}`, "180 seconds"),
                 );
 
               // Both programs are images of the one class application.
