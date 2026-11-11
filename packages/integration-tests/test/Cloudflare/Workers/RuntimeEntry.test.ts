@@ -55,7 +55,11 @@ const packageOf = (id: string) => {
   return rest[0]!.startsWith("@") ? `${rest[0]}/${rest[1]}` : rest[0];
 };
 
-const bundleWorkerEntry = Effect.fn(function* (entry: string, generated = false) {
+const bundleWorkerEntry = Effect.fn(function* (
+  entry: string,
+  generated = false,
+  options: { runtime?: boolean } = {},
+) {
   const path = yield* Path.Path;
   const packagesDir = yield* path.fromFileUrl(new URL("../../../../", import.meta.url));
   const { default: cloudflare } = yield* Effect.promise(
@@ -92,6 +96,10 @@ const bundleWorkerEntry = Effect.fn(function* (entry: string, generated = false)
             },
           },
         ],
+        // Every runtime bundle folds the phase flag, as `Bundle.ts` does.
+        transform: options.runtime
+          ? { define: { "globalThis.__ALCHEMY_RUNTIME__": "true" } }
+          : undefined,
         checks: { unresolvedImport: false, ineffectiveDynamicImport: false },
         logLevel: "silent",
       }),
@@ -223,6 +231,28 @@ layer(NodeServices.layer)("@alchemy.run/cloudflare/Bridge (runtime-only entry)",
         expect(sources.filter(isPlannerSource)).toEqual([]);
         expect(toolchainPackages.filter((name) => packages.has(name))).toEqual([]);
         expect(code).not.toContain("require.resolve");
+      }),
+    { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"] },
+  );
+
+  it.effect(
+    "does not read deploy-time binding wiring from a Worker's runtime graph (#3227)",
+    () =>
+      Effect.gen(function* () {
+        const { sources } = yield* bundleWorkerEntry(
+          "integration-tests/test/Cloudflare/Workers/fixtures/runtime-entry/worker.ts",
+          false,
+          { runtime: true },
+        );
+        expect(sources).toContain("cloudflare/src/Workers/Worker.ts");
+        expect(
+          sources.filter((source) =>
+            [
+              "cloudflare/src/Workers/WorkerAsyncBindings.ts",
+              "cloudflare/src/LocalRuntime.ts",
+            ].includes(source),
+          ),
+        ).toEqual([]);
       }),
     { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"] },
   );
