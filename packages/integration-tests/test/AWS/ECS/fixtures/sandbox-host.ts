@@ -6,10 +6,11 @@ import * as Fiber from "effect/Fiber";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import SandboxAgent from "./sandbox-agent.ts";
-import { SandboxDockerfile, SandboxImage } from "./sandbox-image.ts";
+import { PlainIsolated, SandboxDockerfile, SandboxImage } from "./sandbox-image.ts";
 
 /**
  * Infrastructure of the `AWS.ECS.CreateSandbox` suite. Each export declares a
@@ -67,6 +68,9 @@ const decoder = new TextDecoder();
  * It creates sandboxes of three Tasks on one capacity provider: an Effect
  * program and two plain images. `?kind=image` picks the sandboxes of a public
  * image, `?kind=dockerfile` those of an image built from a Dockerfile.
+ *
+ * `/run` starts a task with `AWS.ECS.RunTask` instead, the way a host does
+ * without `AWS.ECS.CreateSandbox`: no token, no tags, no handle.
  */
 export default class SandboxHost extends AWS.Lambda.Function<SandboxHost>()(
   "EcsSandboxHost",
@@ -82,6 +86,16 @@ export default class SandboxHost extends AWS.Lambda.Function<SandboxHost>()(
     const sandboxes = yield* AWS.ECS.CreateSandbox(capacity, SandboxAgent);
     const images = yield* AWS.ECS.CreateSandbox(capacity, SandboxImage);
     const dockerfiles = yield* AWS.ECS.CreateSandbox(capacity, SandboxDockerfile);
+
+    // The plain ECS operation, on a Task no sandbox binding targets and on
+    // one that a sandbox binding does.
+    const cluster = yield* SandboxCluster;
+    const sandboxImage = yield* SandboxImage;
+    const runPlain = yield* AWS.ECS.RunTask(cluster, PlainIsolated);
+    const runImage = yield* AWS.ECS.RunTask(cluster, sandboxImage);
+    const CapacityName = yield* capacity.name;
+    const Subnets = yield* capacity.subnets;
+    const ImageContainer = yield* sandboxImage.containerName;
 
     return {
       fetch: Effect.gen(function* () {
@@ -103,6 +117,35 @@ export default class SandboxHost extends AWS.Lambda.Function<SandboxHost>()(
                 ...(idle === null ? {} : { idleTimeout: Duration.seconds(Number(idle)) }),
               });
               return { taskArn: sandbox.taskArn, privateIp: sandbox.privateIp };
+            }),
+          );
+        }
+
+        if (url.pathname === "/run") {
+          return yield* respond(
+            Effect.gen(function* () {
+              const placement = {
+                count: 1,
+                capacityProviderStrategy: [{ capacityProvider: yield* CapacityName, weight: 1 }],
+                networkConfiguration: { awsvpcConfiguration: { subnets: yield* Subnets } },
+              };
+              const response = image
+                ? yield* runImage({
+                    ...placement,
+                    overrides: {
+                      containerOverrides: [
+                        {
+                          name: yield* ImageContainer,
+                          command: ["python3", "-c", "import sys; sys.exit(7)"],
+                        },
+                      ],
+                    },
+                  })
+                : yield* runPlain(placement);
+              return {
+                taskArn: response.tasks?.[0]?.taskArn,
+                failures: response.failures ?? [],
+              };
             }),
           );
         }
@@ -310,5 +353,5 @@ export default class SandboxHost extends AWS.Lambda.Function<SandboxHost>()(
         return HttpServerResponse.text("ok");
       }),
     };
-  }).pipe(Effect.provide(AWS.ECS.CreateSandboxHttp)),
+  }).pipe(Effect.provide(Layer.mergeAll(AWS.ECS.CreateSandboxHttp, AWS.ECS.RunTaskHttp))),
 ) {}

@@ -84,6 +84,31 @@ const describeTask = (cluster: string, taskArn: string) =>
     "EcsSandboxStack",
   );
 
+interface Ran {
+  readonly taskArn: string | undefined;
+  readonly failures: readonly { readonly reason?: string; readonly detail?: string }[];
+}
+
+/**
+ * Starts a task with `AWS.ECS.RunTask`, not as a sandbox, and waits for it
+ * to stop. ECS keeps a stopped task readable for an hour.
+ */
+const runToCompletion = (baseUrl: string, cluster: string, kind: "plain" | "image") =>
+  Effect.gen(function* () {
+    const ran = yield* call<Ran>(baseUrl, `/run?kind=${kind}`);
+    expect(ran.failures).toEqual([]);
+    const taskArn = ran.taskArn ?? "";
+    const stopped = yield* describeTask(cluster, taskArn).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("5 seconds"),
+        until: (task) => task?.lastStatus === "STOPPED",
+        times: 48,
+      }),
+    );
+    expect(stopped?.lastStatus).toBe("STOPPED");
+    return stopped;
+  });
+
 /** Where the sandbox agent is mounted in an image's container. */
 const AGENT_DIR = "/opt/alchemy/sandbox";
 const AGENT_CONTAINER = "alchemy-sandbox-agent";
@@ -479,6 +504,53 @@ describe.sequential.skipIf(!!process.env.FAST)(
           expect(result.served).toBe("from the image");
           expect(result.user).toBe("nobody\n");
         }).pipe(Effect.ensuring(Effect.ignore(call(baseUrl, `/kill?${target}`))));
+      }).pipe(logLevel),
+      { timeout: 900_000 },
+    );
+
+    test(
+      "an isolated Task no sandbox binding targets runs with nothing of Alchemy's",
+      Effect.gen(function* () {
+        const { cluster, capacity } = yield* stack;
+        const { baseUrl } = yield* shared;
+
+        const task = yield* runToCompletion(baseUrl, cluster, "plain");
+        expect(task?.trustedExecutionSummary?.isolationMode).toBe("ISOLATED_SANDBOX");
+        expect(task?.capacityProviderName).toBe(capacity);
+        // The task ran the Task's command to its end.
+        expect(task?.containers?.map((container) => container.exitCode)).toEqual([0]);
+        // `RunTask` tags nothing and passes no token.
+        expect(task?.tags ?? []).toEqual([]);
+        expect(task?.overrides?.containerOverrides?.flatMap((o) => o.environment ?? [])).toEqual(
+          [],
+        );
+
+        // One container, with the image's own entry point and no mounts.
+        const { count, container, agent } = yield* describeContainers(task?.taskDefinitionArn);
+        expect(count).toBe(1);
+        expect(agent).toBeUndefined();
+        expect(container?.entryPoint ?? []).toEqual([]);
+        expect(container?.mountPoints ?? []).toEqual([]);
+      }).pipe(logLevel),
+      { timeout: 900_000 },
+    );
+
+    test(
+      "a run of a sandbox's Task without a token runs its command and exits with its code",
+      Effect.gen(function* () {
+        const { cluster } = yield* stack;
+        const { baseUrl } = yield* shared;
+
+        const task = yield* runToCompletion(baseUrl, cluster, "image");
+        const containers = task?.containers ?? [];
+        // The agent's container copies the agent and exits; the image's
+        // container runs the command instead of serving a sandbox.
+        expect(containers.find((container) => container.name === AGENT_CONTAINER)?.exitCode).toBe(
+          0,
+        );
+        expect(containers.find((container) => container.name !== AGENT_CONTAINER)?.exitCode).toBe(
+          7,
+        );
       }).pipe(logLevel),
       { timeout: 900_000 },
     );
