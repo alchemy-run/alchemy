@@ -117,6 +117,18 @@ export interface AppProps extends PlatformProps {
   /** Environment variables, merged after the ones bindings add. */
   env?: Record<string, any>;
   /**
+   * Files and directories copied into the image next to the program,
+   * under `/app` (for example a website's client assets). `dest` is
+   * relative to `/app`; `"."` merges into it.
+   */
+  extraFiles?: ReadonlyArray<{ source: string; dest: string }>;
+  /**
+   * @internal `main` is a complete server program that listens on `PORT`
+   * itself (a website's generated serve entry); it is bundled as-is,
+   * without the Effect or fetch-handler bootstrap.
+   */
+  standalone?: boolean;
+  /**
    * Container Registry the image is pushed to, by name or as the
    * `DigitalOcean.Registry` that declares it. App Platform pulls from it
    * with the team's own access.
@@ -502,7 +514,7 @@ export const AppProvider = () =>
           id,
           source: news as ImageSourceLike,
           port: news.port ?? DEFAULT_PORT,
-          isExternal: false,
+          isExternal: news.standalone === true,
           bootstrap: news.isExternal ? asyncBootstrap(handler) : effectBootstrap(handler),
         };
       };

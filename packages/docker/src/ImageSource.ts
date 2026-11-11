@@ -1,6 +1,7 @@
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Bundle from "alchemy/Bundle/Bundle";
 import { findCwdForBundle, getStableContextDir, resolveMainPath } from "alchemy/Bundle/TempRoot";
+import { copyExtraFiles, hashExtraFiles, type ExtraFile } from "alchemy/Util/extraFiles";
 import { sha256Object } from "alchemy/Util/sha256";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -13,6 +14,9 @@ import { type BuildCacheOptions, imageBuildCacheOptions } from "./BuildCache.ts"
 import { hashDockerBuildInputs } from "./BuildHash.ts";
 import { Docker, type RegistryCredentials } from "./Docker.ts";
 import { isInlineDockerfile, type InlineDockerfile } from "./Dockerfile.ts";
+
+/** Context subdirectory a bundled image's extra files are copied through. */
+const EXTRA_DIR = "alchemy-extra-files";
 
 /**
  * INTERNAL — registry-agnostic container image-source machinery shared by
@@ -91,6 +95,12 @@ export interface BundledImageSource {
    * image build's BuildKit layer cache.
    */
   build?: Bundle.BundleConfig & BuildCacheOptions;
+  /**
+   * Files and directories copied into the image next to the bundle, under
+   * `/app` (for example a website's client assets). Part of the image's
+   * content hash.
+   */
+  extraFiles?: ReadonlyArray<ExtraFile>;
 }
 
 /**
@@ -171,6 +181,8 @@ export interface ImageSourceLike {
   image?: string;
   /** @internal Mount-binding install lines (see {@link BundledImageSource.install}). */
   install?: ReadonlyArray<string>;
+  /** Files copied next to a bundled `main` (see {@link BundledImageSource.extraFiles}). */
+  extraFiles?: ReadonlyArray<ExtraFile>;
 }
 
 export type ImageSourceKind = "main" | "context" | "image";
@@ -525,11 +537,18 @@ export const makeContainerImageSource = Effect.gen(function* () {
       options.port,
       isPathEnv ? "<env>" : undefined,
     );
+    // Extra files join the identity only when there are any, so images
+    // without them keep their tags.
+    const extras =
+      options.source.extraFiles !== undefined && options.source.extraFiles.length > 0
+        ? { extraFiles: yield* hashExtraFiles(options.source.extraFiles) }
+        : {};
     const codeHash = (yield* sha256Object({
       bundleHash: bundled.hash,
       dockerfile,
       platform: options.platform,
       ...envIdentity,
+      ...extras,
     })).slice(0, 16);
     return { bundled, dockerfile, codeHash };
   });
@@ -558,6 +577,9 @@ export const makeContainerImageSource = Effect.gen(function* () {
       // `BunServices-YYY.js`, …). Non-trivial bundles always emit at
       // least one; minimal bundles emit none and the COPY no-ops.
       `COPY *.js /app/`,
+      ...(source.extraFiles !== undefined && source.extraFiles.length > 0
+        ? [`COPY ${EXTRA_DIR}/ /app/`]
+        : []),
     ];
     if (port !== undefined) {
       lines.push(`ENV PORT=${String(port)}`, `EXPOSE ${String(port)}`);
@@ -710,6 +732,11 @@ export const makeContainerImageSource = Effect.gen(function* () {
           content: file.content,
         })),
       });
+      const extraFiles = (source as BundledImageSource).extraFiles;
+      if (extraFiles !== undefined && extraFiles.length > 0) {
+        const path = yield* Path.Path;
+        yield* copyExtraFiles(path.join(contextDir, EXTRA_DIR), extraFiles);
+      }
       yield* session.note(`Building container image ${imageUri}...`);
       yield* buildAndPush(target, {
         imageUri,
