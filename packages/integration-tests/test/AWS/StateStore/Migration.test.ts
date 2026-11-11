@@ -259,6 +259,82 @@ test.provider(
 );
 
 test.provider(
+  "rolling back a migration that stopped before committing hands the stage back to the S3 store",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const storage = yield* stack.deploy(Storage);
+      const stage = "abandoned";
+      const untouched = "never-migrated";
+      const c = resource("ResourceC", { value: "c" });
+      const stageItems = dynamodb
+        .query({
+          TableName: storage.tableName,
+          ConsistentRead: true,
+          KeyConditionExpression: "PK = :pk",
+          ExpressionAttributeValues: { ":pk": { S: `STAGE#${STACK}#${stage}` } },
+        })
+        .pipe(Effect.map((result) => (result.Items ?? []).map((item) => item.SK?.S)));
+      yield* Effect.gen(function* () {
+        yield* seedS3(storage, stage);
+        yield* seedS3(storage, untouched);
+
+        // Stopped after the copy: the stage is fenced, and part of DynamoDB.
+        const interrupted = yield* migrate(storage, {
+          stage,
+          afterStep: (step) =>
+            step === "copied"
+              ? Effect.fail(new StateStoreError({ message: "stopped after copied" }))
+              : Effect.void,
+        });
+        expect(interrupted).toEqual([
+          { stack: STACK, stage, status: "failed", reason: "stopped after copied" },
+        ]);
+        expect((yield* stageItems).length).toBeGreaterThan(0);
+
+        // The rollback undoes it, and leaves alone a stage no migration touched.
+        expect(yield* rollback(storage)).toEqual([
+          {
+            stack: STACK,
+            stage,
+            status: "not-migrated",
+            reason: "its unfinished migration was undone, and the S3 state store holds it again",
+          },
+        ]);
+        expect(yield* stageItems).toEqual([]);
+        expect(yield* legacyKeys(storage, stage)).toHaveLength(3);
+        expect(yield* rollback(storage)).toEqual([]);
+
+        // The S3 store deploys the stage again, once the lifted policy applies.
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            const state = yield* stores(storage).s3;
+            expect(yield* state.get({ stack: STACK, stage, fqn: a.fqn })).toEqual(a);
+            yield* state.set({ stack: STACK, stage, fqn: c.fqn, value: c });
+          }),
+        ).pipe(Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 15 }));
+
+        // And it still migrates, with what the S3 store wrote since.
+        const refused = yield* Effect.scoped(
+          Effect.flatMap(stores(storage).dynamodb, (state) => state.list({ stack: STACK, stage })),
+        ).pipe(Effect.flip);
+        expect(refused.requires?.command).toBe(migrateCommand(stage));
+        expect(yield* migrate(storage, { stage })).toEqual([
+          { stack: STACK, stage, status: "migrated", records: 3 },
+        ]);
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            const state = yield* stores(storage).dynamodb;
+            expect(yield* state.get({ stack: STACK, stage, fqn: c.fqn })).toEqual(c);
+          }),
+        );
+      }).pipe(Effect.ensuring(release(storage)));
+      yield* stack.destroy();
+    }),
+  { tags, timeout: 180_000 },
+);
+
+test.provider(
   "while a stage is copied, writes to its S3 objects are denied and reads are not",
   (stack) =>
     Effect.gen(function* () {

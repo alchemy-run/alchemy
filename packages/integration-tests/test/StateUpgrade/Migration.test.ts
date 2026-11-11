@@ -146,3 +146,79 @@ test.provider(
     }),
   { tags, timeout: 600_000 },
 );
+
+test.provider(
+  `a stage of ${RELEASED} the new version sealed in S3 migrates to DynamoDB still sealed`,
+  (stack) =>
+    Effect.gen(function* () {
+      const name = storeNameFor("ups", stack.stage);
+      const table = `alchemy-state-${name}`;
+      const { accountId, region } = yield* AWSEnvironment.current;
+      const bucket = createStateBucketName(accountId, region, name);
+
+      yield* teardownStores(name);
+      const cwd = yield* workdir(name);
+      const old = yield* released();
+      const next = yield* current();
+      const on = (
+        store: "s3" | "dynamodb",
+        overrides: Record<string, string> = {},
+      ): RunOptions => ({
+        cwd,
+        env: { UPGRADE_STORE: store, UPGRADE_STORE_NAME: name, ...overrides },
+      });
+      const migrate = ["state", "migrate", "--config", MAIN, "--stage", "one"];
+
+      // A project that upgraded alchemy and stayed on the S3 store: its
+      // stage is sealed there under the store's own key.
+      yield* succeeds(old, deployArgs("one"), on("s3"));
+      const secrets = secretsOfTexts((yield* s3Texts(bucket, "one")).values());
+      yield* succeeds(next, deployArgs("one"), on("s3"));
+      const sealed = yield* s3Texts(bucket, "one");
+      expect(sealed.size).toBe(3);
+      expectSealed(sealed.values(), secrets);
+
+      // A DynamoDB store that encrypts another way can't open the stage. It
+      // moves none of it, and leaves it to the S3 store.
+      const mismatched = yield* fails(
+        next,
+        migrate,
+        on("dynamodb", {
+          UPGRADE_ENCRYPTION: "passphrase",
+          ALCHEMY_STATE_PASSPHRASE: "state upgrade test passphrase",
+        }),
+      );
+      expect(mismatched.output).toContain(`${STACK}/one: failed`);
+      expect(mismatched.output).toContain("encrypted with 'aws-kms'");
+      expect((yield* tableTexts(table, "one")).size).toBe(0);
+      expect(yield* s3Texts(bucket, "one")).toEqual(sealed);
+      const unfenced = yield* succeeds(next, deployArgs("one"), on("s3"));
+      expect(planLine(unfenced)).toBe("Plan: no changes");
+      expectSealed((yield* s3Texts(bucket, "one")).values(), secrets);
+
+      // The DynamoDB store of the same name shares the key, and takes the
+      // records as they are.
+      const migrated = yield* succeeds(next, migrate, on("dynamodb"));
+      expect(migrated.output).toContain(`${STACK}/one: migrated (2 records)`);
+      const moved = yield* tableTexts(table, "one");
+      expect(moved.size).toBe(3);
+      expectSealed(moved.values(), secrets);
+      const deployed = yield* succeeds(next, deployArgs("one"), on("dynamodb"));
+      expect(planLine(deployed)).toBe("Plan: no changes");
+      expect(yield* secretsThroughStore(makeDynamoDBState({ name }), "one")).toEqual(secrets);
+
+      // Rolled back, the S3 store reads the stage and seals it again.
+      yield* succeeds(next, [...migrate, "--rollback"], on("dynamodb"));
+      const restored = yield* s3Texts(bucket, "one");
+      expectPlaintext(restored.values());
+      expect(secretsOfTexts(restored.values())).toEqual(secrets);
+      const back = yield* succeeds(next, deployArgs("one"), on("s3"));
+      expect(planLine(back)).toBe("Plan: no changes");
+      const resealed = yield* s3Texts(bucket, "one");
+      expect([...resealed.keys()].sort()).toEqual([...sealed.keys()].sort());
+      expectSealed(resealed.values(), secrets);
+
+      yield* teardownStores(name);
+    }),
+  { tags, timeout: 600_000 },
+);

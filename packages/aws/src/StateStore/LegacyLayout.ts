@@ -364,6 +364,14 @@ export const fenceLegacyStage = (
   );
 };
 
+/** Whether a migration's fence holds the stage's S3 lease. */
+export const isLegacyStageFenced = (location: LegacyLocation, stack: string, stage: string) =>
+  readText(location.bucket, `${stagePrefix(location, stack, stage)}${LEASE_FILE}`).pipe(
+    Effect.map(
+      (existing) => existing !== undefined && parseLease(existing.text).token === FENCE_TOKEN,
+    ),
+  );
+
 /** Remove the stage's fence, so S3 stores can take its lease again. */
 export const unfenceLegacyStage = (location: LegacyLocation, stack: string, stage: string) => {
   const key = `${stagePrefix(location, stack, stage)}${LEASE_FILE}`;
