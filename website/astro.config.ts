@@ -1597,6 +1597,7 @@ export default defineConfig({
                 { label: "Account & API keys", link: "/boat/account-and-keys" },
                 { label: "Credentials & bindings", link: "/boat/security/credentials" },
                 { label: "Environments & secrets", link: "/boat/security/environments" },
+                { label: "Credential profiles", link: "/boat/security/credential-profiles" },
               ],
             },
             {

@@ -78,6 +78,50 @@ or `Volume` prop (driver, labels, IPv6) is a replacement: the old
 one is deleted and a new one created, so treat a Volume's props as
 fixed once it holds data you care about.
 
+### Configure a network
+
+A network can be internal, attachable, and pinned to an explicit subnet:
+
+```typescript
+const privateNetwork = yield* Docker.Network("private-network", {
+  internal: true,
+  attachable: true,
+  driverOpts: { "com.docker.network.driver.mtu": "1420" },
+  ipam: {
+    config: [{
+      subnet: "10.50.0.0/24",
+      gateway: "10.50.0.1",
+      ipRange: "10.50.0.128/25",
+      auxAddresses: { reserved: "10.50.0.5" },
+    }],
+  },
+});
+```
+
+Without `ipam`, Docker picks the subnet and gateway, and Alchemy doesn't treat
+them as drift. Subnets are network prefixes (`10.50.0.0/24`, not
+`10.50.0.1/24`); a bad one fails with `InvalidNetworkOptions` naming the field,
+before the old network is touched.
+
+A dual-stack bridge network enables IPv6 and declares both families:
+
+```typescript
+const dualStack = yield* Docker.Network("dual-stack", {
+  enableIPv6: true,
+  ipam: {
+    config: [
+      { subnet: "10.51.0.0/24", gateway: "10.51.0.1" },
+      { subnet: "fd51:3456:789a::/64", gateway: "fd51:3456:789a::1" },
+    ],
+  },
+});
+```
+
+`internal` cuts external access through that network only; a container on
+another network can still reach out. Every network setting is fixed at
+creation, so changing one replaces the network, and Docker refuses to remove
+it while containers are attached.
+
 ## A Redacted password
 
 ```typescript

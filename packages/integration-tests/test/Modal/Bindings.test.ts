@@ -231,6 +231,51 @@ for (const host of hosts) {
       );
     });
 
+    describe("CreateSandbox network", () => {
+      routerTest(
+        "add a secret to matching HTTPS requests without exposing it inside the sandbox",
+        Effect.gen(function* () {
+          const body = yield* get<{
+            injected: boolean;
+            rotated: boolean;
+            leaked: boolean;
+            stderr: string;
+          }>(host, `/egress?key=e-${host.key}`);
+          expect(body).toMatchObject({ injected: true, rotated: true, leaked: false });
+        }),
+        { tags: tags(host, "sandbox"), timeout: 300_000 },
+      );
+
+      routerTest(
+        "limit a sandbox to an allow-list of domains, then block and reopen its network while it runs",
+        Effect.gen(function* () {
+          const body = yield* get<Record<string, boolean>>(host, `/network?key=n-${host.key}`);
+          expect(body).toEqual({
+            allowed: true,
+            unlisted: false,
+            blocked: false,
+            reopened: true,
+          });
+        }),
+        { tags: tags(host, "sandbox"), timeout: 300_000 },
+      );
+
+      routerTest(
+        "give a sandbox an identity token Modal signs",
+        Effect.gen(function* () {
+          const body = yield* get<{
+            issuer: string;
+            subject: string;
+            sandboxId: string;
+            claims: string[];
+          }>(host, `/identity?key=t-${host.key}`);
+          expect(body.issuer).toBe("https://oidc.modal.com");
+          expect(body.subject).toContain("modal:workspace_id:");
+        }),
+        { tags: tags(host, "sandbox"), timeout: 300_000 },
+      );
+    });
+
     describe("CreateSandbox persistent", () => {
       // Persistent sandboxes are in beta; set MODAL_TEST_PERSISTENT_SANDBOX=1
       // on an entitled workspace (PersistentSandbox.test.ts probes the

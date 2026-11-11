@@ -18,6 +18,8 @@ export const TagRow = Schema.Struct({
   expires_at: Schema.Number,
   /** Pull requests whose runs produced this tag, as `owner/repo#N`. */
   linked_prs: LinkedPrs,
+  /** The kept branch this row is the latest publication of, if any. */
+  head_of: Schema.NullOr(Schema.String),
 });
 export type TagRow = typeof TagRow.Type;
 
@@ -39,8 +41,10 @@ export const get = Effect.fn("Tags.get")(function* (pkg: string, tag: string) {
 
 /**
  * Point `tag` at `sha256`, keeping the row alive for at least `expiresAt`
- * and remembering every pull request that produced it. One statement, so
- * concurrent publications of a shared tag merge rather than overwrite.
+ * and remembering every pull request that produced it. `headOf` marks the
+ * row as the latest publication of a kept branch; a publication without it
+ * leaves an existing mark alone. One statement, so concurrent publications
+ * of a shared tag merge rather than overwrite.
  */
 export const upsert = Effect.fn("Tags.upsert")(function* (input: {
   readonly package: string;
@@ -48,15 +52,17 @@ export const upsert = Effect.fn("Tags.upsert")(function* (input: {
   readonly sha256: string;
   readonly expiresAt: number;
   readonly prs: ReadonlyArray<string>;
+  readonly headOf: string | null;
 }) {
   const sql = yield* SqlClient.SqlClient;
   const prs = yield* Schema.encodeEffect(LinkedPrs)(input.prs);
   yield* sql`
-    INSERT INTO tags (package, tag, sha256, expires_at, linked_prs)
-    VALUES (${input.package}, ${input.tag}, ${input.sha256}, ${input.expiresAt}, ${prs})
+    INSERT INTO tags (package, tag, sha256, expires_at, linked_prs, head_of)
+    VALUES (${input.package}, ${input.tag}, ${input.sha256}, ${input.expiresAt}, ${prs}, ${input.headOf})
     ON CONFLICT (package, tag) DO UPDATE SET
       sha256 = excluded.sha256,
       expires_at = max(tags.expires_at, excluded.expires_at),
+      head_of = coalesce(excluded.head_of, tags.head_of),
       linked_prs = (
         SELECT json_group_array(value) FROM (
           SELECT value FROM json_each(tags.linked_prs)
@@ -91,12 +97,34 @@ export const setExpiry = Effect.fn("Tags.setExpiry")(function* (
   `;
 });
 
-/** Delete every expired row and return the tarballs those rows pointed at. */
+/**
+ * Hand a kept branch's older rows of `pkg` back to the TTL once a newer
+ * publication from the branch has written `current`. Each released row
+ * lives until at least `expiresAt`.
+ */
+export const releaseHead = Effect.fn("Tags.releaseHead")(function* (input: {
+  readonly package: string;
+  readonly branch: string;
+  readonly current: ReadonlyArray<string>;
+  readonly expiresAt: number;
+}) {
+  const sql = yield* SqlClient.SqlClient;
+  yield* sql`
+    UPDATE tags SET head_of = NULL, expires_at = max(expires_at, ${input.expiresAt})
+    WHERE package = ${input.package} AND head_of = ${input.branch}
+      AND NOT ${sql.in("tag", input.current)}
+  `;
+});
+
+/**
+ * Delete every expired row and return the tarballs those rows pointed at.
+ * The latest publication of a kept branch never expires.
+ */
 export const deleteExpired = Effect.fn("Tags.deleteExpired")(function* (now: number) {
   const sql = yield* SqlClient.SqlClient;
   return yield* decodeTarballs(
     yield* sql`
-      DELETE FROM tags WHERE expires_at < ${now} RETURNING package, sha256
+      DELETE FROM tags WHERE expires_at < ${now} AND head_of IS NULL RETURNING package, sha256
     `,
   );
 });

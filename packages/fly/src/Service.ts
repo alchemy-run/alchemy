@@ -278,9 +278,14 @@ export interface ServiceEndpoint {
 
 /** An App secret a {@link Service} wrote. Never the plaintext. */
 export interface BoundSecret {
+  /**
+   * Name of the App secret, scoped to the Service
+   * (`ALCHEMY_<hash>_<ENV_VAR>`). The Machine maps it back to its env var.
+   */
+  name: string;
   /** Fly's digest of the value after the write. */
   digest: string;
-  /** sha256 of the value written. */
+  /** sha256 of `<name>:<value>` for the value written. Never the plaintext. */
   sha256: string;
 }
 
@@ -301,8 +306,8 @@ export type Service = Resource<
     network?: string;
     /**
      * App secrets the Service wrote from bound `Config` and Redacted
-     * values, by name: Fly's digest after the write and a sha256 of the
-     * value. Only these are rewritten or deleted.
+     * values, by the env var they set: the scoped secret name, Fly's
+     * digest after the write and a sha256 of the value.
      */
     secrets?: Record<string, BoundSecret>;
     /** App-secrets version that holds {@link secrets}. */
@@ -770,9 +775,15 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * whoever deploys and stores it as a secret on the Service's App, so
  * there is no need to copy it into `env` and it never appears in the
  * Machine config. Redacted outputs of bound resources are stored the
- * same way. A Service in a shared App (`app`) writes them into the
- * Machine env instead, because Fly gives every App secret to every
- * Machine in the App.
+ * same way. The secret's name is scoped to the Service
+ * (`ALCHEMY_<hash>_API_KEY`) and the Machine maps it back to `API_KEY`,
+ * so it never collides with `Fly.Secret`, `fly secrets set` or an
+ * attachment. The bound value wins over an App secret already named
+ * `API_KEY`, which stays in the App untouched. The Machine sees the
+ * App's other secrets as they were at deploy; one set later with
+ * `fly secrets set` reaches it on the next deploy. A Service in a shared
+ * App (`app`) writes the values into the Machine env instead, because
+ * Fly gives every App secret to every Machine in the App.
  *
  * `Config.Redacted("API_KEY")` is `Redacted<string>`. Unwrap with
  * `Redacted.value` only where you need the raw string.
@@ -1175,23 +1186,39 @@ const toFlyGuest = (guest: MachineGuest | undefined): FlyMachineGuest => {
 };
 
 /**
- * Store bound `Config` and Redacted values as App secrets. Fly's digest is
- * not a hash Alchemy can compute, so a value is unchanged only when its
- * sha256 matches the last write and Fly still reports that write's digest.
- * A bound name that already exists is taken over, as the plain env var
- * used to override it; this also converges after a crash between the
- * write and the state save. Deletes only secrets this Service wrote that
- * are no longer bound. Returns what it now owns and the App-secrets
- * version Machines must reach.
+ * Prefix of the App secrets a Service writes. Scoped to its FQN so they
+ * never share a name with `Fly.Secret`, `fly secrets set`, the
+ * Redis/Postgres/Bucket attachments, or another Service.
+ */
+const boundSecretPrefix = Effect.fn(function* (fqn: string) {
+  const hash = yield* sha256(fqn);
+  return `ALCHEMY_${hash.slice(0, 8).toUpperCase()}_`;
+});
+
+/** A secret some Service wrote under its {@link boundSecretPrefix}. */
+const SCOPED_SECRET = /^ALCHEMY_[0-9A-F]{8}_/;
+
+/**
+ * Store bound `Config` and Redacted values as App secrets under names
+ * scoped to the Service; the Machine config maps each back to its env var
+ * (see {@link secretMappings}). Fly's digest is not a hash Alchemy can
+ * compute, so a value is unchanged only when its sha256 matches the last
+ * write and Fly still reports that write's digest. Deletes secrets under
+ * the Service's prefix that are no longer bound, including ones a crash
+ * left out of state; never touches any other secret. Returns what it now
+ * owns, the App's other secrets the Machine should still see, and the
+ * App-secrets version Machines must reach.
  */
 const syncBoundSecrets = Effect.fn(function* (
   appName: string,
-  desired: Record<string, string>,
+  fqn: string,
+  desired: Record<string, Redacted.Redacted<string>>,
   previous: { secrets: Record<string, BoundSecret>; version: number | undefined },
 ) {
   if (Object.keys(desired).length === 0 && Object.keys(previous.secrets).length === 0) {
-    return { secrets: {}, version: previous.version };
+    return { secrets: {}, others: [], version: previous.version };
   }
+  const prefix = yield* boundSecretPrefix(fqn);
   const listDigests = machines
     .listSecrets({ app_name: appName, show_secrets: false })
     .pipe(
@@ -1205,43 +1232,99 @@ const syncBoundSecrets = Effect.fn(function* (
       ),
     );
   const observed = yield* listDigests;
-  const secrets: Record<string, BoundSecret> = {};
-  const hashes: Record<string, string> = {};
-  const writes: Record<string, string> = {};
-  for (const [name, value] of Object.entries(desired)) {
-    const hash = yield* sha256(value);
-    const last = previous.secrets[name];
-    if (last !== undefined && last.sha256 === hash && observed.get(name) === last.digest) {
-      secrets[name] = last;
-    } else {
-      writes[name] = value;
-      hashes[name] = hash;
-    }
-  }
-  const versions: number[] = [];
-  const accept = (version: number | undefined) => {
-    if (version !== undefined && Number.isSafeInteger(version)) versions.push(version);
+  const planned = yield* Effect.forEach(
+    Object.entries(desired),
+    ([envVar, value]) =>
+      // Salted with the scoped name, so equal values on different Services
+      // or Apps never share a hash in state.
+      sha256(`${prefix}${envVar}:${Redacted.value(value)}`).pipe(
+        Effect.map((hash) => ({ envVar, name: `${prefix}${envVar}`, value, hash })),
+      ),
+    { concurrency: "unbounded" },
+  );
+  const isUnchanged = ({ envVar, name, hash }: (typeof planned)[number]) => {
+    const last = previous.secrets[envVar];
+    return (
+      last !== undefined &&
+      last.name === name &&
+      last.sha256 === hash &&
+      observed.get(name) === last.digest
+    );
   };
-  if (Object.keys(writes).length > 0) {
-    const response = yield* machines.updateSecrets({ app_name: appName, values: writes });
-    accept(response.version ?? response.Version);
-    const written = yield* listDigests;
-    for (const name of Object.keys(writes)) {
-      secrets[name] = { digest: written.get(name) ?? "", sha256: hashes[name]! };
-    }
-  }
-  for (const name of Object.keys(previous.secrets)) {
-    if (name in desired || !observed.has(name)) continue;
-    const response = yield* machines
-      .deleteSecret({ app_name: appName, secret_name: name })
-      .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-    accept(response?.version ?? response?.Version);
-  }
+  const kept = planned.filter(isUnchanged);
+  const changed = planned.filter((entry) => !isUnchanged(entry));
+  const unbound = [...observed.keys()].filter(
+    (name) => name.startsWith(prefix) && !(name.slice(prefix.length) in desired),
+  );
+  const write =
+    changed.length === 0
+      ? Effect.succeed({ version: undefined, written: [] as [string, BoundSecret][] })
+      : Effect.gen(function* () {
+          const response = yield* machines.updateSecrets({
+            app_name: appName,
+            values: Object.fromEntries(changed.map(({ name, value }) => [name, value])),
+          });
+          const digests = yield* listDigests;
+          return {
+            version: response.version ?? response.Version,
+            written: changed.map(({ envVar, name, hash }): [string, BoundSecret] => [
+              envVar,
+              { name, digest: digests.get(name) ?? "", sha256: hash },
+            ]),
+          };
+        });
+  const remove = Effect.forEach(
+    unbound,
+    (name) =>
+      machines.deleteSecret({ app_name: appName, secret_name: name }).pipe(
+        Effect.map((response) => response.version ?? response.Version),
+        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      ),
+    { concurrency: "unbounded" },
+  );
+  const [{ version: writeVersion, written }, deleteVersions] = yield* Effect.all([write, remove], {
+    concurrency: "unbounded",
+  });
+  const secrets: Record<string, BoundSecret> = Object.fromEntries([
+    ...kept.map(({ envVar }): [string, BoundSecret] => [envVar, previous.secrets[envVar]!]),
+    ...written,
+  ]);
+  const versions = [writeVersion, ...deleteVersions].filter(
+    (version): version is number => version !== undefined && Number.isSafeInteger(version),
+  );
+  // A bound value wins over an App secret with the same env var name, as
+  // a Machine env var did; that secret stays in the App untouched.
+  const others = [...observed.keys()]
+    .filter((name) => !SCOPED_SECRET.test(name) && !(name in desired))
+    .sort();
   return {
     secrets,
+    others,
     version: versions.length > 0 ? Math.max(...versions) : previous.version,
   };
 });
+
+/**
+ * Fly maps a process's `secrets` entries from a scoped App secret to the
+ * env var the program reads, but only with `ignore_app_secrets`, which
+ * hides every App secret the process does not list. So the App's other
+ * secrets (attachments, `fly secrets set`) are listed under their own
+ * names, as they were at deploy.
+ */
+const secretMappings = (bound: {
+  secrets: Record<string, BoundSecret>;
+  others: string[];
+}): FlyMachineConfig["processes"] => {
+  const mapped = Object.entries(bound.secrets).map(([envVar, secret]) => ({
+    env_var: envVar,
+    name: secret.name,
+  }));
+  if (mapped.length === 0) return undefined;
+  const entries = [...mapped, ...bound.others.map((name) => ({ env_var: name, name }))].sort(
+    (left, right) => left.env_var.localeCompare(right.env_var),
+  );
+  return [{ secrets: entries, ignore_app_secrets: true }];
+};
 
 const desiredEnv = (
   props: ServiceProps,
@@ -1282,6 +1365,7 @@ const buildConfig = (input: {
   mounts: FlyMachineMount[];
   metadata: Record<string, string>;
   statics?: FlyStatic[];
+  processes?: FlyMachineConfig["processes"];
 }): FlyMachineConfig => ({
   image: input.image,
   guest: input.guest,
@@ -1290,6 +1374,7 @@ const buildConfig = (input: {
   mounts: input.mounts.length > 0 ? input.mounts : undefined,
   metadata: input.metadata,
   statics: input.statics !== undefined && input.statics.length > 0 ? input.statics : undefined,
+  processes: input.processes,
 });
 
 const sameImage = (machine: FlyMachine, image: string) => {
@@ -1343,6 +1428,22 @@ const sameStatics = (observed: FlyStatic[] | undefined, desired: FlyStatic[] | u
   return deepEqual(normalize(observed), normalize(desired), { stripNullish: true });
 };
 
+/** Fly fills an omitted secret `name` with its `env_var`. */
+const sameProcesses = (
+  observed: FlyMachineConfig["processes"],
+  desired: FlyMachineConfig["processes"],
+) => {
+  const normalize = (processes: FlyMachineConfig["processes"]) =>
+    (processes ?? []).map((process) => ({
+      ...process,
+      secrets: process.secrets?.map((secret) => ({
+        env_var: secret.env_var,
+        name: secret.name || secret.env_var,
+      })),
+    }));
+  return deepEqual(normalize(observed), normalize(desired), { stripNullish: true });
+};
+
 const configDrifted = (
   machine: FlyMachine,
   desired: {
@@ -1353,6 +1454,7 @@ const configDrifted = (
     mounts: FlyMachineMount[];
     metadata: Record<string, string>;
     statics?: FlyStatic[];
+    processes?: FlyMachineConfig["processes"];
   },
 ) => {
   const config = machine.config;
@@ -1363,7 +1465,8 @@ const configDrifted = (
     !sameServices(config?.services, desired.services) ||
     !sameMounts(config?.mounts, desired.mounts) ||
     metadataChanged(config?.metadata, desired.metadata) ||
-    !sameStatics(config?.statics, desired.statics)
+    !sameStatics(config?.statics, desired.statics) ||
+    !sameProcesses(config?.processes, desired.processes)
   );
 };
 
@@ -1980,11 +2083,20 @@ export const ServiceProvider = () =>
           const redacted = Object.keys(env).filter((key) =>
             props.env?.[key] !== undefined
               ? Redacted.isRedacted(props.env[key])
-              : key in bound.secrets,
+              : bound.secretNames.includes(key),
           );
+          // Move them out of the plain env record before anything else reads it.
+          const desiredSecrets: Record<string, Redacted.Redacted<string>> = {};
+          if (ownsApp) {
+            for (const key of redacted) {
+              desiredSecrets[key] = Redacted.make(env[key]!);
+              delete env[key];
+            }
+          }
           const boundSecrets = yield* syncBoundSecrets(
             appName,
-            ownsApp ? Object.fromEntries(redacted.map((key) => [key, env[key]!])) : {},
+            fqn,
+            desiredSecrets,
             output?.appName === appName
               ? { secrets: output.secrets ?? {}, version: output.secretsVersion }
               : { secrets: {}, version: undefined },
@@ -1992,8 +2104,7 @@ export const ServiceProvider = () =>
           if (boundSecrets.version !== undefined) secretVersions.push(boundSecrets.version);
           const minSecretsVersion =
             secretVersions.length > 0 ? Math.max(...secretVersions) : undefined;
-          // Fly's Machine env overrides App secrets, so drop the plain copies.
-          for (const name of Object.keys(boundSecrets.secrets)) delete env[name];
+          const processes = secretMappings(boundSecrets);
           if (policy.shutdown && !props.isExternal) {
             env.ALCHEMY_FLY_SHUTDOWN_TIMEOUT_MS = String(policy.shutdown.timeoutMs);
           }
@@ -2064,9 +2175,19 @@ export const ServiceProvider = () =>
                 mounts: desired.mounts,
                 metadata: desired.metadata,
                 statics,
+                processes,
               }),
             buildConfig: ({ mounts, metadata }) =>
-              buildConfig({ image: imageRef, guest, env, services, mounts, metadata, statics }),
+              buildConfig({
+                image: imageRef,
+                guest,
+                env,
+                services,
+                mounts,
+                metadata,
+                statics,
+                processes,
+              }),
           }).pipe(
             Effect.catchTag("Fly.ReplicaNotCreated", (error) =>
               Effect.fail(

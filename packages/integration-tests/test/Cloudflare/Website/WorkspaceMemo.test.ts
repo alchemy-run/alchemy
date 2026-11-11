@@ -1,10 +1,5 @@
-import {
-  makeSourceContext,
-  type SourceHash,
-  type SourceServices,
-} from "@alchemy.run/cloudflare/Workers/Source";
-import { hashViteInput, makeViteSource } from "@alchemy.run/cloudflare/Workers/Sources/Vite";
-import type { WorkerProps } from "@alchemy.run/cloudflare/Workers/Worker";
+import type { SourceServices } from "@alchemy.run/cloudflare/Workers/Source";
+import { hashViteInput } from "@alchemy.run/cloudflare/Workers/Sources/Vite";
 import { describe, expect, it } from "@alchemy.run/test";
 import { NodeServices } from "@effect/platform-node";
 import { Artifacts, createArtifactStore, makeScopedArtifacts } from "alchemy/Artifacts";
@@ -26,10 +21,10 @@ import { cloneFixture } from "../Utils/Fixture.ts";
 // root) in `hash.additionalWorkspaces` and folds it into `hash.input` —
 // the rebuild-deciding memo signal.
 //
-// These tests pin the memo machinery itself — `hashViteInput` and the
-// vite source's `hash()` slots — without deploying or building:
+// These tests pin `hashViteInput` itself without deploying or building:
 // cross-workspace-boundary edits MUST bust the memo, while untouched
-// recomputes stay memoized. The live deploy-level behavior is covered by
+// recomputes stay memoized. How the Worker carries persisted workspaces
+// through diff (including a deleted one, #2606) is covered by
 // "Vite: edits in a sibling workspace package bust the build memo" in
 // Vite.test.ts.
 // ─────────────────────────────────────────────────────────────────────
@@ -190,56 +185,6 @@ describe(
             expect(after.hash).not.toEqual(before.hash);
           }),
         ),
-    );
-
-    it.effect("the vite source's hash() slots carry the persisted workspaces through diff", () =>
-      provide(
-        Effect.gen(function* () {
-          const { appDir, libGreeting } = yield* setup;
-
-          const vite = { rootDir: appDir, memo: { include: memoInclude } };
-          const source = makeViteSource(vite);
-          const props: WorkerProps = { vite };
-          const ctx = makeSourceContext({
-            id: "MonorepoApp",
-            fqn: "MonorepoApp",
-            workerName: "stack-monorepoapp-test-abc123",
-            props,
-            compatibility: { date: "2024-09-23", flags: [] },
-            stack: { name: "stack", stage: "test" },
-          });
-
-          // `previous` is `output.hash` from state: a prior build
-          // discovered `../lib` from the module graph and persisted it.
-          const previous: SourceHash = {
-            bundle: undefined,
-            assets: undefined,
-            input: undefined,
-            additionalWorkspaces: ["../lib"],
-          };
-
-          const slots1 = yield* source.hash(ctx, previous);
-          expect(slots1.input).toBeDefined();
-          expect(slots1.additionalWorkspaces).toEqual(["../lib"]);
-
-          // Same recipe as calling the machinery directly.
-          const direct = yield* hashViteInput(appDir, vite.memo, Effect.succeed(["../lib"]));
-          expect(slots1.input).toEqual(direct.hash);
-
-          // A cross-boundary edit changes the recomputed input slot — the
-          // WorkerProvider's `slots.input !== output.hash.input` diff then
-          // reports the update that triggers the rebuild.
-          yield* editLib(libGreeting, "ws-memo-source-edit");
-          const slots2 = yield* source.hash(ctx, previous);
-          expect(slots2.input).not.toEqual(slots1.input);
-
-          // Without persisted workspaces (fresh state) the hash set is
-          // just the root — documented by a differing input slot.
-          const slotsNoWs = yield* source.hash(ctx, undefined);
-          expect(slotsNoWs.additionalWorkspaces).toEqual([]);
-          expect(slotsNoWs.input).not.toEqual(slots2.input);
-        }),
-      ),
     );
   },
 );
