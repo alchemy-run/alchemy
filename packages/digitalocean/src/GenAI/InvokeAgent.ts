@@ -28,7 +28,7 @@ export const ChatCompletion = Schema.Struct({
   choices: Schema.Array(
     Schema.Struct({
       index: Schema.optional(Schema.Number),
-      finish_reason: Schema.optional(Schema.NullOr(Schema.String)),
+      finish_reason: Schema.String.pipe(Schema.NullOr, Schema.optional),
       message: Schema.Struct({
         role: Schema.String,
         content: Schema.NullOr(Schema.String),

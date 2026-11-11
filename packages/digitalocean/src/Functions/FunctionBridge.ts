@@ -45,7 +45,6 @@ const isText = (contentType: string | null) => TEXT.test((contentType ?? "").spl
 const applyEnvironment = (args: OpenWhiskArgs) => {
   for (const [key, value] of Object.entries(args)) {
     if (key.startsWith("__ow_") || typeof value !== "string") continue;
-    // oxlint-disable-next-line effecttsgo/process-env-in-effect -- the bridge seeds the process environment before Effect runs
     if (process.env[key] === undefined) process.env[key] = value;
   }
 };
@@ -100,7 +99,9 @@ export const makeEffectMain = (entrypoint: unknown) => {
     Layer.effect(
       StackContext,
       Effect.sync(() => ({
+        // oxlint-disable-next-line effecttsgo/process-env-in-effect -- the bridge's own process facts, set by the deploy
         name: process.env.ALCHEMY_STACK_NAME ?? "DigitalOceanFunction",
+        // oxlint-disable-next-line effecttsgo/process-env-in-effect -- the bridge's own process facts, set by the deploy
         stage: process.env.ALCHEMY_STAGE ?? "runtime",
         bindings: {},
         resources: {},

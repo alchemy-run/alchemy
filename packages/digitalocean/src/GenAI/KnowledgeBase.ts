@@ -233,8 +233,8 @@ const syncSchedule = Effect.fn(function* (
     Option.isSome(current) &&
     desired !== undefined &&
     current.value.time === desired.time &&
-    JSON.stringify([...(current.value.days ?? [])].sort()) ===
-      JSON.stringify([...desired.days].sort());
+    JSON.stringify([...(current.value.days ?? [])].sort((a, b) => a - b)) ===
+      JSON.stringify([...desired.days].sort((a, b) => a - b));
   if (same || (Option.isNone(current) && desired === undefined)) return;
   if (Option.isSome(current) && current.value.uuid) {
     yield* ignoreNotFound(DO.deleteGenaiScheduledIndexing({ uuid: current.value.uuid }));

@@ -8,7 +8,6 @@ import * as Arr from "effect/Array";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as Stream from "effect/Stream";
 import { setEquals } from "./internal/equal.ts";
 import { ignoreNotFound, noneIfNotFound } from "./internal/notFound.ts";
 import { pollUntil, type PollBudget } from "./internal/poll.ts";

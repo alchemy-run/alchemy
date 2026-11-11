@@ -120,7 +120,7 @@ export const KeyProvider = () =>
     stables: ["accessKeyId", "secretAccessKey", "createdAt"],
     // A key carries no ownership marker.
     nuke: { skip: true },
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ olds, output }) {
       if (output !== undefined) {
         const observed = yield* observeByAccessKey(output.accessKeyId);
         return Option.match(observed, {

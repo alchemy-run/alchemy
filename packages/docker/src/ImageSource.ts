@@ -897,7 +897,6 @@ export const makeContainerImageSource = Effect.gen(function* () {
         return { imageUri, repositoryUri, codeHash: program.codeHash };
       }
       const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
       const contextDir = yield* getStableContextDir(program.realMain, dotAlchemy, `${id}-image`);
       // The context is the program tree; start clean so no earlier build's
       // files ship with this one.

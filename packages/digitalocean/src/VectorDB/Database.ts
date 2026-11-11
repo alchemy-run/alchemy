@@ -8,7 +8,6 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
-import * as Stream from "effect/Stream";
 import { ignoreNotFound, noneIfNotFound } from "../internal/notFound.ts";
 import { pollUntil, type PollBudget } from "../internal/poll.ts";
 import type { Providers } from "../Providers.ts";

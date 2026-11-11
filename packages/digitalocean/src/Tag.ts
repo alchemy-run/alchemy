@@ -63,10 +63,10 @@ export type Tag = Resource<
 export const Tag = Resource<Tag>("DigitalOcean.Tag");
 
 export class TagNameReserved extends Data.TaggedError("DigitalOcean.TagNameReserved")<{
-  readonly name: string;
+  readonly tag: string;
 }> {
   override get message() {
-    return `Tag '${this.name}' uses the 'alchemy:' prefix, which is reserved for ownership tags.`;
+    return `Tag '${this.tag}' uses the 'alchemy:' prefix, which is reserved for ownership tags.`;
   }
 }
 
@@ -95,7 +95,7 @@ export const TagProvider = () =>
       if ("name" in news && news.name !== olds.name) return { action: "replace" } as const;
     }),
     reconcile: Effect.fn(function* ({ news }) {
-      if (isAlchemyTag(news.name)) return yield* new TagNameReserved({ name: news.name });
+      if (isAlchemyTag(news.name)) return yield* new TagNameReserved({ tag: news.name });
       const observed = yield* observe(news.name);
       const tag = yield* Option.match(observed, {
         onNone: () => DO.createTag({ name: news.name }).pipe(Effect.map((r) => r.tag)),

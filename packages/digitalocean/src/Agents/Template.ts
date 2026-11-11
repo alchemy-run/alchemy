@@ -109,7 +109,7 @@ const latestBuildError = (templateId: string) =>
       (r) =>
         [...(r.builds ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at))[0]?.error,
     ),
-    Effect.catch(() => Effect.succeed(undefined)),
+    Effect.orElseSucceed(() => undefined),
   );
 
 const waitUntilBuilt = (templateId: string) =>

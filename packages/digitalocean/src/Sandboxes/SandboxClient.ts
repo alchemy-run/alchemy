@@ -6,6 +6,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
+import * as Random from "effect/Random";
 import * as Redacted from "effect/Redacted";
 import type { CreateSandboxOptions, SandboxesClient, SandboxHandle } from "./CreateSandbox.ts";
 import {
@@ -16,7 +17,6 @@ import {
   waitUntilRunning,
   type Microvm,
   sizeOf,
-  type SandboxSize,
 } from "./internal.ts";
 import type { Template } from "./Template.ts";
 
@@ -116,7 +116,9 @@ export const makeSandboxesBinding = Effect.succeed(
           const region = yield* withToken(defaultRegion(undefined));
           const microvm = yield* withToken(
             DO.createMicrovm({
-              name: createOptions?.name ?? `sandbox-${Math.random().toString(36).slice(2, 10)}`,
+              name:
+                createOptions?.name ??
+                `sandbox-${(yield* Random.nextIntBetween(0, 2 ** 31)).toString(36)}`,
               source: sourceOf(boundBase),
               region,
               size: sizeOf(createOptions?.size),

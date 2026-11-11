@@ -2,7 +2,6 @@ import { endpointFor } from "@distilled.cloud/digitalocean/Spaces";
 import { Credentials } from "@distilled.cloud/s3/Credentials";
 import { Endpoint } from "@distilled.cloud/s3/Endpoint";
 import * as Binding from "alchemy/Binding";
-import * as Output from "alchemy/Output";
 import { CurrentRuntimeContext, type RuntimeContext } from "alchemy/RuntimeContext";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

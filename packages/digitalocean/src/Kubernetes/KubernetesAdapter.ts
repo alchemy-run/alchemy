@@ -23,6 +23,7 @@ import type { Connection } from "@alchemy.run/kubernetes/Connection";
  * providers through the connection's `auth.kind`.
  */
 import * as DO from "@distilled.cloud/digitalocean";
+import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -104,9 +105,9 @@ export const DoksKubernetesAdapter = () =>
             });
           }
           let current = first;
-          const fresh = Effect.suspend(() => {
+          const fresh = Effect.flatMap(Clock.currentTimeMillis, (now) => {
             const expiresAt = Date.parse(current.expires_at ?? "");
-            return Number.isFinite(expiresAt) && expiresAt - Date.now() > RENEW_BEFORE_MS
+            return Number.isFinite(expiresAt) && expiresAt - now > RENEW_BEFORE_MS
               ? Effect.succeed(current)
               : Effect.tap(mint, (next) => Effect.sync(() => (current = next)));
           });

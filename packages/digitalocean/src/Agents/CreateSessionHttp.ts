@@ -4,6 +4,7 @@ import { CurrentRuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
+import * as Random from "effect/Random";
 import * as Redacted from "effect/Redacted";
 import {
   CreateSession,
@@ -153,7 +154,7 @@ export const CreateSessionHttp = Layer.succeed(
           : Effect.gen(function* () {
               const name =
                 createOptions?.name ??
-                (yield* Effect.sync(() => `session-${crypto.randomUUID().slice(0, 8)}`));
+                `session-${(yield* Random.nextIntBetween(0, 2 ** 31)).toString(36)}`;
               const created = yield* call(
                 "create",
                 DO.createHarnessSession({

@@ -102,7 +102,7 @@ const toAttrs = (secret: ApiSecret): SecretAttributes => ({
 
 const observe = (name: string, region: string) =>
   DO.getSecuritySecret({ secret: name, region }).pipe(
-    Effect.map(Option.some),
+    Effect.asSome,
     Effect.catchTag("NotFound", () => Effect.succeedNone),
   );
 

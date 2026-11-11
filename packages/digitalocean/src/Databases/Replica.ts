@@ -88,11 +88,11 @@ export const Replica = Resource<Replica>("DigitalOcean.Databases.Replica");
 export class ReplicaWaitTimedOut extends Data.TaggedError(
   "DigitalOcean.Databases.ReplicaWaitTimedOut",
 )<{
-  readonly name: string;
+  readonly replicaName: string;
   readonly waitingFor: string;
 }> {
   override get message() {
-    return `Database replica ${this.name} timed out waiting for ${this.waitingFor}.`;
+    return `Database replica ${this.replicaName} timed out waiting for ${this.waitingFor}.`;
   }
 }
 
@@ -157,7 +157,8 @@ export const ReplicaProvider = () =>
         ...REPLICA_POLL,
         until: (o): o is Option.Some<DatabaseReplicaRead> =>
           Option.isSome(o) && o.value.status === "online",
-        onTimeout: () => new ReplicaWaitTimedOut({ name, waitingFor: "the online state" }),
+        onTimeout: () =>
+          new ReplicaWaitTimedOut({ replicaName: name, waitingFor: "the online state" }),
       });
       return toAttrs(news.clusterId, online.value);
     }),
@@ -171,7 +172,8 @@ export const ReplicaProvider = () =>
       yield* pollUntil(observe(output.clusterId, output.name), {
         ...REPLICA_POLL,
         until: Option.isNone,
-        onTimeout: () => new ReplicaWaitTimedOut({ name: output.name, waitingFor: "deletion" }),
+        onTimeout: () =>
+          new ReplicaWaitTimedOut({ replicaName: output.name, waitingFor: "deletion" }),
       });
     }),
   });

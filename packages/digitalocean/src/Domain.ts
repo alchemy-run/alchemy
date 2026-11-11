@@ -71,11 +71,11 @@ export type Domain = Resource<
 export const Domain = Resource<Domain>("DigitalOcean.Domain");
 
 export class DomainWaitTimedOut extends Data.TaggedError("DigitalOcean.DomainWaitTimedOut")<{
-  readonly name: string;
+  readonly domainName: string;
   readonly waitingFor: string;
 }> {
   override get message() {
-    return `Domain ${this.name} timed out waiting for ${this.waitingFor}.`;
+    return `Domain ${this.domainName} timed out waiting for ${this.waitingFor}.`;
   }
 }
 
@@ -96,7 +96,7 @@ const waitUntilGone = (name: string) =>
   pollUntil(observe(name), {
     ...DOMAIN_POLL,
     until: Option.isNone,
-    onTimeout: () => new DomainWaitTimedOut({ name, waitingFor: "deletion" }),
+    onTimeout: () => new DomainWaitTimedOut({ domainName: name, waitingFor: "deletion" }),
   });
 
 export const DomainProvider = () =>

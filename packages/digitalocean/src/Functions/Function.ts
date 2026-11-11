@@ -247,7 +247,7 @@ const activeBindings = (bindings: ReadonlyArray<ResourceBinding<FunctionBinding>
 
 const observe = (namespace: NamespaceRef, name: string) =>
   Fn.getAction({ namespace: namespace.namespaceId, action_name: name }).pipe(
-    Effect.map(Option.some),
+    Effect.asSome,
     Effect.catchTag("NotFound", () => Effect.succeedNone),
     withNamespace(namespace),
   );

@@ -150,7 +150,7 @@ const inSync = (observed: Fn.Action, desired: ReturnType<typeof desiredOf>) => {
 
 const observe = (namespace: NamespaceRef, name: string) =>
   Fn.getAction({ namespace: namespace.namespaceId, action_name: name, code: true }).pipe(
-    Effect.map(Option.some),
+    Effect.asSome,
     Effect.catchTag("NotFound", () => Effect.succeedNone),
     withNamespace(namespace),
   );

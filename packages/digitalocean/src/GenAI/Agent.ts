@@ -168,12 +168,8 @@ export const resolveModel = (
         Stream.filter((m) => m.name === model || m.id === model),
         Stream.runHead,
         Effect.flatMap((found) =>
-          Option.match(
-            Option.flatMapNullishOr(found, (m) => m.uuid),
-            {
-              onNone: () => Effect.fail(new ModelNotFound({ model })),
-              onSome: Effect.succeed,
-            },
+          Effect.fromOption(Option.flatMapNullishOr(found, (m) => m.uuid)).pipe(
+            Effect.mapError(() => new ModelNotFound({ model })),
           ),
         ),
       );

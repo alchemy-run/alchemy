@@ -266,9 +266,13 @@ const syncAlertDestinations = Effect.fn(function* (appId: string, alerts: AppAle
     const emails = [...(alert.emails ?? [])].sort();
     const slack = (alert.slackWebhooks ?? []).map((w) => ({ url: w.url, channel: w.channel }));
     const same =
-      JSON.stringify([...(current.emails ?? [])].sort()) === JSON.stringify(emails) &&
-      JSON.stringify((current.slack_webhooks ?? []).map((w) => w.channel).sort()) ===
-        JSON.stringify(slack.map((w) => w.channel).sort());
+      JSON.stringify([...(current.emails ?? [])].sort((a, b) => a.localeCompare(b))) ===
+        JSON.stringify(emails) &&
+      JSON.stringify(
+        (current.slack_webhooks ?? [])
+          .map((w) => w.channel ?? "")
+          .sort((a, b) => a.localeCompare(b)),
+      ) === JSON.stringify(slack.map((w) => w.channel).sort((a, b) => a.localeCompare(b)));
     if (same) continue;
     yield* DO.assignAppAlertDestinations({
       app_id: appId,
