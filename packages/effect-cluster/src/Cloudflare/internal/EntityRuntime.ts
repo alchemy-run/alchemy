@@ -337,20 +337,18 @@ export const makeEntityRuntime = Effect.fn(function* (options: EntityRuntimeOpti
           Context.Context<never>
         >
       ).pipe(Effect.provideContext(context));
-      const server = yield* (
-        // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- its handlers, middleware and scope are in the context provided below
-        (
-          RpcServer.makeNoSerialization(entity.protocol, {
-            onFromServer,
-            spanPrefix: entity.type,
-            spanAttributes: { "entity.type": entity.type, "entity.id": address.entityId },
-            concurrency: hosted.options.concurrency ?? 1,
-            disableFatalDefects: hosted.options.disableFatalDefects,
-            // The object's reply stream is the backpressure.
-            disableClientAcks: true,
-          }) as Effect.Effect<RpcServer.RpcServer<Rpc.Any>>
-        ).pipe(Effect.provideContext(Context.merge(context, handlers)))
-      );
+      const makeServer = RpcServer.makeNoSerialization(entity.protocol, {
+        onFromServer,
+        spanPrefix: entity.type,
+        spanAttributes: { "entity.type": entity.type, "entity.id": address.entityId },
+        concurrency: hosted.options.concurrency ?? 1,
+        disableFatalDefects: hosted.options.disableFatalDefects,
+        // The object's reply stream is the backpressure.
+        disableClientAcks: true,
+      });
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- its handlers, middleware and scope are in the context provided below
+      const serve = makeServer as Effect.Effect<RpcServer.RpcServer<Rpc.Any>>;
+      const server = yield* serve.pipe(Effect.provideContext(Context.merge(context, handlers)));
       return { scope, server } satisfies Instance;
     }).pipe(Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause))));
   });
