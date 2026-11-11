@@ -217,8 +217,14 @@ export const AutoscalePoolProvider = () =>
       return toAttrs(active.value);
     }),
     delete: Effect.fn(function* ({ output }) {
-      // Deleting the pool destroys its droplets.
-      yield* ignoreNotFound(DO.deleteAutoscalepool({ autoscale_pool_id: output.autoscalePoolId }));
+      // The plain delete keeps the pool's Droplets running; the dangerous
+      // variant destroys them with it.
+      yield* ignoreNotFound(
+        DO.deleteAutoscalepoolDangerous({
+          autoscale_pool_id: output.autoscalePoolId,
+          xDangerous: true,
+        }),
+      );
       yield* pollUntil(observeById(output.autoscalePoolId), {
         ...POOL_POLL,
         until: Option.isNone,

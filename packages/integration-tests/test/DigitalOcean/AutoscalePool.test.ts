@@ -1,8 +1,13 @@
 import * as DigitalOcean from "@alchemy.run/digitalocean";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
-import { getAutoscalepool } from "@distilled.cloud/digitalocean";
+import {
+  getAutoscalepool,
+  getDroplet,
+  listAutoscalepoolMembers,
+} from "@distilled.cloud/digitalocean";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { isGone, logLevel, skipSlow, testPublicKey } from "./support.ts";
 
 const { test } = Test.make({ providers: DigitalOcean.providers() });
@@ -39,11 +44,28 @@ test.provider.skipIf(skipSlow)(
       const remote = yield* getAutoscalepool({ autoscale_pool_id: created.autoscalePoolId });
       expect(remote.autoscale_pool.config).toMatchObject({ target_number_instances: 2 });
 
+      const members = yield* listAutoscalepoolMembers({
+        autoscale_pool_id: created.autoscalePoolId,
+      }).pipe(Effect.map((r) => r.droplets.map((m) => m.droplet_id)));
+      expect(members.length).toBeGreaterThan(0);
+
       yield* stack.destroy();
 
       expect(yield* isGone(getAutoscalepool({ autoscale_pool_id: created.autoscalePoolId }))).toBe(
         true,
       );
+      // Destroying the pool destroys its Droplets too.
+      for (const dropletId of members) {
+        expect(
+          yield* isGone(getDroplet({ droplet_id: dropletId })).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("5 seconds"),
+              until: (gone) => gone,
+              times: 24,
+            }),
+          ),
+        ).toBe(true);
+      }
     }).pipe(logLevel),
   { tags: LIVE_TAGS, timeout: LIVE_TIMEOUT },
 );
