@@ -307,10 +307,17 @@ createServer(async (req, res) => {
 }).listen(port, "0.0.0.0");
 `;
 
+// Binding secrets arrive packed as `{"_tag":"Redacted",...}` (see
+// `packEnvValue`); both forms become App Platform SECRET variables, which
+// are encrypted and hidden in the control panel.
+const isPackedRedacted = (value: string) => value.startsWith('{"_tag":"Redacted"');
+
 const toEnvValue = (value: unknown): { value: string; secret: boolean } =>
   Redacted.isRedacted(value)
     ? { value: String(Redacted.value(value)), secret: true }
-    : { value: typeof value === "string" ? value : JSON.stringify(value), secret: false };
+    : typeof value === "string"
+      ? { value, secret: isPackedRedacted(value) }
+      : { value: JSON.stringify(value), secret: false };
 
 const collectBindingEnv = (bindings: ReadonlyArray<ResourceBinding<AppBinding>>) =>
   bindings
@@ -407,6 +414,17 @@ const waitUntilLive = (appId: string, tag: string) =>
     ),
   );
 
+export class AppImageNotVisible extends Data.TaggedError("DigitalOcean.AppImageNotVisible")<{
+  readonly imageUri: string;
+}> {
+  override get message() {
+    return `The registry did not list ${this.imageUri} after it was pushed.`;
+  }
+}
+
+// A pushed tag takes a few seconds to be visible to App Platform.
+const TAG_POLL: PollBudget = { maxDelay: "5 seconds", times: 24 };
+
 export const AppProvider = () =>
   Provider.effect(
     App,
@@ -468,6 +486,12 @@ export const AppProvider = () =>
             registryTarget(registry, repository),
           );
           const tag = image.codeHash;
+          const target = registryTarget(registry, repository);
+          yield* pollUntil(target.hasTag(tag), {
+            ...TAG_POLL,
+            until: (visible) => visible,
+            onTimeout: () => new AppImageNotVisible({ imageUri: image.imageUri }),
+          });
 
           const env = {
             ...collectBindingEnv(bindings as ReadonlyArray<ResourceBinding<AppBinding>>),

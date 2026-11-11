@@ -31,6 +31,7 @@
     "./Databases": "./src/Databases/index.ts",
     "./Kubernetes": "./src/Kubernetes/index.ts",
     "./Monitoring": "./src/Monitoring/index.ts",
+    "./Sandboxes": "./src/Sandboxes/index.ts",
     "./Spaces": "./src/Spaces/index.ts",
     "./*": "./src/*.ts",
     "./package.json": "./package.json"
@@ -66,6 +67,12 @@
         "worker": "./src/Monitoring/index.ts",
         "default": "./lib/Monitoring/index.js"
       },
+      "./Sandboxes": {
+        "types": "./lib/Sandboxes/index.d.ts",
+        "bun": "./src/Sandboxes/index.ts",
+        "worker": "./src/Sandboxes/index.ts",
+        "default": "./lib/Sandboxes/index.js"
+      },
       "./Spaces": {
         "types": "./lib/Spaces/index.d.ts",
         "bun": "./src/Spaces/index.ts",
@@ -73,6 +80,7 @@
         "default": "./lib/Spaces/index.js"
       },
       "./internal/*": null,
+      "./*/internal": null,
       "./*": {
         "types": "./lib/*.d.ts",
         "bun": "./src/*.ts",

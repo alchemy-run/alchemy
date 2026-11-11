@@ -28,6 +28,7 @@ import {
   ReservedIpv6Assignment,
   ReservedIpv6AssignmentProvider,
 } from "./ReservedIpv6Assignment.ts";
+import * as Sandboxes from "./Sandboxes/index.ts";
 import * as Spaces from "./Spaces/index.ts";
 import { SshKey, SshKeyProvider } from "./SshKey.ts";
 import { Tag, TagProvider } from "./Tag.ts";
@@ -108,6 +109,8 @@ export const providers = () =>
       Kubernetes.Cluster,
       Kubernetes.NodePool,
       App,
+      Sandboxes.Template,
+      Sandboxes.Sandbox,
       KeyPair,
     ]),
   ).pipe(
@@ -148,6 +151,8 @@ export const providers = () =>
         Kubernetes.ClusterProvider(),
         Kubernetes.NodePoolProvider(),
         AppProvider(),
+        Sandboxes.TemplateProvider(),
+        Sandboxes.SandboxProvider(),
         KeyPairProvider(),
       ),
     ),
