@@ -11,6 +11,7 @@ import type {
   DevContainerImage,
   DurableObjectApplicationSettings,
   DurableObjectContainerProps,
+  EffectfulDurableObjectContainerProps,
 } from "./ContainerApplication.ts";
 import type { DurableObjectApplication } from "./DurableObjectApplication.ts";
 
@@ -110,7 +111,6 @@ const MAX_IMAGE_NAME_LENGTH = 128;
 const FLEET_ONLY_PROPS = [
   "name",
   "className",
-  "main",
   "instanceType",
   "instances",
   "maxInstances",
@@ -118,7 +118,6 @@ const FLEET_ONLY_PROPS = [
   "memory",
   "memoryMib",
   "disk",
-  "env",
   "environmentVariables",
   "secrets",
   "labels",
@@ -135,9 +134,14 @@ const FLEET_ONLY_PROPS = [
   "sshPublicKeyIds",
 ] as const satisfies ReadonlyArray<keyof AnyContainerApplicationProps>;
 
+/** A Durable Object-managed Container's props, whatever its image source. */
+export type AnyDurableObjectContainerProps =
+  | DurableObjectContainerProps
+  | EffectfulDurableObjectContainerProps;
+
 export const isDurableObjectContainer = (
   props: AnyContainerApplicationProps,
-): props is DurableObjectContainerProps => props.schedulingPolicy === "durable_object";
+): props is AnyDurableObjectContainerProps => props.schedulingPolicy === "durable_object";
 
 const invalid = (message: string) => Effect.fail(new ContainerConfigurationError({ message }));
 
@@ -184,18 +188,18 @@ export const validateContainerConfiguration = Effect.fn(function* (
   if (!isDurableObjectContainer(props)) return;
 
   yield* imagePreparationTimeoutMillis(props.imagePreparationTimeout);
-  if (
-    props.image !== undefined &&
-    (props.context !== undefined || props.dockerfile !== undefined)
-  ) {
-    return yield* invalid(
-      "A Durable Object-managed container declares one image source: `image`, or `context`/`dockerfile`.",
-    );
-  }
-
   // The union type already forbids these, but untyped or Effect-produced
   // props can still carry them.
   const loose: AnyContainerApplicationProps = props;
+  if (
+    (loose.image !== undefined &&
+      (loose.context !== undefined || loose.dockerfile !== undefined)) ||
+    (!!loose.main && loose.context !== undefined)
+  ) {
+    return yield* invalid(
+      "A Durable Object-managed container declares one image source: `main` (optionally on an `image` or inline `dockerfile` base), `image`, or `context`/`dockerfile`.",
+    );
+  }
   const unsupported = FLEET_ONLY_PROPS.find((key) => loose[key] !== undefined);
   if (unsupported !== undefined) {
     return yield* invalid(
@@ -205,8 +209,11 @@ export const validateContainerConfiguration = Effect.fn(function* (
 });
 
 /** Whether a Durable Object-managed Container declares an image to publish. */
-export const hasImageSource = (props: DurableObjectContainerProps) =>
-  props.image !== undefined || props.context !== undefined || props.dockerfile !== undefined;
+export const hasImageSource = (props: AnyContainerApplicationProps) =>
+  !!props.main ||
+  props.image !== undefined ||
+  props.context !== undefined ||
+  props.dockerfile !== undefined;
 
 /** Read the scheduling policy off a declared Container resource's props. */
 export const isDurableObjectContainerResource = (container: ContainerApplication) => {

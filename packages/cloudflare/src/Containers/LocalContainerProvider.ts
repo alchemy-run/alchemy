@@ -229,13 +229,17 @@ export const LocalContainerProvider = () =>
         yield* validateContainerConfiguration(news, output?.schedulingPolicy);
         const accountId = yield* localAccountId;
         if (isDurableObjectContainer(news)) {
-          const attributes = durableObjectPlaceholder({
-            applicationId: output?.applicationId ?? generateLocalId(),
-            applicationName: yield* createContainerApplicationName(id, undefined),
-            accountId,
-            createdAt: output?.createdAt ?? DateTime.formatIso(yield* DateTime.now),
-            observability: news.observability,
-          });
+          const attributes = {
+            ...durableObjectPlaceholder({
+              applicationId: output?.applicationId ?? generateLocalId(),
+              applicationName: yield* createContainerApplicationName(id, undefined),
+              accountId,
+              createdAt: output?.createdAt ?? DateTime.formatIso(yield* DateTime.now),
+              observability: news.observability,
+            }),
+            // The Durable Object's handle passes this to start(), as on Cloudflare.
+            runtimeEnv: makeContainerEnv(news, accountId, bindings),
+          };
           if (!hasImageSource(news)) return attributes;
           const { dev, hash } = yield* prepareImage(id, news);
           return {
@@ -274,6 +278,10 @@ export const LocalContainerProvider = () =>
             yield* validateContainerConfiguration(news, output?.schedulingPolicy);
           }
           if (!output) return { action: "update" };
+          // State written before the handle passed env to start() has none.
+          if (output.schedulingPolicy === "durable_object" && output.runtimeEnv === undefined) {
+            return { action: "update" };
+          }
           // A content-only edit (an imported module of `main`, a Dockerfile,
           // a context file) changes no prop, so the engine's structural
           // fallback would call it a noop and the image would never rebuild.

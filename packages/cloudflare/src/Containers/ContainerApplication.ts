@@ -285,13 +285,13 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
 }
 
 /**
- * Bundle an Effect-native program into a generated image. Alchemy bundles
- * {@link main} and bakes it in as the container's entrypoint. The
- * environment the program runs in comes from {@link image} or an inline
- * {@link dockerfile} (exclusive with each other), defaulting to the
- * runtime's base image.
+ * The Effect-native image source: Alchemy bundles {@link main} and bakes it
+ * into a generated image as the container's entrypoint. The environment the
+ * program runs in comes from {@link image} or an inline {@link dockerfile}
+ * (exclusive with each other), defaulting to the runtime's base image.
+ * Shared by fleet-scheduled and Durable Object-managed Containers.
  */
-export interface EffectfulContainerProps extends ContainerApplicationPropsBase {
+export interface EffectfulImageProps {
   /** Entrypoint file for the Effect program, typically `import.meta.url`. */
   main: string;
   /**
@@ -359,6 +359,13 @@ export interface EffectfulContainerProps extends ContainerApplicationPropsBase {
    */
   build?: Bundle.BundleConfig & BuildCacheOptions;
 }
+
+/**
+ * Bundle an Effect-native program into a generated image and run it on a
+ * fleet-scheduled application. See {@link EffectfulImageProps}.
+ */
+export interface EffectfulContainerProps
+  extends ContainerApplicationPropsBase, EffectfulImageProps {}
 
 /**
  * Build the container image from your own Dockerfile — no Effect program is
@@ -448,10 +455,39 @@ export interface DurableObjectApplicationSettings {
  * The policy is immutable: migrating an existing fleet application requires a
  * new application and Durable Object namespace.
  */
-export interface DurableObjectContainerProps
-  extends DurableObjectApplicationSettings, PlatformProps, DockerfileBuildOptions {
+export interface DurableObjectContainerPropsBase
+  extends DurableObjectApplicationSettings, PlatformProps {
   /** Select images and instance sizes in `ctx.container.start()`. */
   schedulingPolicy: "durable_object";
+  /**
+   * Environment variables for the container process. A Durable
+   * Object-managed application has no deployment environment, so the
+   * Durable Object's handle passes them to every `start()`; an `env` given
+   * to `start()` overrides them by name. Wrap a secret in `Redacted`: the
+   * values reach the hosting Worker as one `secret_text` binding.
+   *
+   * Only an Effect-native Durable Object's handle passes them. An async
+   * class that calls `ctx.container.start()` itself passes its own `env`.
+   */
+  env?: Record<string, any>;
+  /** Image publication configuration. */
+  publish?: ContainerApplicationPropsBase["publish"];
+  /**
+   * Maximum wait for Cloudflare to prepare the published image, including API calls.
+   * Accepts an Effect duration such as "45 minutes". Must be finite and positive.
+   * Cancellation stops waiting; another deployment reuses the published registry image.
+   * Use an immutable source digest or change the image reference to refresh the image.
+   * @default "30 minutes"
+   */
+  imagePreparationTimeout?: Duration.Input;
+}
+
+/**
+ * A Durable Object-managed Container whose image is a registry `image` or a
+ * Dockerfile build. See {@link DurableObjectContainerPropsBase}.
+ */
+export interface DurableObjectContainerProps
+  extends DurableObjectContainerPropsBase, DockerfileBuildOptions {
   /**
    * Registry image to copy into Cloudflare's managed registry, e.g.
    * `"node:24-slim"`. Exclusive with {@link context} and {@link dockerfile}.
@@ -472,29 +508,29 @@ export interface DurableObjectContainerProps
   context?: string;
   /** Dockerfile path or inline content. Defaults to the context's Dockerfile. */
   dockerfile?: string | InlineDockerfile;
-  /** Image publication configuration. */
-  publish?: ContainerApplicationPropsBase["publish"];
-  /**
-   * Maximum wait for Cloudflare to prepare the published image, including API calls.
-   * Accepts an Effect duration such as "45 minutes". Must be finite and positive.
-   * Cancellation stops waiting; another deployment reuses the published registry image.
-   * Use an immutable source digest or change the image reference to refresh the image.
-   * @default "30 minutes"
-   */
-  imagePreparationTimeout?: Duration.Input;
 }
+
+/**
+ * A Durable Object-managed Container that runs an Effect program. Alchemy
+ * bundles {@link EffectfulImageProps.main | main} into the Container's one
+ * image, and the Durable Object reaches the program's methods over RPC. See
+ * {@link EffectfulImageProps} and {@link DurableObjectContainerPropsBase}.
+ */
+export interface EffectfulDurableObjectContainerProps
+  extends DurableObjectContainerPropsBase, EffectfulImageProps {}
 
 /**
  * Fleet-scheduled applications select a deployment image through `main`
  * (bundled Effect program), `context`/`dockerfile`, or a pre-built `image`.
- * A Durable Object-managed Container publishes one image that its Durable
- * Object selects at runtime.
+ * A Durable Object-managed Container publishes one image, from the same
+ * sources, that its Durable Object selects at runtime.
  */
 export type ContainerApplicationProps =
   | EffectfulContainerProps
   | ExternalContainerProps
   | RemoteContainerProps
-  | DurableObjectContainerProps;
+  | DurableObjectContainerProps
+  | EffectfulDurableObjectContainerProps;
 
 /**
  * INTERNAL — the loose provider-side view across the variants: every
@@ -915,6 +951,13 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
      * declares no image source.
      */
     image?: string;
+    /**
+     * The environment a Durable Object-managed Container's handle passes to
+     * `start()`: the declared `env`, the env its capabilities bind, and
+     * `ALCHEMY_CLOUDFLARE_ACCOUNT_ID`. Unset for fleet applications, which
+     * deploy their environment with the application.
+     */
+    runtimeEnv?: Record<string, string | Redacted.Redacted<string>>;
     /**
      * The Durable Object namespace attached to the application, if it is bound
      * to one.

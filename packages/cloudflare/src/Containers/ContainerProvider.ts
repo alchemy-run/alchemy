@@ -42,6 +42,7 @@ import {
   validateContainerImageProps,
 } from "./ContainerBundle.ts";
 import {
+  type AnyDurableObjectContainerProps,
   ContainerConfigurationError,
   durableObjectPlaceholder,
   hasImageSource,
@@ -912,7 +913,7 @@ export const LiveContainerProvider = () =>
       });
 
       /** The build inputs and content hash of a Durable Object Container's image. */
-      const computeDurableObjectImage = (id: string, props: DurableObjectContainerProps) =>
+      const computeDurableObjectImage = (id: string, props: AnyDurableObjectContainerProps) =>
         hasImageSource(props) ? computeImage(id, props, {}) : Effect.undefined;
 
       /**
@@ -923,25 +924,32 @@ export const LiveContainerProvider = () =>
       const reconcileDurableObjectContainer = Effect.fn(function* ({
         id,
         news,
+        bindings,
         name,
         output,
         session,
       }: {
         id: string;
-        news: DurableObjectContainerProps;
+        news: AnyDurableObjectContainerProps;
+        bindings: ReadonlyArray<ResourceBinding<ContainerApplication["Binding"]>>;
         name: string;
         output: ContainerApplication["Attributes"] | undefined;
         session: ScopedPlanStatusSession;
       }) {
         const { accountId } = yield* yield* CloudflareEnvironment;
-        const attributes = durableObjectPlaceholder({
-          // The application is owned by the Durable Object class.
-          applicationId: "",
-          applicationName: name,
-          accountId,
-          createdAt: output?.createdAt ?? "",
-          observability: news.observability,
-        });
+        const attributes = {
+          ...durableObjectPlaceholder({
+            // The application is owned by the Durable Object class.
+            applicationId: "",
+            applicationName: name,
+            accountId,
+            createdAt: output?.createdAt ?? "",
+            observability: news.observability,
+          }),
+          // The application has no deployment environment: the Durable
+          // Object's handle passes this to start().
+          runtimeEnv: makeContainerEnv(news, accountId, bindings),
+        };
         const image = yield* computeDurableObjectImage(id, news);
         if (image === undefined) return attributes;
 
@@ -981,7 +989,7 @@ export const LiveContainerProvider = () =>
         output,
       }: {
         id: string;
-        news: DurableObjectContainerProps;
+        news: AnyDurableObjectContainerProps;
         output: ContainerApplication["Attributes"] | undefined;
       }) {
         if (output === undefined) return undefined;
@@ -992,6 +1000,8 @@ export const LiveContainerProvider = () =>
         if (output.applicationId !== "") {
           return { action: "update" as const, stables: ["accountId"] };
         }
+        // State written before the handle passed env to start() has none.
+        if (output.runtimeEnv === undefined) return { action: "update" } as const;
         // Image content (a Dockerfile, a context file) can change without any
         // prop changing, so compare content hashes as well.
         const image = yield* computeDurableObjectImage(id, news);
@@ -1462,6 +1472,9 @@ export const LiveContainerProvider = () =>
             return yield* reconcileDurableObjectContainer({
               id,
               news,
+              // Precreate runs before bindings resolve; their env lands on
+              // the reconcile that follows.
+              bindings: [],
               name,
               output: undefined,
               session,
@@ -1522,7 +1535,14 @@ export const LiveContainerProvider = () =>
           const name = output?.applicationName ?? (yield* createApplicationName(id, nameOf(news)));
           yield* Effect.logInfo(`Cloudflare Container reconcile: starting ${name}`);
           if (isDurableObjectContainer(news)) {
-            return yield* reconcileDurableObjectContainer({ id, news, name, output, session });
+            return yield* reconcileDurableObjectContainer({
+              id,
+              news,
+              bindings,
+              name,
+              output,
+              session,
+            });
           }
           const durableObjects = yield* getDurableObjects(bindings);
           const hasUnresolvedAttachment =

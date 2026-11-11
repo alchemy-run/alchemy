@@ -501,7 +501,7 @@ const bindDurableObjectContainers = Effect.fn(function* (
       return yield* Effect.die(
         new DurableObjectContainerBindingError({
           bindingName,
-          message: `Cloudflare.DurableObject("${className}", { containers }) lists a Container that is not Durable Object-managed. Declare it with schedulingPolicy: "durable_object" and an image source (image, or context/dockerfile).`,
+          message: `Cloudflare.DurableObject("${className}", { containers }) lists a Container that is not Durable Object-managed. Declare it with schedulingPolicy: "durable_object" and an image source (main, image, or context/dockerfile).`,
         }),
       );
     }
