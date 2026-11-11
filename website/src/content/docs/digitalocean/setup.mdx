@@ -1,38 +1,19 @@
 ---
 title: Setup
-description: Install Alchemy and connect it to DigitalOcean — generate an API token and store it in a profile.
+description: Install Alchemy and connect it to DigitalOcean — create a personal access token for your team and store it in a profile.
 ---
 
 import PackageManagers from "../../../components/PackageManagers.astro";
 
-export const pkgs = `alchemy@latest @alchemy.run/digitalocean@latest effect @effect/platform-bun @effect/platform-node`;
+export const pkgs = `alchemy@latest @alchemy.run/digitalocean@latest effect @effect/platform-node`;
 
-Everything you need before deploying to DigitalOcean: the alchemy
-package, a DigitalOcean account, and a personal access token stored
-in a profile.
+Everything you need before deploying to DigitalOcean: the packages, a team, and a personal access token stored in a profile.
 
 ## Prerequisites
 
-- [Bun](https://bun.sh) or Node.js 22+
+- [Node.js](https://nodejs.org) 24.11.1+ or [Bun](https://bun.sh)
 - A [DigitalOcean](https://cloud.digitalocean.com) account
-
-## Generate an API token
-
-In the
-[DigitalOcean control panel](https://cloud.digitalocean.com/account/api/tokens):
-
-1. Go to **API** → **Tokens**.
-2. Click **Generate New Token**.
-3. Select **Full Access**, or **Custom Scopes** with:
-   - **droplet**: read, create, update, delete
-   - **ssh_key**: read, create, update, delete
-   - **firewall**: read, create, update, delete
-   - **tag**: read, create, delete
-4. Copy the token — DigitalOcean shows it **only once**.
-
-The **tag** scope is required: Alchemy tags every droplet it creates
-so it can tell its droplets apart — see
-[Ownership and adoption](/digitalocean#ownership-and-adoption).
+- [Docker](https://docs.docker.com/get-docker/), to build App images
 
 ## Create a project directory
 
@@ -42,32 +23,51 @@ so it can tell its droplets apart — see
 
 <PackageManagers add={pkgs} />
 
-## Connect alchemy to DigitalOcean
+## Create a token
 
-There is no separate credentials step. The first time you run
-`alchemy deploy` (or `plan`, `dev`, `destroy`) on a stack that uses
-`DigitalOcean.providers()`, alchemy prompts for the token you
-generated above (and, optionally, an API base URL override). It is
-saved under `~/.alchemy/credentials/<profile>/` in the selected
-[profile](/environments/profiles) and reused on subsequent commands.
+Everything you create belongs to a **team**, and a token reaches one team. Pick the team in the control panel's top-left menu, then:
 
-A minimal stack that triggers the prompt:
+1. Go to **API → Tokens** and click **Generate New Token**.
+2. Choose **Full Access**: a Stack creates many kinds of resources.
+3. Copy the token. DigitalOcean shows it only once.
 
-```typescript
-// alchemy.run.ts
-import * as Alchemy from "alchemy";
+Give production its own team, and its own token, so it stays apart from everything else. See [Teams, projects and tokens](/digitalocean/teams-projects-and-tokens).
+
+## Connect Alchemy
+
+Store the token in a [profile](/environments/profiles):
+
+<PackageManagers run="alchemy profile edit --add DigitalOcean" />
+
+Alchemy asks for the token, an optional API base URL, and an optional Spaces access key pair. Leave the Spaces key empty unless you already have one: each deploy then creates a temporary key for its bucket changes and deletes it afterwards.
+
+To store a token from an environment variable instead, without prompts:
+
+<PackageManagers run="alchemy profile edit --add DigitalOcean --method stored --set apiToken=env:DIGITALOCEAN_TOKEN" />
+
+Check what's stored (secrets are hidden):
+
+<PackageManagers run="alchemy profile show" />
+
+## In CI
+
+With `CI=true`, Alchemy skips the profile and reads `DIGITALOCEAN_TOKEN` (or `DIGITALOCEAN_ACCESS_TOKEN`, then `DIGITALOCEAN_API_KEY`), an optional `DIGITALOCEAN_API_BASE_URL`, and an optional `SPACES_ACCESS_KEY_ID` and `SPACES_SECRET_ACCESS_KEY`. See [CI](/environments/ci).
+
+## State
+
+DigitalOcean has no storage for Alchemy's record of what each Stack created. Keep it next to your code with `Alchemy.localState()`, or share it with your team and CI through `Cloudflare.state()` or `AWS.state()`. See [State Store](/state-store).
+
+```typescript title="alchemy.run.ts"
 import * as DigitalOcean from "@alchemy.run/digitalocean";
+import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
 
 export default Alchemy.Stack(
-  "MyStack",
-  {
-    providers: DigitalOcean.providers(),
-    state: Alchemy.localState(),
-  },
+  "MyApp",
+  { providers: DigitalOcean.providers(), state: Alchemy.localState() },
   Effect.gen(function* () {
-    const host = yield* DigitalOcean.Droplet("app", {
-      region: "sfo3",
+    const host = yield* DigitalOcean.Droplet("Host", {
+      region: "nyc3",
       size: "s-1vcpu-1gb",
       image: "ubuntu-24-04-x64",
     });
@@ -76,45 +76,4 @@ export default Alchemy.Stack(
 );
 ```
 
-In CI (`CI=true`) alchemy skips the prompt and reads
-`DIGITALOCEAN_TOKEN` (or `DIGITALOCEAN_ACCESS_TOKEN`, then
-`DIGITALOCEAN_API_KEY`), plus an optional `DIGITALOCEAN_API_BASE_URL`,
-from the environment instead.
-
-To re-run the setup later (e.g. to rotate the token, or configure a
-separate `prod` profile):
-
-```sh
-# Re-run the interactive setup (e.g. to rotate the token)
-alchemy profile edit --reconfigure DigitalOcean
-
-# Or connect DigitalOcean in a separate `prod` profile
-alchemy profile create prod
-alchemy profile edit --profile prod --add DigitalOcean
-
-# Non-interactive (scripts, agents)
-alchemy profile edit --add DigitalOcean --method stored --set apiToken=env:DIGITALOCEAN_TOKEN
-```
-
-Inspect what's stored (secrets are redacted):
-
-```sh
-alchemy profile show
-```
-
-## State storage
-
-DigitalOcean has no object-storage state backend of its own, so pick
-one of:
-
-- **`Alchemy.localState()`** — state on disk under `.alchemy/` next
-  to your code. Zero setup; right for solo projects and trying
-  things out.
-- **A cloud state store** — if you also use Cloudflare or AWS, pass
-  `Cloudflare.state()` or `AWS.state()` so state is shared with
-  your team and CI. See [State Store](/state-store).
-
-## Next steps
-
-- [DigitalOcean overview](/digitalocean) — Droplets, SSH keys, and
-  Firewalls, and how they compose with the rest of your cloud.
+Next, the [tutorial](/digitalocean/tutorial/part-1) builds an App step by step.

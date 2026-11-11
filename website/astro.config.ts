@@ -1336,7 +1336,17 @@ export default defineConfig({
           label: "DigitalOcean",
           items: [
             { label: "Overview", link: "/digitalocean" },
+            { label: "What is DigitalOcean?", link: "/digitalocean/what-is-digitalocean" },
             { label: "Setup", link: "/digitalocean/setup" },
+            {
+              label: "Accounts & access",
+              items: [
+                {
+                  label: "Teams, projects and tokens",
+                  link: "/digitalocean/teams-projects-and-tokens",
+                },
+              ],
+            },
             providerResourcesEntry("DigitalOcean"),
           ],
         },
