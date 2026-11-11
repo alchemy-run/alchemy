@@ -6,13 +6,22 @@ import * as backupdr from "@distilled.cloud/gcp/backupdr_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-// Management servers take well over 5 minutes to provision.
-const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
+// Management servers take well over 5 minutes to provision, and GCP no
+// longer lets a project create one unless support enables it: `BadRequest:
+// Invalid resource state for "projects/…/locations/us-central1": Management
+// Console is on path for deprecation and creation of new Management server
+// is restricted. Please contact support`. Set
+// GCP_TEST_BACKUPDR_MANAGEMENT_SERVER=1 on a project that still may.
+const runLifecycle =
+  !!process.env.GCP_TEST_BACKUPDR_MANAGEMENT_SERVER &&
+  !!process.env.GCP_TEST_SLOW &&
+  !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   backupdr.getProjectsLocationsManagementServers({ name }).pipe(
@@ -66,6 +75,13 @@ test.provider.skipIf(!runLifecycle)(
             labels: { env: "test" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.BackupDR.ManagementServer.lookup({
+          managementServerId: created.managementServerId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/managementServers/");

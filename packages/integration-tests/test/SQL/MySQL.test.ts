@@ -18,8 +18,8 @@ const HOOK_TIMEOUT = 900_000;
 const TEST_TIMEOUT = 120_000;
 
 /**
- * End-to-end test of `SQL.MySQL` — the raw `@effect/sql-mysql2` client
- * wrapped in alchemy's deferred `proxyChain` — against a real Cloudflare
+ * End-to-end test of `SQL.MySQL` — an `@effect/sql-mysql2` client that
+ * opens its pool per execution — against a real Cloudflare
  * Worker fronting a PlanetScale MySQL origin through Hyperdrive (caching
  * disabled for read-after-write assertions).
  *

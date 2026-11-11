@@ -6,6 +6,7 @@ import * as eventarc from "@distilled.cloud/gcp/eventarc_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -67,6 +68,13 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { channel, connection };
         }),
+      );
+      yield* expectFound(
+        GCP.Eventarc.ChannelConnection.lookup({
+          channelConnectionId: created.connection.channelConnectionId,
+          location: created.connection.location,
+        }),
+        created.connection,
       );
 
       expect(created.connection.name).toContain("/channelConnections/");

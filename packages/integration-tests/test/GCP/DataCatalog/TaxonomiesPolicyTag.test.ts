@@ -4,6 +4,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as datacatalog from "@distilled.cloud/gcp/datacatalog_v1";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { location, logLevel, currentProject } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -61,6 +62,14 @@ test.provider(
           });
           return { taxonomy, tag };
         }),
+      );
+      yield* expectFound(
+        GCP.DataCatalog.TaxonomiesPolicyTag.lookup({ name: created.tag.name }),
+        created.tag,
+      );
+      yield* expectFound(
+        GCP.DataCatalog.Taxonomy.lookup({ name: created.taxonomy.name }),
+        created.taxonomy,
       );
 
       expect(created.tag.name).toContain("/policyTags/");

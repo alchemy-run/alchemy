@@ -294,8 +294,11 @@ const exitTrap = Semaphore.makeUnsafe(1);
 const callDrizzleKit = <A>(command: string, run: () => Promise<A>) =>
   Effect.acquireUseRelease(
     Effect.sync(() => {
-      // oxlint-disable-next-line typescript/unbound-method -- saved only to restore `process.exit` verbatim, never called unbound
-      const trap = { exit: process.exit, exited: false };
+      // Saved only to restore `process.exit` verbatim, never called unbound.
+      // Read through `Reflect.get`: whether `typescript/unbound-method`
+      // flags `process.exit` depends on which `process` typing the linter's
+      // program resolves, which unrelated files change.
+      const trap = { exit: Reflect.get(process, "exit") as typeof process.exit, exited: false };
       process.exit = () => {
         trap.exited = true;
         throw new Error("drizzle-kit exited");

@@ -32,7 +32,7 @@ Every screen or report is a view, keyed by what it's about: `AccountSummary` key
 
 A view is a security boundary. Its `validate` judges every read from who is asking. Make a separate view per audience instead of filtering by caller.
 
-A question across keys (an account's ledger, paged; "withdrawals over 1,000 across all accounts, largest first") is not a view. A projection writes it to a store you own, and a query serves it: `AccountLedger` reads the `Ledger` projection's table. Its input holds the filters and sort orders it supports, its `validate` judges the request and its `visible` each row.
+A question across keys (an account's ledger, paged; "withdrawals over 1,000 across all accounts, largest first") is not a view. A projection writes it to a store you own, and a query serves it: `AccountLedger` reads the `Ledger` projection's table. Its input holds the filters and sort orders it supports, and its handler judges the caller and scopes the rows it reads.
 
 More: [View](https://alchemy.run/domain/view).
 
@@ -56,7 +56,7 @@ More: [External System](https://alchemy.run/domain/external-system).
 
 ## 8. Decide who sees what
 
-Group commands and reads into Apis by audience (`CustomerApi`, `SupportApi`). Middleware authenticates (`Session` provides `CurrentActor`; `MfaChallenge` guards sensitive commands). Each command's `decide` and each read's `validate` authorizes against the current state. A query authorizes twice: `validate` per request, before the store is read, and `visible` per row, dropping what the caller may not see.
+Group commands and reads into Apis by audience (`CustomerApi`, `SupportApi`). Middleware authenticates (`Session` provides `CurrentActor`; `MfaChallenge` guards sensitive commands). Each command's `decide` and each view's or stream's `validate` (on its Layer) authorizes against the current state. A query's handler authorizes the request, failing with a declared rejection, and reads only the rows the caller may see.
 
 More: [Views as security boundaries](https://alchemy.run/domain/view-security).
 

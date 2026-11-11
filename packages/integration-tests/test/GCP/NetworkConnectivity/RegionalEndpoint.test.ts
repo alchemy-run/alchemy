@@ -6,6 +6,7 @@ import * as networkconnectivity from "@distilled.cloud/gcp/networkconnectivity_v
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { DEFAULT_NETWORK, defaultNetworkSelfLink } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -76,6 +77,13 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { subnet, endpoint };
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkConnectivity.RegionalEndpoint.lookup({
+          regionalEndpointId: created.endpoint.regionalEndpointId,
+          location: created.endpoint.location,
+        }),
+        created.endpoint,
       );
 
       expect(created.endpoint.name).toContain("/regionalEndpoints/");

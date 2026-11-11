@@ -58,8 +58,26 @@ export type Folder = Resource<
     managementProject: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  FolderLookup
 >;
+
+/**
+ * Props for {@link Folder.lookup}: find a folder this stack doesn't manage
+ * by its identifiers.
+ */
+export interface FolderLookup {
+  /**
+   * User-visible display name. Unique among sibling folders. 1-30
+   * characters, starting and ending with a letter or digit.
+   */
+  displayName: string;
+  /**
+   * Parent `organizations/{org}` or `folders/{folder}`. Changing parent
+   * moves the folder.
+   */
+  parent?: string;
+}
 
 /**
  * A Cloud Resource Manager folder — a node in an organization's resource
@@ -89,6 +107,18 @@ export type Folder = Resource<
  * ```typescript
  * const folder = yield* GCP.ResourceManager.Folder("Team", {
  *   displayName: "platform-prod",
+ * });
+ * ```
+ *
+ * ### Looking up an existing folder
+ * `Folder.lookup` references a folder Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared folder.
+ *
+ * **Example:** Reference an existing folder
+ * ```typescript
+ * const folder = GCP.ResourceManager.Folder.lookup({
+ *   displayName: "my-display",
  * });
  * ```
  *
@@ -227,6 +257,16 @@ const ensureActive = (folder: resourcemanager.Folder) =>
 export const FolderProvider = () =>
   Provider.succeed(Folder, {
     stables: ["name", "createTime"],
+
+    lookup: Effect.fn(function* ({ displayName, parent: lookupParent }) {
+      const parent = yield* resolveParent(lookupParent, undefined).pipe(
+        Effect.catchTag("GCP.ResourceManager.ParentRequired", () => Effect.succeed("")),
+      );
+      if (parent.length === 0) return undefined;
+      const existing = yield* observe(undefined, parent || "", displayName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing);
+    }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const displayName = yield* toDisplayName(id, olds?.displayName, output?.displayName);

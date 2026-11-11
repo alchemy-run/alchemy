@@ -3,25 +3,44 @@ title: IAM & bindings
 description: What a GCP binding does — the per-runtime service account, the role it grants, where the grant lands, and how removing a binding revokes it.
 ---
 
-On GCP, giving a container permission to call an API normally means
-three separate things: create a service account, attach it to the Cloud
-Run service, and add role bindings to the project IAM policy. Alchemy
-collapses all three into the line that gets you the client.
+import Tree from "../../../../components/diagrams/Tree.astro";
+
+IAM decides, on every request to Google Cloud, whether the caller may do what it's asking.
+
+## Principals, roles and policies
+
+A **principal** is who's asking: a Google account, a group, or a **service account**, the identity code runs as. A **role** is a named set of permissions: `roles/pubsub.publisher` holds `pubsub.topics.publish`. An **IAM policy** on a resource binds principals to roles on that resource.
+
+<Tree
+  nodes={[
+    { id: "org", label: "example.com", type: "organization" },
+    { id: "project", label: "my-app-prod", type: "project", parent: "org" },
+    {
+      id: "events",
+      label: "Events",
+      type: "Pub/Sub topic",
+      parent: "project",
+      tone: "accent",
+      specs: [["policy", "pubsub.publisher → alch-api-…"]],
+    },
+    { id: "audit", label: "Audit", type: "Pub/Sub topic", parent: "project" },
+    { id: "links", label: "Links", type: "Firestore database", parent: "project" },
+  ]}
+  scopes={[{ on: "project", label: "viewer → dev-team@" }]}
+  caption="The dev team's viewer role on the project covers every resource in it. The Api's service account holds pubsub.publisher in the Events topic's own policy, so it can publish there and nowhere else."
+/>
+
+Policies live on the organization, folders, projects and individual resources, and a grant applies to everything beneath where it's made. So the narrowest grant is on the resource itself. Some services also accept an **IAM Condition** on a project-level grant, limiting it to resources whose names match.
+
+## What a binding does
+
+Giving a container permission to call an API normally takes three separate steps: create a service account, attach it to the Cloud Run service, and add a role binding to an IAM policy. Alchemy does all three from the line that gets you the client:
 
 ```typescript
 const events = yield* GCP.PubSub.WriteTopic(topic);
 ```
 
-That expression:
-
-1. Creates (or adopts) a runtime service account for this host.
-2. Adds `roles/pubsub.publisher` to it on that one topic's IAM policy.
-3. Injects whatever the call needs into the revision.
-4. Returns a typed client (`events.publish(...)`) you call from a
-   request handler.
-
-It is the GCP counterpart of AWS `policyStatements` on a Lambda and of
-the scoped `AccountApiToken` a Cloudflare binding creates.
+That creates or reuses a service account for this runtime, grants it `roles/pubsub.publisher` in that one topic's IAM policy, passes the runtime whatever it needs to call the topic, and returns a typed client, `events.publish(...)`, to call from a handler. It's the GCP counterpart of an IAM statement on a Lambda's role.
 
 ## The per-host service account
 

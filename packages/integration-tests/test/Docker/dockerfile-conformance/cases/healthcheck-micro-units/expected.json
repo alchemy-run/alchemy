@@ -1,0 +1,4 @@
+{
+  "ok": false,
+  "error": "dockerfile parse error on line 2: time: unknown unit \"\\xc3\\x82\\xc2\\xb5s\" in duration \"1500\\xc3\\x82\\xc2\\xb5s\""
+}

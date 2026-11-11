@@ -1,11 +1,11 @@
 ---
 name: alchemy-domain
-description: Build backends with @alchemy.run/domain (domain-driven design on Effect) - turn requirements into aggregates, commands, events, rejections, views, policies, sagas, projections, streams, queries, external systems and Apis; lay them out in a monorepo (domain / server / web packages, kind-suffixed files); test them with stories; host them on Cloudflare Durable Objects with alchemy; and drive them from a foldkit frontend. Use when designing or changing an @alchemy.run/domain model, adding a building block, wiring hosting or a frontend, or reviewing such code.
+description: Build backends with @alchemy.run/domain (domain-driven design on Effect) - turn requirements into aggregates, commands, events, rejections, views, policies, sagas, projections, streams, queries, external systems and Apis; lay them out in a monorepo (domain / server / web packages, kind-suffixed files); test them with stories; host them on Durable Objects (Cloudflare, Rivet or Effect Cluster) with alchemy; and drive them from a foldkit frontend. Use when designing or changing an @alchemy.run/domain model, adding a building block, wiring hosting or a frontend, or reviewing such code.
 ---
 
 # Building with @alchemy.run/domain
 
-`@alchemy.run/domain` models a backend as typed messages and pure state transitions. Commands are decided by aggregates, which record events. Views fold events into read models. Policies react to events. Sagas run long processes. Projections write outside the model, and queries serve what they wrote. The same model runs in memory for tests and on Cloudflare Durable Objects in production.
+`@alchemy.run/domain` models a backend as typed messages and pure state transitions. Commands are decided by aggregates, which record events. Views fold events into read models. Policies react to events. Sagas run long processes. Projections write outside the model, and queries serve what they wrote. The same model runs in memory for tests and on Cloudflare, Rivet or Effect Cluster Durable Objects in production.
 
 Docs: https://alchemy.run/domain, with every page listed in https://alchemy.run/llms.txt. Every section here and in the reference files ends with a More link to the docs page that covers it in depth. A complete reference project: `examples/cloudflare-domain` in the alchemy repo (a bank with a foldkit app).
 
@@ -36,7 +36,7 @@ Read the requirements as a story of facts, and name each kind of thing you find:
 - Something outside the model you call (fraud scoring, payments): an **External System**.
 - Writes to a store outside the model (a ledger table): a **Projection**. An ordered, readable log per key (account cards): a **Stream** that a projection appends to.
 - A question across keys, answered from that store (an account's ledger, paged; large withdrawals across all accounts, largest first): a **Query**. Never a hand-written route.
-- Who can do and see what: an **Api** listing commands and reads, with **middleware** (sessions, MFA) and each block's `decide` or `validate` authorizing.
+- Who can do and see what: an **Api** listing commands and reads, with **middleware** (sessions, MFA) and each block authorizing itself: a command in `decide`, a view or stream in its Layer's `validate`, a query in its handler.
 
 A rule that spans aggregates never becomes a cross-aggregate transaction. Give the invariant its own aggregate, keyed by what it protects (`UsernameClaim` keyed by username). Or reserve first and commit after, in a policy or saga, with a deadline for anything that waits.
 
@@ -59,13 +59,14 @@ More: [Project layout](https://alchemy.run/domain/project-layout).
 - `evolve` only applies an event to state. It never decides anything. It and `reply` are total: they cover every state and never fail, because `decide` already refused what can't happen. Keep a state the event can't follow (`s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s`), never a guard that throws.
 - Events carry the outcome `decide` worked out (`balanceAfter`), so `evolve` copies it instead of repeating a rule.
 - Every rejection a command can return is listed in its `rejects`. Callers handle each one with `Effect.catchTag`.
-- Serve a store a projection writes through a `Domain.Query` on an Api, never a hand-written route: authorize it per request with `validate`, and per row with `visible`.
+- Serve a store a projection writes through a `Domain.Query` on an Api, never a hand-written route: its handler checks the caller and scopes the rows it reads.
+- Clients never read an aggregate. Read through a view (one key, live), a stream, or a query; a query's handler may read an aggregate's latest state with `yield* Account` then `accounts.get(ref)`.
 - Policies and projections run at least once. Make their effects idempotent: commands sent from a handler get deterministic ids, and stores key rows by `stream:seq`.
 - Don't wait for a saga in a policy. `start` it, keyed by the aggregate it's about, and react to the events its steps record.
 - A handler resolves its dependencies once in `toLayer` and requires nothing per call.
 - Build one Layer and provide it once (`Layer.mergeAll`, `Layer.provide`). Never chain `Effect.provide`.
 - Never `throw`. Fail with tagged errors (`Domain.Rejection`, `Schema.TaggedError`).
-- Tracing is automatic. Record payload values only through a declaration's `attributes`, or with `Effect.annotateCurrentSpan` in an effectful handler. Make secrets `Schema.Redacted`, so they never reach a trace or a log.
+- Tracing is automatic. Record payload values only with `Effect.annotateCurrentSpan` in a handler: it lands on the engine's span for that handler. Make secrets `Schema.Redacted`, so they never reach a trace or a log.
 - Test what the model does, through stories: events, replies, rejections, views and saga outcomes. Don't test a saga's internal steps.
 
 More: [Domain Model: The aggregate decides, and everything commits at once](https://alchemy.run/domain/model#the-aggregate-decides-and-everything-commits-at-once), [Cloudflare: Count on these guarantees](https://alchemy.run/domain/cloudflare#count-on-these-guarantees).
@@ -75,6 +76,6 @@ More: [Domain Model: The aggregate decides, and everything commits at once](http
 1. Name the new facts, commands and rejections. Put each command in its own `<Command>.command.ts` with its events and rejections.
 2. Add the command to its aggregate's `commands`, with a `decide` branch for it and an `evolve` branch for each event.
 3. Update the views, policies and projections that care about the new events.
-4. Expose it through an Api, if a client sends or reads it, with the middleware it needs.
+4. Expose it through an Api, if a client sends or reads it, with the middleware it needs, and give it a `{ description }` as its last argument.
 5. Write stories for the happy path, every rejection, every policy reaction, and every query's authorization.
 6. Run the domain package's tests, with one that expects `Domain.verify(Model)` to be empty. Then type-check the monorepo (`tsc -b`) and run the server and web tests.

@@ -6,6 +6,7 @@ import * as healthcare from "@distilled.cloud/gcp/healthcare_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -61,6 +62,14 @@ test.provider(
           });
           return { dataset, store };
         }),
+      );
+      yield* expectFound(
+        GCP.Healthcare.DatasetsHl7V2Store.lookup({
+          hl7V2StoreId: created.store.hl7V2StoreId,
+          location: created.store.location,
+          dataset: created.store.dataset,
+        }),
+        created.store,
       );
 
       expect(created.store.name).toContain("/hl7V2Stores/");

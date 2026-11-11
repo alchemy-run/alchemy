@@ -13,6 +13,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
@@ -87,6 +88,10 @@ test.provider(
           return { location, reader };
         }),
       );
+      yield* expectFound(Stripe.TerminalReader.lookup({ id: created.reader.id }), created.reader, {
+        // The reader's heartbeat moves on its own.
+        ignore: ["lastSeenAt"],
+      });
 
       expect(created.reader.id).toMatch(/^tmr_/);
       expect(created.reader.label).toEqual("Alchemy Front Counter");

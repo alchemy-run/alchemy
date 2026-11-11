@@ -6,6 +6,7 @@ import * as spanner from "@distilled.cloud/gcp/spanner_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -69,6 +70,10 @@ test.provider(
             labels: { env: "test" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Spanner.InstanceConfig.lookup({ instanceConfigId: created.instanceConfigId }),
+        created,
       );
 
       expect(created.name).toContain("/instanceConfigs/");

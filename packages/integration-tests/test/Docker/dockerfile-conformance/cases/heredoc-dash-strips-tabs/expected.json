@@ -1,0 +1,30 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "alpine",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "RUN",
+          "line": 2,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "\u003c\u003c-UNINDENT"
+          },
+          "heredocs": [
+            {
+              "name": "UNINDENT",
+              "content": "baz\nquux\n",
+              "stripTabs": true,
+              "quoted": false
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

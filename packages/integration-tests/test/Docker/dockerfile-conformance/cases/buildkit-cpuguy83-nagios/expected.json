@@ -1,0 +1,382 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "cpuguy83/ubuntu",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "ENV",
+          "line": 2,
+          "flags": [],
+          "vars": [
+            [
+              "NAGIOS_HOME",
+              "/opt/nagios"
+            ]
+          ]
+        },
+        {
+          "tag": "ENV",
+          "line": 3,
+          "flags": [],
+          "vars": [
+            [
+              "NAGIOS_USER",
+              "nagios"
+            ]
+          ]
+        },
+        {
+          "tag": "ENV",
+          "line": 4,
+          "flags": [],
+          "vars": [
+            [
+              "NAGIOS_GROUP",
+              "nagios"
+            ]
+          ]
+        },
+        {
+          "tag": "ENV",
+          "line": 5,
+          "flags": [],
+          "vars": [
+            [
+              "NAGIOS_CMDUSER",
+              "nagios"
+            ]
+          ]
+        },
+        {
+          "tag": "ENV",
+          "line": 6,
+          "flags": [],
+          "vars": [
+            [
+              "NAGIOS_CMDGROUP",
+              "nagios"
+            ]
+          ]
+        },
+        {
+          "tag": "ENV",
+          "line": 7,
+          "flags": [],
+          "vars": [
+            [
+              "NAGIOSADMIN_USER",
+              "nagiosadmin"
+            ]
+          ]
+        },
+        {
+          "tag": "ENV",
+          "line": 8,
+          "flags": [],
+          "vars": [
+            [
+              "NAGIOSADMIN_PASS",
+              "nagios"
+            ]
+          ]
+        },
+        {
+          "tag": "ENV",
+          "line": 9,
+          "flags": [],
+          "vars": [
+            [
+              "APACHE_RUN_USER",
+              "nagios"
+            ]
+          ]
+        },
+        {
+          "tag": "ENV",
+          "line": 10,
+          "flags": [],
+          "vars": [
+            [
+              "APACHE_RUN_GROUP",
+              "nagios"
+            ]
+          ]
+        },
+        {
+          "tag": "ENV",
+          "line": 11,
+          "flags": [],
+          "vars": [
+            [
+              "NAGIOS_TIMEZONE",
+              "UTC"
+            ]
+          ]
+        },
+        {
+          "tag": "RUN",
+          "line": 13,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "sed -i 's/universe/universe multiverse/' /etc/apt/sources.list"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 14,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "apt-get update \u0026\u0026 apt-get --no-install-recommends install -y iputils-ping netcat build-essential snmp snmpd snmp-mibs-downloader php5-cli apache2 libapache2-mod-php5 runit bc postfix bsd-mailx"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 15,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "( egrep -i  \"^${NAGIOS_GROUP}\" /etc/group || groupadd $NAGIOS_GROUP ) \u0026\u0026 ( egrep -i \"^${NAGIOS_CMDGROUP}\" /etc/group || groupadd $NAGIOS_CMDGROUP )"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 16,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "( id -u $NAGIOS_USER || useradd --system $NAGIOS_USER -g $NAGIOS_GROUP -d $NAGIOS_HOME ) \u0026\u0026 ( id -u $NAGIOS_CMDUSER || useradd --system -d $NAGIOS_HOME -g $NAGIOS_CMDGROUP $NAGIOS_CMDUSER )"
+          }
+        },
+        {
+          "tag": "ADD",
+          "line": 18,
+          "flags": [],
+          "sources": [
+            "http://downloads.sourceforge.net/project/nagios/nagios-3.x/nagios-3.5.1/nagios-3.5.1.tar.gz?r=http%3A%2F%2Fwww.nagios.org%2Fdownload%2Fcore%2Fthanks%2F%3Ft%3D1398863696\u0026ts=1398863718\u0026use_mirror=superb-dca3"
+          ],
+          "destination": "/tmp/nagios.tar.gz"
+        },
+        {
+          "tag": "RUN",
+          "line": 19,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "cd /tmp \u0026\u0026 tar -zxvf nagios.tar.gz \u0026\u0026 cd nagios  \u0026\u0026 ./configure --prefix=${NAGIOS_HOME} --exec-prefix=${NAGIOS_HOME} --enable-event-broker --with-nagios-command-user=${NAGIOS_CMDUSER} --with-command-group=${NAGIOS_CMDGROUP} --with-nagios-user=${NAGIOS_USER} --with-nagios-group=${NAGIOS_GROUP} \u0026\u0026 make all \u0026\u0026 make install \u0026\u0026 make install-config \u0026\u0026 make install-commandmode \u0026\u0026 cp sample-config/httpd.conf /etc/apache2/conf.d/nagios.conf"
+          }
+        },
+        {
+          "tag": "ADD",
+          "line": 20,
+          "flags": [],
+          "sources": [
+            "http://www.nagios-plugins.org/download/nagios-plugins-1.5.tar.gz"
+          ],
+          "destination": "/tmp/"
+        },
+        {
+          "tag": "RUN",
+          "line": 21,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "cd /tmp \u0026\u0026 tar -zxvf nagios-plugins-1.5.tar.gz \u0026\u0026 cd nagios-plugins-1.5 \u0026\u0026 ./configure --prefix=${NAGIOS_HOME} \u0026\u0026 make \u0026\u0026 make install"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 23,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "sed -i.bak 's/.*\\=www\\-data//g' /etc/apache2/envvars"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 24,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "export DOC_ROOT=\"DocumentRoot $(echo $NAGIOS_HOME/share)\"; sed -i \"s,DocumentRoot.*,$DOC_ROOT,\" /etc/apache2/sites-enabled/000-default"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 26,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "ln -s ${NAGIOS_HOME}/bin/nagios /usr/local/bin/nagios \u0026\u0026 mkdir -p /usr/share/snmp/mibs \u0026\u0026 chmod 0755 /usr/share/snmp/mibs \u0026\u0026 touch /usr/share/snmp/mibs/.foo"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 28,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "echo \"use_timezone=$NAGIOS_TIMEZONE\" \u003e\u003e ${NAGIOS_HOME}/etc/nagios.cfg \u0026\u0026 echo \"SetEnv TZ \\\"${NAGIOS_TIMEZONE}\\\"\" \u003e\u003e /etc/apache2/conf.d/nagios.conf"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 30,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "mkdir -p ${NAGIOS_HOME}/etc/conf.d \u0026\u0026 mkdir -p ${NAGIOS_HOME}/etc/monitor \u0026\u0026 ln -s /usr/share/snmp/mibs ${NAGIOS_HOME}/libexec/mibs"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 31,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "echo \"cfg_dir=${NAGIOS_HOME}/etc/conf.d\" \u003e\u003e ${NAGIOS_HOME}/etc/nagios.cfg"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 32,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "echo \"cfg_dir=${NAGIOS_HOME}/etc/monitor\" \u003e\u003e ${NAGIOS_HOME}/etc/nagios.cfg"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 33,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "download-mibs \u0026\u0026 echo \"mibs +ALL\" \u003e /etc/snmp/snmp.conf"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 35,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "sed -i 's,/bin/mail,/usr/bin/mail,' /opt/nagios/etc/objects/commands.cfg \u0026\u0026   sed -i 's,/usr/usr,/usr,' /opt/nagios/etc/objects/commands.cfg"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 37,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "cp /etc/services /var/spool/postfix/etc/"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 39,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "mkdir -p /etc/sv/nagios \u0026\u0026 mkdir -p /etc/sv/apache \u0026\u0026 rm -rf /etc/sv/getty-5 \u0026\u0026 mkdir -p /etc/sv/postfix"
+          }
+        },
+        {
+          "tag": "ADD",
+          "line": 40,
+          "flags": [],
+          "sources": [
+            "nagios.init"
+          ],
+          "destination": "/etc/sv/nagios/run"
+        },
+        {
+          "tag": "ADD",
+          "line": 41,
+          "flags": [],
+          "sources": [
+            "apache.init"
+          ],
+          "destination": "/etc/sv/apache/run"
+        },
+        {
+          "tag": "ADD",
+          "line": 42,
+          "flags": [],
+          "sources": [
+            "postfix.init"
+          ],
+          "destination": "/etc/sv/postfix/run"
+        },
+        {
+          "tag": "ADD",
+          "line": 43,
+          "flags": [],
+          "sources": [
+            "postfix.stop"
+          ],
+          "destination": "/etc/sv/postfix/finish"
+        },
+        {
+          "tag": "ADD",
+          "line": 45,
+          "flags": [],
+          "sources": [
+            "start.sh"
+          ],
+          "destination": "/usr/local/bin/start_nagios"
+        },
+        {
+          "tag": "ENV",
+          "line": 47,
+          "flags": [],
+          "vars": [
+            [
+              "APACHE_LOCK_DIR",
+              "/var/run"
+            ]
+          ]
+        },
+        {
+          "tag": "ENV",
+          "line": 48,
+          "flags": [],
+          "vars": [
+            [
+              "APACHE_LOG_DIR",
+              "/var/log/apache2"
+            ]
+          ]
+        },
+        {
+          "tag": "EXPOSE",
+          "line": 50,
+          "flags": []
+        },
+        {
+          "tag": "VOLUME",
+          "line": 52,
+          "flags": []
+        },
+        {
+          "tag": "CMD",
+          "line": 54,
+          "flags": [],
+          "command": {
+            "form": "exec",
+            "argv": [
+              "/usr/local/bin/start_nagios"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

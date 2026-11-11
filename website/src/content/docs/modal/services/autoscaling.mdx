@@ -1,0 +1,64 @@
+---
+title: Autoscaling
+description: Keep containers warm and cap concurrency for a deployed Modal function.
+---
+
+import Timeline from "../../../../components/diagrams/Timeline.astro";
+
+Modal scales a function's containers with its calls, down to none when idle. A `Modal.FunctionAutoscaler` sets the bounds: containers kept warm, spare ones ready for the next spike, and a cap on how many may run.
+
+## Warm containers skip the cold start
+
+With `minContainers: 2` and `bufferContainers: 1`, two containers wait for calls and a third stands ready while they're busy:
+
+<Timeline
+  end={10}
+  lanes={[
+    { id: "c1", label: "container 1", type: "min" },
+    { id: "c2", label: "container 2", type: "min" },
+    { id: "c3", label: "container 3", type: "buffer" },
+  ]}
+  bars={[
+    { lane: "c1", start: 0, end: 2, label: "idle", tone: "muted" },
+    { lane: "c1", start: 2, end: 6, label: "call", tone: "accent" },
+    { lane: "c1", start: 6, end: 10, label: "idle", tone: "muted" },
+    { lane: "c2", start: 0, end: 3, label: "idle", tone: "muted" },
+    { lane: "c2", start: 3, end: 7, label: "call", tone: "accent" },
+    { lane: "c2", start: 7, end: 10, label: "idle", tone: "muted" },
+    { lane: "c3", start: 3, end: 4, label: "idle", tone: "muted" },
+    { lane: "c3", start: 4, end: 6.5, label: "call", tone: "accent" },
+  ]}
+  marks={[{ at: 3, label: "both busy" }]}
+  legend={[{ tone: "accent", label: "call" }, { tone: "muted", label: "warm, waiting" }]}
+  caption="The two minimum containers never stop. When both are busy, Modal starts a buffer container, so the next call doesn't wait for a cold start."
+/>
+
+## Keep containers warm
+
+```typescript title="src/Scaling.ts"
+import * as Modal from "@alchemy.run/modal";
+
+export const Warm = Modal.FunctionAutoscaler("Warm", {
+  app: "inference",
+  function: "Model.*",
+  minContainers: 2,
+  bufferContainers: 1,
+  scaledownWindow: "5 minutes",
+});
+```
+
+`scaledownWindow` is how long an idle container above the minimum waits before it stops.
+
+## Cap concurrency
+
+```typescript title="src/Scaling.ts"
+export const Capped = Modal.FunctionAutoscaler("Capped", {
+  app: "inference",
+  function: "embed",
+  maxContainers: 10,
+});
+```
+
+## Settings return when you destroy it
+
+Destroying the resource restores the settings it found. `modal deploy` resets them, so deploy your Stack after redeploying the app.

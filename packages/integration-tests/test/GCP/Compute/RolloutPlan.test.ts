@@ -6,6 +6,7 @@ import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -71,6 +72,10 @@ test.provider(
             waves: [wave(["us-central1-a"])],
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.RolloutPlan.lookup({ rolloutPlanName: created.rolloutPlanName }),
+        created,
       );
 
       expect(created.rolloutPlanName).toEqual(expect.any(String));

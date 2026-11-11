@@ -82,8 +82,10 @@ const loadCommand = async (name: CommandName) => {
       return (await import("./commands/logs.ts")).logsCommand;
     case "profile":
       return (await import("./commands/profile/index.ts")).profileCommand;
-    case "state":
-      return (await import("./commands/state.ts")).stateCommand;
+    case "state": {
+      const { stateCommand } = await import("./commands/state.ts");
+      return loadContributions().then(stateCommand);
+    }
     case "drift":
       return (await import("./commands/drift.ts")).driftCommand;
     case "unsafe":
