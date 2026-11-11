@@ -180,6 +180,10 @@ const flociFixedValues: Record<string, string> = {
   AWS_TEST_CODECONNECTIONS_REPOSITORY_NAME: "alchemy",
   AWS_TEST_CODECONNECTIONS_REPO_LINK_ID: "f10c1000-0000-4000-8000-0000000000c2",
   AWS_TEST_CODECONNECTIONS_SYNC_ROLE_ARN: "arn:aws:iam::000000000000:role/alchemy-floci-git-sync",
+  // Every Floci account holds the entitled "AWS Data Exchange Heartbeat" data set; event
+  // actions on it export each hourly revision to the bucket.
+  AWS_TEST_DATAEXCHANGE_ENTITLED_DATASET_ID: "f10c1000000040008000000000000ea7",
+  AWS_TEST_DATAEXCHANGE_EXPORT_BUCKET: "alchemy-floci-dataexchange-exports",
   // Floci stores authorizer URIs without resolving the function.
   ALCHEMY_TEST_AUTHORIZER_URI:
     "arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-1:000000000000:function:alchemy-floci-standing-authorizer/invocations",
