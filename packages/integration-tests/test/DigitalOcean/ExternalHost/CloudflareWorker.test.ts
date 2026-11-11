@@ -2,10 +2,13 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as DigitalOcean from "@alchemy.run/digitalocean";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import { Credentials } from "@distilled.cloud/digitalocean";
 import * as Alchemy from "alchemy";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import ExternalHostWorker from "./fixtures/worker.ts";
 
@@ -20,7 +23,18 @@ const Stack = Alchemy.Stack(
   "DigitalOceanExternalHostStack",
   { providers, state: Alchemy.localState() },
   Effect.gen(function* () {
-    const worker = yield* ExternalHostWorker;
+    // Insights takes a token the caller passes: the testing profile's.
+    const { apiKey } = yield* yield* Credentials;
+    const ambient = yield* ConfigProvider.ConfigProvider;
+    const worker = yield* ExternalHostWorker.pipe(
+      Effect.provideService(
+        ConfigProvider.ConfigProvider,
+        ConfigProvider.orElse(
+          ConfigProvider.fromUnknown({ DO_TEST_KEY: Redacted.value(apiKey) }),
+          ambient,
+        ),
+      ),
+    );
     return { url: worker.url.as<string>() };
   }),
 );
@@ -77,6 +91,17 @@ describe(
         const body = yield* call("/function");
         expectOk(body);
         expect(body.result).toEqual({ sum: 42 });
+      }),
+      { timeout: 240_000 },
+    );
+
+    test(
+      "Insights QueryMetrics and SearchLogs with the token the caller passed",
+      Effect.gen(function* () {
+        const body = yield* call("/insights");
+        expectOk(body);
+        expect(body.result.metrics.status).toBe("success");
+        expect(body.result.logs).toBeDefined();
       }),
       { timeout: 240_000 },
     );

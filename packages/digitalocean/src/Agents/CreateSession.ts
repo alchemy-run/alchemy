@@ -51,6 +51,20 @@ export interface SessionHandle {
   readonly resume: Effect.Effect<void, SessionError, RuntimeContext>;
   /** Captures the sandbox's machine state; returns the checkpoint id. */
   checkpoint(label?: string): Effect.Effect<string | undefined, SessionError, RuntimeContext>;
+  /**
+   * Starts `count` (1-4) child sessions from a checkpoint of this one, or
+   * from its state now when no checkpoint is given.
+   */
+  fork(options?: {
+    readonly fromCheckpointId?: string;
+    readonly count?: number;
+  }): Effect.Effect<ReadonlyArray<SessionHandle>, SessionError, RuntimeContext>;
+  /** Answers a human-in-the-loop request the agent raised. */
+  resolve(
+    requestId: string,
+    outcome: "approve" | "reject" | "defer",
+    reason?: string,
+  ): Effect.Effect<void, SessionError, RuntimeContext>;
   /** Destroys the session and its sandbox. */
   readonly delete: Effect.Effect<void, SessionError, RuntimeContext>;
 }

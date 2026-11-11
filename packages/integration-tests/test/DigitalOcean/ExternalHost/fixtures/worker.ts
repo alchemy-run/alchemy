@@ -2,6 +2,7 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as DigitalOcean from "@alchemy.run/digitalocean";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Cause from "effect/Cause";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -29,8 +30,8 @@ export const Add = Effect.gen(function* () {
 /**
  * A Cloudflare Worker using DigitalOcean bindings: a foreign host, so each
  * binding hands the Worker its own scoped credential (a Spaces key, a
- * Functions access key) or the values themselves (a secret) as Worker
- * secrets. One route per binding; each answers `{ ok, result | error }`.
+ * Functions access key), the values themselves (a secret), or the token
+ * the caller passed (Insights) as Worker secrets. One route per binding; each answers `{ ok, result | error }`.
  */
 export default class ExternalHostWorker extends Cloudflare.Worker<ExternalHostWorker>()(
   "DoExternalHostWorker",
@@ -43,6 +44,9 @@ export default class ExternalHostWorker extends Cloudflare.Worker<ExternalHostWo
     const readSecret = yield* DigitalOcean.Security.ReadSecret(secret);
     const fn = yield* Add;
     const add = yield* DigitalOcean.Functions.InvokeFunction(fn);
+    const token = yield* Config.Redacted("DO_TEST_KEY");
+    const queryMetrics = yield* DigitalOcean.Insights.QueryMetrics({ token });
+    const searchLogs = yield* DigitalOcean.Insights.SearchLogs({ token });
 
     const respond = (effect: Effect.Effect<unknown, unknown, RuntimeContext>) =>
       effect.pipe(
@@ -78,6 +82,17 @@ export default class ExternalHostWorker extends Cloudflare.Worker<ExternalHostWo
             );
           case "/function":
             return yield* respond(add<{ sum: number }>({ a: 40, b: 2 }));
+          case "/insights":
+            return yield* respond(
+              Effect.gen(function* () {
+                const metrics = yield* queryMetrics({ region: "nyc3", query: "vector(1)" });
+                const logs = yield* searchLogs({
+                  region: "nyc3",
+                  time_range: { from: { relative: "1h" }, to: { relative: "now" } },
+                });
+                return { metrics, logs };
+              }),
+            );
           default:
             return HttpServerResponse.text("ok");
         }
@@ -90,6 +105,8 @@ export default class ExternalHostWorker extends Cloudflare.Worker<ExternalHostWo
         DigitalOcean.Spaces.GetObjectHttp,
         DigitalOcean.Security.ReadSecretHttp,
         DigitalOcean.Functions.InvokeFunctionHttp,
+        DigitalOcean.Insights.QueryMetricsHttp,
+        DigitalOcean.Insights.SearchLogsHttp,
       ),
     ),
   ),

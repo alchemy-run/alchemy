@@ -113,6 +113,31 @@ export const CreateSessionHttp = Layer.succeed(
             Effect.map((r) => r.checkpoint?.checkpoint_id),
           ),
         ),
+      fork: (forkOptions) =>
+        call(
+          "fork",
+          DO.createHarnessSessionFork({
+            session_id: sessionId,
+            from_checkpoint_id: forkOptions?.fromCheckpointId,
+            count: forkOptions?.count,
+          }).pipe(
+            Effect.map((r) =>
+              (r.sessions ?? []).flatMap((child) =>
+                child.session_id === undefined ? [] : [handle(child.session_id)],
+              ),
+            ),
+          ),
+        ),
+      resolve: (requestId, outcome, reason) =>
+        call(
+          "resolve",
+          DO.postHarnessSessionHitl({
+            session_id: sessionId,
+            request_id: requestId,
+            outcome: `HITL_OUTCOME_${outcome.toUpperCase()}`,
+            reason,
+          }),
+        ).pipe(Effect.asVoid),
       delete: call(
         "delete",
         DO.deleteHarnessSession({ session_id: sessionId }).pipe(

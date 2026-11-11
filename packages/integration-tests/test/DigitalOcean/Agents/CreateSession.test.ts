@@ -15,7 +15,7 @@ const { test } = Test.make({ providers: DigitalOcean.providers() });
 // A team holds one registry, so the app deploys, starts a session per
 // request and is destroyed inside one test holding the registry lock.
 test.provider.skipIf(skipSlow)(
-  "an App starts an agent session, runs a command in its sandbox, deletes it",
+  "an App starts an agent session, runs a command in its sandbox, forks it, deletes it",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -58,6 +58,18 @@ test.provider.skipIf(skipSlow)(
         }),
       );
       expect(["gone", "SESSION_STATUS_DESTROYING", "SESSION_STATUS_DESTROYED"]).toContain(status);
+
+      // A fork starts from the parent's state now: the child sees its file.
+      const forked = (yield* client.get(`${url}/fork`).pipe(
+        Effect.flatMap((response) =>
+          response.status === 200
+            ? response.json
+            : Effect.fail(new Error(`HTTP ${response.status}`)),
+        ),
+        Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 6 }),
+      )) as { id: string; children: string[]; stdout: string };
+      expect(forked.children).toHaveLength(1);
+      expect(forked.stdout).toEqual("forked");
       yield* stack.destroy();
     }).pipe(logLevel),
   {

@@ -1,7 +1,9 @@
 import * as DigitalOcean from "@alchemy.run/digitalocean";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Schedule from "effect/Schedule";
 import { TestRegistry } from "../../fixtures/app/shared.ts";
 
 export const Shell = DigitalOcean.Agents.EnvironmentConfig("Shell", {
@@ -12,7 +14,10 @@ export const Shell = DigitalOcean.Agents.EnvironmentConfig("Shell", {
   },
 });
 
-/** Starts a session per request, runs a command in its sandbox, deletes it. */
+/**
+ * Starts a session per request, runs a command in its sandbox, deletes it.
+ * `/fork` also forks the session and runs the command in the child.
+ */
 export default class SessionApp extends DigitalOcean.App<SessionApp>()(
   "SessionApp",
   { main: import.meta.url, registry: TestRegistry, region: "nyc" },
@@ -25,6 +30,24 @@ export default class SessionApp extends DigitalOcean.App<SessionApp>()(
         const session = yield* Effect.acquireRelease(sessions.create(), (s) =>
           Effect.ignore(s.delete),
         );
+        const request = yield* HttpServerRequest;
+        if (request.url.startsWith("/fork")) {
+          yield* session.exec(["sh", "-c", "echo forked > /tmp/marker"]);
+          const children = yield* Effect.acquireRelease(session.fork({ count: 1 }), (cs) =>
+            Effect.forEach(cs, (c) => Effect.ignore(c.delete)),
+          );
+          const child = yield* session
+            .exec(["cat", "/tmp/marker"])
+            .pipe(
+              Effect.andThen(children[0]!.exec(["cat", "/tmp/marker"])),
+              Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 24 }),
+            );
+          return yield* HttpServerResponse.json({
+            id: session.sessionId,
+            children: children.map((c) => c.sessionId),
+            stdout: child.stdout.trim(),
+          });
+        }
         const result = yield* session.exec(["sh", "-c", "echo from-the-sandbox"]);
         return yield* HttpServerResponse.json({
           id: session.sessionId,

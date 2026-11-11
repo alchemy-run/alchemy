@@ -1,3 +1,14 @@
 export * from "./AlertRule.ts";
 export * from "./Dashboard.ts";
 export * from "./NotificationChannel.ts";
+export * from "./QueryMetrics.ts";
+export * from "./QueryMetricsHttp.ts";
+export * from "./QueryMetricsRange.ts";
+export * from "./QueryMetricsRangeHttp.ts";
+export * from "./SearchLogs.ts";
+export * from "./SearchLogsHttp.ts";
+export * from "./SearchSpans.ts";
+export * from "./SearchSpansHttp.ts";
+export * from "./SearchTraces.ts";
+export * from "./SearchTracesHttp.ts";
+export { InsightsTokenMissing, type InsightsOptions } from "./InsightsBinding.ts";
