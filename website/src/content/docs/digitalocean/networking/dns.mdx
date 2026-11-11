@@ -1,0 +1,51 @@
+---
+title: DNS
+description: Host domains on DigitalOcean DNS and manage their records from a Stack, pointing names at Droplets, load balancers and reserved IPs.
+---
+
+import Records from "../../../../components/diagrams/Records.astro";
+
+DigitalOcean hosts DNS for your domains for free. Point the domain's nameservers at `ns1.digitalocean.com`, `ns2.digitalocean.com` and `ns3.digitalocean.com` at your registrar, then manage its **records** here. A domain on DigitalOcean DNS can also get Let's Encrypt certificates for its load balancers.
+
+<Records
+  title="example.com"
+  columns={["name", "type", "data", "ttl"]}
+  rows={[
+    ["@", "A", "203.0.113.10", "1800"],
+    ["www", "CNAME", "@", "1800"],
+    ["@", "MX", "mail.example.com · priority 10", "3600"],
+    ["@", "TXT", "v=spf1 include:_spf.example.com ~all", "3600"],
+  ]}
+  caption="The records the snippets below create: the apex points at a reserved IP, www follows it, and mail goes to the mail host."
+/>
+
+## Add a domain
+
+```typescript
+yield* DigitalOcean.Domain("Example", { name: "example.com" });
+```
+
+## Add records
+
+```typescript
+yield* DigitalOcean.DomainRecord("Apex", {
+  domain: "example.com",
+  type: "A",
+  name: "@",
+  data: ip.ip,
+});
+yield* DigitalOcean.DomainRecord("Www", { domain: "example.com", type: "CNAME", name: "www", data: "@" });
+yield* DigitalOcean.DomainRecord("Mail", {
+  domain: "example.com",
+  type: "MX",
+  name: "@",
+  data: "mail.example.com.",
+  priority: 10,
+});
+```
+
+`data` takes Outputs, so a record follows the Droplet, load balancer or reserved IP it points at. `ttl` defaults to 1800 seconds.
+
+## Limits
+
+- DigitalOcean DNS answers for a domain only once the registrar points it at DigitalOcean's nameservers.

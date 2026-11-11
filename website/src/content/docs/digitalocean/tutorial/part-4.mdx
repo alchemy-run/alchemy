@@ -1,0 +1,63 @@
+---
+title: "Part 4: Run a Nightly Job"
+description: Schedule an App Platform job from the same program, so a report of the day's visits lands in Spaces every night.
+sidebar:
+  order: 4
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+App Platform runs **scheduled jobs** on a cron schedule. A job runs the App's own image, so it shares the App's code and bindings. The job will count the visits and store the count in Spaces.
+
+## Schedule the job
+
+```diff lang="typescript"
+// src/api.ts
+  Effect.gen(function* () {
+    const putObject = yield* DigitalOcean.Spaces.PutObject(Uploads);
+    const getObject = yield* DigitalOcean.Spaces.GetObject(Uploads);
+    const conn = yield* DigitalOcean.Databases.Connect(Db);
+    // the query helper from part 3
++
++    yield* DigitalOcean.cron("0 3 * * *", () =>
++      Effect.gen(function* () {
++        const rows = yield* query("SELECT count(*)::int AS visits FROM visits");
++        yield* putObject({
++          Key: "reports/latest.json",
++          Body: JSON.stringify(rows[0]),
++          ContentType: "application/json",
++        });
++      }),
++    );
+```
+
+`cron` adds a job to the App that runs at 03:00 UTC every day. Pass `{ timeZone: "America/New_York" }` as a third argument to schedule in another zone.
+
+## Provide the scheduler
+
+```diff lang="typescript"
+// src/api.ts
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        DigitalOcean.Spaces.PutObjectHttp,
+        DigitalOcean.Spaces.GetObjectHttp,
+        DigitalOcean.Databases.ConnectHttp,
++        DigitalOcean.CronLive,
+      ),
+    ),
+  ),
+```
+
+## Deploy
+
+<PackageManagers run="alchemy deploy" />
+
+The App's page in the control panel now lists a job next to the service. Run it from there with **Run now**, then fetch the report:
+
+```sh
+curl https://api-xxxxx.ondigitalocean.app/reports/latest.json
+# {"visits":12}
+```
+
+Next, in [Part 5](/digitalocean/tutorial/part-5), you deploy the same Stack to production.

@@ -1339,13 +1339,88 @@ export default defineConfig({
             { label: "What is DigitalOcean?", link: "/digitalocean/what-is-digitalocean" },
             { label: "Setup", link: "/digitalocean/setup" },
             {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "digitalocean/tutorial" } }],
+            },
+            {
               label: "Accounts & access",
               items: [
                 {
                   label: "Teams, projects and tokens",
                   link: "/digitalocean/teams-projects-and-tokens",
                 },
+                { label: "Secrets", link: "/digitalocean/security/secrets" },
               ],
+            },
+            {
+              label: "Compute",
+              items: [
+                { label: "Choosing a runtime", link: "/digitalocean/compute/choosing-a-runtime" },
+                { label: "App Platform", link: "/digitalocean/compute/app-platform" },
+                { label: "Functions", link: "/digitalocean/compute/functions" },
+                { label: "Droplets", link: "/digitalocean/compute/droplets" },
+                { label: "Kubernetes", link: "/digitalocean/compute/kubernetes" },
+                { label: "Sandboxes", link: "/digitalocean/compute/sandboxes" },
+              ],
+            },
+            {
+              label: "Storage & databases",
+              items: [
+                { label: "Spaces", link: "/digitalocean/data/spaces" },
+                { label: "Managed Databases", link: "/digitalocean/data/managed-databases" },
+                { label: "Volumes and NFS", link: "/digitalocean/data/volumes-nfs" },
+                { label: "Vector Databases", link: "/digitalocean/data/vector-databases" },
+              ],
+            },
+            {
+              label: "Networking",
+              items: [
+                { label: "VPCs and NAT", link: "/digitalocean/networking/vpcs" },
+                { label: "Firewalls", link: "/digitalocean/networking/firewalls" },
+                {
+                  label: "Load balancers and certificates",
+                  link: "/digitalocean/networking/load-balancers",
+                },
+                { label: "Reserved IPs", link: "/digitalocean/networking/reserved-ips" },
+                { label: "DNS", link: "/digitalocean/networking/dns" },
+              ],
+            },
+            {
+              label: "Observability",
+              items: [
+                {
+                  label: "Monitoring and Insights",
+                  link: "/digitalocean/observability/monitoring",
+                },
+              ],
+            },
+            {
+              label: "AI",
+              items: [
+                { label: "GenAI agents", link: "/digitalocean/ai/genai-agents" },
+                { label: "Inference", link: "/digitalocean/ai/inference" },
+                { label: "Agent harness", link: "/digitalocean/ai/agent-harness" },
+                { label: "Action Gateway", link: "/digitalocean/ai/action-gateway" },
+              ],
+            },
+            {
+              label: "Frontend",
+              items: sortFrontendItems([
+                { label: "Overview", link: "/digitalocean/frontend/websites" },
+                { label: "Astro", link: "/digitalocean/frontend/astro" },
+                { label: "Foldkit", link: "/digitalocean/frontend/foldkit" },
+                { label: "Next.js", link: "/digitalocean/frontend/nextjs" },
+                { label: "Nuxt", link: "/digitalocean/frontend/nuxt" },
+                { label: "Octane", link: "/digitalocean/frontend/octane" },
+                { label: "React Router", link: "/digitalocean/frontend/react-router" },
+                { label: "SolidStart", link: "/digitalocean/frontend/solidstart" },
+                { label: "SvelteKit", link: "/digitalocean/frontend/sveltekit" },
+                { label: "TanStack Start", link: "/digitalocean/frontend/tanstack-start" },
+                { label: "Vinext", link: "/digitalocean/frontend/vinext" },
+                { label: "Vite", link: "/digitalocean/frontend/vite" },
+                { label: "Vocs", link: "/digitalocean/frontend/vocs" },
+                { label: "Waku", link: "/digitalocean/frontend/waku" },
+              ]),
             },
             providerResourcesEntry("DigitalOcean"),
           ],

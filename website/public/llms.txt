@@ -635,6 +635,79 @@ The Railway hub: overview, What is Railway? (workspaces, projects, environments,
 - [Waku](https://alchemy.run/railway/frontend/waku) — Deploy a Waku app to Railway with Railway.Website.Waku — RSC server on a container Service, SSG pages in the image, and Waku's own dev server under alchemy dev.
 - [Octane](https://alchemy.run/railway/frontend/octane) — Deploy an OctaneJS app to Railway with Railway.Website.Octane — SSR plus client assets on one Service, and Octane's own Vite dev server under alchemy dev.
 
+## DigitalOcean
+
+DigitalOcean: App Platform runtimes and Functions, Droplets, Kubernetes, MicroVM sandboxes, Spaces, Managed Databases, GenAI agents and inference, networking and monitoring, with bindings that give each runtime a key to one resource.
+
+- [DigitalOcean](https://alchemy.run/digitalocean) — Run Effect programs on DigitalOcean with Alchemy. Declare Apps, Functions, Droplets, Kubernetes, Spaces, Managed Databases, AI agents and networking in one TypeScript program.
+- [What is DigitalOcean?](https://alchemy.run/digitalocean/what-is-digitalocean) — The concepts behind DigitalOcean — teams, tokens, projects, regions, App Platform, Functions, Droplets, Kubernetes, Sandboxes, Spaces, Managed Databases, AI agents, networking and monitoring — and how @alchemy.run/digitalocean models each of them.
+- [Setup](https://alchemy.run/digitalocean/setup) — Install Alchemy and connect it to DigitalOcean — create a personal access token for your team and store it in a profile.
+- [Teams, projects and tokens](https://alchemy.run/digitalocean/teams-projects-and-tokens) — How a DigitalOcean team holds your resources and billing, how a personal access token decides where Alchemy deploys, how to keep production in its own team, and the narrower keys bindings create for your runtimes.
+
+## DigitalOcean — Tutorial
+
+- [Part 1: Your First App](https://alchemy.run/digitalocean/tutorial/part-1) — Create a Stack, write an Effect HTTP handler, and deploy it to App Platform with its own Container Registry.
+- [Part 2: Store Files in Spaces](https://alchemy.run/digitalocean/tutorial/part-2) — Declare a Spaces bucket, give the App a key that reaches only that bucket, and read and write objects from a handler.
+- [Part 3: Add a Postgres Database](https://alchemy.run/digitalocean/tutorial/part-3) — Declare a managed PostgreSQL cluster, apply SQL migrations on every deploy, and query it from the App with its connection string.
+- [Part 4: Run a Nightly Job](https://alchemy.run/digitalocean/tutorial/part-4) — Schedule an App Platform job from the same program, so a report of the day's visits lands in Spaces every night.
+- [Part 5: Ship to Production](https://alchemy.run/digitalocean/tutorial/part-5) — Deploy a second copy of the Stack as a stage, give production its own team and profile, deploy from CI, and tear down what you no longer need.
+
+## DigitalOcean — Security
+
+- [Secrets](https://alchemy.run/digitalocean/security/secrets) — Give DigitalOcean Apps and Functions API keys and passwords as Config values from .env or a secrets manager, or keep shared values in DigitalOcean Secrets and read them with ReadSecret.
+
+## DigitalOcean — Compute
+
+- [App Platform](https://alchemy.run/digitalocean/compute/app-platform) — Run an Effect or async program on DigitalOcean App Platform as an HTTPS service, with instance sizes, scheduled jobs, alerts, secrets and the team's Container Registry.
+- [Choosing a runtime](https://alchemy.run/digitalocean/compute/choosing-a-runtime) — How App Platform services and jobs, Functions, Kubernetes and Droplets differ in what starts them, how they scale and what they cost, and how to choose one for each part of an app.
+- [Droplets](https://alchemy.run/digitalocean/compute/droplets) — Run DigitalOcean Droplets with cloud-init, SSH keys, volumes, snapshots, backups and autoscale pools, and know which changes update a Droplet in place and which replace it.
+- [Functions](https://alchemy.run/digitalocean/compute/functions) — Run Effect or async handlers as DigitalOcean Functions, deploy single-file functions in any runtime, schedule them with triggers, and call them from other runtimes with a scoped access key.
+- [Kubernetes](https://alchemy.run/digitalocean/compute/kubernetes) — Create DigitalOcean Kubernetes (DOKS) clusters and node pools, apply manifests from the same Stack, pull images from the team's registry, install 1-Click apps and forward logs.
+- [Sandboxes](https://alchemy.run/digitalocean/compute/sandboxes) — Create DigitalOcean MicroVM sandboxes from a template while your program runs, run untrusted code in them, expose a port, pause and resume them, and delete them when done.
+
+## DigitalOcean — Data
+
+- [Managed Databases](https://alchemy.run/digitalocean/data/managed-databases) — Run managed PostgreSQL, MySQL, Valkey, MongoDB, Kafka and OpenSearch clusters on DigitalOcean, apply SQL migrations on deploy, connect from runtimes, and add users, pools, replicas and trusted sources.
+- [Spaces](https://alchemy.run/digitalocean/data/spaces) — Store objects in DigitalOcean Spaces buckets, read and write them from any runtime with keys scoped to one bucket, serve them through the CDN, and set CORS, versioning and lifecycle rules.
+- [Vector Databases](https://alchemy.run/digitalocean/data/vector-databases) — Run a managed Weaviate vector database on DigitalOcean and connect to it from a runtime with its endpoints and API key.
+- [Volumes and NFS](https://alchemy.run/digitalocean/data/volumes-nfs) — Give Droplets disks that outlive them with Block Storage Volumes, share files between Droplets and Kubernetes nodes with managed NFS, and snapshot Volumes.
+
+## DigitalOcean — Networking
+
+- [DNS](https://alchemy.run/digitalocean/networking/dns) — Host domains on DigitalOcean DNS and manage their records from a Stack, pointing names at Droplets, load balancers and reserved IPs.
+- [Firewalls](https://alchemy.run/digitalocean/networking/firewalls) — Control which traffic reaches DigitalOcean Droplets with Cloud Firewalls, applied by Droplet id or by tag, with inbound and outbound rules.
+- [Load balancers and certificates](https://alchemy.run/digitalocean/networking/load-balancers) — Spread traffic across DigitalOcean Droplets with load balancers, terminate HTTPS with Let's Encrypt or your own certificates, and check backend health.
+- [Reserved IPs](https://alchemy.run/digitalocean/networking/reserved-ips) — Keep a public address on DigitalOcean that stays the same when the Droplet behind it is replaced, and move it between Droplets.
+- [VPCs and NAT](https://alchemy.run/digitalocean/networking/vpcs) — Put Droplets, Kubernetes clusters and databases on a private DigitalOcean VPC, peer two VPCs, and give private machines one outbound address with a NAT gateway.
+
+## DigitalOcean — Observability
+
+- [Monitoring and Insights](https://alchemy.run/digitalocean/observability/monitoring) — Watch DigitalOcean resources with uptime checks, Droplet alert policies and Insights alert rules, send alerts to email, Slack or webhooks, forward Kubernetes logs, and query metrics and logs from a runtime.
+
+## DigitalOcean — AI
+
+- [Action Gateway](https://alchemy.run/digitalocean/ai/action-gateway) — Give agents tools through DigitalOcean's Action Gateway, with toolbelts, MCP endpoints, approval rules, output views, your own MCP servers, provider credentials and per-actor limits.
+- [Agent harness](https://alchemy.run/digitalocean/ai/agent-harness) — Run coding agents like OpenCode and Claude Code in DigitalOcean Harness Runtime sessions, each in its own sandbox, start them from your App, and schedule them with triggers.
+- [GenAI agents](https://alchemy.run/digitalocean/ai/genai-agents) — Build DigitalOcean GenAI Platform agents with instructions, knowledge bases, function calls and routes to other agents, and call them from any runtime with a key of their own.
+- [Inference](https://alchemy.run/digitalocean/ai/inference) — Call models by name with DigitalOcean Serverless Inference from any runtime (chat, embeddings, images, speech, video and batches), or serve an open-weight model on GPUs reserved for you with Dedicated Inference.
+
+## DigitalOcean — Frontend
+
+- [Astro](https://alchemy.run/digitalocean/frontend/astro) — Deploy a Astro app to DigitalOcean App Platform with DigitalOcean.Website.Astro, built on your machine and served by an App, with Astro's own dev server under alchemy dev.
+- [Next.js](https://alchemy.run/digitalocean/frontend/nextjs) — Deploy a Next.js app to DigitalOcean App Platform with DigitalOcean.Website.Nextjs, built on your machine and served by an App, with Next.js's own dev server under alchemy dev.
+- [Nuxt](https://alchemy.run/digitalocean/frontend/nuxt) — Deploy a Nuxt app to DigitalOcean App Platform with DigitalOcean.Website.Nuxt, built on your machine and served by an App, with Nuxt's own dev server under alchemy dev.
+- [SvelteKit](https://alchemy.run/digitalocean/frontend/sveltekit) — Deploy a SvelteKit app to DigitalOcean App Platform with DigitalOcean.Website.SvelteKit, built on your machine and served by an App, with SvelteKit's own dev server under alchemy dev.
+- [SolidStart](https://alchemy.run/digitalocean/frontend/solidstart) — Deploy a SolidStart app to DigitalOcean App Platform with DigitalOcean.Website.SolidStart, built on your machine and served by an App, with SolidStart's own dev server under alchemy dev.
+- [React Router](https://alchemy.run/digitalocean/frontend/react-router) — Deploy a React Router app to DigitalOcean App Platform with DigitalOcean.Website.ReactRouter, built on your machine and served by an App, with React Router's own dev server under alchemy dev.
+- [TanStack Start](https://alchemy.run/digitalocean/frontend/tanstack-start) — Deploy a TanStack Start app to DigitalOcean App Platform with DigitalOcean.Website.TanStackStart, built on your machine and served by an App, with TanStack Start's own dev server under alchemy dev.
+- [Waku](https://alchemy.run/digitalocean/frontend/waku) — Deploy a Waku app to DigitalOcean App Platform with DigitalOcean.Website.Waku, built on your machine and served by an App, with Waku's own dev server under alchemy dev.
+- [Vinext](https://alchemy.run/digitalocean/frontend/vinext) — Deploy a Vinext app to DigitalOcean App Platform with DigitalOcean.Website.Vinext, built on your machine and served by an App, with Vinext's own dev server under alchemy dev.
+- [Vite](https://alchemy.run/digitalocean/frontend/vite) — Deploy a Vite app to DigitalOcean App Platform with DigitalOcean.Website.Vite, built on your machine and served by an App, with Vite's own dev server under alchemy dev.
+- [Vocs](https://alchemy.run/digitalocean/frontend/vocs) — Deploy a Vocs app to DigitalOcean App Platform with DigitalOcean.Website.Vocs, built on your machine and served by an App, with Vocs's own dev server under alchemy dev.
+- [Foldkit](https://alchemy.run/digitalocean/frontend/foldkit) — Deploy a Foldkit app to DigitalOcean App Platform with DigitalOcean.Website.Foldkit, built on your machine and served by an App, with Foldkit's own dev server under alchemy dev.
+- [Octane](https://alchemy.run/digitalocean/frontend/octane) — Deploy a Octane app to DigitalOcean App Platform with DigitalOcean.Website.Octane, built on your machine and served by an App, with Octane's own dev server under alchemy dev.
+- [Websites](https://alchemy.run/digitalocean/frontend/websites) — Deploy Astro, Next.js, Nuxt, SvelteKit, SolidStart, React Router, TanStack Start, Waku, Vinext, Vite, Vocs, Foldkit, Octane and static sites to DigitalOcean App Platform from one Stack.
+
 ## PlanetScale
 
 Serverless MySQL & Postgres as Stack resources. Composes with Cloudflare Hyperdrive and Drizzle — those guides are listed under Cloudflare.
@@ -1200,4 +1273,4 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~253 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~268 KB) — only fetch it when you need to locate a specific resource's reference page.

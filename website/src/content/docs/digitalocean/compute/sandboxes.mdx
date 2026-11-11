@@ -1,0 +1,107 @@
+---
+title: Sandboxes
+description: Create DigitalOcean MicroVM sandboxes from a template while your program runs, run untrusted code in them, expose a port, pause and resume them, and delete them when done.
+---
+
+import Tree from "../../../../components/diagrams/Tree.astro";
+
+A **sandbox** is a MicroVM: a small virtual machine with its own kernel, disk and network, that boots in seconds. Your program creates sandboxes while it runs, runs code it doesn't trust inside them, and deletes them when it's done.
+
+A **template** is a sandbox prepared ahead of time from a container image, with your setup commands already run. Every sandbox created from it boots from its saved state, so packages you installed are already there.
+
+<Tree
+  nodes={[
+    {
+      id: "team", label: "acme", type: "team", icon: "brand:digitalocean", colGap: 6,
+      areas: ["api .", "s1 s2", ". base"],
+      phoneAreas: ["api .", "s1 s2", ". base"],
+    },
+    { id: "base", label: "MyTemplate", type: "template · node:22-bookworm", parent: "team", icon: "package" },
+    { id: "api", label: "Api", type: "App · your app", parent: "team", tone: "accent", icon: "server" },
+    { id: "s1", label: "sandbox-7f3a", type: "MicroVM · request 1", parent: "team", icon: "box" },
+    { id: "s2", label: "sandbox-c91e", type: "MicroVM · request 2", parent: "team", icon: "box" },
+  ]}
+  links={[
+    { from: "api", to: "s1", label: "creates" },
+    { from: "api", to: "s2", label: "creates" },
+    { from: "base", to: "s1", label: "boots" },
+    { from: "base", to: "s2", label: "boots" },
+  ]}
+  caption="The template is declared in the Stack. The App creates a sandbox per request, each booting from the template, and deletes it when the request ends."
+/>
+
+## Declare a template
+
+```typescript title="src/sandbox.ts"
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+
+export const MyTemplate = DigitalOcean.Sandboxes.Template("MyTemplate", {
+  image: "node:22-bookworm",
+  setup: ["npm install -g typescript"],
+});
+```
+
+Deploy boots the image, runs `setup`, and saves the result.
+
+## Create sandboxes from a runtime
+
+`CreateSandbox` gives a runtime a client that creates sandboxes from the template. DigitalOcean has no API to create a narrower token, so pass a token you created with only the `microvm` scopes; it reaches the runtime as a secret.
+
+```typescript title="src/api.ts"
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { MyTemplate } from "./sandbox.ts";
+
+export default class Api extends DigitalOcean.App<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const token = yield* Config.Redacted("SANDBOX_TOKEN");
+    const sandboxes = yield* DigitalOcean.Sandboxes.CreateSandbox(MyTemplate, { token });
+    return {
+      fetch: Effect.gen(function* () {
+        const sandbox = yield* Effect.acquireRelease(sandboxes.create(), (s) =>
+          Effect.ignore(s.delete),
+        );
+        const result = yield* sandbox.exec("tsc --version");
+        return HttpServerResponse.text(result.stdout);
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(DigitalOcean.Sandboxes.CreateSandboxHttp)),
+) {}
+```
+
+`Effect.acquireRelease` deletes the sandbox when the request ends, even if the handler fails. `exec` returns a non-zero exit code as a result, not a failure.
+
+## Expose a port
+
+```typescript
+const sandbox = yield* sandboxes.create({ httpPort: 3000, autoPauseSeconds: 300 });
+yield* sandbox.exec("npx serve -l 3000 &");
+sandbox.url; // public URL of port 3000
+```
+
+With `autoPauseSeconds`, an idle sandbox pauses, keeping its memory and disk, and the next request to `url` resumes it.
+
+## Size a sandbox
+
+```typescript
+yield* sandboxes.create({ size: { cpu: 2, memory: 4096 } });
+```
+
+Sizes come in fixed pairs: 1 vCPU and 2 GiB, 2 and 4, 8 and 16, 16 and 32.
+
+## Keep one running
+
+A `Sandbox` resource is one sandbox declared in the Stack, created at deploy and deleted with it:
+
+```typescript
+yield* DigitalOcean.Sandboxes.Sandbox("Preview", { base: yield* MyTemplate, httpPort: 3000 });
+```
+
+## Limits
+
+- A sandbox you create at run time isn't in the Stack: delete it yourself, or `alchemy destroy` won't find it.
+- Every sandbox from the same template starts from the same saved state; per-sandbox values go in `env`.

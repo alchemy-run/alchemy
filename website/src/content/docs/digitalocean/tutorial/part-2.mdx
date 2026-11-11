@@ -1,0 +1,135 @@
+---
+title: "Part 2: Store Files in Spaces"
+description: Declare a Spaces bucket, give the App a key that reaches only that bucket, and read and write objects from a handler.
+sidebar:
+  order: 2
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+Spaces is DigitalOcean's object storage, and it speaks the S3 API. The App will store whatever you `PUT` to it and serve it back on `GET`.
+
+## Declare a bucket
+
+```diff lang="typescript"
+// src/resources.ts
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+
+export const Registry = DigitalOcean.Registry("Registry", { tier: "starter" });
++
++export const Uploads = DigitalOcean.Spaces.Bucket("Uploads", { region: "nyc3" });
+```
+
+A bucket lives in one region. `nyc3` sits next to the App's `nyc` region.
+
+## Bind the bucket for writing
+
+```diff lang="typescript"
+// src/api.ts
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+-import { Registry } from "./resources.ts";
++import { Registry, Uploads } from "./resources.ts";
+
+export default class Api extends DigitalOcean.App<Api>()(
+  "Api",
+  { main: import.meta.url, region: "nyc", registry: Registry },
+  Effect.gen(function* () {
++    const putObject = yield* DigitalOcean.Spaces.PutObject(Uploads);
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("hello from App Platform")),
+    };
+-  }),
++  }).pipe(Effect.provide(DigitalOcean.Spaces.PutObjectHttp)),
+) {}
+```
+
+`PutObject(Uploads)` creates a Spaces key with `readwrite` access to this one bucket and gives it to the App as a secret. `PutObjectHttp` is the client that signs requests with it.
+
+## Bind it for reading
+
+```diff lang="typescript"
+// src/api.ts
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
++import * as Layer from "effect/Layer";
+import { Registry, Uploads } from "./resources.ts";
+
+export default class Api extends DigitalOcean.App<Api>()(
+  "Api",
+  { main: import.meta.url, region: "nyc", registry: Registry },
+  Effect.gen(function* () {
+    const putObject = yield* DigitalOcean.Spaces.PutObject(Uploads);
++    const getObject = yield* DigitalOcean.Spaces.GetObject(Uploads);
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("hello from App Platform")),
+    };
+-  }).pipe(Effect.provide(DigitalOcean.Spaces.PutObjectHttp)),
++  }).pipe(
++    Effect.provide(
++      Layer.mergeAll(DigitalOcean.Spaces.PutObjectHttp, DigitalOcean.Spaces.GetObjectHttp),
++    ),
++  ),
+) {}
+```
+
+`GetObject` gets its own key, with `read` access only. Both clients go in one Layer, provided once.
+
+## Store and serve objects
+
+```diff lang="typescript"
+// src/api.ts
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+import * as Effect from "effect/Effect";
++import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
++import * as Stream from "effect/Stream";
+import { Registry, Uploads } from "./resources.ts";
+
+export default class Api extends DigitalOcean.App<Api>()(
+  "Api",
+  { main: import.meta.url, region: "nyc", registry: Registry },
+  Effect.gen(function* () {
+    const putObject = yield* DigitalOcean.Spaces.PutObject(Uploads);
+    const getObject = yield* DigitalOcean.Spaces.GetObject(Uploads);
+    return {
+-      fetch: Effect.succeed(HttpServerResponse.text("hello from App Platform")),
++      fetch: Effect.gen(function* () {
++        const request = yield* HttpServerRequest;
++        const key = new URL(request.url, "http://api").pathname.slice(1);
++        if (request.method === "PUT") {
++          yield* putObject({ Key: key, Body: yield* request.text });
++          return HttpServerResponse.text("stored");
++        }
++        const object = yield* getObject({ Key: key });
++        const text = object.Body ? yield* Stream.mkString(Stream.decodeText(object.Body)) : "";
++        return HttpServerResponse.text(text);
++      }).pipe(Effect.orDie),
+    };
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(DigitalOcean.Spaces.PutObjectHttp, DigitalOcean.Spaces.GetObjectHttp),
+    ),
+  ),
+) {}
+```
+
+The path is the object's key. A `PUT` stores the body; anything else reads it back.
+
+## Deploy and try it
+
+<PackageManagers run="alchemy deploy" />
+
+```sh
+curl -X PUT --data "hello spaces" https://api-xxxxx.ondigitalocean.app/notes/first.txt
+# stored
+curl https://api-xxxxx.ondigitalocean.app/notes/first.txt
+# hello spaces
+```
+
+The object is in the bucket: open **Spaces Object Storage** in the control panel to see `notes/first.txt`.
+
+Next, in [Part 3](/digitalocean/tutorial/part-3), the App records every request in Postgres.

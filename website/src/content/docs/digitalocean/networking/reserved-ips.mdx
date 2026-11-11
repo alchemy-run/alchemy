@@ -1,0 +1,44 @@
+---
+title: Reserved IPs
+description: Keep a public address on DigitalOcean that stays the same when the Droplet behind it is replaced, and move it between Droplets.
+---
+
+import Timeline from "../../../../components/diagrams/Timeline.astro";
+
+A **reserved IP** is a public address that belongs to the team, not to a Droplet. You assign it to a Droplet in its region, and when that Droplet is replaced you assign it to the new one, so DNS records and allow-lists pointing at it never change.
+
+<Timeline
+  end={10}
+  lanes={[
+    { id: "ip", label: "203.0.113.10", type: "reserved IP" },
+    { id: "old", label: "Web", type: "Droplet, generation 1" },
+    { id: "new", label: "Web", type: "Droplet, generation 2" },
+  ]}
+  bars={[
+    { lane: "ip", start: 0, end: 5, label: "→ generation 1" },
+    { lane: "ip", start: 5, end: 10, label: "→ generation 2" },
+    { lane: "old", start: 0, end: 5.5, label: "serving" },
+    { lane: "new", start: 4, end: 10, label: "serving" },
+  ]}
+  marks={[{ at: 5, label: "image changes: replaced" }]}
+  caption="When a new image replaces the Droplet, the assignment moves to the new one. The address clients use stays the same."
+/>
+
+## Reserve an address
+
+```typescript
+const ip = yield* DigitalOcean.ReservedIp("Web", { region: "nyc3" });
+```
+
+## Assign it to a Droplet
+
+```typescript
+yield* DigitalOcean.ReservedIpAssignment("WebIp", { ip: ip.ip, dropletId: host.dropletId });
+```
+
+When `host` is replaced, its new `dropletId` moves the assignment on the next deploy. `ReservedIpv6` and `ReservedIpv6Assignment` do the same for IPv6.
+
+## Limits
+
+- A reserved IP and its Droplet must be in the same region.
+- An unassigned reserved IP is billed by the hour.

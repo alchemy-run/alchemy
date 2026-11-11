@@ -1,0 +1,70 @@
+---
+title: Load balancers and certificates
+description: Spread traffic across DigitalOcean Droplets with load balancers, terminate HTTPS with Let's Encrypt or your own certificates, and check backend health.
+---
+
+import Tree from "../../../../components/diagrams/Tree.astro";
+
+A **load balancer** takes traffic on one address and spreads it across Droplets, sending each request only to Droplets that pass its health check. It can pick its Droplets by tag, so new ones join as they're created. A **certificate** lets it terminate HTTPS: DigitalOcean obtains and renews one from Let's Encrypt for domains it hosts, or you upload your own.
+
+<Tree
+  nodes={[
+    {
+      id: "region", label: "nyc3", type: "region", icon: "map-pin", dashed: true, colGap: 4,
+      areas: ["lb lb", "w1 w2"],
+    },
+    {
+      id: "lb", label: "Web", type: "load balancer", parent: "region", icon: "split",
+      specs: [["https 443", "→ http 8080"], ["certificate", "www.example.com"]],
+    },
+    { id: "w1", label: "Web1", type: "Droplet · tag web", parent: "region", tone: "accent", icon: "server" },
+    { id: "w2", label: "Web2", type: "Droplet · tag web", parent: "region", tone: "accent", icon: "server" },
+  ]}
+  links={[
+    { from: "lb", to: "w1", label: "healthy: sends" },
+    { from: "lb", to: "w2", label: "healthy: sends" },
+  ]}
+  caption="The load balancer terminates HTTPS on 443 and forwards plain HTTP to port 8080 on every Droplet tagged web that passes its health check."
+/>
+
+## Get a certificate
+
+```typescript
+const cert = yield* DigitalOcean.Certificate("Www", {
+  type: "lets_encrypt",
+  dnsNames: ["www.example.com"],
+});
+```
+
+Let's Encrypt certificates need the domain on [DigitalOcean DNS](/digitalocean/networking/dns), because DigitalOcean answers the challenge with DNS records. `type: "custom"` uploads your own certificate and key instead.
+
+## Create a load balancer
+
+```typescript
+yield* DigitalOcean.LoadBalancer("Web", {
+  region: "nyc3",
+  tag: "web",
+  forwardingRules: [
+    {
+      entryProtocol: "https",
+      entryPort: 443,
+      targetProtocol: "http",
+      targetPort: 8080,
+      certificateId: cert.certificateId,
+    },
+  ],
+  healthCheck: { protocol: "http", port: 8080, path: "/health" },
+  redirectHttpToHttps: true,
+});
+```
+
+`tag` sends traffic to every Droplet with that tag; `dropletIds` names them instead. `lb.ip` is its public address.
+
+## Size and tune it
+
+`sizeUnit` adds capacity, `stickySessions` keeps a client on one Droplet, and `network: "INTERNAL"` makes it reachable only inside its VPC.
+
+## Limits
+
+- A load balancer serves Droplets in its own region.
+- A Let's Encrypt certificate covers names in domains hosted on DigitalOcean DNS only.

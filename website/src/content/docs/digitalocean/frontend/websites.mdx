@@ -1,0 +1,91 @@
+---
+title: Websites
+description: Deploy Astro, Next.js, Nuxt, SvelteKit, SolidStart, React Router, TanStack Start, Waku, Vinext, Vite, Vocs, Foldkit, Octane and static sites to DigitalOcean App Platform from one Stack.
+---
+
+import Tree from "../../../../components/diagrams/Tree.astro";
+
+A website on DigitalOcean runs as an [App](/digitalocean/compute/app-platform): Alchemy builds your framework app on your machine, puts its server and static files into one image, and App Platform serves it over HTTPS. Pages the framework renders on the server and files it builds ahead of time come from the same App.
+
+<Tree
+  nodes={[
+    { id: "src", label: "./web", type: "Astro project · your machine", icon: "laptop", colGap: 8 },
+    {
+      id: "app", label: "Web", type: "App · nyc", icon: "server", tone: "accent",
+      specs: [["server", "Node · SSR routes"], ["files", "dist/client"]],
+    },
+  ]}
+  areas={["src app"]}
+  phoneAreas={["src", "app"]}
+  colGap={8}
+  links={[{ from: "src", to: "app", label: "builds, pushes" }]}
+  caption="Deploy runs the framework's build on your machine and ships one image. The App's Node server renders pages and serves the built files."
+/>
+
+## Deploy a framework app
+
+Every framework has its own resource, all taking the project's `rootDir`:
+
+```typescript title="alchemy.run.ts"
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MySite",
+  { providers: DigitalOcean.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const site = yield* DigitalOcean.Website.Astro("Web", { rootDir: "./web" });
+    return { url: site.url };
+  }),
+);
+```
+
+The resources are `Astro`, `Nextjs`, `Nuxt`, `SvelteKit`, `SolidStart`, `ReactRouter`, `TanStackStart`, `Waku`, `Vinext`, `Vite`, `Vocs`, `Foldkit` and `Octane`. Deploy needs Docker, and the team's Container Registry or a `registry` you declare.
+
+## Pass configuration
+
+`env` reaches both the server and the framework's dev server. It takes Outputs, so a site can point at an API in the same Stack:
+
+```typescript
+const api = yield* Api;
+yield* DigitalOcean.Website.Nuxt("Web", {
+  rootDir: "./web",
+  env: { API_URL: api.url },
+});
+```
+
+## Size it
+
+`region`, `instanceSizeSlug` and `instanceCount` work as on any App:
+
+```typescript
+DigitalOcean.Website.Nextjs("Web", {
+  rootDir: "./web",
+  region: "ams",
+  instanceSizeSlug: "apps-s-1vcpu-1gb",
+  instanceCount: 2,
+});
+```
+
+## Serve a static site
+
+`StaticSite` runs any build command and serves its output directory:
+
+```typescript
+yield* DigitalOcean.Website.StaticSite("Blog", {
+  command: "hugo --minify",
+  outdir: "public",
+});
+```
+
+`spa: true` answers unknown paths with `index.html`, for single-page apps. It runs as an App with a small file server, because App Platform's own static sites build only from a git repository.
+
+## Develop locally
+
+Under `alchemy dev`, each site runs its framework's dev server on your machine instead of deploying, with the same `env`. See [Local development](/infrastructure-as-code/local-provider).
+
+## Limits
+
+- The build runs on the machine that deploys; it needs the project's dependencies installed.
+- Every deploy that changes the build pushes a new image, and App Platform swaps instances with no downtime, which takes a few minutes.

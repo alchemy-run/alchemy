@@ -1,0 +1,69 @@
+---
+title: TanStack Start
+description: Deploy a TanStack Start app to DigitalOcean App Platform with DigitalOcean.Website.TanStackStart, built on your machine and served by an App, with TanStack Start's own dev server under alchemy dev.
+sidebar:
+  order: 17
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+`DigitalOcean.Website.TanStackStart` deploys a [TanStack Start](https://tanstack.com/start) project to [App Platform](/digitalocean/compute/app-platform). Deploy builds it on your machine, puts the output in one image, and the App runs TanStack Start's server.
+
+## Install
+
+The build integration ships separately. It runs only at build time, so a dev dependency is enough:
+
+<PackageManagers dev="@alchemy.run/frontend-frameworks" />
+
+## Declare the site
+
+```typescript title="alchemy.run.ts"
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+
+export const Website = DigitalOcean.Website.TanStackStart("Website", { rootDir: "./web" });
+
+export default Alchemy.Stack(
+  "MySite",
+  { providers: DigitalOcean.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const site = yield* Website;
+    return { url: site.url };
+  }),
+);
+```
+
+`rootDir` is the directory with the project's `package.json`. `site.url` is the App's HTTPS address. Deploy needs Docker and the team's Container Registry, or a `registry` you declare.
+
+## Add environment variables
+
+```diff lang="typescript"
+// alchemy.run.ts
+export const Website = DigitalOcean.Website.TanStackStart("Website", {
+  rootDir: "./web",
++  env: { GREETING: "Hello from DigitalOcean" },
+});
+```
+
+`env` is set before the build and on the App, so build-time and run-time code see the same values:
+
+```typescript title="src/server/greeting.ts"
+import { createServerFn } from "@tanstack/react-start";
+
+export const getGreeting = createServerFn().handler(() => process.env.GREETING ?? "hello");
+```
+
+## Size the App
+
+`region`, `instanceSizeSlug` and `instanceCount` are passed to the App. See [Websites](/digitalocean/frontend/websites#size-it).
+
+## Local dev
+
+`alchemy dev` runs TanStack Start's own dev server with the same `env` instead of deploying, and `site.url` is its local address.
+
+## Where next
+
+- [`DigitalOcean.Website.TanStackStart` reference](/providers/digitalocean/website): every prop.
+- [Websites](/digitalocean/frontend/websites): what every site on DigitalOcean shares.
+- [App Platform](/digitalocean/compute/app-platform): the App the site runs on.

@@ -1,0 +1,160 @@
+---
+title: Functions
+description: Run Effect or async handlers as DigitalOcean Functions, deploy single-file functions in any runtime, schedule them with triggers, and call them from other runtimes with a scoped access key.
+---
+
+import Tree from "../../../../components/diagrams/Tree.astro";
+
+**DigitalOcean Functions** run code only when it's called, and bill per run. Functions live in a **namespace**, which has its own API host and its own access keys. A function can answer HTTP directly as a web function, run on a schedule with a **trigger**, or be invoked by name from another runtime.
+
+<Tree
+  nodes={[
+    {
+      id: "ns", label: "fns", type: "namespace · nyc1", icon: "folder", dashed: true, colGap: 4,
+      areas: ["api resize", "nightly ."],
+      phoneAreas: ["api", "resize", "nightly"],
+    },
+    { id: "api", label: "Hello", type: "web function", parent: "ns", tone: "accent", icon: "square-function" },
+    { id: "resize", label: "Resize", type: "function", parent: "ns", icon: "square-function" },
+    { id: "nightly", label: "Nightly", type: "trigger · 0 3 * * *", parent: "ns", icon: "clock" },
+  ]}
+  links={[{ from: "nightly", to: "resize", label: "invokes" }]}
+  caption="A namespace holds functions and triggers. A web function has a public URL; the others are invoked by name, by a trigger or by another runtime."
+/>
+
+## Create a namespace
+
+```typescript title="src/resources.ts"
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+
+export const Fns = DigitalOcean.Functions.Namespace("Fns", { region: "nyc1" });
+```
+
+Functions regions are data center slugs: `nyc1`, `sfo3`, `ams3`, `fra1`, `lon1`, `tor1`, `blr1`, `sgp1`, `syd1`.
+
+## Write a Function
+
+A Function is your program as a web function. Its `fetch` handler answers every request to its URL:
+
+```typescript title="src/hello.ts"
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Fns } from "./resources.ts";
+
+export default class Hello extends DigitalOcean.Functions.Function<Hello>()(
+  "Hello",
+  { main: import.meta.url, namespace: Fns },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        return HttpServerResponse.text(`hello from ${request.method} ${request.url}`);
+      }),
+    };
+  }),
+) {}
+```
+
+Deploy bundles the program into one file; no Docker is involved. `hello.url` is its public address, and paths after it reach the handler.
+
+Construction runs once per warm instance. Read `Config` and create bindings there, and the handler closes over them.
+
+## Write an async handler
+
+Any module that exports `fetch(request, env)` runs with `isExternal: true`:
+
+```typescript title="src/webhook.ts"
+export default {
+  async fetch(request: Request, env: Record<string, string | undefined>) {
+    return new Response(`${env.GREETING} ${new URL(request.url).pathname}`);
+  },
+};
+```
+
+```typescript
+const webhook = yield* DigitalOcean.Functions.Function("Webhook", {
+  main: "./src/webhook.ts",
+  namespace: Fns,
+  isExternal: true,
+  env: { GREETING: "hello" },
+});
+```
+
+`env` values reach the function as default parameters that callers can't override.
+
+## Size it
+
+```typescript
+{ main: import.meta.url, namespace: Fns, memoryMb: 512, timeoutMs: 60_000 }
+```
+
+Memory goes from 128 to 1024 MiB, and the timeout up to 15 minutes. Runs are billed in gigabyte-seconds.
+
+## Deploy a single file in any runtime
+
+`Action` deploys source code as it is, in any runtime DigitalOcean offers: Node.js, Python, Go, PHP. Declare it inside an Effect that yields its namespace:
+
+```typescript title="src/resources.ts"
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+import * as Effect from "effect/Effect";
+
+export const Fns = DigitalOcean.Functions.Namespace("Fns", { region: "nyc1" });
+
+export const Add = Effect.gen(function* () {
+  return yield* DigitalOcean.Functions.Action("Add", {
+    namespace: yield* Fns,
+    runtime: "python:3.11",
+    code: "def main(args):\n    return {'sum': args.get('a', 0) + args.get('b', 0)}",
+  });
+});
+```
+
+`web: true` gives it a public URL too.
+
+## Run on a schedule
+
+A trigger invokes a function on a cron schedule, with a body as its arguments:
+
+```typescript
+const add = yield* Add;
+yield* DigitalOcean.Functions.Trigger("Nightly", {
+  namespaceId: add.namespaceId,
+  function: add.name,
+  cron: "0 3 * * *",
+  body: { a: 1, b: 2 },
+});
+```
+
+## Invoke a function from another runtime
+
+`InvokeFunction` calls an `Action` by name. It creates an access key for the function's namespace and gives it to the calling runtime as a secret. Calls are blocking and return the function's result:
+
+```typescript title="src/api.ts"
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Add } from "./resources.ts";
+
+export default class Api extends DigitalOcean.App<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const add = yield* DigitalOcean.Functions.InvokeFunction(Add);
+    return {
+      fetch: Effect.gen(function* () {
+        const result = yield* add<{ sum: number }>({ a: 40, b: 2 });
+        return HttpServerResponse.text(String(result.sum));
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(DigitalOcean.Functions.InvokeFunctionHttp)),
+) {}
+```
+
+The runtime can be anything that runs Alchemy: an App, a Function, or a Cloudflare Worker.
+
+## Limits
+
+- A cold Function takes a moment to start; a warm one answers at once.
+- An access key reaches every function in its namespace. Put functions that need different callers in different namespaces.

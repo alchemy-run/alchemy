@@ -1,0 +1,120 @@
+---
+title: Spaces
+description: Store objects in DigitalOcean Spaces buckets, read and write them from any runtime with keys scoped to one bucket, serve them through the CDN, and set CORS, versioning and lifecycle rules.
+---
+
+import Tree from "../../../../components/diagrams/Tree.astro";
+
+**Spaces** is object storage that speaks the S3 API. A **bucket** holds objects in one region, each under a key like `notes/first.txt`. Spaces signs requests with its own **access keys**, separate from your team token, and a key can be limited to one bucket and to reading only.
+
+<Tree
+  nodes={[
+    {
+      id: "team", label: "acme", type: "team", icon: "brand:digitalocean", colGap: 5,
+      areas: ["api bucket", "cdn bucket"],
+      phoneAreas: ["api", "bucket", "cdn"],
+    },
+    {
+      id: "api", label: "Api", type: "App · your app", parent: "team", tone: "accent", icon: "server",
+      specs: [["key", "Uploads · readwrite"]],
+    },
+    { id: "cdn", label: "CDN endpoint", type: "uploads.example.com", parent: "team", icon: "globe" },
+    {
+      id: "bucket", label: "Uploads", type: "bucket · nyc3", parent: "team", icon: "archive",
+      areas: ["o1", "o2"],
+    },
+    { id: "o1", label: "notes/first.txt", type: "object", parent: "bucket" },
+    { id: "o2", label: "reports/latest.json", type: "object", parent: "bucket" },
+  ]}
+  links={[
+    { from: "api", to: "bucket", label: "puts and gets" },
+    { from: "cdn", to: "bucket", label: "serves from" },
+  ]}
+  caption="The App holds a key that reaches only this bucket. The CDN endpoint serves the bucket's public objects from DigitalOcean's edge."
+/>
+
+## Create a bucket
+
+```typescript title="src/resources.ts"
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+
+export const Uploads = DigitalOcean.Spaces.Bucket("Uploads", { region: "nyc3" });
+```
+
+Bucket names are global across Spaces, so leave `name` out and Alchemy generates a unique one. `forceDestroy: true` lets `alchemy destroy` delete a bucket that still holds objects.
+
+## Read and write from a runtime
+
+Each binding creates a Spaces key for the runtime: `read` for reading, `readwrite` for writing. The key reaches only that bucket.
+
+```typescript title="src/api.ts"
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import { Uploads } from "./resources.ts";
+
+export default class Api extends DigitalOcean.App<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const putObject = yield* DigitalOcean.Spaces.PutObject(Uploads);
+    const listObjects = yield* DigitalOcean.Spaces.ListObjectsV2(Uploads);
+    return {
+      fetch: Effect.gen(function* () {
+        yield* putObject({ Key: "hello.txt", Body: "hello", ContentType: "text/plain" });
+        const listed = yield* listObjects({ Prefix: "" });
+        return HttpServerResponse.json((listed.Contents ?? []).map((o) => o.Key));
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(DigitalOcean.Spaces.PutObjectHttp, DigitalOcean.Spaces.ListObjectsV2Http),
+    ),
+  ),
+) {}
+```
+
+`GetObject`, `HeadObject` and `ListObjectsV2` read; `PutObject` and `DeleteObject` write. They work from any runtime: an App, a Function, or a Cloudflare Worker.
+
+## Serve it through the CDN
+
+```typescript
+const bucket = yield* Uploads;
+yield* DigitalOcean.Spaces.CdnEndpoint("Cdn", {
+  origin: bucket.domainName,
+  ttl: 3600,
+});
+```
+
+`customDomain` with a `certificateId` serves it on your own domain. Only public objects are served: set `acl: "public-read"` on the bucket.
+
+## Configure the bucket
+
+```typescript
+DigitalOcean.Spaces.Bucket("Uploads", {
+  region: "nyc3",
+  versioning: true,
+  cors: [{ allowedOrigins: ["https://example.com"], allowedMethods: ["GET", "PUT"] }],
+  lifecycleRules: [{ id: "expire-tmp", prefix: "tmp/", expirationDays: 7 }],
+});
+```
+
+Versioning keeps every version of an object. A lifecycle rule deletes objects under its prefix after `expirationDays`.
+
+## Create a key yourself
+
+For a program Alchemy doesn't deploy, create a key with the grants it needs:
+
+```typescript
+const key = yield* DigitalOcean.Spaces.Key("Backup", {
+  grants: [{ bucket: bucket.bucketName, permission: "read" }],
+});
+```
+
+`key.accessKeyId` and `key.secretAccessKey` work with any S3 client pointed at `https://nyc3.digitaloceanspaces.com`.
+
+## Limits
+
+- A bucket lives in one region; choose it near what reads it.
+- Deploys that change buckets need a Spaces key. Without one in your profile, each deploy creates a temporary key and deletes it when the deploy ends.
