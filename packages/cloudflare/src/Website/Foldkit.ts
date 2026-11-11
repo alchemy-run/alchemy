@@ -1,4 +1,3 @@
-import type { MemoOptions } from "alchemy/Command/Memo";
 import type { InputProps } from "alchemy/Input";
 import { effectClass } from "alchemy/Util/effect";
 import * as Effect from "effect/Effect";
@@ -9,15 +8,14 @@ import {
   type NormalizedBindings,
   type WorkerAssetsConfig,
   type WorkerBindingProps,
-  type WorkerProps,
 } from "../Workers/Worker.ts";
+import type { FrameworkWebsiteProps } from "./FrameworkWebsite.ts";
 
 const FOLDKIT_SOURCE_PROVIDER = "@alchemy.run/frontend-frameworks/foldkit/source";
 
-export interface FoldkitProps<Bindings extends WorkerBindingProps = {}> extends Omit<
-  WorkerProps<Bindings>,
-  "vite" | "main" | "assets" | "source" | "script" | "bundle" | "rules"
-> {
+export interface FoldkitProps<
+  Bindings extends WorkerBindingProps = {},
+> extends FrameworkWebsiteProps<Bindings> {
   /**
    * Custom Worker entry for a client-only app. Relative paths resolve from
    * {@link rootDir}; the Worker can serve client assets through `ASSETS`.
@@ -25,25 +23,6 @@ export interface FoldkitProps<Bindings extends WorkerBindingProps = {}> extends 
    * Worker handler from the app's server entry.
    */
   main?: string;
-  /**
-   * Foldkit project root directory, resolved from the working directory.
-   * @default process.cwd()
-   */
-  rootDir?: string;
-  /**
-   * Controls which files are content-hashed to decide whether to rebuild.
-   * Defaults to non-gitignored project files and the nearest lockfile, with
-   * imported workspaces detected from the build.
-   */
-  memo?: MemoOptions & {
-    /**
-     * Additional workspace directories to hash (relative to `rootDir`).
-     * By default (`"auto"`), workspaces are auto-detected from the build's
-     * module graph; an explicit array pins them.
-     * @default "auto"
-     */
-    workspaces?: "auto" | Array<MemoOptions & { cwd: string }>;
-  };
   /**
    * Overrides static asset routing defaults. Client-only apps, including
    * any app with a custom {@link main}, use
@@ -229,17 +208,14 @@ export const Foldkit: {
       ) => effectClass(Foldkit(id, propsEff))
     : Worker(
         id,
-        Effect.map(Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff), (props) => {
-          const { main, rootDir, memo, ...workerProps } = props ?? {};
-          return {
-            ...workerProps,
-            main: undefined!,
-            source: {
-              provider: FOLDKIT_SOURCE_PROVIDER,
-              devMode: "server",
-              rootDir,
-              options: { main, memo },
-            },
-          };
-        }),
+        Effect.map(Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff), (props) => ({
+          ...props,
+          main: null,
+          source: {
+            provider: FOLDKIT_SOURCE_PROVIDER,
+            devMode: "server",
+            rootDir: props?.rootDir,
+            options: { main: props?.main, memo: props?.memo },
+          },
+        })),
       )) as any;
