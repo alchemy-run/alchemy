@@ -15,6 +15,32 @@ import { denyUnlisted } from "./internal/SandboxHandle.ts";
 import type { VolumeMount } from "./MountVolume.ts";
 import type { Providers } from "./Providers.ts";
 
+/**
+ * A SOCKS5 proxy that carries a sandbox's outbound TCP. E2B applies the
+ * allow and deny rules first, then tunnels what's left through the proxy;
+ * code in the sandbox can't tell, and can't go around it.
+ */
+export interface SandboxEgressProxy {
+  /** The proxy's address, as `host:port`. */
+  address: string;
+  /** SOCKS5 username. */
+  username?: string;
+  /** SOCKS5 password. E2B never returns it. */
+  password?: string | Redacted.Redacted<string>;
+  /**
+   * Connect to the proxy over TLS, so the username and password aren't
+   * sent in the clear.
+   */
+  tls?: {
+    /** Whether to use TLS. */
+    enabled: boolean;
+    /** Name to check the proxy's certificate against. @default the host in `address` */
+    serverName?: string;
+    /** PEM certificates to trust instead of the system's, for a private CA. */
+    caCert?: string;
+  };
+}
+
 /** Egress rules for a declared sandbox, in E2B's shape. */
 export interface SandboxNetwork {
   /**
@@ -38,6 +64,22 @@ export interface SandboxNetwork {
    * `E2B.Secret`'s `ref` here to inject it at egress.
    */
   rules?: sandboxes.SandboxNetworkConfigRulesMap;
+  /**
+   * Send the sandbox's outbound TCP through a SOCKS5 proxy you run: a
+   * gateway that adds credentials, a static IP, or an audit log.
+   */
+  egressProxy?: SandboxEgressProxy;
+  /**
+   * The `Host` header requests to the sandbox's URLs arrive with, such as
+   * `localhost:${PORT}`. Changing it replaces the sandbox.
+   */
+  maskRequestHost?: string;
+  /**
+   * Ports where the sandbox serves HTTPS itself. E2B connects to them over
+   * TLS without checking the certificate. Changing them replaces the
+   * sandbox.
+   */
+  httpsPorts?: number[];
 }
 
 /**
@@ -87,8 +129,9 @@ export interface SandboxProps {
   /** Your own metadata. Changing it replaces the sandbox. */
   metadata?: Record<string, string>;
   /**
-   * Egress rules. `allowOut`, `denyOut`, `dnsServers` and `rules` update in
-   * place; `allowPublicTraffic` replaces the sandbox.
+   * Egress rules. `allowOut`, `denyOut`, `dnsServers`, `rules` and
+   * `egressProxy` update in place; `allowPublicTraffic`, `maskRequestHost`
+   * and `httpsPorts` replace the sandbox.
    */
   network?: SandboxNetwork;
   /**
@@ -150,7 +193,8 @@ export interface Sandbox extends Resource<
  *
  * :::caution
  * Replacing the sandbox (a new or rebuilt `template`, or new `env`,
- * `metadata`, `mounts`, `memory`, `autoResume` or `allowPublicTraffic`) starts a
+ * `metadata`, `mounts`, `memory`, `autoResume`, `allowPublicTraffic`,
+ * `maskRequestHost` or `httpsPorts`) starts a
  * fresh sandbox and kills the old one with its files. If E2B no longer has
  * the sandbox, the next deploy that updates it (or `alchemy drift`) creates
  * a new one.
@@ -196,6 +240,30 @@ export interface Sandbox extends Resource<
  *   network: { allowPublicTraffic: false },
  * });
  * // send sandbox.trafficAccessToken in the `e2b-traffic-access-token` header
+ * ```
+ *
+ * ### Egress through your own proxy
+ * E2B sends the sandbox's outbound TCP through a SOCKS5 proxy you run,
+ * after its allow and deny rules. Code in the sandbox can't tell, and
+ * can't go around it.
+ *
+ * **Example:** A proxy over TLS, with a password
+ * ```typescript
+ * import * as E2B from "@alchemy.run/e2b";
+ * import * as Config from "effect/Config";
+ * import { Node } from "./Node.ts";
+ *
+ * export const Proxied = E2B.Sandbox("Proxied", {
+ *   template: Node,
+ *   network: {
+ *     egressProxy: {
+ *       address: "proxy.example.com:1080",
+ *       username: "sandbox",
+ *       password: Config.Redacted("PROXY_PASSWORD"),
+ *       tls: { enabled: true },
+ *     },
+ *   },
+ * });
  * ```
  *
  * ### Using it at runtime
@@ -287,8 +355,29 @@ const mutableNetwork = (network: SandboxNetwork | sandboxes.SandboxNetworkConfig
     denyOut: [...(desired.denyOut ?? [])].sort(),
     dnsServers: desired.dnsServers === undefined ? undefined : [...desired.dnsServers].sort(),
     rules: desired.rules ?? {},
+    egressProxy: proxyIdentity(desired.egressProxy),
   };
 };
+
+const plain = (value: string | Redacted.Redacted<string> | undefined) =>
+  Redacted.isRedacted(value) ? Redacted.value(value) : value;
+
+/** An egress proxy without its password, which E2B never returns. */
+const proxyIdentity = (
+  proxy: SandboxEgressProxy | sandboxes.SandboxEgressProxyConfig | null | undefined,
+) =>
+  proxy === undefined || proxy === null
+    ? undefined
+    : {
+        address: proxy.address,
+        username: proxy.username ?? undefined,
+        tls: proxy.tls?.enabled
+          ? {
+              serverName: proxy.tls.serverName ?? undefined,
+              caCert: proxy.tls.caCert ?? undefined,
+            }
+          : undefined,
+      };
 
 const sameJson = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
@@ -314,6 +403,8 @@ const replacingProps = (props: SandboxProps) => ({
   metadata: props.metadata ?? {},
   mounts: mountsOf(props),
   allowPublicTraffic: props.network?.allowPublicTraffic ?? true,
+  maskRequestHost: props.network?.maskRequestHost,
+  httpsPorts: [...(props.network?.httpsPorts ?? [])].sort((a, b) => a - b),
 });
 
 export const SandboxProvider = () =>
@@ -402,6 +493,12 @@ export const SandboxProvider = () =>
             !sameJson(desiredNetwork.allowOut, observedNetwork.allowOut) ||
             !sameJson(desiredNetwork.denyOut, observedNetwork.denyOut) ||
             !sameJson(desiredNetwork.rules, observedNetwork.rules) ||
+            !sameJson(desiredNetwork.egressProxy, observedNetwork.egressProxy) ||
+            // The proxy's password can't be observed, so `olds` is the only
+            // signal it changed.
+            (olds !== undefined &&
+              plain(olds.network?.egressProxy?.password) !==
+                plain(news.network?.egressProxy?.password)) ||
             !dnsMatches
           ) {
             yield* session.note(`Updating sandbox ${detail.sandboxID} network...`);
@@ -410,6 +507,11 @@ export const SandboxProvider = () =>
               allowOut: desiredNetwork.allowOut,
               denyOut: desiredNetwork.denyOut,
               rules: desiredNetwork.rules,
+              // An update replaces the whole configuration: a field left
+              // out is cleared.
+              ...(news.network?.egressProxy === undefined
+                ? {}
+                : { egressProxy: news.network.egressProxy }),
               ...(desiredNetwork.dnsServers === undefined
                 ? {}
                 : { dnsServers: desiredNetwork.dnsServers }),

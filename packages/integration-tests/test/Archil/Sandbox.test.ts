@@ -4,6 +4,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as archil from "@distilled.cloud/archil";
 import * as Process from "@distilled.cloud/archil/Process";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Archil.providers() });
@@ -86,6 +87,49 @@ test.provider(
 
       yield* stack.destroy();
       expect(yield* observe(resized.sandbox.sandboxId)).toBeUndefined();
+    }),
+  { tags: ["provider:archil", "provider:archil:sandbox", "live"], timeout: 300_000 },
+);
+
+test.provider(
+  "egress adds a header to matching requests, and the sandbox never holds its value",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const app = (value: string) =>
+        Archil.Sandbox("Proxied", {
+          baseImage: "node:24-bookworm",
+          idleTtlSeconds: 300,
+          network: {
+            egress: {
+              default: "deny",
+              allow: [
+                {
+                  target: "postman-echo.com",
+                  headers: { "X-Alchemy-Secret": Redacted.make(value) },
+                },
+              ],
+            },
+          },
+        });
+      const echoed = (sid: string) =>
+        Process.exec(sid, "curl -sS -m 20 https://postman-echo.com/headers").pipe(
+          Effect.map((r) => r.stdout + r.stderr),
+        );
+
+      // Archil adds the header outside the sandbox, on the way to the target.
+      const sandbox = yield* stack.deploy(app("s3cr3t-value"));
+      expect(yield* echoed(sandbox.sandboxId)).toContain("s3cr3t-value");
+      const env = yield* Process.exec(sandbox.sandboxId, "env; cat /proc/1/environ");
+      expect(env.stdout).not.toContain("s3cr3t-value");
+
+      // A new value updates the policy on the running sandbox.
+      const rotated = yield* stack.deploy(app("r0tated-value"));
+      expect(rotated.sandboxId).toBe(sandbox.sandboxId);
+      expect(yield* echoed(sandbox.sandboxId)).toContain("r0tated-value");
+
+      yield* stack.destroy();
+      expect(yield* observe(sandbox.sandboxId)).toBeUndefined();
     }),
   { tags: ["provider:archil", "provider:archil:sandbox", "live"], timeout: 300_000 },
 );

@@ -53,6 +53,8 @@ yield* sandbox.setNetworkAccess({ blockNetwork: true });
 yield* sandbox.exec(["node", "agent-output.mjs"], { cwd: "/work" });
 ```
 
+The new policy replaces the old one, and Modal closes the connections it no longer allows. Pass an allow-list to narrow the network instead, or `{}` to open it again.
+
 ## Open a port through a tunnel
 
 List the ports when you create the sandbox. Each gets a tunnel, and `getTcpPort` returns its public URL and a client for it:
