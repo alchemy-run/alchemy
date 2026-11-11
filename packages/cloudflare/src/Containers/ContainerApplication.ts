@@ -945,6 +945,11 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
       image: string;
       digest?: string;
       configuration?: string;
+      /**
+       * Hash of the container configuration alone. Only a change to it
+       * creates a rollout; scaling and placement changes apply in place.
+       */
+      rollout?: string;
     };
     dev: DevContainerImage | undefined;
   },

@@ -1567,7 +1567,7 @@ describe.concurrent(
     );
 
     test.provider(
-      "restores declared zero and positive counts without rolling out unchanged configuration",
+      "applies and restores declared counts without rolling out unchanged configuration",
       (stack) =>
         Effect.gen(function* () {
           yield* stack.destroy();
@@ -1579,7 +1579,9 @@ describe.concurrent(
               instances,
               constraints: { jurisdiction: "eu", regions: ["WEUR", "EEUR"] },
             }).Application;
-          const identities = yield* Effect.forEach([0, 2], (instances) =>
+          // The same application goes 0 -> 2: a count change, like a
+          // restored count, updates it in place without a new version.
+          const steps = yield* Effect.forEach([0, 2], (instances) =>
             Effect.gen(function* () {
               const declared = yield* stack.deploy(program(instances));
               const identity = {
@@ -1600,14 +1602,18 @@ describe.concurrent(
               expect(restored.version).toBe(drifted.version);
               expect(restored.configuration).toEqual(drifted.configuration);
               expect(restored.maxInstances).toBe(2);
-              return identity;
+              return { identity, declared: declared.version, restored: restored.version };
             }),
           ).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie)));
-          for (const identity of identities) {
-            expect(
-              yield* waitForApplicationDeleted(identity.accountId, identity.applicationId),
-            ).toBeUndefined();
-          }
+          const [zero, two] = steps;
+          expect(two!.identity).toEqual(zero!.identity);
+          expect(two!.declared).toBe(zero!.restored);
+          expect(
+            yield* waitForApplicationDeleted(
+              zero!.identity.accountId,
+              zero!.identity.applicationId,
+            ),
+          ).toBeUndefined();
         }).pipe(logLevel),
       { timeout: 300_000 },
     );
