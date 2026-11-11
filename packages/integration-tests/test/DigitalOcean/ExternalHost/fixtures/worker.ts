@@ -49,6 +49,8 @@ export default class ExternalHostWorker extends Cloudflare.Worker<ExternalHostWo
     const searchLogs = yield* DigitalOcean.Insights.SearchLogs({ token });
     const createResponse = yield* DigitalOcean.Inference.CreateResponse({ key: token });
     const createMessage = yield* DigitalOcean.Inference.CreateMessage({ key: token });
+    const createImage = yield* DigitalOcean.Inference.CreateImage({ key: token });
+    const createSpeech = yield* DigitalOcean.Inference.CreateSpeech({ key: token });
 
     const respond = (effect: Effect.Effect<unknown, unknown, RuntimeContext>) =>
       effect.pipe(
@@ -117,6 +119,24 @@ export default class ExternalHostWorker extends Cloudflare.Worker<ExternalHostWo
                 (out) => ({ blocks: out.content.length }),
               ),
             );
+          case "/media":
+            return yield* respond(
+              Effect.gen(function* () {
+                const image = yield* createImage({
+                  model: "stable-diffusion-3.5-large",
+                  prompt: "a red circle on white",
+                  n: 1,
+                  size: "1024x1024",
+                });
+                const speech = yield* createSpeech({
+                  model: "qwen3-tts-voicedesign",
+                  input: "hello",
+                  voice: "default",
+                  instructions: "a calm voice",
+                });
+                return { images: image.data.length, audioBytes: speech.byteLength };
+              }),
+            );
           default:
             return HttpServerResponse.text("ok");
         }
@@ -133,6 +153,8 @@ export default class ExternalHostWorker extends Cloudflare.Worker<ExternalHostWo
         DigitalOcean.Insights.SearchLogsHttp,
         DigitalOcean.Inference.CreateResponseHttp,
         DigitalOcean.Inference.CreateMessageHttp,
+        DigitalOcean.Inference.CreateImageHttp,
+        DigitalOcean.Inference.CreateSpeechHttp,
       ),
     ),
   ),

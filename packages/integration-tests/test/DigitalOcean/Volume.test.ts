@@ -12,6 +12,7 @@ import {
 } from "@distilled.cloud/digitalocean";
 import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { forgetAttributes, isGone, logLevel, testName } from "./support.ts";
 
 const { test } = Test.make({ providers: DigitalOcean.providers() });
@@ -23,7 +24,11 @@ const LIVE_TIMEOUT = 240_000;
 const readVolume = (volumeId: string) =>
   getVolume({ volume_id: volumeId }).pipe(Effect.map((response) => response.volume));
 
-const isVolumeGone = (volumeId: string) => isGone(readVolume(volumeId));
+// A deleted volume can still answer a GET for a few seconds.
+const isVolumeGone = (volumeId: string) =>
+  isGone(readVolume(volumeId)).pipe(
+    Effect.repeat({ schedule: Schedule.spaced("3 seconds"), until: (gone) => gone, times: 10 }),
+  );
 
 test.provider(
   "volume lifecycle: create formatted, grow and retag in place, replace on shrink, destroy",

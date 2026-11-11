@@ -109,6 +109,17 @@ describe(
     );
 
     test(
+      "Inference CreateImage and CreateSpeech",
+      Effect.gen(function* () {
+        const media = yield* call("/media");
+        expectOk(media);
+        expect(media.result.images).toEqual(1);
+        expect(media.result.audioBytes).toBeGreaterThan(1000);
+      }),
+      { timeout: 240_000 },
+    );
+
+    test(
       "Insights QueryMetrics and SearchLogs with the token the caller passed",
       Effect.gen(function* () {
         const body = yield* call("/insights");

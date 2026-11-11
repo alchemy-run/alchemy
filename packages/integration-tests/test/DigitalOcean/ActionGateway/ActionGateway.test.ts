@@ -139,5 +139,6 @@ test.provider(
       );
       expect(["gone", "PROVIDER_CREDENTIAL_STATUS_DELETED"]).toContain(credentialStatus);
     }).pipe(logLevel),
-  { tags: LIVE_TAGS },
+  // A new actor's limits can take a minute to accept under load.
+  { tags: LIVE_TAGS, timeout: 300_000 },
 );

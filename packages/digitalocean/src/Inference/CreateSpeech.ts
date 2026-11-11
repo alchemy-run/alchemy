@@ -38,7 +38,7 @@ export interface CreateSpeech extends Binding.Service<
     (
       request: DO.CreateInferenceSpeechRequest,
     ) => Effect.Effect<
-      DO.SpeechResponse,
+      DO.InferenceCreateSpeechAudio,
       DO.CreateInferenceSpeechError | InferenceKeyMissing,
       RuntimeContext
     >
