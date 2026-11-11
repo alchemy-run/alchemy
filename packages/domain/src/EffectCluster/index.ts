@@ -16,7 +16,13 @@ import { PgClient } from "@effect/sql-pg";
 import { entrypointLayer, entrypointTag } from "alchemy/Runtime/Bootstrap";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { makeInputGate, type InputGateShape } from "alchemy/Workers/InputGate";
-import { decodeResult, encodeResult, payloadCodec } from "alchemy/WorkflowEncoding";
+import {
+  CurrentActivity,
+  decodeResult,
+  encodeResult,
+  makeCurrentActivity,
+  payloadCodec,
+} from "alchemy/WorkflowEncoding";
 import { ClusterSchema, DeliverAt, Entity as EffectEntity } from "effect/cluster";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
@@ -35,7 +41,7 @@ import { Rpc } from "effect/rpc";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import { SqlClient } from "effect/sql/SqlClient";
-import { DurableDeferred, Workflow, WorkflowEngine } from "effect/workflow";
+import { type Activity, DurableDeferred, Workflow, WorkflowEngine } from "effect/workflow";
 import {
   alarmCallbacks,
   className,
@@ -172,6 +178,50 @@ export class DomainClassNotHosted extends Data.TaggedError("Cluster.DomainClassN
   readonly message: string;
 }> {}
 
+/**
+ * The host's Postgres client, inside the model's objects. A projection's
+ * handler that writes through it joins the transaction that records the
+ * projection's progress: its rows and its checkpoint commit together.
+ */
+export class HostSql extends Context.Service<HostSql, SqlClient>()(
+  "alchemy/Domain/Cluster/HostSql",
+) {}
+
+/** {@link hostSql} was read outside an object of a model on this host. */
+export class DomainHostSqlUnavailable extends Data.TaggedError("Cluster.DomainHostSqlUnavailable")<{
+  readonly message: string;
+}> {}
+
+/**
+ * The host's Postgres client, for a projection's handler.
+ *
+ * **Example:** A store that commits with the projection's checkpoint
+ * ```typescript
+ * export const LedgerLive = Ledger.toLayer(
+ *   Effect.succeed(
+ *     Effect.fn(function* (batch) {
+ *       const sql = yield* DomainCluster.hostSql;
+ *       for (const { envelope, event } of batch)
+ *         yield* sql`INSERT INTO ledger (stream, seq, amount)
+ *           VALUES (${envelope.stream}, ${envelope.seq}, ${event.amount})`.pipe(Effect.orDie);
+ *     }),
+ *   ),
+ * );
+ * ```
+ */
+export const hostSql: Effect.Effect<SqlClient> = Effect.flatMap(
+  Effect.serviceOption(HostSql),
+  Option.match({
+    onNone: () =>
+      Effect.die(
+        new DomainHostSqlUnavailable({
+          message: "DomainCluster.hostSql is read only inside a model's object on Effect Cluster.",
+        }),
+      ),
+    onSome: Effect.succeed,
+  }),
+);
+
 /** A saga's workflow engine was used before the runner joined the cluster. */
 export class DomainEngineNotStarted extends Data.TaggedError("Cluster.DomainEngineNotStarted")<{
   readonly message: string;
@@ -278,6 +328,30 @@ const remoteEngine = (workflows: Namespace): WorkflowEngine.WorkflowEngine["Serv
     scheduleClock: () => outside("sleep"),
   });
 };
+
+/**
+ * Effect Cluster's engine, as a saga's run sees it: each step runs with
+ * its own sequence of command ids (`CurrentActivity`), so a step that runs
+ * again, after its runner died, sends the same commands. Effect Cluster
+ * runs a step with the context it was called with.
+ */
+const withStepIds = (
+  engine: WorkflowEngine.WorkflowEngine["Service"],
+): WorkflowEngine.WorkflowEngine["Service"] =>
+  WorkflowEngine.WorkflowEngine.of({
+    ...engine,
+    activityExecute: ((activity: Activity.Any, attempt: number) =>
+      Effect.flatMap(WorkflowEngine.WorkflowInstance, (instance) =>
+        engine
+          .activityExecute(activity as never, attempt)
+          .pipe(
+            Effect.provideService(
+              CurrentActivity,
+              makeCurrentActivity(instance.workflow._tag, instance.executionId, activity.name),
+            ),
+          ),
+      )) as never,
+  });
 
 /** A deferred left to Effect Cluster's engine to encode: its value arrives already encoded. */
 const encodedDeferred = (name: string) =>
@@ -514,9 +588,14 @@ export const layerEntities = <PoolReq>(
           exclusive: (effect) => gate.exclusive(effect),
           // Background work stays part of the call that started it.
           waitUntil: (effect) => Effect.asVoid(Effect.forkIn(effect, instanceScope)),
+          // A handler writes through `hostSql`, the client of `storage`.
+          handlersJoinTransaction: true,
         };
         const runtime = yield* RuntimeContext;
+        // Every event of the instance sees the host's client.
+        const withSql = Effect.provideService(HostSql, client);
         const record = yield* build.pipe(
+          withSql,
           Effect.provideService(ObjectState, state),
           Effect.provideService(RuntimeContext, {
             ...runtime,
@@ -533,7 +612,10 @@ export const layerEntities = <PoolReq>(
                       ...(JSON.parse(payload.args) as ReadonlyArray<unknown>),
                     )
                   : Effect.die(new Error(`${id} has no method ${payload.method}`));
-              }).pipe(Effect.map((result) => JSON.stringify(result ?? null))),
+              }).pipe(
+                Effect.map((result) => JSON.stringify(result ?? null)),
+                withSql,
+              ),
             ),
           Wake: ({ payload }) =>
             gate.call(
@@ -541,7 +623,7 @@ export const layerEntities = <PoolReq>(
                 const at = yield* storage.get<number>("~alarm");
                 if (at !== undefined && at <= payload.at) yield* storage.delete("~alarm");
                 yield* callbacks.fire;
-              }),
+              }).pipe(withSql),
             ),
         });
       });
@@ -583,8 +665,15 @@ export const layerEntities = <PoolReq>(
           hosted,
           Effect.gen(function* () {
             const clusterEngine = yield* WorkflowEngine.WorkflowEngine;
+            const runs = withStepIds(clusterEngine);
             for (const [workflow, execute] of yield* Ref.get(registrations))
-              yield* clusterEngine.register(workflow as never, execute as never);
+              yield* clusterEngine.register(
+                workflow as never,
+                ((payload: unknown, id: string) =>
+                  execute(payload, id).pipe(
+                    Effect.provideService(WorkflowEngine.WorkflowEngine, runs),
+                  )) as never,
+              );
             yield* Deferred.succeed(engine, clusterEngine);
           }).pipe(Layer.effectDiscard),
         );

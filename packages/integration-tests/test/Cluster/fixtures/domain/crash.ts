@@ -22,14 +22,14 @@ export interface CrashOptions {
   readonly stack: { readonly name: string; readonly stage: string };
 }
 
-const docker = (args: ReadonlyArray<string>) => {
+export const docker = (args: ReadonlyArray<string>) => {
   const result = NodeChildProcess.spawnSync("docker", args, { encoding: "utf8" });
   if (result.status !== 0) throw new Error(`docker ${args.join(" ")}: ${result.stderr.trim()}`);
   return result.stdout.trim();
 };
 
 /** The pool's Swarm service. */
-const poolService = (stack: CrashOptions["stack"]) =>
+export const poolService = (stack: CrashOptions["stack"]) =>
   docker([
     "service",
     "ls",
@@ -44,7 +44,7 @@ const poolService = (stack: CrashOptions["stack"]) =>
   ]);
 
 /** The running containers of the pool: one per runner. */
-const runners = (stack: CrashOptions["stack"]) => {
+export const runners = (stack: CrashOptions["stack"]) => {
   const service = poolService(stack);
   const ids = docker([
     "ps",
@@ -57,7 +57,7 @@ const runners = (stack: CrashOptions["stack"]) => {
 };
 
 /** SIGKILL one runner: no shutdown, no shard handoff. Swarm starts a new task in its place. */
-const killOne = (stack: CrashOptions["stack"]) =>
+export const killOne = (stack: CrashOptions["stack"]) =>
   Effect.sync(() => {
     const [victim] = runners(stack);
     if (victim === undefined) throw new Error("the pool has no running runner");
@@ -66,7 +66,7 @@ const killOne = (stack: CrashOptions["stack"]) =>
   });
 
 /** Wait until the pool runs two runners again, neither of them `killed`. */
-const bothRunning = (stack: CrashOptions["stack"], killed: string) =>
+export const bothRunning = (stack: CrashOptions["stack"], killed: string) =>
   Effect.sync(() => runners(stack)).pipe(
     Effect.filterOrFail(
       (running) => running.length === 2 && !running.includes(killed),
@@ -75,9 +75,9 @@ const bothRunning = (stack: CrashOptions["stack"], killed: string) =>
     Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 90 }),
   );
 
-const fresh = (name: string) => `${name}-${crypto.randomUUID().slice(0, 8)}`;
+export const fresh = (name: string) => `${name}-${crypto.randomUUID().slice(0, 8)}`;
 
-const get = <T>(base: string, path: string) =>
+export const get = <T>(base: string, path: string) =>
   Effect.gen(function* () {
     const client = yield* HttpClient.HttpClient;
     const response = yield* client.get(`${base}${path}`);
@@ -90,7 +90,7 @@ const get = <T>(base: string, path: string) =>
   }).pipe(Effect.timeout("30 seconds"));
 
 /** How long a case waits for the cluster to recover: the dead runner's shards move on. */
-const RECOVERY = 180_000;
+export const RECOVERY = 180_000;
 
 export const crash = ({ test, url, stack }: CrashOptions) => {
   const call = <T>(path: string) => get<T>(url, path);

@@ -1,13 +1,18 @@
 /**
  * The front of the Domain conformance suite: a Docker service on the
- * database's network that runs the model's Api side and reaches its
- * entities through the pool's gateway.
+ * database's network that runs the models' Api side and reaches their
+ * entities through the pool's gateway: the conformance model, and the
+ * contract model under `/contract`.
  */
 import * as Docker from "@alchemy.run/docker";
 import * as Cluster from "@alchemy.run/effect-cluster";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as Layer from "effect/Layer";
 import { app } from "../../../Domain/conformance/app.ts";
 import { DOMAIN_FRONT_PORT, DomainDatabase } from "./cluster.ts";
+import { contractApp } from "./contract-app.ts";
+import { ContractClusterLive } from "./contract-live.ts";
 import { ConformanceClusterLive } from "./live.ts";
 
 export default class DomainFront extends Docker.Service<DomainFront>()(
@@ -22,6 +27,14 @@ export default class DomainFront extends Docker.Service<DomainFront>()(
     };
   }).pipe(Effect.provide(DomainDatabase)),
   Effect.gen(function* () {
-    return { fetch: yield* app };
-  }).pipe(Effect.provide(ConformanceClusterLive)),
+    const conformance = yield* app;
+    const contract = yield* contractApp;
+    return {
+      fetch: Effect.flatMap(HttpServerRequest, (request) =>
+        new URL(request.url, "http://front").pathname.startsWith("/contract/")
+          ? contract
+          : conformance,
+      ),
+    };
+  }).pipe(Effect.provide(Layer.merge(ConformanceClusterLive, ContractClusterLive))),
 ) {}

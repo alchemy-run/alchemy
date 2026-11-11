@@ -118,6 +118,25 @@ Commands to one aggregate instance run one at a time. Its events, new state and 
 
 Every event reaches the views, projections and policies that consume it, at least once and in order for each source, even if a runner restarts in between. Scheduled commands are persisted messages, delivered when they're due on whichever runner then owns the instance.
 
+## Write a projection's rows with its progress
+
+A projection's handler that writes through `DomainCluster.hostSql` writes in the same Postgres transaction that records the projection's progress. Its rows and its checkpoint commit together; a run that fails leaves no row, and runs again:
+
+```typescript
+export const LedgerLive = Ledger.toLayer(
+  Effect.succeed(
+    Effect.fn(function* (batch) {
+      const sql = yield* DomainCluster.hostSql;
+      for (const { envelope, event } of batch)
+        yield* sql`INSERT INTO ledger (stream, seq, amount)
+          VALUES (${envelope.stream}, ${envelope.seq}, ${event.amount})`.pipe(Effect.orDie);
+    }),
+  ),
+);
+```
+
+The instance holds its other events while the handler runs, so keep the handler short.
+
 ## Read live over HTTP
 
 Effect Cluster entities hold no WebSockets, so serve the Api with `Domain.protocolHttp`. A `watch` or `events` read is a streamed response, fed by polling the entity that owns the key. `Domain.protocolWebSocket` answers `501` here.

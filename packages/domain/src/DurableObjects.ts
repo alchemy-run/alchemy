@@ -118,6 +118,14 @@ export interface ObjectStateShape {
   /** Run `effect` in the background, keeping the instance alive until it ends. */
   waitUntil(effect: Effect.Effect<void>): Effect.Effect<void>;
   /**
+   * Whether `storage.transaction` is a database transaction that a
+   * projection's handler can write in too (the Effect Cluster host: one
+   * Postgres client). A projection then runs its handler and records its
+   * checkpoint in one transaction, with the instance held: its rows and its
+   * progress commit together, or neither does.
+   */
+  readonly handlersJoinTransaction?: boolean;
+  /**
    * Live reads pushed over WebSockets the object holds. Without it, live
    * reads are streamed responses that poll the object.
    */
@@ -1300,21 +1308,27 @@ const projectionObject = (
             ) {
               return yield* wake(run[0]!.at + waitMillis);
             }
-            yield* kit.run(meta.key, run);
-            yield* exclusively(
-              Effect.gen(function* () {
-                const current = yield* readMeta;
-                const handled: Record<string, number> = {};
-                for (const { delivery } of run) {
-                  handled[delivery.source] = Math.max(handled[delivery.source] ?? 0, delivery.seq);
-                }
-                yield* state.storage.put("meta", {
-                  ...current,
-                  processed: run[run.length - 1]!.position,
-                  checkpoints: mergeCheckpoints(current.checkpoints, handled),
-                } satisfies ProjectionMeta);
-              }),
-            );
+            const checkpoint = Effect.gen(function* () {
+              const current = yield* readMeta;
+              const handled: Record<string, number> = {};
+              for (const { delivery } of run) {
+                handled[delivery.source] = Math.max(handled[delivery.source] ?? 0, delivery.seq);
+              }
+              yield* state.storage.put("meta", {
+                ...current,
+                processed: run[run.length - 1]!.position,
+                checkpoints: mergeCheckpoints(current.checkpoints, handled),
+              } satisfies ProjectionMeta);
+            });
+            if (state.handlersJoinTransaction) {
+              // A failed run rolls back its writes with the checkpoint.
+              yield* exclusively(
+                state.storage.transaction(Effect.andThen(kit.run(meta.key, run), checkpoint)),
+              );
+            } else {
+              yield* kit.run(meta.key, run);
+              yield* exclusively(checkpoint);
+            }
           }
         }),
       );
