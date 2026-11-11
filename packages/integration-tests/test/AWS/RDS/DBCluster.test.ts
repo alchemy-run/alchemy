@@ -5,10 +5,12 @@ import type { DBClusterProps } from "@alchemy.run/aws/RDS/DBCluster";
 import { DBSubnetGroup } from "@alchemy.run/aws/RDS/DBSubnetGroup";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import * as rds from "@distilled.cloud/aws/rds";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
+import { interruptDestroy } from "../../interruptDestroy.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -316,4 +318,44 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       yield* stack.destroy();
     }),
   { tags: ["provider:aws", "provider:aws:ec2", "provider:aws:rds", "live"], timeout: 2_400_000 },
+);
+
+// A destroy interrupted while it waits for RDS leaves the cluster `deleting`
+// and still in state. RDS accepts a second delete of a deleting cluster; this
+// pins that the next destroy finishes it.
+test.provider.skipIf(!!process.env.FAST)(
+  "delete: a destroy interrupted mid-delete finishes on the next destroy",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const cluster = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* DBCluster("InterruptedCluster", {
+            engine: "aurora-postgresql",
+            engineMode: "provisioned",
+            serverlessV2ScalingConfiguration: { MinCapacity: 0.5, MaxCapacity: 1 },
+            manageMasterUserPassword: true,
+            masterUsername: "alchemy",
+          });
+        }),
+      );
+
+      yield* interruptDestroy(stack, {
+        status: rds
+          .describeDBClusters({ DBClusterIdentifier: cluster.dbClusterIdentifier })
+          .pipe(Effect.map((response) => response.DBClusters?.[0]?.Status)),
+        deleting: "deleting",
+      });
+      yield* stack.destroy();
+
+      const remaining = yield* rds
+        .describeDBClusters({ DBClusterIdentifier: cluster.dbClusterIdentifier })
+        .pipe(
+          Effect.map((response) => response.DBClusters?.[0]?.Status),
+          Effect.catchTag("DBClusterNotFoundFault", () => Effect.succeed("gone" as const)),
+        );
+      expect(remaining).toBe("gone");
+    }),
+  { tags: ["provider:aws", "provider:aws:rds", "live"], timeout: 1_800_000 },
 );
