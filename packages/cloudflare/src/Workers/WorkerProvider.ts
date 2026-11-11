@@ -233,6 +233,24 @@ export const resolvePreviewParentName = (preview: WorkerProps["preview"]): strin
   return typeof workerName === "string" ? workerName : undefined;
 };
 
+/**
+ * Whether a Preview's observed observability already holds every field the
+ * desired settings set. A desired `false` also matches an absent field, so
+ * a Preview that never had traces is not patched to turn them off.
+ */
+const observabilityCovered = (desired: unknown, observed: unknown): boolean => {
+  if (desired === undefined) return true;
+  if (desired === false) return observed === undefined || observed === null || observed === false;
+  if (Array.isArray(desired)) return JSON.stringify(desired) === JSON.stringify(observed ?? []);
+  if (desired !== null && typeof desired === "object") {
+    const fields = (observed ?? {}) as Record<string, unknown>;
+    return Object.entries(desired).every(([key, value]) =>
+      observabilityCovered(value, fields[key]),
+    );
+  }
+  return desired === observed;
+};
+
 const toPreviewWireKey = (key: string) => key.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
 
 const toPreviewWire = (value: unknown): unknown => {
@@ -2960,7 +2978,9 @@ export const LiveWorkerProvider = () =>
        * Reconcile a *Preview Worker*: create/update a first-class Preview of
        * the parent script and upload this Worker's code + bindings as a
        * Preview deployment. Isolated same-Worker Durable Object classes
-       * get their own namespace per Preview.
+       * get their own namespace per Preview, which the Preview reports in
+       * `durableObjectNamespaces` so a class's container application
+       * attaches to it.
        */
       const putWorkerPreview = Effect.fn(function* (
         id: string,
@@ -3058,7 +3078,29 @@ export const LiveWorkerProvider = () =>
             }),
           );
 
-        const previewResource =
+        // Cloudflare keeps observability per Preview, independent of the
+        // parent, and a new Preview starts with it off. It must be on the
+        // Preview before the deployment is created: a deployment created
+        // first is not recorded, even after a later PATCH. An omitted
+        // section is turned off explicitly, so removing traces or logs from
+        // the props turns them off on an existing Preview.
+        const resolvedObservability = yield* resolveObservability(news, bindings);
+        // The Preview API takes no `null` sampling rate; omit it instead.
+        const sampled = <T extends { headSamplingRate?: number | null }>(settings: T) => ({
+          ...settings,
+          headSamplingRate: settings.headSamplingRate ?? undefined,
+        });
+        const observability = {
+          ...sampled(resolvedObservability),
+          logs: resolvedObservability.logs
+            ? sampled(resolvedObservability.logs)
+            : { enabled: false },
+          traces: resolvedObservability.traces
+            ? sampled(resolvedObservability.traces)
+            : { enabled: false },
+        };
+
+        const createdPreview =
           existingPreview ??
           (yield* workers
             .createPreview({
@@ -3066,6 +3108,7 @@ export const LiveWorkerProvider = () =>
               workerId: parentName,
               name: previewName,
               ignoreBaseConfig: true,
+              observability,
             })
             .pipe(
               Effect.catchTag("PreviewAlreadyExists", () =>
@@ -3087,6 +3130,17 @@ export const LiveWorkerProvider = () =>
                 ),
               ),
             ));
+
+        // Sync against the observed settings: an existing (or raced)
+        // Preview may carry different or no observability.
+        const previewResource = observabilityCovered(observability, createdPreview.observability)
+          ? createdPreview
+          : yield* workers.updatePreview({
+              accountId,
+              workerId: parentName,
+              previewId: createdPreview.id,
+              observability,
+            });
 
         const accountSubdomain = yield* getAccountSubdomain(accountId);
         const parentAttrs =
@@ -3183,6 +3237,18 @@ export const LiveWorkerProvider = () =>
           }
         }
 
+        // A container-backed class carries its images as the parent's does,
+        // without the parent's application name: the Preview's namespace gets
+        // its own application, attached through `durableObjectNamespaces`.
+        const containerRows = bindings.flatMap((b) => b.data.containers ?? []);
+        yield* assertBindingContainersOnAsyncClasses(
+          containerRows,
+          effectNativeDurableObjectClasses(news.exports),
+        );
+        const containers = (yield* mergeWorkerContainers(containerRows)).map(
+          ({ className, images }) => ({ className, images }),
+        );
+
         const compatibility = getCompatibility(news);
         const annotations =
           preview.message !== undefined || preview.tag !== undefined
@@ -3207,6 +3273,9 @@ export const LiveWorkerProvider = () =>
             cacheOptions: news.cache ?? getCacheBinding(bindings),
             annotations,
             migrations,
+            containers: containers.length > 0 ? containers : undefined,
+            limits: news.limits,
+            placement: news.placement,
             exports: nonEmptyExports(
               yield* workerEntrypointExports(parentName, news.entrypoints, classNames),
             ),
@@ -3214,6 +3283,16 @@ export const LiveWorkerProvider = () =>
           },
           files: bundle.files,
         });
+
+        const durableObjectNamespaces =
+          classNames.length > 0
+            ? yield* getPreviewDurableObjectNamespaces(
+                accountId,
+                parentName,
+                deployment.previewId ?? previewResource.id,
+                classNames,
+              )
+            : {};
 
         const refreshed = yield* workers
           .getPreview({ accountId, workerId: parentName, previewId: previewResource.id })
@@ -3233,7 +3312,7 @@ export const LiveWorkerProvider = () =>
           urls,
           domain: undefined,
           tags: undefined,
-          durableObjectNamespaces: {},
+          durableObjectNamespaces,
           accountId,
           routes: [],
           crons: [],
@@ -4367,10 +4446,17 @@ export const LiveWorkerProvider = () =>
             ? yield* reconcileCrons(name, desiredCrons, previousCrons, session)
             : [];
         if (!dispatchNamespace && versionId === undefined) {
-          const { deployments } = yield* workers.listScriptDeployments({
-            accountId,
-            scriptName: name,
-          });
+          // Same eventual-consistency window as `setWorkerSubdomain`: on a
+          // Worker's first deploy, GET /deployments can still return
+          // `WorkerNotFound` (code 10007) after `putScript` succeeded (#2999).
+          const { deployments } = yield* workers
+            .listScriptDeployments({ accountId, scriptName: name })
+            .pipe(
+              Effect.retry({
+                while: (error) => error._tag === "WorkerNotFound",
+                schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(8)]),
+              }),
+            );
           const active = deployments[0];
           deploymentId = active?.id;
           versionId = active?.versions.find((version) => version.percentage === 100)?.versionId;
@@ -4781,8 +4867,13 @@ export const LiveWorkerProvider = () =>
           // update even when nothing else changed, so reconcile re-records
           // the immutable Worker ID.
           const legacyWorkerId = cachedWorkerId(output.workerId, output.workerName) === undefined;
+          // Previews deployed by older releases recorded no namespaces, so
+          // their classes' container applications never attached. Plan one
+          // update so reconcile records them.
+          const previewNamespacesMissing = newIsPreview && !doNamespacesStable;
           if (
             legacyWorkerId ||
+            previewNamespacesMissing ||
             domainsChanged ||
             routesChanged ||
             cronsChanged ||
@@ -5743,6 +5834,42 @@ const listDurableObjectNamespaces = (accountId: string, dispatchNamespace?: stri
           : [],
       ),
     ),
+  );
+
+/**
+ * The namespace Cloudflare provisioned for each of a Preview's own Durable
+ * Object classes, by class. A Preview's namespaces name the parent Worker as
+ * their `script`, like the parent's own, and carry the Preview's id. They can
+ * appear in the listing shortly after the Preview deployment that creates
+ * them, so a missing class is retried before it fails.
+ */
+const getPreviewDurableObjectNamespaces = (
+  accountId: string,
+  parentName: string,
+  previewId: string,
+  classNames: readonly string[],
+) =>
+  durableObjectsApi.listNamespaces.items({ accountId }).pipe(
+    Stream.runCollect,
+    Effect.flatMap((namespaces) => {
+      const byClass: Record<string, string> = {};
+      for (const ns of namespaces) {
+        if (ns.id && ns.class && ns.script === parentName && ns.preview?.id === previewId) {
+          byClass[ns.class] = ns.id;
+        }
+      }
+      const missing = classNames.filter((className) => !byClass[className]);
+      return missing.length > 0
+        ? Effect.fail(new MissingDurableObjects({ scriptName: parentName, expected: missing }))
+        : Effect.succeed(
+            Object.fromEntries(classNames.map((className) => [className, byClass[className]!])),
+          );
+    }),
+    Effect.retry({
+      while: (error) => error._tag === "MissingDurableObjects",
+      schedule: Schedule.spaced("1 second"),
+      times: 15,
+    }),
   );
 
 type ObservedDurableObjectNamespace = {

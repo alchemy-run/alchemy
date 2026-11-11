@@ -58,6 +58,8 @@ export const TAB_ICONS: Record<string, string | undefined> = {
   Modal: b("modal"),
   Archil: b("archil"),
   Boat: b("boat"),
+  // The Sandboxes dropdown's link to the AWS hub's Nitro Sandboxes page.
+  "AWS Nitro": b("aws"),
   Prisma: b("prisma"),
   DigitalOcean: b("digitalocean"),
   // Brand-colored prism for marketing surfaces.

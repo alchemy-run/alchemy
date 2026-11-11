@@ -18,7 +18,7 @@ import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import { Activity, Workflow as EffectWorkflow, WorkflowEngine } from "effect/workflow";
 import type { Worker } from "../Workers/Worker.ts";
-import { Workflow, type WorkflowHandle } from "./Workflow.ts";
+import { Workflow, type WorkflowHandle, type WorkflowStepConfig } from "./Workflow.ts";
 import { WorkflowStep } from "./WorkflowRuntime.ts";
 
 /** What each Cloudflare Workflow instance runs: one execution of one Effect workflow. */
@@ -54,6 +54,52 @@ const currentRun = (operation: string) =>
       ? Effect.succeed(run.value)
       : Effect.die(new Error(`NativeEngine: ${operation} only runs inside a workflow run`)),
   );
+
+/**
+ * The Cloudflare `step.do` config (timeout, native retries) that
+ * `NativeEngine` runs every attempt of one Activity with. Set it with
+ * {@link withStepConfig}. Unset, Cloudflare's defaults apply: a 10-minute
+ * timeout and 5 retries.
+ */
+export const ActivityStepConfig = Context.Reference<WorkflowStepConfig | undefined>(
+  "alchemy/Cloudflare/Workflows/NativeEngine/ActivityStepConfig",
+  { defaultValue: () => undefined },
+);
+
+/**
+ * Run every attempt of an Activity as a `step.do` with this timeout and
+ * native retry policy on `NativeEngine`. Unset, Cloudflare's defaults apply:
+ * a 10-minute timeout and 5 retries.
+ *
+ * `retries` are Cloudflare's retries inside one step: a defect the workflow
+ * doesn't capture fails the step, and Cloudflare runs it again. With
+ * `limit: 0` the first defect is final. `Activity.retry` is separate: it runs
+ * the Activity again as a new step, each with this config.
+ *
+ * `DurableObjectEngine` has no step timeout and ignores the config.
+ *
+ * Pipe it straight onto the Activity, before any Effect combinator turns it
+ * into a plain `Effect`.
+ *
+ * ```ts
+ * const encode = Activity.make({
+ *   name: "encode",
+ *   success: Schema.String,
+ *   execute: transcode(input),
+ * }).pipe(
+ *   Cloudflare.Workflows.withStepConfig({
+ *     timeout: "16 minutes",
+ *     retries: { limit: 6, delay: "15 seconds", backoff: "exponential" },
+ *   }),
+ * );
+ * ```
+ */
+export const withStepConfig =
+  (config: WorkflowStepConfig) =>
+  <Success extends Schema.Constraint, Error extends Schema.Constraint, R>(
+    self: Activity.Activity<Success, Error, R>,
+  ): Activity.Activity<Success, Error, R> =>
+    self.annotate(ActivityStepConfig, config);
 
 /**
  * A name Cloudflare accepts for an instance id or event type: up to 100
@@ -194,6 +240,26 @@ const resultOf = (
  *     Effect.provide(SendWelcomeLive.pipe(Layer.provideMerge(Cloudflare.Workflows.NativeEngine))),
  *   ),
  * ) {}
+ * ```
+ *
+ * ### Configuring an Activity's step
+ * **Example:** Raise the step timeout and set native retries
+ * ```typescript
+ * import * as Cloudflare from "@alchemy.run/cloudflare";
+ * import * as Schema from "effect/Schema";
+ * import { Activity } from "effect/workflow";
+ *
+ * // Cloudflare stops a step after 10 minutes unless its config says otherwise.
+ * const encode = Activity.make({
+ *   name: "encode",
+ *   success: Schema.String,
+ *   execute: transcode(input),
+ * }).pipe(
+ *   Cloudflare.Workflows.withStepConfig({
+ *     timeout: "16 minutes",
+ *     retries: { limit: 6, delay: "15 seconds", backoff: "exponential" },
+ *   }),
+ * );
  * ```
  *
  * @layer
@@ -353,6 +419,7 @@ export const NativeEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, never, Wor
           for (let generation = 0; ; generation++) {
             const text = yield* run.step
               .do({
+                ...Context.get(activity.annotations, ActivityStepConfig),
                 name:
                   generation === 0
                     ? `${activity.name}/${attempt}`

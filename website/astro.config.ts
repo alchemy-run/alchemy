@@ -830,6 +830,7 @@ export default defineConfig({
                 { label: "Lambda Web Functions", link: "/aws/compute/web-functions" },
                 { label: "Effect workflows", link: "/aws/compute/effect-workflows" },
                 { label: "ECS", link: "/aws/compute/ecs" },
+                { label: "ECS Sandboxes", link: "/aws/compute/ecs-sandboxes" },
                 { label: "EKS", link: "/aws/compute/eks" },
                 { label: "EC2", link: "/aws/compute/ec2" },
                 { label: "HyperPod", link: "/aws/compute/hyperpod" },
@@ -1691,6 +1692,7 @@ export default defineConfig({
                 { label: "Account & API keys", link: "/boat/account-and-keys" },
                 { label: "Credentials & bindings", link: "/boat/security/credentials" },
                 { label: "Environments & secrets", link: "/boat/security/environments" },
+                { label: "Credential profiles", link: "/boat/security/credential-profiles" },
               ],
             },
             {

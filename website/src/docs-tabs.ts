@@ -19,7 +19,8 @@
 export interface DocsTab {
   label: string;
   href: string;
-  /** URL path prefixes this tab owns (matched on segment boundaries). */
+  /** URL path prefixes this tab owns (matched on segment boundaries). A hub
+   * with none is only a link in its dropdown, to a page another tab owns. */
   prefixes: string[];
   slot: "start" | "hub" | "end";
   /** Dropdown category (required for slot: "hub"). */
@@ -119,6 +120,16 @@ export const DOCS_TABS: DocsTab[] = [
   ]),
   hub("Archil", "archil", "Sandboxes", "sandboxes · disks · branches", ["/providers/archil"]),
   hub("Boat", "boat", "Sandboxes", "sandboxes · snapshots · environments", ["/providers/boat"]),
+  // A page of the AWS hub, listed with the sandbox providers. It owns no
+  // prefix, so the page keeps the AWS tab and its sidebar.
+  {
+    label: "AWS Nitro",
+    href: "/aws/compute/nitro-sandboxes",
+    prefixes: [],
+    slot: "hub",
+    category: "Sandboxes",
+    hint: "sandboxes · ECS · EKS · EC2",
+  },
 
   hub("Rivet", "rivet", "Actors", "durable objects · control planes · pools", ["/providers/rivet"]),
   hub("Effect Cluster", "cluster", "Actors", "entities · workflows · pools", [
