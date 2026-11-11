@@ -62,7 +62,6 @@
     "./Diagnostics": "./src/Diagnostics/index.ts",
     "./Dlp": "./src/Dlp/index.ts",
     "./DNS": "./src/DNS/index.ts",
-    "./Domain": "./src/Domain/index.ts",
     "./Email": "./src/Email/index.ts",
     "./Firewall": "./src/Firewall/index.ts",
     "./Flagship": "./src/Flagship/index.ts",
@@ -338,12 +337,6 @@
         "bun": "./src/DNS/index.ts",
         "worker": "./src/DNS/index.ts",
         "default": "./lib/DNS/index.js"
-      },
-      "./Domain": {
-        "types": "./lib/Domain/index.d.ts",
-        "bun": "./src/Domain/index.ts",
-        "worker": "./src/Domain/index.ts",
-        "default": "./lib/Domain/index.js"
       },
       "./Email": {
         "types": "./lib/Email/index.d.ts",
@@ -789,7 +782,6 @@
     "tinyglobby": "catalog:"
   },
   "devDependencies": {
-    "@alchemy.run/domain": "workspace:*",
     "@alchemy.run/frontend-frameworks": "workspace:*",
     "@cloudflare/workers-types": "catalog:",
     "@effect/platform-bun": "catalog:",
@@ -803,7 +795,6 @@
     "vite": "catalog:"
   },
   "peerDependencies": {
-    "@alchemy.run/domain": "workspace:*",
     "@alchemy.run/frontend-frameworks": "workspace:*",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
@@ -812,9 +803,6 @@
     "vite": "catalog:frontend-peer"
   },
   "peerDependenciesMeta": {
-    "@alchemy.run/domain": {
-      "optional": true
-    },
     "@alchemy.run/frontend-frameworks": {
       "optional": true
     },

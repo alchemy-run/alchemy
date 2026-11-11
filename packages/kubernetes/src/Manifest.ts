@@ -210,7 +210,7 @@ export const Manifest = Resource<Manifest>("Kubernetes.Manifest", {
 
 const toObjectDefinition = (
   manifest: KubernetesManifest,
-): Effect.Effect<KubernetesObjectDefinition, Error> => {
+): Effect.Effect<KubernetesObjectDefinition, ManifestInvalidProps> => {
   const name = manifest.metadata?.name;
   if (!name) {
     return Effect.fail(

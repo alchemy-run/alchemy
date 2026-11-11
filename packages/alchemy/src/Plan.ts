@@ -1,4 +1,3 @@
-/** @effect-diagnostics anyUnknownInErrorContext:off */
 /** @effect-diagnostics missingEffectError:off */
 import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";

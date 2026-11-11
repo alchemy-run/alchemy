@@ -6,12 +6,14 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import {
+  type ArchivePlatformError,
   isArchivedRegularFile,
   readDirectoryEntriesSecure,
   writeCompressedArchiveSecure,
   type ArchiveTarEntry,
 } from "./internal/ArchivePlatform.ts";
 import {
+  type ArtifactFileError,
   inspectArtifactFile,
   inspectVerifiedFile,
   readArtifactFile,
@@ -131,7 +133,13 @@ export class ComputeArchiveOptionsError extends Data.TaggedError("ComputeArchive
   readonly cause?: unknown;
 }> {}
 
-type ArchiveError = PlatformError | Error;
+type ArchiveError =
+  | PlatformError
+  | ComputeArchiveInvalidProps
+  | ComputeArchiveOperationFailed
+  | ComputeArchiveOptionsError
+  | ArchivePlatformError
+  | ArtifactFileError;
 type ArchiveRequirements = FileSystem.FileSystem | Path.Path;
 
 export function createComputeArchive(

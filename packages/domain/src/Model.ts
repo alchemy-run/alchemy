@@ -202,11 +202,12 @@ export interface LayerOptions<Views extends string = string> {
   /**
    * Before Domain version 0, models in one Worker that listed the same
    * aggregate, view or saga shared its Durable Object class, and so its data.
-   * Each model now has classes of its own, and the first deploy moves the
-   * shared class to one of them. Set this on the model that keeps that data;
-   * the others start empty. The deploy fails until exactly one model sets it.
+   * Each model now has classes of its own, and the first deploy renames the
+   * shared class to the model's, keeping its data. When two models shared a
+   * class, only one can keep it: set `false` on the others, which start
+   * empty. The deploy fails while more than one would take it over.
    *
-   * @default false
+   * @default true
    */
   readonly legacyData?: boolean;
   /**
@@ -347,7 +348,7 @@ export const make = <
           members.sagas ?? [],
           members.queries ?? [],
           Telemetry.resolve(options?.telemetry),
-          options?.legacyData ?? false,
+          options?.legacyData ?? true,
           options?.lazy ?? [],
         ),
       );

@@ -8,6 +8,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { interruptDestroy } from "../../interruptDestroy.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -56,7 +57,7 @@ test.provider(
 );
 
 test.provider.skipIf(!runLifecycle)(
-  "create, update, and delete an alloydb instance",
+  "create, update, and delete an alloydb instance through an interrupted destroy",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -138,6 +139,14 @@ test.provider.skipIf(!runLifecycle)(
       expect(refetched.labels?.env).toEqual("prod");
       expect(refetched.labels?.role).toEqual("primary");
 
+      // The destroy is interrupted once the instance is DELETING, so the next
+      // one has to finish a delete already under way.
+      yield* interruptDestroy(stack, {
+        status: alloydb
+          .getProjectsLocationsClustersInstances({ name: created.instance.name })
+          .pipe(Effect.map((instance) => instance.state)),
+        deleting: "DELETING",
+      });
       yield* stack.destroy();
 
       const gone = yield* waitUntilGone(created.instance.name);

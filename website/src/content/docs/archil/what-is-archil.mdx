@@ -13,10 +13,18 @@ Take one small app: a `Dataset` disk of CSV files. A Cloudflare Worker counts th
 <Tree
   nodes={[
     { id: "org", label: "acme", type: "organization", icon: "brand:archil" },
-    { id: "region", label: "aws-us-east-1", type: "region", parent: "org", dashed: true, icon: "map-pin" },
-    { id: "dataset", label: "Dataset", type: "disk", parent: "region", wide: true, tone: "accent", icon: "hard-drive", specs: [["files in", "your bucket"]] },
-    { id: "api", label: "Api", type: "sandbox", parent: "region", icon: "box", specs: [["mounts", "Dataset"]] },
-    { id: "exec", label: "exec", type: "microVM per call", parent: "region", icon: "terminal", specs: [["mounts", "Dataset"]] },
+    { id: "region", label: "aws-us-east-1", type: "region", parent: "org", dashed: true, icon: "map-pin", areas: ["api dataset", "exec dataset"], phoneAreas: ["api exec", "dataset dataset"], colGap: 3 },
+    { id: "api", label: "Api", type: "sandbox", parent: "region", icon: "box" },
+    { id: "exec", label: "exec", type: "microVM per call", parent: "region", icon: "terminal" },
+    { id: "dataset", label: "Dataset", type: "disk", parent: "region", tone: "accent", icon: "hard-drive" },
+    { id: "bucket", label: "your bucket", type: "S3", icon: "archive" },
+  ]}
+  areas={["org bucket"]}
+  colGap={3}
+  links={[
+    { from: "api", to: "dataset", label: "mounts" },
+    { from: "exec", to: "dataset", label: "mounts" },
+    { from: "dataset", to: "bucket", label: "syncs", dashed: true },
   ]}
   caption="The disk, the sandbox and each exec call live in one region of the organization, and both mount the disk, whose files sync to your own bucket. Outside Archil, a Worker starts exec calls through Archil's API, and your Indexer Container mounts the disk over the network."
 />
@@ -123,7 +131,7 @@ See [Branches and checkpoints](/archil/storage/branches).
 Every sandbox has an **egress policy** that Archil enforces outside the microVM. It can deny everything but a list of hosts, and add headers, like an API key, to requests on their way out, so code inside never sees the value.
 
 ```typescript
-export const Agent = Archil.Sandbox("Agent", {
+export const MySandbox = Archil.Sandbox("MySandbox", {
   network: { egress: { default: "deny", allow: ["registry.npmjs.org", "*.github.com"] } },
 });
 ```

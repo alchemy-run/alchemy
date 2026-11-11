@@ -3,18 +3,11 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { account } from "./Credentials.ts";
 import { isAlchemyName, tokenName } from "./internal/archil.ts";
 import type { Providers } from "./Providers.ts";
-
-export class ApiTokenUnexpectedResponse extends Data.TaggedError(
-  "Archil.ApiTokenUnexpectedResponse",
-)<{
-  readonly message: string;
-}> {}
 
 export interface ApiTokenProps {
   /**
@@ -83,17 +76,12 @@ const observe = Effect.fn(function* (match: { tokenId?: string; name: string }) 
 const revoke = (tokenId: string) =>
   archil.deleteToken({ id: tokenId }).pipe(
     Effect.asVoid,
-    Effect.catchTag("ApiTokenNotFound", () => Effect.void),
+    Effect.catchTag("NotFound", () => Effect.void),
   );
 
 /** Create an API key and return its attributes. */
 export const createApiToken = Effect.fn(function* (name: string, description?: string) {
   const { data } = yield* archil.createApiToken({ name, description });
-  if (!data.token || !data.id) {
-    return yield* new ApiTokenUnexpectedResponse({
-      message: `Archil returned no key for API token ${name}`,
-    });
-  }
   const { region } = yield* account;
   return {
     tokenId: data.id,

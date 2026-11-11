@@ -15,6 +15,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
+import { isDeclaration } from "./internal/Declared.ts";
 import {
   boatName,
   hasAnyAlchemyLabel,
@@ -165,6 +166,16 @@ export interface SandboxProps extends PlatformProps {
   handler?: string;
   /** Bundler configuration for `main`. */
   build?: Bundle.BundleConfig;
+  /**
+   * Who in the organization that pays for the sandbox can use it:
+   * `private`, only you; `shared`, every member. Omitted, the organization's
+   * default for new sandboxes applies. Updated in place. Sharing a sandbox
+   * that holds your logins (GitHub, Claude and Codex logins, environment
+   * secrets) wipes them at its next start and never pushes them again, so
+   * share one with `noEnv` or an environment that passes nothing. A
+   * personal sandbox is always private, and Boat refuses `shared` for one.
+   */
+  visibility?: "shared" | "private";
 }
 
 export interface SandboxAttributes {
@@ -202,6 +213,13 @@ export interface SandboxAttributes {
   urlToken: Redacted.Redacted<string> | undefined;
   /** The program the sandbox runs, for a sandbox with `main`. */
   program: ProgramState | undefined;
+  /**
+   * The organization that pays for it, fixed when it was created;
+   * `undefined` when you do.
+   */
+  org: { id: string; name: string } | undefined;
+  /** `shared` or `private` for an organization's sandbox; `undefined` for yours. */
+  visibility: "shared" | "private" | undefined;
 }
 
 export type Sandbox = Resource<
@@ -232,6 +250,11 @@ export type SandboxRuntimeContext = HostRuntimeContext;
  * Alchemy labels the sandbox with its stack, stage and logical ID
  * (`alchemy.stack`, `alchemy.stage`, `alchemy.id`) to recognise the
  * sandboxes it owns.
+ *
+ * The sandbox bills the stack's organization (`Boat.providers({ org })`,
+ * or the profile's), else your active wallet. Boat fixes the wallet at
+ * create, so changing the stack's `org` later leaves the sandbox where it
+ * is; `org` says which.
  *
  * :::caution
  * Replacing the sandbox (a new `type`, `env`, `environment`, `noEnv`,
@@ -286,14 +309,24 @@ export type SandboxRuntimeContext = HostRuntimeContext;
  * **Example:** A sandbox with a project set up and its secrets
  * ```typescript
  * export const Golden = Boat.Snapshot("Golden", { run: ["npm i -g pnpm"] });
- * export const Agents = Boat.Environment("Agents", {
+ * export const MyEnv = Boat.Environment("MyEnv", {
  *   env: { API_TOKEN: Config.Redacted("API_TOKEN") },
  * });
  *
  * export const Box = Boat.Sandbox("Box", {
  *   snapshot: Golden,
- *   environment: Agents,
+ *   environment: MyEnv,
  *   autoStop: "30 minutes",
+ * });
+ * ```
+ *
+ * ### Sharing with an organization
+ * **Example:** A sandbox every member of the team can use
+ * ```typescript
+ * // with Boat.providers({ org: "acme" }) on the stack
+ * export const TeamBox = Boat.Sandbox("TeamBox", {
+ *   noEnv: true,
+ *   visibility: "shared",
  * });
  * ```
  *
@@ -331,8 +364,10 @@ export const Sandbox: Platform<Sandbox, SandboxServices, SandboxShape, SandboxRu
     transformProps: (_id, props: SandboxProps) =>
       Effect.gen(function* () {
         if (globalThis.__ALCHEMY_RUNTIME__) return props;
+        // A lookup (`Boat.Environment.lookup({ name })`) is an Output, which
+        // the engine resolves; only a declaration is yielded.
         const ref = <T>(value: T) =>
-          Effect.isEffect(value)
+          isDeclaration(value)
             ? (value as unknown as Effect.Effect<T, never, Providers>)
             : Effect.succeed(value);
         return {
@@ -388,6 +423,8 @@ export const toAttributes = (sandbox: boat.Sandbox): SandboxAttributes => ({
   url: undefined,
   urlToken: undefined,
   program: undefined,
+  org: sandbox.team ? { id: sandbox.team.id, name: sandbox.team.name } : undefined,
+  visibility: sandbox.visibility ?? undefined,
 });
 
 /** The bindings still attached (a removed binding arrives as a `delete`). */
@@ -514,6 +551,7 @@ export const SandboxProvider = () =>
               ...(news.monitoring === undefined ? {} : { monitoring: news.monitoring }),
               ...(news.setupScript === undefined ? {} : { setupScript: news.setupScript }),
               ...(news.snapshot === undefined ? {} : { from: resolved(news.snapshot).name }),
+              ...(news.visibility === undefined ? {} : { visibility: news.visibility }),
               labels: { ...news.labels, ...owner },
             });
             sandbox = created.sandbox;
@@ -539,6 +577,27 @@ export const SandboxProvider = () =>
               ...(subdomainChanged ? { subdomain: news.subdomain } : {}),
             });
             sandbox = updated.sandbox ?? sandbox;
+          }
+
+          // Sync — visibility, against what Boat reports.
+          if (
+            news.visibility !== undefined &&
+            (sandbox.visibility ?? "private") !== news.visibility
+          ) {
+            yield* session.note(
+              `Making sandbox ${name} ${news.visibility === "shared" ? "shared" : "private"}...`,
+            );
+            if (news.visibility === "shared") {
+              const shared = yield* boat.shareSandbox({ sandboxId: sandbox.id });
+              if (shared.restartRequired) {
+                yield* session.note(
+                  `Sandbox ${name} is shared from its next start: stop and resume it to share it now.`,
+                );
+              }
+            } else {
+              yield* boat.unshareSandbox({ sandboxId: sandbox.id });
+            }
+            sandbox = (yield* observeSandbox(sandbox.id)) ?? sandbox;
           }
 
           const attrs = toAttributes(sandbox);

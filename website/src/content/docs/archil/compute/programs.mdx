@@ -19,12 +19,14 @@ sandbox boots. The program's port gets a public `https://` URL.
   shell={{
     label: "Api",
     type: "sandbox · https://3000-….archil.app",
+    icon: "brand:archil",
     children: [
       {
         label: "service manager",
-        children: [{ label: "program", type: "your bundle · PORT=3000", tone: "accent" }],
+        icon: "cog",
+        children: [{ label: "program", type: "your bundle · PORT=3000", tone: "accent", icon: "file-code" }],
       },
-      { label: "/data", type: "Dataset · read-only" },
+      { label: "/data", type: "Dataset · read-only", icon: "hard-drive" },
     ],
   }}
   caption="The program is a service inside its sandbox. The service manager restarts it if it crashes, and starts it each time the sandbox boots. Disks it binds are mounted before it starts."
@@ -174,5 +176,4 @@ A sandbox pauses after its idle timeout, 30 minutes by default, and the next req
 ## Where next
 
 - [Sandboxes](/archil/compute/sandboxes): sizes, disks, and network policy
-- [Websites](/archil/frontend/websites): framework sites in their own sandboxes
 - [`Archil.Sandbox` reference](/providers/archil/reference/sandbox)

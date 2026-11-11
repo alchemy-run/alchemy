@@ -27,8 +27,7 @@ export default WorkerA.make(
   Effect.gen(function* () {
     const counter = yield* Counter;
 
-    // `counter.getByName(key)` returns a chainable Proxy (built via
-    // `proxyChain`) so each method call yields directly. `Effect.orDie`
+    // `counter.getByName(key)` is an Effect of the RPC client. `Effect.orDie`
     // drops the transport-level `RpcClientError`, which isn't part of
     // the declared `CounterRpcs` error channel.
     const handlers = CounterRpcs.toLayer({

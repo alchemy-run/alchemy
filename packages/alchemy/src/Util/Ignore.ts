@@ -387,27 +387,33 @@ export const walkIgnoring = <E, R>({
 
 /**
  * A {@link WalkIgnoringOptions.list} over the real file system rooted at
- * `root`. Symlinks are probed before `stat`, which follows them.
+ * `root`. One directory read returns every entry's own type (a symlink is a
+ * link, never its target); only an entry the platform can't type is probed,
+ * link first, since `stat` follows links.
  */
 export const listFileSystemDirectory = Effect.fn(function* (root: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   return Effect.fn(function* (relativeDirectory: string) {
     const directory = path.join(root, relativeDirectory);
-    const names = yield* fs.readDirectory(directory);
-    return yield* Effect.forEach(names, (name) =>
-      Effect.gen(function* () {
+    const entries = yield* fs.readDirectoryEntries(directory);
+    return yield* Effect.forEach(entries, ({ name, type }) => {
+      if (type === "File" || type === "Directory" || type === "SymbolicLink") {
+        return Effect.succeed({ name, type });
+      }
+      if (type !== "Unknown") return Effect.succeed({ name, type: "Other" as const });
+      return Effect.gen(function* () {
         const fullPath = path.join(directory, name);
         const link = yield* Effect.result(fs.readLink(fullPath));
         if (Result.isSuccess(link)) {
           return { name, type: "SymbolicLink" as const };
         }
         const info = yield* fs.stat(fullPath);
-        const type: WalkEntryType =
+        const probed: WalkEntryType =
           info.type === "File" || info.type === "Directory" ? info.type : "Other";
-        return { name, type };
-      }),
-    );
+        return { name, type: probed };
+      });
+    });
   });
 });
 

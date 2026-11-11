@@ -815,6 +815,46 @@ if (el) {
           expect(site3.hash?.input).toEqual(site2.hash?.input);
           expect(site3.hash?.additionalWorkspaces).toEqual(site2.hash?.additionalWorkspaces);
 
+          // ── deploy 4: the sibling package is deleted (#2606) ───────────────
+          // State still lists `../shared`. Planning must count the missing
+          // workspace as a change and rebuild, not fail reading it.
+          const marker4 = `vite-ws-4-${Date.now()}`;
+          yield* fs.writeFileString(
+            path.join(rootDir, "src/main.ts"),
+            `const el = document.getElementById("app");
+if (el) {
+  el.textContent = ${JSON.stringify(marker4)};
+}
+`,
+          );
+          yield* fs.remove(sharedDir, { recursive: true });
+
+          const site4 = yield* stack.deploy(
+            Effect.gen(function* () {
+              return yield* Cloudflare.Website.Vite(
+                "ViteWorkspace",
+                viteProps(rootDir, memoInclude),
+              );
+            }),
+          );
+
+          expect(site4.hash?.input).not.toEqual(site3.hash?.input);
+          expect(site4.hash?.additionalWorkspaces ?? []).not.toContain("../shared");
+          yield* expectBundleContains(site4.url!, marker4, {
+            label: "root-only marker after deleting the workspace",
+          });
+
+          // ── deploy 5: unchanged ⇒ the rebuilt workspace set is a memo hit ─
+          const site5 = yield* stack.deploy(
+            Effect.gen(function* () {
+              return yield* Cloudflare.Website.Vite(
+                "ViteWorkspace",
+                viteProps(rootDir, memoInclude),
+              );
+            }),
+          );
+          expect(site5.hash?.input).toEqual(site4.hash?.input);
+
           yield* stack.destroy();
           yield* waitForWorkerToBeDeleted(site1.workerName, accountId);
         }).pipe(logLevel),

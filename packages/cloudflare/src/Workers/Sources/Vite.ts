@@ -10,6 +10,7 @@ import { makeResourceLogger } from "alchemy/Util/ResourceOutput";
 import { sha256Object } from "alchemy/Util/sha256";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import type * as vite from "vite";
@@ -462,10 +463,23 @@ export const makeViteSource = (vite: ViteOptions): SourceProvider => ({
     };
   }),
   hash: Effect.fn(function* (_ctx, previous) {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const root = path.resolve(initialCwd, vite.rootDir ?? ".");
+    // A workspace the previous build recorded can be gone by now: its
+    // package was deleted, or `rootDir` moved and the stored relative
+    // path resolves nowhere (#2606). Leave it out, as the next build
+    // would. The input hash then differs from state, so the Worker
+    // rebuilds and records a fresh workspace set.
+    const previousWorkspaces = yield* Effect.filter(
+      previous?.additionalWorkspaces ?? [],
+      (cwd) => fs.exists(path.resolve(root, cwd)),
+      { concurrency: "unbounded" },
+    );
     const { hash, workspaces } = yield* hashViteInput(
       vite.rootDir,
       vite.memo,
-      Effect.succeed(previous?.additionalWorkspaces ?? []),
+      Effect.succeed(previousWorkspaces),
     );
     return { input: hash, additionalWorkspaces: workspaces };
   }),

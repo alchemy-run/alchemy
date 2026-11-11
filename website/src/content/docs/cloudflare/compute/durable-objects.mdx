@@ -662,6 +662,29 @@ renaming a handler does not migrate those jobs. TypeScript payload types
 do not validate data stored by an earlier deployment, so decode evolving
 payloads explicitly with a schema when needed.
 
+## Rename a class
+
+A Durable Object's class name is where its objects live. Change
+`className` under the same binding and the deploy renames the class,
+keeping every object:
+
+```typescript
+env: { Counter: Cloudflare.DurableObject("Counter", { className: "Meter" }) },
+```
+
+When the class moves to a new binding instead, name the class it was
+called before with `renamedFrom`:
+
+```typescript
+env: { Meter: Cloudflare.DurableObject("Meter", { renamedFrom: "Counter" }) },
+```
+
+The deploy ships a `renamed_classes` migration, so `Meter` takes over
+`Counter`'s namespace and its objects. Once `Counter` is gone it does
+nothing, so it can stay. Only one class can take over a class: two
+classes renamed from the same one fail the deploy with
+`DurableObjectRenameConflict` before anything is uploaded.
+
 ## Adopt a Worker deployed by Wrangler
 
 Alchemy deploys Durable Object classes with Cloudflare's declarative

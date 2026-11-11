@@ -27,9 +27,9 @@ import {
   type DurableObject,
   type DurableObjectRuntimeContext,
 } from "../DurableObject.ts";
+import { PoolHost } from "../Host.ts";
 import { Pool, type PoolDurableObject } from "../Pool.ts";
 import type { Providers } from "../Providers.ts";
-import { PoolHost } from "./PoolHostService.ts";
 import { stageRustProgram } from "./RustProgram.ts";
 
 /** The RivetKit release node images install. */

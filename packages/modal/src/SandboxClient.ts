@@ -168,6 +168,20 @@ export interface SandboxCreateOptions {
   readonly outboundPolicy?: OutboundPolicy;
   /** Route outbound traffic through a `Modal.Proxy`'s static IPs. */
   readonly proxy?: { readonly proxyId: string };
+  /**
+   * Give the sandbox a `MODAL_IDENTITY_TOKEN` environment variable: an OIDC
+   * token Modal signs, naming the workspace, environment, app and sandbox.
+   * A cloud that trusts Modal's issuer (`https://oidc.modal.com`) exchanges
+   * it for short-lived credentials, so no long-lived key enters the sandbox.
+   */
+  readonly includeOidcIdentityToken?: boolean;
+  /**
+   * Serve the sandbox an X.509 certificate that names it (an X.509-SVID),
+   * over the SPIFFE Workload API socket at `SPIFFE_ENDPOINT_SOCKET`. A
+   * cloud that trusts Modal's certificate authority (AWS IAM Roles
+   * Anywhere) exchanges it for short-lived credentials.
+   */
+  readonly includeX509Svid?: boolean;
   /** Ports reachable through TLS tunnels (`sandbox.getTcpPort(port)`). */
   readonly encryptedPorts?: ReadonlyArray<number>;
   /** Ports reachable through plain TCP tunnels. */
@@ -357,7 +371,10 @@ export interface SandboxHandleOf<R> {
     path: string,
     snapshot: { readonly imageId: string },
   ): Effect.Effect<void, SandboxRouterError<"mountDirectory">, R>;
-  /** Replace the sandbox's outbound network policy while it runs. */
+  /**
+   * Replace the sandbox's outbound network policy while it runs. Connections
+   * the new policy no longer allows are closed. `{}` opens the network.
+   */
   setNetworkAccess(access: {
     readonly blockNetwork?: boolean;
     readonly cidrAllowlist?: ReadonlyArray<string>;
@@ -529,6 +546,8 @@ const definitionOf = (
     : undefined,
   outboundPolicy: options.outboundPolicy ? outboundPolicyOf(options.outboundPolicy) : undefined,
   proxyId: options.proxy?.proxyId,
+  includeOidcIdentityToken: options.includeOidcIdentityToken,
+  includeX509Svid: options.includeX509Svid,
   openPorts: {
     ports: [
       ...(options.encryptedPorts ?? []).map((port) => ({ port })),
@@ -554,6 +573,28 @@ const networkAccessOf = (options: {
           allowedDomains: options.allowedDomains ? [...options.allowedDomains] : [],
         }
       : undefined;
+
+/**
+ * The policy for a sandbox that is already running. Modal's task router
+ * accepts only an allow-list here: an empty one blocks everything, and
+ * `0.0.0.0/0` opens the network.
+ */
+const runningNetworkAccessOf = (access: {
+  readonly blockNetwork?: boolean;
+  readonly cidrAllowlist?: ReadonlyArray<string>;
+  readonly allowedDomains?: ReadonlyArray<string>;
+}): sandbox.NetworkAccess => {
+  const open = access.cidrAllowlist === undefined && access.allowedDomains === undefined;
+  return {
+    networkAccessType: "ALLOWLIST",
+    allowedCidrs: access.blockNetwork
+      ? []
+      : open
+        ? ["0.0.0.0/0"]
+        : [...(access.cidrAllowlist ?? [])],
+    allowedDomains: access.blockNetwork ? [] : [...(access.allowedDomains ?? [])],
+  };
+};
 
 const portsOf = (ports: OutboundPorts | undefined) =>
   ports?.map((port) => (typeof port === "number" ? { start: port, end: port } : port));
@@ -1107,10 +1148,7 @@ export const sandboxHandle = (
       ).pipe(Effect.asVoid),
     setNetworkAccess: (access) =>
       viaRouter(routerOps.setNetworkAccess, (op, task) =>
-        op({
-          taskId: task,
-          networkAccess: networkAccessOf(access) ?? { networkAccessType: "OPEN" },
-        }),
+        op({ taskId: task, networkAccess: runningNetworkAccessOf(access) }),
       ).pipe(Effect.asVoid),
     setOutboundPolicy: Effect.fn(function* (policy) {
       yield* ops.setOutboundPolicy({

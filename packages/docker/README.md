@@ -43,6 +43,22 @@ export default Alchemy.Stack(
 
 `alchemy deploy` pulls the image and starts the container. Change a prop and the next deploy replaces only what changed; `alchemy destroy` removes all of it.
 
+## Network configuration
+
+A network can be internal, attachable, and pinned to an explicit subnet:
+
+```typescript
+const internalNetwork = yield* Docker.Network("InternalNetwork", {
+  internal: true,
+  attachable: true,
+  ipam: {
+    config: [{ subnet: "10.50.0.0/24", gateway: "10.50.0.1" }],
+  },
+});
+```
+
+Without `ipam`, Docker picks the subnet and gateway. Network settings are fixed at creation, so changing one replaces the network. See [local services](https://alchemy.run/docker/local-services) for dual-stack networks and driver options.
+
 ## Learn more
 
 - [Docker on alchemy.run](https://alchemy.run/docker)

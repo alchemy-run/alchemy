@@ -12,7 +12,7 @@ A **template** is the image a sandbox boots from. E2B builds it on its side, so 
 <Timeline
   end={10}
   lanes={[
-    { id: "build", label: "Agent", type: "template" },
+    { id: "build", label: "MyTemplate", type: "template" },
     { id: "s1", label: "user-42", type: "sandbox" },
     { id: "s2", label: "user-43", type: "sandbox" },
   ]}
@@ -41,7 +41,7 @@ export const Python = E2B.Template("Python", { image: "python:3.12-slim" });
 import * as Dockerfile from "@alchemy.run/docker/Dockerfile";
 import * as E2B from "@alchemy.run/e2b";
 
-export const Agent = E2B.Template("Agent", {
+export const MyTemplate = E2B.Template("MyTemplate", {
   dockerfile: Dockerfile.inline`
     FROM node:22-bookworm
     RUN apt-get update && apt-get install -y git ripgrep

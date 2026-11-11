@@ -42,9 +42,6 @@
     },
     {
       "path": "../railway/tsconfig.json"
-    },
-    {
-      "path": "../domain/tsconfig.json"
     }
   ]
 }

@@ -78,7 +78,7 @@ export const createPortToken = Effect.fn(function* (sid: string, port: number, t
 export const revokePortToken = (sid: string, tokenId: string) =>
   archil.deleteSandboxPortToken({ sid, token_id: tokenId }).pipe(
     Effect.asVoid,
-    Effect.catchTag("SandboxPortTokenNotFound", () => Effect.void),
+    Effect.catchTag("NotFound", () => Effect.void),
   );
 
 export const SandboxPortTokenProvider = () =>
@@ -100,7 +100,7 @@ export const SandboxPortTokenProvider = () =>
             .getSandboxPortToken({ sid: output.sandboxId, token_id: output.tokenId })
             .pipe(
               Effect.map(() => output),
-              Effect.catchTag("SandboxPortTokenNotFound", () => Effect.undefined),
+              Effect.catchTag("NotFound", () => Effect.undefined),
             );
         }),
         reconcile: Effect.fn(function* ({ news, output }) {
@@ -110,7 +110,7 @@ export const SandboxPortTokenProvider = () =>
               .getSandboxPortToken({ sid: output.sandboxId, token_id: output.tokenId })
               .pipe(
                 Effect.as(true),
-                Effect.catchTag("SandboxPortTokenNotFound", () => Effect.succeed(false)),
+                Effect.catchTag("NotFound", () => Effect.succeed(false)),
               );
             if (live) return output;
           }
