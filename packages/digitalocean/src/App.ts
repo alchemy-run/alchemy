@@ -31,6 +31,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
+import { JOB_ENV, type AppBinding } from "./internal/appJobs.ts";
 import { noneIfNotFound } from "./internal/notFound.ts";
 import { pollUntil, type PollBudget } from "./internal/poll.ts";
 import type { Providers } from "./Providers.ts";
@@ -47,11 +48,6 @@ export type AppRegion =
   | "syd"
   | "tor"
   | "atl";
-
-/** Environment a binding attaches to an App: plain variables. */
-export interface AppBinding {
-  env?: Record<string, any>;
-}
 
 export interface AppProps extends PlatformProps {
   /**
@@ -129,6 +125,8 @@ export type App = Resource<
 >;
 
 export type AppAttributes = App["Attributes"];
+
+export type { AppBinding } from "./internal/appJobs.ts";
 
 export type AppServices = ServerHost;
 
@@ -319,12 +317,24 @@ const toEnvValue = (value: unknown): { value: string; secret: boolean } =>
       ? { value, secret: isPackedRedacted(value) }
       : { value: JSON.stringify(value), secret: false };
 
+const activeBindings = (bindings: ReadonlyArray<ResourceBinding<AppBinding>>) =>
+  bindings.filter(
+    (binding: ResourceBinding<AppBinding> & { action?: string }) => binding.action !== "delete",
+  );
+
 const collectBindingEnv = (bindings: ReadonlyArray<ResourceBinding<AppBinding>>) =>
-  bindings
-    .filter(
-      (binding: ResourceBinding<AppBinding> & { action?: string }) => binding.action !== "delete",
-    )
-    .reduce<Record<string, any>>((env, binding) => ({ ...env, ...binding.data?.env }), {});
+  activeBindings(bindings).reduce<Record<string, any>>(
+    (env, binding) => ({ ...env, ...binding.data?.env }),
+    {},
+  );
+
+const collectJobs = (bindings: ReadonlyArray<ResourceBinding<AppBinding>>) => [
+  ...new Map(
+    activeBindings(bindings)
+      .flatMap((binding) => binding.data?.jobs ?? [])
+      .map((job) => [job.name, job] as const),
+  ).values(),
+];
 
 const observe = (appId: string) =>
   noneIfNotFound(DO.getApp({ id: appId }).pipe(Effect.map((r) => r.app)));
@@ -459,7 +469,8 @@ export const AppProvider = () =>
           }
           // A generated name is this resource's; a chosen one proves nothing.
           if (olds.name !== undefined) return undefined;
-          const named = yield* observeByName(yield* physicalName(id));
+          const generatedName = yield* physicalName(id);
+          const named = yield* observeByName(generatedName);
           return Option.getOrUndefined(
             Option.map(named, (app) => ({
               appId: app.id,
@@ -501,23 +512,42 @@ export const AppProvider = () =>
             PORT: String(news.port ?? DEFAULT_PORT),
             ...news.env,
           };
+          const envs = Object.entries(env).map(([key, raw]) => {
+            const { value, secret } = toEnvValue(raw);
+            return { key, value, scope: "RUN_TIME", type: secret ? "SECRET" : "GENERAL" };
+          });
+          // Named explicitly: without it App Platform resolves the team's
+          // registry from a cache that can still hold a deleted one.
+          const appImage = { registry_type: "DOCR", registry, repository, tag };
+          const instanceSize = news.instanceSizeSlug ?? DEFAULT_SIZE;
           const spec = {
             name,
             region: news.region ?? "nyc",
             services: [
               {
                 name: "web",
-                image: { registry_type: "DOCR", repository, tag },
+                image: appImage,
                 http_port: news.port ?? DEFAULT_PORT,
-                instance_size_slug: news.instanceSizeSlug ?? DEFAULT_SIZE,
+                instance_size_slug: instanceSize,
                 instance_count: news.instanceCount ?? 1,
                 health_check: { http_path: news.healthCheckPath ?? "/" },
-                envs: Object.entries(env).map(([key, raw]) => {
-                  const { value, secret } = toEnvValue(raw);
-                  return { key, value, scope: "RUN_TIME", type: secret ? "SECRET" : "GENERAL" };
-                }),
+                envs,
               },
             ],
+            // A `DigitalOcean.cron` schedule runs the same image as a job.
+            jobs: collectJobs(bindings as ReadonlyArray<ResourceBinding<AppBinding>>).map(
+              (job) => ({
+                name: job.name,
+                kind: "SCHEDULED",
+                schedule: { cron: job.cron, time_zone: job.timeZone },
+                image: appImage,
+                instance_size_slug: instanceSize,
+                envs: [
+                  ...envs,
+                  { key: JOB_ENV, value: job.name, scope: "RUN_TIME", type: "GENERAL" },
+                ],
+              }),
+            ),
           };
 
           const observed =

@@ -14,6 +14,7 @@ import {
   runSetup,
   waitUntilRunning,
   type MicrovmCheckpoint,
+  defaultRegion,
 } from "./internal.ts";
 
 export type TemplateProps = {
@@ -150,10 +151,11 @@ export const TemplateProvider = () =>
       }
       const name = news.name ?? (yield* physicalName(id));
       // Boot the image, run the setup, checkpoint, and drop the builder.
+      const region = yield* defaultRegion(news.region);
       const builder = yield* DO.createMicrovm({
         name: `${name}-builder`.slice(0, 63),
         source: { oci_ref: news.image },
-        region: news.region,
+        region,
         size: news.size,
       }).pipe(Effect.map((r) => r.microvm));
       return yield* Effect.gen(function* () {

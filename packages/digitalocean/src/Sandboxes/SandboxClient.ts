@@ -8,7 +8,14 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import type { CreateSandboxOptions, SandboxesClient, SandboxHandle } from "./CreateSandbox.ts";
-import { autoPauseOf, deleteMicrovm, urlOf, waitUntilRunning, type Microvm } from "./internal.ts";
+import {
+  autoPauseOf,
+  defaultRegion,
+  deleteMicrovm,
+  urlOf,
+  waitUntilRunning,
+  type Microvm,
+} from "./internal.ts";
 import type { Template } from "./Template.ts";
 
 /** A MicroVM API call failed. */
@@ -99,10 +106,12 @@ export const makeSandboxesBinding = Effect.succeed(
       create: (createOptions?: CreateSandboxOptions) =>
         Effect.gen(function* () {
           const { base: boundBase, withToken } = yield* resolve;
+          const region = yield* withToken(defaultRegion(undefined));
           const microvm = yield* withToken(
             DO.createMicrovm({
               name: createOptions?.name ?? `sandbox-${Math.random().toString(36).slice(2, 10)}`,
               source: sourceOf(boundBase),
+              region,
               size: createOptions?.size,
               environment: createOptions?.env,
               http_port: createOptions?.httpPort,

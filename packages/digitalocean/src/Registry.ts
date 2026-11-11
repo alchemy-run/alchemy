@@ -112,7 +112,8 @@ export const RegistryProvider = () =>
     stables: ["name", "endpoint", "region", "createdAt"],
     nuke: { skip: true },
     read: Effect.fn(function* ({ id, olds, output }) {
-      const observed = yield* observe(output?.name ?? olds.name ?? (yield* physicalName(id)));
+      const name = output?.name ?? olds.name ?? (yield* physicalName(id));
+      const observed = yield* observe(name);
       if (Option.isNone(observed)) return undefined;
       const attrs = toAttrs(observed.value, yield* currentTier);
       return output === undefined ? Unowned(attrs) : attrs;

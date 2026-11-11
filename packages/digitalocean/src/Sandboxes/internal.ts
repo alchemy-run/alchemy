@@ -113,3 +113,9 @@ export const urlOf = (microvm: Microvm) => {
 /** App Platform style idle pause: pause after `seconds` idle, resume on request. */
 export const autoPauseOf = (seconds: number | undefined) =>
   seconds === undefined ? undefined : { enabled: true, idle_timeout: `${seconds}s` };
+
+/** The region MicroVMs go to when none is given: the account's default. */
+export const defaultRegion = (region: string | undefined) =>
+  region !== undefined
+    ? Effect.succeed(region)
+    : DO.getMicrovmOptions({}).pipe(Effect.map((options) => options.default_region));

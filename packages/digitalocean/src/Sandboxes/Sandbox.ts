@@ -13,6 +13,7 @@ import {
   urlOf,
   waitUntilRunning,
   type Microvm,
+  defaultRegion,
 } from "./internal.ts";
 
 export type SandboxProps = {
@@ -120,10 +121,11 @@ export const SandboxProvider = () =>
         }
       }
       const name = news.name ?? (yield* physicalName(id));
+      const region = yield* defaultRegion(news.region);
       const { microvm } = yield* DO.createMicrovm({
         name,
         source: sourceOf(news.base),
-        region: news.region,
+        region,
         size: news.size,
         environment: news.env,
         http_port: news.httpPort,
