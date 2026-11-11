@@ -10,6 +10,7 @@ import * as Layer from "effect/Layer";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 
 const { test } = Test.make({
   providers: Layer.mergeAll(AWS.providers(), Kubernetes.providers()),
@@ -18,12 +19,41 @@ const { test } = Test.make({
 
 class PodNotRunning extends Data.TaggedError("PodNotRunning")<{ readonly pods: string }> {}
 
+class KubectlFailed extends Data.TaggedError("KubectlFailed")<{
+  readonly args: ReadonlyArray<string>;
+  readonly exitCode: number;
+  readonly stderr: string;
+}> {
+  override get message() {
+    return `kubectl ${this.args.join(" ")} exited ${this.exitCode}: ${this.stderr}`;
+  }
+}
+
 /** The emulator runs each EKS cluster's control plane and node in a k3s container. */
 const kubectl = Effect.fn(function* (clusterName: string, args: ReadonlyArray<string>) {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  return yield* spawner.string(
-    ChildProcess.make("docker", ["exec", `floci-aws-eks-${clusterName}`, "kubectl", ...args]),
+  const result = yield* ChildProcess.make(
+    "docker",
+    ["exec", `floci-aws-eks-${clusterName}`, "kubectl", ...args],
+    { stdin: "ignore", stdout: "pipe", stderr: "pipe" },
+  ).pipe(
+    spawner.spawn,
+    Effect.flatMap((child) =>
+      Effect.all(
+        {
+          exitCode: child.exitCode,
+          stdout: child.stdout.pipe(Stream.decodeText, Stream.mkString),
+          stderr: child.stderr.pipe(Stream.decodeText, Stream.mkString),
+        },
+        { concurrency: "unbounded" },
+      ),
+    ),
+    Effect.scoped,
   );
+  if (result.exitCode !== 0) {
+    return yield* new KubectlFailed({ args, exitCode: result.exitCode, stderr: result.stderr });
+  }
+  return result.stdout;
 });
 
 // In `alchemy dev`, an EKS Auto Mode cluster has the Nitro Sandbox
@@ -98,7 +128,14 @@ test.provider(
         "--",
         "uname",
         "-r",
-      ]);
+      ]).pipe(
+        // The API server reaches the kubelet over a tunnel that can lag the pod.
+        Effect.retry({
+          while: (e) => e._tag === "KubectlFailed",
+          schedule: Schedule.spaced("2 seconds"),
+          times: 10,
+        }),
+      );
       expect(kernel).toContain("gvisor");
 
       yield* stack.destroy();

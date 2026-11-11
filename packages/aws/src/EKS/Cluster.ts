@@ -569,6 +569,7 @@ const mapClusterState = (
     managedClusterRoleName?: string;
     managedNodeRoleName?: string;
   } = {},
+  nodeArchitecture?: "amd64" | "arm64",
 ): Cluster["Attributes"] => ({
   managedClusterRoleName: managedRoles.managedClusterRoleName,
   managedNodeRoleName: managedRoles.managedNodeRoleName,
@@ -583,6 +584,7 @@ const mapClusterState = (
     endpoint: cluster.endpoint,
     certificateAuthorityData: cluster.certificateAuthority?.data,
     emulator: isEmulatorArn(cluster.arn),
+    architecture: nodeArchitecture,
   }),
   version: cluster.version,
   platformVersion: cluster.platformVersion,
@@ -752,7 +754,20 @@ export const ClusterProvider = () =>
           })
           .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
         const tags = normalizeTags(listedTags?.tags ?? cluster.tags);
-        return mapClusterState(cluster, tags, kubernetesObjects ?? [], managedRoles);
+        // An emulated cluster's nodes run on this machine's Docker, so
+        // workload images default to its architecture rather than amd64.
+        const nodeArchitecture = isEmulatorArn(cluster.arn)
+          ? yield* Effect.sync(() =>
+              process.arch === "arm64" ? ("arm64" as const) : ("amd64" as const),
+            )
+          : undefined;
+        return mapClusterState(
+          cluster,
+          tags,
+          kubernetesObjects ?? [],
+          managedRoles,
+          nodeArchitecture,
+        );
       });
 
       const waitForClusterActive = (

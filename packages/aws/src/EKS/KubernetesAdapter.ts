@@ -196,9 +196,11 @@ export const eksConnectionOf = (options: {
   endpoint?: string | undefined;
   certificateAuthorityData?: string | undefined;
   emulator?: boolean | undefined;
+  architecture?: "amd64" | "arm64" | undefined;
 }): Connection => ({
   endpoint: options.endpoint,
   certificateAuthorityData: options.certificateAuthorityData,
+  ...(options.architecture ? { architecture: options.architecture } : {}),
   auth: {
     kind: "aws-eks",
     clusterName: options.clusterName,
