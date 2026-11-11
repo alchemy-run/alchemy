@@ -475,7 +475,10 @@ describe(
         for (const { props, path } of cases) {
           const error = yield* stack
             .deploy(Docker.Network("invalid-network-options", { ...props, name }))
-            .pipe(Effect.catchCause((cause) => Effect.succeed(findNetworkOptionsError(cause))));
+            .pipe(
+              Effect.as(undefined),
+              Effect.catchCause((cause) => Effect.succeed(findNetworkOptionsError(cause))),
+            );
           expect(error?._tag).toBe("InvalidNetworkOptions");
           expect(error).toMatchObject({ path, message: expect.stringContaining(path) });
           const missing = yield* docker.network.inspect(name).pipe(Effect.flip);
@@ -512,14 +515,16 @@ describe(
               internal: false,
               ipam: { config },
             });
-            const planned = yield* stack
-              .plan(invalid)
-              .pipe(Effect.catchCause((cause) => Effect.succeed(findNetworkOptionsError(cause))));
+            const planned = yield* stack.plan(invalid).pipe(
+              Effect.as(undefined),
+              Effect.catchCause((cause) => Effect.succeed(findNetworkOptionsError(cause))),
+            );
             expect(planned?._tag).toBe("InvalidNetworkOptions");
             expect(planned).toMatchObject({ path, message: expect.stringContaining(path) });
-            const deployed = yield* stack
-              .deploy(invalid)
-              .pipe(Effect.catchCause((cause) => Effect.succeed(findNetworkOptionsError(cause))));
+            const deployed = yield* stack.deploy(invalid).pipe(
+              Effect.as(undefined),
+              Effect.catchCause((cause) => Effect.succeed(findNetworkOptionsError(cause))),
+            );
             expect(deployed?._tag).toBe("InvalidNetworkOptions");
             expect(deployed).toMatchObject({ path, message: expect.stringContaining(path) });
             expect((yield* docker.network.inspect(previous.id)).Internal).toBe(true);
@@ -552,14 +557,16 @@ describe(
               name,
               internal: false,
             });
-            const planned = yield* stack
-              .plan(invalid)
-              .pipe(Effect.catchCause((cause) => Effect.succeed(findNetworkOptionsError(cause))));
+            const planned = yield* stack.plan(invalid).pipe(
+              Effect.as(undefined),
+              Effect.catchCause((cause) => Effect.succeed(findNetworkOptionsError(cause))),
+            );
             expect(planned?._tag).toBe("InvalidNetworkOptions");
             expect(planned).toMatchObject({ path: "ipam.config[0].subnet" });
-            const deployed = yield* stack
-              .deploy(invalid)
-              .pipe(Effect.catchCause((cause) => Effect.succeed(findNetworkOptionsError(cause))));
+            const deployed = yield* stack.deploy(invalid).pipe(
+              Effect.as(undefined),
+              Effect.catchCause((cause) => Effect.succeed(findNetworkOptionsError(cause))),
+            );
             expect(deployed?._tag).toBe("InvalidNetworkOptions");
             expect(deployed).toMatchObject({ path: "ipam.config[0].subnet" });
             expect((yield* docker.network.inspect(original.id)).Internal).toBe(true);
@@ -580,14 +587,16 @@ describe(
           name,
           labels: { "alchemy::id": "spoofed-resource", environment: "production" },
         });
-        const planned = yield* stack
-          .plan(invalid)
-          .pipe(Effect.catchCause((cause) => Effect.succeed(findNetworkOptionsError(cause))));
+        const planned = yield* stack.plan(invalid).pipe(
+          Effect.as(undefined),
+          Effect.catchCause((cause) => Effect.succeed(findNetworkOptionsError(cause))),
+        );
         expect(planned?._tag).toBe("InvalidNetworkOptions");
         expect(planned).toMatchObject({ path: 'labels["alchemy::id"]' });
-        const deployed = yield* stack
-          .deploy(invalid)
-          .pipe(Effect.catchCause((cause) => Effect.succeed(findNetworkOptionsError(cause))));
+        const deployed = yield* stack.deploy(invalid).pipe(
+          Effect.as(undefined),
+          Effect.catchCause((cause) => Effect.succeed(findNetworkOptionsError(cause))),
+        );
         expect(deployed?._tag).toBe("InvalidNetworkOptions");
         expect(deployed).toMatchObject({ path: 'labels["alchemy::id"]' });
         expect((yield* docker.network.inspect(original.id)).Labels?.environment).toBe("test");
@@ -693,19 +702,24 @@ describe(
         yield* docker.network.remove(original.id);
         const foreign = yield* docker.network.create({ name, driver: "bridge" });
         yield* Effect.addFinalizer(() => docker.network.remove(foreign.stdout).pipe(Effect.ignore));
-        const planned = yield* stack
-          .plan(resource)
-          .pipe(Effect.catchCause((cause) => Effect.succeed(findOwnedError(cause))));
+        const planned = yield* stack.plan(resource).pipe(
+          Effect.as(undefined),
+          Effect.catchCause((cause) => Effect.succeed(findOwnedError(cause))),
+        );
         expect(planned?._tag).toBe("OwnedBySomeoneElse");
-        const deployed = yield* stack
-          .deploy(resource)
-          .pipe(Effect.catchCause((cause) => Effect.succeed(findOwnedError(cause))));
+        const deployed = yield* stack.deploy(resource).pipe(
+          Effect.as(undefined),
+          Effect.catchCause((cause) => Effect.succeed(findOwnedError(cause))),
+        );
         expect(deployed?._tag).toBe("OwnedBySomeoneElse");
         // A changed immutable option takes the delete-first replacement path.
         // It must also reject the foreign owner before any destructive work.
         const replacement = yield* stack
           .deploy(Docker.Network("ownership-replacement", { name, internal: true }))
-          .pipe(Effect.catchCause((cause) => Effect.succeed(findOwnedError(cause))));
+          .pipe(
+            Effect.as(undefined),
+            Effect.catchCause((cause) => Effect.succeed(findOwnedError(cause))),
+          );
         expect(replacement?._tag).toBe("OwnedBySomeoneElse");
         expect((yield* docker.network.inspect(foreign.stdout)).Id).toBe(foreign.stdout);
       }),
