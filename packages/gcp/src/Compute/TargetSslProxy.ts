@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitGlobalOperation } from "./operations.ts";
@@ -92,8 +93,26 @@ export type TargetSslProxy = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  TargetSslProxyLookup
 >;
+
+/**
+ * Props for {@link TargetSslProxy.lookup}: find a target ssl proxy this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface TargetSslProxyLookup {
+  /**
+   * TargetSslProxy name (RFC1035, 1-63 characters).
+   */
+  targetSslProxyName: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A global Compute Engine target SSL proxy.
@@ -148,6 +167,19 @@ export type TargetSslProxy = Resource<
  *   service: nextBackend.name,
  *   sslCertificates: [nextCert.sslCertificateName],
  *   proxyHeader: "PROXY_V1",
+ * });
+ * ```
+ *
+ * ### Looking up an existing target ssl proxy
+ * `TargetSslProxy.lookup` references a target ssl proxy Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * target ssl proxy.
+ *
+ * **Example:** Reference an existing target ssl proxy
+ * ```typescript
+ * const targetSslProxy = GCP.Compute.TargetSslProxy.lookup({
+ *   targetSslProxyName: "my-target-ssl-proxy",
  * });
  * ```
  *
@@ -272,6 +304,13 @@ export const TargetSslProxyProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ targetSslProxyName }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(env.project, targetSslProxyName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;

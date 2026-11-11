@@ -7,6 +7,7 @@ import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -76,6 +77,13 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { instance, table, view };
         }),
+      );
+      yield* expectFound(
+        GCP.Bigtable.InstancesMaterializedView.lookup({
+          materializedViewId: created.view.materializedViewId,
+          instance: created.view.instance,
+        }),
+        created.view,
       );
 
       expect(created.view.name).toContain("/materializedViews/");

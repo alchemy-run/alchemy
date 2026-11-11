@@ -1,0 +1,79 @@
+---
+title: Organization and keys
+description: How an Archil account or organization holds your disks, sandboxes and images, how an API key decides where Alchemy deploys, and what access each host gets instead of your key.
+---
+
+import Tree from "../../../components/diagrams/Tree.astro";
+
+Everything you create on Archil belongs to a personal account or an **organization**: its disks, sandboxes and images, and the bill for them. An organization lets a team share disks. Members manage them, and administrators also manage who the members are.
+
+## A key works in one region of one organization
+
+Inside it, each region keeps its own disks and sandboxes, and an API key works in one region only.
+
+<Tree
+  nodes={[
+    { id: "org", label: "acme", type: "organization · one bill" },
+    { id: "use1", label: "aws-us-east-1", type: "region", parent: "org" },
+    { id: "dataset", label: "Dataset", type: "disk", parent: "use1" },
+    { id: "home", label: "user-42", type: "disk", parent: "use1" },
+    { id: "api", label: "Api", type: "sandbox", parent: "use1" },
+    { id: "euw1", label: "aws-eu-west-1", type: "region", parent: "org", side: true },
+    { id: "archive", label: "Archive", type: "disk", parent: "euw1" },
+  ]}
+  scopes={[
+    { on: "use1", label: "API key key-…" },
+    { on: "dataset", label: "disk user" },
+  ]}
+  caption="An API key reaches everything in one region of one organization. A disk user reaches one disk, so a host holding it can't touch any other."
+/>
+
+## Store your key in a profile
+
+Alchemy calls Archil's control plane with an **API key**. Create one in the [console](https://console.archil.com) under **API Keys**, with the account or organization you deploy to selected. It starts with `key-`.
+
+Then store it in a [profile](/environments/profiles), with the region your disks live in:
+
+```sh
+alchemy profile edit --add Archil
+```
+
+The key picks the organization and the profile's region picks where every disk, sandbox and image goes, `aws-us-east-1` by default. Run code against disks only in the AWS regions: `gcp-us-central1` stores disks but has no serverless exec or sandboxes.
+
+Enter your organization id too if you keep disks on your own bucket. The bucket policy only trusts Archil on behalf of that organization. See [Your own bucket](/archil/storage/your-own-bucket).
+
+## Give production its own profile
+
+A [stage](/environments/stages) decides what you deploy. The profile decides where. Give production its own organization, or at least its own key, and its own profile:
+
+```sh
+alchemy profile create prod
+alchemy profile edit --profile prod --add Archil
+alchemy deploy --stage prod --profile prod
+```
+
+Archil has no tags, so Alchemy tells stages apart by name. Each stage's disks and sandboxes get names generated from the app, stage and id.
+
+## Each host gets access to one disk
+
+Archil can't scope an API key, and only creates new ones from a console session, so a deployed host never gets a key of its own. Bindings that touch one disk give their host a **disk user** instead: an S3 key pair for `ReadDisk`, `WriteDisk` and `ReadWriteDisk`, or a mount token for `MountDisk` on your own hosts. Archil checks each one, and destroying the Stack removes them.
+
+```typescript
+const files = yield* Archil.ReadDisk(Dataset);
+```
+
+Bindings that call the control plane (`ExecDisk`, `CreateDisk`, `BranchDisk`, `CreateSandbox`, `ConnectSandbox`, `CreateImage`) run with the key you deploy with. Rotate it in the console and redeploy.
+
+See [Credentials and bindings](/archil/security/credentials).
+
+## Deploy from CI with a key
+
+When `ARCHIL_API_KEY` is set, Alchemy uses it instead of the profile. Set `ARCHIL_REGION` too unless you deploy to `aws-us-east-1`, and `ARCHIL_ORGANIZATION` for disks on your own bucket:
+
+```sh
+ARCHIL_API_KEY=key-... ARCHIL_REGION=aws-eu-west-1 alchemy deploy --stage prod
+```
+
+Use a separate key for CI, so you can delete it without touching yours. See [CI](/environments/ci).
+
+What each host gets, and who owns what your app creates while it runs, is in [Credentials and bindings](/archil/security/credentials). What a sandbox can reach is in [Network](/archil/security/network).

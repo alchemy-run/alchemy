@@ -1,0 +1,26 @@
+{
+  "name": "cloudflare-archil-workspaces",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "examples/cloudflare-archil-workspaces"
+  },
+  "type": "module",
+  "scripts": {
+    "deploy": "alchemy deploy",
+    "destroy": "alchemy destroy",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@alchemy.run/archil": "workspace:*",
+    "@alchemy.run/cloudflare": "workspace:*",
+    "alchemy": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@alchemy.run/test": "workspace:*"
+  }
+}

@@ -1,0 +1,48 @@
+---
+title: Call Python functions
+description: Call functions you deployed with modal deploy from a Worker or Lambda.
+---
+
+Modal's own Python client deploys most Modal apps. Deploy the function with `modal deploy` as usual, and a Worker or Lambda calls it by app and function name, with arguments and results encoded as CBOR.
+
+## Bind the function by name
+
+```typescript title="src/Api.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Modal from "@alchemy.run/modal";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.url, compatibility: { flags: ["nodejs_compat"] } },
+  Effect.gen(function* () {
+    const embed = yield* Modal.InvokeFunction({ app: "inference", function: "embed" });
+    return {
+      fetch: Effect.gen(function* () {
+        const vector = yield* embed.call<number[]>(["hello world"]);
+        return yield* HttpServerResponse.json({ dims: vector.length });
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Modal.InvokeFunctionHttp)),
+) {}
+```
+
+Arguments and results are CBOR: numbers, strings, bytes, lists, dicts, booleans and `None`.
+
+## Call a class method
+
+```typescript
+const model = yield* Modal.InvokeFunction({ app: "inference", function: "Model.generate" });
+```
+
+`Class.method` names a method of a Modal class.
+
+## Start a call and read it later
+
+```typescript
+const job = yield* train.spawn([], { epochs: 3 });
+const metrics = yield* train.result(job, { timeout: "30 minutes" });
+```
+
+`spawn` returns as soon as Modal queues the call, so a long job doesn't hold the request open.

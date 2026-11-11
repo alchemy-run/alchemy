@@ -1,15 +1,10 @@
 import type { MySQLConfig } from "@alchemy.run/sql/MySQL";
 // `@effect/sql-mysql2` (and mysql2 underneath) are optional peers — value
-// imports are deferred to first use so `@alchemy.run/drizzle` resolves without
+// imports are deferred to the call so `@alchemy.run/drizzle` resolves without
 // them installed.
-import type * as MysqlClient from "@effect/sql-mysql2/MysqlClient";
-import { makeExecutionMemo } from "alchemy/Runtime/ExecutionMemo";
-import { proxyChain } from "alchemy/Util/proxy-chain";
 import type { AnyRelations, EmptyRelations } from "drizzle-orm";
-import type { EffectMysql2Database } from "drizzle-orm/effect-mysql2";
 import type { EffectDrizzleMySqlConfig } from "drizzle-orm/mysql-core/effect/utils";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import type * as Redacted from "effect/Redacted";
 
 /**
@@ -25,10 +20,12 @@ import type * as Redacted from "effect/Redacted";
  * });
  * ```
  *
- * The pool opens on the first query of an execution, is reused for every
- * query in it, and closes when the event settles (see
- * {@link makeExecutionMemo}); plan/deploy never connect. Workers defaults
- * ({@link resolveMySQLConfig}) are overridden via `config.client`:
+ * The database is a real `EffectMysql2Database`. Queries, subqueries, CTEs
+ * and `sql` fragments are built by drizzle's own code, with no connection.
+ * Running a query opens the pool. The pool is opened at most once per
+ * execution and closes when the event settles. The connection string
+ * resolves then too, so deploy / plan-time invocations never connect.
+ * Workers defaults (`resolveMySQLConfig`) are overridden via `config.client`:
  *
  * ```typescript
  * const db = yield* Drizzle.MySQL(connectionString, {
@@ -39,7 +36,11 @@ import type * as Redacted from "effect/Redacted";
  *
  * @binding
  */
-export const MySQL = <TRelations extends AnyRelations = EmptyRelations, E = never, R = never>(
+export const MySQL = Effect.fn(function* <
+  TRelations extends AnyRelations = EmptyRelations,
+  E = never,
+  R = never,
+>(
   connectionString: Effect.Effect<Redacted.Redacted<string>, E, R>,
   config?: EffectDrizzleMySqlConfig<TRelations> & {
     /**
@@ -49,38 +50,16 @@ export const MySQL = <TRelations extends AnyRelations = EmptyRelations, E = neve
      */
     readonly client?: Omit<MySQLConfig, "url">;
   },
-) =>
-  Effect.map(
-    makeExecutionMemo(
-      Effect.gen(function* () {
-        const [MysqlClient, MySqlDrizzle, { resolveMySQLConfig }] = yield* Effect.promise(() =>
-          Promise.all([
-            import("@effect/sql-mysql2/MysqlClient"),
-            import("drizzle-orm/effect-mysql2"),
-            import("@alchemy.run/sql/MySQL"),
-          ]),
-        );
-        const { client, ...drizzleConfig } = config ?? {};
-        const mysqlCtx = yield* Layer.build(
-          MysqlClient.layer(yield* resolveMySQLConfig({ ...client, url: connectionString })),
-        );
-        return yield* MySqlDrizzle.makeWithDefaults(
-          drizzleConfig as EffectDrizzleMySqlConfig<TRelations>,
-        ).pipe(Effect.provideContext(mysqlCtx));
-      }),
-    ),
-    (db) =>
-      proxyChain<
-        EffectMysql2Database<TRelations> & {
-          $client: MysqlClient.MysqlClient;
-        }
-      >(
-        db as Effect.Effect<
-          EffectMysql2Database<TRelations> & {
-            $client: MysqlClient.MysqlClient;
-          },
-          any,
-          any
-        >,
-      ),
+) {
+  const [{ MysqlClient }, MySqlDrizzle, SQL] = yield* Effect.promise(() =>
+    Promise.all([
+      import("@effect/sql-mysql2/MysqlClient"),
+      import("drizzle-orm/effect-mysql2"),
+      import("@alchemy.run/sql/MySQL"),
+    ]),
   );
+  const { client, ...drizzleConfig } = config ?? {};
+  return yield* MySqlDrizzle.makeWithDefaults(
+    drizzleConfig as EffectDrizzleMySqlConfig<TRelations>,
+  ).pipe(Effect.provideServiceEffect(MysqlClient, SQL.MySQL({ ...client, url: connectionString })));
+});

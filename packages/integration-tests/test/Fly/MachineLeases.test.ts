@@ -12,8 +12,9 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Result from "effect/Result";
 import { assertAppGone } from "./fixtures/bluegreen.ts";
 import { transportProxy, type TransportEvent } from "./fixtures/transport.ts";
+import { flyApi } from "./limit.ts";
 
-const { test } = Test.make({ providers: Fly.providers() });
+const { test } = Test.make({ limit: flyApi, providers: Fly.providers() });
 
 const targets = Effect.gen(function* () {
   const app = yield* Fly.App("LeaseSite");

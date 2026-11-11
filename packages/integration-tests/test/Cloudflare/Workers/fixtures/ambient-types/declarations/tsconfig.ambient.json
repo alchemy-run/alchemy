@@ -1,0 +1,26 @@
+{
+  // Checks the emitted `lib/*.d.ts` of alchemy and @alchemy.run/cloudflare,
+  // the files the published packages serve to TypeScript, not their `src`
+  // (#3119). Loads the workerd globals through `"types"`, as the issue's
+  // project does.
+  "extends": "../../../../../../../../tsconfig.base.json",
+  "include": ["ambient.ts"],
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "module": "Preserve",
+    "moduleResolution": "Bundler",
+    "target": "ESNext",
+    "lib": ["ES2023"],
+    "types": ["@cloudflare/workers-types"],
+    "paths": {
+      "alchemy/*": ["../../../../../../../alchemy/lib/*.d.ts"],
+      "@alchemy.run/cloudflare": ["../../../../../../../cloudflare/lib/index.d.ts"]
+    }
+  },
+  "references": [
+    { "path": "../../../../../../../alchemy/tsconfig.json" },
+    { "path": "../../../../../../../cloudflare/tsconfig.json" }
+  ]
+}

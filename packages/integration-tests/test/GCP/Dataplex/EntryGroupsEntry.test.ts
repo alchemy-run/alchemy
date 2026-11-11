@@ -5,6 +5,7 @@ import * as dataplex from "@distilled.cloud/gcp/dataplex_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { withDataplexSlot } from "./quota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -52,6 +53,21 @@ test.provider.skipIf(!!process.env.FAST)(
           });
           return { type, group, entry };
         }),
+      );
+      yield* expectFound(
+        GCP.Dataplex.EntryGroupsEntry.lookup({
+          entryId: created.entry.entryId,
+          entryGroup: created.entry.entryGroup,
+          location: created.entry.location,
+        }),
+        created.entry,
+      );
+      yield* expectFound(
+        GCP.Dataplex.EntryType.lookup({
+          entryTypeId: created.type.entryTypeId,
+          location: created.type.location,
+        }),
+        created.type,
       );
 
       expect(created.entry.name).toContain("/entries/");

@@ -10,7 +10,7 @@ import * as Output from "alchemy/Output";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import { type LookupMethod, Resource } from "alchemy/Resource";
 import type { HostRuntimeContext, ServerHost } from "alchemy/Runtime/Process";
 import { Stack } from "alchemy/Stack";
 import { createInternalTags, diffTags } from "alchemy/Tags";
@@ -947,8 +947,20 @@ export interface Service extends Resource<
     };
   },
   TaskBindingContract,
-  Providers
+  Providers,
+  ServiceLookup
 > {}
+
+/**
+ * Props for {@link Service.lookup}: find a service this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ServiceLookup {
+  /** The name or ARN of the cluster the service runs in. */
+  cluster: string;
+  /** The name of the existing service. */
+  serviceName: string;
+}
 
 export type ServiceServices = Credentials | Region | ServerHost | AWSEnvironment;
 
@@ -1023,6 +1035,39 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  *     };
  *   }).pipe(Effect.provide(AWS.DynamoDB.PutItemHttp)),
  * );
+ * ```
+ *
+ * ### Caching Build Layers
+ * Builds reuse the local BuildKit cache of the machine they run on, and
+ * nothing but the image is pushed. A builder that has never built the image,
+ * such as a fresh CI runner, reruns every step. Set `build.cache: true` to keep
+ * every stage's layers at the image repository's `:buildcache` tag, so fresh
+ * builders skip unchanged steps. For another backend, pass BuildKit's own
+ * `--cache-from` / `--cache-to` values as `from` and `to`.
+ *
+ * **Example:** Cache layers in the image repository
+ * ```typescript
+ * const api = yield* AWS.ECS.Service("Api", {
+ *   cluster,
+ *   context: "./api",
+ *   port: 8080,
+ *   build: { cache: true },
+ * });
+ * ```
+ *
+ * **Example:** Cache layers in GitHub Actions
+ * ```typescript
+ * const api = yield* AWS.ECS.Service("Api", {
+ *   cluster,
+ *   context: "./api",
+ *   port: 8080,
+ *   build: {
+ *     cache: {
+ *       from: ["type=gha,scope=api"],
+ *       to: ["type=gha,scope=api,mode=max"],
+ *     },
+ *   },
+ * });
  * ```
  *
  * ### Bundling & Tree-shaking
@@ -1332,28 +1377,39 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * });
  * ```
  *
+ * ### Looking up an existing service
+ * `Service.lookup` references a service Alchemy doesn't manage (created in the
+ * console or by another stack), found by `cluster` and `serviceName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing service
+ * ```typescript
+ * const web = AWS.ECS.Service.lookup({ cluster: "shared", serviceName: "web" });
+ * const serviceArn = web.serviceArn;
+ * ```
+ *
  * @resource
  */
-export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRuntimeContext> =
-  Platform("AWS.ECS.Service", {
-    createRuntimeContext: createContainerRuntimeContext("AWS.ECS.Service") as (
-      id: string,
-    ) => ServiceRuntimeContext,
-    // Compose the managed load balancer (owned ALB/listeners or shared-listener
-    // rules + target groups) as REAL namespaced child resources before the core
-    // service resource is declared.
-    transformProps: (id, props) => transformServiceProps(id, props),
-    // Autoscaling references the service's own Output attributes (cluster/name/
-    // target-group ARNs), so it composes AFTER the resource exists.
-    onCreate: (resource, props) =>
-      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- Platform onCreate hook type is Effect<void, never, any>; failures still propagate at runtime
-      composeServiceScaling(
-        resource as Service,
-        props as ServiceProps,
-        // Typed failures (e.g. RequestCountScalingRequiresLoadBalancer)
-        // surface through the deploy like any resource-construction error.
-      ) as Effect.Effect<void, never, any>,
-  });
+export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRuntimeContext> &
+  LookupMethod<Service> = Platform("AWS.ECS.Service", {
+  createRuntimeContext: createContainerRuntimeContext("AWS.ECS.Service") as (
+    id: string,
+  ) => ServiceRuntimeContext,
+  // Compose the managed load balancer (owned ALB/listeners or shared-listener
+  // rules + target groups) as REAL namespaced child resources before the core
+  // service resource is declared.
+  transformProps: (id, props) => transformServiceProps(id, props),
+  // Autoscaling references the service's own Output attributes (cluster/name/
+  // target-group ARNs), so it composes AFTER the resource exists.
+  onCreate: (resource, props) =>
+    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- Platform onCreate hook type is Effect<void, never, any>; failures still propagate at runtime
+    composeServiceScaling(
+      resource as Service,
+      props as ServiceProps,
+      // Typed failures (e.g. RequestCountScalingRequiresLoadBalancer)
+      // surface through the deploy like any resource-construction error.
+    ) as Effect.Effect<void, never, any>,
+});
 
 /** The BYO task reference, when the props use the `task:` form. */
 /**
@@ -2538,29 +2594,49 @@ const observeServiceConvergence = (input: {
       };
     }
 
-    const targetGroupArns = [
-      ...new Set(
-        (service.loadBalancers ?? []).flatMap((loadBalancer) =>
-          loadBalancer.targetGroupArn ? [loadBalancer.targetGroupArn] : [],
-        ),
-      ),
+    // A load balancer is one target "slot". With native blue/green, ECS
+    // alternates the tasks between the configured group and
+    // `advancedConfiguration.alternateTargetGroupArn` while DescribeServices
+    // keeps reporting the configured one, so a slot counts the targets of
+    // both groups — it converges wherever ECS put the tasks.
+    const targetGroupSlots = [
+      ...new Map(
+        (service.loadBalancers ?? []).flatMap((loadBalancer) => {
+          const arns = [
+            ...new Set(
+              [
+                loadBalancer.targetGroupArn,
+                loadBalancer.advancedConfiguration?.alternateTargetGroupArn,
+              ].filter((arn): arn is string => arn !== undefined && arn !== ""),
+            ),
+          ];
+          return arns.length > 0 ? [[arns.join("|"), arns] as const] : [];
+        }),
+      ).values(),
     ];
     const targetGroups = yield* Effect.forEach(
-      targetGroupArns,
-      (targetGroupArn) =>
-        elbv2.describeTargetHealth({ TargetGroupArn: targetGroupArn }).pipe(
-          Effect.map((health) => ({
-            missing: false,
-            states: (health.TargetHealthDescriptions ?? []).map(
-              (target) => target.TargetHealth?.State,
+      targetGroupSlots,
+      (arns) =>
+        Effect.forEach(arns, (targetGroupArn) =>
+          elbv2.describeTargetHealth({ TargetGroupArn: targetGroupArn }).pipe(
+            Effect.map((health) => ({
+              missing: false,
+              states: (health.TargetHealthDescriptions ?? []).map(
+                (target) => target.TargetHealth?.State,
+              ),
+            })),
+            Effect.catchTag("TargetGroupNotFoundException", () =>
+              Effect.succeed({
+                missing: true,
+                states: [] as (string | undefined)[],
+              }),
             ),
-          })),
-          Effect.catchTag("TargetGroupNotFoundException", () =>
-            Effect.succeed({
-              missing: true,
-              states: [] as (string | undefined)[],
-            }),
           ),
+        ).pipe(
+          Effect.map((groups) => ({
+            missing: groups.every((group) => group.missing),
+            states: groups.flatMap((group) => group.states),
+          })),
         ),
       { concurrency: 4 },
     );
@@ -2931,7 +3007,9 @@ export const ServiceProvider = () =>
           output?.repositoryName ??
           (yield* createPhysicalName({
             id: `${id}-repo`,
-            maxLength: 256,
+            // ECS caps an image reference at 255 characters: the registry host,
+            // this name and a 64-character tag must all fit.
+            maxLength: 128,
             lowercase: true,
           }));
         const logGroupName =
@@ -3214,6 +3292,25 @@ export const ServiceProvider = () =>
             }
           }
         }),
+        lookup: Effect.fn(function* ({ cluster, serviceName }) {
+          const described = yield* ecs
+            .describeServices({ cluster, services: [serviceName], include: ["TAGS"] })
+            .pipe(Effect.catchTag("ClusterNotFoundException", () => Effect.undefined));
+          const service = described?.services?.[0];
+          if (!service?.serviceArn || service.status === "INACTIVE") return undefined;
+          return {
+            serviceArn: service.serviceArn as ServiceArn,
+            serviceName: service.serviceName!,
+            clusterArn: service.clusterArn as ClusterArn,
+            taskDefinitionArn: service.taskDefinition!,
+            status: service.status ?? "ACTIVE",
+            configuration: observeServiceConfiguration(
+              service,
+              undefined,
+              ecsTagRecord(service.tags),
+            ),
+          };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const clusterArn = output?.clusterArn ?? clusterArnOf(olds?.cluster);
           if (clusterArn === undefined) {
@@ -3393,22 +3490,32 @@ export const ServiceProvider = () =>
           };
 
           if (!observed?.serviceArn) {
-            const created = yield* ecs.createService({
-              ...mutableInput(news, task, network, securityGroups),
-              // With autoscaling, `desiredCount` is only the initial size
-              // (defaulting to `scaling.min`) — the scalable target owns it
-              // from then on.
-              desiredCount: news.desiredCount ?? news.scaling?.min ?? 1,
-              serviceName,
-              cluster: clusterArn,
-              loadBalancers: loadBalancersOf(news, task),
-              serviceRegistries: news.serviceRegistries,
-              deploymentController: news.deploymentController,
-              schedulingStrategy: news.schedulingStrategy,
-              role: news.role,
-              tags: toEcsTags(desiredTags),
-              enableECSManagedTags: news.enableECSManagedTags ?? true,
-            });
+            const created = yield* ecs
+              .createService({
+                ...mutableInput(news, task, network, securityGroups),
+                // With autoscaling, `desiredCount` is only the initial size
+                // (defaulting to `scaling.min`) — the scalable target owns it
+                // from then on.
+                desiredCount: news.desiredCount ?? news.scaling?.min ?? 1,
+                serviceName,
+                cluster: clusterArn,
+                loadBalancers: loadBalancersOf(news, task),
+                serviceRegistries: news.serviceRegistries,
+                deploymentController: news.deploymentController,
+                schedulingStrategy: news.schedulingStrategy,
+                role: news.role,
+                tags: toEcsTags(desiredTags),
+                enableECSManagedTags: news.enableECSManagedTags ?? true,
+              })
+              .pipe(
+                Effect.retry({
+                  // ECS assumes `advancedConfiguration.roleArn` (blue/green) to
+                  // validate the target groups. A role created in the same apply
+                  // may not have propagated through IAM yet — retry bounded.
+                  while: (e) => e._tag === "ServiceRoleNotAssumable",
+                  schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(12)]),
+                }),
+              );
             const service = created.service;
             if (!service?.serviceArn) {
               return yield* Effect.die(new Error("createService returned no service"));
@@ -3480,11 +3587,14 @@ export const ServiceProvider = () =>
             .pipe(
               // The service may still be transitioning (e.g. a prior
               // deployment settling). updateService rejects with
-              // ServiceNotActiveException until it returns to ACTIVE — retry
-              // bounded.
+              // ServiceNotActiveException until it returns to ACTIVE. ECS also
+              // assumes `advancedConfiguration.roleArn` (blue/green) to validate
+              // the target groups, and a role created in the same apply may not
+              // have propagated through IAM yet. Retry both, bounded.
               Effect.retry({
-                while: (e) => e._tag === "ServiceNotActiveException",
-                schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(8)]),
+                while: (e) =>
+                  e._tag === "ServiceNotActiveException" || e._tag === "ServiceRoleNotAssumable",
+                schedule: Schedule.max([Schedule.spaced("5 seconds"), Schedule.recurs(12)]),
               }),
             );
           yield* session.note(`Waiting for ECS service ${serviceName} to stabilize`);

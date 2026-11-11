@@ -1,0 +1,146 @@
+---
+title: Mounting
+description: Mount Archil disks in program sandboxes, your own Containers, and ECS tasks.
+sidebar:
+  order: 2
+---
+
+import Boundaries from "../../../../components/diagrams/Boundaries.astro";
+
+`Archil.MountDisk(disk, { path, mode })` returns a mount reference: the fields of a sandbox `mounts` entry, plus `mount()`. Where it mounts depends on the host it's bound to.
+
+## Mount it in a program sandbox
+
+An [`Archil.Sandbox` with `main`](/archil/compute/programs) mounts the disk itself. The binding adds it to the sandbox's mounts, and the disk is there when the program starts:
+
+```typescript
+const dataset = yield* Archil.MountDisk(Dataset, { path: "/data", mode: "read-only" });
+const names = yield* fs.readDirectory(dataset.path);
+```
+
+## Mount it on your own hosts
+
+On a Cloudflare Container or an ECS task on EC2, the binding installs the Archil client into the host's image, and the plan fails if the host can't provide FUSE. `mount()` runs the client:
+
+```typescript
+export default class Indexer extends Cloudflare.Container<Indexer>()(
+  "Indexer",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const dataset = yield* Archil.MountDisk(Dataset, { path: "/data", mode: "read-only" });
+    const fs = yield* FileSystem.FileSystem;
+    return {
+      fetch: Effect.scoped(
+        Effect.gen(function* () {
+          const path = yield* dataset.mount();
+          const entries = yield* fs.readDirectory(path);
+          return yield* HttpServerResponse.json(entries);
+        }),
+      ),
+    };
+  }).pipe(Effect.provide(Archil.MountDiskLive)),
+) {}
+```
+
+The mount lasts as long as its scope. Closing the scope flushes writes and unmounts.
+
+The host gets a disk token for `Dataset` only, so it can't mount any other disk and never holds an API key. With `mode: "read-only"` the token is read-only too.
+
+## Start the Container with internet access
+
+The Archil client talks to Archil over the network, and a Cloudflare Container has no outbound network unless the Durable Object that starts it asks for one:
+
+```typescript
+export class IndexerObject extends Cloudflare.DurableObject<IndexerObject>()(
+  "IndexerObject",
+  Effect.gen(function* () {
+    const indexer = yield* Indexer;
+    return Effect.gen(function* () {
+      const { fetch } = yield* indexer.getTcpPort(3000);
+      return {
+        list: () =>
+          Effect.gen(function* () {
+            yield* indexer.start({ enableInternet: true });
+            const response = yield* fetch(HttpClientRequest.get("http://container/"));
+            return yield* response.text;
+          }),
+      };
+    });
+  }),
+) {}
+```
+
+Without `enableInternet: true`, `mount` fails after 60 seconds with the client's output.
+
+## Mount disks named at run time
+
+`MountDisk()` takes the disk and its token per call, e.g. from a Worker that created the disk:
+
+```typescript
+const archil = yield* Archil.MountDisk();
+const path = yield* archil.mount({ disk: job.diskId, token: job.token, path: "/work" });
+```
+
+The Worker makes the token with `home.createToken(name)` and revokes it with `home.removeToken(id)`.
+
+## Share a disk between hosts
+
+`mode` picks how this mount shares the disk. An `exclusive` mount, the default, locks the whole disk for one writer, and every other client can only mount it read-only:
+
+<Boundaries
+  nodes={[
+    { id: "indexer", label: "Indexer", type: "exclusive", col: 0, row: 1, tone: "accent" },
+    { id: "job", label: "Job", type: "exclusive", col: 1, row: 0 },
+    { id: "api", label: "Api", type: "read-only", col: 2, row: 1 },
+    { id: "files", label: "/", type: "locked by Indexer", col: 1, row: 1 },
+  ]}
+  zones={[{ id: "dataset", label: "Dataset", type: "disk", nodes: ["files"], labelAt: "right" }]}
+  links={[
+    { from: "indexer", to: "files", label: "writes" },
+    { from: "api", to: "files", label: "reads" },
+    { from: "job", to: "dataset", kind: "blocked" },
+  ]}
+  caption="The Indexer holds the disk's write lock, so the Api only reads it and the Job can't write until the Indexer unmounts. Mount both writers conditional and both can write."
+/>
+
+```typescript
+const dataset = yield* Archil.MountDisk(Dataset, { path: "/data", mode: "shared" });
+```
+
+`exclusive` (the default) owns writes; `shared` lets many clients mount and write only paths they check out; `conditional` lets many clients write anywhere; `read-only` never writes. Mount a branch with `branch: "session-42"`. `shared`, `branch`, and `force` are FUSE-client options: a sandbox mounts with `exclusive`, `conditional`, or `read-only`, and takes `queueMs`.
+
+## Pass a mount to a sandbox
+
+A mount reference has the same fields as a sandbox `mounts` entry, so it goes straight into a sandbox created at run time:
+
+```typescript
+const workspace = yield* Archil.MountDisk(Workspace, { path: "/workspace", mode: "conditional" });
+const sandboxes = yield* Archil.CreateSandbox();
+const sandbox = yield* sandboxes.create({ name: `task-${id}`, mounts: [workspace] });
+```
+
+## Mount it in an ECS task
+
+ECS tasks need the EC2 launch type, since Fargate has no FUSE:
+
+```typescript
+export default class Reader extends AWS.ECS.Task<Reader>()(
+  "Reader",
+  { main: import.meta.url, port: 3000, requiresCompatibilities: ["EC2"], networkMode: "bridge" },
+  Effect.gen(function* () {
+    const dataset = yield* Archil.MountDisk(Dataset, { path: "/data", mode: "read-only" });
+    const fs = yield* FileSystem.FileSystem;
+    return {
+      fetch: Effect.scoped(
+        Effect.gen(function* () {
+          const path = yield* dataset.mount();
+          const entries = yield* fs.readDirectory(path);
+          return yield* HttpServerResponse.json(entries);
+        }),
+      ),
+    };
+  }).pipe(Effect.provide(Archil.MountDiskLive)),
+) {}
+```
+
+Alchemy adds `/dev/fuse` and `SYS_ADMIN` to the task's container.

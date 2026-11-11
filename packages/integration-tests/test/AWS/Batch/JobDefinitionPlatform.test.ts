@@ -1,4 +1,5 @@
 import * as AWS from "@alchemy.run/aws";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as batch from "@distilled.cloud/aws/batch";
@@ -6,11 +7,16 @@ import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as ecr from "@distilled.cloud/aws/ecr";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
+import { OtelCollector, waitForWorkSpan, withCollectorUrl } from "../../Utils/Telemetry.ts";
 import NightlyJob, { MARKER } from "./fixtures/nightly-job.ts";
+import TracedJob from "./fixtures/traced-job.ts";
 import { BatchTestNetwork } from "./TestNetwork.ts";
 
-const { test } = Test.make({ providers: AWS.providers() });
+const { test } = Test.make({
+  providers: Layer.mergeAll(AWS.providers(), Cloudflare.providers()),
+});
 
 // Full end-to-end for the Effect-native `Batch.JobDefinition` form: bundle
 // the inline run-to-completion Effect, build + push the container image to
@@ -139,6 +145,69 @@ test.provider.skipIf(!!process.env.FAST)(
       "provider:aws:ec2",
       "provider:aws:ecr",
       "provider:aws:iam",
+      "live",
+    ],
+    timeout: 1_200_000,
+  },
+);
+
+test.provider.skipIf(!!process.env.FAST)(
+  "an Effect-native Batch job exports its spans before it exits",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      // The traced job binds the collector url at deploy, so it deploys first.
+      const collector = yield* stack.deploy(OtelCollector());
+      const outputs = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            yield* OtelCollector();
+            const network = yield* BatchTestNetwork;
+            const computeEnvironment = yield* AWS.Batch.ComputeEnvironment("TracedCE", {
+              subnets: network.subnetIds,
+              securityGroupIds: network.securityGroupIds,
+            });
+            const queue = yield* AWS.Batch.JobQueue("TracedQueue", {
+              computeEnvironments: [computeEnvironment.computeEnvironmentArn],
+            });
+            const job = yield* TracedJob;
+            return { jobQueueArn: queue.jobQueueArn, jobDefinitionArn: job.jobDefinitionArn };
+          }),
+        )
+        .pipe(withCollectorUrl(collector.url!));
+
+      const submitted = yield* batch.submitJob({
+        jobName: "alchemy-e2e-traced-run",
+        jobQueue: outputs.jobQueueArn,
+        jobDefinition: outputs.jobDefinitionArn!,
+      });
+      const job = yield* batch.describeJobs({ jobs: [submitted.jobId] }).pipe(
+        Effect.map((result) => result.jobs?.[0]),
+        Effect.repeat({
+          schedule: Schedule.spaced("10 seconds"),
+          until: (j): boolean => j?.status === "SUCCEEDED" || j?.status === "FAILED",
+          times: 60,
+        }),
+      );
+      expect(`${job?.status}: ${job?.statusReason ?? ""}`).toMatch(/^SUCCEEDED:/);
+
+      // The job has exited; its span arrived on the final flush.
+      const traces = yield* waitForWorkSpan(collector.url!, "batch");
+      expect(traces).toContain("work:batch");
+      expect(traces).toContain("batch-job-e2e");
+
+      yield* stack.destroy();
+    }),
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:batch",
+      "provider:aws:ec2",
+      "provider:aws:ecr",
+      "provider:aws:iam",
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
       "live",
     ],
     timeout: 1_200_000,

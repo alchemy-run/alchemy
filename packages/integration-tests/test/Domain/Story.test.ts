@@ -84,12 +84,12 @@ class Counter extends Domain.Aggregate("Counter", {
       if (operator === "guest") return yield* new NotAnOperator();
       return [new WasReset({ by: operator })];
     }),
-    Increment: (s, cmd) =>
+    Increment: (counter, cmd) =>
       cmd.by > 10
         ? new TooBig({ max: 10 })
-        : [new Incremented({ by: cmd.by, total: s.total + cmd.by })],
-    Cap: (s) => (s.capped ? [] : [new Capped()]),
-    Remind: (s) => (s.capped ? [new Reminded()] : []),
+        : [new Incremented({ by: cmd.by, total: counter.total + cmd.by })],
+    Cap: (counter) => (counter.capped ? [] : [new Capped()]),
+    Remind: (counter) => (counter.capped ? [new Reminded()] : []),
   },
   evolve: {
     Incremented: (s, e) => ({ ...s, total: e.total }),
@@ -100,11 +100,6 @@ class Counter extends Domain.Aggregate("Counter", {
   reply: {
     Increment: (s) => ({ total: s.total }),
     ResetCounter: (s) => ({ total: s.total }),
-  },
-  read: {
-    middleware: [OperatorSession],
-    rejects: [NotAnOperator],
-    validate: () => notGuest(),
   },
 }) {}
 
@@ -119,8 +114,11 @@ class Totals extends Domain.View("Totals", {
     Incremented: (_, e) => ({ total: e.total }),
     WasReset: () => ({ total: 0 }),
   },
-  validate: () => notGuest(),
 }) {}
+
+/** Who may read each key of Totals. */
+
+const TotalsLive = Totals.toLayer(Effect.succeed(() => notGuest()));
 
 class Logged extends Domain.Event("Logged", { by: Schema.Number }) {}
 
@@ -236,9 +234,7 @@ const RemindWhenCappedLive = RemindWhenCapped.toLayer(
   Effect.gen(function* () {
     const counters = yield* Counter;
     return Effect.fn(function* ({ source }) {
-      yield* counters
-        .schedule(source, new Remind(), { after: "1 hour" })
-        .pipe(Effect.catchTag("AlreadyExecuted", () => Effect.void));
+      yield* counters.schedule(source, new Remind(), { after: "1 hour" });
     });
   }),
 );
@@ -250,7 +246,7 @@ class Counters extends Domain.Model("Counters", {
 }) {}
 
 const story = Story.make(Counters, {
-  layer: Layer.mergeAll(CapWhenLargeLive, CapWhenOverdrawnLive, RemindWhenCappedLive),
+  layer: Layer.mergeAll(CapWhenLargeLive, CapWhenOverdrawnLive, RemindWhenCappedLive, TotalsLive),
   stub: [Approval],
 });
 
@@ -269,7 +265,7 @@ const ApprovalAdapter = Approval.toLayer(
   }),
 );
 const unstubbed = Story.make(Counters, {
-  layer: Layer.mergeAll(CapWhenLargeLive, CapWhenOverdrawnLive, RemindWhenCappedLive),
+  layer: Layer.mergeAll(CapWhenLargeLive, CapWhenOverdrawnLive, RemindWhenCappedLive, TotalsLive),
 });
 const real = (...steps: ReadonlyArray<Step>) =>
   unstubbed(...steps).pipe(Effect.provide(ApprovalAdapter));
@@ -681,7 +677,12 @@ describe("Domain Story", { tags: ["unit", "local"] }, () => {
         Layer.mergeAll(
           OperatorSessionLive,
           Counters.layer(
-            Layer.mergeAll(CapWhenLargeLive, CapWhenOverdrawnLive, RemindWhenCappedLive),
+            Layer.mergeAll(
+              CapWhenLargeLive,
+              CapWhenOverdrawnLive,
+              RemindWhenCappedLive,
+              TotalsLive,
+            ),
           ),
         ).pipe(
           Layer.provide(
@@ -695,13 +696,12 @@ describe("Domain Story", { tags: ["unit", "local"] }, () => {
     ),
   );
 
-  it.live("an Api exposes views and aggregates; validate judges every read", () =>
+  it.live("an Api exposes views; validate judges every read", () =>
     Effect.gen(function* () {
       class CounterApi extends Domain.Api("CounterApi", {
         model: Counters,
         commands: ["ResetCounter"],
         views: ["Totals"],
-        aggregates: ["Counter"],
       }) {}
       const client = yield* CounterApi.clientInProcess;
       const counters = yield* Counter;
@@ -730,10 +730,6 @@ describe("Domain Story", { tags: ["unit", "local"] }, () => {
       expect((yield* client.Totals.list("c-1", guest).pipe(Effect.flip))._tag).toBe(
         "NotAnOperator",
       );
-      expect(yield* client.Counter.get("c-1", sam)).toEqual({ total: 3, capped: false });
-      expect((yield* client.Counter.get("c-1", guest).pipe(Effect.flip))._tag).toBe(
-        "NotAnOperator",
-      );
 
       // A read without a session fails with the middleware's error, and the client's type has it.
       const anonymous = [
@@ -744,23 +740,15 @@ describe("Domain Story", { tags: ["unit", "local"] }, () => {
           Stream.runCollect,
           Effect.catchTag("Unauthenticated", (e) => Effect.succeed(e._tag)),
         ),
-        yield* client.Counter.get("c-1").pipe(
-          Effect.catchTag("Unauthenticated", (e) => Effect.succeed(e._tag)),
-        ),
-        yield* client.Counter.watch("c-1").pipe(
+        yield* client.Totals.events("c-1").pipe(
           Stream.runCollect,
           Effect.catchTag("Unauthenticated", (e) => Effect.succeed(e._tag)),
         ),
       ];
-      expect(anonymous).toEqual(Array(4).fill("Unauthenticated"));
+      expect(anonymous).toEqual(Array(3).fill("Unauthenticated"));
 
       // A watch sees the current state, then each change.
       const totals = yield* client.Totals.watch("c-1", sam).pipe(
-        Stream.take(2),
-        Stream.runCollect,
-        Effect.forkChild,
-      );
-      const states = yield* client.Counter.watch("c-1", sam).pipe(
         Stream.take(2),
         Stream.runCollect,
         Effect.forkChild,
@@ -771,9 +759,8 @@ describe("Domain Story", { tags: ["unit", "local"] }, () => {
         { state: { total: 3 }, cursor: 1 },
         { state: { total: 5 }, cursor: 2 },
       ]);
-      expect((yield* Fiber.join(states)).map(({ state }) => state.total)).toEqual([3, 5]);
 
-      const events = yield* client.Counter.events("c-1", sam).pipe(
+      const events = yield* client.Totals.events("c-1", sam).pipe(
         Stream.filter(Domain.Read.isEvent),
         Stream.take(2),
         Stream.runCollect,
@@ -785,7 +772,12 @@ describe("Domain Story", { tags: ["unit", "local"] }, () => {
         Layer.mergeAll(
           OperatorSessionLive,
           Counters.layer(
-            Layer.mergeAll(CapWhenLargeLive, CapWhenOverdrawnLive, RemindWhenCappedLive),
+            Layer.mergeAll(
+              CapWhenLargeLive,
+              CapWhenOverdrawnLive,
+              RemindWhenCappedLive,
+              TotalsLive,
+            ),
           ),
         ).pipe(
           Layer.provide(

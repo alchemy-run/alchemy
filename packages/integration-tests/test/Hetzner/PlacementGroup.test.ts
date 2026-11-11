@@ -5,16 +5,15 @@ import * as placementGroups from "@distilled.cloud/hetzner/placement_groups";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
-
 const waitUntilGone = Hetzner.waitUntilPlacementGroupGone;
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "create, update, and delete a placement group",
   (stack) =>
     Effect.gen(function* () {
@@ -28,6 +27,7 @@ test.provider.skipIf(!hasHetznerCreds)(
           });
         }),
       );
+      yield* expectFound(Hetzner.PlacementGroup.lookup({ name: created.name }), created);
 
       expect(created.id).toEqual(expect.any(Number));
       expect(created.name).toEqual(expect.any(String));
@@ -85,7 +85,7 @@ test.provider.skipIf(!hasHetznerCreds)(
   },
 );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "list enumerates the deployed placement group",
   (stack) =>
     Effect.gen(function* () {

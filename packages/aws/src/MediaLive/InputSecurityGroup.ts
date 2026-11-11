@@ -60,8 +60,18 @@ export interface InputSecurityGroup extends Resource<
     whitelistRules: string[];
   },
   never,
-  Providers
+  Providers,
+  InputSecurityGroupLookup
 > {}
+
+/**
+ * Props for {@link InputSecurityGroup.lookup}: find an input security group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface InputSecurityGroupLookup {
+  /** The id of the existing input security group. */
+  inputSecurityGroupId: string;
+}
 
 /**
  * An AWS Elemental MediaLive input security group — an IP allowlist that
@@ -92,6 +102,16 @@ export interface InputSecurityGroup extends Resource<
  *   inputSecurityGroups: [isg.inputSecurityGroupId],
  *   destinations: [{ StreamName: "live/stream" }],
  * });
+ * ```
+ *
+ * ### Looking up an existing input security group
+ * `InputSecurityGroup.lookup` references an input security group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `inputSecurityGroupId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing input security group
+ * ```typescript
+ * const studio = AWS.MediaLive.InputSecurityGroup.lookup({ inputSecurityGroupId: "123456" });
  * ```
  *
  * @resource
@@ -160,6 +180,10 @@ export const InputSecurityGroupProvider = () =>
             ),
           ),
 
+        lookup: Effect.fn(function* ({ inputSecurityGroupId }) {
+          const isg = yield* getGroup(inputSecurityGroupId);
+          return isg === undefined ? undefined : toAttrs(isg);
+        }),
         read: Effect.fn(function* ({ id, output }) {
           const isg =
             output?.inputSecurityGroupId !== undefined

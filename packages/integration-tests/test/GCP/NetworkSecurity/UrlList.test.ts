@@ -6,6 +6,7 @@ import * as networksecurity from "@distilled.cloud/gcp/networksecurity_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -58,6 +59,13 @@ test.provider(
             values: ["malware.example.com"],
           });
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkSecurity.UrlList.lookup({
+          urlListId: created.urlListId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/urlLists/");

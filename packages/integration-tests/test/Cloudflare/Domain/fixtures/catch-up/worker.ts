@@ -1,4 +1,4 @@
-import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -34,18 +34,18 @@ export const ledgerWorker = (
         const path = new URL(request.url, "http://localhost").pathname.split("/");
         if (path[1] === "version") return HttpServerResponse.text(version);
         if (path[1] === "deposits" && view) {
-          const state = yield* view.query(Account.ref(path[2]!));
+          const state = yield* view.get(Account.ref(path[2]!));
           return yield* HttpServerResponse.json(Option.getOrNull(state));
         }
         if (path[1] === "timeline" && timeline) {
-          return yield* HttpServerResponse.json(Option.getOrNull(yield* timeline.query("all")));
+          return yield* HttpServerResponse.json(Option.getOrNull(yield* timeline.get("all")));
         }
         if (path[1] === "history" && view) {
           return yield* HttpServerResponse.json(yield* view.history);
         }
         if (path[1] !== "deposit") return HttpServerResponse.text("Not Found", { status: 404 });
         yield* accounts.send(path[2]!, new Deposit({ amount: Number(path[3]) }));
-        return yield* HttpServerResponse.json(yield* accounts.state(path[2]!));
+        return yield* HttpServerResponse.json(yield* accounts.get(path[2]!));
       }).pipe(
         Effect.catchTag("ConsistencyTimeout", () =>
           Effect.succeed(HttpServerResponse.text("not caught up", { status: 503 })),

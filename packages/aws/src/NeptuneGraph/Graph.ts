@@ -100,8 +100,23 @@ export interface Graph extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  GraphLookup
 > {}
+
+/**
+ * Props for {@link Graph.lookup}: find a graph this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type GraphLookup =
+  | {
+      /** The id of the existing graph. */
+      graphId: string;
+    }
+  | {
+      /** The name of the existing graph. */
+      graphName: string;
+    };
 
 /**
  * An Amazon Neptune Analytics graph — a serverless, memory-optimized graph
@@ -142,6 +157,17 @@ export interface Graph extends Resource<
  *   queryString: "MATCH (n) RETURN count(n) AS n",
  *   language: "OPEN_CYPHER",
  * });
+ * ```
+ *
+ * ### Looking up an existing graph
+ * `Graph.lookup` references a graph Alchemy doesn't manage (created in the
+ * console or by another stack), found by `graphId` or `graphName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing graph
+ * ```typescript
+ * const social = AWS.NeptuneGraph.Graph.lookup({ graphName: "social" });
+ * const endpoint = social.endpoint;
  * ```
  *
  * @resource
@@ -317,6 +343,14 @@ export const GraphProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* (props) {
+          const graph = yield* observeGraph(
+            "graphId" in props ? props.graphId : undefined,
+            "graphName" in props ? props.graphName : "",
+          );
+          if (graph === undefined) return undefined;
+          return toAttrs({ graph, tags: yield* readTags(graph.arn) });
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =

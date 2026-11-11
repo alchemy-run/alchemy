@@ -89,8 +89,18 @@ export interface Analysis extends Resource<
     status: string;
   },
   never,
-  Providers
+  Providers,
+  AnalysisLookup
 > {}
+
+/**
+ * Props for {@link Analysis.lookup}: find an analysis this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface AnalysisLookup {
+  /** The id of the existing analysis. */
+  analysisId: string;
+}
 
 /**
  * An Amazon QuickSight analysis — an editable workspace built from a template
@@ -114,6 +124,16 @@ export interface Analysis extends Resource<
  *     },
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing analysis
+ * `Analysis.lookup` references an analysis Alchemy doesn't manage (created in the
+ * console or by another stack), found by `analysisId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing analysis
+ * ```typescript
+ * const sales = AWS.QuickSight.Analysis.lookup({ analysisId: "sales" });
  * ```
  *
  * @resource
@@ -165,6 +185,11 @@ export const AnalysisProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ analysisId }) {
+          const { accountId } = yield* AWSEnvironment.current;
+          const found = yield* readAnalysis(accountId, analysisId);
+          return found === undefined ? undefined : toAttrs(found);
+        }),
         read: Effect.fn(function* ({ id, olds = {}, output }) {
           const { accountId } = yield* AWSEnvironment.current;
           const analysisId = output?.analysisId ?? (yield* toId(id, olds));

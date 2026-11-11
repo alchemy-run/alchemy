@@ -196,6 +196,14 @@ export const FunctionProviderLive = () =>
       const artifact = yield* buildFunctionArtifact(news);
       if (artifact.codeHash !== output?.codeHash) return { action: "update" };
     }),
+    lookup: Effect.fn(function* ({ projectId, branchId, slug }) {
+      const scope = yield* resolveBranchScope(
+        branchId === undefined ? { project: { projectId } } : { branch: { projectId, branchId } },
+      );
+      const found = yield* observeFunction(scope, slug);
+      return found === undefined ? undefined : attributes(scope, found);
+    }),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       if (
         !output &&

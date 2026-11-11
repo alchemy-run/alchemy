@@ -1,0 +1,243 @@
+---
+title: What is AWS?
+description: The concepts behind AWS — accounts, regions, IAM identities and policies, resources and ARNs, runtimes, event sources, VPCs and the edge — and how @alchemy.run/aws models each of them.
+---
+
+import Tree from "../../../components/diagrams/Tree.astro";
+
+Amazon Web Services (AWS) is a cloud platform with services for databases, queues, object storage, functions, containers, virtual machines, networks, DNS and more. Each service creates **resources** in your **account**, and every call to a resource is checked against **IAM**, the service that decides who may do what.
+
+Take one small app: a Lambda Function that stores files in an S3 Bucket and queues jobs for a second Function. Your profile signs you in to an account and sets a default region. Inside it, a Function runs as a role, and the role's policy lets it reach the Bucket and the Queue. The Queue in turn invokes the worker.
+
+<Tree
+  nodes={[
+    { id: "account", label: "123456789012", type: "account", icon: "brand:aws", areas: ["role region"], colGap: 3 },
+    { id: "role", label: "Role", type: "IAM role · every region", parent: "account", icon: "id-card" },
+    { id: "region", label: "us-east-1", type: "region", parent: "account", dashed: true, icon: "map-pin", areas: ["api files", "api jobs", "api worker"], colGap: 3 },
+    { id: "api", label: "Api", type: "Lambda Function", parent: "region", tone: "accent", icon: "square-function" },
+    { id: "files", label: "Files", type: "S3 Bucket", parent: "region", icon: "archive" },
+    { id: "jobs", label: "Jobs", type: "SQS Queue", parent: "region", icon: "inbox" },
+    { id: "worker", label: "Worker", type: "Lambda Function", parent: "region", icon: "square-function" },
+  ]}
+  links={[
+    { from: "api", to: "role", label: "runs as" },
+    { from: "api", to: "files", label: "writes" },
+    { from: "api", to: "jobs", label: "sends" },
+    { from: "jobs", to: "worker", label: "invokes", dashed: true },
+  ]}
+  caption="IAM roles belong to the account and work in every region. The rest lives in one region. Api runs as Role, whose policy lets it write to Files and send to Jobs; Jobs invokes Worker."
+/>
+
+## Accounts: the boundary around everything
+
+An **AWS account** is a container for resources, identified by a twelve-digit id like `123456789012`. Everything you create lives in exactly one account, every bill is per account, and by default nothing in one account can see anything in another.
+
+That makes the account the strongest isolation AWS offers. Most teams run production in its own account and give development, staging and each engineer separate ones. An **organization** groups accounts under one bill and one set of guardrails.
+
+Alchemy deploys into whichever account your [profile](/environments/profiles) signs in to. You choose it once, in [Setup](/aws/setup):
+
+```sh
+alchemy profile edit --add AWS
+```
+
+See [Accounts and regions](/aws/accounts-and-regions).
+
+## Regions: where a resource runs
+
+A **region** is a geographic location with its own copy of each service: `us-east-1` in Virginia, `eu-west-1` in Ireland, `ap-southeast-2` in Sydney. A Bucket in `us-east-1` is a different resource from one in `eu-west-1`, and most services never move data between regions on their own.
+
+Each region is built from several **Availability Zones**: separate data centers with independent power and networking. Services like Lambda, DynamoDB and SQS spread across zones for you. Networks and virtual machines make you choose.
+
+A few services are **global**: IAM, CloudFront and Route 53 have one copy for the whole account. Your profile sets the default region, where every regional resource in your Stack is created.
+
+See [Accounts and regions](/aws/accounts-and-regions).
+
+## IAM: who may do what
+
+Every request to AWS is made by an **identity** and checked by IAM. Nothing is allowed until a policy allows it.
+
+A **policy** is a list of statements. Each statement allows or denies a set of **actions** on a set of **resources**:
+
+```json
+{
+  "Effect": "Allow",
+  "Action": ["s3:PutObject"],
+  "Resource": "arn:aws:s3:::myapp-files-a1b2c3/*"
+}
+```
+
+Identities come in two kinds. An **IAM user** is a long-lived identity with its own keys. An **IAM role** has no keys at all: something trusted **assumes** it and gets temporary credentials. People sign in through IAM Identity Center and assume a role in each account. Code runs as a role too: every Lambda Function has an **execution role**, and the role's policies are exactly what the code may call.
+
+See [IAM and bindings](/aws/iam).
+
+## Resources and ARNs
+
+A **resource** is one thing a service manages: a Bucket, a Table, a Queue, a Function. Each one has a name you choose, or Alchemy generates, and an **Amazon Resource Name** (ARN) that identifies it across all of AWS:
+
+```text
+arn:aws:sqs:us-east-1:123456789012:myapp-jobs-a1b2c3
+```
+
+The ARN carries the service, the region, the account and the name. IAM statements, event sources and other resources refer to it, so it's the value you pass around most.
+
+In Alchemy, you declare a resource in your Stack and read its attributes, ARN included, from what it returns:
+
+```typescript title="src/queue.ts"
+export const Jobs = AWS.SQS.Queue("Jobs");
+```
+
+Alchemy names it from your app, stage and the id you gave it, so `dev` and `prod` each get their own Queue. It also **tags** it with the Stack, stage and id. Tags are how Alchemy knows a resource is its own, and how you find everything one Stack created.
+
+## Runtimes: where your code runs
+
+AWS has several places to run code, from fully managed to fully yours.
+
+A **Lambda Function** runs your code in response to a request or an event, and costs nothing while idle. A **Lambda Web Function** is the same idea for HTTP servers, serving many requests per environment. **ECS** runs long-lived containers, **EKS** runs Kubernetes, and **EC2** gives you a virtual machine.
+
+In Alchemy, a runtime is a class. Its code and its infrastructure live in one file:
+
+```typescript title="src/api.ts"
+export default class Api extends AWS.Lambda.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("Hello from Lambda!")),
+    };
+  }),
+) {}
+```
+
+Deploy bundles the file, uploads it and creates the Function, its execution role and its log group.
+
+See [Choosing a runtime](/aws/compute/choosing-a-runtime).
+
+## Bindings: the code is the policy
+
+A runtime that calls a resource needs two things: a client in the code, and a statement in its role. On AWS those are usually written in two places, and they drift apart.
+
+A **binding** gives you both from one line. Bind `S3.PutObject` to the Bucket, and the Function gets a typed `putObject` and an `s3:PutObject` statement on exactly that Bucket:
+
+```typescript title="src/api.ts"
+export default class Api extends AWS.Lambda.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const putObject = yield* S3.PutObject(Files);
+    return {
+      fetch: putObject({ Key: "hello.txt", Body: "hi" }).pipe(
+        Effect.as(HttpServerResponse.text("stored")),
+        Effect.orDie,
+      ),
+    };
+  }).pipe(Effect.provide(S3.PutObjectHttp)),
+) {}
+```
+
+`S3.PutObjectHttp` is the client the Function provides. It calls S3 with the role's credentials.
+
+Remove the binding, and the next deploy removes the statement. The role only ever allows what the code actually calls, which is the least privilege IAM asks for.
+
+See [IAM and bindings](/aws/iam).
+
+## Event sources: AWS calls your code
+
+Many services produce events: a message arrives on a Queue, an object lands in a Bucket, a row changes in a Table, a schedule fires. An **event source** connects one of them to a Function, and AWS invokes the Function with each batch.
+
+```typescript title="src/worker.ts"
+yield* SQS.consumeQueueMessages(
+  Jobs,
+  { batchSize: 10 },
+  Effect.fn(function* (event) {
+    for (const record of event.Records) {
+      yield* Console.log(record.body);
+    }
+  }),
+);
+```
+
+The Function provides `AWS.Lambda.QueueEventSource`. Deploy creates the event source mapping and grants the role the permissions to receive and delete messages.
+
+See [SQS](/aws/messaging/sqs), [S3 events](/aws/messaging/s3-events), [DynamoDB Streams](/aws/messaging/dynamodb-streams) and [EventBridge](/aws/messaging/eventbridge).
+
+## Networks: VPCs, subnets and security groups
+
+A **VPC** is a private network inside a region. It's divided into **subnets**, one or more per Availability Zone. A **public** subnet routes to the internet through an internet gateway. A **private** one reaches out only through a NAT gateway, if at all. **Security groups** are firewalls around each network interface.
+
+A Lambda Function needs none of this. It reaches AWS services over AWS's own endpoints and serves HTTP from its Function URL. Containers, Kubernetes and virtual machines run inside a VPC, and so does anything that has to reach a private database. The `Network` helper builds the usual layout in one line:
+
+```typescript title="src/network.ts"
+export const AppNetwork = AWS.EC2.Network("AppNetwork", { cidrBlock: "10.42.0.0/16" });
+```
+
+See [VPC & networking](/aws/networking).
+
+## The edge: CloudFront, Route 53 and certificates
+
+Traffic from the internet usually arrives through the **edge**. **CloudFront** is AWS's CDN: it caches and serves your site from locations near your users and forwards the rest to an origin, like a Bucket or a Function. **Route 53** hosts your domain's DNS. **ACM** issues the TLS certificates both use.
+
+A Website resource puts these together: a Bucket for the files, a CloudFront distribution in front of it, and, given a domain, the certificate and the DNS records too.
+
+See [Websites](/aws/frontend/websites) and [Custom domains](/aws/networking/custom-domains).
+
+## Observability: CloudWatch
+
+Every service reports to **CloudWatch**. Your Function's logs go to a **log group**, each service publishes **metrics** like invocations, errors and queue depth, and an **alarm** watches a metric and notifies you when it crosses a line.
+
+A **dashboard** puts metrics side by side. It's declared next to the Function it watches, so each stage gets its own:
+
+```typescript title="alchemy.run.ts"
+const api = yield* Api;
+
+yield* AWS.CloudWatch.Dashboard("Api", {
+  DashboardBody: api.functionName.pipe(
+    Output.map((functionName) => ({
+      widgets: [
+        {
+          type: "metric",
+          width: 12,
+          height: 6,
+          properties: {
+            title: "Invocations and errors",
+            stat: "Sum",
+            period: 300,
+            metrics: [
+              ["AWS/Lambda", "Invocations", "FunctionName", functionName],
+              ["AWS/Lambda", "Errors", "FunctionName", functionName],
+            ],
+          },
+        },
+      ],
+    })),
+  ),
+});
+```
+
+`functionName` is only known once the Function is deployed, so the body is built from it with `Output.map`.
+
+See [CloudWatch](/aws/observability/cloudwatch).
+
+## State: Alchemy's record in your account
+
+Alchemy remembers what each Stack created, so the next deploy knows what to change. On AWS that record is a DynamoDB table, `alchemy-state`, in your own account. Deploys from your machine and from CI read the same one.
+
+```typescript title="alchemy.run.ts"
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: AWS.providers(), state: AWS.state() },
+  Effect.gen(function* () {
+    const api = yield* Api;
+    return { url: api.functionUrl };
+  }),
+);
+```
+
+## How @alchemy.run/aws models these concepts
+
+Each of these concepts is something your Stack declares or something Alchemy does for you.
+
+Your profile signs in to the account and sets the default region, and `AWS.providers()` deploys there. Every resource is a declaration like `AWS.SQS.Queue("Jobs")`, named and tagged per stage. Every runtime is a class that holds its own code, and its execution role is generated from the bindings it uses. Event sources are bindings too. Networks, edge and monitoring are resources like any other, declared next to the code that needs them.
+
+The same Stack runs on your machine under `alchemy dev`, against a local emulator, with no account at all. See [Local development](/aws/local-development).
+
+Next, build one: the [tutorial](/aws/tutorial/part-1) puts these ideas to work, one step at a time. Or read the concepts in depth, starting with [Accounts and regions](/aws/accounts-and-regions) and [IAM and bindings](/aws/iam).

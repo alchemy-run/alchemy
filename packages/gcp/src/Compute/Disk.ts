@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -129,8 +130,29 @@ export type Disk = Resource<
     users: ReadonlyArray<string>;
   },
   never,
-  Providers
+  Providers,
+  DiskLookup
 >;
+
+/**
+ * Props for {@link Disk.lookup}: find a disk this stack doesn't manage by
+ * its identifiers, in the ambient project unless `project` names another.
+ */
+export interface DiskLookup {
+  /**
+   * Disk name (RFC1035, 1-63 characters).
+   */
+  diskName: string;
+  /**
+   * Zone the disk lives in (e.g. `us-central1-a`).
+   */
+  zone?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A zonal Compute Engine persistent disk.
@@ -164,6 +186,16 @@ export type Disk = Resource<
  *   diskName: "app-data",
  *   sizeGb: 50,
  * });
+ * ```
+ *
+ * ### Looking up an existing disk
+ * `Disk.lookup` references a disk Alchemy doesn't manage (created in the
+ * console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared disk.
+ *
+ * **Example:** Reference an existing disk
+ * ```typescript
+ * const disk = GCP.Compute.Disk.lookup({ diskName: "my-disk" });
  * ```
  *
  * @resource
@@ -338,6 +370,14 @@ export const DiskProvider = () =>
           previousName !== undefined && nextName === previousName && previousZone === nextZone,
       };
     }),
+
+    lookup: Effect.fn(function* ({ diskName, zone: lookupZone }) {
+      const env = yield* GcpEnvironment.current;
+      const zone = lastSegment(lookupZone) ?? DEFAULT_ZONE;
+      const existing = yield* getByName(env.project, zone, diskName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

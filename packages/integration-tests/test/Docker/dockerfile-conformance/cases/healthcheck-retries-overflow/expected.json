@@ -1,0 +1,4 @@
+{
+  "ok": false,
+  "error": "dockerfile parse error on line 2: strconv.ParseInt: parsing \"4294967296\": value out of range"
+}

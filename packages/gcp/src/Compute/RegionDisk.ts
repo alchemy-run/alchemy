@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -140,8 +141,31 @@ export type RegionDisk = Resource<
     users: ReadonlyArray<string>;
   },
   never,
-  Providers
+  Providers,
+  RegionDiskLookup
 >;
+
+/**
+ * Props for {@link RegionDisk.lookup}: find a region disk this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface RegionDiskLookup {
+  /**
+   * Disk name (RFC1035, 1-63 characters).
+   */
+  diskName: string;
+  /**
+   * Region the disk lives in (e.g. `us-central1`). `US-CENTRAL1` is
+   * accepted and normalized to `us-central1`.
+   */
+  region?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A regional Compute Engine persistent disk.
@@ -180,6 +204,17 @@ export type RegionDisk = Resource<
  *   region: "us-central1",
  *   sizeGb: 250,
  * });
+ * ```
+ *
+ * ### Looking up an existing region disk
+ * `RegionDisk.lookup` references a region disk Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * region disk.
+ *
+ * **Example:** Reference an existing region disk
+ * ```typescript
+ * const regionDisk = GCP.Compute.RegionDisk.lookup({ diskName: "my-disk" });
  * ```
  *
  * @resource
@@ -383,6 +418,14 @@ export const RegionDiskProvider = () =>
           previousName !== undefined && nextName === previousName && previousRegion === nextRegion,
       };
     }),
+
+    lookup: Effect.fn(function* ({ diskName, region: lookupRegion }) {
+      const env = yield* GcpEnvironment.current;
+      const region = normalizeRegion(lookupRegion, env.region);
+      const existing = yield* getByName(env.project, region, diskName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

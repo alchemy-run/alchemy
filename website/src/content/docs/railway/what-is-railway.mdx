@@ -1,0 +1,130 @@
+---
+title: What is Railway?
+description: The concepts behind Railway — workspaces, projects, environments, services, deployments, databases, volumes, variables, private networking and domains — and how @alchemy.run/railway models each of them.
+---
+
+import Tree from "../../../components/diagrams/Tree.astro";
+
+
+Railway runs containers for you. You put **services** in a **project**: your API, a worker, a Postgres database, a Redis cache. Railway builds each one, runs it, gives it a URL, and connects the services in a project over a private network. You pay for the CPU and memory they actually use.
+
+Take one small app: an API service with a Postgres database and a Volume, in one project. A workspace holds the project. The project runs a full copy of its services in each environment, and services in one environment reach each other over its private network.
+
+<Tree
+  nodes={[
+    { id: "ws", label: "acme", type: "workspace", icon: "brand:railway" },
+    { id: "project", label: "Site", type: "project", parent: "ws", dashed: true, icon: "folder" },
+    { id: "prod", label: "production", type: "environment", parent: "project", dashed: true, icon: "layers", areas: ["api pg"], colGap: 4 },
+    { id: "api", label: "Api", type: "service · public URL", parent: "prod", tone: "accent", icon: "server" },
+    { id: "pg", label: "Postgres", type: "service · volume", parent: "prod", icon: "brand:postgresql" },
+    { id: "staging", label: "staging", type: "environment", parent: "project", dashed: true, icon: "layers", areas: ["api2 pg2"], colGap: 4 },
+    { id: "api2", label: "Api", type: "service", parent: "staging", icon: "server" },
+    { id: "pg2", label: "Postgres", type: "service · volume", parent: "staging", icon: "brand:postgresql" },
+  ]}
+  links={[
+    { from: "api", to: "pg", label: "privately" },
+    { from: "api2", to: "pg2", label: "privately" },
+  ]}
+  caption="A workspace holds projects, and an API token deploys into one workspace. Each environment is a full copy of the project's services, with its own variables, data and private network."
+/>
+
+## Workspaces and tokens
+
+A **workspace** is your account or your team on Railway. It holds your projects and their bill. Alchemy creates projects in your token's workspace, or, for an account token or OAuth, in your first workspace. A Project can name another with `workspaceId`.
+
+Connect a token once, in [Setup](/railway/setup).
+
+## Projects
+
+A **project** groups the services that make up one app, with their databases, volumes and variables. Alchemy generates a unique name for it unless you give one, so each stage gets its own project.
+
+```typescript title="src/project.ts"
+export const Site = Railway.Project("Site");
+```
+
+See [Projects](/railway/compute/projects).
+
+## Environments
+
+Every project has a **production** environment, created with it. An **environment** is a full copy of the project's services, with its own variables and its own data, so a staging environment can run the same app against its own database.
+
+See [Environments](/railway/compute/environments).
+
+## Services: a container each
+
+A **service** is one container in a project. It runs a public image, code from a GitHub repository, or, in Alchemy, your Effect program, which Alchemy bundles and Railway builds into an image:
+
+```typescript title="src/api.ts"
+export default class Api extends Railway.Service<Api>()(
+  "Api",
+  { project: Site, main: import.meta.url, port: 3000 },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("hello from Railway")),
+    };
+  }),
+) {}
+```
+
+Each build of a service is a **deployment**. Railway starts the new one, waits for its health check, and then moves traffic to it.
+
+See [Services](/railway/compute/services).
+
+## Functions
+
+A **function** is a service made from one TypeScript file, with no Dockerfile and no image registry. It can answer HTTP or run on a cron schedule.
+
+See [Functions, templates & VMs](/railway/compute/functions).
+
+## Regions
+
+A service, volume or database runs in one **region**, like `us-west2`. Running it near its users, or near its database, cuts latency.
+
+See [Regions](/railway/compute/regions).
+
+## Databases
+
+Railway runs databases as services, from official images: **Postgres**, **MySQL**, **Mongo** and **Redis**. Each keeps its data on a volume and publishes a connection URL as a variable. A service reaches it through a binding that hands it the connection string.
+
+See [Postgres](/railway/data/postgres), [MySQL](/railway/data/mysql), [Mongo](/railway/data/mongo) and [Redis](/railway/data/redis).
+
+## Volumes and buckets
+
+A **volume** is a disk mounted into one service, whose files survive deploys and restarts. A **bucket** is object storage that speaks the S3 API, for files any service can read and write.
+
+See [Volumes](/railway/data/volumes) and [Buckets](/railway/data/buckets).
+
+## Variables
+
+**Variables** are environment variables for a service, set per environment. A variable can refer to another service's, so the API's `DATABASE_URL` follows the database's. Values from your `.env` read with `effect/Config` reach a service the same way.
+
+See [Variables](/railway/data/variables).
+
+## Networking: domains, TCP and the private network
+
+A service with a port gets a public `*.up.railway.app` domain, and can take a **custom domain** of yours. A **TCP proxy** exposes a database to the internet, for a migration or a tool on your laptop. Inside a project, services reach each other at `{service}.railway.internal` over a **private network**, never leaving Railway.
+
+See [Custom domains, TCP & private networks](/railway/networking).
+
+## State: where Alchemy keeps its record
+
+Railway has no storage for Alchemy's own record of what each Stack created. Keep it on disk with `Alchemy.localState()`, or share it with your team and CI through `Cloudflare.state()` or `AWS.state()`.
+
+```typescript title="alchemy.run.ts"
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Railway.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const api = yield* Api;
+    return { url: api.url };
+  }),
+);
+```
+
+## How @alchemy.run/railway models these concepts
+
+Each of these concepts is something your Stack declares.
+
+Your API token picks the workspace, and `Railway.providers()` deploys into it. A project and its environments are declarations. A service is your program, an image or a repository, running in the project. Databases, volumes, buckets, variables and domains are declarations like any other, and bindings hand a service the connection details for what it uses.
+
+Next, build one: the [tutorial](/railway/tutorial/part-1) puts these ideas to work, one step at a time. Or read the concepts in depth, starting with [Projects](/railway/compute/projects).

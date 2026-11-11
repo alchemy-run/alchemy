@@ -4,6 +4,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as cloudchannel from "@distilled.cloud/gcp/cloudchannel_v1";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
+import { expectFound } from "../lookup.ts";
 import {
   logLevel,
   probeAccountName,
@@ -92,6 +93,13 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { customer, config };
         }),
+      );
+      yield* expectFound(
+        GCP.CloudChannel.CustomersCustomerRepricingConfig.lookup({
+          parent: created.config.parent,
+          configId: created.config.configId,
+        }),
+        created.config,
       );
 
       expect(created.config.name).toContain("/customerRepricingConfigs/");

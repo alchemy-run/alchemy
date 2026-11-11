@@ -4,6 +4,7 @@ description: Deploy Foldkit SPA, SSR, SSG, and hybrid applications to Cloudflare
 sidebar:
   order: 8
 ---
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 `Cloudflare.Website.Foldkit` deploys a [Foldkit](https://foldkit.dev) app
 as a Cloudflare Worker. Alchemy runs the project's Vite build and uploads
@@ -269,9 +270,7 @@ response headers in `renderPage`. Put data APIs or additional Worker handlers in
 
 ## Local dev
 
-```sh
-bun alchemy dev
-```
+<PackageManagers run="alchemy dev" />
 
 `alchemy dev` runs Foldkit's native Vite dev server with state-preserving live
 reload and devtools. SSR uses the same server entry as the production build.
