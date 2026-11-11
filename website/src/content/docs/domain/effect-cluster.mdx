@@ -97,6 +97,49 @@ export default Alchemy.Stack(
 
 <PackageManagers run="alchemy deploy" />
 
+## Host it in your own process
+
+If your process already runs an Effect Cluster runner, host the model on it with `DomainCluster.layerSharding`. It takes the `Sharding`, the `SqlClient` and the `WorkflowEngine` from the context, so there is no pool, gateway or Bootstrap resource to deploy. Every process that provides it is a runner of the model's entity.
+
+```typescript
+// packages/server/src/BankLive.ts
+import * as DomainCluster from "@alchemy.run/domain/EffectCluster";
+import { Bank, BankHandlers } from "@bank/domain/Bank.model";
+import { NodeClusterHttp } from "@effect/platform-node";
+import { PgClient } from "@effect/sql-pg";
+import { ClusterWorkflowEngine } from "effect/cluster";
+import * as Config from "effect/Config";
+import * as Layer from "effect/Layer";
+
+const Cluster = ClusterWorkflowEngine.layer.pipe(
+  Layer.provideMerge(NodeClusterHttp.layer({ transport: "http", storage: "sql" })),
+  Layer.provideMerge(PgClient.layerConfig({ url: Config.Redacted("DATABASE_URL") })),
+);
+
+export const BankLive = Bank.layer(BankHandlers).pipe(
+  Layer.provide(DomainCluster.layerSharding({ name: "Bank" })),
+  Layer.provide(Cluster),
+);
+```
+
+The model's sagas run on the `ClusterWorkflowEngine` of the same context. Two models can share one `Sharding`: give each its own `name`, or the same `name` to host both on one entity.
+
+`layerSharding` makes no table. Make `alchemy_domain_objects` once, for example in a deploy step, with a role that may create tables:
+
+```typescript
+import * as DomainCluster from "@alchemy.run/domain/EffectCluster";
+import { PgClient } from "@effect/sql-pg";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+await Layer.build(DomainCluster.layerMigrations).pipe(
+  Effect.scoped,
+  Effect.provide(PgClient.layerConfig({ url: Config.Redacted("DATABASE_URL") })),
+  Effect.runPromise,
+);
+```
+
 ## Know what runs where
 
 Every object of the model is an entity id of the `Bank` entity, named after what it holds:

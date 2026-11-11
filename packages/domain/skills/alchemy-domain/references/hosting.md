@@ -51,7 +51,7 @@ export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
 
 ## Hosting on Rivet or Effect Cluster
 
-Every platform is one Layer provided to the model: `DomainCloudflare.layerDurableObjects()`, `DomainRivet.layerDurableObjects(options)`, `DomainCluster.layerEntities(options)`. On Rivet and Effect Cluster, the Layer declares one class (or entity) that holds the whole model: each object is an instance named `<Model>.<Class>/<key>`, like `Bank.AccountAggregate/a-1`. In a caller the Layer deploys that class and reaches it through the gateway; the pool's nodes load the same Layer from `main`/`handler` and host the model.
+Every platform is one Layer provided to the model: `DomainCloudflare.layerDurableObjects()`, `DomainRivet.layerDurableObjects(options)`, `DomainCluster.layerEntities(options)`. On Rivet and Effect Cluster, the Layer declares one class (or entity) that holds the whole model: each object is an instance named `<Model>.<Class>/<key>`, like `Bank.AccountAggregate/a-1`. In a caller the Layer deploys that class and reaches it through the gateway; the pool's nodes load the same Layer from `main`/`handler` and host the model. To host the model on an Effect Cluster runner your own process already runs, use `DomainCluster.layerSharding({ name })` instead: it takes `Sharding`, `SqlClient` and `WorkflowEngine` from the context and deploys nothing; `DomainCluster.layerMigrations` makes its table in a deploy step.
 
 ```ts
 // packages/server/src/BankLive.ts — provide BankLive wherever the Api is served
