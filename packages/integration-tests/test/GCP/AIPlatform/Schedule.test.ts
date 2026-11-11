@@ -85,7 +85,8 @@ test.provider(
         name: created.name,
       });
       expect(fetched.name).toEqual(created.name);
-      expect(fetched.displayName).toContain("alchemy-id=");
+      // The ownership marker is never cut, however long the stack and stage.
+      expect(fetched.displayName).toMatch(/^\[alchemy [^\]]+\]/);
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {

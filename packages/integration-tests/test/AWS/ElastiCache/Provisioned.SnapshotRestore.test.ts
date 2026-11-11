@@ -79,6 +79,9 @@ test.provider.skipIf(!!process.env.FAST)(
     }).pipe(Effect.ensuring(deleteSnapshot().pipe(Effect.ignore))),
   {
     tags: ["provider:aws", "provider:aws:ec2", "provider:aws:elasticache", "live"],
-    timeout: 2_700_000,
+    // Two replication groups plus a final snapshot run back to back; a busy
+    // run measured over 45 minutes. A timed-out test is abandoned and skips
+    // the file's afterAll, which leaks the shared network fixture.
+    timeout: 5_400_000,
   },
 );

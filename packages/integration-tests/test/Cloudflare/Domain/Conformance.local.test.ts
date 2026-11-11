@@ -10,6 +10,9 @@ import Stack from "./fixtures/conformance-stack.ts";
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Layer.mergeAll(Cloudflare.providers(), DomainCloudflare.providers()),
   dev: true,
+  // Its own stage: the live suite deploys the same stack concurrently, and a
+  // shared stage lets this file's destroy delete the live Worker.
+  stage: `${Test.defaultStage()}-local`,
 });
 
 // The Domain conformance suite, with the model on Durable Objects in local workerd.
