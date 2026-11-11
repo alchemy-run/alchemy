@@ -26,6 +26,8 @@ export type Domain = Resource<
   {
     /** The domain name. */
     name: string;
+    /** Uniform resource name, `do:domain:<name>`, for `ProjectResources`. */
+    urn: string;
     /** Default TTL of the domain's records, in seconds. */
     ttl: number | undefined;
     /** The zone file DigitalOcean serves for the domain. */
@@ -82,6 +84,7 @@ const DOMAIN_POLL: PollBudget = { maxDelay: "3 seconds", times: 20 };
 
 const toAttrs = (domain: DO.DomainOutput) => ({
   name: domain.name,
+  urn: `do:domain:${domain.name}`,
   ttl: domain.ttl ?? undefined,
   zoneFile: domain.zone_file || undefined,
 });
@@ -98,7 +101,7 @@ const waitUntilGone = (name: string) =>
 
 export const DomainProvider = () =>
   Provider.succeed(Domain, {
-    stables: ["name"],
+    stables: ["name", "urn"],
     // A domain carries no ownership marker.
     nuke: { skip: true },
     read: Effect.fn(function* ({ olds, output }) {

@@ -80,6 +80,8 @@ export type Volume = Resource<
   {
     /** Volume id (UUID). */
     volumeId: string;
+    /** Uniform resource name, `do:volume:<id>`, for `ProjectResources`. */
+    urn: string;
     /** Volume name. */
     name: string;
     /** Region slug. */
@@ -223,6 +225,7 @@ const REPLACING_VALUES = [
 // requested one stands in until then.
 const toAttrs = (volume: VolumeFull, requested?: VolumeProps): VolumeAttributes => ({
   volumeId: volume.id,
+  urn: `do:volume:${volume.id}`,
   name: volume.name,
   region: volume.region.slug,
   sizeGigabytes: volume.size_gigabytes,
@@ -328,7 +331,7 @@ const syncSize = Effect.fn(function* (volume: VolumeFull, sizeGigabytes: number)
 
 export const VolumeProvider = () =>
   Provider.succeed(Volume, {
-    stables: ["volumeId", "name", "region", "createdAt"],
+    stables: ["volumeId", "urn", "name", "region", "createdAt"],
     list: Effect.fn(function* () {
       const volumes = yield* DO.listVolumes.items({ per_page: PAGE_SIZE }).pipe(Stream.runCollect);
       return volumes

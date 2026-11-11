@@ -10,9 +10,12 @@ import { Domain, DomainProvider } from "./Domain.ts";
 import { DomainRecord, DomainRecordProvider } from "./DomainRecord.ts";
 import { Droplet, DropletProvider } from "./Droplet.ts";
 import { Firewall, FirewallProvider } from "./Firewall.ts";
+import { Project, ProjectProvider } from "./Project.ts";
+import { ProjectResources, ProjectResourcesProvider } from "./ProjectResources.ts";
 import { ReservedIp, ReservedIpProvider } from "./ReservedIp.ts";
 import { ReservedIpAssignment, ReservedIpAssignmentProvider } from "./ReservedIpAssignment.ts";
 import { SshKey, SshKeyProvider } from "./SshKey.ts";
+import { Tag, TagProvider } from "./Tag.ts";
 import { Volume, VolumeProvider } from "./Volume.ts";
 import { VolumeAttachment, VolumeAttachmentProvider } from "./VolumeAttachment.ts";
 import { Vpc, VpcProvider } from "./Vpc.ts";
@@ -64,6 +67,9 @@ export const providers = () =>
       ReservedIpAssignment,
       Domain,
       DomainRecord,
+      Project,
+      ProjectResources,
+      Tag,
       KeyPair,
     ]),
   ).pipe(
@@ -79,6 +85,9 @@ export const providers = () =>
         ReservedIpAssignmentProvider(),
         DomainProvider(),
         DomainRecordProvider(),
+        ProjectProvider(),
+        ProjectResourcesProvider(),
+        TagProvider(),
         KeyPairProvider(),
       ),
     ),

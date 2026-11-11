@@ -22,6 +22,8 @@ export type ReservedIp = Resource<
   {
     /** The reserved IPv4 address. */
     ip: string;
+    /** Uniform resource name, `do:floatingip:<ip>`, for `ProjectResources`. */
+    urn: string;
     /** Region slug. */
     region: string;
     /** Id of the droplet the IP is assigned to, if any. */
@@ -85,6 +87,7 @@ const RESERVED_IP_POLL: PollBudget = { maxDelay: "3 seconds", times: 20 };
 
 export const toReservedIpAttrs = (reservedIp: ApiReservedIp): ReservedIpAttributes => ({
   ip: reservedIp.ip,
+  urn: `do:floatingip:${reservedIp.ip}`,
   region: reservedIp.region.slug,
   dropletId: reservedIp.droplet?.id,
   projectId: reservedIp.project_id || undefined,
@@ -102,7 +105,7 @@ const waitUntilGone = (ip: string) =>
 
 export const ReservedIpProvider = () =>
   Provider.succeed(ReservedIp, {
-    stables: ["ip", "region"],
+    stables: ["ip", "urn", "region"],
     // A reserved IP carries no ownership marker.
     nuke: { skip: true },
     read: Effect.fn(function* ({ output }) {

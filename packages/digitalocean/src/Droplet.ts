@@ -138,6 +138,8 @@ export type Droplet = Resource<
   {
     /** Numeric droplet id. */
     dropletId: number;
+    /** Uniform resource name, `do:droplet:<id>`, for `ProjectResources`. */
+    urn: string;
     /** Droplet name and hostname. */
     name: string;
     /** Droplet status, for example `active`. */
@@ -405,6 +407,7 @@ const privateAddress = (networks: ReadonlyArray<NetworkV4> | undefined) =>
 
 const toAttrs = (droplet: ApiDroplet): DropletAttributes => ({
   dropletId: droplet.id,
+  urn: `do:droplet:${droplet.id}`,
   name: droplet.name,
   status: droplet.status,
   region: droplet.region.slug,
@@ -628,6 +631,7 @@ export const DropletProvider = () =>
   Provider.succeed(Droplet, {
     stables: [
       "dropletId",
+      "urn",
       "region",
       "sizeSlug",
       "imageId",
