@@ -1,18 +1,12 @@
 import { ConfigError } from "@distilled.cloud/core/errors";
-import { Credentials, normalizeApiBaseUrl } from "@distilled.cloud/fly-io";
+import { Credentials, CredentialsFromEnv } from "@distilled.cloud/fly-io";
 import { lazyCredentials, orDieCredentialsUnavailable } from "alchemy/Auth/Resolve";
 import * as Output from "alchemy/Output";
-import { unpackEnvValue } from "alchemy/RuntimeContext";
-import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
-import {
-  FLY_API_TOKEN_ENV,
-  FLY_AUTH_PROVIDER_NAME,
-  type FlyResolvedCredentials,
-} from "./AuthProvider.ts";
+import { FLY_AUTH_PROVIDER_NAME, type FlyResolvedCredentials } from "./AuthProvider.ts";
 
 export {
   Credentials,
@@ -32,7 +26,7 @@ export const bindFlyApiToken = (): Effect.Effect<void, never, Credentials> =>
   Effect.gen(function* () {
     // Bound as Redacted so a Service that owns its App stores the token
     // as an App secret, not plain Machine env. The runtime reads it back
-    // with `CredentialsFromBoundEnv`.
+    // with `CredentialsFromEnv`.
     const token = globalThis.__ALCHEMY_RUNTIME__
       ? Redacted.make("")
       : yield* Credentials.pipe(
@@ -46,39 +40,6 @@ export const bindFlyApiToken = (): Effect.Effect<void, never, Credentials> =>
   });
 
 /**
- * `Credentials` inside a deployed host. `bindFlyApiToken` binds the org
- * token as `Redacted`, so `FLY_API_TOKEN` can hold the packed
- * `RuntimeContext` value (an App secret, or Machine env in a shared App).
- * Reads through `Config` like distilled's `CredentialsFromEnv`, so each
- * platform's ConfigProvider still resolves it, then unpacks it; a raw token
- * set by hand also works.
- */
-export const CredentialsFromBoundEnv: Layer.Layer<Credentials> = Layer.succeed(
-  Credentials,
-  Effect.gen(function* () {
-    const raw = yield* Config.String(FLY_API_TOKEN_ENV).pipe(
-      Config.orElse(() => Config.String("FLY_IO_API_KEY")),
-    );
-    const hostname = yield* Config.String("FLY_API_HOSTNAME").pipe(Config.withDefault(""));
-    const unpacked = unpackEnvValue<unknown>(raw);
-    return {
-      apiKey: Redacted.isRedacted(unpacked)
-        ? (unpacked as Redacted.Redacted<string>)
-        : Redacted.make(raw),
-      apiBaseUrl: normalizeApiBaseUrl(hostname || undefined),
-    };
-  }).pipe(
-    Effect.mapError(
-      () =>
-        new ConfigError({
-          message: "FLY_API_TOKEN (or FLY_IO_API_KEY) environment variable is required",
-        }),
-    ),
-    Effect.orDie,
-  ),
-);
-
-/**
  * `Credentials` for the HTTP binding layers (`GetSecretHttp`, `ExecHttp`, …).
  *
  * Those layers are built in two places. Inside a stack (plan/deploy, or an
@@ -89,14 +50,14 @@ export const CredentialsFromBoundEnv: Layer.Layer<Credentials> = Layer.succeed(
  * has already `RuntimeContext.set` the org token, which reaches the
  * Machine as `FLY_API_TOKEN` (an App secret, or Machine env in a shared
  * App). So: reuse the ambient `Credentials` when present, otherwise read
- * it with {@link CredentialsFromBoundEnv}.
+ * it with {@link CredentialsFromEnv}.
  */
 export const CredentialsFromAmbientOrEnv: Layer.Layer<Credentials> = Layer.effect(
   Credentials,
   Effect.gen(function* () {
     const ambient = yield* Effect.serviceOption(Credentials);
     if (Option.isSome(ambient)) return ambient.value;
-    return yield* Credentials.pipe(Effect.provide(CredentialsFromBoundEnv));
+    return yield* Credentials.pipe(Effect.provide(CredentialsFromEnv));
   }),
 );
 
@@ -106,7 +67,7 @@ export const CredentialsFromAmbientOrEnv: Layer.Layer<Credentials> = Layer.effec
  *
  * Maps onto `@distilled.cloud/fly-io`'s `{ apiKey, apiBaseUrl }` shape.
  * Distilled's own `CredentialsFromEnv` also accepts `FLY_IO_API_KEY` as a
- * fallback — this deploy-time path only reads `FLY_API_TOKEN`.
+ * fallback — Alchemy itself only reads `FLY_API_TOKEN`.
  */
 export const fromAuthProvider = () =>
   Layer.effect(

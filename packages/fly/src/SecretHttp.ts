@@ -1,4 +1,9 @@
-import { Credentials, credentials, MachineIdentity } from "@distilled.cloud/fly-io";
+import {
+  Credentials,
+  CredentialsFromEnv,
+  credentials,
+  MachineIdentity,
+} from "@distilled.cloud/fly-io";
 import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Context from "effect/Context";
@@ -8,7 +13,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import type { App } from "./App.ts";
-import { bindFlyApiToken, CredentialsFromBoundEnv } from "./Credentials.ts";
+import { bindFlyApiToken } from "./Credentials.ts";
 import type { Secret } from "./Secret.ts";
 import type { SecretKey } from "./SecretKey.ts";
 
@@ -19,7 +24,7 @@ import type { SecretKey } from "./SecretKey.ts";
  * org token during stack-eval (so Actions work in-process) and `yield*`s
  * it plus `appName` / secret `name` so RuntimeContext.set runs. Platform
  * copies those Outputs into host env; runtime `yield*` gets them back.
- * {@link CredentialsFromBoundEnv} still reads `FLY_API_TOKEN` after that copy.
+ * {@link CredentialsFromEnv} still reads `FLY_API_TOKEN` after that copy.
  *
  * NOT exported from `index.ts`.
  */
@@ -86,7 +91,7 @@ export const makeSecretAuth = (
     if (globalThis.__ALCHEMY_RUNTIME__) {
       // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- TimeoutError/env-credential errors surface untyped; widening SecretAuth would ripple through every Fly secret client
       return eff.pipe(
-        Effect.provide(Layer.mergeAll(CredentialsFromBoundEnv, FetchHttpClient.layer)),
+        Effect.provide(Layer.mergeAll(CredentialsFromEnv, FetchHttpClient.layer)),
         Effect.timeout("8 seconds"),
       ) as Effect.Effect<A, E, RuntimeContext>;
     }
