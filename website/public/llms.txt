@@ -789,6 +789,7 @@ Boat sandboxes: what Boat is, accounts and scoped API keys, sandboxes from any W
 - [Account & API keys](https://alchemy.run/boat/account-and-keys) — How a Boat account holds your sandboxes, how an API key limits what a caller can do, and the key each host gets instead of yours.
 - [Credentials & bindings](https://alchemy.run/boat/security/credentials) — What each host gets to reach Boat, deploy-time resources vs clients your app runs, and who owns the sandboxes your app creates.
 - [Environments & secrets](https://alchemy.run/boat/security/environments) — Boat environments — the variables, secret files and credentials a sandbox starts with, versioned on every change.
+- [Credential profiles](https://alchemy.run/boat/security/credential-profiles) — Boat credential profiles — the AI keys and API secrets a sandbox gets, and the proxy that keeps the real ones out of it.
 - [Choosing a runtime](https://alchemy.run/boat/sandboxes/choosing-a-runtime) — Program sandboxes, a declared dev box, and sandboxes created per task, and when to use each.
 - [Sandboxes](https://alchemy.run/boat/sandboxes/sandboxes) — Boat sandboxes — machine sizes, auto-stop, stop and resume, labels — declared as a long-lived dev box or created per task from a Worker or Function.
 - [Programs](https://alchemy.run/boat/sandboxes/programs) — Run an Effect HTTP program in its own Boat sandbox, served at a URL, restarted in place when its code changes.

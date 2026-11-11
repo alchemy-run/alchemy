@@ -100,6 +100,8 @@ export const MyEnv = Boat.Environment("MyEnv", { env: { NODE_ENV: "production" }
 
 See [Environments & secrets](/boat/security/environments).
 
+AI keys live in a **credential profile**, which an environment names. With Boat's AI credentials proxy on, a sandbox gets placeholders and the real keys never enter it. See [Credential profiles](/boat/security/credential-profiles).
+
 ## Ports: a URL for each server
 
 A server that listens on a port inside a sandbox answers at `https://<subdomain>-<port>.on.boat.dev`. Each port needs a token unless you make it public, and a port's `fetch` sends it for you:
