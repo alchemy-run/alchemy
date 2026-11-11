@@ -542,10 +542,15 @@ const observeActionStatus = (dropletId: number, actionId: number) =>
     Effect.catchTag("NotFound", () => Effect.succeed<ActionStatus>("in-progress")),
   );
 
-const waitForAction = (dropletId: number, actionId: number) => {
+/** Waits for a droplet action to finish; fails unless it completed. */
+export const waitForAction = (
+  dropletId: number,
+  actionId: number,
+  budget: PollBudget = ACTION_POLL,
+) => {
   const failed = (status: ActionStatus) => new DropletActionFailed({ dropletId, actionId, status });
   return pollUntil(observeActionStatus(dropletId, actionId), {
-    ...ACTION_POLL,
+    ...budget,
     until: isFinished,
     onTimeout: failed,
   }).pipe(Effect.filterOrFail((status) => status === "completed", failed));

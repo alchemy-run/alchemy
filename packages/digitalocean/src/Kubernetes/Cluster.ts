@@ -71,6 +71,14 @@ export type ClusterProps = {
   /** Tags to assign. The `alchemy:` prefix is reserved. A change updates in place. */
   tags?: string[];
   /**
+   * Let the cluster's nodes pull images from the team's Container Registry
+   * (DigitalOcean installs the pull secret in every namespace). Updates in
+   * place.
+   *
+   * @default false
+   */
+  registryEnabled?: boolean;
+  /**
    * Also destroy the load balancers and volumes the cluster created for
    * Services and PersistentVolumeClaims when the cluster is destroyed.
    *
@@ -396,7 +404,15 @@ export const ClusterProvider = () =>
         cluster = yield* waitUntilRunning(cluster.id, (c) => c.version === version);
       }
 
-      return toAttrs(yield* waitUntilRunning(cluster.id, (c) => c.name === name));
+      const registryEnabled = news.registryEnabled ?? false;
+      if ((cluster.registry_enabled ?? false) !== registryEnabled) {
+        yield* registryEnabled
+          ? DO.addKubernetesRegistry({ cluster_uuids: [cluster.id] })
+          : DO.removeKubernetesRegistry({ cluster_uuids: [cluster.id] });
+      }
+
+      const running = yield* waitUntilRunning(cluster.id, (c) => c.name === name);
+      return toAttrs(running);
     }),
     delete: Effect.fn(function* ({ olds, output }) {
       const observed = yield* observeKubernetesCluster(output.clusterId);

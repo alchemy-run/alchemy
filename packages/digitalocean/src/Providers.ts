@@ -14,10 +14,12 @@ import * as Databases from "./Databases/index.ts";
 import { Domain, DomainProvider } from "./Domain.ts";
 import { DomainRecord, DomainRecordProvider } from "./DomainRecord.ts";
 import { Droplet, DropletProvider } from "./Droplet.ts";
+import { DropletSnapshot, DropletSnapshotProvider } from "./DropletSnapshot.ts";
 import { Firewall, FirewallProvider } from "./Firewall.ts";
 import * as Functions from "./Functions/index.ts";
 import * as GenAI from "./GenAI/index.ts";
 import { Image, ImageProvider } from "./Image.ts";
+import * as Insights from "./Insights/index.ts";
 import * as Kubernetes from "./Kubernetes/index.ts";
 import { LoadBalancer, LoadBalancerProvider } from "./LoadBalancer.ts";
 import * as Monitoring from "./Monitoring/index.ts";
@@ -38,8 +40,10 @@ import * as Security from "./Security/index.ts";
 import * as Spaces from "./Spaces/index.ts";
 import { SshKey, SshKeyProvider } from "./SshKey.ts";
 import { Tag, TagProvider } from "./Tag.ts";
+import * as VectorDB from "./VectorDB/index.ts";
 import { Volume, VolumeProvider } from "./Volume.ts";
 import { VolumeAttachment, VolumeAttachmentProvider } from "./VolumeAttachment.ts";
+import { VolumeSnapshot, VolumeSnapshotProvider } from "./VolumeSnapshot.ts";
 import { Vpc, VpcProvider } from "./Vpc.ts";
 import { VpcPeering, VpcPeeringProvider } from "./VpcPeering.ts";
 
@@ -129,6 +133,10 @@ export const providers = () =>
       Functions.AccessKey,
       Functions.Action,
       Functions.Trigger,
+      Insights.NotificationChannel,
+      Insights.AlertRule,
+      Insights.Dashboard,
+      VectorDB.Database,
     ]),
   ).pipe(
     Layer.provide(
@@ -173,6 +181,8 @@ export const providers = () =>
         NatGatewayProvider(),
         NfsProvider(),
         AutoscalePoolProvider(),
+        DropletSnapshotProvider(),
+        VolumeSnapshotProvider(),
         KeyPairProvider(),
         GenAI.AgentProvider(),
         GenAI.AgentApiKeyProvider(),
@@ -182,6 +192,10 @@ export const providers = () =>
         Functions.AccessKeyProvider(),
         Functions.ActionProvider(),
         Functions.TriggerProvider(),
+        Insights.NotificationChannelProvider(),
+        Insights.AlertRuleProvider(),
+        Insights.DashboardProvider(),
+        VectorDB.DatabaseProvider(),
       ),
     ),
     // Spaces' S3 API signs with Spaces keys, not the token.

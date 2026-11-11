@@ -1,8 +1,10 @@
 export * as Functions from "./Functions/index.ts";
 export * as GenAI from "./GenAI/index.ts";
 export * as Inference from "./Inference/index.ts";
+export * as Insights from "./Insights/index.ts";
 export * as Monitoring from "./Monitoring/index.ts";
 export * as Security from "./Security/index.ts";
+export * as VectorDB from "./VectorDB/index.ts";
 export * as Spaces from "./Spaces/index.ts";
 export * from "./AuthProvider.ts";
 export * from "./Certificate.ts";
@@ -37,3 +39,5 @@ export * from "./Cron.ts";
 export * from "./NatGateway.ts";
 export * from "./Nfs.ts";
 export * from "./AutoscalePool.ts";
+export * from "./DropletSnapshot.ts";
+export * from "./VolumeSnapshot.ts";
