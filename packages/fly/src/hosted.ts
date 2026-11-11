@@ -210,9 +210,10 @@ export const collectBindingState = (bindings: readonly ResourceBinding<ServiceBi
     .map((binding) => binding?.data?.env)
     .reduce<Record<string, any>>((acc, value) => ({ ...acc, ...value }), {});
   const env = toEnvRecord(merged);
-  // Bound `Config` values and Redacted outputs, still packed for the runtime.
-  const secrets = toEnvRecord(
-    Object.fromEntries(Object.entries(merged).filter(([, value]) => Redacted.isRedacted(value))),
+  // Names of bound `Config` values and Redacted outputs. Only the names:
+  // the values stay in `env` until the Service moves them into App secrets.
+  const secretNames = Object.keys(toEnvRecord(merged)).filter((key) =>
+    Redacted.isRedacted(merged[key]),
   );
   const mounts: DiskSpec[] = [];
   const seen = new Set<string>();
@@ -279,7 +280,16 @@ export const collectBindingState = (bindings: readonly ResourceBinding<ServiceBi
       });
     }
   }
-  return { env, secrets, mounts, redis, buckets, postgres, targets, callers: [...callers].sort() };
+  return {
+    env,
+    secretNames,
+    mounts,
+    redis,
+    buckets,
+    postgres,
+    targets,
+    callers: [...callers].sort(),
+  };
 };
 
 /**

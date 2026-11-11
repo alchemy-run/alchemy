@@ -285,7 +285,7 @@ export interface BoundSecret {
   name: string;
   /** Fly's digest of the value after the write. */
   digest: string;
-  /** sha256 of the value written. */
+  /** sha256 of `<name>:<value>` for the value written. Never the plaintext. */
   sha256: string;
 }
 
@@ -1212,7 +1212,7 @@ const SCOPED_SECRET = /^ALCHEMY_[0-9A-F]{8}_/;
 const syncBoundSecrets = Effect.fn(function* (
   appName: string,
   fqn: string,
-  desired: Record<string, string>,
+  desired: Record<string, Redacted.Redacted<string>>,
   previous: { secrets: Record<string, BoundSecret>; version: number | undefined },
 ) {
   if (Object.keys(desired).length === 0 && Object.keys(previous.secrets).length === 0) {
@@ -1234,10 +1234,12 @@ const syncBoundSecrets = Effect.fn(function* (
   const observed = yield* listDigests;
   const secrets: Record<string, BoundSecret> = {};
   const hashes: Record<string, string> = {};
-  const writes: Record<string, string> = {};
+  const writes: Record<string, Redacted.Redacted<string>> = {};
   for (const [envVar, value] of Object.entries(desired)) {
     const name = `${prefix}${envVar}`;
-    const hash = yield* sha256(value);
+    // Salted with the scoped name, so equal values on different Services
+    // or Apps never share a hash in state.
+    const hash = yield* sha256(`${name}:${Redacted.value(value)}`);
     const last = previous.secrets[envVar];
     if (
       last !== undefined &&
@@ -1256,7 +1258,12 @@ const syncBoundSecrets = Effect.fn(function* (
     if (version !== undefined && Number.isSafeInteger(version)) versions.push(version);
   };
   if (Object.keys(writes).length > 0) {
-    const response = yield* machines.updateSecrets({ app_name: appName, values: writes });
+    const response = yield* machines.updateSecrets({
+      app_name: appName,
+      values: Object.fromEntries(
+        Object.entries(writes).map(([name, value]) => [name, Redacted.value(value)]),
+      ),
+    });
     accept(response.version ?? response.Version);
     const written = yield* listDigests;
     for (const envVar of Object.keys(hashes)) {
@@ -2062,12 +2069,20 @@ export const ServiceProvider = () =>
           const redacted = Object.keys(env).filter((key) =>
             props.env?.[key] !== undefined
               ? Redacted.isRedacted(props.env[key])
-              : key in bound.secrets,
+              : bound.secretNames.includes(key),
           );
+          // Move them out of the plain env record before anything else reads it.
+          const desiredSecrets: Record<string, Redacted.Redacted<string>> = {};
+          if (ownsApp) {
+            for (const key of redacted) {
+              desiredSecrets[key] = Redacted.make(env[key]!);
+              delete env[key];
+            }
+          }
           const boundSecrets = yield* syncBoundSecrets(
             appName,
             fqn,
-            ownsApp ? Object.fromEntries(redacted.map((key) => [key, env[key]!])) : {},
+            desiredSecrets,
             output?.appName === appName
               ? { secrets: output.secrets ?? {}, version: output.secretsVersion }
               : { secrets: {}, version: undefined },
@@ -2075,8 +2090,6 @@ export const ServiceProvider = () =>
           if (boundSecrets.version !== undefined) secretVersions.push(boundSecrets.version);
           const minSecretsVersion =
             secretVersions.length > 0 ? Math.max(...secretVersions) : undefined;
-          // Machine env overrides App secrets, so drop the plain copies.
-          for (const name of Object.keys(boundSecrets.secrets)) delete env[name];
           const processes = secretMappings(boundSecrets);
           if (policy.shutdown && !props.isExternal) {
             env.ALCHEMY_FLY_SHUTDOWN_TIMEOUT_MS = String(policy.shutdown.timeoutMs);
