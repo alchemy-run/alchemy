@@ -6,6 +6,8 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import { DigitalOceanAuth } from "./AuthProvider.ts";
 import * as Credentials from "./Credentials.ts";
+import { Domain, DomainProvider } from "./Domain.ts";
+import { DomainRecord, DomainRecordProvider } from "./DomainRecord.ts";
 import { Droplet, DropletProvider } from "./Droplet.ts";
 import { Firewall, FirewallProvider } from "./Firewall.ts";
 import { ReservedIp, ReservedIpProvider } from "./ReservedIp.ts";
@@ -60,6 +62,8 @@ export const providers = () =>
       Vpc,
       ReservedIp,
       ReservedIpAssignment,
+      Domain,
+      DomainRecord,
       KeyPair,
     ]),
   ).pipe(
@@ -73,6 +77,8 @@ export const providers = () =>
         VpcProvider(),
         ReservedIpProvider(),
         ReservedIpAssignmentProvider(),
+        DomainProvider(),
+        DomainRecordProvider(),
         KeyPairProvider(),
       ),
     ),

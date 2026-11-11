@@ -69,3 +69,11 @@ export const forgetAttributes = Effect.fn(function* (address: {
   const { attr: _attr, ...creating } = stored;
   yield* state.set({ ...address, value: { ...creating, status: "creating" } });
 });
+
+/**
+ * A domain unique to the user and worktree, under the standing test zone.
+ * DigitalOcean hosts any name a team adds, so nothing at the registrar has
+ * to change for the API to accept it.
+ */
+export const testDomain = (stage: string, label: string) =>
+  `${testName(stage, label)}.do.alchemy-test-2.us`;

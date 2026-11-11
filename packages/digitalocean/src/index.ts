@@ -1,5 +1,7 @@
 export * from "./AuthProvider.ts";
 export * from "./Credentials.ts";
+export * from "./Domain.ts";
+export * from "./DomainRecord.ts";
 export * from "./Droplet.ts";
 export * from "./Firewall.ts";
 export * from "./Providers.ts";
