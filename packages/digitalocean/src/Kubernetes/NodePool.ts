@@ -94,7 +94,8 @@ export class NodePoolWaitTimedOut extends Data.TaggedError(
 // Nodes take a few minutes to join (≈ 15 min budget).
 const NODE_POLL: PollBudget = { maxDelay: "15 seconds", times: 64 };
 
-const physicalName = (id: string) => createPhysicalName({ id, lowercase: true, maxLength: 63 });
+// Node pool names are at most 55 characters.
+const physicalName = (id: string) => createPhysicalName({ id, lowercase: true, maxLength: 55 });
 
 const toAttrs = (clusterId: string, pool: KubernetesNodePool): NodePoolAttributes => ({
   nodePoolId: pool.id,

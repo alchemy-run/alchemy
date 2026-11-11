@@ -5,6 +5,7 @@ import { KeyPair, KeyPairProvider } from "alchemy/KeyPair";
 import * as Provider from "alchemy/Provider";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
+import { App, AppProvider } from "./App.ts";
 import { DigitalOceanAuth } from "./AuthProvider.ts";
 import { Certificate, CertificateProvider } from "./Certificate.ts";
 import * as Credentials from "./Credentials.ts";
@@ -106,6 +107,7 @@ export const providers = () =>
       Databases.User,
       Kubernetes.Cluster,
       Kubernetes.NodePool,
+      App,
       KeyPair,
     ]),
   ).pipe(
@@ -145,6 +147,7 @@ export const providers = () =>
         ImageProvider(),
         Kubernetes.ClusterProvider(),
         Kubernetes.NodePoolProvider(),
+        AppProvider(),
         KeyPairProvider(),
       ),
     ),

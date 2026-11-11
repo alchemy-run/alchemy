@@ -1,6 +1,7 @@
 import * as DO from "@distilled.cloud/digitalocean";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
+import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
@@ -15,8 +16,10 @@ export type RegistryProps = {
    * Registry name: 3 to 63 lowercase letters, digits and `-`, unique across
    * DigitalOcean. Images are pushed to `registry.digitalocean.com/<name>`.
    * A change replaces the registry and deletes its images.
+   *
+   * @default a generated physical name
    */
-  name: string;
+  name?: string;
   /**
    * Subscription tier. `starter` is free (one repository, 500 MiB);
    * `basic` and `professional` are billed monthly. A change updates the
@@ -85,6 +88,8 @@ export type RegistryAttributes = Registry["Attributes"];
  */
 export const Registry = Resource<Registry>("DigitalOcean.Registry");
 
+const physicalName = (id: string) => createPhysicalName({ id, lowercase: true, maxLength: 63 });
+
 const observe = (name: string) =>
   noneIfNotFound(DO.getRegistry({ registry_name: name }).pipe(Effect.map((r) => r.registry)));
 
@@ -106,8 +111,8 @@ export const RegistryProvider = () =>
   Provider.succeed(Registry, {
     stables: ["name", "endpoint", "region", "createdAt"],
     nuke: { skip: true },
-    read: Effect.fn(function* ({ olds, output }) {
-      const observed = yield* observe(output?.name ?? olds.name);
+    read: Effect.fn(function* ({ id, olds, output }) {
+      const observed = yield* observe(output?.name ?? olds.name ?? (yield* physicalName(id)));
       if (Option.isNone(observed)) return undefined;
       const attrs = toAttrs(observed.value, yield* currentTier);
       return output === undefined ? Unowned(attrs) : attrs;
@@ -119,13 +124,14 @@ export const RegistryProvider = () =>
         return { action: "replace", deleteFirst: true } as const;
       }
     }),
-    reconcile: Effect.fn(function* ({ news }) {
+    reconcile: Effect.fn(function* ({ id, news, output }) {
       const tier = news.tier ?? "starter";
-      const observed = yield* observe(news.name);
+      const name = output?.name ?? news.name ?? (yield* physicalName(id));
+      const observed = yield* observe(name);
       const registry = yield* Option.match(observed, {
         onNone: () =>
           DO.createRegistry({
-            name: news.name,
+            name,
             subscription_tier_slug: tier,
             region: news.region ?? "nyc3",
           }).pipe(Effect.map((r) => r.registry)),

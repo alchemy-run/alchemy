@@ -26,3 +26,5 @@ export * from "./Vpc.ts";
 export * from "./VpcPeering.ts";
 export * as Databases from "./Databases/index.ts";
 export * as Kubernetes from "./Kubernetes/index.ts";
+export * from "./App.ts";
+export type { InferEnv } from "./InferEnv.ts";
