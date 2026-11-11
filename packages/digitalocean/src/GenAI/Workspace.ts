@@ -112,6 +112,24 @@ export const WorkspaceProvider = () =>
       return { workspaceId: workspace.uuid, name };
     }),
     delete: Effect.fn(function* ({ output }) {
+      const observed = yield* observe(output.workspaceId);
+      if (Option.isNone(observed)) return;
+      // A workspace with agents cannot be deleted, and the agents are
+      // deleted after it. Move them to the team's default workspace, the
+      // oldest one, which DigitalOcean creates with the team's first agent.
+      const agentIds = (observed.value.agents ?? []).map((agent) => agent.uuid);
+      if (agentIds.length > 0) {
+        const { workspaces } = yield* DO.listGenaiWorkspaces({});
+        const fallback = [...(workspaces ?? [])]
+          .filter((w) => w.uuid !== output.workspaceId)
+          .sort((a, b) => (a.created_at ?? "").localeCompare(b.created_at ?? ""))[0];
+        if (fallback !== undefined) {
+          yield* DO.updateGenaiAgentsWorkspace({
+            workspace_uuid: fallback.uuid,
+            agent_uuids: agentIds,
+          });
+        }
+      }
       yield* ignoreNotFound(DO.deleteGenaiWorkspace({ workspace_uuid: output.workspaceId }));
     }),
   });

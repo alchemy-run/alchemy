@@ -12,7 +12,7 @@ import type { Providers } from "../Providers.ts";
 
 export type DestinationProps = {
   /**
-   * Destination name. Updates in place.
+   * Destination name. A change replaces the destination.
    *
    * @default a generated physical name
    */
@@ -20,7 +20,7 @@ export type DestinationProps = {
   /**
    * Where logs go: a DigitalOcean Managed OpenSearch cluster (by id, signed
    * with its own credentials), or any OpenSearch endpoint with a username and
-   * password. A change of kind replaces the destination.
+   * password. A change replaces the destination.
    */
   opensearch:
     | { clusterId: string; indexName?: string; retentionDays?: number }
@@ -51,9 +51,9 @@ export type Destination = Resource<
 export type DestinationAttributes = Destination["Attributes"];
 
 /**
- * A log-forwarding destination: an OpenSearch index that `Monitoring.Sink`
- * forwards resource logs to. Everything updates in place except switching
- * between a managed cluster and an external endpoint.
+ * A log-forwarding destination: an OpenSearch index that Kubernetes log
+ * sinks forward to. Any change replaces the destination: the API's update
+ * endpoint answers `405` to the request its spec documents.
  *
  * ### Forwarding Logs to OpenSearch
  * **Example:** A managed OpenSearch cluster
@@ -123,35 +123,25 @@ export const DestinationProvider = () =>
     }),
     diff: Effect.fn(function* ({ olds, news }) {
       if (!isResolved(news)) return undefined;
-      if (kindOf(news) !== kindOf(olds)) return { action: "replace" } as const;
+      if (
+        news.name !== olds.name ||
+        JSON.stringify(configOf(news)) !== JSON.stringify(configOf(olds))
+      ) {
+        return { action: "replace" } as const;
+      }
     }),
-    reconcile: Effect.fn(function* ({ id, news, olds, output }) {
-      const name = news.name ?? output?.name ?? (yield* physicalName(id));
-      const type = kindOf(news);
-      const config = configOf(news);
-      const observed =
-        output === undefined
-          ? Option.none<DestinationOmitCredentials>()
-          : yield* observe(output.destinationId);
-      if (Option.isNone(observed)) {
-        const { destination } = yield* DO.createMonitoringDestination({ name, type, config });
-        return toAttrs(destination);
+    reconcile: Effect.fn(function* ({ id, news, output }) {
+      if (output !== undefined) {
+        const observed = yield* observe(output.destinationId);
+        if (Option.isSome(observed)) return toAttrs(observed.value);
       }
-      // Credentials are write-only; a change is seen against the props.
-      const current = observed.value;
-      const same =
-        current.name === name &&
-        olds !== undefined &&
-        JSON.stringify(configOf(olds)) === JSON.stringify(config);
-      if (!same) {
-        yield* DO.updateMonitoringDestination({
-          destination_uuid: current.id,
-          name,
-          type,
-          config,
-        });
-      }
-      return toAttrs({ ...current, name });
+      const name = news.name ?? (yield* physicalName(id));
+      const { destination } = yield* DO.createMonitoringDestination({
+        name,
+        type: kindOf(news),
+        config: configOf(news),
+      });
+      return toAttrs(destination);
     }),
     delete: Effect.fn(function* ({ output }) {
       yield* ignoreNotFound(

@@ -23,7 +23,7 @@ const destination = (retentionDays: number) =>
   });
 
 test.provider(
-  "log destination: create, update in place, destroy",
+  "log destination: create, replace on a change, destroy",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -32,14 +32,15 @@ test.provider(
       const observed = yield* getMonitoringDestination({ destination_uuid: created.destinationId });
       expect(observed.destination.config?.endpoint).toEqual("https://opensearch.example.com:9200");
 
-      const updated = yield* stack.deploy(destination(14));
-      expect(updated.destinationId).toEqual(created.destinationId);
-      const after = yield* getMonitoringDestination({ destination_uuid: created.destinationId });
-      expect(after.destination.config?.retention_days).toEqual(14);
+      const replaced = yield* stack.deploy(destination(14));
+      expect(replaced.destinationId).not.toEqual(created.destinationId);
+      expect(
+        yield* isGone(getMonitoringDestination({ destination_uuid: created.destinationId })),
+      ).toBe(true);
 
       yield* stack.destroy();
       expect(
-        yield* isGone(getMonitoringDestination({ destination_uuid: created.destinationId })),
+        yield* isGone(getMonitoringDestination({ destination_uuid: replaced.destinationId })),
       ).toBe(true);
     }).pipe(logLevel),
   { tags: LIVE_TAGS },
