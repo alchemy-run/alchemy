@@ -186,6 +186,10 @@ const flociFixedValues: Record<string, string> = {
   AWS_TEST_DATAEXCHANGE_EXPORT_BUCKET: "alchemy-floci-dataexchange-exports",
   // floci serves Deadline Cloud farms, fleets and jobs without an entitled account.
   AWS_TEST_DEADLINE: "1",
+  // floci provisions Managed Microsoft AD directories in seconds; Simple AD stays closed to new
+  // customers, as on AWS, so its lifecycle (AWS_TEST_DIRECTORY_SIMPLE_AD) stays off.
+  AWS_TEST_DIRECTORY: "1",
+  AWS_TEST_DIRECTORY_MSAD: "1",
   // Floci stores authorizer URIs without resolving the function.
   ALCHEMY_TEST_AUTHORIZER_URI:
     "arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-1:000000000000:function:alchemy-floci-standing-authorizer/invocations",
