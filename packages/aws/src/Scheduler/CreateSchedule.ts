@@ -91,6 +91,16 @@ export type CreateScheduleClient = ScheduleWriteClient<
  * const schedule = yield* AWS.Scheduler.CreateSchedule(queue, { group });
  * ```
  *
+ * **Example:** Send Undeliverable Reminders To A Dead-Letter Queue
+ * ```typescript
+ * const failed = yield* AWS.SQS.Queue("FailedReminders");
+ * const schedule = yield* AWS.Scheduler.CreateSchedule(queue, { deadLetterQueue: failed });
+ * ```
+ *
+ * The generated role may send to the dead-letter queue, and every schedule
+ * the client writes uses it. `kmsKey` works the same way for a customer
+ * managed key that encrypts the target input.
+ *
  * **Example:** Use An Existing Execution Role
  * ```typescript
  * const schedule = yield* AWS.Scheduler.CreateSchedule(queue, { role });

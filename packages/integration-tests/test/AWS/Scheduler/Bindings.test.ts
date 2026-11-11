@@ -2,6 +2,7 @@ import * as AWS from "@alchemy.run/aws";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
+import * as iam from "@distilled.cloud/aws/iam";
 import * as lambda from "@distilled.cloud/aws/lambda";
 import * as scheduler from "@distilled.cloud/aws/scheduler";
 import * as SQS from "@distilled.cloud/aws/sqs";
@@ -31,6 +32,7 @@ let sinkQueueUrl: string;
 let sinkQueueArn: string;
 let cronQueueUrl: string;
 let executionRoleArn: string;
+let deadLetterQueueArn: string;
 
 class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly status: number;
@@ -176,6 +178,7 @@ describe(
                   sinkQueueArn?: string;
                   cronQueueUrl?: string;
                   executionRoleArn?: string;
+                  deadLetterQueueArn?: string;
                 }>)
               : Effect.fail(new Error(`Function not ready: ${response.status}`)),
           ),
@@ -187,6 +190,7 @@ describe(
                     sinkQueueArn: string;
                     cronQueueUrl: string;
                     executionRoleArn: string;
+                    deadLetterQueueArn: string;
                   },
                 )
               : Effect.fail(new Error("Function returned empty queue urls")),
@@ -200,6 +204,7 @@ describe(
         sinkQueueArn = info.sinkQueueArn;
         cronQueueUrl = info.cronQueueUrl;
         executionRoleArn = info.executionRoleArn;
+        deadLetterQueueArn = info.deadLetterQueueArn;
       }),
       { timeout: 240_000 },
     );
@@ -274,6 +279,32 @@ describe(
             yield* waitUntilScheduleGone(name);
           }),
         { timeout: 150_000 },
+      );
+
+      test.provider(
+        "{ deadLetterQueue } is the default and the generated role may send to it",
+        (_stack) =>
+          Effect.gen(function* () {
+            const name = `${SCHEDULE_PREFIX}dlq`;
+            yield* send(HttpClientRequest.post(`${baseUrl}/dlq-schedules/${name}`));
+
+            const observed = yield* scheduler.getSchedule({ Name: name });
+            expect(observed.Target?.Arn).toBe(sinkQueueArn);
+            expect(observed.Target?.DeadLetterConfig?.Arn).toBe(deadLetterQueueArn);
+
+            // Out of band: the role the binding generated allows the queue.
+            const roleName = observed.Target!.RoleArn!.split("/").pop()!;
+            const policy = yield* iam.getRolePolicy({
+              RoleName: roleName,
+              PolicyName: "ScheduleTarget",
+            });
+            const document = decodeURIComponent(policy.PolicyDocument);
+            expect(document).toContain(deadLetterQueueArn);
+            expect(document).toContain("sqs:SendMessage");
+
+            const deleted = yield* send(HttpClientRequest.delete(`${baseUrl}/schedules/${name}`));
+            expect(deleted.status).toBe(200);
+          }),
       );
 
       test.provider("every() creates a recurring rate schedule", (_stack) =>

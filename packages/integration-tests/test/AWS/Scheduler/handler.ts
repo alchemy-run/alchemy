@@ -74,6 +74,10 @@ export default SchedulerTestFunction.make(
     const schedule = yield* Scheduler.CreateSchedule(sinkQueue);
     const reschedule = yield* Scheduler.UpdateSchedule(sinkQueue);
     const scheduleWithRole = yield* Scheduler.CreateSchedule(sinkQueue, { role: executionRole });
+    // Deliveries Scheduler gives up on go to this queue; the generated role
+    // may send to it.
+    const deadLetterQueue = yield* SQS.Queue("SchedulerDeadLetterQueue");
+    const scheduleWithDlq = yield* Scheduler.CreateSchedule(sinkQueue, { deadLetterQueue });
     const getSchedule = yield* Scheduler.GetSchedule();
     const deleteSchedule = yield* Scheduler.DeleteSchedule();
     const listSchedules = yield* Scheduler.ListSchedules();
@@ -136,6 +140,7 @@ export default SchedulerTestFunction.make(
 
     const sinkQueueArn = yield* sinkQueue.queueArn;
     const executionRoleArn = yield* executionRole.roleArn;
+    const deadLetterQueueArn = yield* deadLetterQueue.queueArn;
     const sinkQueueUrl = yield* sinkQueue.queueUrl;
     const cronQueueUrl = yield* cronQueue.queueUrl;
 
@@ -152,6 +157,7 @@ export default SchedulerTestFunction.make(
             sinkQueueArn: yield* sinkQueueArn,
             cronQueueUrl: yield* cronQueueUrl,
             executionRoleArn: yield* executionRoleArn,
+            deadLetterQueueArn: yield* deadLetterQueueArn,
           });
         }
 
@@ -213,6 +219,14 @@ export default SchedulerTestFunction.make(
           }
           if (request.method === "GET") return yield* respond(callback.getStatus(id));
           if (request.method === "DELETE") return yield* respond(callback.cancel(id));
+        }
+
+        // A one-shot schedule through the dead-letter binding.
+        if (request.method === "POST" && pathname.startsWith("/dlq-schedules/")) {
+          const name = pathname.slice("/dlq-schedules/".length);
+          const fireAt = yield* Effect.sync(() => new Date(Date.now() + 3_600_000));
+          const created = yield* scheduleWithDlq.at(fireAt, { name, payload: { marker: name } });
+          return yield* HttpServerResponse.json({ scheduleArn: created.ScheduleArn });
         }
 
         // Recurring schedule through the `every` shortcut.

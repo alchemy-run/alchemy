@@ -34,6 +34,7 @@ import * as Option from "effect/Option";
 import * as AWSBindings from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import { Role, type RoleProps } from "../IAM/Role.ts";
+import type { Key } from "../KMS/Key.ts";
 import type { Function as LambdaFunction } from "../Lambda/Function.ts";
 import { qualifiedArnOf } from "../Lambda/QualifiedArn.ts";
 import type { Queue } from "../SQS/Queue.ts";
@@ -148,7 +149,10 @@ export const makeScheduleGroupScopedHttpBinding = <
  * the Queue or invoke the Function. The role is declared under the target's logical id,
  * so every host (and both write bindings) binding the same target shares it.
  */
-export const executionRolePropsOf = (target: ScheduleTarget): InputProps<RoleProps> => ({
+export const executionRolePropsOf = (
+  target: ScheduleTarget,
+  extras: { deadLetterQueue?: Queue; kmsKey?: Key } = {},
+): InputProps<RoleProps> => ({
   assumeRolePolicyDocument: {
     Version: "2012-10-17",
     Statement: [
@@ -174,6 +178,26 @@ export const executionRolePropsOf = (target: ScheduleTarget): InputProps<RolePro
               Action: ["lambda:InvokeFunction"],
               Resource: [functionArnOf(target)],
             },
+        // Scheduler sends deliveries it gives up on to the dead-letter queue,
+        // and decrypts the target input with the key, both as this role.
+        ...(extras.deadLetterQueue
+          ? [
+              {
+                Effect: "Allow" as const,
+                Action: ["sqs:SendMessage"],
+                Resource: [extras.deadLetterQueue.queueArn as Output.Output<string, never>],
+              },
+            ]
+          : []),
+        ...(extras.kmsKey
+          ? [
+              {
+                Effect: "Allow" as const,
+                Action: ["kms:Decrypt"],
+                Resource: [extras.kmsKey.keyArn as Output.Output<string, never>],
+              },
+            ]
+          : []),
       ],
     },
   },
@@ -288,13 +312,11 @@ const shortcutRequest = (
   EndDate: options.endDate,
   Description: options.description,
   State: options.state,
-  KmsKeyArn: options.kmsKeyArn,
   ActionAfterCompletion: options.actionAfterCompletion,
   FlexibleTimeWindow: options.flexibleTimeWindow,
   Target: {
     Input: toInput(options.payload),
     RetryPolicy: options.retryPolicy,
-    DeadLetterConfig: options.deadLetterConfig,
     SqsParameters: options.sqs,
   },
 });
@@ -346,14 +368,19 @@ export const makeScheduleWriteHttpBinding = <
           }),
         );
       }
+      const { deadLetterQueue, kmsKey } = writeOptions;
+      // One role per target and extras, so bindings with different
+      // dead-letter queues or keys never share (and fight over) a role.
       const roleArn = writeOptions.role
         ? (writeOptions.role.roleArn as Output.Output<string, never>)
         : ((yield* IamRole(
-            `${target.LogicalId}ScheduleExecutionRole`,
-            executionRolePropsOf(target),
+            `${target.LogicalId}${deadLetterQueue?.LogicalId ?? ""}${kmsKey?.LogicalId ?? ""}ScheduleExecutionRole`,
+            executionRolePropsOf(target, { deadLetterQueue, kmsKey }),
           )).roleArn as Output.Output<string, never>);
       const RoleArn = yield* roleArn;
       const TargetArn = yield* targetArnOf(target);
+      const DeadLetterArn = deadLetterQueue ? yield* deadLetterQueue.queueArn : undefined;
+      const KmsKeyArn = kmsKey ? yield* kmsKey.keyArn : undefined;
       const GroupName = group ? yield* group.scheduleGroupName : undefined;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const pattern = yield* scheduleArnPattern(group);
@@ -386,14 +413,20 @@ export const makeScheduleWriteHttpBinding = <
         const roleArn = yield* RoleArn;
         const targetArn = yield* TargetArn;
         const groupName = GroupName ? yield* GroupName : undefined;
+        const deadLetterArn = DeadLetterArn ? yield* DeadLetterArn : undefined;
+        const kmsKeyArn = KmsKeyArn ? yield* KmsKeyArn : undefined;
         return yield* op({
           ...request,
           GroupName: groupName,
           FlexibleTimeWindow: request.FlexibleTimeWindow ?? { Mode: "OFF" },
+          KmsKeyArn: request.KmsKeyArn ?? kmsKeyArn,
           Target: {
             ...request.Target,
             Arn: request.Target?.Arn ?? targetArn,
             RoleArn: request.Target?.RoleArn ?? roleArn,
+            DeadLetterConfig:
+              request.Target?.DeadLetterConfig ??
+              (deadLetterArn ? { Arn: deadLetterArn } : undefined),
           },
         } as unknown as I);
       });
