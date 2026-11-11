@@ -59,6 +59,124 @@ export const MySandbox = Archil.Sandbox("MySandbox", {
 
 Archil has no secret store, so the value lives in the sandbox's policy.
 
+## Send requests through your own gateway
+
+An allow entry can also forward matching requests to a URL of yours. Archil decrypts the request, applies the entry's headers, and sends it to `forwardUrl` with the original path and query. It names the original destination and the calling sandbox in `archil-forwarded-host`, `archil-forwarded-scheme`, `archil-forwarded-port`, `archil-forwarded-path` and `archil-sandbox-id` headers.
+
+<Boundaries
+  nodes={[
+    { id: "agent", label: "agent", type: "your code", col: 0, row: 0, tone: "accent" },
+    { id: "gateway", label: "MyGateway", type: "Worker · + x-api-key", col: 1, row: 0 },
+    { id: "api", label: "api.example.com", type: "receives the key", col: 2, row: 0 },
+  ]}
+  zones={[{ id: "sandbox", label: "sandbox", type: "egress: deny", nodes: ["agent"] }]}
+  links={[
+    { from: "agent", to: "gateway", label: "forwarded · + token" },
+    { from: "gateway", to: "api", label: "calls" },
+  ]}
+  caption="The agent calls api.example.com as usual. Archil forwards the request to the gateway and adds the token that proves it came from this policy. The gateway adds the API key and calls the real host. Neither secret enters the sandbox."
+/>
+
+A Cloudflare Worker makes a small gateway. This one accepts only requests carrying the gateway token, sends them on only to hosts it lists, and adds the API key:
+
+```typescript title="src/Gateway.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+const UPSTREAMS = ["api.example.com"];
+
+export default class MyGateway extends Cloudflare.Worker<MyGateway>()(
+  "MyGateway",
+  {
+    main: import.meta.url,
+    env: {
+      GATEWAY_TOKEN: Config.Redacted("GATEWAY_TOKEN"),
+      API_KEY: Config.Redacted("API_KEY"),
+    },
+  },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const env = yield* Cloudflare.Workers.WorkerEnvironment;
+        const host = request.headers["archil-forwarded-host"];
+        if (request.headers["x-gateway-token"] !== env.GATEWAY_TOKEN) {
+          return HttpServerResponse.text("forbidden", { status: 403 });
+        }
+        if (host === undefined || !UPSTREAMS.includes(host)) {
+          return HttpServerResponse.text("host not allowed", { status: 403 });
+        }
+        const url = new URL(request.originalUrl);
+        const headers = Object.fromEntries(
+          Object.entries(request.headers).filter(
+            ([name]) => !name.startsWith("archil-") && name !== "x-gateway-token" && name !== "host",
+          ),
+        );
+        const body = new Uint8Array(yield* request.arrayBuffer);
+        const client = yield* HttpClient.HttpClient;
+        const upstream = yield* client.execute(
+          HttpClientRequest.make(request.method as "GET")(
+            `https://${host}${url.pathname}${url.search}`,
+          ).pipe(
+            HttpClientRequest.setHeaders({ ...headers, "x-api-key": env.API_KEY }),
+            body.byteLength > 0 ? HttpClientRequest.bodyUint8Array(body) : (r) => r,
+          ),
+        );
+        return HttpServerResponse.text(yield* upstream.text, {
+          status: upstream.status,
+          contentType: upstream.headers["content-type"],
+        });
+      }).pipe(Effect.orDie),
+    };
+  }),
+) {}
+```
+
+The sandbox's policy forwards the API's host to the gateway and adds the gateway token:
+
+```typescript title="alchemy.run.ts"
+import * as Archil from "@alchemy.run/archil";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Alchemy from "alchemy";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import MyGateway from "./src/Gateway.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Layer.mergeAll(Cloudflare.providers(), Archil.providers()),
+    state: Cloudflare.state(),
+  },
+  Effect.gen(function* () {
+    const gateway = yield* MyGateway;
+    const sandbox = yield* Archil.Sandbox("MySandbox", {
+      network: {
+        egress: {
+          default: "deny",
+          allow: [
+            {
+              target: "api.example.com",
+              headers: { "X-Gateway-Token": Config.Redacted("GATEWAY_TOKEN") },
+              forwardUrl: gateway.url.as<string>(),
+            },
+          ],
+        },
+      },
+    });
+    return { sandbox: sandbox.name };
+  }),
+);
+```
+
+The gateway holds the API key, so rotating it changes only the Worker. `archil-sandbox-id` tells it which sandbox called, which it can use to log, rate-limit or pick a key per sandbox. `forwardUrl` must be a public HTTPS URL on a domain name, so a `workers.dev` URL or a custom domain works, and an IP address doesn't.
+
 ## Change the policy while it runs
 
 ```typescript

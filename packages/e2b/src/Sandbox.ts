@@ -18,7 +18,8 @@ import type { Providers } from "./Providers.ts";
 /**
  * A SOCKS5 proxy that carries a sandbox's outbound TCP. E2B applies the
  * allow and deny rules first, then tunnels what's left through the proxy;
- * code in the sandbox can't tell, and can't go around it.
+ * code in the sandbox can't tell, and can't go around it. The proxy must
+ * accept TCP connections, so a Cloudflare Worker can't be one.
  */
 export interface SandboxEgressProxy {
   /** The proxy's address, as `host:port`. */
