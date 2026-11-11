@@ -80,7 +80,11 @@ export interface ContainerProps {
   stopTimeout?: Duration.Input;
   /** Networks to connect after create. */
   networks?: Container.NetworkMapping[];
-  /** Network namespace. Use `{ container: id }` to share another container's namespace. */
+  /**
+   * Network namespace. Use `{ container: id }` to share another container's
+   * namespace. Container-shared networking cannot set a hostname, custom DNS,
+   * extra hosts, published ports or separate network attachments.
+   */
   networkMode?: Container.NetworkMode;
   /** IPC namespace selection, e.g. `"private"`, `"host"` or `"container:<id>"`. */
   ipcNamespace?: string;
@@ -691,7 +695,9 @@ export const ContainerProvider = () =>
         // Update attachments sequentially so one rejected connection does
         // not disconnect every managed network before returning an error.
         for (const network of news.networks ?? []) {
-          const previous = olds?.networks?.find((old) => old.name === network.name);
+          const previous = olds?.networks?.find((old) =>
+            referencesSameNetwork(live, old.name, network.name),
+          );
           if (matchesNetworkEndpoint(live, network, previous)) continue;
           const attached = findNetworkEndpoint(live, network.name);
           if (attached) {
@@ -705,9 +711,11 @@ export const ContainerProvider = () =>
         // container cannot say who connected a network. Sweeping every live
         // network instead tore off the default `bridge` and anything a user,
         // compose file, or another tool had attached out of band (#1386).
-        const desired = new Set((news.networks ?? []).map((n) => n.name));
         for (const network of olds?.networks ?? []) {
-          if (!desired.has(network.name) && findNetworkEndpoint(live, network.name)) {
+          const stillManaged = (news.networks ?? []).some((desired) =>
+            referencesSameNetwork(live, desired.name, network.name),
+          );
+          if (!stillManaged && findNetworkEndpoint(live, network.name)) {
             yield* docker.network.disconnect({
               network: network.name,
               container: live.Id,
@@ -755,6 +763,9 @@ export const ContainerProvider = () =>
         }),
         diff: Effect.fn(function* ({ id, instanceId, news, olds }) {
           if (!isResolved(news)) return undefined;
+          // Validate the desired creation settings before any delete-first
+          // replacement decision, including Docker context changes.
+          const newArgs = yield* makeCreateArgs(id, news, instanceId);
           // An Output-valued `image` doesn't survive a `creating`-state
           // round-trip (it deserializes as `undefined`) — without comparable
           // prior create args, let the engine apply its default update logic.
@@ -763,7 +774,6 @@ export const ContainerProvider = () =>
             return { action: "replace" as const, deleteFirst: true };
           }
           const oldArgs = yield* makeCreateArgs(id, olds, instanceId);
-          const newArgs = yield* makeCreateArgs(id, news, instanceId);
           if (!Equal.equals(oldArgs, newArgs)) {
             return { action: "replace" as const, deleteFirst: true };
           }
@@ -1052,6 +1062,18 @@ const findNetworkEndpoint = (
   return (
     attached?.[network] ??
     Object.values(attached ?? {}).find((entry) => entry.NetworkID === network)
+  );
+};
+
+/** A managed network may be referenced by name or by the same Docker network ID. */
+const referencesSameNetwork = (live: Docker.Container, left: string, right: string): boolean => {
+  if (left === right) return true;
+  const leftEndpoint = findNetworkEndpoint(live, left);
+  const rightEndpoint = findNetworkEndpoint(live, right);
+  return (
+    leftEndpoint !== undefined &&
+    rightEndpoint !== undefined &&
+    leftEndpoint.NetworkID === rightEndpoint.NetworkID
   );
 };
 
@@ -1467,6 +1489,23 @@ const validateContainerOptions = (news: ContainerProps) => {
     return Effect.fail(
       new InvalidContainerOptions({
         message: "Docker.Container networkMode.container cannot be combined with ports or networks",
+      }),
+    );
+  }
+  // Docker forbids these creation flags when the network namespace belongs
+  // to another container; reject them before a delete-first replacement.
+  if (
+    isContainerNetworkMode(news.networkMode) &&
+    (news.hostname !== undefined ||
+      (news.dns?.length ?? 0) > 0 ||
+      (news.dnsSearch?.length ?? 0) > 0 ||
+      (news.dnsOptions?.length ?? 0) > 0 ||
+      (news.extraHosts?.length ?? 0) > 0)
+  ) {
+    return Effect.fail(
+      new InvalidContainerOptions({
+        message:
+          "Docker.Container networkMode.container cannot be combined with hostname, dns, dnsSearch, dnsOptions or extraHosts",
       }),
     );
   }

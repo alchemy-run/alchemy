@@ -357,10 +357,37 @@ test.provider(
         { options: { sharedMemorySize: "garbage" }, reason: "sharedMemorySize" },
         { options: { sharedMemorySize: "0" }, reason: "sharedMemorySize" },
         { options: { sharedMemorySize: "-1m" }, reason: "sharedMemorySize" },
+        {
+          options: {
+            context: "alchemy-test-missing-docker-context",
+            sharedMemorySize: "invalid",
+          },
+          reason: "sharedMemorySize",
+        },
         { options: { workingDirectory: "relative" }, reason: "workingDirectory" },
         { options: { pidNamespace: "private" }, reason: "pidNamespace" },
         { options: { ipcNamespace: "invalid" }, reason: "ipcNamespace" },
         { options: { sharedMemorySize: "128m", ipcNamespace: "host" }, reason: "sharedMemorySize" },
+        {
+          options: { networkMode: "container:donor", hostname: "sidecar" },
+          reason: "networkMode.container",
+        },
+        {
+          options: { networkMode: "container:donor", dns: ["1.1.1.1"] },
+          reason: "networkMode.container",
+        },
+        {
+          options: { networkMode: "container:donor", dnsSearch: ["internal.example"] },
+          reason: "networkMode.container",
+        },
+        {
+          options: { networkMode: "container:donor", dnsOptions: ["ndots:1"] },
+          reason: "networkMode.container",
+        },
+        {
+          options: { networkMode: "container:donor", extraHosts: ["api:192.0.2.1"] },
+          reason: "networkMode.container",
+        },
       ]) {
         const resource = deploy(options);
         const planned = yield* stack.plan(resource).pipe(
@@ -1158,6 +1185,43 @@ describe(
         yield* stack.destroy();
         const gone = yield* docker.container.inspect(first.container.id).pipe(Effect.flip);
         expect(gone.reason._tag).toBe("NotFound");
+      }),
+    );
+
+    test.provider("keeps a managed endpoint when switching between network name and ID", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        yield* stack.destroy();
+        yield* Effect.addFinalizer(() => stack.destroy().pipe(Effect.ignore));
+        const resource = (byId: boolean, aliases: string[]) =>
+          Effect.gen(function* () {
+            const network = yield* Docker.Network("network-reference-switch");
+            const container = yield* Docker.Container("network-reference-container", {
+              image: "nginx:alpine",
+              networks: [{ name: byId ? network.id : network.name, aliases }],
+              start: true,
+            });
+            return { container, network };
+          });
+
+        const first = yield* stack.deploy(resource(false, ["before"]));
+        const second = yield* stack.deploy(resource(true, ["after"]));
+        expect(second.container.id).toBe(first.container.id);
+        const byId = (yield* docker.container.inspect(second.container.id)).NetworkSettings
+          .Networks?.[second.network.name];
+        expect(byId?.Aliases).toContain("after");
+        expect(byId?.Aliases).not.toContain("before");
+
+        const third = yield* stack.deploy(resource(false, []));
+        expect(third.container.id).toBe(first.container.id);
+        const byName = (yield* docker.container.inspect(third.container.id)).NetworkSettings
+          .Networks?.[third.network.name];
+        expect(byName).toBeDefined();
+        expect(byName?.Aliases).not.toContain("after");
+        expect(
+          (yield* stack.plan(resource(false, []))).resources["network-reference-container"]?.action,
+        ).toBe("noop");
+        yield* stack.destroy();
       }),
     );
 
