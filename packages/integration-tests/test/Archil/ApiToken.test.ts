@@ -13,10 +13,10 @@ const listed = (tokenId: string) =>
     .listApiTokens({})
     .pipe(Effect.map(({ data }) => (data.tokens ?? []).find((t) => t.id === tokenId)));
 
-// Archil only lists, mints and revokes API keys from a console session; an
-// API key gets a bare 401, first from the listing that observes the token
-// (typed `ApiTokenAccessForbidden`). Set ARCHIL_TEST_API_TOKEN=1 when
-// ARCHIL_API_KEY is a console-session credential.
+// Archil refuses API keys on its API key operations with the bare 401 a bad
+// key gets (typed `Unauthorized`), first from the listing that observes the
+// token. Set ARCHIL_TEST_API_TOKEN=1 when ARCHIL_API_KEY is a credential
+// Archil accepts there.
 test.provider(
   "deploying an API token with an API key is rejected with a typed error",
   (stack) =>
@@ -25,7 +25,7 @@ test.provider(
       const result = yield* Effect.result(stack.deploy(Archil.ApiToken("Ci", {})));
       expect(result._tag).toBe("Failure");
       if (result._tag === "Failure") {
-        expect(result.failure._tag).toBe("ApiTokenAccessForbidden");
+        expect(result.failure._tag).toBe("Unauthorized");
       }
       yield* stack.destroy();
     }),
