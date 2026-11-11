@@ -7,18 +7,22 @@ import Tree from "../../../components/diagrams/Tree.astro";
 
 DigitalOcean is a cloud platform where everything you create belongs to a **team**. One API, signed with one team token, creates every kind of resource: an App, a Droplet, a database cluster, a bucket. Each of those runs in a **region** you choose, and **projects** group them inside the team for organizing.
 
-Take one small app: an API on App Platform that stores files in a Spaces bucket and keeps its data in Postgres. Your token reaches the team. The team's Container Registry holds the API's image. In `nyc3` the API runs, the bucket holds the files, and the database cluster holds the data, and the API reaches each through a binding.
+Take one small app: an API on App Platform that stores files in a Spaces bucket and keeps its data in Postgres. Your token reaches the team. The team's Container Registry holds the API's image. The Shop project groups the three for the control panel. In `nyc3` the API runs, the bucket holds the files, and the database cluster holds the data, and the API reaches each through a binding.
 
 <Tree
   nodes={[
     {
       id: "team", label: "acme", type: "team", icon: "brand:digitalocean", colGap: 3,
-      areas: ["registry region"],
-      phoneAreas: ["registry", "region"],
+      areas: ["registry project"],
+      phoneAreas: ["registry", "project"],
     },
     { id: "registry", label: "acme", type: "Container Registry", parent: "team", icon: "package" },
     {
-      id: "region", label: "nyc3", type: "region · New York", parent: "team", dashed: true, icon: "map-pin", colGap: 5,
+      id: "project", label: "Shop", type: "project", parent: "team", dashed: true, icon: "folder",
+      areas: ["region"],
+    },
+    {
+      id: "region", label: "nyc3", type: "region · New York", parent: "project", dashed: true, icon: "map-pin", colGap: 5,
       areas: ["api uploads", "api db"],
     },
     { id: "api", label: "Api", type: "App · service", parent: "region", tone: "accent", icon: "server" },
@@ -31,7 +35,7 @@ Take one small app: an API on App Platform that stores files in a Spaces bucket 
     { from: "api", to: "db", label: "queries" },
   ]}
   scopes={[{ on: "team", label: "token: acme" }]}
-  caption="A token reaches the whole team. A team has one Container Registry, shared by every region. Apps, buckets and clusters each run in one region. Projects group resources for organizing but don't change where anything runs."
+  caption="A token reaches the whole team. A team has one Container Registry, shared by every region. Apps, buckets and clusters each run in one region. The Shop project groups them for the control panel; a project can hold resources from any region, and doesn't change where anything runs or who can reach it."
 />
 
 ## Teams and tokens

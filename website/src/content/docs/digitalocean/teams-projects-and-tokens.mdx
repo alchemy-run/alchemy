@@ -14,13 +14,19 @@ A team is the boundary for access. A **personal access token** is created for on
   nodes={[
     {
       id: "team", label: "acme", type: "team", icon: "brand:digitalocean", colGap: 5,
-      areas: ["spaceskey uploads", "fnkey fns", "agentkey agent"],
+      areas: ["api uploads", "api fns", "api agent"],
+      phoneAreas: ["uploads fns agent", "api api api"],
     },
-    { id: "spaceskey", label: "ApiUploadsReadKey", type: "Spaces key · read", parent: "team", icon: "key-round" },
+    {
+      id: "api", label: "Api", type: "App · service", parent: "team", tone: "accent", icon: "server",
+      areas: ["spaceskey", "fnkey", "agentkey"],
+      phoneAreas: ["spaceskey fnkey agentkey"],
+    },
+    { id: "spaceskey", label: "Uploads", type: "Spaces key · read", parent: "api", icon: "key-round" },
+    { id: "fnkey", label: "fns", type: "Functions key", parent: "api", icon: "key-round" },
+    { id: "agentkey", label: "Support", type: "agent key", parent: "api", icon: "key-round" },
     { id: "uploads", label: "Uploads", type: "Spaces bucket", parent: "team", icon: "archive" },
-    { id: "fnkey", label: "ApiResizeKey", type: "Functions access key", parent: "team", icon: "key-round" },
     { id: "fns", label: "fns", type: "Functions namespace", parent: "team", icon: "square-function" },
-    { id: "agentkey", label: "ApiSupportKey", type: "agent API key", parent: "team", icon: "key-round" },
     { id: "agent", label: "Support", type: "GenAI agent", parent: "team", icon: "bot" },
   ]}
   links={[
@@ -29,7 +35,7 @@ A team is the boundary for access. A **personal access token** is created for on
     { from: "agentkey", to: "agent", label: "calls" },
   ]}
   scopes={[{ on: "team", label: "token: acme" }]}
-  caption="The team token reaches everything in the team. The keys a binding creates each reach one resource, and are what your runtime holds."
+  caption="The team token reaches everything in the team. The Api holds only the keys its bindings created, as secrets, and each key reaches one resource."
 />
 
 ## Projects group, teams isolate
