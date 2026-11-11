@@ -106,8 +106,27 @@ export type Queue = Resource<
     deliveryPaused: boolean;
   },
   never,
-  Providers
+  Providers,
+  QueueLookup
 >;
+
+/**
+ * Props for {@link Queue.lookup}: find a queue this stack doesn't manage, by
+ * its id or its name.
+ */
+export type QueueLookup =
+  | {
+      /**
+       * The Cloudflare-assigned ID of the existing queue.
+       */
+      queueId: string;
+    }
+  | {
+      /**
+       * The name of the existing queue.
+       */
+      name: string;
+    };
 
 /**
  * A Cloudflare Queue for reliable message passing between Workers.
@@ -195,6 +214,30 @@ export type Queue = Resource<
  *     };
  *   }).pipe(Effect.provide(Cloudflare.Queues.WriteQueueBinding)),
  * );
+ * ```
+ *
+ * ### Looking up an existing queue
+ * `Queue.lookup` binds a queue Alchemy doesn't manage (created in the
+ * dashboard or by another stack), found by `queueId` or `name`. It is read
+ * during plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** By name
+ * ```typescript
+ * const jobs = yield* Cloudflare.Queues.WriteQueue(
+ *   Cloudflare.Queues.Queue.lookup({ name: "jobs" }),
+ * );
+ * ```
+ *
+ * **Example:** By ID, in an async Worker's `env`
+ * ```typescript
+ * const worker = yield* Cloudflare.Worker("Worker", {
+ *   main: "./src/worker.ts",
+ *   env: {
+ *     JOBS: Cloudflare.Queues.Queue.lookup({
+ *       queueId: "023e105f4ecef8ad9ca31a8372d0c353",
+ *     }),
+ *   },
+ * });
  * ```
  *
  * @resource
@@ -382,6 +425,17 @@ export const ProviderLive = () =>
           ),
         ),
       );
+    }),
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const queue =
+        "queueId" in props
+          ? yield* queues
+              .getQueue({ accountId, queueId: props.queueId })
+              .pipe(Effect.catchTag(["QueueNotFound", "InvalidRoute"], () => Effect.undefined))
+          : yield* findQueueByName(props.name);
+      if (!queue?.queueId || !queue.queueName) return undefined;
+      return toAttributes(queue, accountId);
     }),
     read: Effect.fn(function* ({ id, output, olds, previous }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

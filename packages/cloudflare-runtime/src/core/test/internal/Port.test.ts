@@ -111,6 +111,35 @@ describe("Port.find", () => {
   );
 });
 
+describe("Port.release", () => {
+  it.effect("frees a port this allocator reserved", () =>
+    Effect.gen(function* () {
+      const port = yield* PortHelpers.find(0);
+      const holder = yield* Port.make({ cache: false });
+      const other = yield* Port.make({ cache: false });
+      yield* holder.check(port);
+      expect((yield* Effect.result(other.check(port)))._tag).toBe("Failure");
+      yield* holder.release(port);
+      expect(yield* other.check(port)).toBe(port);
+      yield* other.release(port);
+    }),
+  );
+
+  it.effect("leaves a reservation another allocator holds alone", () =>
+    Effect.gen(function* () {
+      const port = yield* PortHelpers.find(0);
+      const holder = yield* Port.make({ cache: false });
+      const stranger = yield* Port.make({ cache: false });
+      const probe = yield* Port.make({ cache: false });
+      yield* holder.check(port);
+      // `stranger` never reserved the port, so releasing it is a no-op.
+      yield* stranger.release(port);
+      expect((yield* Effect.result(probe.check(port)))._tag).toBe("Failure");
+      yield* holder.release(port);
+    }),
+  );
+});
+
 describe("Port.isUnsupportedHostError", () => {
   it("recognizes coded unsupported-host errors", () => {
     expect(Port.isUnsupportedHostError({ code: "EAFNOSUPPORT" }, "::1", true)).toBe(true);

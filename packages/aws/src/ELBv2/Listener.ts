@@ -117,8 +117,25 @@ export interface Listener extends Resource<
     };
   },
   never,
-  Providers
+  Providers,
+  ListenerLookup
 > {}
+
+/**
+ * Props for {@link Listener.lookup}: find a listener this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type ListenerLookup =
+  | {
+      /** The ARN of the existing listener. */
+      listenerArn: string;
+    }
+  | {
+      /** The load balancer the listener belongs to. */
+      loadBalancerArn: string;
+      /** The port the listener accepts connections on. */
+      port: number;
+    };
 
 /**
  * An ELBv2 (Application/Network) Load Balancer listener. A listener checks for
@@ -205,6 +222,18 @@ export interface Listener extends Resource<
  *   certificates: [certArn],
  *   mutualAuthentication: { mode: "verify", trustStoreArn: trustStore.trustStoreArn },
  * });
+ * ```
+ *
+ * ### Looking up an existing listener
+ * `Listener.lookup` references a listener Alchemy doesn't manage (created in the
+ * console or by another stack), found by `listenerArn`, or the `loadBalancerArn`
+and `port` it listens on. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Add a rule to an existing listener
+ * ```typescript
+ * const https = AWS.ELBv2.Listener.lookup({ loadBalancerArn, port: 443 });
+ * const listenerArn = https.listenerArn;
  * ```
  *
  * @resource
@@ -308,6 +337,35 @@ export const ListenerProvider = () =>
       if (olds.loadBalancerArn !== news.loadBalancerArn) {
         return { action: "replace" } as const;
       }
+    }),
+    lookup: Effect.fn(function* (props) {
+      const described = yield* elbv2
+        .describeListeners(
+          "listenerArn" in props
+            ? { ListenerArns: [props.listenerArn] }
+            : { LoadBalancerArn: props.loadBalancerArn },
+        )
+        .pipe(
+          Effect.catchTag(
+            ["ListenerNotFoundException", "LoadBalancerNotFoundException"],
+            () => Effect.undefined,
+          ),
+        );
+      const listener = (described?.Listeners ?? []).find(
+        (l) => "listenerArn" in props || l.Port === props.port,
+      );
+      if (!listener?.ListenerArn) return undefined;
+      const attributes = yield* readListenerAttributes(listener.ListenerArn, undefined);
+      const sni = yield* readSniCertificates(listener.ListenerArn, undefined);
+      return {
+        listenerArn: listener.ListenerArn as ListenerArn,
+        loadBalancerArn: listener.LoadBalancerArn as LoadBalancerArn,
+        targetGroupArn: defaultForwardTargetGroup(listener.DefaultActions),
+        port: listener.Port!,
+        protocol: listener.Protocol!,
+        attributes,
+        configuration: observeListenerConfiguration(listener, sni),
+      };
     }),
     read: Effect.fn(function* ({ olds, output }) {
       if (!output) {

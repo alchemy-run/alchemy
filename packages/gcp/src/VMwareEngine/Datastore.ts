@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   VmwareengineNotResolved,
@@ -115,8 +116,32 @@ export type Datastore = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DatastoreLookup
 >;
+
+/**
+ * Props for {@link Datastore.lookup}: find a datastore this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface DatastoreLookup {
+  /**
+   * Datastore id (the `{datastore}` segment of
+   * `projects/{project}/locations/{location}/datastores/{datastore}`).
+   */
+  datastoreId: string;
+  /**
+   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * normalized.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Google Cloud VMware Engine NFS datastore.
@@ -150,6 +175,18 @@ export type Datastore = Resource<
  *       fileShare: "vol1",
  *     },
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing datastore
+ * `Datastore.lookup` references a datastore Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared datastore.
+ *
+ * **Example:** Reference an existing datastore
+ * ```typescript
+ * const datastore = GCP.VMwareEngine.Datastore.lookup({
+ *   datastoreId: "my-datastore",
  * });
  * ```
  *
@@ -230,6 +267,15 @@ export const DatastoreProvider = () =>
         extra: !sameJson(news.nfsDatastore, olds?.nfsDatastore),
       });
     }),
+
+    lookup: Effect.fn(function* ({ datastoreId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, datastoreId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

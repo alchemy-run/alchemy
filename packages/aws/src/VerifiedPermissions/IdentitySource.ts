@@ -135,8 +135,20 @@ export interface IdentitySource extends Resource<
     identitySourceId: string;
   },
   {},
-  Providers
+  Providers,
+  IdentitySourceLookup
 > {}
+
+/**
+ * Props for {@link IdentitySource.lookup}: find an identity source this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface IdentitySourceLookup {
+  /** The policy store the identity source belongs to. */
+  policyStoreId: string;
+  /** The id of the existing identity source. */
+  identitySourceId: string;
+}
 
 /**
  * An identity source connects a Verified Permissions policy store to an
@@ -171,6 +183,16 @@ export interface IdentitySource extends Resource<
  *     },
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing identity source
+ * `IdentitySource.lookup` references an identity source Alchemy doesn't manage (created in the
+ * console or by another stack), found by `policyStoreId` and `identitySourceId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing identity source
+ * ```typescript
+ * const cognito = AWS.VerifiedPermissions.IdentitySource.lookup({ policyStoreId, identitySourceId });
  * ```
  *
  * @resource
@@ -316,6 +338,12 @@ export const IdentitySourceProvider = () =>
         // child of a policy store — not enumerable account-wide
         list: () => Effect.succeed([]),
 
+        lookup: Effect.fn(function* ({ policyStoreId, identitySourceId }) {
+          const source = yield* observe(policyStoreId, identitySourceId);
+          return source === undefined
+            ? undefined
+            : { policyStoreId, identitySourceId: source.identitySourceId };
+        }),
         read: Effect.fn(function* ({ olds, output }) {
           const policyStoreId = output?.policyStoreId ?? olds?.policyStoreId;
           const identitySourceId = output?.identitySourceId;

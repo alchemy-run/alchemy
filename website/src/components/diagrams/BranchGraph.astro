@@ -1,0 +1,134 @@
+---
+/**
+ * `<BranchGraph />` — copies made from a parent over time, like git branches.
+ * One lane per branch, time running right, a curve where a branch forks from
+ * its parent, and labelled points for what happens on each. Use it for
+ * database branches (Neon, PlanetScale, Prisma), point-in-time copies (Turso)
+ * and preview stages that come and go.
+ *
+ *   <BranchGraph
+ *     end={10}
+ *     branches={[
+ *       { id: "main", label: "main", type: "production" },
+ *       { id: "pr", label: "pr-42", from: { branch: "main", at: 3 }, until: 8 },
+ *     ]}
+ *     points={[
+ *       { branch: "main", at: 1, label: "orders table" },
+ *       { branch: "pr", at: 5, label: "add column" },
+ *     ]}
+ *   />
+ *
+ * `until` ends a branch (deleted with its stage). `dashed` draws the stretch of
+ * a branch that still shares its parent's storage, up to `sharedUntil`.
+ */
+import "./diagram.css";
+
+interface Branch {
+  id: string;
+  label: string;
+  type?: string;
+  from?: { branch: string; at: number };
+  until?: number;
+  sharedUntil?: number;
+  tone?: "default" | "accent";
+}
+interface Props {
+  branches: Branch[];
+  points?: { branch: string; at: number; label: string; below?: boolean }[];
+  end: number;
+  ticks?: { at: number; label: string }[];
+  caption?: string;
+}
+
+const { branches, points = [], end, ticks = [], caption } = Astro.props as Props;
+
+// Two layouts: branch names on the left (desktop), or above each lane
+// (phones), so the text keeps its size. CSS shows one of them.
+const layout = (narrow: boolean) => {
+  const LABEL_W = narrow ? 8 : Math.max(...branches.map((b) => Math.max(b.label.length * 7.6, (b.type ?? "").length * 6.4))) + 24;
+  const PLOT_W = narrow ? 304 : 540;
+  const LANE = narrow ? 78 : 64;
+  const TOP = narrow ? 46 : 30;
+  const x = (t: number) => LABEL_W + (t / end) * PLOT_W;
+  const lane = new Map(branches.map((b, i) => [b.id, TOP + i * LANE]));
+  const H = TOP + (branches.length - 1) * LANE + 34 + (ticks.length ? 20 : 0);
+  const W = LABEL_W + PLOT_W + 16;
+  // A point label that would run into the one before it on its lane goes below the line.
+  const lastEnd = new Map<string, number>();
+  const placed = [...points]
+    .sort((a, b) => a.at - b.at)
+    .map((p) => {
+      const w = p.label.length * 6.4;
+      const left = Math.max(2, Math.min(x(p.at) - w / 2, W - w - 2));
+      const below = p.below || (narrow && left < (lastEnd.get(p.branch) ?? -Infinity) + 6);
+      if (!below) lastEnd.set(p.branch, left + w);
+      return { p, below, left };
+    });
+  return { narrow, x, lane, H, W, placed };
+};
+const layouts = [layout(false), layout(true)];
+---
+
+<figure class="alc-fig not-content" data-nosnippet>
+  <div class="alc-fig__panel">
+  {
+    layouts.map(({ narrow, x, lane, H, W, placed }) => (
+      <svg
+        class:list={["alc-fig__svg", narrow ? "alc-fig__svg--narrow" : "alc-fig__svg--wide"]}
+        viewBox={`0 0 ${W} ${H}`}
+        style={`max-width: ${Math.round(W * 1.15)}px`}
+        role="img"
+        aria-label={caption ?? "Branches"}
+      >
+        {branches.map((b) => {
+          const y = lane.get(b.id)!;
+          const start = b.from ? b.from.at : 0;
+          const stop = b.until ?? end;
+          const fork = b.from && { px: x(b.from.at), py: lane.get(b.from.branch)! };
+          const bodyStart = fork ? x(start) + 26 : x(0);
+          const shared = b.sharedUntil !== undefined ? x(b.sharedUntil) : bodyStart;
+          return (
+            <g>
+              {narrow ? (
+                <text x={fork ? Math.min(bodyStart, W - b.label.length * 7.6 - (b.type ?? "").length * 6.4 - 16) : 0} y={y - 30} class="alc-fig__label">
+                  {b.label}
+                  {b.type && <tspan class="alc-fig__type" dx="8">{b.type}</tspan>}
+                </text>
+              ) : (
+                <>
+                  <text x="4" y={y + (b.type ? 0 : 4)} class="alc-fig__label">{b.label}</text>
+                  {b.type && <text x="4" y={y + 14} class="alc-fig__type">{b.type}</text>}
+                </>
+              )}
+              {fork && (
+                <path d={`M ${fork.px} ${fork.py} C ${fork.px + 18} ${fork.py}, ${fork.px + 8} ${y}, ${fork.px + 26} ${y}`} class="alc-fig__line" />
+              )}
+              {shared > bodyStart && <line x1={bodyStart} y1={y} x2={shared} y2={y} class="alc-fig__line alc-fig__line--dashed" />}
+              <line x1={Math.max(bodyStart, shared)} y1={y} x2={x(stop)} y2={y} class="alc-fig__line" style={b.tone === "accent" ? "stroke-width: 3" : ""} />
+              {b.until !== undefined && (
+                <g>
+                  <line x1={x(stop) - 5} y1={y - 5} x2={x(stop) + 5} y2={y + 5} class="alc-fig__line" />
+                  <line x1={x(stop) - 5} y1={y + 5} x2={x(stop) + 5} y2={y - 5} class="alc-fig__line" />
+                </g>
+              )}
+            </g>
+          );
+        })}
+        {placed.map(({ p, below, left }) => {
+          const y = lane.get(p.branch)!;
+          return (
+            <g>
+              <circle cx={x(p.at)} cy={y} r="5.5" class="alc-fig__box alc-fig__box--accent" />
+              <text x={narrow ? left : x(p.at)} y={below ? y + 21 : y - 11} text-anchor={narrow ? "start" : "middle"} class="alc-fig__small alc-fig__haloed">{p.label}</text>
+            </g>
+          );
+        })}
+        {ticks.map((t) => (
+          <text x={x(t.at)} y={H - 4} text-anchor={t.at === 0 ? "start" : t.at === end ? "end" : "middle"} class="alc-fig__small">{t.label}</text>
+        ))}
+      </svg>
+    ))
+  }
+  </div>
+  {caption && <figcaption class="alc-fig__caption">{caption}</figcaption>}
+</figure>

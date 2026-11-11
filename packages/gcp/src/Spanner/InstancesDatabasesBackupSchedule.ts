@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   backupScheduleName,
@@ -121,8 +122,36 @@ export type InstancesDatabasesBackupSchedule = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  InstancesDatabasesBackupScheduleLookup
 >;
+
+/**
+ * Props for {@link InstancesDatabasesBackupSchedule.lookup}: find an
+ * instances databases backup schedule this stack doesn't manage by its
+ * identifiers, in the ambient project unless `project` names another.
+ */
+export interface InstancesDatabasesBackupScheduleLookup {
+  /**
+   * Backup schedule id (the `{schedule}` segment of
+   * `.../databases/{database}/backupSchedules/{schedule}`). Must match
+   * `^[a-z][-a-z0-9]*[a-z0-9]$` (2–60 characters).
+   */
+  backupScheduleId: string;
+  /**
+   * Parent instance id or full name.
+   */
+  instance: string;
+  /**
+   * Parent database id or full name.
+   */
+  database: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An automated backup schedule on a Cloud Spanner database.
@@ -159,6 +188,22 @@ export type InstancesDatabasesBackupSchedule = Resource<
  *     retentionDuration: "1209600s",
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing instances databases backup schedule
+ * `InstancesDatabasesBackupSchedule.lookup` references an instances
+ * databases backup schedule Alchemy doesn't manage (created in the console
+ * or by another stack). It is read during plan/deploy, never created,
+ * updated or deleted, and binds like a declared instances databases backup
+ * schedule.
+ *
+ * **Example:** Reference an existing instances databases backup schedule
+ * ```typescript
+ * const instancesDatabasesBackupSchedule = GCP.Spanner.InstancesDatabasesBackupSchedule.lookup({
+ *   backupScheduleId: "my-backup-schedule",
+ *   instance: "my-instance",
+ *   database: "my-database",
+ * });
  * ```
  *
  * @resource
@@ -275,6 +320,17 @@ export const InstancesDatabasesBackupScheduleProvider = () =>
       if (!replace) return undefined;
       return { action: "replace" as const };
     }),
+
+    lookup: Effect.fn(function* ({ backupScheduleId, instance, database }) {
+      const env = yield* GcpEnvironment.current;
+      const instanceId = instanceIdOf(instance ?? "");
+      const databaseId = databaseIdOf(database ?? "");
+      if (instanceId.length === 0 || databaseId.length === 0) return undefined;
+      const name = backupScheduleName(env.project, instanceId, databaseId, backupScheduleId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

@@ -97,8 +97,27 @@ export type Tunnel = Resource<
     token: Redacted.Redacted<string>;
   },
   never,
-  Providers
+  Providers,
+  TunnelLookup
 >;
+
+/**
+ * Props for {@link Tunnel.lookup}: find a tunnel this stack doesn't manage,
+ * by its id or its name.
+ */
+export type TunnelLookup =
+  | {
+      /**
+       * The Cloudflare-assigned ID (UUID) of the existing tunnel.
+       */
+      tunnelId: string;
+    }
+  | {
+      /**
+       * The name of the existing tunnel.
+       */
+      name: string;
+    };
 
 /**
  * A Cloudflare Tunnel that establishes a secure connection from your origin to
@@ -145,6 +164,24 @@ export type Tunnel = Resource<
  *     return HttpServerResponse.json({ id: tunnel.id, token });
  *   }),
  * };
+ * ```
+ *
+ * ### Looking up an existing Tunnel
+ * `Tunnel.lookup` reads a tunnel Alchemy doesn't manage (created with
+ * `cloudflared` or by another stack), found by `tunnelId` or `name`, so
+ * routes, configurations and DNS records can point at it. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Route a hostname to an existing tunnel
+ * ```typescript
+ * const tunnel = Cloudflare.Tunnel.Tunnel.lookup({ name: "home-lab" });
+ * yield* Cloudflare.DNS.Record("Admin", {
+ *   zoneId: zone.zoneId,
+ *   name: "admin.example.com",
+ *   type: "CNAME",
+ *   content: Output.interpolate`${tunnel.tunnelId}.cfargotunnel.com`,
+ *   proxied: true,
+ * });
  * ```
  *
  * @resource
@@ -198,7 +235,7 @@ export const TunnelProvider = () =>
       );
       return rows.filter((row): row is Tunnel["Attributes"] => row !== undefined);
     }),
-    diff: Effect.fn(function* ({ id, olds = {}, news, output }) {
+    diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (!isResolved(news)) return undefined;
       if ((output?.accountId ?? accountId) !== accountId) {
@@ -326,6 +363,33 @@ export const TunnelProvider = () =>
             schedule: Schedule.max([Schedule.spaced("3 seconds"), Schedule.recurs(10)]),
           }),
         );
+    }),
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const tunnel =
+        "tunnelId" in props
+          ? yield* zeroTrust
+              .getTunnelCloudflared({ accountId, tunnelId: props.tunnelId })
+              .pipe(Effect.catchTag("TunnelNotFound", () => Effect.undefined))
+          : yield* findTunnelByName(props.name);
+      // A deleted tunnel still answers by id until Cloudflare purges it.
+      if (!tunnel?.id || tunnel.deletedAt) return undefined;
+      const tunnelId = tunnel.id;
+      const token = yield* zeroTrust
+        .getTunnelCloudflaredToken({ accountId, tunnelId })
+        .pipe(Effect.catchTag("TunnelTokenNotFound", () => Effect.undefined));
+      if (token === undefined) return undefined;
+      return {
+        tunnelId,
+        tunnelName: tunnel.name ?? tunnelId,
+        accountTag: tunnel.accountTag ?? undefined,
+        accountId,
+        createdAt: tunnel.createdAt ?? undefined,
+        deletedAt: undefined,
+        configSrc: ((tunnel as { configSrc?: "cloudflare" | "local" | null }).configSrc ??
+          "cloudflare") as "cloudflare" | "local",
+        token: Redacted.make(token),
+      };
     }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

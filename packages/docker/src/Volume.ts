@@ -52,8 +52,23 @@ export interface Volume extends Resource<
     createdAt: number;
   },
   never,
-  Providers
+  Providers,
+  VolumeLookup
 > {}
+
+/**
+ * Props for {@link Volume.lookup}: find a volume this stack
+ * doesn't manage by its name.
+ */
+export interface VolumeLookup {
+  /** Volume name. */
+  name: string;
+  /**
+   * Docker context the engine is reached through.
+   * @default the current context
+   */
+  context?: string;
+}
 
 /**
  * A Docker volume managed through the active Docker context.
@@ -99,6 +114,16 @@ export interface Volume extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing volume
+ * `Volume.lookup` references a volume Alchemy doesn't manage (created with
+ * the Docker CLI, Compose or another stack). It is read during plan/deploy,
+ * never created, updated or removed.
+ *
+ * **Example:** Reference an existing volume
+ * ```typescript
+ * const data = Docker.Volume.lookup({ name: "pgdata" });
+ * ```
+ *
  * @resource
  * @product Volume
  */
@@ -112,6 +137,13 @@ export const VolumeProvider = () =>
 
       return Volume.Provider.of({
         list: () => Effect.succeed([]),
+        lookup: Effect.fn(function* ({ name, context }) {
+          const info = yield* docker.volume
+            .inspect(name, context)
+            .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
+          return info ? toVolumeAttributes(info) : undefined;
+        }),
+
         read: Effect.fn(function* ({ id, instanceId, olds, output }) {
           const context = dockerContextName(olds?.context);
           const name = yield* dockerPhysicalName(id, olds, instanceId);

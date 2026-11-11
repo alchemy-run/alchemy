@@ -88,8 +88,20 @@ export interface Alias extends Resource<
     eventInvokeConfig?: ObservedEventInvokeConfig | undefined;
   },
   never,
-  Providers
+  Providers,
+  AliasLookup
 > {}
+
+/**
+ * Props for {@link Alias.lookup}: find an alias this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface AliasLookup {
+  /** The function the alias points into. */
+  functionName: string;
+  /** The name of the existing alias. */
+  aliasName: string;
+}
 
 type ResolvedAliasProps = Input.ResolveProps<AliasProps>;
 
@@ -140,6 +152,17 @@ const resolvedProps = (props: AliasProps): ResolvedAliasProps =>
  *     },
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing alias
+ * `Alias.lookup` references an alias Alchemy doesn't manage (created in the
+ * console or by another stack), found by `functionName` and `aliasName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Invoke an existing alias
+ * ```typescript
+ * const live = AWS.Lambda.Alias.lookup({ functionName: "checkout", aliasName: "live" });
+ * const aliasArn = live.aliasArn;
  * ```
  */
 export const Alias = Resource<Alias>("AWS.Lambda.Alias");
@@ -215,6 +238,19 @@ export const AliasProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ functionName, aliasName }) {
+          const { region } = yield* AWSEnvironment.current;
+          const alias = yield* Lambda.getAlias({
+            FunctionName: functionName,
+            Name: aliasName,
+          }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
+          const attrs = alias ? snapshotAlias(functionName, alias, region) : undefined;
+          if (!attrs) return undefined;
+          return {
+            ...attrs,
+            eventInvokeConfig: yield* observeEventInvokeConfig(functionName, attrs.aliasName),
+          };
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           // An interrupted create's first checkpoint strips the Version

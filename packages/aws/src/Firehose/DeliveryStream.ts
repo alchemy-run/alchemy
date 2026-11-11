@@ -233,8 +233,18 @@ export interface DeliveryStream extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DeliveryStreamLookup
 > {}
+
+/**
+ * Props for {@link DeliveryStream.lookup}: find a delivery stream this stack doesn't
+ * manage, in the ambient account and region, by name.
+ */
+export interface DeliveryStreamLookup {
+  /** The name of the existing delivery stream. */
+  deliveryStreamName: string;
+}
 
 /**
  * An Amazon Data Firehose delivery stream that buffers records and delivers
@@ -323,6 +333,19 @@ export interface DeliveryStream extends Resource<
  *     Data: new TextEncoder().encode(`${line}\n`),
  *   })),
  * });
+ * ```
+ *
+ * ### Looking up an existing delivery stream
+ * `DeliveryStream.lookup` references a delivery stream Alchemy doesn't manage (created in the
+ * console or by another stack), found by `deliveryStreamName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Write records to an existing delivery stream
+ * ```typescript
+ * const stream = AWS.Firehose.DeliveryStream.lookup({ deliveryStreamName: "clicks" });
+ *
+ * // init
+ * const putRecord = yield* AWS.Firehose.PutRecord(stream);
  * ```
  *
  * @resource
@@ -695,6 +718,13 @@ export const DeliveryStreamProvider = () =>
               (attrs): attrs is DeliveryStream["Attributes"] => attrs !== undefined,
             );
           }),
+
+        lookup: Effect.fn(function* ({ deliveryStreamName }) {
+          const attrs = yield* readDeliveryStream({ deliveryStreamName, roleName: undefined });
+          // The stream's destination role names the role a declared stream
+          // records, so a lookup of a managed stream matches its state.
+          return attrs && { ...attrs, roleName: attrs.roleArn.split("/").at(-1) || undefined };
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const deliveryStreamName =

@@ -140,8 +140,18 @@ export interface Endpoint extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  EndpointLookup
 > {}
+
+/**
+ * Props for {@link Endpoint.lookup}: find an endpoint this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface EndpointLookup {
+  /** The endpoint identifier of the existing endpoint. */
+  endpointIdentifier: string;
+}
 
 /**
  * An AWS Database Migration Service (DMS) endpoint — the source or target
@@ -172,6 +182,16 @@ export interface Endpoint extends Resource<
  *     ServiceAccessRoleArn: role.roleArn,
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing endpoint
+ * `Endpoint.lookup` references an endpoint Alchemy doesn't manage (created in the
+ * console or by another stack), found by `endpointIdentifier`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing endpoint
+ * ```typescript
+ * const existing = AWS.DMS.Endpoint.lookup({ endpointIdentifier: "my-endpoint" });
  * ```
  *
  * @resource
@@ -273,6 +293,13 @@ export const EndpointProvider = () =>
           if ((news.kmsKeyId ?? undefined) !== (olds?.kmsKeyId ?? undefined)) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ endpointIdentifier: name }) {
+          const endpoint = yield* findEndpoint(name);
+          if (!endpoint?.EndpointArn) return undefined;
+          const attrs = yield* toAttrs(endpoint);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

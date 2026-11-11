@@ -1,6 +1,6 @@
 import { Query, type UnwrapPlan } from "@distilled.cloud/core/query";
 import { Railway, type Environment as RailwayEnvironment } from "@distilled.cloud/railway";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { Unowned, stripUnowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -75,8 +75,20 @@ export type Environment = Resource<
     url: string;
   },
   never,
-  Providers
+  Providers,
+  EnvironmentLookup
 >;
+
+/**
+ * Props for {@link Environment.lookup}: find an environment this
+ * stack doesn't manage by its project and id.
+ */
+export interface EnvironmentLookup {
+  /** Railway project id. */
+  projectId: string;
+  /** Railway environment id. */
+  environmentId: string;
+}
 
 const EnvironmentResource = Resource<Environment>("Railway.Environment");
 
@@ -168,6 +180,19 @@ const resolveEnvironmentProps = (
  * });
  * ```
  *
+ * ### Looking up an existing environment
+ * `Environment.lookup` references a environment Alchemy doesn't manage (created in
+ * the Railway dashboard or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted.
+ *
+ * **Example:** Reference an existing environment
+ * ```typescript
+ * const staging = Railway.Environment.lookup({
+ *   projectId: "a1b2c3d4-…",
+ *   environmentId: "e5f6a7b8-…",
+ * });
+ * ```
+ *
  * @resource
  * @product Project
  */
@@ -249,6 +274,32 @@ const findByName = (projectId: string, name: string) =>
     Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
+/**
+ * Observe a Environment from its last known attributes or its props. `lookup`
+ * passes the ids it was given as a partial `output`, as a refresh would.
+ */
+const readEnvironmentAttributes = Effect.fn(function* ({
+  id,
+  olds,
+  output,
+}: {
+  id: string;
+  olds?: EnvironmentProps;
+  output?: Partial<Environment["Attributes"]> | undefined;
+}) {
+  const name = yield* resolveName(id, olds?.name, output?.name);
+  const projectId =
+    output?.projectId ?? (olds !== undefined ? projectIdOf(olds.project) : undefined);
+  const found =
+    (output?.environmentId !== undefined
+      ? yield* getById(output.environmentId, output.projectId)
+      : undefined) ?? (projectId !== undefined ? yield* findByName(projectId, name) : undefined);
+  if (found === undefined) return undefined;
+  const attrs = toAttrs(found, { name, projectId });
+  if (output !== undefined) return attrs;
+  return matchesAlchemyPhysicalName(found.name) ? attrs : Unowned(attrs);
+});
+
 export const EnvironmentProvider = () =>
   Provider.succeed(Environment, {
     stables: ["environmentId", "projectId"],
@@ -264,20 +315,19 @@ export const EnvironmentProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
-      const name = yield* resolveName(id, olds?.name, output?.name);
-      const projectId =
-        output?.projectId ?? (olds !== undefined ? projectIdOf(olds.project) : undefined);
-      const found =
-        (output?.environmentId !== undefined
-          ? yield* getById(output.environmentId, output.projectId)
-          : undefined) ??
-        (projectId !== undefined ? yield* findByName(projectId, name) : undefined);
-      if (found === undefined) return undefined;
-      const attrs = toAttrs(found, { name, projectId });
-      if (output !== undefined) return attrs;
-      return matchesAlchemyPhysicalName(found.name) ? attrs : Unowned(attrs);
-    }),
+    lookup: ({ projectId, environmentId }) =>
+      // The ids find it; an empty name only stops `read` deriving a physical
+      // name, which needs a deploy's resource context. Railway answers an id
+      // it doesn't know with Not Authorized, so that is a miss too.
+      readEnvironmentAttributes({
+        id: environmentId,
+        output: { projectId, environmentId, name: "" },
+      }).pipe(
+        Effect.map((attrs) => (attrs === undefined ? undefined : stripUnowned(attrs))),
+        Effect.catchTag("RailwayForbidden", () => Effect.undefined),
+      ),
+
+    read: readEnvironmentAttributes,
 
     list: Effect.fn(function* () {
       const projects = yield* ownedProjects();

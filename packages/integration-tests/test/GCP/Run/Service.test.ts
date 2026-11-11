@@ -15,6 +15,7 @@ import * as Exit from "effect/Exit";
 import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { DataBucket, Tweets } from "./fixtures/bound-resources.ts";
 import Worker from "./fixtures/container-worker.ts";
 import EffectApiCaller from "./fixtures/effect-apis/caller.ts";
@@ -60,6 +61,10 @@ test.provider(
             },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Run.Service.lookup({ serviceId: created.serviceId, location: created.location }),
+        created,
       );
 
       expect(created.name).toContain("/services/");

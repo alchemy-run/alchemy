@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { CAPACITY_REGION, CAPACITY_ZONE, CAPACITY_ZONE_2, withGkeClusterSlot } from "../zones.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -108,6 +109,13 @@ test.provider.skipIf(!runLifecycle)(
               removeDefaultNodePool: true,
             });
           }),
+        );
+        yield* expectFound(
+          GCP.Container.Cluster.lookup({
+            clusterId: created.clusterId,
+            location: created.location,
+          }),
+          created,
         );
 
         expect(created.name).toContain("/clusters/");

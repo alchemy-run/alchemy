@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -120,8 +121,30 @@ export type AuthorizationPolicy = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AuthorizationPolicyLookup
 >;
+
+/**
+ * Props for {@link AuthorizationPolicy.lookup}: find an authorization
+ * policy this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface AuthorizationPolicyLookup {
+  /**
+   * Authorization policy id.
+   */
+  authorizationPolicyId: string;
+  /**
+   * Location (`global`, `us-central1`, …).
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Network Security authorization policy for Traffic Director /
@@ -150,6 +173,19 @@ export type AuthorizationPolicy = Resource<
  *     },
  *   ],
  *   labels: { env: "prod" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing authorization policy
+ * `AuthorizationPolicy.lookup` references an authorization policy Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared authorization policy.
+ *
+ * **Example:** Reference an existing authorization policy
+ * ```typescript
+ * const authorizationPolicy = GCP.NetworkSecurity.AuthorizationPolicy.lookup({
+ *   authorizationPolicyId: "my-authorization-policy",
  * });
  * ```
  *
@@ -232,6 +268,15 @@ export const AuthorizationPolicyProvider = () =>
           previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ authorizationPolicyId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = resourceName(env.project, location, authorizationPolicyId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

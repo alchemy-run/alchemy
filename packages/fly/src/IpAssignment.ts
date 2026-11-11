@@ -85,8 +85,20 @@ export type IpAssignment = Resource<
     createdAt: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  IpAssignmentLookup
 >;
+
+/**
+ * Props for {@link IpAssignment.lookup}: find an address this stack
+ * doesn't manage by its App and IP.
+ */
+export interface IpAssignmentLookup {
+  /** Fly App name the address is assigned to. */
+  appName: string;
+  /** The allocated address. */
+  ip: string;
+}
 
 const resolveIpAssignmentProps = (
   props: IpAssignmentProps | Effect.Effect<IpAssignmentProps, never, Providers>,
@@ -245,6 +257,19 @@ const IpAssignmentResource = Resource<IpAssignment>("Fly.IpAssignment");
  *     return { url: api.url, ip: ip.ip };
  *   }),
  * );
+ * ```
+ *
+ * ### Looking up an existing address
+ * `IpAssignment.lookup` references an address Alchemy doesn't manage
+ * (allocated with `fly ips allocate-v4` or by another stack). It is read
+ * during plan/deploy, never allocated or released.
+ *
+ * **Example:** Reference an existing address
+ * ```typescript
+ * const ip = Fly.IpAssignment.lookup({
+ *   appName: "my-site",
+ *   ip: "2a09:8280:1::1",
+ * });
  * ```
  *
  * @resource
@@ -437,6 +462,11 @@ export const IpAssignmentProvider = () =>
         return { action: "replace" as const };
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ appName, ip }) {
+      const found = yield* findByIp(appName, ip);
+      return found?.ip === undefined ? undefined : toAttrs(appName, found);
     }),
 
     read: Effect.fn(function* ({ olds, output }) {

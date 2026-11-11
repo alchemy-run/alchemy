@@ -5,6 +5,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
@@ -182,7 +183,33 @@ export type McpServerAttributes = {
   createdAt: string | undefined;
 };
 
-export type McpServer = Resource<TypeId, McpServerProps, McpServerAttributes, never, Providers>;
+export type McpServer = Resource<
+  TypeId,
+  McpServerProps,
+  McpServerAttributes,
+  never,
+  Providers,
+  McpServerLookup
+>;
+
+/**
+ * Props for {@link McpServer.lookup}: find an MCP server this stack doesn't
+ * manage, by its id or its name.
+ */
+export type McpServerLookup =
+  | {
+      /**
+       * The id of the existing server.
+       */
+      serverId: string;
+    }
+  | {
+      /**
+       * The name of the existing server. Names are not unique; the first
+       * server with this exact name is used.
+       */
+      name: string;
+    };
 
 /**
  * A Cloudflare Zero Trust **AI Controls MCP server** — an upstream MCP
@@ -274,6 +301,20 @@ export type McpServer = Resource<TypeId, McpServerProps, McpServerAttributes, ne
  * }).pipe(adopt(true));
  * ```
  *
+ * ### Looking up an existing server
+ * `McpServer.lookup` references a server Alchemy doesn't manage (registered
+ * in the dashboard or by another stack), found by `serverId` or `name`. It
+ * is read during plan/deploy and never created, updated, synced or deleted.
+ *
+ * **Example:** Read an existing server's tools
+ * ```typescript
+ * const server = Cloudflare.Access.McpServer.lookup({ serverId: "docs" });
+ * const worker = yield* Cloudflare.Worker("Agent", {
+ *   main: "./src/agent.ts",
+ *   env: { MCP_SERVER_ID: server.serverId, MCP_HOSTNAME: server.hostname },
+ * });
+ * ```
+ *
  * @see https://developers.cloudflare.com/cloudflare-one/access-controls/ai-controls/
  *
  * @resource
@@ -328,6 +369,22 @@ export const McpServerProvider = () =>
         return { action: "replace", deleteFirst: true } as const;
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed =
+        "serverId" in props
+          ? yield* observeServer(accountId, props.serverId).pipe(
+              // An id Cloudflare would never accept cannot name a server.
+              Effect.catchTag("McpServerInvalidId", () => Effect.undefined),
+            )
+          : yield* zeroTrust.listAccessAiControlMcpServers.items({ accountId }).pipe(
+              Stream.filter((server) => server.name === props.name),
+              Stream.runHead,
+              Effect.map(Option.getOrUndefined),
+            );
+      return observed ? toAttributes(observed, accountId) : undefined;
     }),
 
     read: Effect.fn(function* ({ id, output, olds, previous }) {

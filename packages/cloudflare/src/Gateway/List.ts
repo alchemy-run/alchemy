@@ -101,7 +101,26 @@ export interface ListAttributes {
   updatedAt: string | undefined;
 }
 
-export type List = Resource<TypeId, ListProps, ListAttributes, never, Providers>;
+export type List = Resource<TypeId, ListProps, ListAttributes, never, Providers, ListLookup>;
+
+/**
+ * Props for {@link List.lookup}: find a Gateway list this stack doesn't
+ * manage, by its id or its name.
+ */
+export type ListLookup =
+  | {
+      /**
+       * The UUID of the existing list.
+       */
+      listId: string;
+    }
+  | {
+      /**
+       * The name of the existing list. Names are not unique; the oldest list
+       * with this exact name is used.
+       */
+      name: string;
+    };
 
 /**
  * A Cloudflare Zero Trust Gateway list — a named set of domains, IPs,
@@ -140,6 +159,21 @@ export type List = Resource<TypeId, ListProps, ListAttributes, never, Providers>
  *   action: "block",
  *   filters: ["dns"],
  *   traffic: `any(dns.domains[*] in $${blocked.listId})`,
+ * });
+ * ```
+ *
+ * ### Looking up an existing list
+ * `List.lookup` references a list Alchemy doesn't manage (created in the
+ * dashboard or by another stack), found by `listId` or `name`. It is read
+ * during plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Block every domain in an existing list
+ * ```typescript
+ * const blocked = Cloudflare.Gateway.List.lookup({ name: "blocked-domains" });
+ * yield* Cloudflare.Gateway.Rule("BlockListedDomains", {
+ *   action: "block",
+ *   filters: ["dns"],
+ *   traffic: Output.interpolate`any(dns.domains[*] in $${blocked.listId})`,
  * });
  * ```
  *
@@ -184,6 +218,14 @@ export const ListProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const listId =
+        "listId" in props ? props.listId : (yield* findByName(accountId, props.name))?.id;
+      if (!listId) return undefined;
+      const observed = yield* getList(accountId, listId);
+      return observed ? toAttributes(observed, accountId) : undefined;
+    }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;

@@ -9,6 +9,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -271,8 +272,38 @@ export type NodePool = Resource<
     selfLink: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  NodePoolLookup
 >;
+
+/**
+ * Props for {@link NodePool.lookup}: find a node pool this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface NodePoolLookup {
+  /**
+   * Node pool id (the `{nodePool}` segment of
+   * `.../clusters/{cluster}/nodePools/{nodePool}`). Must be 1-40 characters
+   * and match `[a-z]([a-z0-9-]*[a-z0-9])?`.
+   */
+  nodePoolId: string;
+  /**
+   * Zone or region of the parent cluster (`us-central1-a`, `us-central1`,
+   * …). Ignored when `cluster` is a full resource name.
+   */
+  location?: string;
+  /**
+   * Parent cluster id or full resource name
+   * (`projects/{project}/locations/{location}/clusters/{cluster}`).
+   */
+  cluster: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Google Kubernetes Engine node pool.
@@ -324,6 +355,19 @@ export type NodePool = Resource<
  * ```typescript
  * const getNodePool = yield* GCP.Container.GetNodePool(pool);
  * const live = yield* getNodePool();
+ * ```
+ *
+ * ### Looking up an existing node pool
+ * `NodePool.lookup` references a node pool Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared node pool.
+ *
+ * **Example:** Reference an existing node pool
+ * ```typescript
+ * const nodePool = GCP.Container.NodePool.lookup({
+ *   nodePoolId: "my-node-pool",
+ *   cluster: "my-cluster",
+ * });
  * ```
  *
  * @resource
@@ -806,6 +850,21 @@ export const NodePoolProvider = () =>
           nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ nodePoolId, location, cluster }) {
+      const env = yield* GcpEnvironment.current;
+      const clusterRef = (typeof cluster === "string" ? cluster : undefined) ?? "";
+      // A pool whose cluster never resolved (e.g. the cluster create failed)
+      // was never created and cannot be looked up.
+      if (clusterRef.trim().length === 0) {
+        return undefined;
+      }
+      const ref = parseClusterRef(clusterRef, env.project, location);
+      const name = resourceName(ref.project, ref.location, ref.clusterId, nodePoolId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, ref.project, ref.location, ref.clusterId);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

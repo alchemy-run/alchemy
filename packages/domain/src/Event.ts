@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import type * as Telemetry from "./Telemetry.ts";
+import type { Annotations as DomainAnnotations } from "./Annotations.ts";
 
 /**
  * Field map shared by every Domain message builder.
@@ -21,9 +21,17 @@ export type Instance<Tag extends string, F extends Fields> = { readonly _tag: Ta
  */
 export interface Any extends Schema.Top {
   readonly kind: "Event";
+  readonly annotations: DomainAnnotations;
   readonly tag: string;
   new (...args: any[]): { readonly _tag: string };
 }
+
+/**
+ * What an Event takes after its fields: its `Domain.Annotations`, and every
+ * annotation `Schema.TaggedClass` takes.
+ */
+export type Annotations<Tag extends string, F extends Fields> = DomainAnnotations &
+  Schema.Annotations.Declaration<Instance<Tag, F>, readonly [Schema.TaggedStruct<Tag, F>]>;
 
 /**
  * A fact your domain recorded, named in the past tense. Aggregates record
@@ -48,29 +56,37 @@ export interface Any extends Schema.Top {
  * export class AccountClosed extends Domain.Event("AccountClosed") {}
  * ```
  *
+ * ### Annotating events
+ * The third argument is its annotations, which are the event Schema's
+ * annotations too.
+ *
+ * **Example:** A description
+ * ```typescript
+ * export class MoneyDeposited extends Domain.Event("MoneyDeposited", {
+ *   amount: Schema.Int,
+ * }, {
+ *   description: "Money arrived in an account. The amount is in cents.",
+ * }) {}
+ * ```
+ *
  * @primitive
  */
 export const make = <const Tag extends string, const F extends Fields = {}>(
   tag: Tag,
   fields: F = {} as F,
-  options?: {
-    /**
-     * Span attributes to record for this event, on every span it passes
-     * through. Nothing from it is recorded unless you return it here, and a
-     * `Redacted` value is recorded as `<redacted>`.
-     */
-    readonly attributes?: Telemetry.Attributes<Instance<Tag, F>>;
-  },
+  annotations: Annotations<Tag, F> = {},
 ): EventClass<Tag, F> => {
+  const schemaAnnotations = annotations;
   // The base type is conditional on `Self`, so it is not a constructor until `make` returns.
   const Base: new (...args: any[]) => object = Schema.TaggedClass<Instance<Tag, F>>(tag)(
     tag,
     fields,
+    schemaAnnotations,
   ) as any;
   return class extends Base {
     static readonly kind = "Event" as const;
+    static readonly annotations: DomainAnnotations = schemaAnnotations;
     static readonly tag: Tag = tag;
-    static readonly attributes = options?.attributes;
   } as unknown as EventClass<Tag, F>;
 };
 
@@ -83,7 +99,6 @@ export interface EventClass<Tag extends string, F extends Fields> extends Schema
   {}
 > {
   readonly kind: "Event";
+  readonly annotations: DomainAnnotations;
   readonly tag: Tag;
-  /** Span attributes the event adds, if it declares any. */
-  readonly attributes: Telemetry.Attributes<Instance<Tag, F>> | undefined;
 }

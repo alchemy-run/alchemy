@@ -9,6 +9,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import Box from "./fixtures/sprite.ts";
 import { flyApi } from "./limit.ts";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ limit: flyApi, providers: Fly.providers() });
 
@@ -80,6 +81,10 @@ describe.concurrent("Sprite", () => {
             return yield* Box;
           }),
         );
+        yield* expectFound(Fly.Sprite.lookup({ name: deployed.name }), deployed, {
+          // The bundled program's hash is this stack's record, not Fly's.
+          ignore: ["code"],
+        });
 
         expect(deployed.spriteId).toEqual(expect.any(String));
         expect(deployed.spriteId.length).toBeGreaterThan(0);

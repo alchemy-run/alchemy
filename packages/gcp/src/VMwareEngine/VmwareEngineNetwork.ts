@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_GLOBAL,
@@ -103,8 +104,38 @@ export type VmwareEngineNetwork = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  VmwareEngineNetworkLookup
 >;
+
+/**
+ * Props for {@link VmwareEngineNetwork.lookup}: find a vmware engine
+ * network this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface VmwareEngineNetworkLookup {
+  /**
+   * Network id (the `{vmwareEngineNetwork}` segment of
+   * `projects/{project}/locations/{location}/vmwareEngineNetworks/{id}`).
+   * For `LEGACY` networks the API requires `{region}-default`.
+   */
+  vmwareEngineNetworkId: string;
+  /**
+   * Network type. `STANDARD` is global; `LEGACY` is the per-region
+   * singleton `{region}-default`.
+   */
+  type?: VmwareEngineNetworkType;
+  /**
+   * Location. `STANDARD` networks are global (`global`). `LEGACY` networks
+   * are regional (`us-central1`). `US-CENTRAL1` is accepted and normalized.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A VMware Engine network that private clouds attach to for intranet,
@@ -153,6 +184,19 @@ export type VmwareEngineNetwork = Resource<
  *   location: "global",
  *   type: "STANDARD",
  *   description: "prod network v2",
+ * });
+ * ```
+ *
+ * ### Looking up an existing vmware engine network
+ * `VmwareEngineNetwork.lookup` references a vmware engine network Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared vmware engine network.
+ *
+ * **Example:** Reference an existing vmware engine network
+ * ```typescript
+ * const vmwareEngineNetwork = GCP.VMwareEngine.VmwareEngineNetwork.lookup({
+ *   vmwareEngineNetworkId: "my-vmware-engine-network",
  * });
  * ```
  *
@@ -251,6 +295,20 @@ export const VmwareEngineNetworkProvider = () =>
         extra: previousType !== nextType,
       });
     }),
+
+    lookup: Effect.fn(function* ({
+      vmwareEngineNetworkId,
+      type: lookupType,
+      location: lookupLocation,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const type = typeOf(lookupType);
+      const location = normalizeLocation(lookupLocation, fallbackLocation(type, env.region));
+      const name = resourceName(env.project, location, vmwareEngineNetworkId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

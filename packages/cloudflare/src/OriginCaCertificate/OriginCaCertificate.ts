@@ -327,7 +327,7 @@ const findByHostnames = (hostnames: string[]) =>
     const zoneId = yield* resolveZoneIdForHostname(accountId, hostname);
     if (!zoneId) return [];
     const certs = yield* originCa.listOriginCaCertificates.items({ zoneId }).pipe(
-      Stream.filter((cert) => sameHostnames([...cert.hostnames], hostnames)),
+      Stream.filter((cert) => sameHostnames([...(cert.hostnames ?? [])], hostnames)),
       Stream.runCollect,
     );
     return [...certs].sort((a, b) => (a.id ?? "").localeCompare(b.id ?? ""));
@@ -358,7 +358,7 @@ type CertificateShape = {
   id?: string | null | undefined;
   certificate?: string | null | undefined;
   csr?: string | null | undefined;
-  hostnames: readonly string[];
+  hostnames?: readonly string[] | null | undefined;
   requestType?: string | null | undefined;
   requestedValidity?: number | null | undefined;
   expiresOn?: string | null | undefined;
@@ -379,7 +379,7 @@ const toAttributes = (
   certificateId: cert.id!,
   certificate: cert.certificate ?? "",
   csr: cert.csr ?? fallback?.csr ?? "",
-  hostnames: [...cert.hostnames],
+  hostnames: [...(cert.hostnames ?? [])],
   requestType: (cert.requestType ?? fallback?.requestType ?? "origin-rsa") as RequestType,
   requestedValidity: cert.requestedValidity ?? fallback?.requestedValidity ?? DEFAULT_VALIDITY,
   expiresOn: cert.expiresOn ?? undefined,

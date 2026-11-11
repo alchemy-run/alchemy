@@ -42,13 +42,12 @@ export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
   events: [MoneyWithdrawn],                // every event it may record
   rejects: [NotOpen, DailyLimitExceeded],  // every way it can be refused
   reply: { balance: Cents },               // optional typed reply
-  attributes: (cmd) => ({ "bank.amount": cmd.amount }),  // optional: what its spans record
 }) {}
 ```
 
-A rejection with no fields: `class NotOpen extends Domain.Rejection("NotOpen") {}` in `NotOpen.rejection.ts`. Events and rejections take `attributes` as a third argument: `Domain.Event("MoneyWithdrawn", { ... }, { attributes: (e) => ({ ... }) })`. Nothing from a payload is traced unless `attributes` returns it, and `Redacted` values record as `<redacted>`.
+A rejection with no fields: `class NotOpen extends Domain.Rejection("NotOpen") {}` in `NotOpen.rejection.ts`. Nothing from a payload is traced unless a handler annotates it: `yield* Effect.annotateCurrentSpan("bank.amount", cmd.amount)` in `decide` lands on the engine's `Domain.decide` span.
 
-`Domain.Rejection(tag, fields, annotations)` is `Schema.TaggedError` with its type filled in: the third argument takes the same annotations (`httpApiStatus`, `description`, ...) plus `attributes`. `rejects` takes any tagged error class, `HttpApiError.Forbidden` included.
+`Domain.Rejection(tag, fields, annotations)` is `Schema.TaggedError` with its type filled in: the third argument takes the same annotations (`httpApiStatus`, `description`, ...) `rejects` takes any tagged error class, `HttpApiError.Forbidden` included.
 
 More: [Command: Annotate a rejection](https://alchemy.run/domain/command#annotate-a-rejection).
 
@@ -69,16 +68,16 @@ export class Account extends Domain.Aggregate("Account", {
   initial: { _tag: "Unopened" },
   commands: [OpenAccount, DepositMoney, WithdrawMoney],  // events derive from the commands
   decide: {
-    OpenAccount: (s, cmd) =>
-      s._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],
-    DepositMoney: (s, cmd) => {
-      const o = openFor(s);
+    OpenAccount: (account, cmd) =>
+      account._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],
+    DepositMoney: (account, cmd) => {
+      const o = openFor(account);
       if (o._tag !== "Open") return o;
       return [new MoneyDeposited({ amount: cmd.amount, balanceAfter: o.balance + cmd.amount })];
     },
     // Effect.fn when decide reads middleware context; fail with `return yield* rejection`
-    WithdrawMoney: Effect.fn(function* (s, cmd, { now }) {
-      const o = openFor(s);
+    WithdrawMoney: Effect.fn(function* (account, cmd) {
+      const o = openFor(account);
       if (o._tag !== "Open") return yield* o;
       if (o.owner !== (yield* CurrentActor).customerId) return yield* new NotOwner();
       if (cmd.amount > o.balance) return yield* new InsufficientFunds({ balance: o.balance });
@@ -92,10 +91,10 @@ export class Account extends Domain.Aggregate("Account", {
     MoneyWithdrawn: (s, e) => (s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s),
   },
   reply: { WithdrawMoney: (s) => ({ balance: s._tag === "Open" ? s.balance : 0 }) },
-  // optional: let clients read/watch the aggregate through an Api
-  read: { middleware: [Session], rejects: [NotOwner], validate: Effect.fn(function* (_req, s) { /* authorize */ }) },
 }) {}
 ```
+
+An aggregate's state is never read by clients directly: a view projects what they may see of it.
 
 `Aggregate.ref(id)` builds a reference for stories and views.
 
@@ -156,12 +155,19 @@ export class AccountSummary extends Domain.View("AccountSummary", {
     AccountOpened: (v, e) => ({ ...v, customerId: e.customerId }),
     MoneyWithdrawn: (v, e) => ({ ...v, balance: e.balanceAfter }),
   },
-  // judged on every get, list, and every change while watched
-  validate: Effect.fn(function* (_request, summary) {
-    yield* mustOwn(summary?.customerId ?? null);
-  }),
 }) {}
+
+// judged on every get, list, and every change while watched; required when the view declares middleware or rejects
+export const AccountSummaryLive = AccountSummary.toLayer(
+  Effect.succeed(
+    Effect.fn(function* (_request, summary) {
+      yield* mustOwn(summary?.customerId ?? null);
+    }),
+  ),
+);
 ```
+
+Merge `AccountSummaryLive` into the model's handlers: `Bank.layer(handlers)` is a type error until every guarded view and stream has its Layer. The Layer's construction may resolve services; `validate` itself may only read what the middleware provides.
 
 Emit derived events with `events: [StatementLine]` and `emit: { MoneyDeposited: (e) => new StatementLine({...}) }`. Each emitted event carries the view's state after it. Route one event to several keys with named routes:
 
@@ -318,8 +324,11 @@ export class AccountCard extends Domain.Stream("AccountCard", {
   entries: [CardChanged],
   middleware: [Session],
   rejects: [NotOwner],
-  validate: Effect.fn(function* (_request, latest) { /* authorize on the latest entry */ }),
 }) {}
+
+export const AccountCardLive = AccountCard.toLayer(
+  Effect.succeed(Effect.fn(function* (_request, latest) { /* authorize on the latest entry */ })),
+);
 ```
 
 A projection with `writes: [AccountCard]` appends entries with `yield* cards.append(input, new CardChanged({...}))`. Clients `peek`, `watch`, `list` and read `events`.
@@ -339,25 +348,24 @@ export class AccountLedger extends Domain.Query("AccountLedger", {
   waitsFor: [Ledger],              // `atLeast` waits on these; reads outside their stores aren't covered
   middleware: [Session],
   rejects: [NotOwner],
-  // per request, before the store is read; may read middleware context and the model's views
-  validate: Effect.fn(function* ({ account }) {
-    const summary = yield* (yield* AccountSummary).query(Account.ref(account)).pipe(Effect.orDie);
-    yield* mustOwn(Option.getOrNull(summary)?.customerId ?? null);
-  }),
-  // optional, per row: rows it refuses are dropped, never rejected. Keep it cheap.
-  // visible: Effect.fn(function* (row) { return row.branchId === (yield* CurrentActor).branchId; }),
 }) {}
 
+// One handler: it checks the caller, then reads the store scoped to what the caller may see.
 export const AccountLedgerLive = AccountLedger.toLayer(
   Effect.gen(function* () {
-    const store = yield* LedgerStore;                                  // resolved once
-    return ({ account }, page) => store.forAccount(account, page);    // page: { after, take }
+    const store = yield* LedgerStore;           // resolved once
+    const summaries = yield* AccountSummary;    // model members too
+    return Effect.fn(function* ({ account }, page) {   // page: { after, take }
+      const summary = yield* summaries.get(Account.ref(account)).pipe(Effect.orDie);
+      yield* mustOwn(Option.getOrNull(summary)?.customerId ?? null);   // fail with a declared rejection
+      return yield* store.forAccount(account, page);
+    });
   }),
-  { take: { default: 50, max: 200 } },   // tuning lives on the Layer: page limits, span `attributes`
+  { take: { default: 50, max: 200 } },   // tuning lives on the Layer: page limits
 );
 ```
 
-List it in the model's `queries` and its Live Layer in the handlers. The port returns `{ entries, cursor }`, with `cursor: null` on the last page; page by keyset on the store's sort key (`"<at>:<id>"`), never by offset. Scope the store query by the caller in the handler, so pages are full; `visible` is the guarantee. Clients call it as a method: `bank.AccountLedger({ account }, { atLeast: receipt, take, after })`.
+List it in the model's `queries` and its Live Layer in the handlers. The port returns `{ entries, cursor }`, with `cursor: null` on the last page; page by keyset on the store's sort key (`"<at>:<id>"`), never by offset. Scope the store query by the caller in the handler, so a page holds only rows the caller may see. Clients call it as a method: `bank.AccountLedger({ account }, { atLeast: receipt, take, after })`.
 
 More: [Query](https://alchemy.run/domain/query).
 
@@ -370,15 +378,16 @@ export class CustomerApi extends Domain.Api("CustomerApi", {
   commands: ["RegisterCustomer", "DepositMoney", "WithdrawMoney"], // client methods
   views: ["AccountSummary", "Statement"],
   streams: ["AccountCard"],
-  aggregates: ["Account"], // read directly, through their `read` contract
   queries: ["AccountLedger"], // client methods
 }) {}
-// A kind left out is served whole (aggregates: those with `read`); `[]` serves none.
+// A kind left out is served whole; `[]` serves none. An aggregate's state is never served.
 ```
 
-Clients call commands and queries as methods (`bank.WithdrawMoney(accountId, { amount }, { commandId, headers })`, `bank.AccountLedger({ account }, { take })`) and reads as namespaces. A view or aggregate has `get(id)` and `watch(id)` for its state, and `events(id)` and `list(id, { take, after })` for what it emitted. A view also has `snapshot(id)`: its state and the cursor to pass as `events(id, { after })`. A stream has `peek`, `watch`, `events` and `list`. What an Api serves authorizes itself, through its own middleware and `validate`.
+Clients call commands and queries as methods (`bank.WithdrawMoney(accountId, { amount }, { commandId, headers })`, `bank.AccountLedger({ account }, { take })`) and reads as namespaces. A view has `get(id)` and `watch(id)` for its state, and `events(id)` and `list(id, { take, after })` for what it emitted. A view also has `snapshot(id)`: its state and the cursor to pass as `events(id, { after })`. A stream has `peek`, `watch`, `events` and `list`. What an Api serves authorizes itself: a command in `decide`, a view or stream in its Layer's `validate`, a query in its handler.
 
-More: [Api](https://alchemy.run/domain/api).
+Give every declaration a `{ description }` as its last argument, written for the person or agent who calls it; `toMcp` tools, `toCli` help and the `toHttpApi` OpenAPI document show it. Add your own keys by augmenting `Domain.Annotations` (`declare module "@alchemy.run/domain"`), and read them as `X.annotations`.
+
+More: [Api](https://alchemy.run/domain/api), [Annotations](https://alchemy.run/domain/annotations).
 
 An Api is the domain's interface for its own clients. For a public or partner API, write a separate `HttpApi` with its own response schemas that calls the Api in process; see [hosting.md](hosting.md#public-and-partner-apis). `toHttpApi`, `toMcp` and `toCli` publish only the calls their `expose` option lists, as the domain shapes them, which is convenient for internal tools only; see [hosting.md](hosting.md#conveniences-for-internal-tools).
 

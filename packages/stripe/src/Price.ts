@@ -142,8 +142,18 @@ export type Price = Resource<
     livemode: boolean;
   },
   never,
-  Providers
+  Providers,
+  PriceLookup
 >;
+
+/**
+ * Props for {@link Price.lookup}: find a price this stack
+ * doesn't manage by its id.
+ */
+export interface PriceLookup {
+  /** Stripe price id, e.g. `"price_1A2b3C4d5E6f7G8h"`. */
+  id: string;
+}
 
 /**
  * A Stripe Price — the unit cost attached to a Product. Currency, amount,
@@ -195,6 +205,16 @@ export type Price = Resource<
  * ```typescript
  * // Stripe cannot delete a used price. `alchemy destroy` sets
  * // `active: false`.
+ * ```
+ *
+ * ### Looking up an existing price
+ * `Price.lookup` references a price Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing price
+ * ```typescript
+ * const ref = Stripe.Price.lookup({ id: "price_1A2b3C4d5E6f7G8h" });
  * ```
  *
  * @resource
@@ -364,6 +384,11 @@ export const PriceProvider = () =>
         return { action: "replace" } as const;
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing);
     }),
 
     read: Effect.fn(function* ({ id, output }) {

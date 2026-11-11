@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -247,8 +248,32 @@ export type Target = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  TargetLookup
 >;
+
+/**
+ * Props for {@link Target.lookup}: find a target this stack doesn't manage
+ * by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface TargetLookup {
+  /**
+   * Target id (the `{target}` segment of
+   * `projects/{project}/locations/{location}/targets/{target}`).
+   */
+  targetId: string;
+  /**
+   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Deploy target — a location a Skaffold configuration can be
@@ -289,6 +314,16 @@ export type Target = Resource<
  *   description: "prod run target v2",
  *   labels: { env: "prod", team: "platform" },
  * });
+ * ```
+ *
+ * ### Looking up an existing target
+ * `Target.lookup` references a target Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared target.
+ *
+ * **Example:** Reference an existing target
+ * ```typescript
+ * const target = GCP.CloudDeploy.Target.lookup({ targetId: "my-target" });
  * ```
  *
  * @resource
@@ -449,6 +484,15 @@ export const TargetProvider = () =>
         ),
       });
     }),
+
+    lookup: Effect.fn(function* ({ targetId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation ?? env.region);
+      const name = resourceName(env.project, location, targetId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

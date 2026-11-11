@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   clusterLocation,
@@ -150,8 +151,34 @@ export type Cluster = Resource<
     state: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ClusterLookup
 >;
+
+/**
+ * Props for {@link Cluster.lookup}: find a cluster this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface ClusterLookup {
+  /**
+   * Cluster id (the `{cluster}` segment of
+   * `projects/{project}/instances/{instance}/clusters/{cluster}`). Must be
+   * 6-30 characters and match `[a-z][-a-z0-9]*`.
+   */
+  clusterId: string;
+  /**
+   * Parent instance id (the `{instance}` segment of
+   * `projects/{project}/instances/{instance}`). Full resource names are
+   * accepted and reduced to the last path segment.
+   */
+  instance: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Bigtable cluster — a resizable group of nodes in one zone
@@ -205,6 +232,19 @@ export type Cluster = Resource<
  *       autoscalingTargets: { cpuUtilizationPercent: 50 },
  *     },
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing cluster
+ * `Cluster.lookup` references a cluster Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared cluster.
+ *
+ * **Example:** Reference an existing cluster
+ * ```typescript
+ * const cluster = GCP.Bigtable.Cluster.lookup({
+ *   clusterId: "my-cluster",
+ *   instance: "my-instance",
  * });
  * ```
  *
@@ -429,6 +469,16 @@ export const ClusterProvider = () =>
           previousInstance === nextInstance && previousId !== undefined && nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ clusterId, instance }) {
+      const env = yield* GcpEnvironment.current;
+      const instanceId = instanceIdOf(instance ?? "");
+      if (instanceId.length === 0) return undefined;
+      const name = clusterName(env.project, instanceId, clusterId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

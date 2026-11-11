@@ -59,6 +59,12 @@ export interface FlociStandingFixtures {
 export interface FlociStandingFixtureOptions {
   /** Selected test files (relative or absolute). Omit to provision every group. */
   readonly files?: ReadonlyArray<string>;
+  /**
+   * The image the run started the emulator with. Without it `ensureFloci`
+   * falls back to the pinned release and recreates the container, discarding
+   * the fixtures and testing the wrong emulator.
+   */
+  readonly image?: string | undefined;
 }
 
 const NAME = "alchemy-floci-standing";
@@ -1448,9 +1454,14 @@ const selectGroups = (files: ReadonlyArray<string> | undefined) =>
     return selected;
   });
 
-const provision = (external: boolean, groups: ReadonlySet<Group>, ledger: Array<Cleanup>) =>
+const provision = (
+  external: boolean,
+  groups: ReadonlySet<Group>,
+  ledger: Array<Cleanup>,
+  image: string | undefined,
+) =>
   Effect.gen(function* () {
-    yield* Floci.ensureFloci({ port: Floci.DEFAULT_FLOCI_PORT, external });
+    yield* Floci.ensureFloci({ port: Floci.DEFAULT_FLOCI_PORT, external, image });
     yield* log(`fixtures: provisioning ${[...groups].join(", ")}`);
     const env: Record<string, string> = {};
     // Shared by every group that needs subnets; cleanups register once.
@@ -1615,7 +1626,7 @@ export const provisionFlociStandingFixtures = Effect.fn(function* (
     ledger.length === 0 ? Effect.void : runCleanups(ledger),
   ).pipe(Effect.provide(fixtureLayer));
   if (groups.size === 0) return { env: {}, teardown } satisfies FlociStandingFixtures;
-  const env = yield* provision(external, groups, ledger).pipe(
+  const env = yield* provision(external, groups, ledger, options.image).pipe(
     Effect.onError(() =>
       runCleanups(ledger).pipe(Effect.catch((error) => Console.error(String(error.message)))),
     ),

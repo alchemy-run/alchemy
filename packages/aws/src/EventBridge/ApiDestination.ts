@@ -103,8 +103,28 @@ export interface ApiDestination extends Resource<
     apiDestinationState: eventbridge.ApiDestinationState;
   },
   never,
-  Providers
+  Providers,
+  ApiDestinationLookup
 > {}
+
+/**
+ * Props for {@link ApiDestination.lookup}: find an API destination this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ApiDestinationLookup {
+  /** The name of the existing API destination. *
+   * ### Looking up an existing API destination
+   * `ApiDestination.lookup` references an API destination Alchemy doesn't manage (created in the
+   * console or by another stack), found by `apiDestinationName`. It is read during
+   * plan/deploy and never created, updated or deleted.
+   *
+   * **Example:** Reference an existing API destination
+   * ```typescript
+   * const existing = AWS.EventBridge.ApiDestination.lookup({ apiDestinationName: "..." });
+   * ```
+   */
+  apiDestinationName: string;
+}
 export const ApiDestination = Resource<ApiDestination>("AWS.EventBridge.ApiDestination");
 
 export const ApiDestinationProvider = () =>
@@ -128,6 +148,19 @@ export const ApiDestinationProvider = () =>
           if (oldName !== newName) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ apiDestinationName: name }) {
+          const described = yield* eventbridge
+            .describeApiDestination({ Name: name })
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
+          if (!described?.Name || !described.ApiDestinationArn) {
+            return undefined;
+          }
+          return {
+            apiDestinationName: described.Name,
+            apiDestinationArn: described.ApiDestinationArn as ApiDestinationArn,
+            apiDestinationState: described.ApiDestinationState ?? "ACTIVE",
+          };
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           // API destinations don't support tags; the deterministic physical

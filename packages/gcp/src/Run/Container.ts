@@ -1,3 +1,4 @@
+import type { BuildCacheOptions } from "@alchemy.run/docker/BuildCache";
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import type * as Bundle from "alchemy/Bundle/Bundle";
 import type { PackageInstall } from "alchemy/Bundle/InstalledPackages";
@@ -68,8 +69,10 @@ export type ContainerProps = PlatformProps &
      * Environment variables. Merged after binding-injected `env`.
      */
     env?: Record<string, any> | undefined;
-    /** Bundler configuration for `main`. */
-    build?: (Bundle.BundleConfig & { install?: PackageInstall | undefined }) | undefined;
+    /** Bundler configuration for `main`, and the image build's layer `cache`. */
+    build?:
+      | (Bundle.BundleConfig & BuildCacheOptions & { install?: PackageInstall | undefined })
+      | undefined;
     /** Host files or directories baked into the image next to `main`. */
     extraFiles?: ReadonlyArray<ExtraFile> | undefined;
   };

@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -214,8 +215,36 @@ export type BackendsBuild = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  BackendsBuildLookup
 >;
+
+/**
+ * Props for {@link BackendsBuild.lookup}: find a backends build this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface BackendsBuildLookup {
+  /**
+   * Build id (the `{buildId}` segment).
+   */
+  buildId: string;
+  /**
+   * Region used when `backend` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent backend. Full name
+   * `projects/{project}/locations/{location}/backends/{backend}` or the
+   * backend id (combined with `location`).
+   */
+  backend: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Firebase App Hosting build of a backend from a git commit, storage
@@ -242,6 +271,20 @@ export type BackendsBuild = Resource<
  *   backend: backend.name,
  *   source: { archive: { userStorageUri: "gs://bucket/app.tar.gz" } },
  *   config: { runConfig: { cpu: 1, memoryMib: 512, maxInstances: 4 } },
+ * });
+ * ```
+ *
+ * ### Looking up an existing backends build
+ * `BackendsBuild.lookup` references a backends build Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * backends build.
+ *
+ * **Example:** Reference an existing backends build
+ * ```typescript
+ * const backendsBuild = GCP.FirebaseAppHosting.BackendsBuild.lookup({
+ *   buildId: "my-build",
+ *   backend: "my-backend",
  * });
  * ```
  *
@@ -386,6 +429,19 @@ export const BackendsBuildProvider = () =>
           fingerprint(olds?.config ?? output?.config) !== fingerprint(news.config),
       });
     }),
+
+    lookup: Effect.fn(function* ({ buildId, location: lookupLocation, backend: lookupBackend }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const backend = lookupBackend
+        ? expandParent(lookupBackend, env.project, location, "backends")
+        : undefined;
+      const name = backend ? resourceName(backend, buildId) : undefined;
+      if (name === undefined) return undefined;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

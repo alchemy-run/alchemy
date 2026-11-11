@@ -116,6 +116,11 @@ export interface ServiceBinding {
    * published.
    */
   target?: BoundTarget;
+  /**
+   * A Service that calls this one, recorded on the target by
+   * `Fly.bindService`. Only the Apps recorded here may call its methods.
+   */
+  caller?: { appName: string };
 }
 
 /** A Service bound by `Fly.bindService` or `Fly.bindEndpoint`. */
@@ -128,8 +133,6 @@ export interface BoundTarget {
   network: string | undefined;
   /** The bound Service's private address; `undefined` when it publishes nothing. */
   privateUrl: string | undefined;
-  /** The bound Service's caller token. */
-  rpcToken?: import("effect/Redacted").Redacted<string>;
   /** Port `Fly.bindEndpoint` targets; the binding port for `bindService`. */
   port?: number;
   /** Ports the bound Service publishes, for `Fly.bindEndpoint`. */

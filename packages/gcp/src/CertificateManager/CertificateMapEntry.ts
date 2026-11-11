@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -114,8 +115,43 @@ export type CertificateMapEntry = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  CertificateMapEntryLookup
 >;
+
+/**
+ * Props for {@link CertificateMapEntry.lookup}: find a certificate map
+ * entry this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface CertificateMapEntryLookup {
+  /**
+   * Certificate map entry id (the `{certificateMapEntry}` segment of
+   * `.../ce
+   * rtificateMaps/{certificateMap}/certificateMapEntries/{certificateMapEntr
+   * y}`). Must be 1-63 characters, start with a letter, and match
+   * `[a-zA-Z][a-zA-Z0-9_-]*`.
+   */
+  certificateMapEntryId: string;
+  /**
+   * Parent certificate map. Full name
+   * `projects/{project}/locations/{locatio
+   * n}/certificateMaps/{certificateMap}` or the map id (combined with
+   * `location`).
+   */
+  certificateMap: string;
+  /**
+   * Certificate Manager location. Used when `certificateMap` is a bare id.
+   * Certificate maps are global resources; omit or set `"global"`. `GLOBAL`
+   * is accepted and normalized to `global`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Certificate Manager certificate map entry — binds one or more
@@ -171,6 +207,20 @@ export type CertificateMapEntry = Resource<
  *   certificateMap: map.name,
  *   certificates: [cert.name, extra.name],
  *   hostname: "www.example.com",
+ * });
+ * ```
+ *
+ * ### Looking up an existing certificate map entry
+ * `CertificateMapEntry.lookup` references a certificate map entry Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared certificate map entry.
+ *
+ * **Example:** Reference an existing certificate map entry
+ * ```typescript
+ * const certificateMapEntry = GCP.CertificateManager.CertificateMapEntry.lookup({
+ *   certificateMapEntryId: "my-certificate-map-entry",
+ *   certificateMap: "my-certificate-map",
  * });
  * ```
  *
@@ -533,6 +583,20 @@ export const CertificateMapEntryProvider = () =>
           nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ certificateMapEntryId, certificateMap, location }) {
+      const env = yield* GcpEnvironment.current;
+      // Interrupted creates persist parent Outputs as holes (`{}` / "").
+      // Don't call GET with `.../certificateMaps//certificateMapEntries/...`.
+      if (typeof certificateMap !== "string" || certificateMap.length === 0) {
+        return undefined;
+      }
+      const parent = resolveParent(env.project, certificateMap, location);
+      const name = resourceName(parent.parent, certificateMapEntryId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

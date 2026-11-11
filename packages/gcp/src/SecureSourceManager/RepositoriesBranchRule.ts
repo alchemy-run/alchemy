@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -156,8 +157,36 @@ export type RepositoriesBranchRule = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RepositoriesBranchRuleLookup
 >;
+
+/**
+ * Props for {@link RepositoriesBranchRule.lookup}: find a repositories
+ * branch rule this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface RepositoriesBranchRuleLookup {
+  /**
+   * Branch rule id (the `{branchRule}` segment).
+   */
+  branchRuleId: string;
+  /**
+   * Region used when `repository` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent repository. Full name
+   * `projects/{project}/locations/{location}/repositories/{repository}` or
+   * the repository id (combined with `location`).
+   */
+  repository: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Secure Source Manager branch protection rule.
@@ -200,6 +229,20 @@ export type RepositoriesBranchRule = Resource<
  *   requirePullRequest: true,
  *   minimumApprovalsCount: 2,
  *   annotations: { env: "prod", team: "platform" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing repositories branch rule
+ * `RepositoriesBranchRule.lookup` references a repositories branch rule
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared repositories branch rule.
+ *
+ * **Example:** Reference an existing repositories branch rule
+ * ```typescript
+ * const repositoriesBranchRule = GCP.SecureSourceManager.RepositoriesBranchRule.lookup({
+ *   branchRuleId: "my-branch-rule",
+ *   repository: "my-repository",
  * });
  * ```
  *
@@ -290,6 +333,20 @@ export const RepositoriesBranchRuleProvider = () =>
         nextParent: expandName(news.repository, env.project, location, "repositories"),
       });
     }),
+
+    lookup: Effect.fn(function* ({
+      branchRuleId,
+      location: lookupLocation,
+      repository: lookupRepository,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const repository = expandName(lookupRepository ?? "", env.project, location, "repositories");
+      const name = repository.length > 0 ? resourceName(repository, branchRuleId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

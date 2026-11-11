@@ -22,6 +22,8 @@ import {
   createInternalLabels,
   diffLabels,
   hasAlchemyLabels,
+  isReplacedGeneration,
+  keepsName,
   labelSelector,
   stripInternalLabels,
   toLabels,
@@ -375,8 +377,18 @@ export type LoadBalancer = Resource<
     created: string;
   },
   never,
-  Providers
+  Providers,
+  LoadBalancerLookup
 >;
+
+/**
+ * Props for {@link LoadBalancer.lookup}: find a load balancer this stack
+ * doesn't manage by its name.
+ */
+export interface LoadBalancerLookup {
+  /** Load balancer name (unique in the project). */
+  name: string;
+}
 
 /**
  * A Hetzner Cloud Load Balancer. Create it in a Location (`nbg1` by
@@ -451,6 +463,16 @@ export type LoadBalancer = Resource<
  *     { protocol: "tcp", listenPort: 80, destinationPort: 80 },
  *   ],
  * });
+ * ```
+ *
+ * ### Looking up an existing load balancer
+ * `LoadBalancer.lookup` references a load balancer Alchemy doesn't manage (created in
+ * the Hetzner Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing load balancer
+ * ```typescript
+ * const lb = Hetzner.LoadBalancer.lookup({ name: "ingress" });
  * ```
  *
  * @resource
@@ -1281,7 +1303,18 @@ const syncTargets = (
           schedule: backoff,
         }),
         Effect.flatMap(({ action }) => waitForAction(action)),
-        Effect.catchIf(alreadyThere, () => Effect.void),
+        // A rejected add is only fine when the target is in fact there.
+        Effect.catchIf(alreadyThere, (error) =>
+          getById(loadBalancerId).pipe(
+            Effect.flatMap((current) =>
+              observedTargets(current?.targets).some(
+                (existing) => targetKey(existing) === targetKey(target),
+              )
+                ? Effect.void
+                : Effect.fail(error),
+            ),
+          ),
+        ),
       );
     }
   });
@@ -1334,22 +1367,37 @@ export const LoadBalancerProvider = () =>
       if (!isResolved(news)) return undefined;
       if (output !== undefined) {
         if (news.location !== undefined && news.location !== output.location) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
         if (news.networkZone !== undefined && news.networkZone !== output.networkZone) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
       }
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ name }) {
+      const found = yield* getByName(name);
+      return found === undefined ? undefined : toAttrs(found);
+    }),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const found = yield* observe({
         id,
         name: olds?.name ?? output?.name,
         outputId: output?.id,
       });
       if (found === undefined) return undefined;
+      if (
+        isReplacedGeneration({
+          previousId: previous?.id,
+          foundId: found.id,
+          claimedName: olds?.name,
+          foundName: found.name,
+        })
+      ) {
+        return undefined;
+      }
       const attrs = toAttrs(found);
       const owned = yield* hasAlchemyLabels(id, tagRecord(found.labels));
       return owned ? attrs : Unowned(attrs);

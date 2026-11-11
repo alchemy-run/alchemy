@@ -207,16 +207,6 @@ export interface AggregateKit {
   readonly consumerSingleSource: (target: string) => boolean;
   /** Route stored events to the consumers lagging behind them (see `CatchUp`). */
   readonly replay: (input: ReplayInput<StoredEvent>) => Effect.Effect<ReplayResult>;
-  /**
-   * What a subscriber of instance `id` receives, given its current state and
-   * the events committed since (at least those after the subscription's cursor).
-   */
-  readonly push: (
-    id: string,
-    subscription: Subscription,
-    current: { readonly state: Json; readonly version: number },
-    events: ReadonlyArray<StoredEvent>,
-  ) => Effect.Effect<Push>;
 }
 
 /**
@@ -299,12 +289,6 @@ export interface AggregateStore {
    * trigger policies (tests; optional).
    */
   readonly seed?: (id: string, events: ReadonlyArray<Json>) => Effect.Effect<void>;
-  /**
-   * Accept a WebSocket upgrade (the current request) for a live read of
-   * `key`, then push to it on every commit. Optional: without it, live reads
-   * are streamed responses over `changes` and `tail`.
-   */
-  readonly connect?: (key: string, subscription: Subscription) => HttpEffect;
 }
 
 /** How much history has reached a consumer: see `View.History`. */
@@ -650,7 +634,7 @@ export interface HostedModel {
   readonly id: object;
   /** The names of the model's sagas, which run on the workflow engine. */
   readonly sagas: ReadonlyArray<string>;
-  /** Whether this model keeps data it shared with other models before Domain version 0: `legacyData` on its `layer`. */
+  /** Whether this model takes over data it shared with other models before Domain version 0: `legacyData` on its `layer`. */
   readonly legacyData: boolean;
 }
 

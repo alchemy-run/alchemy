@@ -187,8 +187,18 @@ export interface TargetGroup extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  TargetGroupLookup
 > {}
+
+/**
+ * Props for {@link TargetGroup.lookup}: find a target group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface TargetGroupLookup {
+  /** The id of the existing target group. */
+  targetGroupId: string;
+}
 
 /**
  * An Amazon VPC Lattice target group — the collection of compute targets
@@ -219,6 +229,16 @@ export interface TargetGroup extends Resource<
  *   },
  *   targets: [{ id: "10.0.1.10", port: 80 }],
  * });
+ * ```
+ *
+ * ### Looking up an existing target group
+ * `TargetGroup.lookup` references a target group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `targetGroupId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing target group
+ * ```typescript
+ * const existing = AWS.VpcLattice.TargetGroup.lookup({ targetGroupId: "..." });
  * ```
  *
  * @resource
@@ -358,6 +378,22 @@ export const TargetGroupProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ targetGroupId }) {
+          const group = yield* observe(targetGroupId);
+          if (!group?.arn || !group.id) return undefined;
+          const listed = yield* vpclattice.listTagsForResource({
+            resourceArn: group.arn,
+          });
+          const attrs = {
+            targetGroupId: group.id,
+            targetGroupArn: group.arn,
+            name: group.name!,
+            type: (group.type as TargetGroupType) ?? "IP",
+            status: group.status ?? "UNKNOWN",
+            tags: tagRecord(listed.tags),
+          };
+          return attrs;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const group = output?.targetGroupId

@@ -7,6 +7,7 @@ import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -102,6 +103,19 @@ test.provider(
         displayName: "Alchemy CI",
         condition: `assertion.repository == "alchemy-run/alchemy"`,
       });
+      yield* expectFound(
+        GCP.IAM.WorkloadIdentityPool.lookup({
+          workloadIdentityPoolId: created.pool.workloadIdentityPoolId,
+        }),
+        created.pool,
+      );
+      yield* expectFound(
+        GCP.IAM.WorkloadIdentityProvider.lookup({
+          workloadIdentityPoolId: created.pool.workloadIdentityPoolId,
+          workloadIdentityPoolProviderId: created.provider.workloadIdentityPoolProviderId,
+        }),
+        created.provider,
+      );
 
       expect(created.pool.workloadIdentityPoolId).toMatch(/^[a-z][a-z0-9-]{2,30}[a-z0-9]$/);
       // GCP names pools by project number, which principalSet members need.

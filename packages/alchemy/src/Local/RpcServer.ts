@@ -23,6 +23,7 @@ import {
   type ServerRpcSession,
   type ServerWebSocketLike,
 } from "./RpcServerSession.ts";
+import { makeRpcToken, withRpcToken } from "./RpcToken.ts";
 
 /**
  * A service that exposes one or more resource providers over RPC.
@@ -366,9 +367,14 @@ export const layerServer = (
     ) => ServerRpcSession<RpcProxyApi>;
     /** Called when the parent connection, indicated by the `/parent` path, is established. */
     parentConnected: () => void;
-    /** Called when the parent disconnects. The server will shut down when this is called. */
     /** The parent link closed; `detail` says how, when the server knows. */
     parentDisconnected: (detail?: string) => void;
+    /**
+     * Secret every connection must carry as the first path segment
+     * (`/<token>` for sessions, `/<token>/parent` for the parent link).
+     * Reject any other upgrade: see `RpcToken.ts`.
+     */
+    token: string;
   }) => Effect.Effect<{ readonly url: string }, never, Scope.Scope>,
 ) =>
   Layer.effect(
@@ -378,7 +384,9 @@ export const layerServer = (
       const context = yield* Effect.context();
       const connected = yield* Deferred.make<void>();
       const disconnected = yield* Deferred.make<string | undefined>();
-      const { url } = yield* serve({
+      const token = yield* makeRpcToken;
+      const { url: address } = yield* serve({
+        token,
         createRpcSession: (ws, sessionEnv) => {
           const lease: SessionLease = { closed: false, calls: new Set() };
           let testOwned = false;
@@ -410,6 +418,9 @@ export const layerServer = (
         parentConnected: () => Deferred.doneUnsafe(connected, Effect.void),
         parentDisconnected: (detail) => Deferred.doneUnsafe(disconnected, Effect.succeed(detail)),
       });
+      // Printed only on the stdout pipe the parent reads, so the token in
+      // the URL reaches no one else.
+      const url = withRpcToken(address, token);
       yield* Console.log(`<ALCHEMY_RPC_ADDRESS>${url}</ALCHEMY_RPC_ADDRESS>`);
       yield* Deferred.await(connected).pipe(Effect.timeout("10 seconds")); // TODO(john): should the timeout be shorter?
       // The sidecar exits with its parent; record why the link closed.

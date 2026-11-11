@@ -200,8 +200,18 @@ export type PaymentLink = Resource<
     livemode: boolean;
   },
   never,
-  Providers
+  Providers,
+  PaymentLinkLookup
 >;
+
+/**
+ * Props for {@link PaymentLink.lookup}: find a payment link this stack
+ * doesn't manage by its id.
+ */
+export interface PaymentLinkLookup {
+  /** Stripe payment link id, e.g. `"plink_1A2b3C4d5E6f7G8h"`. */
+  id: string;
+}
 
 /**
  * A Stripe Payment Link — a shareable URL that opens a hosted Checkout
@@ -248,6 +258,16 @@ export type PaymentLink = Resource<
  *   inactiveMessage: "This link is no longer available.",
  *   metadata: { campaign: "paused" },
  * });
+ * ```
+ *
+ * ### Looking up an existing payment link
+ * `PaymentLink.lookup` references a payment link Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing payment link
+ * ```typescript
+ * const ref = Stripe.PaymentLink.lookup({ id: "plink_1A2b3C4d5E6f7G8h" });
  * ```
  *
  * @resource
@@ -553,6 +573,11 @@ export const PaymentLinkProvider = () =>
         return { action: "replace" } as const;
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing);
     }),
 
     read: Effect.fn(function* ({ id, output }) {

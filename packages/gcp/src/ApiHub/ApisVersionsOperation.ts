@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   ApihubNotResolved,
@@ -120,8 +121,32 @@ export type ApisVersionsOperation = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ApisVersionsOperationLookup
 >;
+
+/**
+ * Props for {@link ApisVersionsOperation.lookup}: find an apis versions
+ * operation this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface ApisVersionsOperationLookup {
+  /**
+   * Operation id (the `{operation}` segment of
+   * `.../versions/{version}/operations/{operation}`).
+   */
+  apiOperationId: string;
+  /**
+   * Parent version. Full name
+   * `projects/{project}/locations/{location}/apis/{api}/versions/{version}`.
+   */
+  version: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An API operation in an API Hub version. Operations can be created only
@@ -142,6 +167,20 @@ export type ApisVersionsOperation = Resource<
  *     httpOperation: { method: "GET", path: { path: "/pets" } },
  *     description: "list pets",
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing apis versions operation
+ * `ApisVersionsOperation.lookup` references an apis versions operation
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared apis versions operation.
+ *
+ * **Example:** Reference an existing apis versions operation
+ * ```typescript
+ * const apisVersionsOperation = GCP.ApiHub.ApisVersionsOperation.lookup({
+ *   apiOperationId: "my-api-operation",
+ *   version: "my-version",
  * });
  * ```
  *
@@ -227,6 +266,15 @@ export const ApisVersionsOperationProvider = () =>
         nextParent: news.version ?? olds?.version ?? output?.version,
       });
     }),
+
+    lookup: Effect.fn(function* ({ apiOperationId, version: lookupVersion }) {
+      const env = yield* GcpEnvironment.current;
+      const version = lookupVersion ?? "";
+      const name = resourceName(version, apiOperationId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

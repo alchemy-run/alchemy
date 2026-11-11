@@ -178,8 +178,20 @@ export interface LocalCluster extends Resource<
     connection: Connection;
   },
   {},
-  Providers
+  Providers,
+  LocalClusterLookup
 > {}
+
+/**
+ * Props for {@link LocalCluster.lookup}: find a kind cluster this
+ * stack doesn't manage by its name.
+ */
+export interface LocalClusterLookup {
+  /** kind cluster name. */
+  name: string;
+  /** Kubeconfig file the cluster's context is in. */
+  kubeconfig?: string | undefined;
+}
 
 /**
  * A Kubernetes cluster on your machine, for trying Alchemy's Kubernetes
@@ -250,6 +262,17 @@ export interface LocalCluster extends Resource<
  *   name: "green",
  *   registryPort: 5002,
  * });
+ * ```
+ *
+ * ### Looking up an existing cluster
+ * `LocalCluster.lookup` references a kind cluster Alchemy doesn't manage (applied with
+ * `kubectl`, Helm or another stack). It is read during plan/deploy, never
+ * applied, updated or deleted.
+ *
+ * **Example:** Apply to an existing kind cluster
+ * ```typescript
+ * const cluster = Kubernetes.LocalCluster.lookup({ name: "dev" });
+ * yield* Kubernetes.Manifest("Settings", { cluster, manifest });
  * ```
  *
  * @resource
@@ -559,6 +582,17 @@ export const LocalClusterProvider = () =>
             return { action: "replace", deleteFirst: true } as const;
           }
         }),
+        lookup: Effect.fn(function* ({ name, kubeconfig }) {
+          if (!(yield* clusterExists(name))) return undefined;
+          const registryInfo = yield* inspectRegistry(`${name}-registry`);
+          return toAttributes({
+            name,
+            kubeconfig,
+            registryPort: registryHostPort(registryInfo) ?? DEFAULT_REGISTRY_PORT,
+            architecture: yield* hostArchitecture,
+          });
+        }),
+
         read: Effect.fn(function* ({ id, olds, output, previous }) {
           const name = yield* clusterName(id, olds, output);
           if (!(yield* clusterExists(name))) return undefined;

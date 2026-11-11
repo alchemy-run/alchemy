@@ -1,3 +1,4 @@
+import type { BuildCacheOptions } from "@alchemy.run/docker/BuildCache";
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";
 import { Unowned } from "alchemy/AdoptPolicy";
@@ -6,7 +7,7 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import { Platform, type Main, type PlatformProps, type PlatformServices } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
-import { Resource, type ResourceBinding } from "alchemy/Resource";
+import { type LookupMethod, Resource, type ResourceBinding } from "alchemy/Resource";
 import {
   createContainerRuntimeContext,
   type HostRuntimeContext,
@@ -21,7 +22,12 @@ import type { Scope } from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { destroyHostImageRepository, makeImageSource } from "../ArtifactRegistry/ImageSource.ts";
 import { GcpEnvironment } from "../Environment.ts";
-import { retryActAs, type AppliedIamGrant, type GcpHostBinding } from "../Host.ts";
+import {
+  retryActAs,
+  serviceAccountUniqueId,
+  type AppliedIamGrant,
+  type GcpHostBinding,
+} from "../Host.ts";
 import {
   alchemyRuntimeEnv,
   isManagedServiceAccount,
@@ -30,6 +36,7 @@ import {
   releaseHostIdentity,
   resolveHostIdentity,
 } from "../HostRuntime.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -185,9 +192,9 @@ export type JobProps = PlatformProps & {
    */
   env?: Record<string, any>;
   /**
-   * Bundler configuration for `main`.
+   * Bundler configuration for `main`, and the image build's layer `cache`.
    */
-  build?: Bundle.BundleConfig | undefined;
+  build?: (Bundle.BundleConfig & BuildCacheOptions) | undefined;
   /**
    * Max time a task attempt may run (e.g. `"600s"`).
    * @default "600s"
@@ -277,8 +284,31 @@ export type Job = Resource<
     codeHash: string | undefined;
   },
   GcpHostBinding,
-  Providers
+  Providers,
+  JobLookup
 >;
+
+/**
+ * Props for {@link Job.lookup}: find a job this stack doesn't manage by its
+ * identifiers, in the ambient project unless `project` names another.
+ */
+export interface JobLookup {
+  /**
+   * Job id (the `{job}` segment of
+   * `projects/{project}/locations/{location}/jobs/{job}`).
+   */
+  jobId: string;
+  /**
+   * Region (`us-central1`, `europe-west1`, …). `US-CENTRAL1` is accepted
+   * and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 export type JobRuntimeContext = HostRuntimeContext;
 export type JobServices = Credentials | GcpEnvironment | ServerHost;
@@ -339,6 +369,35 @@ export type JobShape =
  * ) {}
  * ```
  *
+ * ### Caching Build Layers
+ * Builds reuse the local BuildKit cache of the machine they run on, and
+ * nothing but the image is pushed. A builder that has never built the image,
+ * such as a fresh CI runner, reruns every step. Set `build.cache: true` to keep
+ * every stage's layers at the image repository's `:buildcache` tag, so fresh
+ * builders skip unchanged steps. For another backend, pass BuildKit's own
+ * `--cache-from` / `--cache-to` values as `from` and `to`.
+ *
+ * **Example:** Cache layers in Artifact Registry
+ * ```typescript
+ * const migrate = yield* GCP.Run.Job("Migrate", {
+ *   main: import.meta.url,
+ *   build: { cache: true },
+ * });
+ * ```
+ *
+ * **Example:** Cache layers in GitHub Actions
+ * ```typescript
+ * const migrate = yield* GCP.Run.Job("Migrate", {
+ *   main: import.meta.url,
+ *   build: {
+ *     cache: {
+ *       from: ["type=gha,scope=migrate"],
+ *       to: ["type=gha,scope=migrate,mode=max"],
+ *     },
+ *   },
+ * });
+ * ```
+ *
  * ### Running a Job
  * **Example:** Trigger an execution
  * ```typescript
@@ -346,17 +405,25 @@ export type JobShape =
  * yield* runJob();
  * ```
  *
+ * ### Looking up an existing job
+ * `Job.lookup` references a job Alchemy doesn't manage (created in the
+ * console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared job.
+ *
+ * **Example:** Reference an existing job
+ * ```typescript
+ * const job = GCP.Run.Job.lookup({ jobId: "my-job" });
+ * ```
+ *
  * @resource
  * @category Run
  */
-export const Job: Platform<Job, JobServices, JobShape, JobRuntimeContext> = Platform(
-  "GCP.Run.Job",
-  {
+export const Job: Platform<Job, JobServices, JobShape, JobRuntimeContext> & LookupMethod<Job> =
+  Platform("GCP.Run.Job", {
     createRuntimeContext: createContainerRuntimeContext("GCP.Run.Job") as (
       id: string,
     ) => JobRuntimeContext,
-  },
-);
+  });
 
 export class JobNotResolved extends Data.TaggedError("GCP.Run.JobNotResolved")<{
   resourceName: string;
@@ -728,6 +795,23 @@ export const JobProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ jobId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, jobId);
+      const existing = yield* getByName(name);
+      if (existing === undefined || existing.deleteTime !== undefined) {
+        return undefined;
+      }
+      const attrs = toAttrs(existing, env.project, env.region);
+      // The id AWS roles trust the runtime's Google ID tokens by.
+      const uniqueId =
+        attrs.serviceAccount === undefined
+          ? undefined
+          : yield* serviceAccountUniqueId(attrs.serviceAccount);
+      return { ...attrs, serviceAccountUniqueId: uniqueId };
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

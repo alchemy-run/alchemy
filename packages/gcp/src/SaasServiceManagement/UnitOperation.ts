@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -44,11 +45,6 @@ export type UnitOperationProvision = {
   inputVariables?: UnitOperationVariable[] | undefined;
 };
 
-export type UnitOperationFlagUpdate = {
-  /** Flag release to apply. */
-  flagRelease?: string | undefined;
-};
-
 export type UnitOperationSchedule = {
   /** RFC3339 start time. If omitted, the next maintenance window is used. */
   startTime?: string | undefined;
@@ -83,8 +79,8 @@ export type UnitOperationProps = {
    */
   unit: string;
   /**
-   * Provision the unit. Mutually exclusive with `upgrade`,
-   * `deprovision`, and `flagUpdate`. Immutable.
+   * Provision the unit. Mutually exclusive with `upgrade` and
+   * `deprovision`. Immutable.
    */
   provision?: UnitOperationProvision | undefined;
   /**
@@ -97,11 +93,6 @@ export type UnitOperationProps = {
    * operation types. Immutable.
    */
   deprovision?: boolean | undefined;
-  /**
-   * Push a flag release. Mutually exclusive with the other operation
-   * types. Immutable.
-   */
-  flagUpdate?: UnitOperationFlagUpdate | undefined;
   /**
    * Parent unit operation, for tracing child work.
    */
@@ -151,8 +142,6 @@ export type UnitOperation = Resource<
     upgrade: UnitOperationProvision | undefined;
     /** Whether this is a deprovision. */
     deprovision: boolean;
-    /** Flag-update payload, if this is a flag update. */
-    flagUpdate: UnitOperationFlagUpdate | undefined;
     /** Parent unit operation. */
     parentUnitOperation: string | undefined;
     /** Creating rollout. */
@@ -183,12 +172,37 @@ export type UnitOperation = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  UnitOperationLookup
 >;
 
 /**
- * An App Lifecycle Manager unit operation — one provision, upgrade,
- * deprovision, or flag-update of a Unit.
+ * Props for {@link UnitOperation.lookup}: find an unit operation this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface UnitOperationLookup {
+  /**
+   * UnitOperation id (the `{unitOperation}` segment of
+   * `projects/{project}/l
+   * ocations/{location}/unitOperations/{unitOperation}`).
+   */
+  unitOperationId: string;
+  /**
+   * Region of the operation (`us-central1`, …). `US-CENTRAL1` is accepted
+   * and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
+
+/**
+ * An App Lifecycle Manager unit operation — one provision, upgrade, or
+ * deprovision of a Unit.
  *
  * `unitOperationId`, `location`, `unit`, and the chosen operation type
  * replace the resource. `cancel`, labels, and annotations update in
@@ -223,6 +237,19 @@ export type UnitOperation = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing unit operation
+ * `UnitOperation.lookup` references an unit operation Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * unit operation.
+ *
+ * **Example:** Reference an existing unit operation
+ * ```typescript
+ * const unitOperation = GCP.SaasServiceManagement.UnitOperation.lookup({
+ *   unitOperationId: "my-unit-operation",
+ * });
+ * ```
+ *
  * @resource
  * @category SaasServiceManagement
  */
@@ -232,12 +259,10 @@ const operationKind = (props: {
   provision?: UnitOperationProvision | undefined;
   upgrade?: UnitOperationProvision | undefined;
   deprovision?: boolean | undefined;
-  flagUpdate?: UnitOperationFlagUpdate | undefined;
 }) => {
   if (props.provision !== undefined) return "provision";
   if (props.upgrade !== undefined) return "upgrade";
   if (props.deprovision === true) return "deprovision";
-  if (props.flagUpdate !== undefined) return "flagUpdate";
   return "";
 };
 
@@ -269,7 +294,6 @@ const toAttrs = (item: saasservicemgmt.UnitOperation, project: string) => {
     provision: item.provision,
     upgrade: item.upgrade,
     deprovision: item.deprovision !== undefined,
-    flagUpdate: item.flagUpdate,
     parentUnitOperation: item.parentUnitOperation,
     rollout: item.rollout,
     schedule: item.schedule,
@@ -335,7 +359,6 @@ export const UnitOperationProvider = () =>
         provision: olds?.provision ?? output?.provision,
         upgrade: olds?.upgrade ?? output?.upgrade,
         deprovision: olds?.deprovision ?? output?.deprovision,
-        flagUpdate: olds?.flagUpdate ?? output?.flagUpdate,
       });
       const nextKind = operationKind(news) || previousKind;
       return replaceOnIdentity({
@@ -350,6 +373,15 @@ export const UnitOperationProvider = () =>
           (previousKind.length > 0 && nextKind.length > 0 && previousKind !== nextKind),
       });
     }),
+
+    lookup: Effect.fn(function* ({ unitOperationId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation ?? env.region);
+      const name = resourceName(env.project, location, COLLECTION, unitOperationId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
@@ -409,7 +441,6 @@ export const UnitOperationProvider = () =>
               provision,
               upgrade,
               deprovision: news.deprovision === true ? {} : undefined,
-              flagUpdate: news.flagUpdate,
               parentUnitOperation,
               rollout: news.rollout,
               schedule: news.schedule,

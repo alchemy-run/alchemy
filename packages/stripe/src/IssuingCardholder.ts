@@ -295,8 +295,18 @@ export type IssuingCardholder = Resource<
     livemode: boolean;
   },
   never,
-  Providers
+  Providers,
+  IssuingCardholderLookup
 >;
+
+/**
+ * Props for {@link IssuingCardholder.lookup}: find an Issuing cardholder this stack
+ * doesn't manage by its id.
+ */
+export interface IssuingCardholderLookup {
+  /** Stripe Issuing cardholder id, e.g. `"ich_1A2b3C4d5E6f7G8h"`. */
+  id: string;
+}
 
 /**
  * A Stripe Issuing Cardholder — an individual or company who can be
@@ -407,6 +417,16 @@ export type IssuingCardholder = Resource<
  *     },
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing Issuing cardholder
+ * `IssuingCardholder.lookup` references an Issuing cardholder Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing Issuing cardholder
+ * ```typescript
+ * const ref = Stripe.IssuingCardholder.lookup({ id: "ich_1A2b3C4d5E6f7G8h" });
  * ```
  *
  * @resource
@@ -695,6 +715,11 @@ export const IssuingCardholderProvider = () =>
         return { action: "replace" } as const;
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing);
     }),
 
     read: Effect.fn(function* ({ id, output }) {

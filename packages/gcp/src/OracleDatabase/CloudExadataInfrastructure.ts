@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -138,8 +139,31 @@ export type CloudExadataInfrastructure = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  CloudExadataInfrastructureLookup
 >;
+
+/**
+ * Props for {@link CloudExadataInfrastructure.lookup}: find a cloud exadata
+ * infrastructure this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface CloudExadataInfrastructureLookup {
+  /**
+   * Exadata Infrastructure id (the `{cloud_exadata_infrastructure}`
+   * segment).
+   */
+  cloudExadataInfrastructureId: string;
+  /**
+   * Region.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Oracle Exadata Infrastructure on Google Cloud.
@@ -160,6 +184,19 @@ export type CloudExadataInfrastructure = Resource<
  *   shape: "Exadata.X9M",
  *   computeCount: 2,
  *   storageCount: 3,
+ * });
+ * ```
+ *
+ * ### Looking up an existing cloud exadata infrastructure
+ * `CloudExadataInfrastructure.lookup` references a cloud exadata
+ * infrastructure Alchemy doesn't manage (created in the console or by
+ * another stack). It is read during plan/deploy, never created, updated or
+ * deleted, and binds like a declared cloud exadata infrastructure.
+ *
+ * **Example:** Reference an existing cloud exadata infrastructure
+ * ```typescript
+ * const cloudExadataInfrastructure = GCP.OracleDatabase.CloudExadataInfrastructure.lookup({
+ *   cloudExadataInfrastructureId: "my-cloud-exadata-infrastructure",
  * });
  * ```
  *
@@ -277,6 +314,15 @@ export const CloudExadataInfrastructureProvider = () =>
         extra: nextShape !== previousShape || nextZone !== previousZone,
       });
     }),
+
+    lookup: Effect.fn(function* ({ cloudExadataInfrastructureId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation ?? env.region);
+      const name = resourceNameOf(env.project, location, COLLECTION, cloudExadataInfrastructureId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

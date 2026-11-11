@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -257,8 +258,32 @@ export type BackupPlan = Resource<
     lastSuccessfulBackupTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  BackupPlanLookup
 >;
+
+/**
+ * Props for {@link BackupPlan.lookup}: find a backup plan this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface BackupPlanLookup {
+  /**
+   * Backup plan id (the `{backupPlan}` segment of
+   * `projects/{project}/locations/{location}/backupPlans/{backupPlan}`).
+   */
+  backupPlanId: string;
+  /**
+   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`. Must match the source cluster region.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Backup for GKE backup plan — the configuration and schedule for a
@@ -294,6 +319,19 @@ export type BackupPlan = Resource<
  *   cluster: cluster.name,
  *   description: "nightly backups v2",
  *   labels: { env: "prod", team: "platform" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing backup plan
+ * `BackupPlan.lookup` references a backup plan Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * backup plan.
+ *
+ * **Example:** Reference an existing backup plan
+ * ```typescript
+ * const backupPlan = GCP.GKEBackup.BackupPlan.lookup({
+ *   backupPlanId: "my-backup-plan",
  * });
  * ```
  *
@@ -411,6 +449,15 @@ export const BackupPlanProvider = () =>
           !previousCluster.endsWith(`/${news.cluster}`),
       });
     }),
+
+    lookup: Effect.fn(function* ({ backupPlanId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, backupPlanId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

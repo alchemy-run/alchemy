@@ -150,8 +150,23 @@ export type Postgres = Resource<
     importHashes: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  PostgresLookup
 >;
+
+/**
+ * Props for {@link Postgres.lookup}: find a Managed Postgres cluster
+ * this stack doesn't manage by its name.
+ */
+export interface PostgresLookup {
+  /** Cluster name (unique in the org). */
+  name: string;
+  /**
+   * Organization slug.
+   * @default the current token's org
+   */
+  orgSlug?: string;
+}
 
 /**
  * A Fly.Postgres is a Managed Postgres (MPG) cluster. It is billed.
@@ -285,6 +300,18 @@ export type Postgres = Resource<
  *   region: "iad",
  *   migrations: schema,
  * });
+ * ```
+ *
+ * ### Looking up an existing cluster
+ * `Postgres.lookup` references a cluster Alchemy doesn't manage (created
+ * with `fly mpg create` or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and its connection URIs
+ * come from Fly like a declared cluster's.
+ *
+ * **Example:** Connect to an existing cluster
+ * ```typescript
+ * const db = Fly.Postgres.lookup({ name: "my-db" });
+ * const sql = yield* Fly.ConnectPostgres(db);
  * ```
  *
  * @resource
@@ -608,6 +635,14 @@ export const PostgresProvider = () =>
         }
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ name, orgSlug }) {
+      const org = orgSlug ?? (yield* resolveOrgSlug());
+      const found = yield* findByName(org, name);
+      if (found === undefined) return undefined;
+      const hydrated = found.id !== undefined ? yield* getClusterResponse(found.id) : undefined;
+      return toAttrs(hydrated?.data ?? found, { name, orgSlug: org }, hydrated?.credentials);
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {

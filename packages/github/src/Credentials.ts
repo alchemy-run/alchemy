@@ -1,4 +1,5 @@
 import type { ConfigError } from "@distilled.cloud/core/errors";
+import * as App from "@distilled.cloud/github/App";
 import {
   Credentials,
   DEFAULT_API_BASE_URL,
@@ -7,7 +8,9 @@ import {
 import { lazyCredentials } from "alchemy/Auth/Resolve";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Record from "effect/Record";
 import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
 import {
   GITHUB_AUTH_PROVIDER_NAME,
   type GitHubResolvedCredentials,
@@ -75,6 +78,51 @@ export const fromEnv = () =>
       Effect.orDie,
     ),
   );
+
+/**
+ * Build a `Credentials` layer that acts as one installation of a GitHub App.
+ * The installation access token is minted with the App's private key on the
+ * first request, reused, and minted again a minute before its hour runs out.
+ * A refused mint (an unknown installation, a revoked key) fails the call with
+ * `GithubAppAuthError`.
+ *
+ * `privateKey` is the PEM GitHub issued (PKCS #1) or a PKCS #8 PEM. Pass
+ * `repositories` or `permissions` to narrow the token, and `baseUrl` to
+ * target a GitHub Enterprise instance.
+ *
+ * @example
+ * ```typescript
+ * Effect.provide(
+ *   GitHub.fromApp({
+ *     appId: "123456",
+ *     privateKey: Redacted.make(pem),
+ *     installationId: 7890,
+ *   }),
+ * )
+ * ```
+ */
+export const fromApp = (
+  options: Omit<App.InstallationConfig, "apiBaseUrl" | "userAgent"> & {
+    readonly baseUrl?: string;
+  },
+) => {
+  const { baseUrl, ...app } = options;
+  return Layer.unwrap(
+    (baseUrl !== undefined ? normalizeGitHubBaseUrl(baseUrl) : Effect.undefined).pipe(
+      Effect.map((apiBaseUrl) =>
+        App.installationCredentials({
+          ...app,
+          ...Record.filterMap(
+            { apiBaseUrl },
+            Result.fromNullishOr(() => undefined),
+          ),
+          userAgent: USER_AGENT,
+        }),
+      ),
+      Effect.orDie,
+    ),
+  );
+};
 
 /**
  * Build a `Credentials` layer that resolves a token via the

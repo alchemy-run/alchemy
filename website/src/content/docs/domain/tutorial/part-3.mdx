@@ -57,8 +57,8 @@ export class Customer extends Domain.Aggregate("Customer", {
   initial: { name: null },
   commands: [RegisterCustomer],
   decide: {
-    RegisterCustomer: (s, cmd) =>
-      s.name !== null ? new AlreadyRegistered() : [new CustomerRegistered({ name: cmd.name })],
+    RegisterCustomer: (customer, cmd) =>
+      customer.name !== null ? new AlreadyRegistered() : [new CustomerRegistered({ name: cmd.name })],
   },
   evolve: {
     CustomerRegistered: (_, e) => ({ name: e.name }),

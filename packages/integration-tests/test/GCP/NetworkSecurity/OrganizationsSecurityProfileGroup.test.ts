@@ -7,6 +7,7 @@ import * as networksecurity from "@distilled.cloud/gcp/networksecurity_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -110,6 +111,14 @@ test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_ORG_NETWORKSECU
           });
           return { profile, group };
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkSecurity.OrganizationsSecurityProfileGroup.lookup({
+          securityProfileGroupId: created.group.securityProfileGroupId,
+          organization: created.group.organization,
+          location: created.group.location,
+        }),
+        created.group,
       );
 
       expect(created.group.name).toContain("/securityProfileGroups/");

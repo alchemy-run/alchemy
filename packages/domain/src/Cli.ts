@@ -12,6 +12,7 @@ import * as Runtime from "effect/Runtime";
 import * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
 import type * as Scope from "effect/Scope";
+import type { Annotations } from "./Annotations.ts";
 import type { Servable } from "./Api.ts";
 import {
   DefinitionError,
@@ -19,7 +20,13 @@ import {
   DuplicateFlag,
   ReservedFlag,
 } from "./DefinitionError.ts";
-import { exposedOf, type OnceCallName, type Operation, operationsOf } from "./ReadRpcs.ts";
+import {
+  exposedOf,
+  isMethod,
+  type OnceCallName,
+  type Operation,
+  operationsOf,
+} from "./ReadRpcs.ts";
 
 /**
  * A command line for an Api: one subcommand per thing it serves, run as a client of the
@@ -31,6 +38,7 @@ import { exposedOf, type OnceCallName, type Operation, operationsOf } from "./Re
 /** What {@link toCli} reads from an Api class. */
 export interface Cliable {
   readonly apiName: string;
+  readonly annotations: Annotations;
   readonly serves: ReadonlyArray<Servable>;
   readonly group: RpcGroup.RpcGroup<Rpc.Any>;
   readonly client: Effect.Effect<unknown, never, any>;
@@ -73,7 +81,7 @@ export interface Options<A extends Cliable, E = never, R = never> {
   readonly expose?: ReadonlyArray<Exposable<A>>;
   /** The root command: the name a person types. Default: the Api's name in kebab-case. */
   readonly name?: string;
-  /** The root command's help text. */
+  /** The root command's help text. The Api's `description` annotation by default. */
   readonly description?: string;
   /**
    * Headers sent with every call, such as a bearer token for the session
@@ -89,7 +97,7 @@ export type Failure<E = never> = CallRejected | CliError.UserError | E;
 // ---------------------------------------------------------------- naming
 
 /**
- * The command-line name of a command, view, stream, aggregate, operation or field: kebab-case
+ * The command-line name of a command, view, stream, operation or field: kebab-case
  * (`AccountSummary` → `account-summary`, `commandId` → `command-id`).
  */
 export const kebab = (name: string): string =>
@@ -155,14 +163,15 @@ const descriptionOfField = (ast: SchemaAST.AST): string | undefined =>
 
 /**
  * The fields of a call's payload, as the wire carries them (the encoded
- * side). A command's `input` is flattened into flags of its own fields
- * (`--amount`), next to `--target` and `--command-id`. A field whose flag
+ * side). A command's or a query's `input` is flattened into flags of its
+ * own fields (`--amount`), next to `--target` and `--command-id`, or
+ * `--after` and `--take`. A field whose flag
  * the CLI reserves, or that another field takes, is a definition problem.
  */
 const fieldsOf = (
   where: string,
   payload: Schema.Top,
-  command: boolean,
+  flattenInput: boolean,
   problems: Array<DefinitionError>,
 ): ReadonlyArray<Field> => {
   const ast = SchemaAST.toEncoded(payload.ast);
@@ -195,7 +204,7 @@ const fieldsOf = (
   };
   const outer = new Set(ast.propertySignatures.map((property) => kebab(String(property.name))));
   return ast.propertySignatures.flatMap((property) => {
-    const input = command && property.name === "input" ? property.type : undefined;
+    const input = flattenInput && property.name === "input" ? property.type : undefined;
     // An input field named like `target` keeps the whole input as `--input`'s JSON.
     const flat =
       input !== undefined &&
@@ -294,6 +303,11 @@ const invoke = (
     ) => Effect.Effect<unknown, unknown>;
     return send(target, input, { headers, ...(commandId === undefined ? {} : { commandId }) });
   }
+  if (op.operation === "ask") {
+    const { input, ...options } = payload;
+    const ask = served as (input: unknown, options: unknown) => Effect.Effect<unknown, unknown>;
+    return ask(input, { ...options, headers });
+  }
   const { key, ...options } = payload;
   const read = (served as Record<string, (key: unknown, options: unknown) => unknown>)[
     op.operation
@@ -308,14 +322,16 @@ const invoke = (
 const published = (op: Operation): boolean => !op.stream;
 
 /**
- * A subcommand's help text: a command's Schema `description` annotation, or
- * what it is (`Send the Deposit command.`, `Read the Balance view.`).
+ * A subcommand's help text: the entry's `description`, or what it is
+ * (`Send the Deposit command.`, `Read the Balance view.`).
  */
 const descriptionOf = (op: Operation): string =>
-  (op.served.kind === "Command" ? SchemaAST.resolveDescription(op.served.ast) : undefined) ??
+  op.description ??
   (op.served.kind === "Command"
     ? `Send the ${op.name} command.`
-    : `Read the ${op.name} ${op.served.kind.toLowerCase()}.`);
+    : op.served.kind === "Query"
+      ? `Ask the ${op.name} query.`
+      : `Read the ${op.name} ${op.served.kind.toLowerCase()}.`);
 
 /** What each read prints, for its help. */
 const READS: Record<string, string> = {
@@ -333,8 +349,8 @@ const commandOf = <E, R>(
   problems: Array<DefinitionError>,
 ): Command.Command<string, unknown, {}, Failure<E>, R> => {
   const { rpc } = op;
-  const command = op.operation === "send";
-  const fields = fieldsOf(`${api.apiName} ${rpc._tag}`, rpc.payloadSchema, command, problems);
+  // A command's and a query's `input` fields are flags of their own.
+  const fields = fieldsOf(`${api.apiName} ${rpc._tag}`, rpc.payloadSchema, isMethod(op), problems);
   const decodePayload = Schema.decodeUnknownEffect(Schema.toCodecJson(rpc.payloadSchema));
   const encodeSuccess = Schema.encodeUnknownEffect(Schema.toCodecJson(rpc.successSchema));
   // Errors decode with no services, so they encode with none.
@@ -419,13 +435,13 @@ const commandOf = <E, R>(
  * request/response calls `options.expose` lists. Nothing is exposed by
  * default. The tree is read from those calls:
  *
- * - each command, view, stream and aggregate is a subcommand named in kebab-case (`AccountSummary` →
- *   `account-summary`). A command runs as that subcommand; a view, an
- *   aggregate or a stream has one subcommand per call (`get`, `list`,
+ * - each command, query, view and stream is a subcommand named in kebab-case (`AccountSummary` →
+ *   `account-summary`). A command or a query runs as that subcommand; a view
+ *   or a stream has one subcommand per call (`get`, `list`,
  *   `snapshot`, `peek`). Live reads (`watch`, `events`) are left out.
  * - each payload field is a flag in kebab-case (`--target`, `--command-id`,
- *   `--key`), and a command's input fields are flags of their own
- *   (`--amount`). A string, a number, a boolean or a set of string literals
+ *   `--key`), and a command's or a query's input fields are flags of their
+ *   own (`--amount`, `--account`). A string, a number, a boolean or a set of string literals
  *   takes a typed flag; any other field takes its JSON (`--at-least
  *   '{"stream":"Account/a-1","version":3}'`). `--json` takes the flags as
  *   one object (`{"target":"a-1","amount":1000}`), and flags override it.
@@ -455,7 +471,7 @@ const commandOf = <E, R>(
  *
  * const bank = toCli(CustomerApi, {
  *   name: "bank",
- *   expose: ["DepositMoney", "AccountSummary.get"],
+ *   expose: ["DepositMoney", "AccountLedger", "AccountSummary.get"],
  *   headers: Config.redacted("BANK_TOKEN").pipe(
  *     Effect.map((token) => ({ authorization: `Bearer ${Redacted.value(token)}` })),
  *   ),
@@ -468,6 +484,7 @@ const commandOf = <E, R>(
  *   BunRuntime.runMain,
  * );
  * // $ bank deposit-money --target a-1 --amount 1000
+ * // $ bank account-ledger --account a-1 --take 20
  * // $ bank account-summary get --key a-1
  * ```
  */
@@ -505,7 +522,7 @@ export const toCli = <A extends Cliable, E = never, R = never>(
     const ops = all.filter(published);
     if (ops.length === 0) continue;
     let command: Command.Command<string, unknown, {}, Failure<E>, R>;
-    if (all[0]!.operation === "send") {
+    if (isMethod(all[0]!)) {
       command = commandOf(api, ops[0]!, name, options, problems);
     } else {
       command = Command.make(name).pipe(
@@ -525,7 +542,7 @@ export const toCli = <A extends Cliable, E = never, R = never>(
     problems.length > 0
       ? Command.make(rootName, {}, () => problems[0]!.pipe(Effect.die))
       : Command.make(rootName).pipe(Command.withSubcommands(subcommands as never));
-  return (
-    options.description === undefined ? root : Command.withDescription(root, options.description)
-  ) as never;
+  // The Api's own description, unless the CLI is given one.
+  const description = options.description ?? api.annotations.description;
+  return (description === undefined ? root : Command.withDescription(root, description)) as never;
 };

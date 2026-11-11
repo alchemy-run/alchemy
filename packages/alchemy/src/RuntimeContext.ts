@@ -1,4 +1,5 @@
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -28,6 +29,13 @@ export interface BaseRuntimeContext {
     handler: HttpEffect<Req>,
     options?: { shape?: Record<string, unknown> },
   ): Effect.Effect<void, never, Req>;
+  /**
+   * Serve even when the impl shape has no `fetch` handler and no RPC
+   * methods. Set by runtimes whose served handler carries routes of its
+   * own — e.g. a runtime that routes Durable Object calls itself, so a
+   * worker that only hosts Durable Objects still serves.
+   */
+  alwaysServe?: boolean;
   shape?: () => Record<string, unknown>;
   /** additional services to provide to the plan  */
   planServices?: Layer.Layer<any>;
@@ -36,7 +44,7 @@ export interface BaseRuntimeContext {
    * instance (e.g. a Cloudflare Worker's `WebhookHost`), so user code
    * doesn't provide them itself.
    */
-  hostServices?: Layer.Layer<any, never, any>;
+  hostServices?: Layer.Layer<any, never, any> | undefined;
   /**
    * Telemetry exporter Layer registered during init via
    * `Telemetry.layer(...)` / `Telemetry.layerOtlp(...)` (see Telemetry.ts).
@@ -44,7 +52,26 @@ export interface BaseRuntimeContext {
    * overriding the env-driven default.
    */
   telemetry?: Layer.Layer<never, any, any>;
+  /**
+   * Set during init by providing the `Workers.InputGate` Layer
+   * (`alchemy/Workers`): the Durable Object bridge gives each instance an
+   * input gate.
+   */
+  inputGate?: boolean;
+  /**
+   * Mint an OIDC ID token for `audience`, signed by the host's platform
+   * (a Fly Machine's `/.fly/api`). Present only on hosts whose platform
+   * issues them. Bindings exchange it with a cloud's STS instead of
+   * holding a key Alchemy created.
+   */
+  oidcToken?: (audience: string) => Effect.Effect<Redacted.Redacted<string>, OidcTokenError>;
 }
+
+/** The host's platform did not issue an OIDC token. */
+export class OidcTokenError extends Data.TaggedError("OidcTokenError")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * Keys a Platform's Init captured through {@link BaseRuntimeContext.set}

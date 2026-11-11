@@ -1486,3 +1486,55 @@ export const observeReplicaSet = Effect.fn(function* (input: {
     };
   return undefined;
 });
+
+/**
+ * The Machines a lookup names: those whose name (or Alchemy base name) is
+ * `name`, or `name-N` for a replica, or every Machine in the App when
+ * `name` is omitted. Of an Alchemy deployment, only the newest generation
+ * that finished rolling out counts; a Machine without that metadata
+ * counts as it is. `undefined` when nothing in the App matches.
+ */
+export const lookupReplicaSet = Effect.fn(function* (input: {
+  appName: string;
+  name?: string | undefined;
+}) {
+  const named = (yield* listMachinesByApp(input.appName)).filter((machine) => {
+    if (input.name === undefined) return true;
+    const base = machine.config?.metadata?.[alchemyMetadataKeys.baseName];
+    return (
+      base === input.name ||
+      machine.name === input.name ||
+      (base === undefined && machine.name?.startsWith(`${input.name}-`) === true)
+    );
+  });
+  const active = named.filter((machine) => {
+    const phase = machine.config?.metadata?.[alchemyMetadataKeys.phase];
+    return (phase === undefined || phase === "active") && machine.cordoned !== true;
+  });
+  const sequenceOf = (machine: FlyMachine) =>
+    Number(machine.config?.metadata?.[alchemyMetadataKeys.sequence] ?? 0);
+  const newest = Math.max(0, ...active.map(sequenceOf));
+  const listed = active
+    .filter((machine) => sequenceOf(machine) === newest)
+    .sort((a, b) => replicaIndexOf(a) - replicaIndexOf(b));
+  if (listed.length === 0) return undefined;
+  const volumesById = new Map<string, FlyVolume>();
+  for (const machine of listed) {
+    for (const mount of machine.config?.mounts ?? []) {
+      const volumeId = mount.volume;
+      if (volumeId === undefined || volumesById.has(volumeId)) continue;
+      const volume = yield* getVolumeById(input.appName, volumeId);
+      if (volume !== undefined) volumesById.set(volumeId, volume);
+    }
+  }
+  const replicas = listed.map((machine) => toReplica(machine, volumesById));
+  return toReplicaSet(
+    replicas,
+    input.appName,
+    listed[0]?.config?.metadata?.[alchemyMetadataKeys.baseName] ??
+      input.name ??
+      replicas[0]?.name ??
+      "",
+    listed[0]?.config?.services,
+  );
+});

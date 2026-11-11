@@ -34,7 +34,6 @@ import path from "pathe";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Container } from "../Containers/Container.ts";
 import type { DevContainerImage } from "../Containers/ContainerApplication.ts";
-import type { DomainClass } from "../Domain/Version.ts";
 import type { DevOrigin } from "../Hyperdrive/Connection.ts";
 import type { Providers } from "../Providers.ts";
 import type { DispatchNamespace } from "../WorkersForPlatforms/DispatchNamespace.ts";
@@ -45,7 +44,6 @@ import { Request } from "./Request.ts";
 import type { ModuleRule } from "./Sources/Prebuilt.ts";
 import type { WorkerBuildOptions } from "./Sources/Rolldown.ts";
 import type { WorkerAccessConfig, WorkerAccessIdentity } from "./WorkerAccess.ts";
-import { bindWorkerAsyncBindings } from "./WorkerAsyncBindings.ts";
 import type { WorkerBinding, WorkerBindingResource } from "./WorkerBinding.ts";
 import { transformWorkerDomainProps } from "./WorkerDomainDns.ts";
 import { WorkerEnvironment, WorkerTypeId } from "./WorkerRuntime.ts";
@@ -540,6 +538,11 @@ export interface WorkerPreviewOptions {
    * Preview Worker. Locally-hosted Durable Object and Workflow classes
    * *are* allowed: each Preview gets its own isolated namespace.
    *
+   * `observability` and `Cloudflare.Telemetry()` apply to the Preview
+   * itself: Cloudflare keeps Workers Logs and Traces settings per
+   * Preview, independent of the parent, so a Preview records logs by
+   * default and traces when it provides `Cloudflare.Telemetry()`.
+   *
    * Changing the parent replaces the resource (a Preview belongs to
    * exactly one script).
    */
@@ -579,7 +582,7 @@ export interface WorkerProps<
    * Worker name override. If omitted, Alchemy derives a deterministic physical
    * name from the stack, stage, and logical ID.
    */
-  name?: string;
+  name?: string | undefined;
   /**
    * Deploy this Worker into a Workers for Platforms dispatch namespace as a
    * "user worker" — a customer Worker that a platform Worker dispatches to at
@@ -723,6 +726,8 @@ export interface WorkerProps<
    * across full deployments. Setting it to `false` or omitting `issues`
    * disables Issues on the next full deployment. Version-only uploads and
    * gradual rollouts keep the parent's live observability settings.
+   * A Preview Worker (`preview.of`) applies these settings to its own
+   * Preview, which Cloudflare configures separately from the parent.
    */
   observability?: WorkerObservability | undefined;
   /**
@@ -979,7 +984,7 @@ export interface WorkerProps<
    * shims. The entry remains {@link main}. Ignored when {@link bundle} is
    * `false`. See {@link WorkerBuildOptions}.
    */
-  build?: WorkerBuildOptions;
+  build?: WorkerBuildOptions | undefined;
   /**
    * Whether to bundle {@link main} with rolldown before upload.
    *
@@ -1509,12 +1514,6 @@ export type Worker<Bindings = any> = Resource<
         }[]
       | undefined;
     crons?: string[];
-    /**
-     * Durable Object classes a Domain model hosts, with the names they had in
-     * earlier Domain versions, so a deploy carries their data over to this
-     * version's names. See `Domain/Version.ts`.
-     */
-    domainClasses?: DomainClass[];
     hyperdrives?: Record<string, Required<DevOrigin>> | undefined;
     /**
      * Dev-only channel (like `hyperdrives`): binding name → opt-out of local
@@ -3064,9 +3063,19 @@ export const Worker: ResourceClassLike<Worker> & {
   Platform(
     WorkerTypeId,
     {
-      // WorkerAsyncBindings imports isWorker; defer access until module initialization completes.
+      // Binding wiring is deploy-time only and its imports reach the local
+      // runtime, so load it on first use: a runtime bundle folds the guard and
+      // never reads `WorkerAsyncBindings` (#3227). The lazy import also defers
+      // its `isWorker` access until this module has initialized.
       // `props` is `undefined` for a bare tag whose `.make` Layer has not built yet.
-      onCreate: (resource, props) => bindWorkerAsyncBindings(resource as Worker, props ?? {}),
+      onCreate: (resource, props) =>
+        globalThis.__ALCHEMY_RUNTIME__
+          ? Effect.void
+          : Effect.promise(() => import("./WorkerAsyncBindings.ts")).pipe(
+              Effect.flatMap(({ bindWorkerAsyncBindings }) =>
+                bindWorkerAsyncBindings(resource as Worker, props ?? {}),
+              ),
+            ),
       createRuntimeContext: (id) => makeWorkerRuntimeContext(id),
       // Normalize `main` relative to the cwd, then let `domain.dns` naming a
       // non-Cloudflare DNS host compose Cloudflare for SaaS custom hostnames +

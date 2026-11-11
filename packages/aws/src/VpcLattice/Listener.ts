@@ -94,8 +94,27 @@ export interface Listener extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ListenerLookup
 > {}
+
+/**
+ * Props for {@link Listener.lookup}: find a listener this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type ListenerLookup =
+  | {
+      /** The service the listener belongs to. */
+      serviceId: string;
+      /** The id of the existing listener. */
+      listenerId: string;
+    }
+  | {
+      /** The service the listener belongs to. */
+      serviceId: string;
+      /** The name of the existing listener. */
+      name: string;
+    };
 
 /**
  * An Amazon VPC Lattice listener — the process on a lattice service that
@@ -126,6 +145,17 @@ export interface Listener extends Resource<
  *     },
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing listener
+ * `Listener.lookup` references a listener Alchemy doesn't manage (created in the
+ * console or by another stack), found by `serviceId` with `listenerId` or `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing listener
+ * ```typescript
+ * const https = AWS.VpcLattice.Listener.lookup({ serviceId, name: "https" });
+ * const listenerArn = https.listenerArn;
  * ```
  *
  * @resource
@@ -194,6 +224,24 @@ export const ListenerProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* (props) {
+          const listener =
+            "listenerId" in props
+              ? yield* observe(props.serviceId, props.listenerId)
+              : yield* findByName(props.serviceId, props.name);
+          if (!listener?.arn || !listener.id || !listener.serviceId) return undefined;
+          const listed = yield* vpclattice.listTagsForResource({ resourceArn: listener.arn });
+          return {
+            listenerId: listener.id,
+            listenerArn: listener.arn,
+            name: listener.name!,
+            protocol: listener.protocol ?? "HTTP",
+            port: listener.port,
+            serviceId: listener.serviceId,
+            serviceArn: listener.serviceArn,
+            tags: tagRecord(listed.tags),
+          };
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const serviceIdentifier = output?.serviceId ?? olds?.serviceIdentifier;

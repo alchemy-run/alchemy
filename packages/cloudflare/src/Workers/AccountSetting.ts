@@ -149,7 +149,7 @@ export const AccountSettingProvider = () =>
       ];
     }),
 
-    reconcile: Effect.fn(function* ({ news, output }) {
+    reconcile: Effect.fn(function* ({ news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
       // 1. Observe — the singleton always exists; read its live values.

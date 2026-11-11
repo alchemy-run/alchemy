@@ -2,6 +2,7 @@
 title: "Local services: Postgres with containers, networks, and volumes"
 description: Run a local Postgres for development as alchemy resources — a pinned image, a named network and volume, a Redacted password, and a healthchecked container that converges on every deploy.
 ---
+import Tree from "../../../components/diagrams/Tree.astro";
 
 A Docker `Container` runs an image; a `Network` gives containers a
 stable DNS name to reach each other; a `Volume` keeps data alive
@@ -16,6 +17,21 @@ You'll need a Docker daemon reachable from your CLI and the provider
 registered — see [Setup](/docker/setup) and the
 [Docker overview](/docker). The full program below is the checked-in
 [`examples/docker-postgres`](https://github.com/alchemy-run/alchemy/tree/main/examples/docker-postgres).
+
+<Tree
+  nodes={[
+    { id: "engine", label: "local Docker", type: "engine", areas: ["net vol"], colGap: 3 },
+    { id: "net", label: "app-network", type: "Network · DNS by name", parent: "engine", areas: ["worker pg"], colGap: 3 },
+    { id: "worker", label: "worker", type: "Container", parent: "net" },
+    { id: "pg", label: "postgres", type: "Container", parent: "net", tone: "accent", specs: [["image", "postgres@sha256:…"]] },
+    { id: "vol", label: "postgres-data", type: "Volume", parent: "engine" },
+  ]}
+  links={[
+    { from: "worker", to: "pg", label: ":5432" },
+    { from: "pg", to: "vol", label: "mounts" },
+  ]}
+  caption="The containers find each other by name on their network. The data lives in a Volume, so replacing the postgres container keeps it."
+/>
 
 ## Pin the image
 
@@ -61,6 +77,50 @@ from the app, stage, and logical ID. Note that changing a `Network`
 or `Volume` prop (driver, labels, IPv6) is a replacement: the old
 one is deleted and a new one created, so treat a Volume's props as
 fixed once it holds data you care about.
+
+### Configure a network
+
+A network can be internal, attachable, and pinned to an explicit subnet:
+
+```typescript
+const privateNetwork = yield* Docker.Network("private-network", {
+  internal: true,
+  attachable: true,
+  driverOpts: { "com.docker.network.driver.mtu": "1420" },
+  ipam: {
+    config: [{
+      subnet: "10.50.0.0/24",
+      gateway: "10.50.0.1",
+      ipRange: "10.50.0.128/25",
+      auxAddresses: { reserved: "10.50.0.5" },
+    }],
+  },
+});
+```
+
+Without `ipam`, Docker picks the subnet and gateway, and Alchemy doesn't treat
+them as drift. Subnets are network prefixes (`10.50.0.0/24`, not
+`10.50.0.1/24`); a bad one fails with `InvalidNetworkOptions` naming the field,
+before the old network is touched.
+
+A dual-stack bridge network enables IPv6 and declares both families:
+
+```typescript
+const dualStack = yield* Docker.Network("dual-stack", {
+  enableIPv6: true,
+  ipam: {
+    config: [
+      { subnet: "10.51.0.0/24", gateway: "10.51.0.1" },
+      { subnet: "fd51:3456:789a::/64", gateway: "fd51:3456:789a::1" },
+    ],
+  },
+});
+```
+
+`internal` cuts external access through that network only; a container on
+another network can still reach out. Every network setting is fixed at
+creation, so changing one replaces the network, and Docker refuses to remove
+it while containers are attached.
 
 ## A Redacted password
 

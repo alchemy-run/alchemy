@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitRegionOperation } from "./operations.ts";
@@ -113,8 +114,31 @@ export type TargetPool = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  TargetPoolLookup
 >;
+
+/**
+ * Props for {@link TargetPool.lookup}: find a target pool this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface TargetPoolLookup {
+  /**
+   * Target pool name (RFC1035, 1-63 characters).
+   */
+  targetPoolName: string;
+  /**
+   * Region the pool lives in. `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  region?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A regional Compute Engine target pool.
@@ -159,6 +183,19 @@ export type TargetPool = Resource<
  *     "projects/{project}/zones/us-central1-a/instances/web-1",
  *     "us-central1-b/web-2",
  *   ],
+ * });
+ * ```
+ *
+ * ### Looking up an existing target pool
+ * `TargetPool.lookup` references a target pool Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * target pool.
+ *
+ * **Example:** Reference an existing target pool
+ * ```typescript
+ * const targetPool = GCP.Compute.TargetPool.lookup({
+ *   targetPoolName: "my-target-pool",
  * });
  * ```
  *
@@ -383,6 +420,14 @@ export const TargetPoolProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ targetPoolName, region: lookupRegion }) {
+      const env = yield* GcpEnvironment.current;
+      const region = normalizeRegion(lookupRegion, env.region);
+      const existing = yield* getByName(env.project, region, targetPoolName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

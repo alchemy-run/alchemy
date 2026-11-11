@@ -358,8 +358,19 @@ export interface Bucket extends Resource<
      */
     policyStatements?: PolicyStatement[];
   },
-  Providers
+  Providers,
+  BucketLookup
 > {}
+
+/**
+ * Props for {@link Bucket.lookup}: find a bucket this stack doesn't manage,
+ * owned by the ambient account, by its name. The bucket may live in any
+ * region; the lookup reports the one it is in.
+ */
+export interface BucketLookup {
+  /** The name of the existing bucket. */
+  bucketName: string;
+}
 
 /**
  * An S3 bucket for storing objects in AWS.
@@ -567,6 +578,20 @@ export interface Bucket extends Resource<
  *     ),
  *   ),
  * );
+ * ```
+ *
+ * ### Looking up an existing bucket
+ * `Bucket.lookup` references a bucket Alchemy doesn't manage (created in the
+ * console or by another stack), found by `bucketName` among the buckets the
+ * ambient account owns. It is read during plan/deploy and never created,
+ * updated or deleted, and binds like a declared bucket.
+ *
+ * **Example:** Read objects from an existing bucket
+ * ```typescript
+ * const uploads = AWS.S3.Bucket.lookup({ bucketName: "acme-uploads" });
+ *
+ * // init
+ * const getObject = yield* AWS.S3.GetObject(uploads);
  * ```
  *
  * @resource
@@ -1962,6 +1987,27 @@ export const BucketProvider = () =>
               ),
             );
           }),
+        lookup: Effect.fn(function* ({ bucketName }) {
+          const { accountId } = yield* AWSEnvironment.current;
+          const location = yield* s3
+            .getBucketLocation({ Bucket: bucketName, ExpectedBucketOwner: accountId })
+            .pipe(Effect.catchTag("NoSuchBucket", () => Effect.undefined));
+          if (!location) return undefined;
+          // S3 reports us-east-1 as no constraint and eu-west-1 by its legacy
+          // `EU` alias.
+          const constraint: string | undefined = location.LocationConstraint;
+          const region = (
+            !constraint ? "us-east-1" : constraint === "EU" ? "eu-west-1" : constraint
+          ) as RegionID;
+          return {
+            bucketName,
+            bucketArn: `arn:aws:s3:::${bucketName}` as const,
+            bucketDomainName: `${bucketName}.s3.amazonaws.com` as const,
+            bucketRegionalDomainName: `${bucketName}.s3.${region}.amazonaws.com` as const,
+            region,
+            accountId,
+          };
+        }),
         read: Effect.fn(function* ({ id, fqn, instanceId, olds, output }) {
           const bucketName = output?.bucketName ?? (yield* createBucketName(id, olds ?? {}));
           const { accountId, region } = yield* AWSEnvironment.current;

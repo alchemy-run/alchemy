@@ -298,9 +298,8 @@ export const WorkerLoader: WorkerLoaderClass = Object.assign(
                 wrapWorkerStub(
                   loader.get(name, () =>
                     asEffect(getCode()).pipe(
-                      Effect.provide(context),
                       Effect.map(unwrapWorkerLoader),
-                      Effect.runPromise,
+                      Effect.runPromiseWith(context),
                     ),
                   ),
                 ),

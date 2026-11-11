@@ -1,3 +1,5 @@
+import { Docker } from "@alchemy.run/docker/Docker";
+import { buildImageArchive, hashImageArchive } from "@alchemy.run/docker/ImageArchive";
 import * as Hetzner from "@distilled.cloud/hetzner";
 import * as Bundle from "alchemy/Bundle/Bundle";
 import { isResolved } from "alchemy/Diff";
@@ -9,6 +11,7 @@ import type { ServerHost } from "alchemy/Runtime/Process";
 import { Stack } from "alchemy/Stack";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Redacted from "effect/Redacted";
 import {
   collectBindingState,
@@ -38,7 +41,20 @@ export interface ServiceProps extends PlatformProps {
    * Module entrypoint bundled with rolldown and copied onto the Server
    * over SSH as a systemd unit.
    */
-  main: string;
+  main?: string;
+  /**
+   * A Docker build context the Service runs as a container instead of a
+   * bundled `main`: built on the deploying machine for the Server's
+   * architecture (`cax` types are arm64), copied over SSH, and run under
+   * systemd with Docker (installed if missing) on the host network. The
+   * image's own `CMD` runs, with {@link env}. Set this or {@link main}.
+   */
+  context?: string;
+  /**
+   * The Dockerfile for {@link context}, relative to it unless absolute.
+   * @default "Dockerfile"
+   */
+  dockerfile?: string;
   /**
    * Port the hosted HTTP server listens on. Written to `PORT` and used
    * to build {@link Service} `url`.
@@ -140,6 +156,15 @@ export type ServiceRuntimeContext = HetznerHostRuntimeContext;
  * ) {}
  * ```
  *
+ * ### Running your own image
+ * **Example:** A Dockerfile build, run with Docker on the Server
+ * ```typescript
+ * const worker = yield* Hetzner.Service("Worker", {
+ *   server,
+ *   context: "./worker",
+ * });
+ * ```
+ *
  * ### Volumes
  * **Example:** Mount a Volume
  * ```typescript
@@ -207,6 +232,18 @@ const createUnitName = (id: string, existing?: string) =>
         lowercase: true,
       }).pipe(Effect.map((name) => name.replaceAll(/[^a-z0-9-]/g, "-")));
 
+/** Ampere (`cax`) Servers run arm64; every other type runs amd64. */
+const platformOf = (server: unknown) => {
+  const type = (server as { serverType?: unknown } | null)?.serverType;
+  return typeof type === "string" && type.startsWith("cax") ? "linux/arm64" : "linux/amd64";
+};
+
+const archiveSource = (props: ServiceProps) => ({
+  context: props.context!,
+  dockerfile: props.dockerfile,
+  platform: platformOf(props.server),
+});
+
 const serviceUrl = (ipv4: string | undefined, port: number) =>
   ipv4 !== undefined ? `http://${ipv4}:${port}` : undefined;
 
@@ -215,6 +252,7 @@ export const ServiceProvider = () =>
     Service,
     Effect.gen(function* () {
       const stack = yield* Stack;
+      const docker = yield* Docker;
       const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
       const hosted = createHetznerHostedSupport({
         stackName: stack.name,
@@ -240,8 +278,14 @@ export const ServiceProvider = () =>
           if (output !== undefined && nextServer !== undefined && output.serverId !== nextServer) {
             return { action: "replace" } as const;
           }
+          if (output !== undefined && news.context !== undefined) {
+            const hash = yield* hashImageArchive(archiveSource(news));
+            if (hash !== output.code.hash) {
+              return { action: "update" } as const;
+            }
+          }
           if (output !== undefined && news.main) {
-            const { hash } = yield* hosted.bundleProgram(id, news);
+            const { hash } = yield* hosted.bundleProgram(id, { ...news, main: news.main });
             if (hash !== output.code.hash) {
               return { action: "update" } as const;
             }
@@ -278,6 +322,11 @@ export const ServiceProvider = () =>
               message: "Service requires the Server to have a public IPv4",
             });
           }
+          if ((news.main === undefined) === (news.context === undefined)) {
+            return yield* new ServiceError({
+              message: "Service takes exactly one of 'main' and 'context'",
+            });
+          }
           const port = news.port ?? DEFAULT_PORT;
           const unitName = yield* createUnitName(id, output?.unitName);
           const { env: bindingEnv, volumes } = collectBindingState(
@@ -290,7 +339,28 @@ export const ServiceProvider = () =>
             ...news.env,
           };
 
-          const { archive, hash, entryRel } = yield* hosted.bundleProgram(id, news);
+          // A `context` is an image, built locally and loaded on the Server.
+          const image =
+            news.context !== undefined
+              ? yield* Effect.gen(function* () {
+                  const fs = yield* FileSystem.FileSystem;
+                  const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-hetzner-" });
+                  const source = archiveSource(news);
+                  return {
+                    archive: yield* buildImageArchive(source, {
+                      tag: `alchemy-${unitName}:latest`,
+                      output: `${dir}/image.tar`,
+                    }),
+                    hash: yield* hashImageArchive(source),
+                  };
+                }).pipe(Effect.scoped, Effect.provideService(Docker, docker))
+              : undefined;
+          const program =
+            image === undefined
+              ? yield* hosted.bundleProgram(id, { ...news, main: news.main ?? "" })
+              : undefined;
+          const { archive, hash } = image ?? program!;
+          const entryRel = program?.entryRel;
 
           const ssh = yield* openSession(news);
           yield* Effect.ensuring(
@@ -304,13 +374,17 @@ export const ServiceProvider = () =>
                 serverId,
                 volumes,
               });
-              yield* hosted.deployUnit({
-                ssh,
-                unitName,
-                archive,
-                env,
-                entryRel,
-              });
+              if (image !== undefined) {
+                yield* hosted.deployImageUnit({ ssh, unitName, archive, env });
+              } else {
+                yield* hosted.deployUnit({
+                  ssh,
+                  unitName,
+                  archive,
+                  env,
+                  entryRel,
+                });
+              }
             }),
             ssh.close,
           );

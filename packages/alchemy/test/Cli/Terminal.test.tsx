@@ -4,6 +4,7 @@ import { stripVTControlCharacters } from "node:util";
 import { expect, it } from "@alchemy.run/test";
 import * as Console from "effect/Console";
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
@@ -616,6 +617,33 @@ it.effect(
       expect(hiddenOutput).toContain("Dev stack ready (0/1)");
       expect(hiddenOutput).toContain("p show plan/output");
       yield* live.close;
+    }),
+  { tags: ["unit", "local"] },
+);
+
+it.effect(
+  "shows the total apply time once the session settles",
+  () =>
+    Effect.gen(function* () {
+      for (const [outcome, label] of [
+        ["success", "Stack deployed"],
+        ["failure", "Deploy failed"],
+      ] as const) {
+        const { service, stdout } = yield* makeLive();
+        const cli = sigilCli().pipe(Layer.provide(Layer.succeed(Interaction, service)));
+        yield* Effect.gen(function* () {
+          const { startApplySession } = yield* Cli;
+          const session = yield* startApplySession(
+            planWith([updateNode({ version: 1 }, { version: 2 })]),
+          );
+          expect(stripVTControlCharacters(stdout.output)).not.toContain(label);
+          yield* session.done(outcome);
+          yield* Effect.promise(() => stdout.waitFor(label));
+          expect(stripVTControlCharacters(stdout.output)).toMatch(
+            new RegExp(`${label} \\(0/1\\) \\(\\d+(ms|\\.\\ds)\\)`),
+          );
+        }).pipe(Effect.provide(cli));
+      }
     }),
   { tags: ["unit", "local"] },
 );
@@ -2635,6 +2663,8 @@ it.effect(
   { tags: ["unit", "local"] },
 );
 
+class ChildDeleteFailed extends Data.TaggedError("ChildDeleteFailed")<{ message: string }> {}
+
 it.effect(
   "renders nuke execution outcomes in the shared plan",
   () =>
@@ -2659,7 +2689,10 @@ it.effect(
           providerId: "Test.Child",
           displayName: "same-name",
           attributes: {},
-          provider: { ...provider, delete: () => Effect.fail("cannot delete child") },
+          provider: {
+            ...provider,
+            delete: () => Effect.fail(new ChildDeleteFailed({ message: "cannot delete child" })),
+          },
         },
         { key: "t5", providerId: "Test.Child", displayName: "same-name", attributes: {}, provider },
       ];

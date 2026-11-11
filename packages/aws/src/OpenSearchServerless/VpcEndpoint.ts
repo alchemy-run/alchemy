@@ -50,8 +50,18 @@ export interface VpcEndpoint extends Resource<
     status?: string | undefined;
   },
   {},
-  Providers
+  Providers,
+  VpcEndpointLookup
 > {}
+
+/**
+ * Props for {@link VpcEndpoint.lookup}: find a VPC endpoint this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface VpcEndpointLookup {
+  /** The endpoint name of the existing VPC endpoint. */
+  endpointName: string;
+}
 
 /**
  * An Amazon OpenSearch Serverless-managed interface VPC endpoint. Creating one
@@ -71,6 +81,16 @@ export interface VpcEndpoint extends Resource<
  *   subnetIds: [subnet.subnetId],
  *   securityGroupIds: [securityGroup.groupId],
  * });
+ * ```
+ *
+ * ### Looking up an existing VPC endpoint
+ * `VpcEndpoint.lookup` references a VPC endpoint Alchemy doesn't manage (created in the
+ * console or by another stack), found by `endpointName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing VPC endpoint
+ * ```typescript
+ * const existing = AWS.OpenSearchServerless.VpcEndpoint.lookup({ endpointName: "my-vpc-endpoint" });
  * ```
  *
  * @resource
@@ -130,6 +150,12 @@ export const VpcEndpointProvider = () =>
                 status: s.status,
               }));
           }),
+
+        lookup: Effect.fn(function* ({ endpointName }) {
+          const detail = yield* observe(endpointName, undefined);
+          if (detail?.id === undefined) return undefined;
+          return { vpcEndpointId: detail.id, endpointName: detail.name!, status: detail.status };
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.endpointName ?? (yield* createName(id, olds ?? {}));

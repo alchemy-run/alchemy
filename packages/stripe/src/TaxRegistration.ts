@@ -337,8 +337,18 @@ export type TaxRegistration = Resource<
     livemode: boolean;
   },
   never,
-  Providers
+  Providers,
+  TaxRegistrationLookup
 >;
+
+/**
+ * Props for {@link TaxRegistration.lookup}: find a tax registration this stack
+ * doesn't manage by its id.
+ */
+export interface TaxRegistrationLookup {
+  /** Stripe tax registration id, e.g. `"taxreg_A2b3C4d5E6f7G8"`. */
+  id: string;
+}
 
 /**
  * A Stripe Tax Registration — records that your business is registered to
@@ -411,6 +421,16 @@ export type TaxRegistration = Resource<
  *     us: { type: "state_sales_tax", state: "CA" },
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing tax registration
+ * `TaxRegistration.lookup` references a tax registration Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing tax registration
+ * ```typescript
+ * const ref = Stripe.TaxRegistration.lookup({ id: "taxreg_A2b3C4d5E6f7G8" });
  * ```
  *
  * @resource
@@ -578,6 +598,11 @@ export const TaxRegistrationProvider = () =>
         return { action: "replace" } as const;
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing);
     }),
 
     read: Effect.fn(function* ({ output }) {

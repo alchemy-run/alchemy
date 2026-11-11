@@ -15,8 +15,15 @@ import { Workflow, WorkflowEngine } from "effect/workflow";
  */
 export interface Host {
   readonly now: () => number;
-  /** Queue a run; it runs in the background, counted as running until it finishes. */
-  readonly enqueue: (run: Effect.Effect<void>) => Effect.Effect<void>;
+  /** Queue a run of the execution `key`; it runs in the background, counted as running until it finishes. */
+  readonly enqueue: (run: Effect.Effect<void>, key: string) => Effect.Effect<void>;
+  /**
+   * Wait for the execution's turn before it runs its next Activity, so the
+   * host decides what runs between two steps. Absent: run straight on.
+   */
+  readonly turn?: ((key: string, activity: string) => Effect.Effect<void>) | undefined;
+  /** Take a lock, counting the run as waiting while another run holds it. */
+  readonly acquire: (lock: Semaphore.Semaphore) => Effect.Effect<void>;
   /** Fire `fire` at `at` on the platform's clock; scheduling the same key again replaces it. */
   readonly timer: (key: string, at: number, fire: Effect.Effect<void>) => Effect.Effect<void>;
   /** Record a run that failed, so a story can report it. */
@@ -64,7 +71,20 @@ export const make = (host: Host): WorkflowEngine.WorkflowEngine["Service"] => {
     return lock;
   };
 
-  const run = (key: string): Effect.Effect<void> => lockOf(key).withPermits(1)(runOnce(key));
+  // Executions whose current run has not run an Activity yet: its first one
+  // needs no turn, since starting the run already took one.
+  const fresh = new Set<string>();
+
+  const run = (key: string): Effect.Effect<void> =>
+    Effect.acquireUseRelease(
+      host.acquire(lockOf(key)),
+      () =>
+        Effect.sync(() => fresh.add(key)).pipe(
+          Effect.andThen(runOnce(key)),
+          Effect.ensuring(Effect.sync(() => fresh.delete(key))),
+        ),
+      () => lockOf(key).release(1),
+    );
 
   const runOnce = (key: string): Effect.Effect<void> =>
     Effect.suspend(() => {
@@ -107,7 +127,7 @@ export const make = (host: Host): WorkflowEngine.WorkflowEngine["Service"] => {
       );
     });
 
-  const wake = (key: string) => host.enqueue(run(key));
+  const wake = (key: string) => host.enqueue(run(key), key);
 
   const engine: WorkflowEngine.WorkflowEngine["Service"] = WorkflowEngine.makeUnsafe({
     register: (workflow, execute) => Effect.sync(() => void handlers.set(workflow._tag, execute)),
@@ -165,6 +185,9 @@ export const make = (host: Host): WorkflowEngine.WorkflowEngine["Service"] => {
         const key = `${keyOf(instance.workflow._tag, instance.executionId)}/${activity.name}/${attempt}`;
         const stored = activities.get(key);
         if (stored) return new Workflow.Complete({ exit: stored });
+        const execution = keyOf(instance.workflow._tag, instance.executionId);
+        if (fresh.has(execution)) fresh.delete(execution);
+        else if (host.turn) yield* host.turn(execution, activity.name);
         const activityInstance = WorkflowEngine.WorkflowInstance.initial(
           instance.workflow,
           instance.executionId,

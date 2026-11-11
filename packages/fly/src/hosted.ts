@@ -9,6 +9,7 @@ import {
   type PackageInstall,
 } from "alchemy/Bundle/InstalledPackages";
 import { findCwdForBundle, getStableContextDir, resolveMainPath } from "alchemy/Bundle/TempRoot";
+import { hashDirectory } from "alchemy/Command/Memo";
 import { safeHttpEffect } from "alchemy/Http";
 import type { ResourceBinding } from "alchemy/Resource";
 import { createContainerRuntimeContext, type HostRuntimeContext } from "alchemy/Runtime/Process";
@@ -30,6 +31,7 @@ import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import type * as rolldown from "rolldown";
+import { flyHostBundle, flyOidcToken } from "./internal/Oidc.ts";
 import { buildOnRemoteBuilder } from "./internal/RemoteBuilder.ts";
 import type { BoundTarget, DiskSpec, ServiceBinding } from "./MountVolume.ts";
 import { rpcMethodsOf, serveFlyRpc } from "./rpc.ts";
@@ -59,7 +61,12 @@ export const createFlyHostRuntimeContext =
         boots ? { shape: { ...shape, fetch: shape?.fetch ?? wrapped } } : options,
       ) as Effect.Effect<void, never, any>;
     };
-    return Object.assign(base, { serve });
+    // A Service runs on Fly Machines, which mint OIDC tokens for their
+    // bindings to exchange with AWS and GCP (see `internal/Oidc.ts`).
+    return Object.assign(
+      base,
+      type === "Fly.Service" ? { serve, oidcToken: flyOidcToken } : { serve },
+    );
   };
 
 export const FLY_REGISTRY = "registry.fly.io";
@@ -200,9 +207,12 @@ export const collectBindingState = (bindings: readonly ResourceBinding<ServiceBi
   const buckets: { name: string; id?: string | undefined; values?: Record<string, string> }[] = [];
   const postgres: { clusterId: string; variableName?: string | undefined }[] = [];
   const targets: BoundTarget[] = [];
+  const callers = new Set<string>();
   for (const binding of active) {
     const target = binding?.data?.target;
     if (target !== undefined) targets.push(target);
+    const caller = coerceBindingName(binding?.data?.caller?.appName);
+    if (caller !== undefined) callers.add(caller);
     for (const mount of binding?.data?.mounts ?? []) {
       if (seen.has(mount.path)) continue;
       seen.add(mount.path);
@@ -256,7 +266,7 @@ export const collectBindingState = (bindings: readonly ResourceBinding<ServiceBi
       });
     }
   }
-  return { env, mounts, redis, buckets, postgres, targets };
+  return { env, mounts, redis, buckets, postgres, targets, callers: [...callers].sort() };
 };
 
 /**
@@ -377,7 +387,7 @@ export const createFlyHostedSupport = ({
       plugins?: rolldown.RolldownPluginOption,
     ) {
       return yield* Bundle.build(
-        {
+        flyHostBundle({
           ...props.build?.input,
           input: entry,
           cwd,
@@ -394,7 +404,7 @@ export const createFlyHostedSupport = ({
             ...props.build?.input?.resolve,
           },
           plugins: [props.build?.input?.plugins, plugins],
-        },
+        }),
         {
           ...props.build?.output,
           format: "esm",
@@ -539,10 +549,10 @@ export const createFlyHostedSupport = ({
         );
         const entryRel = posixRelUnder(root, realMain, path) ?? path.basename(realMain);
         const dest = path.join(contextDir, entryRel);
-        if (!(yield* fs.exists(dest).pipe(Effect.orElseSucceed(() => false)))) {
-          yield* fs.makeDirectory(path.dirname(dest), { recursive: true });
-          yield* fs.copy(realMain, dest, { overwrite: true });
-        }
+        // The context directory is reused across deploys: always copy the
+        // entry, or a changed entry ships the previous deploy's copy.
+        yield* fs.makeDirectory(path.dirname(dest), { recursive: true });
+        yield* fs.copy(realMain, dest, { overwrite: true });
       }
       return contextDir;
     });
@@ -583,7 +593,79 @@ export const createFlyHostedSupport = ({
     return codeHash;
   });
 
-  return { alchemyEnv, bundleProgram, computeCodeHash, resolveImage, hash };
+  /** A Docker build context's content hash: its image changes when any file in it does. */
+  const contextHash = Effect.fn(function* (context: string) {
+    return (yield* hashDirectory({ cwd: context })).slice(0, 16);
+  });
+
+  /**
+   * Build the image a `context` directory's `Dockerfile` describes, as it
+   * is, and push it to `registry.fly.io/{appName}:{logicalId}-{hash}`.
+   * When `previousHash` matches, skip build and push.
+   */
+  const resolveContextImage = Effect.fn(function* (input: {
+    id: string;
+    appName: string;
+    context: string;
+    remote: boolean | undefined;
+    previousHash?: string | undefined;
+    session?: { note: (message: string) => Effect.Effect<void> };
+  }) {
+    const note = input.session?.note ?? ((_message: string) => Effect.void);
+    const codeHash = yield* contextHash(input.context);
+    const imageRef = `${FLY_REGISTRY}/${input.appName}:${sanitizeImageRepo(input.id)}-${codeHash}`;
+    if (input.previousHash === codeHash) return { imageRef, codeHash };
+
+    const minted = yield* machines.createAppDeployToken({ app_name: input.appName });
+    const token =
+      minted.token === undefined || Redacted.isRedacted(minted.token)
+        ? minted.token
+        : Redacted.make(minted.token);
+    if (token === undefined || Redacted.value(token).length === 0) {
+      return yield* new DeployTokenMissing({ appName: input.appName });
+    }
+    const registry = { server: FLY_REGISTRY, username: "x", password: token };
+
+    if (input.remote !== false) {
+      yield* note(`Building ${imageRef} on a Fly remote builder...`);
+      yield* buildOnRemoteBuilder({
+        docker,
+        appName: input.appName,
+        contextDir: input.context,
+        imageRef,
+        platform: MACHINE_PLATFORM,
+        registry,
+        note,
+      });
+      yield* note(`Pushed ${imageRef}`);
+      return { imageRef, codeHash };
+    }
+
+    if (!(yield* imageExists(imageRef))) {
+      yield* note(`Building container image ${imageRef}...`);
+      yield* docker.image.build({
+        context: input.context,
+        tag: imageRef,
+        platform: MACHINE_PLATFORM,
+      });
+    }
+    yield* note(`Pushing ${imageRef}...`);
+    yield* docker.image
+      .push(imageRef, registry)
+      .pipe(Effect.retry({ times: 3, schedule: pushBackoff }));
+    yield* note(`Pushed ${imageRef}`);
+    return { imageRef, codeHash };
+  });
+
+  return {
+    alchemyEnv,
+    bundleProgram,
+    computeCodeHash,
+    resolveImage,
+    hash,
+    contextHash,
+    resolveContextImage,
+  };
 };
 
 /**

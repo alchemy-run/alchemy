@@ -82,8 +82,18 @@ export type App = Resource<
     url: string;
   },
   AppBinding,
-  Providers
+  Providers,
+  AppLookup
 >;
+
+/**
+ * Props for {@link App.lookup}: find an App this stack doesn't manage by
+ * its name.
+ */
+export interface AppLookup {
+  /** Fly App name. */
+  name: string;
+}
 
 /**
  * Binding contract accepted by {@link App}. Each {@link Service} placed in
@@ -194,6 +204,20 @@ export interface AppBinding {
  * import * as Fly from "@alchemy.run/fly";
  *
  * export const Site = Fly.App("Site");
+ * ```
+ *
+ * ### Looking up an existing App
+ * `App.lookup` references an App Alchemy doesn't manage (created with
+ * `fly launch` or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and works anywhere a declared App does.
+ *
+ * **Example:** Reference an existing App
+ * ```typescript
+ * const site = Fly.App.lookup({ name: "my-site" });
+ * const db = yield* Fly.Secret("DatabaseUrl", {
+ *   app: site,
+ *   value: Redacted.make("postgres://…"),
+ * });
  * ```
  *
  * @resource
@@ -481,6 +505,11 @@ export const AppProvider = () =>
         };
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ name }) {
+      const found = yield* getByName(name);
+      return found === undefined ? undefined : toAttrs(found, name);
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {

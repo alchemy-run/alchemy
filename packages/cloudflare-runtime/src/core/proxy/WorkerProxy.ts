@@ -405,6 +405,9 @@ export const WorkerProxyLive = Layer.effect(
       pendingTimeout,
     }: ResolvedOptions) {
       const relay = makeRelay(pendingTimeout);
+      // Registered first so it runs after the listeners close: the port is
+      // free again once this proxy stops, not when its reservation expires.
+      yield* Effect.addFinalizer(() => ports.release(port));
       yield* listen(relay, host, port);
       if (ipv6) {
         // The IPv6 half of `localhost` (see `ipv6Loopback` above). The port

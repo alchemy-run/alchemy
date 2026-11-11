@@ -27,7 +27,7 @@ export const createPhysicalName = Effect.fn(function* ({
    *
    * @default ${app.name}-${sanitizedId}-${app.stage}-
    */
-  prefix?: string;
+  prefix?: string | undefined;
   /**
    * Hex-encoded instance ID (16 random bytes)
    *

@@ -157,8 +157,23 @@ export interface StateMachine extends Resource<
      */
     policyStatements: PolicyStatement[];
   },
-  Providers
+  Providers,
+  StateMachineLookup
 > {}
+
+/**
+ * Props for {@link StateMachine.lookup}: find a state machine this stack
+ * doesn't manage, in the ambient account and region.
+ */
+export type StateMachineLookup =
+  | {
+      /** The name of the existing state machine. */
+      stateMachineName: string;
+    }
+  | {
+      /** The ARN of the existing state machine. */
+      stateMachineArn: string;
+    };
 
 /**
  * The definition failed AWS's `validateStateMachineDefinition` pre-flight
@@ -355,6 +370,20 @@ const fromProgram = (id: string, props: FromProgramProps) =>
  *     return { doubled: result.doubled, size };
  *   }),
  * });
+ * ```
+ *
+ * ### Looking up an existing state machine
+ * `StateMachine.lookup` references a state machine Alchemy doesn't manage (created in the
+ * console or by another stack), found by `stateMachineName` or
+`stateMachineArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Start executions of an existing state machine
+ * ```typescript
+ * const checkout = AWS.StepFunctions.StateMachine.lookup({ stateMachineName: "checkout" });
+ *
+ * // init
+ * const startExecution = yield* AWS.StepFunctions.StartExecution(checkout);
  * ```
  *
  * @resource
@@ -763,6 +792,24 @@ export const StateMachineProvider = () =>
             );
             return results.filter((item): item is StateMachine["Attributes"] => item !== undefined);
           }),
+
+        lookup: Effect.fn(function* (props) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const found = yield* describeOrUndefined(
+            "stateMachineArn" in props
+              ? props.stateMachineArn
+              : stateMachineArnOf(region, accountId, props.stateMachineName),
+          );
+          if (!found || found.status === "DELETING") return undefined;
+          return {
+            stateMachineName: found.name,
+            stateMachineArn: found.stateMachineArn,
+            type: found.type as StateMachineType,
+            roleArn: found.roleArn,
+            roleName: undefined,
+            configuration: yield* observeStateMachineConfiguration("", found, undefined),
+          };
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;

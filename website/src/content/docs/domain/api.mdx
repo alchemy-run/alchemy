@@ -5,9 +5,9 @@ description: How an Api publishes a model to one kind of client, how it's served
 
 import DAG from "../../../components/DAG.astro";
 
-An Api is the interface a model publishes. It lists what one kind of client may reach: the commands it may send, the views, streams and aggregates it may read, and the queries it may ask. Everything else in the model stays private.
+An Api is the interface a model publishes. It lists what one kind of client may reach: the commands it may send, the views and streams it may read, and the queries it may ask. Everything else in the model stays private.
 
-An Api has no handlers of its own. Aggregates already decide commands and views already answer reads, so an Api only chooses which of them to expose. This chapter starts with what it means to publish a model, then covers what an Api can expose, declaring one, serving it, and calling it.
+An Api has no handlers of its own. Aggregates already decide commands and views already answer reads, so an Api only chooses which of them to expose.
 
 ## Publish the model, keep the rest private
 
@@ -37,7 +37,7 @@ It's also the first line of the model's security. What isn't published can't be 
 
 ## What an Api can expose
 
-An Api can expose five kinds of entry. Commands are what a client sends to change something. Views, streams and aggregates are what a client reads, one key at a time. Queries read across keys, from a store a projection wrote.
+An Api can expose four kinds of entry. Commands are what a client sends to change something. Views and streams are what a client reads, one key at a time. Queries read across keys, from a store a projection wrote. An aggregate's state is never exposed: a view projects what clients may see of it, so the aggregate stays free to change with its rules.
 
 Exposing an entry doesn't bypass its security. Each entry declares its own middleware and checks, and they run on every call that comes through the Api.
 
@@ -48,18 +48,16 @@ Exposing an entry doesn't bypass its security. Each entry declares its own middl
     { id: "command", label: "DepositMoney", type: "command · send", kind: "command", col: 2, row: 0 },
     { id: "view", label: "AccountSummary", type: "view · get, watch", kind: "view", col: 2, row: 1 },
     { id: "stream", label: "AccountCard", type: "stream · peek, watch", kind: "stream", col: 2, row: 2 },
-    { id: "aggregate", label: "Account", type: "aggregate · get, events", kind: "aggregate", col: 2, row: 3 },
-    { id: "query", label: "AccountLedger", type: "query · ask", kind: "query", col: 2, row: 4 },
+    { id: "query", label: "AccountLedger", type: "query · ask", kind: "query", col: 2, row: 3 },
   ]}
   edges={[
     { from: "client", to: "api" },
     { from: "api", to: "command" },
     { from: "api", to: "view" },
     { from: "api", to: "stream" },
-    { from: "api", to: "aggregate" },
     { from: "api", to: "query" },
   ]}
-  caption="One Api, five kinds of entry. Each is guarded by its own middleware and rules."
+  caption="One Api, four kinds of entry. Each is guarded by its own middleware and rules."
 />
 
 Policies, projections and external systems are never on an Api. They run inside the model, and a client reaches what they produce through the entries above: a projection's [stream](/domain/stream), a view a policy feeds, or a [query](/domain/query) over a projection's store.
@@ -74,7 +72,7 @@ const { reply } = yield* bank.DepositMoney(accountId, { amount: 500 });
 
 ### Views
 
-A view becomes a namespace with five reads: `get` for the current state, `watch` for the state and every change, each with its cursor, `events` for its emitted events (history, a `CaughtUp` frame, then live), `list` for a page of them, and `snapshot` for the state with the cursor it is valid at. Streams and aggregates send the same shapes; see [Know when a live read is current](/domain/view#know-when-a-live-read-is-current). `get`, `list` and `snapshot` also take `atLeast`, to read your own write, and fail with `ConsistencyTimeout` if the view hasn't applied it within 10 seconds. Its middleware and `validate` decide who may read which key, on every read and on every change while a client watches.
+A view becomes a namespace with five reads: `get` for the current state, `watch` for the state and every change, each with its cursor, `events` for its emitted events (history, a `CaughtUp` frame, then live), `list` for a page of them, and `snapshot` for the state with the cursor it is valid at. Streams send the same shapes; see [Know when a live read is current](/domain/view#know-when-a-live-read-is-current). `get`, `list` and `snapshot` also take `atLeast`, to read your own write, and fail with `ConsistencyTimeout` if the view hasn't applied it within 10 seconds. Its middleware and its Layer's `validate` decide who may read which key, on every read and on every change while a client watches.
 
 ```typescript title="packages/server/test/apiEntries.ts"
 const summary = yield* bank.AccountSummary.get(accountId);
@@ -84,37 +82,16 @@ const page = yield* bank.Statement.list(accountId, { order: "desc", take: 10 });
 
 ### Streams
 
-A stream becomes a namespace like a view's, with `peek` in place of `get`: the latest entry is the current value. It's guarded the same way, by its middleware and `validate`, judged against the latest entry. See [Stream](/domain/stream).
+A stream becomes a namespace like a view's, with `peek` in place of `get`: the latest entry is the current value. It's guarded the same way, by its middleware and its Layer's `validate`, judged against the latest entry. See [Stream](/domain/stream).
 
 ```typescript title="packages/server/test/apiEntries.ts"
 const card = yield* bank.AccountCard.peek(accountId);
 const cards = bank.AccountCard.watch(accountId);
 ```
 
-### Aggregates
-
-An aggregate can be read directly too: its current state with `get` and `watch`, and its committed events with `events`. It's only allowed on an Api if it declares a `read` contract, because its state is otherwise private to its rules. The contract names the middleware and the check every read must pass.
-
-```typescript title="packages/domain/src/Account/Account.aggregate.ts"
-read: {
-  middleware: [Session],
-  rejects: [NotOwner],
-  validate: Effect.fn(function* (_request, s) {
-    yield* mustOwn(s._tag === "Open" ? s.customerId : null);
-  }),
-},
-```
-
-```typescript title="packages/server/test/apiEntries.ts"
-const account = yield* bank.Account.get(accountId);
-const history = bank.Account.events(accountId, { after: 0 });
-```
-
-Reading an aggregate directly is handy for an account's own screen. For anything shaped for a question, like a statement or a dashboard, prefer a view: it keeps the aggregate's state free to change with its rules.
-
 ### Queries
 
-A query becomes a method that takes its input, and options to page (`take`, `after`) and to read your own write (`atLeast`). Its middleware runs first, then its `validate`, then its handler reads the store; for a paged query, `visible` judges every row. See [Query](/domain/query).
+A query becomes a method that takes its input, and options to page (`take`, `after`) and to read your own write (`atLeast`). A paged query's method also streams it: `entries` yields every entry and `pages` every page, following the cursors for you. Its middleware runs first, then its handler checks the caller and reads the store. See [Query](/domain/query).
 
 ```typescript title="packages/server/test/CustomerApi.test.ts"
 const first = yield* sam.AccountLedger({ account: accountId }, { atLeast: receipt, take: 1 });
@@ -133,9 +110,23 @@ export class BankApi extends Domain.Api("BankApi", {
 }) {}
 ```
 
-`model` is the model the Api is over. `commands`, `views`, `streams` and `aggregates` name what of it a client may reach, and naming something the model doesn't hold is a type error. A kind you leave out is served whole, so `Domain.Api("BankApi", { model: Bank })` serves every command, view and stream, and every aggregate that declares `read`. `[]` serves none of a kind, and naming an aggregate without `read` is a type error.
+`model` is the model the Api is over. `commands`, `views`, `streams` and `queries` name what of it a client may reach, and naming something the model doesn't hold is a type error. A kind you leave out is served whole, so `Domain.Api("BankApi", { model: Bank })` serves every command, view, stream and query. `[]` serves none of a kind.
 
 Leaving something out is how you keep it internal. `OpenAccount` isn't listed, because only the `MainAccountProvisioning` policy opens accounts. No client can send it, however it's built.
+
+## Describe what it serves
+
+Everything built from an Api shows the descriptions of what it serves: an agent's [MCP](/domain/mcp) tools, the [CLI](/domain/cli)'s help, and the OpenAPI document of [`toHttpApi`](/domain/http-api). Each comes from the [annotations](/domain/annotations) of the declaration, so describe each command, view, stream and query where you declare it.
+
+An Api's own last argument is its annotations too. Its `description` heads the CLI's root help and is the OpenAPI document's `info.description`:
+
+```typescript title="src/BankApi.ts"
+export class BankApi extends Domain.Api(
+  "BankApi",
+  { model: Bank, commands: ["WithdrawMoney"], views: ["AccountSummary"] },
+  { description: "What a customer of the bank reaches." },
+) {}
+```
 
 ## Give each kind of client its own Api
 
@@ -147,7 +138,7 @@ export class SupportApi extends Domain.Api("SupportApi", {
   commands: ["FreezeAccount", "ChangeOwner", "ApproveTransfer"],
   views: ["AccountSummary", "AccountActivity"],
   streams: [],
-  aggregates: [],
+  queries: ["AccountLedger"],
 }) {}
 ```
 
@@ -170,7 +161,7 @@ export class SupportApi extends Domain.Api("SupportApi", {
   caption="One model, published to two kinds of client."
 />
 
-Being on an Api doesn't mean anyone may use an entry for anything. Each entry still guards itself. A command's middleware establishes who's calling and its `decide` checks whether they may; a view's middleware and `validate` decide what they may see. So `AccountSummary` can sit on both Apis, and a customer still reads only their own accounts.
+Being on an Api doesn't mean anyone may use an entry for anything. Each entry still guards itself. A command's middleware establishes who's calling and its `decide` checks whether they may; a view's middleware and its Layer's `validate` decide what they may see. So `AccountSummary` can sit on both Apis, and a customer still reads only their own accounts.
 
 ## Serve it
 
@@ -207,7 +198,7 @@ See [Cloudflare Durable Objects](/domain/cloudflare) for how the model is hosted
 
 ## Call it with a typed client
 
-`Api.client` builds a client typed from the Api's entries. Each command is a method that takes the target, the input, and optional call options like `headers`. Each query is a method that takes its input. Each view or aggregate is a namespace with its reads.
+`Api.client` builds a client typed from the Api's entries. Each command is a method that takes the target, the input, and optional call options like `headers`. Each query is a method that takes its input. Each view or stream is a namespace with its reads.
 
 ```typescript title="packages/domain/test/depositAndWatch.ts"
 export const depositAndWatch = Effect.gen(function* () {

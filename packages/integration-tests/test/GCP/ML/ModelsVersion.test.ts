@@ -4,6 +4,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as ml from "@distilled.cloud/gcp/ml_v1";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { logLevel, currentProject, region, runLifecycle, runVersionLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -90,6 +91,13 @@ test.provider.skipIf(!runVersionLifecycle)(
           });
           return { model, version };
         }),
+      );
+      yield* expectFound(
+        GCP.ML.ModelsVersion.lookup({
+          versionId: created.version.versionId,
+          model: created.version.model,
+        }),
+        created.version,
       );
 
       expect(created.version.name).toContain("/versions/");

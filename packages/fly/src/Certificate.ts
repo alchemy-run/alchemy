@@ -99,8 +99,20 @@ export type Certificate = Resource<
     source: CertificateSource;
   },
   never,
-  Providers
+  Providers,
+  CertificateLookup
 >;
+
+/**
+ * Props for {@link Certificate.lookup}: find a certificate this stack
+ * doesn't manage by its App and hostname.
+ */
+export interface CertificateLookup {
+  /** Fly App name the certificate is attached to. */
+  appName: string;
+  /** Hostname the certificate covers. */
+  hostname: string;
+}
 
 /**
  * A Fly.Certificate covers a hostname on an {@link App}. Default
@@ -176,6 +188,20 @@ export type Certificate = Resource<
  *   fullchain: pem,
  *   privateKey: Redacted.make(key),
  * });
+ * ```
+ *
+ * ### Looking up an existing certificate
+ * `Certificate.lookup` references a certificate Alchemy doesn't manage
+ * (added with `fly certs add` or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted.
+ *
+ * **Example:** Read the DNS records Fly expects
+ * ```typescript
+ * const cert = Fly.Certificate.lookup({
+ *   appName: "my-site",
+ *   hostname: "www.example.com",
+ * });
+ * const target = cert.dnsRequirements;
  * ```
  *
  * @resource
@@ -423,6 +449,11 @@ export const CertificateProvider = () =>
         };
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ appName, hostname }) {
+      const found = yield* getByHostname(appName, hostname);
+      return found === undefined ? undefined : toAttrs(appName, found, hostname);
     }),
 
     read: Effect.fn(function* ({ olds, output }) {

@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { listLocations } from "./names.ts";
@@ -98,8 +99,30 @@ export type SemanticGovernancePolicy = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SemanticGovernancePolicyLookup
 >;
+
+/**
+ * Props for {@link SemanticGovernancePolicy.lookup}: find a semantic
+ * governance policy this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface SemanticGovernancePolicyLookup {
+  /**
+   * Policy id (the `{semantic_governance_policy}` segment).
+   */
+  semanticGovernancePolicyId: string;
+  /**
+   * Region (`us-central1`, …).
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Vertex AI SemanticGovernancePolicy constraining an Agent's tools.
@@ -113,6 +136,19 @@ export type SemanticGovernancePolicy = Resource<
  * const policy = yield* GCP.AIPlatform.SemanticGovernancePolicy("Safety", {
  *   agent: "projects/my-project/locations/us-central1/agents/support",
  *   naturalLanguageConstraint: "Never share customer PII.",
+ * });
+ * ```
+ *
+ * ### Looking up an existing semantic governance policy
+ * `SemanticGovernancePolicy.lookup` references a semantic governance policy
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared semantic governance policy.
+ *
+ * **Example:** Reference an existing semantic governance policy
+ * ```typescript
+ * const semanticGovernancePolicy = GCP.AIPlatform.SemanticGovernancePolicy.lookup({
+ *   semanticGovernancePolicyId: "my-semantic-governance-policy",
  * });
  * ```
  *
@@ -217,6 +253,15 @@ export const SemanticGovernancePolicyProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ semanticGovernancePolicyId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = lookupLocation ?? env.region;
+      const name = resourceName(locationParent(env.project, location), semanticGovernancePolicyId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;

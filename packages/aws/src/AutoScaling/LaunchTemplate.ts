@@ -7,7 +7,7 @@ import type { Input } from "alchemy/Input";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import { type LookupMethod, Resource } from "alchemy/Resource";
 import { Stack } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
 import { createInternalTags, diffTags, hasTags } from "alchemy/Tags";
@@ -20,6 +20,7 @@ import {
   createEc2HostRuntimeContext,
   createEc2HostedSupport,
   type Ec2HostRuntimeContext,
+  type InstanceEnclaveOptions,
   type InstanceMetadataOptions,
 } from "../EC2/hosted.ts";
 import type { SecurityGroupId } from "../EC2/SecurityGroup.ts";
@@ -85,6 +86,13 @@ export interface LaunchTemplateProps extends PlatformProps {
    * template version. Unset fields keep the AMI / account defaults.
    */
   metadataOptions?: InstanceMetadataOptions | undefined;
+  /**
+   * Enable AWS Nitro Enclaves on launched instances, which also lets them run
+   * [Nitro Sandboxes](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/amazon-ec2-nitro-sandboxes.html).
+   * EKS node groups need it to run `isolated-sandbox` and
+   * `confidential-sandbox` pods. Changes publish a new template version.
+   */
+  enclaveOptions?: InstanceEnclaveOptions;
   /**
    * User-defined tags to apply to the launch template and launched instances.
    */
@@ -204,8 +212,23 @@ export interface LaunchTemplate extends Resource<
      */
     policyStatements?: PolicyStatement[];
   },
-  Providers
+  Providers,
+  LaunchTemplateLookup
 > {}
+
+/**
+ * Props for {@link LaunchTemplate.lookup}: find a launch template this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type LaunchTemplateLookup =
+  | {
+      /** The id of the existing launch template. */
+      launchTemplateId: string;
+    }
+  | {
+      /** The name of the existing launch template. */
+      launchTemplateName: string;
+    };
 
 export type LaunchTemplateServices = Credentials | Region;
 
@@ -259,6 +282,24 @@ export type LaunchTemplateRuntimeContext = Ec2HostRuntimeContext;
  * );
  * ```
  *
+ * ### Looking up an existing launch template
+ * `LaunchTemplate.lookup` references a launch template Alchemy doesn't manage (created in the
+ * console or by another stack), found by `launchTemplateId` or
+`launchTemplateName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Scale an existing launch template
+ * ```typescript
+ * const template = AWS.AutoScaling.LaunchTemplate.lookup({ launchTemplateName: "web" });
+ *
+ * yield* AWS.AutoScaling.AutoScalingGroup("Web", {
+ *   launchTemplate: template,
+ *   subnetIds,
+ *   minSize: 1,
+ *   maxSize: 3,
+ * });
+ * ```
+ *
  * @resource
  */
 export const LaunchTemplate: Platform<
@@ -266,7 +307,8 @@ export const LaunchTemplate: Platform<
   LaunchTemplateServices,
   LaunchTemplateShape,
   LaunchTemplateRuntimeContext
-> = Platform("AWS.AutoScaling.LaunchTemplate", {
+> &
+  LookupMethod<LaunchTemplate> = Platform("AWS.AutoScaling.LaunchTemplate", {
   createRuntimeContext: createEc2HostRuntimeContext("AWS.AutoScaling.LaunchTemplate"),
 });
 
@@ -372,6 +414,7 @@ export const LaunchTemplateProvider = () =>
               securityGroupIds: news.securityGroupIds as string[] | undefined,
               associatePublicIpAddress: news.associatePublicIpAddress,
               metadataOptions: news.metadataOptions,
+              enclaveOptions: news.enclaveOptions,
               tags: news.tags,
             },
             runtime,
@@ -450,6 +493,13 @@ export const LaunchTemplateProvider = () =>
             }
           }
         }),
+        lookup: Effect.fn(function* (props) {
+          const template =
+            "launchTemplateId" in props
+              ? yield* describeById(props.launchTemplateId)
+              : yield* describeByName(props.launchTemplateName);
+          return template ? yield* toAttributes(template) : undefined;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const template =
             (output?.launchTemplateId && (yield* describeById(output.launchTemplateId))) ??
@@ -522,6 +572,7 @@ export const LaunchTemplateProvider = () =>
                   securityGroupIds: news.securityGroupIds as string[] | undefined,
                   associatePublicIpAddress: news.associatePublicIpAddress,
                   metadataOptions: news.metadataOptions,
+                  enclaveOptions: news.enclaveOptions,
                   tags: desiredTags,
                 },
                 runtime,

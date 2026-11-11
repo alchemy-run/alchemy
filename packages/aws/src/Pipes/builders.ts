@@ -98,15 +98,41 @@ interface PipeBuilderState {
  *   .toLambda(fn);
  * ```
  */
-export const from = (source: PipeSource, options: PipeSourceOptions = {}) =>
+export const from = (source: PipeSource, options: PipeSourceOptions = {}): PipeBuilder =>
   makePipeBuilder({ source, options, filters: [] });
 
-const makePipeBuilder = (state: PipeBuilderState) => ({
+// TODO(typescript>7.1.0): TypeScript 7.1 rejects the inferred type of the
+// self-recursive `makePipeBuilder` (TS5088 "cyclic structure which cannot be
+// trivially serialized" on `from`), so the builder type is written out here.
+// To revert, drop this interface and the `PipeBuilder` annotations on `from`
+// and `makePipeBuilder`, and check that `pnpm exec tsrs -b` emits
+// declarations for `packages/aws` without TS5088.
+/**
+ * The fluent pipe builder returned by {@link from}. Narrow it with
+ * `.filter`/`.enrich`, then deliver with `.toLambda`/`.toQueue`.
+ */
+export interface PipeBuilder {
   /**
    * Add EventBridge event-pattern filters. Only source events matching at
    * least one pattern reach the enrichment/target. Accepts pattern strings
    * or plain objects (JSON-stringified).
    */
+  filter(...patterns: (string | Record<string, unknown>)[]): PipeBuilder;
+  /**
+   * Enrich each batch with a Lambda function before delivery to the
+   * target. The synthesized role is granted `lambda:InvokeFunction` on the
+   * enrichment function.
+   */
+  enrich(fn: Function, parameters?: pipes.PipeEnrichmentParameters): PipeBuilder;
+  /** Deliver batches to a Lambda function target. */
+  toLambda(fn: Function, options?: LambdaTargetOptions): MaterializedPipe;
+  /** Deliver batches to an SQS queue target. */
+  toQueue(queue: Queue, options?: QueueTargetOptions): MaterializedPipe;
+}
+
+type MaterializedPipe = ReturnType<typeof materializePipe>;
+
+const makePipeBuilder = (state: PipeBuilderState): PipeBuilder => ({
   filter: (...patterns: (string | Record<string, unknown>)[]) =>
     makePipeBuilder({
       ...state,
@@ -118,17 +144,9 @@ const makePipeBuilder = (state: PipeBuilderState) => ({
       ],
     }),
 
-  /**
-   * Enrich each batch with a Lambda function before delivery to the
-   * target. The synthesized role is granted `lambda:InvokeFunction` on the
-   * enrichment function.
-   */
   enrich: (fn: Function, parameters?: pipes.PipeEnrichmentParameters) =>
     makePipeBuilder({ ...state, enrichment: { fn, parameters } }),
 
-  /**
-   * Deliver batches to a Lambda function target.
-   */
   toLambda: (fn: Function, options: LambdaTargetOptions = {}) =>
     materializePipe(
       state,
@@ -150,9 +168,6 @@ const makePipeBuilder = (state: PipeBuilderState) => ({
       options,
     ),
 
-  /**
-   * Deliver batches to an SQS queue target.
-   */
   toQueue: (queue: Queue, options: QueueTargetOptions = {}) =>
     materializePipe(
       state,

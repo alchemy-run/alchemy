@@ -65,8 +65,18 @@ export interface LogGroup extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  LogGroupLookup
 > {}
+
+/**
+ * Props for {@link LogGroup.lookup}: find a log group this stack doesn't
+ * manage, in the ambient account and region, by name.
+ */
+export interface LogGroupLookup {
+  /** The name of the existing log group. */
+  logGroupName: string;
+}
 
 /**
  * A CloudWatch Logs log group — the container for log streams and the unit
@@ -138,6 +148,22 @@ export interface LogGroup extends Resource<
  *     metricNamespace: "MyApp",
  *     metricValue: "1",
  *   }],
+ * });
+ * ```
+ *
+ * ### Looking up an existing log group
+ * `LogGroup.lookup` references a log group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `logGroupName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Stream an existing log group to a function
+ * ```typescript
+ * const logs = AWS.Logs.LogGroup.lookup({ logGroupName: "/ecs/web" });
+ *
+ * yield* AWS.Logs.SubscriptionFilter("ToProcessor", {
+ *   logGroupName: logs.logGroupName,
+ *   filterPattern: "ERROR",
+ *   destinationArn: processor.functionArn,
  * });
  * ```
  *
@@ -229,6 +255,28 @@ export const LogGroupProvider = () =>
           if (toLogGroupClass(olds ?? {}) !== toLogGroupClass(news ?? {})) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ logGroupName }) {
+          const match = yield* observe(logGroupName);
+          if (!match?.arn) {
+            return undefined;
+          }
+          return {
+            logGroupName,
+            logGroupArn: normalizeLogGroupArn(match.arn),
+            retentionInDays: match.retentionInDays,
+            kmsKeyId: match.kmsKeyId,
+            logGroupClass: match.logGroupClass ?? "STANDARD",
+            deletionProtectionEnabled: match.deletionProtectionEnabled ?? false,
+            tags: yield* logs
+              .listTagsForResource({ resourceArn: normalizeLogGroupArn(match.arn) })
+              .pipe(
+                Effect.map((r) => tagRecord(r.tags)),
+                Effect.catchTag("ResourceNotFoundException", () =>
+                  Effect.succeed({} as Record<string, string>),
+                ),
+              ),
+          };
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const logGroupName = output?.logGroupName ?? (yield* toLogGroupName(id, olds ?? {}));

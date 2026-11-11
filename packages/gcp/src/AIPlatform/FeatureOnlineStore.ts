@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -131,8 +132,31 @@ export type FeatureOnlineStore = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  FeatureOnlineStoreLookup
 >;
+
+/**
+ * Props for {@link FeatureOnlineStore.lookup}: find a feature online store
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface FeatureOnlineStoreLookup {
+  /**
+   * Feature Online Store id. Valid characters `[a-z0-9_]`, must start with
+   * a letter, max 60.
+   */
+  featureOnlineStoreId: string;
+  /**
+   * Region.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Vertex AI Feature Online Store for low-latency feature and embedding
@@ -157,6 +181,19 @@ export type FeatureOnlineStore = Resource<
  *   bigtable: {
  *     autoScaling: { minNodeCount: 1, maxNodeCount: 2 },
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing feature online store
+ * `FeatureOnlineStore.lookup` references a feature online store Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared feature online store.
+ *
+ * **Example:** Reference an existing feature online store
+ * ```typescript
+ * const featureOnlineStore = GCP.AIPlatform.FeatureOnlineStore.lookup({
+ *   featureOnlineStoreId: "my-feature-online-store",
  * });
  * ```
  *
@@ -339,6 +376,15 @@ export const FeatureOnlineStoreProvider = () =>
           previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ featureOnlineStoreId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, featureOnlineStoreId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

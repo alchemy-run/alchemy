@@ -1,3 +1,4 @@
+import { type BuildCacheOptions, imageBuildCacheOptions } from "@alchemy.run/docker/BuildCache";
 import { hashDockerBuildInputs, resolveDockerBuildPaths } from "@alchemy.run/docker/BuildHash";
 import { Docker } from "@alchemy.run/docker/Docker";
 import * as ecr from "@distilled.cloud/aws/ecr";
@@ -11,6 +12,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 
 export class ImageUnexpectedResponse extends Data.TaggedError("ImageUnexpectedResponse")<{
@@ -69,13 +71,15 @@ export const buildAndPushEcrImage = Effect.fn(function* (
     /** Docker build context directory. */
     context: string;
     /** Absolute path to the Dockerfile. Defaults to `Dockerfile` in `context`. */
-    dockerfile?: string;
+    dockerfile?: string | undefined;
     /** Target platform, e.g. `"linux/amd64"`. */
-    platform?: string;
+    platform?: string | undefined;
     /** Docker build arguments. */
     buildArgs?: Record<string, string> | undefined;
+    /** BuildKit layer cache; `true` keeps it at `<repositoryUri>:buildcache`. */
+    cache?: BuildCacheOptions["cache"];
     /** Additional arguments appended to `docker image build`. */
-    args?: string[];
+    args?: string[] | undefined;
   },
 ) {
   const credentials = yield* getEcrRegistryCredentials;
@@ -86,6 +90,7 @@ export const buildAndPushEcrImage = Effect.fn(function* (
     platform: options.platform,
     "build-arg": options.buildArgs,
     args: options.args,
+    ...imageBuildCacheOptions(options, options.imageUri, credentials),
   });
   // Pushes are idempotent; transient registry-transport failures (Docker
   // Desktop's embedded proxy timing out under load, ECR 503s, credential
@@ -133,6 +138,17 @@ export interface ImageProps {
    * Docker build arguments (`--build-arg`).
    */
   buildArgs?: Record<string, string> | undefined;
+  /**
+   * Keep build layers in a remote cache so a fresh builder (a new CI runner)
+   * skips unchanged steps. `true` keeps every stage's layers at the
+   * repository's `:buildcache` tag; pass BuildKit's `--cache-from` /
+   * `--cache-to` values as `{ from, to }` for another
+   * [backend](https://docs.docker.com/build/cache/backends/). An explicit
+   * ECR registry cache needs `image-manifest=true,oci-mediatypes=true`,
+   * which `true` sets. The cache is not part of the content hash.
+   * @default false
+   */
+  cache?: BuildCacheOptions["cache"];
 }
 
 export interface Image extends Resource<
@@ -153,8 +169,20 @@ export interface Image extends Resource<
     ownsRepository: boolean;
   },
   never,
-  Providers
+  Providers,
+  ImageLookup
 > {}
+
+/**
+ * Props for {@link Image.lookup}: find an image this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ImageLookup {
+  /** The repository holding the image. */
+  repositoryName: string;
+  /** The image's tag. */
+  imageTag: string;
+}
 
 /**
  * A Docker image built from a local context and pushed to a private Amazon
@@ -225,6 +253,33 @@ export interface Image extends Resource<
  * });
  * ```
  *
+ * ### Caching Build Layers
+ * Builds reuse the local BuildKit cache of the machine they run on, and
+ * nothing but the image is pushed. A builder that has never built the image,
+ * such as a fresh CI runner, reruns every step. Set `cache: true` to keep
+ * every stage's layers at the image repository's `:buildcache` tag, so fresh
+ * builders skip unchanged steps. For another backend, pass BuildKit's own
+ * `--cache-from` / `--cache-to` values as `from` and `to`.
+ *
+ * **Example:** Cache layers in the ECR repository
+ * ```typescript
+ * const image = yield* AWS.ECR.Image("AppImage", {
+ *   context: "./app",
+ *   cache: true,
+ * });
+ * ```
+ *
+ * **Example:** Cache layers in GitHub Actions
+ * ```typescript
+ * const image = yield* AWS.ECR.Image("AppImage", {
+ *   context: "./app",
+ *   cache: {
+ *     from: ["type=gha,scope=app"],
+ *     to: ["type=gha,scope=app,mode=max"],
+ *   },
+ * });
+ * ```
+ *
  * ### Consuming the Image
  * **Example:** Reference from a Task Definition
  * ```typescript
@@ -232,6 +287,17 @@ export interface Image extends Resource<
  *   main: import.meta.url,
  *   sidecars: [{ name: "proxy", image: image.imageUri, essential: false }],
  * });
+ * ```
+ *
+ * ### Looking up an existing image
+ * `Image.lookup` references an image Alchemy doesn't manage (created in the
+ * console or by another stack), found by `repositoryName` and `imageTag`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Run an image pinned by digest
+ * ```typescript
+ * const web = AWS.ECR.Image.lookup({ repositoryName: "web", imageTag: "stable" });
+ * const pinned = Output.interpolate`${web.repositoryUri}@${web.digest}`;
  * ```
  *
  * @resource
@@ -317,6 +383,20 @@ export const ImageProvider = () =>
       });
 
       return {
+        lookup: Effect.fn(function* ({ repositoryName, imageTag }) {
+          const detail = yield* describeImage(repositoryName, imageTag);
+          if (!detail?.imageDigest || !detail.registryId) return undefined;
+          const { region } = yield* AWSEnvironment.current;
+          const repositoryUri = `${detail.registryId}.dkr.ecr.${region}.amazonaws.com/${repositoryName}`;
+          return {
+            imageUri: `${repositoryUri}:${imageTag}`,
+            digest: detail.imageDigest,
+            repositoryUri,
+            repositoryName,
+            imageTag,
+            ownsRepository: false,
+          };
+        }),
         read: Effect.fn(function* ({ output }) {
           // The content hash cannot be recovered without running a build, so
           // a lost-state read has nothing to look up.
@@ -390,6 +470,7 @@ export const ImageProvider = () =>
             dockerfile,
             platform: news.platform ?? "linux/amd64",
             buildArgs: news.buildArgs,
+            cache: news.cache,
             // Engines using the containerd image store attach provenance
             // attestations by default, turning the pushed tag into an OCI
             // image index — which Lambda (a valid consumer of these images)

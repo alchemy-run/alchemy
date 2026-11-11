@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -182,8 +183,31 @@ export type Endpoint = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  EndpointLookup
 >;
+
+/**
+ * Props for {@link Endpoint.lookup}: find an endpoint this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface EndpointLookup {
+  /**
+   * Endpoint id (the `{endpoint}` segment of
+   * `projects/{project}/locations/{location}/endpoints/{endpoint}`).
+   */
+  endpointId: string;
+  /**
+   * Region (`us-central1`, `us-east1`, …).
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Vertex AI Endpoint for online prediction.
@@ -215,6 +239,18 @@ export type Endpoint = Resource<
  * const endpoint = yield* GCP.AIPlatform.Endpoint("Predictor", {
  *   displayName: "orders-v2",
  *   labels: { env: "prod", role: "predict" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing endpoint
+ * `Endpoint.lookup` references an endpoint Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared endpoint.
+ *
+ * **Example:** Reference an existing endpoint
+ * ```typescript
+ * const endpoint = GCP.AIPlatform.Endpoint.lookup({
+ *   endpointId: "my-endpoint",
  * });
  * ```
  *
@@ -452,6 +488,15 @@ export const EndpointProvider = () =>
           previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ endpointId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, endpointId);
+      const existing = yield* getSettled(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

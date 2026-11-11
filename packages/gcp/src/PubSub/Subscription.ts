@@ -24,6 +24,7 @@ import {
   revokeIamMembership,
   updateIamMembership,
 } from "../IamPolicy.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -298,8 +299,27 @@ export type Subscription = Resource<
     iamGrants?: SubscriptionIamGrant[] | undefined;
   },
   never,
-  Providers
+  Providers,
+  SubscriptionLookup
 >;
+
+/**
+ * Props for {@link Subscription.lookup}: find a subscription this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface SubscriptionLookup {
+  /**
+   * Subscription id (the `{subscription}` segment of
+   * `projects/{project}/subscriptions/{subscription}`).
+   */
+  subscriptionId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Google Cloud Pub/Sub subscription.
@@ -377,6 +397,19 @@ export type Subscription = Resource<
  *     // also a referenced account's email, or a literal one
  *     serviceAccountEmail: writer.email,
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing subscription
+ * `Subscription.lookup` references a subscription Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * subscription.
+ *
+ * **Example:** Reference an existing subscription
+ * ```typescript
+ * const subscription = GCP.PubSub.Subscription.lookup({
+ *   subscriptionId: "my-subscription",
  * });
  * ```
  *
@@ -847,6 +880,14 @@ export const SubscriptionProvider = () =>
           !nameChanged && nextId !== undefined && previousId !== undefined && nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ subscriptionId }) {
+      const env = yield* GcpEnvironment.current;
+      const name = resourceName(env.project, subscriptionId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return { ...toAttrs(existing, env.project), iamGrants: undefined };
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

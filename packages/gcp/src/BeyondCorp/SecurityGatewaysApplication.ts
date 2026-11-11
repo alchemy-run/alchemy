@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -125,8 +126,38 @@ export type SecurityGatewaysApplication = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SecurityGatewaysApplicationLookup
 >;
+
+/**
+ * Props for {@link SecurityGatewaysApplication.lookup}: find a security
+ * gateways application this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface SecurityGatewaysApplicationLookup {
+  /**
+   * Application id (the `{application}` segment of
+   * `.../securityGateways/{securityGateway}/applications/{application}`).
+   */
+  applicationId: string;
+  /**
+   * Location of the parent gateway. Inferred from `securityGateway` when
+   * that value is a full resource name.
+   */
+  location?: string;
+  /**
+   * Parent SecurityGateway resource name
+   * (`projects/{project}/locations/{loc
+   * ation}/securityGateways/{securityGateway}`) or gateway id.
+   */
+  securityGateway: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A BeyondCorp Security Gateway application that matches host and
@@ -160,6 +191,20 @@ export type SecurityGatewaysApplication = Resource<
  *       },
  *     },
  *   ],
+ * });
+ * ```
+ *
+ * ### Looking up an existing security gateways application
+ * `SecurityGatewaysApplication.lookup` references a security gateways
+ * application Alchemy doesn't manage (created in the console or by another
+ * stack). It is read during plan/deploy, never created, updated or deleted,
+ * and binds like a declared security gateways application.
+ *
+ * **Example:** Reference an existing security gateways application
+ * ```typescript
+ * const securityGatewaysApplication = GCP.BeyondCorp.SecurityGatewaysApplication.lookup({
+ *   applicationId: "my-application",
+ *   securityGateway: "my-security-gateway",
  * });
  * ```
  *
@@ -300,6 +345,23 @@ export const SecurityGatewaysApplicationProvider = () =>
         nextParent: news.securityGateway,
       });
     }),
+
+    lookup: Effect.fn(function* ({ applicationId, location: lookupLocation, securityGateway }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(
+        lookupLocation ??
+          (securityGateway ? locationFromParent(securityGateway, DEFAULT_GLOBAL) : undefined),
+        DEFAULT_GLOBAL,
+      );
+      const parent = securityGateway
+        ? parentGatewayName(env.project, location, securityGateway)
+        : undefined;
+      const name = parent ? resourceNameOf(parent, applicationId) : undefined;
+      if (name === undefined) return undefined;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

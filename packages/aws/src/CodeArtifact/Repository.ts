@@ -63,8 +63,20 @@ export interface Repository extends Resource<
     administratorAccount: string;
   },
   never,
-  Providers
+  Providers,
+  RepositoryLookup
 > {}
+
+/**
+ * Props for {@link Repository.lookup}: find a repository this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface RepositoryLookup {
+  /** The domain the repository belongs to. */
+  domainName: string;
+  /** The name of the existing repository. */
+  repositoryName: string;
+}
 
 /**
  * An AWS CodeArtifact repository — a package store inside a
@@ -99,6 +111,17 @@ export interface Repository extends Resource<
  *   domain: domain.domainName,
  *   upstreams: [shared.repositoryName],
  * });
+ * ```
+ *
+ * ### Looking up an existing repository
+ * `Repository.lookup` references a repository Alchemy doesn't manage (created in the
+ * console or by another stack), found by `domainName` and `repositoryName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing repository
+ * ```typescript
+ * const npm = AWS.CodeArtifact.Repository.lookup({ domainName: "acme", repositoryName: "npm" });
+ * const repositoryArn = npm.repositoryArn;
  * ```
  *
  * @resource
@@ -199,6 +222,13 @@ export const RepositoryProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ domainName, repositoryName }) {
+          const repository = yield* getRepository(domainName, undefined, repositoryName);
+          return repository?.arn === undefined
+            ? undefined
+            : toAttrs(repository, repositoryName, domainName);
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

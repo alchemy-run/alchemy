@@ -368,6 +368,34 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
       return stables ? ({ action: "noop", stables } as const) : undefined;
     }),
 
+    lookup: Effect.fn(function* ({ database, name }: any) {
+      const { organization } = yield* yield* Credentials;
+      return yield* planetscale.getBranch({ organization, database, branch: name }).pipe(
+        Effect.map(
+          (data) =>
+            ({
+              name: data.name,
+              organization,
+              database,
+              parentBranch: data.parent_branch ?? "main",
+              production: data.production,
+              createdAt: data.created_at,
+              updatedAt: data.updated_at,
+              htmlUrl: data.html_url,
+              region: { slug: data.region.slug },
+              migrationsDir: undefined,
+              migrationsTable: undefined,
+              migrationsHashes: {},
+              importHashes: {},
+              desiredReplicas: undefined,
+              hasReplicas: data.has_replicas,
+              hasReadOnlyReplicas: data.has_read_only_replicas,
+            }) satisfies BaseBranchAttributes,
+        ),
+        Effect.catchTag("NotFound", () => Effect.undefined),
+      );
+    }),
+
     read: Effect.fn(function* ({ id, olds, output }: any) {
       // If we have neither a cached output nor a usable `olds.database`
       // there's no way to identify which branch to refresh — most often

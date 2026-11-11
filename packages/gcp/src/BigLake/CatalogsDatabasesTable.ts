@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   BiglakeNotResolved,
@@ -148,8 +149,41 @@ export type CatalogsDatabasesTable = Resource<
     expireTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  CatalogsDatabasesTableLookup
 >;
+
+/**
+ * Props for {@link CatalogsDatabasesTable.lookup}: find a catalogs
+ * databases table this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface CatalogsDatabasesTableLookup {
+  /**
+   * Table id (the `{table}` segment).
+   */
+  tableId: string;
+  /**
+   * Location used when `database` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent database. Full name
+   * `projects/{project}/locations/{location}/cata
+   * logs/{catalog}/databases/{database}` or the database id (combined with
+   * `catalog` and `location`).
+   */
+  database: string;
+  /**
+   * Parent catalog used when `database` is a bare id.
+   */
+  catalog?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Hive table inside a BigLake Metastore database.
@@ -187,6 +221,20 @@ export type CatalogsDatabasesTable = Resource<
  *       locationUri: "gs://my-bucket/page_views",
  *     },
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing catalogs databases table
+ * `CatalogsDatabasesTable.lookup` references a catalogs databases table
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared catalogs databases table.
+ *
+ * **Example:** Reference an existing catalogs databases table
+ * ```typescript
+ * const catalogsDatabasesTable = GCP.BigLake.CatalogsDatabasesTable.lookup({
+ *   tableId: "my-table",
+ *   database: "my-database",
  * });
  * ```
  *
@@ -274,6 +322,24 @@ export const CatalogsDatabasesTableProvider = () =>
         nextParent: databaseOf(news.database, env.project, location, news.catalog),
       });
     }),
+
+    lookup: Effect.fn(function* ({
+      tableId,
+      location: lookupLocation,
+      database: lookupDatabase,
+      catalog,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const database =
+        lookupDatabase !== undefined
+          ? databaseOf(lookupDatabase, env.project, location, catalog)
+          : "";
+      const name = database.length > 0 ? resourceName(database, tableId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;

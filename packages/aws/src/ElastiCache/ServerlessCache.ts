@@ -160,8 +160,18 @@ export interface ServerlessCache extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ServerlessCacheLookup
 > {}
+
+/**
+ * Props for {@link ServerlessCache.lookup}: find a serverless cache this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ServerlessCacheLookup {
+  /** The serverless cache name of the existing serverless cache. */
+  serverlessCacheName: string;
+}
 
 /**
  * An Amazon ElastiCache serverless cache (valkey, redis, or memcached).
@@ -198,6 +208,16 @@ export interface ServerlessCache extends Resource<
  * const connect = yield* ElastiCache.Connect(cache);
  * // inside a handler:
  * const { host, port, tls } = yield* connect;
+ * ```
+ *
+ * ### Looking up an existing serverless cache
+ * `ServerlessCache.lookup` references a serverless cache Alchemy doesn't manage (created in the
+ * console or by another stack), found by `serverlessCacheName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing serverless cache
+ * ```typescript
+ * const existing = AWS.ElastiCache.ServerlessCache.lookup({ serverlessCacheName: "my-serverless-cache" });
  * ```
  *
  * @resource
@@ -409,6 +429,15 @@ export const ServerlessCacheProvider = () =>
           if ((news?.networkType ?? undefined) !== (olds?.networkType ?? undefined)) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ serverlessCacheName: name }) {
+          const cache = yield* readCache(name);
+          // A cache that is still provisioning has no endpoint to bind yet.
+          if (!cache?.ARN || !cache.Endpoint?.Address || cache.Endpoint.Port === undefined) {
+            return undefined;
+          }
+          return yield* toAttrs(cache);
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

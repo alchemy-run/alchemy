@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -180,8 +181,26 @@ export type GlobalForwardingRule = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  GlobalForwardingRuleLookup
 >;
+
+/**
+ * Props for {@link GlobalForwardingRule.lookup}: find a global forwarding
+ * rule this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface GlobalForwardingRuleLookup {
+  /**
+   * Name of the forwarding rule.
+   */
+  forwardingRuleName: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A global Compute Engine forwarding rule — the frontend of a global
@@ -237,6 +256,19 @@ export type GlobalForwardingRule = Resource<
  *   target: otherProxy.selfLink,
  *   portRange: "80",
  *   labels: { env: "prod", role: "edge" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing global forwarding rule
+ * `GlobalForwardingRule.lookup` references a global forwarding rule Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared global forwarding rule.
+ *
+ * **Example:** Reference an existing global forwarding rule
+ * ```typescript
+ * const globalForwardingRule = GCP.Compute.GlobalForwardingRule.lookup({
+ *   forwardingRuleName: "my-forwarding-rule",
  * });
  * ```
  *
@@ -521,6 +553,13 @@ export const GlobalForwardingRuleProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ forwardingRuleName }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(env.project, forwardingRuleName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

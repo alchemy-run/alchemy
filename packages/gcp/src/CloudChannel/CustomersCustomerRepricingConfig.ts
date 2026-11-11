@@ -86,8 +86,31 @@ export type CustomersCustomerRepricingConfig = Resource<
     repricingConfig: cloudchannel.GoogleCloudChannelV1RepricingConfig | undefined;
   },
   never,
-  Providers
+  Providers,
+  CustomersCustomerRepricingConfigLookup
 >;
+
+/**
+ * Props for {@link CustomersCustomerRepricingConfig.lookup}: find a
+ * customers customer repricing config this stack doesn't manage by its
+ * identifiers.
+ */
+export interface CustomersCustomerRepricingConfigLookup {
+  /**
+   * Customer that receives this repricing config. Full name
+   * `accounts/{account}/customers/{customer}`.
+   */
+  parent: string;
+  /**
+   * Config id (last segment of the resource name).
+   */
+  configId?: string;
+  /**
+   * Year/month when the adjustment activates. Day must be `0`. You can only
+   * create or update configs for a future month.
+   */
+  effectiveInvoiceMonth?: cloudchannel.GoogleTypeDate;
+}
 
 /**
  * A Cloud Channel customer repricing config.
@@ -125,6 +148,19 @@ export type CustomersCustomerRepricingConfig = Resource<
  *     entitlement: `${customer.name}/entitlements/ent-1`,
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing customers customer repricing config
+ * `CustomersCustomerRepricingConfig.lookup` references a customers customer
+ * repricing config Alchemy doesn't manage (created in the console or by
+ * another stack). It is read during plan/deploy, never created, updated or
+ * deleted, and binds like a declared customers customer repricing config.
+ *
+ * **Example:** Reference an existing customers customer repricing config
+ * ```typescript
+ * const customersCustomerRepricingConfig = GCP.CloudChannel.CustomersCustomerRepricingConfig.lookup({
+ *   parent: "my-parent",
+ * });
  * ```
  *
  * @resource
@@ -172,6 +208,14 @@ export const CustomersCustomerRepricingConfigProvider = () =>
           nextMonth !== undefined &&
           !jsonEqual(previousMonth, nextMonth),
       });
+    }),
+
+    lookup: Effect.fn(function* ({ parent: lookupParent, configId, effectiveInvoiceMonth }) {
+      const parent = normalizeName(lookupParent ?? "");
+      const name = toRepricingConfigName(parent, configId, "customerRepricingConfigs");
+      const existing = yield* findCustomerRepricing(parent, name, effectiveInvoiceMonth);
+      if (existing === undefined) return undefined;
+      return toCustomerRepricingAttrs(existing);
     }),
 
     read: Effect.fn(function* ({ olds, output }) {

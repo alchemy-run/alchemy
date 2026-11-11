@@ -88,8 +88,18 @@ export interface CollectionGroup extends Resource<
     generation?: string | undefined;
   },
   {},
-  Providers
+  Providers,
+  CollectionGroupLookup
 > {}
+
+/**
+ * Props for {@link CollectionGroup.lookup}: find a collection group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface CollectionGroupLookup {
+  /** The collection group name of the existing collection group. */
+  collectionGroupName: string;
+}
 
 /**
  * An Amazon OpenSearch Serverless collection group. Collection groups manage
@@ -110,6 +120,16 @@ export interface CollectionGroup extends Resource<
  *     maxSearchCapacityInOCU: 4,
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing collection group
+ * `CollectionGroup.lookup` references a collection group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `collectionGroupName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing collection group
+ * ```typescript
+ * const existing = AWS.OpenSearchServerless.CollectionGroup.lookup({ collectionGroupName: "my-collection-group" });
  * ```
  *
  * @resource
@@ -200,6 +220,15 @@ export const CollectionGroupProvider = () =>
                 generation: s.generation,
               }));
           }),
+
+        lookup: Effect.fn(function* ({ collectionGroupName: name }) {
+          const detail = yield* observeByName(name);
+          if (detail?.id === undefined || detail.arn === undefined) {
+            return undefined;
+          }
+          const attrs = toAttributes(detail);
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.collectionGroupName ?? (yield* createName(id, olds ?? {}));

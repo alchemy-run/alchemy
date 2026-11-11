@@ -70,8 +70,18 @@ export type FileLink = Resource<
     livemode: boolean;
   },
   never,
-  Providers
+  Providers,
+  FileLinkLookup
 >;
+
+/**
+ * Props for {@link FileLink.lookup}: find a file link this stack
+ * doesn't manage by its id.
+ */
+export interface FileLinkLookup {
+  /** Stripe file link id, e.g. `"link_1A2b3C4d5E6f7G8h"`. */
+  id: string;
+}
 
 /**
  * A Stripe File Link — a public URL for a File that does not require
@@ -116,6 +126,16 @@ export type FileLink = Resource<
  *   file: "file_123",
  * });
  * // stack.destroy() sets expires_at to now
+ * ```
+ *
+ * ### Looking up an existing file link
+ * `FileLink.lookup` references a file link Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing file link
+ * ```typescript
+ * const ref = Stripe.FileLink.lookup({ id: "link_1A2b3C4d5E6f7G8h" });
  * ```
  *
  * @resource
@@ -223,6 +243,11 @@ export const FileLinkProvider = () =>
         return { action: "replace" as const };
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing);
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {

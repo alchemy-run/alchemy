@@ -5,7 +5,10 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Record from "effect/Record";
 import * as Ref from "effect/Ref";
+import * as Result from "effect/Result";
 import { stripUnowned } from "./AdoptPolicy.ts";
 import {
   Artifacts,
@@ -15,7 +18,7 @@ import {
   makeScopedArtifacts,
 } from "./Artifacts.ts";
 import { deepEqual } from "./Diff.ts";
-import { captureEmit, emit } from "./Events.ts";
+import { captureEmit, emit, failureMessage } from "./Events.ts";
 import type { Apply, Plan } from "./Plan.ts";
 import { findProviderByType, Provider } from "./Provider.ts";
 import { stampedMode } from "./ProviderMode.ts";
@@ -413,6 +416,21 @@ const runDrift = (
             id: persisted.logicalId,
             resourceType: persisted.resourceType,
             status: "fail",
+            // The provider's own error, not the wrapper naming the resource:
+            // the row already says which resource failed.
+            ...Record.filterMap(
+              {
+                message: failureMessage(
+                  Cause.map(cause, (error) =>
+                    Predicate.isTagged(error, "DriftResourceError") &&
+                    Predicate.hasProperty(error, "cause")
+                      ? error.cause
+                      : error,
+                  ),
+                ),
+              },
+              Result.fromNullishOr(() => undefined),
+            ),
           });
         }
         return undefined;

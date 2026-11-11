@@ -571,7 +571,11 @@ export const Aurora = (id: string, props: AuroraProps) =>
         tags: mergeTags(commonTags, props.instance?.tags),
         ...props.instance,
         migrations: props.migrations,
-        migrationsTransport: props.migrationsTransport,
+        // The documented default: the Data API whenever it is enabled, rather
+        // than whatever the described cluster reports (Floci omits it).
+        migrationsTransport:
+          props.migrationsTransport ??
+          (props.migrations && props.dataApi !== false ? "data-api" : undefined),
         migrationsSecretArn: props.migrations ? secret.secretArn : undefined,
       });
 

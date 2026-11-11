@@ -6,6 +6,7 @@ import * as networkservices from "@distilled.cloud/gcp/networkservices_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -60,6 +61,13 @@ test.provider.skipIf(!process.env.GCP_TEST_SLOW || !!process.env.FAST)(
             googleManaged: { governedAccessPath: "AGENT_TO_ANYWHERE" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkServices.AgentGateway.lookup({
+          agentGatewayId: created.agentGatewayId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/agentGateways/");

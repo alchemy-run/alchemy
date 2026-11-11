@@ -125,8 +125,23 @@ export interface Secret extends Resource<
     resourcePolicy?: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SecretLookup
 > {}
+
+/**
+ * Props for {@link Secret.lookup}: find a secret this stack doesn't manage,
+ * in the ambient account and region, by its name or ARN.
+ */
+export type SecretLookup =
+  | {
+      /** The name of the existing secret. */
+      secretName: string;
+    }
+  | {
+      /** The ARN of the existing secret. */
+      secretArn: string;
+    };
 
 /**
  * An AWS Secrets Manager secret.
@@ -173,6 +188,19 @@ export interface Secret extends Resource<
  *     ],
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing secret
+ * `Secret.lookup` references a secret Alchemy doesn't manage (created in the
+ * console or by another stack), found by `secretName` or `secretArn`. It is
+ * read during plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Read an existing secret from a function
+ * ```typescript
+ * const apiKey = AWS.SecretsManager.Secret.lookup({ secretName: "prod/api-key" });
+ *
+ * // init
+ * const getSecretValue = yield* AWS.SecretsManager.GetSecretValue(apiKey);
  * ```
  *
  * @resource
@@ -394,6 +422,17 @@ export const SecretProvider = () =>
           if ((yield* toSecretName(id, olds ?? {})) !== (yield* toSecretName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* (props) {
+          const described = yield* readSecret(
+            "secretArn" in props ? props.secretArn : props.secretName,
+          );
+          if (!described?.ARN || !described.Name) return undefined;
+          return yield* observeSecretAttributes({
+            ...described,
+            ARN: described.ARN,
+            Name: described.Name,
+          });
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const secretName = output?.secretName ?? (yield* toSecretName(id, olds ?? {}));

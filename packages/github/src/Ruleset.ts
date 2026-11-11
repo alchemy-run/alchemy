@@ -232,7 +232,7 @@ export interface RulesetProps {
    * provider. Changing it replaces the resource — the same name on a
    * different GitHub instance is a different physical resource.
    */
-  baseUrl?: string;
+  baseUrl?: string | undefined;
 }
 
 /**
@@ -292,8 +292,27 @@ export interface Ruleset extends Resource<
     updatedAt: string | undefined;
   },
   never,
-  GitHub.Providers
+  GitHub.Providers,
+  RulesetLookup
 > {}
+
+/**
+ * Props for {@link Ruleset.lookup}: find a repository ruleset this
+ * stack doesn't manage by its repository and id.
+ */
+export interface RulesetLookup {
+  /** Repository owner (user or organization). */
+  owner: string;
+  /** Repository name. */
+  repository: string;
+  /** Ruleset id. */
+  rulesetId: number;
+  /**
+   * GitHub Enterprise Server URL.
+   * @default `https://github.com`
+   */
+  baseUrl?: string;
+}
 
 /**
  * A GitHub repository ruleset.
@@ -431,6 +450,16 @@ export interface Ruleset extends Resource<
  * }).pipe(adopt(true))
  * ```
  *
+ * ### Looking up an existing ruleset
+ * `Ruleset.lookup` references a ruleset Alchemy doesn't manage (created on
+ * GitHub or by another stack). It is read during plan/deploy, never created,
+ * updated or deleted.
+ *
+ * **Example:** Reference an existing ruleset
+ * ```typescript
+ * const main = GitHub.Ruleset.lookup({ owner: "alchemy-run", repository: "alchemy", rulesetId: 1234 });
+ * ```
+ *
  * @resource
  * @product Repository
  */
@@ -459,6 +488,14 @@ export const RulesetProvider = () =>
         return { action: "noop" };
       }
     }),
+
+    lookup: Effect.fn(
+      function* ({ owner, repository, rulesetId, baseUrl }) {
+        const observed = yield* getRuleset({ owner, repository, baseUrl }, rulesetId);
+        return observed === undefined ? undefined : attrsOf(observed);
+      },
+      (effect, { baseUrl }) => effect.pipe(withBaseUrl(baseUrl)),
+    ),
 
     reconcile: Effect.fn(
       function* ({ news, output }) {

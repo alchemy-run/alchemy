@@ -1,5 +1,3 @@
-/** @effect-diagnostics anyUnknownInErrorContext:off */
-
 import bun from "bun:test";
 import type { AlchemyContext } from "alchemy/AlchemyContext";
 import type { CompiledStack, StackDefinition } from "alchemy/Stack";

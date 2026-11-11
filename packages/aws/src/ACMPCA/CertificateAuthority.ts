@@ -208,8 +208,18 @@ export interface CertificateAuthority extends Resource<
     status: acmpca.CertificateAuthorityStatus;
   },
   never,
-  Providers
+  Providers,
+  CertificateAuthorityLookup
 > {}
+
+/**
+ * Props for {@link CertificateAuthority.lookup}: find a certificate authority this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface CertificateAuthorityLookup {
+  /** The ARN of the existing private CA. */
+  certificateAuthorityArn: string;
+}
 
 /**
  * An Amazon Web Services Private CA certificate authority.
@@ -290,6 +300,16 @@ export interface CertificateAuthority extends Resource<
  *   (events) =>
  *     Stream.runForEach(events, (event) => Effect.log(event.detail)),
  * );
+ * ```
+ *
+ * ### Looking up an existing certificate authority
+ * `CertificateAuthority.lookup` references a certificate authority Alchemy doesn't manage (created in the
+ * console or by another stack), found by `certificateAuthorityArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing certificate authority
+ * ```typescript
+ * const issuing = AWS.ACMPCA.CertificateAuthority.lookup({ certificateAuthorityArn });
  * ```
  *
  * @resource
@@ -493,6 +513,11 @@ export const CertificateAuthorityProvider = () =>
                 .map((ca) => toAttrs(ca.Arn!, ca.Status)),
             ),
           ),
+        lookup: Effect.fn(function* ({ certificateAuthorityArn }) {
+          const ca = yield* describeCa(certificateAuthorityArn);
+          if (ca?.Arn === undefined || ca.Status === "DELETED") return undefined;
+          return toAttrs(ca.Arn, ca.Status);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           // The ARN is auto-assigned: prefer the cached output, fall back
           // to searching by ownership tags (state persistence failure).

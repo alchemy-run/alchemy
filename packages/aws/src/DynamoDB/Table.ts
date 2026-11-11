@@ -302,8 +302,18 @@ export interface Table extends Resource<
     contributorInsightsEnabled?: boolean;
   },
   TableBinding,
-  Providers
+  Providers,
+  TableLookup
 > {}
+
+/**
+ * Props for {@link Table.lookup}: find a table this stack doesn't manage, in
+ * the ambient account and region, by its name.
+ */
+export interface TableLookup {
+  /** The name of the existing table. */
+  tableName: string;
+}
 
 /**
  * An Amazon DynamoDB table with optional indexes, PITR, TTL, and stream-aware
@@ -520,6 +530,20 @@ export interface Table extends Resource<
  *     }
  *   }),
  * );
+ * ```
+ *
+ * ### Looking up an existing table
+ * `Table.lookup` references a table Alchemy doesn't manage (created in the
+ * console or by another stack), found by `tableName`. It is read during
+ * plan/deploy and never created, updated or deleted, and binds like a
+ * declared table.
+ *
+ * **Example:** Read items from an existing table
+ * ```typescript
+ * const table = DynamoDB.Table.lookup({ tableName: "users" });
+ *
+ * // init
+ * const getItem = yield* DynamoDB.GetItem(table);
  * ```
  *
  * @resource
@@ -1672,6 +1696,12 @@ export const TableProvider = () =>
             );
             return states.filter((state) => state !== undefined).map((state) => toAttrs(state));
           }),
+        lookup: Effect.fn(function* ({ tableName }) {
+          const state = yield* readTableState(tableName).pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
+          );
+          return state ? toAttrs(state) : undefined;
+        }),
         read: Effect.fn(function* ({ id, olds, output, previous }) {
           const tableName =
             output?.tableName ?? (olds ? yield* createTableName(id, olds) : undefined);

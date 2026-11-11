@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -171,8 +172,35 @@ export type Backend = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  BackendLookup
 >;
+
+/**
+ * Props for {@link Backend.lookup}: find a backend this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface BackendLookup {
+  /**
+   * Backend id (the `{backendId}` segment of
+   * `projects/{project}/locations/{location}/backends/{backendId}`). Also
+   * used as the Cloud Run service id and as part of the default domain
+   * name. Must start with a letter, contain only lowercase letters, digits,
+   * and hyphens, and be at most 49 characters.
+   */
+  backendId: string;
+  /**
+   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Firebase App Hosting backend — the primary resource that provisions
@@ -207,6 +235,18 @@ export type Backend = Resource<
  * const backend = yield* GCP.FirebaseAppHosting.Backend("Web", {
  *   displayName: "production web v2",
  *   labels: { env: "prod", team: "web" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing backend
+ * `Backend.lookup` references a backend Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared backend.
+ *
+ * **Example:** Reference an existing backend
+ * ```typescript
+ * const backend = GCP.FirebaseAppHosting.Backend.lookup({
+ *   backendId: "my-backend",
  * });
  * ```
  *
@@ -305,6 +345,15 @@ export const BackendProvider = () =>
           previousServing !== nextServing,
       });
     }),
+
+    lookup: Effect.fn(function* ({ backendId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, backendId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

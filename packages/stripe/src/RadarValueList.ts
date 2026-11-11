@@ -97,8 +97,18 @@ export type RadarValueList = Resource<
     livemode: boolean;
   },
   never,
-  Providers
+  Providers,
+  RadarValueListLookup
 >;
+
+/**
+ * Props for {@link RadarValueList.lookup}: find a Radar value list this stack
+ * doesn't manage by its id.
+ */
+export interface RadarValueListLookup {
+  /** Stripe Radar value list id, e.g. `"rsl_1A2b3C4d5E6f7G8h"`. */
+  id: string;
+}
 
 /**
  * A Stripe Radar Value List — a named collection of values (emails, IPs,
@@ -146,6 +156,16 @@ export type RadarValueList = Resource<
  *   alias: "custom_blocklist",
  *   itemType: "ip_address",
  * });
+ * ```
+ *
+ * ### Looking up an existing Radar value list
+ * `RadarValueList.lookup` references a Radar value list Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing Radar value list
+ * ```typescript
+ * const ref = Stripe.RadarValueList.lookup({ id: "rsl_1A2b3C4d5E6f7G8h" });
  * ```
  *
  * @resource
@@ -303,6 +323,11 @@ export const RadarValueListProvider = () =>
         };
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing);
     }),
 
     read: Effect.fn(function* ({ id, output, previous }) {

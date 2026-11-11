@@ -62,8 +62,18 @@ export interface RunGroup extends Resource<
     name: string;
   },
   never,
-  Providers
+  Providers,
+  RunGroupLookup
 > {}
+
+/**
+ * Props for {@link RunGroup.lookup}: find a run group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface RunGroupLookup {
+  /** The id of the existing run group. */
+  runGroupId: string;
+}
 
 /**
  * An Amazon HealthOmics run group — a resource-limit envelope for workflow
@@ -90,6 +100,16 @@ export interface RunGroup extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing run group
+ * `RunGroup.lookup` references a run group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `runGroupId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing run group
+ * ```typescript
+ * const existing = AWS.Omics.RunGroup.lookup({ runGroupId: "..." });
+ * ```
+ *
  * @resource
  */
 export const RunGroup = Resource<RunGroup>("AWS.Omics.RunGroup");
@@ -114,6 +134,18 @@ export const RunGroupProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk)),
           ),
+        lookup: Effect.fn(function* ({ runGroupId }) {
+          const found = yield* omics
+            .getRunGroup({ id: runGroupId })
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
+          if (found === undefined || found.id === undefined) return undefined;
+          const attrs = {
+            runGroupId: found.id,
+            runGroupArn: found.arn!,
+            name: found.name ?? "",
+          };
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, output }) {
           if (output?.runGroupId === undefined) return undefined;
           const found = yield* omics

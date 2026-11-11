@@ -77,8 +77,27 @@ export type ServiceToken = Resource<
     clientSecretVersion: number;
   },
   never,
-  Providers
+  Providers,
+  ServiceTokenLookup
 >;
+
+/**
+ * Props for {@link ServiceToken.lookup}: find a service token this stack
+ * doesn't manage, by its id or its name.
+ */
+export type ServiceTokenLookup =
+  | {
+      /**
+       * The Cloudflare-assigned ID (UUID) of the existing service token.
+       */
+      serviceTokenId: string;
+    }
+  | {
+      /**
+       * The name of the existing service token.
+       */
+      name: string;
+    };
 
 /**
  * A Cloudflare Zero Trust Access service token. Service tokens let
@@ -118,6 +137,24 @@ export type ServiceToken = Resource<
  * const policy = yield* Cloudflare.Access.Policy("AllowCi", {
  *   decision: "non_identity",
  *   include: [{ serviceToken: { tokenId: token.serviceTokenId } }],
+ * });
+ * ```
+ *
+ * ### Looking up an existing Service Token
+ * `ServiceToken.lookup` reads a token Alchemy doesn't manage (created in the
+ * dashboard or by another stack), found by `serviceTokenId` or `name`, so
+ * policies can authorize it. It is read during plan/deploy and never
+ * created, rotated or deleted. Cloudflare reveals a client secret only to
+ * whoever creates or rotates the token, so a looked-up token's
+ * `clientSecret` is `undefined`.
+ *
+ * **Example:** Authorize an existing token
+ * ```typescript
+ * const ci = Cloudflare.Access.ServiceToken.lookup({ name: "ci" });
+ *
+ * const policy = yield* Cloudflare.Access.Policy("AllowCi", {
+ *   decision: "non_identity",
+ *   include: [{ serviceToken: { tokenId: ci.serviceTokenId } }],
  * });
  * ```
  *
@@ -171,6 +208,30 @@ export const ServiceTokenProvider = () =>
         return { action: "replace" } as const;
       }
       // name/duration converge via PUT; clientSecretVersion bumps rotate.
+    }),
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const token: ObservedToken | undefined =
+        "serviceTokenId" in props
+          ? yield* zeroTrust
+              .getAccessServiceTokenForAccount({
+                accountId,
+                serviceTokenId: props.serviceTokenId,
+              })
+              .pipe(Effect.catchTag("AccessServiceTokenNotFound", () => Effect.undefined))
+          : yield* findTokenByName(accountId, props.name);
+      if (!token?.id || !token.clientId) return undefined;
+      return {
+        serviceTokenId: token.id,
+        accountId,
+        clientId: token.clientId,
+        // Only whoever creates or rotates a token ever sees its secret.
+        clientSecret: undefined,
+        name: token.name ?? "",
+        duration: token.duration ?? undefined,
+        expiresAt: token.expiresAt ?? undefined,
+        clientSecretVersion: 1,
+      };
     }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

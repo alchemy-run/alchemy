@@ -19,6 +19,8 @@ import {
   labelSelector,
   stripInternalLabels,
   toLabels,
+  isReplacedGeneration,
+  keepsName,
 } from "./Labels.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -81,8 +83,18 @@ export type PlacementGroup = Resource<
     servers: number[];
   },
   never,
-  Providers
+  Providers,
+  PlacementGroupLookup
 >;
+
+/**
+ * Props for {@link PlacementGroup.lookup}: find a placement group this stack
+ * doesn't manage by its name.
+ */
+export interface PlacementGroupLookup {
+  /** Placement group name (unique in the project). */
+  name: string;
+}
 
 /**
  * A Hetzner Cloud Placement Group. Spread groups keep member Servers on
@@ -108,6 +120,16 @@ export type PlacementGroup = Resource<
  *   type: "spread",
  *   labels: { role: "web" },
  * });
+ * ```
+ *
+ * ### Looking up an existing placement group
+ * `PlacementGroup.lookup` references a placement group Alchemy doesn't manage (created in
+ * the Hetzner Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing placement group
+ * ```typescript
+ * const spread = Hetzner.PlacementGroup.lookup({ name: "spread" });
  * ```
  *
  * @resource
@@ -204,15 +226,30 @@ export const PlacementGroupProvider = () =>
       if (!isResolved(news)) return undefined;
       const nextType = news.type ?? DEFAULT_TYPE;
       if (output !== undefined && nextType !== output.type) {
-        return { action: "replace" } as const;
+        return { action: "replace", deleteFirst: keepsName(news, output) } as const;
       }
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ name }) {
+      const found = yield* findByName(name);
+      return found === undefined ? undefined : toAttrs(found);
+    }),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const name = yield* toName(id, olds?.name, output?.name);
       const existing = yield* observe({ id: output?.id, name, logicalId: id });
       if (existing === undefined) return undefined;
+      if (
+        isReplacedGeneration({
+          previousId: previous?.id,
+          foundId: existing.id,
+          claimedName: olds?.name,
+          foundName: existing.name,
+        })
+      ) {
+        return undefined;
+      }
       const attrs = toAttrs(existing);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),

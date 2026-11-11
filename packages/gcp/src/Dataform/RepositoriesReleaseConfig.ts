@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -137,8 +138,36 @@ export type RepositoriesReleaseConfig = Resource<
     releaseCompilationResult: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RepositoriesReleaseConfigLookup
 >;
+
+/**
+ * Props for {@link RepositoriesReleaseConfig.lookup}: find a repositories
+ * release config this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface RepositoriesReleaseConfigLookup {
+  /**
+   * Release config id.
+   */
+  releaseConfigId: string;
+  /**
+   * Region used when `repository` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent repository. Full name
+   * `projects/{project}/locations/{location}/repositories/{repository}` or
+   * the repository id (combined with `location`).
+   */
+  repository: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Dataform release configuration — compiles a Git commitish on a
@@ -166,6 +195,20 @@ export type RepositoriesReleaseConfig = Resource<
  *   gitCommitish: "main",
  *   cronSchedule: "0 8 * * *",
  *   timeZone: "America/Los_Angeles",
+ * });
+ * ```
+ *
+ * ### Looking up an existing repositories release config
+ * `RepositoriesReleaseConfig.lookup` references a repositories release
+ * config Alchemy doesn't manage (created in the console or by another
+ * stack). It is read during plan/deploy, never created, updated or deleted,
+ * and binds like a declared repositories release config.
+ *
+ * **Example:** Reference an existing repositories release config
+ * ```typescript
+ * const repositoriesReleaseConfig = GCP.Dataform.RepositoriesReleaseConfig.lookup({
+ *   releaseConfigId: "my-release-config",
+ *   repository: "my-repository",
  * });
  * ```
  *
@@ -249,6 +292,24 @@ export const RepositoriesReleaseConfigProvider = () =>
         nextParent: expandRepository(news.repository, env.project, location),
       });
     }),
+
+    lookup: Effect.fn(function* ({
+      releaseConfigId,
+      location: lookupLocation,
+      repository: lookupRepository,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const repository = expandRepository(
+        lookupRepository ?? parseResourceName("", "releaseConfigs", env.region).parent,
+        env.project,
+        location,
+      );
+      const name = resourceName(repository, releaseConfigId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

@@ -2,6 +2,9 @@
   "name": "@alchemy.run/scripts",
   "version": "0.0.0",
   "private": true,
+  "bin": {
+    "tsgolint": "./oxlint/tsgolint.mjs"
+  },
   "type": "module",
   "devDependencies": {
     "@alchemy.run/aws": "workspace:*",

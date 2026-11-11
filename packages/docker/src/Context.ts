@@ -41,8 +41,18 @@ export interface Context extends Resource<
     docker?: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ContextLookup
 > {}
+
+/**
+ * Props for {@link Context.lookup}: find a Docker context this
+ * stack doesn't manage by its name.
+ */
+export interface ContextLookup {
+  /** Context name. */
+  name: string;
+}
 
 /**
  * A named Docker CLI context — a pointer to a Docker engine (local socket,
@@ -89,6 +99,17 @@ export interface Context extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing context
+ * `Context.lookup` references a context Alchemy doesn't manage (created with
+ * the Docker CLI, Compose or another stack). It is read during plan/deploy,
+ * never created, updated or removed.
+ *
+ * **Example:** Deploy to an existing context
+ * ```typescript
+ * const remote = Docker.Context.lookup({ name: "prod-host" });
+ * const api = yield* Docker.Container("Api", { image: "nginx:alpine", context: remote });
+ * ```
+ *
  * @resource
  * @product Context
  */
@@ -107,6 +128,11 @@ export const ContextProvider = () =>
 
       return Context.Provider.of({
         list: () => Effect.succeed([]),
+        lookup: Effect.fn(function* ({ name }) {
+          const live = yield* inspect(name);
+          return live ? toContextAttributes(live) : undefined;
+        }),
+
         read: Effect.fn(function* ({ id, instanceId, olds, output }) {
           const name = yield* dockerPhysicalName(id, olds, instanceId);
           const live = yield* inspect(name);

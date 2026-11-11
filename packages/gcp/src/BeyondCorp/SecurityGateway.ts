@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -147,8 +148,33 @@ export type SecurityGateway = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SecurityGatewayLookup
 >;
+
+/**
+ * Props for {@link SecurityGateway.lookup}: find a security gateway this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface SecurityGatewayLookup {
+  /**
+   * SecurityGateway id (the `{securityGateway}` segment of
+   * `projects/{projec
+   * t}/locations/{location}/securityGateways/{securityGateway}`). Must be
+   * 4-63 characters matching `[a-z]([a-z0-9-]{0,61}[a-z0-9])?`.
+   */
+  securityGatewayId: string;
+  /**
+   * Location. Security gateways live in `global`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A BeyondCorp Security Gateway that fronts Chrome Enterprise Premium
@@ -173,6 +199,19 @@ export type SecurityGateway = Resource<
  *   hubs: {
  *     "us-central1": { internetGateway: {} },
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing security gateway
+ * `SecurityGateway.lookup` references a security gateway Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * security gateway.
+ *
+ * **Example:** Reference an existing security gateway
+ * ```typescript
+ * const securityGateway = GCP.BeyondCorp.SecurityGateway.lookup({
+ *   securityGatewayId: "my-security-gateway",
  * });
  * ```
  *
@@ -343,6 +382,15 @@ export const SecurityGatewayProvider = () =>
         ),
       });
     }),
+
+    lookup: Effect.fn(function* ({ securityGatewayId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, DEFAULT_GLOBAL);
+      const name = resourceName(env.project, location, securityGatewayId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

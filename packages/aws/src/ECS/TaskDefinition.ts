@@ -95,8 +95,8 @@ export interface TaskDefinitionProps {
          */
         group?: string;
         /**
-         * awslogs stream prefix.
-         * @default the task family
+         * awslogs stream prefix, at most 200 characters.
+         * @default the task family's first 200 characters
          */
         streamPrefix?: string;
       };
@@ -151,6 +151,18 @@ export interface TaskDefinitionProps {
   enableFaultInjection?: boolean;
 
   /**
+   * Run each task in its own Nitro Sandbox, a lightweight VM isolated by the
+   * AWS Nitro hypervisor. `ISOLATED_SANDBOX` isolates tasks from each other;
+   * `CONFIDENTIAL_SANDBOX` also hides the task's memory from the instance and
+   * needs an `attestationPolicy`.
+   *
+   * Requires `requiresCompatibilities: ["MANAGED_INSTANCES"]` and a Managed
+   * Instances capacity provider with `nitroEnclavesEnabled`.
+   * @default { isolationMode: "SHARED" }
+   */
+  trustedExecutionConfiguration?: ecs.TrustedExecutionConfiguration | undefined;
+
+  /**
    * User-defined tags applied to each registered revision.
    */
   tags?: Record<string, string>;
@@ -199,8 +211,18 @@ export interface TaskDefinition extends Resource<
     logGroupArn: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  TaskDefinitionLookup
 > {}
+
+/**
+ * Props for {@link TaskDefinition.lookup}: find a task definition this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface TaskDefinitionLookup {
+  /** The family, `family:revision` or ARN of the existing task definition. A bare family finds its latest active revision. */
+  family: string;
+}
 
 /**
  * A standalone ECS task definition for bring-your-own-container workloads.
@@ -299,6 +321,17 @@ export interface TaskDefinition extends Resource<
  *     },
  *   ],
  * });
+ * ```
+ *
+ * ### Looking up an existing task definition
+ * `TaskDefinition.lookup` references a task definition Alchemy doesn't manage (created in the
+ * console or by another stack), found by `family`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Run the latest revision of an existing task definition
+ * ```typescript
+ * const migrate = AWS.ECS.TaskDefinition.lookup({ family: "migrate" });
+ * const taskDefinitionArn = migrate.taskDefinitionArn;
  * ```
  *
  * @resource
@@ -404,8 +437,10 @@ export const TaskDefinitionProvider = () =>
         const fargate = requiresCompatibilities.includes("FARGATE");
         const networkMode = props.networkMode ?? (fargate ? "awsvpc" : undefined);
         const logGroupName = logGroupNameOf(family, props);
+        // ECS caps the prefix at 200 characters; a generated family can be 255.
         const streamPrefix =
-          (typeof props.awslogs === "object" ? props.awslogs.streamPrefix : undefined) ?? family;
+          (typeof props.awslogs === "object" ? props.awslogs.streamPrefix : undefined) ??
+          family.slice(0, 200);
         const containerDefinitions = props.containerDefinitions.map((cd) =>
           logGroupName !== undefined && cd.logConfiguration === undefined
             ? {
@@ -439,6 +474,7 @@ export const TaskDefinitionProvider = () =>
           ephemeralStorage: props.ephemeralStorage,
           runtimePlatform: props.runtimePlatform,
           enableFaultInjection: props.enableFaultInjection,
+          trustedExecutionConfiguration: props.trustedExecutionConfiguration,
         };
       };
 
@@ -475,6 +511,7 @@ export const TaskDefinitionProvider = () =>
             ephemeralStorage: observed.ephemeralStorage,
             runtimePlatform: observed.runtimePlatform,
             enableFaultInjection: observed.enableFaultInjection,
+            trustedExecutionConfiguration: observed.trustedExecutionConfiguration,
           }),
         );
 
@@ -594,6 +631,10 @@ export const TaskDefinitionProvider = () =>
           if ((yield* toFamily(id, olds ?? {})) !== (yield* toFamily(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ family }) {
+          const td = yield* describeLatestActive(family);
+          return td?.taskDefinitionArn ? attrsOf(td) : undefined;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const family = output?.family ?? (yield* toFamily(id, olds ?? {}));

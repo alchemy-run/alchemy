@@ -83,8 +83,18 @@ export interface ResourceShare extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ResourceShareLookup
 > {}
+
+/**
+ * Props for {@link ResourceShare.lookup}: find a resource share this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ResourceShareLookup {
+  /** The ARN of the existing resource share. */
+  resourceShareArn: string;
+}
 
 /**
  * An AWS Resource Access Manager (RAM) resource share.
@@ -110,6 +120,16 @@ export interface ResourceShare extends Resource<
  *   allowExternalPrincipals: true,
  *   tags: { team: "platform" },
  * });
+ * ```
+ *
+ * ### Looking up an existing resource share
+ * `ResourceShare.lookup` references a resource share Alchemy doesn't manage (created in the
+ * console or by another stack), found by `resourceShareArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing resource share
+ * ```typescript
+ * const existing = AWS.RAM.ResourceShare.lookup({ resourceShareArn: "..." });
  * ```
  *
  * @resource
@@ -216,6 +236,11 @@ export const ResourceShareProvider = () =>
                 .map(toAttrs),
             ),
           ),
+        lookup: Effect.fn(function* ({ resourceShareArn }) {
+          const state = yield* readByArn(resourceShareArn);
+          if (!state) return undefined;
+          return state;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const state = output?.resourceShareArn
             ? yield* readByArn(output.resourceShareArn)

@@ -509,14 +509,7 @@ export const GkeKubernetesAdapter = () =>
             endpoint,
             certificateAuthorityData,
           });
-        }).pipe(
-          withGcp,
-          Effect.mapError((error): ClusterNotFoundError | Error =>
-            error instanceof ClusterNotFoundError || error instanceof Error
-              ? error
-              : new KubernetesAdapterOperationFailed({ message: String(error) }),
-          ),
-        );
+        }).pipe(withGcp);
 
       const identityReconcile = Effect.fn(function* (options: WorkloadIdentityReconcileOptions) {
         const auth = yield* narrowGkeAuth(options.connection);

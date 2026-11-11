@@ -53,8 +53,18 @@ export interface ContactList extends Resource<
     contactListArn: string;
   },
   never,
-  Providers
+  Providers,
+  ContactListLookup
 > {}
+
+/**
+ * Props for {@link ContactList.lookup}: find a contact list this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ContactListLookup {
+  /** The name of the existing contact list. */
+  contactListName: string;
+}
 
 /**
  * An Amazon SES v2 contact list — a named audience of email contacts with
@@ -126,6 +136,17 @@ export interface ContactList extends Resource<
  * }
  * ```
  *
+ * ### Looking up an existing contact list
+ * `ContactList.lookup` references a contact list Alchemy doesn't manage (created in the
+ * console or by another stack), found by `contactListName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Add contacts to an existing list
+ * ```typescript
+ * const newsletter = AWS.SES.ContactList.lookup({ contactListName: "newsletter" });
+ * const contactListName = newsletter.contactListName;
+ * ```
+ *
  * @resource
  */
 export const ContactList = Resource<ContactList>("AWS.SES.ContactList");
@@ -190,6 +211,16 @@ export const ContactListProvider = () =>
                   ]
                 : [],
             );
+        }),
+
+        lookup: Effect.fn(function* ({ contactListName }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const found = yield* getList(contactListName);
+          if (!found) return undefined;
+          return {
+            contactListName,
+            contactListArn: contactListArnOf(region, accountId, contactListName),
+          };
         }),
 
         read: Effect.fn(function* ({ id, olds, output, previous }) {
