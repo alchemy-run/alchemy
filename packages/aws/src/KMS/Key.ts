@@ -306,7 +306,14 @@ export const KeyProvider = () =>
         if (!keyId) {
           return yield* Effect.die(new Error("createKey returned no key ID"));
         }
-        state = yield* readKey({ keyId, deletionWindowInDays });
+        // DescribeKey can answer NotFound for a moment after CreateKey.
+        state = yield* readKey({ keyId, deletionWindowInDays }).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("1 second"),
+            until: (read) => read !== undefined,
+            times: 15,
+          }),
+        );
         if (!state) {
           return yield* Effect.die(new Error(`failed to read created KMS key ${keyId}`));
         }

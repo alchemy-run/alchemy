@@ -6,9 +6,10 @@ import { Railway as RailwayApi } from "@distilled.cloud/railway";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { railwayApi } from "./limit.ts";
 import { suitePartition } from "./suiteProject.ts";
 
-const { test } = Test.make({ providers: Railway.providers() });
+const { test } = Test.make({ limit: railwayApi, providers: Railway.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
