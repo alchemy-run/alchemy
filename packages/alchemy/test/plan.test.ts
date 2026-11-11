@@ -6361,6 +6361,8 @@ describe("plan-time observation of unresolved identities", { tags: ["unit", "loc
       events: string[];
       /** `observe` can't check the identity yet. */
       unresolved: boolean;
+      /** `observe` fails ("error") or crashes ("defect"). */
+      broken: "error" | "defect" | undefined;
     }
   >()("PlanObservationCloud") {}
 
@@ -6393,6 +6395,8 @@ describe("plan-time observation of unresolved identities", { tags: ["unit", "loc
       observe: Effect.fn(function* ({ id, news }) {
         const cloud = yield* Cloud;
         cloud.events.push(`observe ${news.name}`);
+        if (cloud.broken === "error") return yield* new ResourceFailure();
+        if (cloud.broken === "defect") return yield* Effect.die(new Error("lookup crashed"));
         if (cloud.unresolved) return Unresolved;
         return ownership(cloud, id, news.name);
       }),
@@ -6406,6 +6410,7 @@ describe("plan-time observation of unresolved identities", { tags: ["unit", "loc
           owners: new Map<string, string>(),
           events: [] as string[],
           unresolved: false,
+          broken: undefined as "error" | "defect" | undefined,
         })),
       ),
     ),
@@ -6429,6 +6434,7 @@ describe("plan-time observation of unresolved identities", { tags: ["unit", "loc
     cloud.owners.clear();
     cloud.events.length = 0;
     cloud.unresolved = false;
+    cloud.broken = undefined;
     return cloud;
   });
 
@@ -6514,6 +6520,23 @@ describe("plan-time observation of unresolved identities", { tags: ["unit", "loc
       expect(cloud.events).toEqual(["observe api"]);
     }),
   );
+
+  for (const [broken, label] of [
+    ["error", "fails"],
+    ["defect", "crashes"],
+  ] as const) {
+    observeTest.provider(`an observe that ${label} plans a create`, (stack) =>
+      Effect.gen(function* () {
+        const cloud = yield* reset(stack);
+        cloud.owners.set("api", "Subject");
+        cloud.broken = broken;
+        const node = subjectNode(yield* stack.plan(subject()));
+        expect(node.adopts).toBeUndefined();
+        expect(Plan.displayAction(node)).toBe("create");
+        expect(cloud.events).toEqual(["observe api"]);
+      }),
+    );
+  }
 
   observeTest.provider("resolved props are read, not observed", (stack) =>
     Effect.gen(function* () {

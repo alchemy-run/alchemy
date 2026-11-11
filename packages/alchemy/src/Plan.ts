@@ -1633,9 +1633,26 @@ const makePlan = <A>(
       let adoptsObserved = false;
       if (oldState === undefined && provider.observe && !isResolved(news) && !reusesMigratedFqn) {
         const observeInstanceId = yield* generateInstanceId();
+        // Only a label rides on this probe, so it never fails the plan: a
+        // lookup that errors or crashes leaves the create labelled `create`,
+        // and Apply's own check (which does fail on errors) still runs.
         const observed = yield* provider
           .observe({ id, fqn, instanceId: observeInstanceId, news })
-          .pipe(providePlanScope(resource, observeInstanceId));
+          .pipe(
+            providePlanScope(resource, observeInstanceId),
+            Effect.catch((error) =>
+              Effect.logDebug(
+                `Plan-time observe of '${fqn}' failed; labelling it a create.`,
+                error,
+              ).pipe(Effect.as(undefined)),
+            ),
+            Effect.catchDefect((defect) =>
+              Effect.logDebug(
+                `Plan-time observe of '${fqn}' crashed; labelling it a create.`,
+                defect,
+              ).pipe(Effect.as(undefined)),
+            ),
+          );
         adoptsObserved =
           observed !== undefined &&
           observed !== Unresolved &&
