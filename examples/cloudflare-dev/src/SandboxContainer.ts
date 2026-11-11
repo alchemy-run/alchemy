@@ -1,5 +1,4 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import { Stack } from "alchemy/Stack";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
@@ -8,9 +7,8 @@ export class SandboxContainer extends Cloudflare.Container<SandboxContainer, {}>
 ) {}
 
 export const SandboxLive = /* @__PURE__ */ SandboxContainer.make(
-  Stack.useSync((stack) => ({
+  {
     main: import.meta.url,
-    instanceType: stack.stage === "prod" ? "standard-1" : "dev",
     env: {
       GREETING: "hello-from-env",
     },
@@ -19,7 +17,7 @@ export const SandboxLive = /* @__PURE__ */ SandboxContainer.make(
         enabled: true,
       },
     },
-  })),
+  },
   Effect.gen(function* () {
     return SandboxContainer.of({
       fetch: Effect.succeed(

@@ -92,9 +92,9 @@ export type {
 };
 
 /**
- * Props for an Effect-native (`main`) container's `.make()`: a fleet
- * application, or a Durable Object-managed one with
- * `schedulingPolicy: "durable_object"`.
+ * Props for an Effect-native (`main`) container's `.make()`: a Durable
+ * Object-managed application (the default), or a fleet one with
+ * `schedulingPolicy: "default"` or `"regional"`.
  */
 export type MakeContainerProps =
   | InputProps<EffectfulContainerProps>
@@ -390,8 +390,8 @@ type ContainerShape<Shape> = {
  * signal its descendants. Use an Effect timeout to bound a command's lifetime.
  *
  * ### Effect-native Containers in a Durable Object
- * An Effect-native Container (`main`) takes `schedulingPolicy:
- * "durable_object"` too. Alchemy bundles the program into the Container's
+ * An Effect-native Container (`main`) is Durable Object-managed unless it
+ * names a fleet policy. Alchemy bundles the program into the Container's
  * image, and the handle carries both the lifecycle (`start`,
  * `snapshotContainer`, `destroy`, `image`) and the program's RPC methods.
  * `env` reaches the program through `start()`, which the handle calls with
@@ -408,7 +408,6 @@ type ContainerShape<Shape> = {
  * // src/Sandbox.runtime.ts
  * export default Sandbox.make(
  *   {
- *     schedulingPolicy: "durable_object",
  *     main: import.meta.url,
  *     dockerfile: Dockerfile.inline`FROM oven/bun:1
  * RUN apt-get update && apt-get install -y poppler-utils`,
@@ -465,6 +464,25 @@ type ContainerShape<Shape> = {
  *   }),
  * ) {}
  * ```
+ *
+ * **Example:** A fleet-scheduled Effect-native Container
+ * ```typescript
+ * // Cloudflare places the instances, scales to maxInstances, and rolls out
+ * // new versions; the Durable Object starts the one image.
+ * export default Sandbox.make(
+ *   { schedulingPolicy: "default", main: import.meta.url, maxInstances: 50 },
+ *   Effect.gen(function* () {
+ *     const fs = yield* FileSystem.FileSystem;
+ *     return Sandbox.of({ read: (path) => Effect.orDie(fs.readFileString(path)) });
+ *   }),
+ * );
+ * ```
+ *
+ * An Effect-native Container deployed on a fleet application before
+ * Durable Object scheduling became the default keeps deploying only with
+ * `schedulingPolicy: "default"`. The policy cannot change in place: moving to
+ * Durable Object scheduling takes a new Container and Durable Object class,
+ * and Durable Object storage does not carry over.
  *
  * ### Native Durable Objects on Async Workers
  * A plain Durable Object class on an async Worker attaches its Containers
@@ -756,16 +774,17 @@ type ContainerShape<Shape> = {
  *
  * ### Configuration
  * The props object — the first argument to `.make()` — accepts `main`
- * (entrypoint file), `instanceType` (compute size), `runtime`
- * (`"bun"` or `"node"`), and `observability` settings. Use
- * `Stack.useSync` to read the surrounding stack and pick a beefier
- * `instanceType` in prod while keeping the cheap `dev` instance for
- * preview environments.
+ * (entrypoint file), `runtime` (`"bun"` or `"node"`), and `observability`
+ * settings. A Durable Object-managed Container picks its compute size per
+ * instance with `start({ instance })`. A fleet application sets
+ * `instanceType` for every instance; use `Stack.useSync` to read the
+ * surrounding stack and pick a beefier one in prod.
  *
  * **Example:** Stage-dependent configuration
  * ```typescript
  * export const SandboxLive = Sandbox.make(
  *   Stack.useSync((stack) => ({
+ *     schedulingPolicy: "default",
  *     main: import.meta.url,
  *     instanceType: stack.stage === "prod" ? "standard-1" : "dev",
  *     observability: { logs: { enabled: true } },
@@ -778,9 +797,10 @@ type ContainerShape<Shape> = {
  *
  * ### Environment Variables
  * A container is a process, not a Worker: it has no bindings, so every
- * piece of configuration reaches it through `env`. Each entry lands on
- * the deployment and shows up in `process.env` inside the image —
- * generated (`main`), built (`context`), or pre-built (`image`) alike.
+ * piece of configuration reaches it through `env`. Each entry shows up in
+ * `process.env` inside the image — generated (`main`), built (`context`), or
+ * pre-built (`image`) alike. A fleet application sets it on the deployment;
+ * a Durable Object-managed one passes it to every `start()`.
  * Wrap a secret in `Redacted` to keep it encrypted in state and out of
  * plan output; the container still reads a plain string.
  *

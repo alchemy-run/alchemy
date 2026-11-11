@@ -1,5 +1,4 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import { Stack } from "alchemy/Stack";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -26,15 +25,14 @@ export class Sandbox extends Cloudflare.Container<
 >()("Sandbox") {}
 
 export const SandboxLive = /* @__PURE__ */ Sandbox.make(
-  Stack.useSync((stack) => ({
+  {
     main: import.meta.url,
-    instanceType: stack.stage === "prod" ? "standard-1" : "dev",
     observability: {
       logs: {
         enabled: true,
       },
     },
-  })),
+  },
   Effect.gen(function* () {
     //
     const cp = yield* ChildProcessSpawner;

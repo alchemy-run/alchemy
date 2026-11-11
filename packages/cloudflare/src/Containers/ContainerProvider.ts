@@ -47,6 +47,7 @@ import {
   durableObjectPlaceholder,
   hasImageSource,
   isDurableObjectContainer,
+  schedulingPolicyOf,
   validateContainerConfiguration,
 } from "./ContainerConfiguration.ts";
 import { waitForContainerImage } from "./ContainerImagePreparation.ts";
@@ -297,7 +298,7 @@ export const LiveContainerProvider = () =>
       const scalingDefaults = (props: AnyContainerApplicationProps) => ({
         instances: props.instances ?? 0,
         maxInstances: props.maxInstances ?? 20,
-        schedulingPolicy: props.schedulingPolicy ?? "default",
+        schedulingPolicy: schedulingPolicyOf(props),
         constraints: props.constraints ?? {},
       });
 

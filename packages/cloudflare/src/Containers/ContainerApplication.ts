@@ -362,10 +362,19 @@ export interface EffectfulImageProps {
 
 /**
  * Bundle an Effect-native program into a generated image and run it on a
- * fleet-scheduled application. See {@link EffectfulImageProps}.
+ * fleet-scheduled application. An Effect-native Container is Durable
+ * Object-managed unless it names a fleet policy. See
+ * {@link EffectfulImageProps}.
  */
 export interface EffectfulContainerProps
-  extends ContainerApplicationPropsBase, EffectfulImageProps {}
+  extends Omit<ContainerApplicationPropsBase, "schedulingPolicy">, EffectfulImageProps {
+  /**
+   * Run the program on a fleet-scheduled application: Cloudflare picks
+   * where instances run and applies `maxInstances`, rollouts, and placement.
+   * Omit it for a Durable Object-managed Container.
+   */
+  schedulingPolicy: "default" | "regional";
+}
 
 /**
  * Build the container image from your own Dockerfile — no Effect program is
@@ -517,7 +526,14 @@ export interface DurableObjectContainerProps
  * {@link EffectfulImageProps} and {@link DurableObjectContainerPropsBase}.
  */
 export interface EffectfulDurableObjectContainerProps
-  extends DurableObjectContainerPropsBase, EffectfulImageProps {}
+  extends Omit<DurableObjectContainerPropsBase, "schedulingPolicy">, EffectfulImageProps {
+  /**
+   * Select images and instance sizes in `ctx.container.start()`. This is an
+   * Effect-native Container's default.
+   * @default "durable_object"
+   */
+  schedulingPolicy?: "durable_object";
+}
 
 /**
  * Fleet-scheduled applications select a deployment image through `main`

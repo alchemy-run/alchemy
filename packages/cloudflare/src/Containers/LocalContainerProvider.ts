@@ -29,6 +29,7 @@ import {
   durableObjectPlaceholder,
   hasImageSource,
   isDurableObjectContainer,
+  schedulingPolicyOf,
   validateContainerConfiguration,
 } from "./ContainerConfiguration.ts";
 import { ContainerPlatform } from "./ContainerPlatform.ts";
@@ -257,7 +258,7 @@ export const LocalContainerProvider = () =>
           applicationId: output?.applicationId ?? generateLocalId(),
           applicationName: yield* createContainerApplicationName(id, news.name),
           accountId: output?.accountId ?? accountId,
-          schedulingPolicy: news.schedulingPolicy ?? "default",
+          schedulingPolicy: schedulingPolicyOf(news),
           instances: news.instances ?? 1,
           maxInstances: news.maxInstances ?? 1,
           constraints: news.constraints,

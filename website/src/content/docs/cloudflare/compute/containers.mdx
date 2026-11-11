@@ -703,14 +703,13 @@ the image to its own application.
 
 ## Effect programs in a Durable Object's images
 
-An Effect-native Container takes `schedulingPolicy: "durable_object"` too.
-Alchemy bundles `main` into the Container's image:
+An Effect-native Container is Durable Object-managed unless it names a fleet
+policy. Alchemy bundles `main` into the Container's image:
 
 ```typescript
 // src/Sandbox.runtime.ts
 export default Sandbox.make(
   {
-    schedulingPolicy: "durable_object",
     main: import.meta.url,
     env: { WORKSPACE: "/workspace" },
   },
@@ -807,13 +806,15 @@ the same props shape (`instanceType`, `observability`, `runtime`,
 
 ## Rollouts
 
-When a deploy changes the image or configuration, running instances
-are replaced with the new version. By default the replacement is
+Rollouts belong to fleet applications, so an Effect-native Container names
+`schedulingPolicy: "default"` to use them. When a deploy changes the image or
+configuration, running instances are replaced with the new version. By default the replacement is
 immediate — every instance at once. Set `rollout` to replace them in
 steps instead, so the application stays available through the update:
 
 ```typescript
 export class Api extends Cloudflare.Container<Api>()("Api", {
+  schedulingPolicy: "default",
   main: import.meta.url,
   instances: 4,
   maxInstances: 4,

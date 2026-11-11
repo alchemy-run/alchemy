@@ -31,7 +31,7 @@ import {
   withBuilder,
   withDockerEnv,
 } from "./fixtures/buildx.ts";
-import MyContainerLive, { MyContainer } from "./fixtures/effectful/container.ts";
+import { MyContainer, MyFleetContainerLive } from "./fixtures/effectful/container.ts";
 import EffectfulContainerWorker from "./fixtures/effectful/worker.ts";
 import { ExternalContainer } from "./fixtures/external/object.ts";
 import ExternalContainerWorker from "./fixtures/external/worker.ts";
@@ -1154,7 +1154,7 @@ describe.concurrent(
           const worker = yield* EffectfulContainerWorker;
           const app: Cloudflare.ContainerApplication = yield* MyContainer.Application;
           return { app, url: worker.url.as<string>() };
-        }).pipe(Effect.provide(MyContainerLive)),
+        }).pipe(Effect.provide(MyFleetContainerLive)),
         route: "/ping",
         response: "pong",
       },
