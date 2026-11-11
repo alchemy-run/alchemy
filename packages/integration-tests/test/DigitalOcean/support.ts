@@ -1,6 +1,6 @@
 import { createHash, createPrivateKey, createPublicKey } from "node:crypto";
 import { parseAuthorizedKey } from "@alchemy.run/digitalocean/internal/authorizedKey";
-import type { NotFound } from "@distilled.cloud/digitalocean";
+import { getAccount, type NotFound } from "@distilled.cloud/digitalocean";
 import { isActionState, State } from "alchemy/State/State";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -77,3 +77,9 @@ export const forgetAttributes = Effect.fn(function* (address: {
  */
 export const testDomain = (stage: string, label: string) =>
   `${testName(stage, label)}.do.alchemy-test-2.us`;
+
+/** The team account's email, which DigitalOcean has verified for alerts. */
+export const accountEmail = getAccount({}).pipe(
+  Effect.flatMap((response) => Effect.fromNullishOr(response.account?.email)),
+  Effect.orDie,
+);

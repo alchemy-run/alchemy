@@ -13,6 +13,7 @@ import { DomainRecord, DomainRecordProvider } from "./DomainRecord.ts";
 import { Droplet, DropletProvider } from "./Droplet.ts";
 import { Firewall, FirewallProvider } from "./Firewall.ts";
 import { LoadBalancer, LoadBalancerProvider } from "./LoadBalancer.ts";
+import * as Monitoring from "./Monitoring/index.ts";
 import { Project, ProjectProvider } from "./Project.ts";
 import { ProjectResources, ProjectResourcesProvider } from "./ProjectResources.ts";
 import { ReservedIp, ReservedIpProvider } from "./ReservedIp.ts";
@@ -79,6 +80,9 @@ export const providers = () =>
       Spaces.Bucket,
       Spaces.CdnEndpoint,
       Spaces.Key,
+      Monitoring.AlertPolicy,
+      Monitoring.UptimeAlert,
+      Monitoring.UptimeCheck,
       KeyPair,
     ]),
   ).pipe(
@@ -102,6 +106,9 @@ export const providers = () =>
         Spaces.BucketProvider(),
         Spaces.CdnEndpointProvider(),
         Spaces.KeyProvider(),
+        Monitoring.AlertPolicyProvider(),
+        Monitoring.UptimeAlertProvider(),
+        Monitoring.UptimeCheckProvider(),
         KeyPairProvider(),
       ),
     ),

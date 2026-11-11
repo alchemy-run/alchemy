@@ -27,6 +27,7 @@
   "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
+    "./Monitoring": "./src/Monitoring/index.ts",
     "./Spaces": "./src/Spaces/index.ts",
     "./*": "./src/*.ts",
     "./package.json": "./package.json"
@@ -38,6 +39,12 @@
         "bun": "./src/index.ts",
         "worker": "./src/index.ts",
         "default": "./lib/index.js"
+      },
+      "./Monitoring": {
+        "types": "./lib/Monitoring/index.d.ts",
+        "bun": "./src/Monitoring/index.ts",
+        "worker": "./src/Monitoring/index.ts",
+        "default": "./lib/Monitoring/index.js"
       },
       "./Spaces": {
         "types": "./lib/Spaces/index.d.ts",
