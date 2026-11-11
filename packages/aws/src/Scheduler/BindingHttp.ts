@@ -384,27 +384,32 @@ export const makeScheduleWriteHttpBinding = <
       const GroupName = group ? yield* group.scheduleGroupName : undefined;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const pattern = yield* scheduleArnPattern(group);
-        yield* bind`${options.tag}(${target}, ${group ?? "default"})`({
-          policyStatements: [
-            {
-              Effect: "Allow",
-              Action: [...options.actions],
-              Resource: [pattern],
-            },
-            // CRITICAL: without iam:PassRole on the execution role, the
-            // write fails only at runtime with an AccessDenied.
-            {
-              Effect: "Allow",
-              Action: ["iam:PassRole"],
-              Resource: [roleArn],
-              Condition: {
-                StringEquals: {
-                  "iam:PassedToService": "scheduler.amazonaws.com",
+        // Keyed by everything that changes the statements, so two bindings
+        // on one target (another role, dead-letter queue or key) don't
+        // overwrite each other's iam:PassRole.
+        yield* bind`${options.tag}(${target}, ${group ?? "default"}, ${writeOptions.role ?? "generated"}, ${deadLetterQueue ?? "no-dlq"}, ${kmsKey ?? "no-kms"})`(
+          {
+            policyStatements: [
+              {
+                Effect: "Allow",
+                Action: [...options.actions],
+                Resource: [pattern],
+              },
+              // CRITICAL: without iam:PassRole on the execution role, the
+              // write fails only at runtime with an AccessDenied.
+              {
+                Effect: "Allow",
+                Action: ["iam:PassRole"],
+                Resource: [roleArn],
+                Condition: {
+                  StringEquals: {
+                    "iam:PassedToService": "scheduler.amazonaws.com",
+                  },
                 },
               },
-            },
-          ],
-        });
+            ],
+          },
+        );
       }
 
       const write = Effect.fn(`${options.tag}(${target.LogicalId})`)(function* (

@@ -265,9 +265,10 @@ describe(
           Effect.gen(function* () {
             const name = `${SCHEDULE_PREFIX}raw`;
 
-            yield* send(
+            const created = (yield* send(
               HttpClientRequest.post(`${baseUrl}/raw-schedules/${name}?delaySeconds=15`),
-            ).pipe(Effect.flatMap((r) => r.json));
+            ).pipe(Effect.flatMap((r) => r.json))) as { error?: string; message?: string };
+            expect(created.message).toBeUndefined();
 
             const observed = yield* scheduler.getSchedule({ Name: name });
             expect(observed.Target?.Arn).toBe(sinkQueueArn);

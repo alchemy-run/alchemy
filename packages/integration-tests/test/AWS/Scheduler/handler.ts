@@ -184,13 +184,20 @@ export default SchedulerTestFunction.make(
           const delaySeconds = Number(url.searchParams.get("delaySeconds") ?? "30");
           const fireAt = yield* Effect.sync(() => new Date(Date.now() + delaySeconds * 1000));
           const expression = `at(${fireAt.toISOString().slice(0, 19)})`;
-          const created = yield* scheduleWithRole({
+          // Surface the typed failure (424 so the 5xx retry doesn't mask it).
+          return yield* scheduleWithRole({
             Name: name,
             ScheduleExpression: expression,
             ActionAfterCompletion: "DELETE",
             Target: { Input: JSON.stringify({ marker: name }) },
-          });
-          return yield* HttpServerResponse.json({ scheduleArn: created.ScheduleArn, expression });
+          }).pipe(
+            Effect.flatMap((created) =>
+              HttpServerResponse.json({ scheduleArn: created.ScheduleArn, expression }),
+            ),
+            Effect.catch((e) =>
+              HttpServerResponse.json({ error: e._tag, message: String(e) }, { status: 424 }),
+            ),
+          );
         }
 
         // Durable callbacks: schedule, read, cancel. Typed failures surface
