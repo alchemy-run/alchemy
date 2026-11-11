@@ -26,6 +26,8 @@ alchemy profile edit --add RivetCloud
 
 The dashboard opens and asks you to approve a code. Once you do, the profile keeps the session and refreshes it, and remembers the cluster you chose. Deploys read the cluster's address and admin token with it.
 
+If your account belongs to several organizations, sign-in also asks which one to act in and remembers it. Set `RIVET_CLOUD_ORGANIZATION` to the organization's slug to answer without the question.
+
 Self-hosted control planes never ask for this: only `RivetCloud.ControlPlane` signs in.
 
 ## Sign in from CI

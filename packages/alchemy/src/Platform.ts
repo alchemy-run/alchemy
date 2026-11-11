@@ -153,6 +153,28 @@ export interface Platform<
   Provider: Provider<Resource>;
 
   <Self, Shape, Deps = never>(): {
+    <
+      const Id extends string,
+      PropsReq = never,
+      InitReq extends Services | PlatformServices | Resource = never,
+    >(
+      id: Id,
+      props:
+        | InputProps<InlineProps>
+        | Effect.Effect<InputProps<InlineProps>, ConfigError.ConfigError, PropsReq>,
+      impl: Effect.Effect<Shape, ConfigError.ConfigError, InitReq>,
+    ): Effect.Effect<
+      Resource & Rpc<Self>,
+      never,
+      | Resource["Providers"]
+      | Exclude<PropsReq, Services | PlatformServices | Resource>
+      | Exclude<InitReq, Services | PlatformServices | Resource>
+    > &
+      Named<Id> &
+      PlatformIdentity<Id> & {
+        new (_: never): MakeShape<Shape, BaseShape> & Named<Id> & Tag<Resource["Type"]>;
+      };
+
     <const Id extends string>(
       id: Id,
     ): Effect.Effect<Resource & Rpc<Self> & Dependencies<Deps>, never, Resource["Providers"]> &
@@ -502,8 +524,10 @@ export const Platform = <
 
               yield* impl.pipe(
                 Effect.flatMap((impl) => {
-                  if (!impl) return Effect.void;
-                  const shape = impl as Record<string, unknown>;
+                  // An `alwaysServe` runtime serves routes of its own, so it
+                  // boots even when the program returns nothing.
+                  if (!impl && runtimeContext.alwaysServe !== true) return Effect.void;
+                  const shape = (impl ?? {}) as Record<string, unknown>;
                   // Serve when there's a `fetch` handler OR any RPC shape
                   // methods. A pure-RPC impl (methods, no `fetch`) still needs
                   // the server to boot — hand `serveRpc` a default 404 fallback

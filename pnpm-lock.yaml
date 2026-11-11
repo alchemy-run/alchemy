@@ -1176,6 +1176,24 @@ importers:
         specifier: workspace:*
         version: link:../../packages/alchemy-test
 
+  examples/aws-ecs-sandboxes:
+    dependencies:
+      '@alchemy.run/aws':
+        specifier: workspace:*
+        version: link:../../packages/aws
+      '@distilled.cloud/aws':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/aws
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.1.0(effect@4.1.0)(redis@6.2.1(@opentelemetry/api@1.10.0))
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.1.0
+        version: 4.1.0
+
   examples/aws-eks:
     dependencies:
       '@alchemy.run/aws':
