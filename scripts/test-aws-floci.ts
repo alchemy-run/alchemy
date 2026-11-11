@@ -196,6 +196,7 @@ const flociFixedValues: Record<string, string> = {
   // floci onboards an organization to Firewall Manager in seconds, where AWS keeps it onboarding
   // (and refusing to offboard) for over ten minutes.
   AWS_TEST_FMS: "1",
+  AWS_TEST_FORECAST: "1",
   // Floci stores authorizer URIs without resolving the function.
   ALCHEMY_TEST_AUTHORIZER_URI:
     "arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-1:000000000000:function:alchemy-floci-standing-authorizer/invocations",
