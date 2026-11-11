@@ -118,6 +118,17 @@ Commands to one aggregate instance run one at a time. Its events, new state and 
 
 Every event reaches the views, projections and policies that consume it, at least once and in order for each source, even if a runner restarts in between. Scheduled commands are persisted messages, delivered when they're due on whichever runner then owns the instance.
 
+A policy delivery whose handler fails runs again after 1, 2, 4, 8 and 16 seconds. If it still fails, the host logs `policy <Name> gave up on delivery <source>:<seq>` with the cause, and the next delivery to that key runs. One bad event can't hold up its key for ever. Set `policyRetry` to change the schedule, or to `false` to retry a failed delivery until it succeeds:
+
+```typescript
+DomainCluster.layerEntities({
+  name: "Bank",
+  main: import.meta.url,
+  pool: Default,
+  policyRetry: { schedule: Schedule.exponential("5 seconds"), times: 8 },
+});
+```
+
 ## Read live over HTTP
 
 Effect Cluster entities hold no WebSockets, so serve the Api with `Domain.protocolHttp`. A `watch` or `events` read is a streamed response, fed by polling the entity that owns the key. `Domain.protocolWebSocket` answers `501` here.

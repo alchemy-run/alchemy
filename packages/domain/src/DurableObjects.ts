@@ -196,7 +196,60 @@ export interface Host<R = never> {
   ) => Effect.Effect<(targets: ReadonlyArray<string>) => Effect.Effect<void, never, R>, never, R>;
   /** Models whose names collide on the same key fail to host: one per Worker, pool or class. */
   readonly claimKey: Effect.Effect<object, never, R>;
+  /**
+   * Bound the runs of one policy delivery: retry a failed run on this
+   * schedule, then log the delivery as given up and go on to the next one.
+   * Without it, a failed delivery stays at the head of its key's inbox and
+   * is redelivered by the inbox's durable callback until it succeeds.
+   */
+  readonly policyRetry?: PolicyRetry;
 }
+
+/** How a host bounds the runs of one policy delivery (see {@link Host.policyRetry}). */
+export interface PolicyRetry {
+  /** The waits between runs. */
+  readonly schedule: Schedule.Schedule<unknown, unknown>;
+  /** Retries after the first run, at most. */
+  readonly times: number;
+}
+
+/**
+ * The default {@link PolicyRetry}: up to 5 retries, waiting 1, 2, 4, 8 and 16
+ * seconds, about 31 seconds in all.
+ */
+export const POLICY_RETRY: PolicyRetry = {
+  schedule: Schedule.exponential("1 second"),
+  times: 5,
+};
+
+/**
+ * Run a policy delivery with bounded retries. A run that fails (or dies) is
+ * retried on `retry`; when the retries are spent, the failure is logged with
+ * the delivery's id and the delivery ends, so the deliveries after it in the
+ * same inbox still run. Policy handlers should handle their own failures;
+ * this is the backstop for one that does not, so one bad event cannot block
+ * its key's inbox for ever.
+ */
+export const runPolicyBounded =
+  (kit: PolicyKit, retry: PolicyRetry) =>
+  (delivery: Delivery): Effect.Effect<void> =>
+    kit.run(delivery).pipe(
+      Effect.catchDefect((defect) => Effect.fail(defect)),
+      Effect.retry({ schedule: retry.schedule, times: retry.times }),
+      Effect.catchCause((cause) =>
+        Effect.logError(
+          `policy ${kit.name} gave up on delivery ${delivery.source}:${delivery.seq} after ${retry.times + 1} runs`,
+          cause,
+        ).pipe(
+          Effect.annotateLogs({
+            "domain.policy": kit.name,
+            "domain.key": delivery.key,
+            "domain.source": delivery.source,
+            "domain.seq": delivery.seq,
+          }),
+        ),
+      ),
+    );
 
 const pad = (n: number) => n.toString().padStart(12, "0");
 
@@ -1173,10 +1226,19 @@ const viewObject = (
     };
   });
 
-const policyObject = (kit: PolicyKit) =>
+/**
+ * A policy key's object: deliveries are deduped by source and seq, staged in
+ * an ordered inbox and run one at a time. With `retry`, a delivery that keeps
+ * failing is given up (see {@link runPolicyBounded}); without it, it stays at
+ * the head of the inbox until it succeeds.
+ */
+export const policyObject = (kit: PolicyKit, retry?: PolicyRetry) =>
   Effect.gen(function* () {
     const state = yield* ObjectState;
-    const inbox = yield* queue<Delivery>("inbox", kit.run);
+    const inbox = yield* queue<Delivery>(
+      "inbox",
+      retry === undefined ? kit.run : runPolicyBounded(kit, retry),
+    );
     return {
       receive: (delivery: Delivery) =>
         reportDefects(
@@ -2070,7 +2132,10 @@ export const makePlatform = <R>(
             policy: (policy, kit) =>
               inInit(
                 Effect.gen(function* () {
-                  const namespace = yield* object(`${policy.policyName}Policy`, policyObject(kit));
+                  const namespace = yield* object(
+                    `${policy.policyName}Policy`,
+                    policyObject(kit, host.policyRetry),
+                  );
                   return {
                     receive: (delivery) =>
                       unwrapDefects(namespace.getByName(delivery.key).receive(delivery)),

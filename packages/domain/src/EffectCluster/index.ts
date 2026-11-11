@@ -48,6 +48,8 @@ import {
   type ObjectStateShape,
   type ObjectStorage,
   parseMultiplexedName,
+  POLICY_RETRY,
+  type PolicyRetry,
 } from "../DurableObjects.ts";
 import type { Platform } from "../Platform.ts";
 
@@ -371,6 +373,14 @@ export interface EntitiesOptions<PoolReq> {
   readonly handler?: string;
   /** The pool whose runners run the model, e.g. `ClusterDocker.SwarmPool("Default")`. */
   readonly pool: PoolLayer<PoolReq>;
+  /**
+   * How often a policy delivery whose handler fails runs again before it is
+   * given up: retried on `schedule` at most `times` times, then the failure
+   * is logged and the next delivery to the same key runs. `false` keeps a
+   * failed delivery at the head of its key's inbox until it succeeds.
+   * @default { schedule: Schedule.exponential("1 second"), times: 5 }
+   */
+  readonly policyRetry?: PolicyRetry | false;
 }
 
 /**
@@ -389,6 +399,8 @@ export interface EntitiesOptions<PoolReq> {
  * instance's input gate. Every instance's events, state and outbox live in
  * the cluster's Postgres, in one table, and commit together. Scheduled
  * commands and retries are persisted messages delivered when they are due.
+ * A policy delivery whose handler keeps failing is retried with backoff
+ * (`policyRetry`), then logged and given up, so later deliveries still run.
  * The model's sagas run on Effect Cluster's workflow engine. Live reads are
  * streamed responses that poll the owning instance.
  *
@@ -444,6 +456,8 @@ export const layerEntities = <PoolReq>(
   Layer.unwrap(
     Effect.gen(function* () {
       const name = options.name;
+      const policyRetry =
+        options.policyRetry === false ? undefined : (options.policyRetry ?? POLICY_RETRY);
       // In this pool's shard group, as the runner registers its entities.
       const shardGroup = () =>
         (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env
@@ -630,6 +644,7 @@ export const layerEntities = <PoolReq>(
             }),
           lookup: ({ modelName }, cls) => self(className(modelName, cls)),
           claimKey: Effect.succeed(claimOf(name)),
+          policyRetry,
         };
         return Layer.merge(
           makePlatform(host),
