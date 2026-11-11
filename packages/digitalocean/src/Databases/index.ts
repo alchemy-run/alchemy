@@ -4,3 +4,5 @@ export * from "./Database.ts";
 export * from "./Firewall.ts";
 export * from "./Replica.ts";
 export * from "./User.ts";
+export * from "./Connect.ts";
+export * from "./ConnectHttp.ts";

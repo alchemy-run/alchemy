@@ -29,8 +29,8 @@ export class Cron extends Context.Service<Cron, CronService>()("DigitalOcean.Cro
  *   App Platform records the run as succeeded or failed. The App's web
  *   service never runs the handler.
  *
- * A schedule fires at most once a minute. Requires `CronLive` provided on
- * the App's Effect.
+ * App Platform runs a schedule at most every 15 minutes. Requires
+ * `CronLive` provided on the App's Effect.
  *
  * ### Declare a schedule
  * **Example:** Clean up every night at 03:00 UTC

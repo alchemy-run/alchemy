@@ -15,6 +15,8 @@ import {
   urlOf,
   waitUntilRunning,
   type Microvm,
+  sizeOf,
+  type SandboxSize,
 } from "./internal.ts";
 import type { Template } from "./Template.ts";
 
@@ -112,7 +114,7 @@ export const makeSandboxesBinding = Effect.succeed(
               name: createOptions?.name ?? `sandbox-${Math.random().toString(36).slice(2, 10)}`,
               source: sourceOf(boundBase),
               region,
-              size: createOptions?.size,
+              size: sizeOf(createOptions?.size),
               environment: createOptions?.env,
               http_port: createOptions?.httpPort,
               auto_pause: autoPauseOf(createOptions?.autoPauseSeconds),

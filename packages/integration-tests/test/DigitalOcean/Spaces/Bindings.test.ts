@@ -100,17 +100,17 @@ describe.sequential("Spaces bindings in a DigitalOcean.App", { tags: LIVE_TAGS }
     test.skipIf(skipSlow)(
       "a scheduled job runs the app's image and writes with its bindings",
       Effect.gen(function* () {
-        // Jobs fire on the minute; allow a few for the first run to start.
+        // The job fires on the quarter hour; the first run can be 15 minutes out.
         const fired = yield* call("/get?key=cron.txt").pipe(
           Effect.repeat({
-            schedule: Schedule.spaced("15 seconds"),
+            schedule: Schedule.spaced("20 seconds"),
             until: (response) => response.status === 200,
-            times: 24,
+            times: 54,
           }),
         );
         expect(fired.text).toMatch(/^\d{4}-\d{2}-\d{2}T/);
       }).pipe(logLevel),
-      { timeout: 600_000 },
+      { timeout: 1_200_000 },
     );
   });
 });

@@ -2,6 +2,7 @@ import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
+import type { SandboxSize } from "./internal.ts";
 import type { SandboxBindingNotConfigured, SandboxError } from "./SandboxClient.ts";
 import type { Template } from "./Template.ts";
 
@@ -16,7 +17,7 @@ export interface CreateSandboxOptions {
   /** Pause after this many idle seconds; a request to `url` resumes it. */
   readonly autoPauseSeconds?: number;
   /** vCPUs and memory (MiB). @default the template's */
-  readonly size?: { readonly cpu: number; readonly memory: number };
+  readonly size?: SandboxSize;
 }
 
 /** The result of a command: a non-zero exit is returned, not failed. */

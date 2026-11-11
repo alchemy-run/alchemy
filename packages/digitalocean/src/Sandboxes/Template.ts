@@ -15,6 +15,8 @@ import {
   waitUntilRunning,
   type MicrovmCheckpoint,
   defaultRegion,
+  sizeOf,
+  type SandboxSize,
 } from "./internal.ts";
 
 export type TemplateProps = {
@@ -35,7 +37,7 @@ export type TemplateProps = {
   /** Region the template lives in. A change rebuilds the template. */
   region?: string;
   /** vCPUs and memory (MiB) sandboxes from the template start with. */
-  size?: { cpu: number; memory: number };
+  size?: SandboxSize;
 };
 
 export type Template = Resource<
@@ -156,7 +158,7 @@ export const TemplateProvider = () =>
         name: `${name}-builder`.slice(0, 63),
         source: { oci_ref: news.image },
         region,
-        size: news.size,
+        size: sizeOf(news.size),
       }).pipe(Effect.map((r) => r.microvm));
       return yield* Effect.gen(function* () {
         yield* waitUntilRunning(builder.id);

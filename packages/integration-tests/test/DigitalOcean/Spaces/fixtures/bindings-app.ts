@@ -11,7 +11,7 @@ export const Files = DigitalOcean.Spaces.Bucket("Files", { region: "nyc3", force
 
 /**
  * One route per Spaces binding, each running as this App's scoped key, and
- * a scheduled job that writes `cron.txt` every minute.
+ * a scheduled job that writes `cron.txt` every 15 minutes.
  */
 export default class BindingsApp extends DigitalOcean.App<BindingsApp>()(
   "BindingsApp",
@@ -24,8 +24,8 @@ export default class BindingsApp extends DigitalOcean.App<BindingsApp>()(
     const listObjects = yield* DigitalOcean.Spaces.ListObjectsV2(bucket);
     const deleteObject = yield* DigitalOcean.Spaces.DeleteObject(bucket);
 
-    // A scheduled job: every minute, record that the schedule fired.
-    yield* DigitalOcean.cron("* * * * *", () =>
+    // A scheduled job, at App Platform's shortest interval: record that it fired.
+    yield* DigitalOcean.cron("*/15 * * * *", () =>
       putObject({ Key: "cron.txt", Body: new Date().toISOString(), ContentType: "text/plain" }),
     );
 

@@ -14,6 +14,8 @@ import {
   waitUntilRunning,
   type Microvm,
   defaultRegion,
+  sizeOf,
+  type SandboxSize,
 } from "./internal.ts";
 
 export type SandboxProps = {
@@ -31,7 +33,7 @@ export type SandboxProps = {
   /** Region. A change replaces the sandbox. */
   region?: string;
   /** vCPUs and memory (MiB). A change replaces the sandbox. */
-  size?: { cpu: number; memory: number };
+  size?: SandboxSize;
   /** Environment variables for processes in the sandbox. A change replaces the sandbox. */
   env?: Record<string, string>;
   /** Port an HTTP server in the sandbox listens on, exposed at `url`. */
@@ -126,7 +128,7 @@ export const SandboxProvider = () =>
         name,
         source: sourceOf(news.base),
         region,
-        size: news.size,
+        size: sizeOf(news.size),
         environment: news.env,
         http_port: news.httpPort,
         auto_pause: autoPauseOf(news.autoPauseSeconds),

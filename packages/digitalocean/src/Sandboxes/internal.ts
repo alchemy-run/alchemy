@@ -119,3 +119,13 @@ export const defaultRegion = (region: string | undefined) =>
   region !== undefined
     ? Effect.succeed(region)
     : DO.getMicrovmOptions({}).pipe(Effect.map((options) => options.default_region));
+
+/** A MicroVM size: one of the vCPU and memory (MiB) pairs DigitalOcean offers. */
+export type SandboxSize =
+  | { readonly cpu: 1; readonly memory: 2048 }
+  | { readonly cpu: 2; readonly memory: 4096 }
+  | { readonly cpu: 8; readonly memory: 16384 }
+  | { readonly cpu: 16; readonly memory: 32768 };
+
+/** The size a MicroVM gets when none is given: 1 vCPU, 2 GiB. */
+export const sizeOf = (size: SandboxSize | undefined) => size ?? { cpu: 1, memory: 2048 };
