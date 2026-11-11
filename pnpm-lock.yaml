@@ -11827,6 +11827,22 @@ importers:
         specifier: 'catalog:'
         version: 2.9.1
 
+  submodules/distilled/packages/coinflow:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.1.0
+        version: 4.1.0
+    devDependencies:
+      '@distilled.cloud/dev':
+        specifier: workspace:*
+        version: link:../dev
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+
   submodules/distilled/packages/coolify:
     dependencies:
       '@distilled.cloud/core':
@@ -12690,6 +12706,22 @@ importers:
       '@distilled.cloud/s3':
         specifier: workspace:*
         version: link:../s3
+      effect:
+        specifier: 4.1.0
+        version: 4.1.0
+    devDependencies:
+      '@distilled.cloud/dev':
+        specifier: workspace:*
+        version: link:../dev
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+
+  submodules/distilled/packages/questrade:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
       effect:
         specifier: 4.1.0
         version: 4.1.0
