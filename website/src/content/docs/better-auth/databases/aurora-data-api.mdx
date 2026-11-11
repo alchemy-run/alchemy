@@ -2,14 +2,13 @@
 title: Aurora Data API
 description: Deploy a Better Auth Lambda with Aurora PostgreSQL over HTTPS and automatic IAM bindings.
 ---
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 This example creates Aurora PostgreSQL and serves Better Auth through a Lambda Function URL. Aurora needs a VPC, but Lambda reaches the Data API over HTTPS without joining that VPC.
 
 ## Install
 
-```sh
-bun add @alchemy.run/better-auth better-auth@^1.7.5 kysely @distilled.cloud/aws
-```
+<PackageManagers add="@alchemy.run/better-auth better-auth@^1.7.5 kysely @distilled.cloud/aws" />
 
 Configure AWS through an [Alchemy profile](/environments/profiles) in a region supporting Aurora PostgreSQL's Data API. No `pg` driver or TCP connection pool is required.
 
@@ -94,9 +93,7 @@ The auth signing secret is generated and bound automatically, separately from Au
 
 ## Deploy and migrate
 
-```sh
-bunx alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 Automatic migrations wait for the writer and use the Data API with deploy-time AWS credentials. Those credentials need database and secret access too; the function's IAM bindings do not grant permissions to the deployer.
 

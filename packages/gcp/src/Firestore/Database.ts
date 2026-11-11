@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -173,8 +174,29 @@ export type Database = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DatabaseLookup
 >;
+
+/**
+ * Props for {@link Database.lookup}: find a database this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface DatabaseLookup {
+  /**
+   * Database id (the `{database}` segment of
+   * `projects/{project}/databases/{database}`). Must be 4-63 characters,
+   * match `[a-z][a-z0-9-]*[a-z0-9]`, and must not look like a UUID.
+   * `"(default)"` is valid for the Standard edition default database.
+   */
+  databaseId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Firestore database.
@@ -213,6 +235,18 @@ export type Database = Resource<
  * });
  * const getDocument = yield* GCP.Firestore.GetDocument(database);
  * const doc = yield* getDocument({ documentPath: "users/alice" });
+ * ```
+ *
+ * ### Looking up an existing database
+ * `Database.lookup` references a database Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared database.
+ *
+ * **Example:** Reference an existing database
+ * ```typescript
+ * const database = GCP.Firestore.Database.lookup({
+ *   databaseId: "my-database",
+ * });
  * ```
  *
  * @resource
@@ -429,6 +463,14 @@ export const DatabaseProvider = () =>
         deleteFirst: previousId !== undefined && nextId !== undefined && nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ databaseId }) {
+      const env = yield* GcpEnvironment.current;
+      const name = resourceName(env.project, databaseId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

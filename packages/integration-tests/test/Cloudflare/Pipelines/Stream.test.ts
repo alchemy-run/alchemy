@@ -53,3 +53,16 @@ test.provider(
     timeout: 300_000,
   },
 );
+
+test.provider(
+  "declared without props, it deploys and destroys",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      // Every prop is optional, so the declaration needs no props object.
+      const deployed = yield* stack.deploy(Cloudflare.Pipelines.Stream("NoProps"));
+      expect(deployed.streamId).toBeTruthy();
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:cloudflare", "provider:cloudflare:pipelines", "live"] },
+);

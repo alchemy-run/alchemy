@@ -6,6 +6,7 @@ import * as discoveryengine from "@distilled.cloud/gcp/discoveryengine_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { quotaTolerant } from "./parent.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -71,6 +72,13 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { store, engine, session };
         }),
+      );
+      yield* expectFound(
+        GCP.DiscoveryEngine.CollectionsEnginesSession.lookup({
+          sessionId: created.session.sessionId,
+          engine: created.session.engine,
+        }),
+        created.session,
       );
 
       expect(created.session.name).toContain("/sessions/");

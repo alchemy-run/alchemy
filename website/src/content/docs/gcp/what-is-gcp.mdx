@@ -1,0 +1,171 @@
+---
+title: What is GCP?
+description: The concepts behind Google Cloud — organizations, projects, APIs, regions, IAM principals, roles and service accounts, Cloud Run and the other runtimes, events, networks and logging — and how @alchemy.run/gcp models each of them.
+---
+
+import Tree from "../../../components/diagrams/Tree.astro";
+
+Google Cloud (GCP) is a cloud platform with services like Cloud Run, Firestore, Cloud Storage, Pub/Sub, BigQuery and Cloud SQL. Each service creates **resources** in your **project**. Every call to a resource is checked by **IAM**, which decides which **principal** holds which **role** on it.
+
+Take one small app: a Cloud Run service that stores links in Firestore and publishes an event to Pub/Sub for a worker. Your profile deploys into a project. Service accounts and topics belong to the whole project, while the service, the database and the worker live in one region. The service runs as its own service account, which holds a role on each resource it uses.
+
+<Tree
+  nodes={[
+    { id: "org", label: "example.com", type: "organization", icon: "brand:gcp" },
+    {
+      id: "project", label: "my-app-prod", type: "project", parent: "org", dashed: true, icon: "folder", colGap: 2,
+      areas: ["sa region topic"],
+      phoneAreas: ["sa sa", "region region", "topic topic"],
+    },
+    { id: "sa", label: "alch-api-…", type: "service account", parent: "project", icon: "id-card" },
+    { id: "region", label: "us-central1", type: "region", parent: "project", dashed: true, icon: "map-pin", areas: ["api", "db", "worker"] },
+    { id: "api", label: "Api", type: "Cloud Run service", parent: "region", tone: "accent", icon: "server" },
+    { id: "db", label: "Links", type: "Firestore database", parent: "region", icon: "database" },
+    { id: "worker", label: "Worker", type: "Cloud Run worker pool", parent: "region", icon: "cog" },
+    { id: "topic", label: "Events", type: "Pub/Sub topic", parent: "project", icon: "radio-tower" },
+  ]}
+  links={[
+    { from: "api", to: "sa", label: "runs as" },
+    { from: "api", to: "db", label: "writes" },
+    { from: "api", to: "topic", label: "publishes" },
+    { from: "worker", to: "topic", label: "pulls" },
+  ]}
+  caption="The project sits in your organization. Service accounts and Pub/Sub topics belong to the project and work in every region. The service, the database and the worker live in one region. Api runs as its service account, which holds a role on Links and Events; Worker pulls the messages Api publishes."
+/>
+
+## Projects: where resources live
+
+A **project** holds resources, the IAM policy that guards them, and the APIs that are turned on for them. It's identified by an id you choose, like `my-app-prod`. Every resource belongs to exactly one project, and its bill goes to the project's **billing account**.
+
+Projects sit in a hierarchy. An **organization** is the root, usually your company's domain, and **folders** group projects inside it, by team or environment. A role granted on a folder applies to every project under it.
+
+Use projects to keep environments apart: one for production, others for staging and development. Many stages can share a development project, each with its own resources.
+
+Alchemy deploys into the project your [profile](/environments/profiles)'s gcloud configuration names. See [Setup](/gcp/setup).
+
+## APIs: turned on per project
+
+Every service is an API, like `run.googleapis.com` or `firestore.googleapis.com`, and an API has to be **enabled** in a project before anything in it can use the service. A new project has almost none enabled.
+
+```sh
+gcloud services enable run.googleapis.com artifactregistry.googleapis.com
+```
+
+[Setup](/gcp/setup) lists the ones most apps need.
+
+## Regions and zones
+
+A **region** is a geographic location, like `us-central1` or `europe-west1`, and each region has several **zones**, separate data centers within it. A Cloud Run service, a Cloud SQL instance or a subnet runs in one region. Some resources are **multi-regional**, like a Cloud Storage bucket in `US`, and some are **global**, like a VPC network and IAM itself.
+
+Your gcloud configuration's `compute/region` is where Alchemy creates regional resources.
+
+## IAM: principals, roles and policies
+
+A **principal** is who's asking: a Google account, a group, or a **service account**, the identity code runs as. A **role** is a named set of permissions, like `roles/pubsub.publisher`. An **IAM policy** on a resource **binds** principals to roles: these principals hold this role here.
+
+```json
+{
+  "role": "roles/pubsub.publisher",
+  "members": ["serviceAccount:alch-api-3f9c0a1b2d@my-app.iam.gserviceaccount.com"]
+}
+```
+
+Policies are set on projects, folders and individual resources, and inherited downward. A role granted on one topic covers that topic. The same role granted on the project covers every topic in it. Grant on the narrowest resource that works.
+
+See [IAM & bindings](/gcp/security/iam).
+
+## Resources and names
+
+A **resource** is one thing a service manages: a bucket, a topic, a database, a service. Its full name carries the project and, if it's regional, the location:
+
+```text
+projects/my-app/topics/myapp-dev-events-a1b2c3
+```
+
+In Alchemy you declare a resource and read its attributes from what it returns:
+
+```typescript title="src/events.ts"
+export const Events = GCP.PubSub.Topic("Events", {});
+```
+
+Alchemy names it from your app, stage and id, so each stage gets its own, and labels it with `alchemy-stack`, `alchemy-stage` and `alchemy-id`, so it knows the resource is its own.
+
+## Runtimes: where your code runs
+
+**Cloud Run** runs containers. A **service** answers HTTP, scales with traffic and to zero when idle. A **job** runs to completion. A **worker pool** keeps containers running with no URL, to consume messages. **Cloud Functions** runs on Cloud Run too, with Google building the image for you. **GKE** runs Kubernetes.
+
+In Alchemy, a runtime is a class whose code and configuration live in one file:
+
+```typescript title="src/api.ts"
+export default class Api extends GCP.Function<Api>()(
+  "Api",
+  { main: import.meta.url, invokerIamDisabled: true },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("Hello from Cloud Run!")),
+    };
+  }),
+) {}
+```
+
+Deploy bundles the file, builds an image, pushes it to Artifact Registry, and deploys a Cloud Run service. `invokerIamDisabled` lets anyone call its URL.
+
+See [Choosing a runtime](/gcp/compute/choosing-a-runtime).
+
+## Bindings: the code is the IAM policy
+
+A runtime that uses a resource needs a client in its code, and a role for its service account on that resource. A **binding** gives you both from one line:
+
+```typescript title="src/api.ts"
+const events = yield* GCP.PubSub.WriteTopic(Events);
+yield* events.publish({ data: "link.created" });
+```
+
+Each runtime gets its own service account. The binding grants that account `roles/pubsub.publisher` on this one topic, and removing the binding revokes it. So each runtime holds exactly the roles its code uses, on exactly the resources it uses.
+
+See [IAM & bindings](/gcp/security/iam).
+
+## Events: Pub/Sub, Eventarc and Scheduler
+
+**Pub/Sub** carries messages: publishers send to a **topic**, and each **subscription** on it receives every message, pushed to a URL or pulled by a worker. **Eventarc** routes events from Google services, like a document changing in Firestore, to a runtime. **Cloud Scheduler** calls a runtime on a cron schedule.
+
+In Alchemy, a runtime subscribes from its own code, and the subscription, the push endpoint and the roles they need are created for it.
+
+See [Pub/Sub](/gcp/messaging/pubsub), [Eventarc](/gcp/messaging/eventarc) and [Cloud Scheduler](/gcp/messaging/scheduler).
+
+## Networks: VPCs and private access
+
+A **VPC network** is global: one network spans every region, divided into regional **subnets**. **Firewall rules** decide what may reach what. Cloud SQL, Memorystore and anything else with a private IP live on a VPC.
+
+Cloud Run reaches into a VPC with **Direct VPC egress**, sending its outbound traffic through a subnet. A runtime that only uses Google APIs, like Firestore or Pub/Sub, needs no network at all.
+
+See [VPC & private networking](/gcp/networking/vpc).
+
+## Logging and monitoring
+
+Everything a runtime writes to its output goes to **Cloud Logging**. Every service reports metrics to **Cloud Monitoring**, where **uptime checks** call your URLs and **alert policies** notify you when something crosses a line.
+
+See [Logging & Monitoring](/gcp/observability/monitoring).
+
+## State: Alchemy's record in your project
+
+Alchemy remembers what each Stack created, so the next deploy knows what to change. `GCP.state()` keeps that record in a Cloud Storage bucket in your project, so deploys from your machine and from CI read the same one.
+
+```typescript title="alchemy.run.ts"
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: GCP.providers(), state: GCP.state() },
+  Effect.gen(function* () {
+    const api = yield* Api;
+    return { url: api.uri };
+  }),
+);
+```
+
+## How @alchemy.run/gcp models these concepts
+
+Each of these concepts is something your Stack declares or something Alchemy does for you.
+
+Your profile's gcloud configuration picks the project and the default region, and `GCP.providers()` deploys into them. Every resource is a declaration, named and labelled per stage. Every runtime is a class that holds its own code, and runs as a service account of its own. Bindings grant that account the roles its code uses, on the resources it uses. Events, networks and monitoring are declarations like any other, next to the code that needs them.
+
+Next, build one: the [tutorial](/gcp/tutorial/part-1) puts these ideas to work, one step at a time. Or read the concepts in depth, starting with [IAM & bindings](/gcp/security/iam).

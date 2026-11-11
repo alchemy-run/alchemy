@@ -9,7 +9,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { emailRoutingScoped } from "./scope.ts";
+import { EMAIL_ROUTING_ZONE, emailRoutingScoped } from "./scope.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -120,7 +120,7 @@ describe.skipIf(!emailRoutingScoped)(
 
           if (!before.enabled) yield* retryForbidden(emailRouting.disableEmailRouting({ zoneId }));
         }).pipe(logLevel),
-      { timeout: 120_000 },
+      { timeout: 120_000, exclusive: EMAIL_ROUTING_ZONE },
     );
   },
 );

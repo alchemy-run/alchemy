@@ -5,6 +5,7 @@ import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
 import { inMemoryState } from "alchemy/State";
 import * as Effect from "effect/Effect";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Docker.providers(), state: inMemoryState() });
 
@@ -75,6 +76,7 @@ describe(
         const docker = yield* Docker.Docker;
         yield* stack.destroy();
         const first = yield* stack.deploy(Docker.Volume("bare-volume"));
+        yield* expectFound(Docker.Volume.lookup({ name: first.name }), first);
         expect(first.driver).toBe("local");
         const second = yield* stack.deploy(Docker.Volume("bare-volume"));
         expect(second.createdAt).toBe(first.createdAt);

@@ -1,3 +1,4 @@
+import { Docker } from "@alchemy.run/docker/Docker";
 import type { Credentials } from "@distilled.cloud/aws/Credentials";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import { Region } from "@distilled.cloud/aws/Region";
@@ -7,7 +8,7 @@ import type { Input } from "alchemy/Input";
 import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
 import type { ScopedPlanStatusSession } from "alchemy/Report";
-import { Resource } from "alchemy/Resource";
+import { type LookupMethod, Resource } from "alchemy/Resource";
 import type { ServerHost } from "alchemy/Runtime/Process";
 import { Stack } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
@@ -21,10 +22,12 @@ import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
+import { nameTagFilter, single } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import {
   type Ec2HostedProps,
+  type InstanceEnclaveOptions,
   type InstanceMetadataOptions,
   createEc2HostRuntimeContext,
   createEc2HostedSupport,
@@ -34,7 +37,7 @@ import type { SecurityGroupId } from "./SecurityGroup.ts";
 import type { SubnetId } from "./Subnet.ts";
 import type { VpcId } from "./Vpc.ts";
 
-export type { InstanceMetadataOptions };
+export type { InstanceEnclaveOptions, InstanceMetadataOptions };
 
 export type InstanceId<ID extends string = string> = `i-${ID}`;
 export const InstanceId = <ID extends string>(id: ID): ID & InstanceId<ID> =>
@@ -109,6 +112,16 @@ export interface InstanceProps extends PlatformProps {
    */
   metadataOptions?: InstanceMetadataOptions;
   /**
+   * Enable AWS Nitro Enclaves, which also lets the instance run
+   * [Nitro Sandboxes](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/amazon-ec2-nitro-sandboxes.html):
+   * lightweight VMs, isolated by the Nitro hypervisor, that a VMM such as
+   * Firecracker launches on the instance. Needs an instance type that
+   * supports Nitro Enclaves.
+   *
+   * Set at launch only; changing it replaces the instance.
+   */
+  enclaveOptions?: InstanceEnclaveOptions;
+  /**
    * User-defined tags to apply to the instance.
    */
   tags?: Record<string, string>;
@@ -117,6 +130,20 @@ export interface InstanceProps extends PlatformProps {
    * When omitted, the instance behaves as a low-level EC2 resource.
    */
   main?: string;
+  /**
+   * A Docker build context the instance runs as a container: built on the
+   * deploying machine for the instance's architecture (Graviton types are
+   * arm64), saved, and loaded into Docker on the instance, which installs
+   * Docker if it has none. The image's own `CMD` runs on the host network,
+   * with {@link env}. A change to the context reboots into the new image.
+   * Set this or {@link main}.
+   */
+  context?: string;
+  /**
+   * The Dockerfile for {@link context}, relative to it unless absolute.
+   * @default "Dockerfile"
+   */
+  dockerfile?: string;
   /**
    * Named export to load from `main`.
    * @default "default"
@@ -239,6 +266,10 @@ export interface Instance extends Resource<
      */
     metadataOptions?: InstanceMetadataOptions;
     /**
+     * Whether Nitro Enclaves (and so Nitro Sandboxes) are enabled.
+     */
+    enclaveOptions?: InstanceEnclaveOptions;
+    /**
      * When the instance was launched.
      */
     launchTime?: string;
@@ -283,8 +314,23 @@ export interface Instance extends Resource<
     /** IAM policy statements attached to the instance profile role. */
     policyStatements?: PolicyStatement[];
   },
-  Providers
+  Providers,
+  InstanceLookup
 > {}
+
+/**
+ * Props for {@link Instance.lookup}: find an instance this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type InstanceLookup =
+  | {
+      /** The id of the existing instance. */
+      instanceId: string;
+    }
+  | {
+      /** The value of its `Name` tag; fails when several running instances share it. */
+      name: string;
+    };
 
 export type InstanceServices = ServerHost | Credentials | Region | AWSEnvironment;
 
@@ -316,6 +362,18 @@ export type InstanceRuntimeContext = Ec2HostRuntimeContext;
  *     httpTokens: "required",
  *     httpPutResponseHopLimit: 1,
  *   },
+ * });
+ * ```
+ *
+ * ### Nitro Sandboxes
+ * **Example:** Instance that runs Nitro Sandboxes
+ * Enable Nitro Enclaves on a supported instance type, then launch each
+ * sandbox on the instance with Firecracker.
+ * ```typescript
+ * const host = yield* AWS.EC2.Instance("SandboxHost", {
+ *   imageId: AWS.EC2.amazonLinux2023(),
+ *   instanceType: "m6i.xlarge",
+ *   enclaveOptions: { enabled: true },
  * });
  * ```
  *
@@ -367,12 +425,33 @@ export type InstanceRuntimeContext = Ec2HostRuntimeContext;
  * }
  * ```
  *
+ * ### Running a container
+ * **Example:** A Dockerfile build, run with Docker on the instance
+ * ```typescript
+ * const worker = yield* AWS.EC2.Instance("Worker", {
+ *   imageId: AWS.EC2.amazonLinux2023(),
+ *   instanceType: "t4g.small",
+ *   context: "./worker",
+ * });
+ * ```
+ *
+ * ### Looking up an existing instance
+ * `Instance.lookup` references an instance Alchemy doesn't manage (created in the
+ * console or by another stack), found by `instanceId` or its `Name` tag. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Register an existing instance with a target group
+ * ```typescript
+ * const bastion = AWS.EC2.Instance.lookup({ name: "bastion" });
+ * const instanceId = bastion.instanceId;
+ * ```
+ *
  * @resource
  */
-export const Instance: Platform<Instance, InstanceServices, InstanceShape, InstanceRuntimeContext> =
-  Platform("AWS.EC2.Instance", {
-    createRuntimeContext: createEc2HostRuntimeContext("AWS.EC2.Instance"),
-  });
+export const Instance: Platform<Instance, InstanceServices, InstanceShape, InstanceRuntimeContext> &
+  LookupMethod<Instance> = Platform("AWS.EC2.Instance", {
+  createRuntimeContext: createEc2HostRuntimeContext("AWS.EC2.Instance"),
+});
 
 export const InstanceProvider = () =>
   Provider.effect(
@@ -397,6 +476,7 @@ export const InstanceProvider = () =>
         fs,
         virtualEntryPlugin,
         resourceType: "EC2.Instance",
+        docker: yield* Docker,
       });
 
       const isPendingInstanceProfileError = (error: unknown) => {
@@ -499,6 +579,9 @@ export const InstanceProvider = () =>
                   | InstanceMetadataOptions["instanceMetadataTags"]
                   | undefined,
               }
+            : undefined,
+          enclaveOptions: instance.EnclaveOptions
+            ? { enabled: instance.EnclaveOptions.Enabled ?? false }
             : undefined,
           launchTime:
             instance.LaunchTime instanceof Date
@@ -658,6 +741,7 @@ export const InstanceProvider = () =>
             privateIpAddress: news.privateIpAddress,
             availabilityZone: news.availabilityZone,
             metadataOptions: news.metadataOptions,
+            enclaveOptions: news.enclaveOptions,
             tags,
           },
           runtime,
@@ -703,7 +787,8 @@ export const InstanceProvider = () =>
           // must be compared by value rather than by reference.
           const userDataChanged =
             !isResolved(raw.userData) || !deepEqual(raw.userData, olds.userData);
-          const hostModeChanged = Boolean(olds.main) !== Boolean(raw.main);
+          const hostModeChanged =
+            Boolean(olds.main || olds.context) !== Boolean(raw.main || raw.context);
           if (
             hostModeChanged ||
             launchConfigChanged(raw.imageId, olds.imageId) ||
@@ -713,7 +798,10 @@ export const InstanceProvider = () =>
             userDataChanged ||
             launchConfigChanged(raw.associatePublicIpAddress, olds.associatePublicIpAddress) ||
             launchConfigChanged(raw.privateIpAddress, olds.privateIpAddress) ||
-            launchConfigChanged(raw.availabilityZone, olds.availabilityZone)
+            launchConfigChanged(raw.availabilityZone, olds.availabilityZone) ||
+            !isResolved(raw.enclaveOptions) ||
+            (olds.enclaveOptions?.enabled ?? false) !==
+              ((raw.enclaveOptions as InstanceEnclaveOptions | undefined)?.enabled ?? false)
           ) {
             // A primary private IP cannot belong to two instances in the
             // same subnet. An omitted subnet may still resolve to that subnet.
@@ -734,6 +822,9 @@ export const InstanceProvider = () =>
           // diff had).
           const contentInputs = {
             main: raw.main,
+            context: raw.context,
+            dockerfile: raw.dockerfile,
+            instanceType: raw.instanceType,
             handler: raw.handler,
             build: raw.build,
             port: raw.port,
@@ -743,11 +834,12 @@ export const InstanceProvider = () =>
             // with MISSING_EXPORT when the source has no default export.
             isExternal: raw.isExternal,
           };
-          if (isResolved(contentInputs) && contentInputs.main !== undefined && output?.code?.hash) {
-            const { hash } = yield* hosted.bundleProgram(
-              id,
-              contentInputs as unknown as Ec2HostedProps,
-            );
+          if (
+            isResolved(contentInputs) &&
+            (contentInputs.main !== undefined || contentInputs.context !== undefined) &&
+            output?.code?.hash
+          ) {
+            const hash = yield* hosted.programHash(id, contentInputs as unknown as Ec2HostedProps);
             if (hash !== output.code.hash) {
               return {
                 action: "update",
@@ -762,6 +854,8 @@ export const InstanceProvider = () =>
             olds.sourceDestCheck !== news.sourceDestCheck ||
             !deepEqual(olds.metadataOptions ?? {}, news.metadataOptions ?? {}) ||
             olds.main !== news.main ||
+            olds.context !== news.context ||
+            olds.dockerfile !== news.dockerfile ||
             olds.handler !== news.handler ||
             olds.port !== news.port ||
             !deepEqual(olds.env ?? {}, news.env ?? {}) ||
@@ -781,6 +875,29 @@ export const InstanceProvider = () =>
 
           // Content-only changes were already handled by the resolved-subset
           // bundle-hash check above.
+        }),
+        lookup: Effect.fn(function* (props) {
+          const instance =
+            "instanceId" in props
+              ? yield* describeInstance(props.instanceId).pipe(
+                  Effect.catchTags({
+                    "InvalidInstanceID.NotFound": () => Effect.undefined,
+                    InstanceNotFound: () => Effect.undefined,
+                  }),
+                )
+              : yield* single(
+                  "AWS.EC2.Instance",
+                  `Name=${props.name}`,
+                  (yield* ec2.describeInstances({
+                    Filters: [nameTagFilter(props.name)],
+                  })).Reservations?.flatMap((r) => r.Instances ?? []).filter(
+                    (i) => i.State?.Name !== "terminated",
+                  ) ?? [],
+                  (i) => i.InstanceId,
+                );
+          return instance && instance.State?.Name !== "terminated"
+            ? yield* toAttributes(instance)
+            : undefined;
         }),
         read: Effect.fn(function* ({ id, instanceId, output }) {
           const instance = output?.instanceId
@@ -1022,7 +1139,7 @@ export const InstanceProvider = () =>
           // Hosted-runtime reboot — picks up new bundle/env without an
           // explicit instance-type cycle. Skip if the type-change path
           // already restarted us.
-          if (news.main && !restarted) {
+          if ((news.main || news.context) && !restarted) {
             yield* ec2.rebootInstances({ InstanceIds: [instanceId] });
             yield* waitForState({
               instanceId,

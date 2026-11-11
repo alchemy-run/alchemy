@@ -101,10 +101,10 @@ tool (its `create-workflow` skill), or the equivalent elsewhere. Run a
 workflow only when the user asked for one, since it spends many agents. A workflow runs the whole wave as one
 script with bounded parallelism, enforces an agent budget, and journals
 every finished agent's result, so a crash costs only the agents still
-running. Use plain subagents only when no workflow tool exists; in T3 Code
-those are `delegate_task` subagent threads (nested under the coordinator,
-which is notified as each finishes), never top-level `t3_thread_launch`
-threads. Either way,
+running. When no workflow tool exists, launch each agent as a detached
+top-level thread (`t3_thread_launch` with `workspaceStrategy: "worktree"`
+in T3 Code), never a `delegate_task` subagent thread; the coordinator reads
+each thread's result with `t3_thread_read`. Either way,
 each agent gets the task contract from **What every agent task prompt must
 include** in `AGENTS.md`, owns one distilled service, and returns the
 structured result the coordinator turns into index statuses.
@@ -161,7 +161,10 @@ unverified. Ask in one message, and name exactly what is needed:
 
 - the auth method the provider supports (API token, service account key,
   OAuth app, access key pair) and the minimum scopes or roles the test
-  resources need;
+  resources need. If the provider supports OIDC or workload identity
+  federation for deploys (GitHub Actions, a cloud's identity pool), ask for
+  that setup and wire it through `alchemy/Auth/OidcToken`; a long-lived API
+  key is the fallback, not the default;
 - a dedicated test account, project, or organization — never a production
   one, because tests create and nuke resources;
 - account identifiers the API needs (org id, project id, default region);
@@ -481,18 +484,36 @@ an SQS queue. `src/<Provider>Bindings.ts` owns the decision and exports:
 
 - `HostBinding` — what a binding attaches: grants (IAM statements, role
   bindings, role assignments) plus `env`.
-- `Bind` — yields a tagged-template `bind`. On a host that runs as the
-  cloud's own identity (`runsAsRole`, `runsAsServiceAccount`; an Azure
-  managed identity) the grants go on that identity. Any other host gets an
-  identity built from the provider's own resources (IAM `User` +
-  `AccessKey` + `Role` on AWS, `ServiceAccount` + `ServiceAccountKey` on
-  GCP), the grants go on it, and its key goes into the host's env through
-  `CurrentRuntimeContext`. With no host (a script, plan-time `execute`) it
-  does nothing. In a host bundle it is a no-op, so the identity resources
-  drop out.
+- `Bind` — yields a tagged-template `bind`. It picks the host's identity
+  in the order of "Federated identity over keys" in `AGENTS.md`:
+  - On a host that runs as the cloud's own identity (`runsAsRole`,
+    `runsAsServiceAccount`; an Azure managed identity) the grants go on
+    that identity.
+  - On a host whose platform signs identity tokens (`runsAsGoogleServiceAccount`
+    and `runsOnFlyMachines` in `AWSBindings`; `runsAsAwsRole` and
+    `runsOnFlyMachines` in `GCPBindings`) it creates a trust scoped to that
+    one workload (a Role that trusts the token's subject, a workload
+    identity pool member for one role or App), and the grants go on it. No
+    key exists.
+  - Only a host with no platform identity (a Cloudflare Worker) gets an
+    identity built from the provider's own resources (IAM `User` +
+    `AccessKey` + a Role that user alone may assume on AWS,
+    `ServiceAccount` + `ServiceAccountKey` on GCP), and its key goes into
+    the host's env through `CurrentRuntimeContext`.
+
+  With no host (a script, plan-time `execute`) it does nothing. In a host
+  bundle it is a no-op, so the identity resources drop out.
+
+  When you add a provider, or a new kind of runtime, check whether its
+  platform issues OIDC tokens or signs requests before reaching for the key
+  path, and add a federated branch to every cloud's `<P>Bindings` that can
+  trust it. A runtime that has tokens implements
+  `BaseRuntimeContext.oidcToken(audience)` and sets
+  `__ALCHEMY_HOST_IDENTITY__` in its bundler.
 - `withCredentials(operation)` — resolves a distilled operation once when
-  the layer is built: the host's ambient identity, the bound key read back
-  from `RuntimeContext`, or the deployer's credentials.
+  the layer is built: the host's ambient identity, a token exchange
+  (`AssumeRoleWithWebIdentity`, Google STS) for a federated host, the
+  bound key read back from `RuntimeContext`, or the deployer's credentials.
 - `<identity>HostBundle` — the rolldown option the provider's own host
   bundlers apply (`Lambda/FunctionBundle.ts`, `CloudFunctions/FunctionSource.ts`,
   the `ImageSource.ts` files). It sets `__ALCHEMY_HOST_IDENTITY__` (declared

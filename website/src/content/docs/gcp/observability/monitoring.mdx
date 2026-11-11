@@ -2,6 +2,7 @@
 title: Logging & Monitoring
 description: Declare uptime checks, alert policies, notification channels, and logs-based metrics in the same Stack as the services they watch.
 ---
+import Timeline from "../../../../components/diagrams/Timeline.astro";
 
 Cloud Run sends everything your service logs to Cloud Logging, with no
 setup. Declare the checks and alerts that watch it next to the service
@@ -70,6 +71,20 @@ yield* GCP.Monitoring.AlertPolicy("ApiErrors", {
   notificationChannels: [oncall.name],
 });
 ```
+
+<Timeline
+  end={10}
+  lanes={[
+    { id: "cond", label: "5xx > 5/s", type: "the condition" },
+    { id: "inc", label: "ApiErrors", type: "incident" },
+  ]}
+  bars={[
+    { lane: "cond", start: 1, end: 8, label: "condition holds", tone: "danger" },
+    { lane: "inc", start: 2.6, end: 8, label: "open", tone: "warn" },
+  ]}
+  marks={[{ at: 2.6, label: "held 60s: oncall notified" }, { at: 8, label: "clears: closes" }]}
+  caption="The condition has to hold for its whole duration before the policy opens an incident and notifies the channel. When the errors stop, the incident closes."
+/>
 
 ## Count log lines
 

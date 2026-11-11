@@ -1,7 +1,8 @@
 /**
  * Model a domain from commands, events and rejections; aggregates that decide;
- * views that fold; and policies that react. Expose it to clients as an Api,
- * and host it on whichever Platform Layer is provided.
+ * views that fold; policies that react; and queries that read across keys.
+ * Expose it to clients as an Api, and host it on whichever Platform Layer is
+ * provided.
  *
  * ```typescript
  * import * as Domain from "@alchemy.run/domain";
@@ -15,7 +16,7 @@
  * Every building block is `Domain.<Noun>(...)`, and its types live on the
  * same name: `Domain.Event.Any`, `Domain.Aggregate.StateOf<typeof Account>`.
  * Stories (given / when / then specifications) are in `@alchemy.run/domain/Story`;
- * the Cloudflare platform is in `@alchemy.run/cloudflare/Domain`.
+ * the Cloudflare platform is in `@alchemy.run/domain/Cloudflare`.
  */
 import * as AggregateModule from "./Aggregate.ts";
 import * as ApiModule from "./Api.ts";
@@ -26,6 +27,7 @@ import type * as KeyModule from "./Key.ts";
 import * as ModelModule from "./Model.ts";
 import * as PolicyModule from "./Policy.ts";
 import * as ProjectionModule from "./Projection.ts";
+import * as QueryModule from "./Query.ts";
 import * as RejectionModule from "./Rejection.ts";
 import * as RequestContextModule from "./RequestContext.ts";
 import * as SagaModule from "./Saga.ts";
@@ -134,6 +136,8 @@ export declare namespace View {
   export type Page<E> = ViewModule.Page<E>;
   /** What `MyView.evolve` applies. */
   export type LocalInput<Def, Key extends KeyModule.Any> = ViewModule.LocalInput<Def, Key>;
+  /** How much of the history recorded before a view or projection has reached it. */
+  export type History = ViewModule.History;
 }
 /** A read model folded from events, per key. See {@link ViewModule.make}. */
 export const View = ViewModule.make;
@@ -175,6 +179,21 @@ export declare namespace Projection {
 /** Consumes events into a store you own, in order per key; replayable, never sends commands. See {@link ProjectionModule.make}. */
 export const Projection = ProjectionModule.make;
 
+export declare namespace Query {
+  /** Any Query class. */
+  export type Any = QueryModule.Any;
+  export type InputOf<Q extends QueryModule.Any> = QueryModule.InputOf<Q>;
+  export type ResultOf<Q extends QueryModule.Any> = QueryModule.ResultOf<Q>;
+  /** A page of a paged query's rows. */
+  export type Page<Row> = QueryModule.Page<Row>;
+  /** The page a paged query's handler is asked for. */
+  export type PageRequest = QueryModule.PageRequest;
+  /** How a query's Layer runs it: page size limits. */
+  export type LayerOptions = QueryModule.LayerOptions;
+}
+/** A question asked across keys, answered from a store a projection writes. See {@link QueryModule.make}. */
+export const Query = QueryModule.make;
+
 export declare namespace Stream {
   /** Any Stream class. */
   export type Any = StreamModule.Any;
@@ -199,10 +218,26 @@ export declare namespace ExternalSystem {
 export const ExternalSystem = ExternalSystemModule.make;
 
 export declare namespace Api {
-  /** What an Api may expose: commands, views, and aggregates with a `read` contract. */
-  export type Entry = ApiModule.Entry;
+  /** What an Api may serve: commands, views, streams and queries. */
+  export type Servable = ApiModule.Servable;
+  /** What `Domain.Api` takes: the model, and the names of what of it the Api serves. */
+  export type Options<
+    M extends ModelModule.Any,
+    C extends ReadonlyArray<ApiModule.CommandName<M>>,
+    V extends ReadonlyArray<ApiModule.ViewName<M>>,
+    S extends ReadonlyArray<ApiModule.StreamName<M>>,
+    Q extends ReadonlyArray<ApiModule.QueryName<M>> = ReadonlyArray<ApiModule.QueryName<M>>,
+  > = ApiModule.Options<M, C, V, S, Q>;
+  /** The names of the commands a model holds: their tags. */
+  export type CommandName<M extends ModelModule.Any> = ApiModule.CommandName<M>;
+  /** The names of the views a model holds. */
+  export type ViewName<M extends ModelModule.Any> = ApiModule.ViewName<M>;
+  /** The names of the streams a model holds. */
+  export type StreamName<M extends ModelModule.Any> = ApiModule.StreamName<M>;
+  /** The names of the queries a model holds. */
+  export type QueryName<M extends ModelModule.Any> = ApiModule.QueryName<M>;
   /** The typed client of an Api. */
-  export type Client<E extends ApiModule.Entry> = ApiModule.ApiClient<E>;
+  export type Client<E extends ApiModule.Servable> = ApiModule.ApiClient<E>;
   /** Type-level identity of an Api's client service, e.g. `Domain.Api.ClientKey<"BankApi">`. */
   export type ClientKey<Name extends string> = ApiModule.ClientKey<Name>;
   export type CommandClient<C extends CommandModule.Any> = ApiModule.CommandClient<C>;
@@ -210,7 +245,13 @@ export declare namespace Api {
   export type CommandOptions = ApiModule.CommandOptions;
   export type ViewClient<V extends ViewModule.Any> = ApiModule.ViewClient<V>;
   export type StreamClient<S extends StreamModule.Any> = ApiModule.StreamClient<S>;
-  export type AggregateClient<A extends AggregateModule.Any> = ApiModule.AggregateClient<A>;
+  export type QueryClient<Q extends QueryModule.Any> = ApiModule.QueryClient<Q>;
+  /** A paged query's `pages` and `entries` Streams. */
+  export type PagedQueryClient<Q extends QueryModule.Any> = ApiModule.PagedQueryClient<Q>;
+  /** How a client asks a query: `atLeast`, `after`, `take` and the call's headers. */
+  export type QueryOptions = ApiModule.QueryOptions;
+  /** Everything a query can fail with. */
+  export type QueryError<Q extends QueryModule.Any> = ApiModule.QueryError<Q>;
   /** Everything a read can fail with. */
   export type ReadError<D> = ApiModule.ReadError<D>;
   /** Any Api class, for code that works with every Api. */
@@ -234,13 +275,16 @@ export const protocolInProcess = ApiModule.protocolInProcess;
 export declare namespace Model {
   /** Any Model class. */
   export type Any = ModelModule.Any;
+  /** How a model's `layer` hosts it, including each view's version. */
+  export type LayerOptions<Views extends string = string> = ModelModule.LayerOptions<Views>;
 }
-/** The aggregates, views, policies, projections and streams hosted together. See {@link ModelModule.make}. */
+/** The aggregates, views, policies, projections, streams and queries hosted together. See {@link ModelModule.make}. */
 export const Model = ModelModule.make;
 
 /** Every definition problem in a Model, without hosting it. See {@link ModelModule.verify}. */
 export const verify = ModelModule.verify;
 /** A problem in a Model's definitions, found by {@link verify} or when its Layer is built. */
+export type { Annotations } from "./Annotations.ts";
 export { DefinitionError } from "./Kernel.ts";
 
 /** A service middleware provides to a request, carried into the domain. See {@link RequestContextModule.make}. */

@@ -3,6 +3,7 @@ import { describe, expect, it } from "@alchemy.run/test";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
 class RefundDeclined extends Domain.Rejection("RefundDeclined", { reason: Schema.String }) {}
@@ -41,7 +42,7 @@ const refund = (args: unknown) =>
 const defectOf = <A, E>(exit: Exit.Exit<A, E>) =>
   Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
 
-describe("Domain ExternalSystem", () => {
+describe("Domain ExternalSystem", { tags: ["unit", "local"] }, () => {
   it.effect("passes valid arguments to the adapter and returns its answer", () =>
     Effect.gen(function* () {
       const { seen, layer } = adapter(({ settlementId }) =>
@@ -173,5 +174,44 @@ describe("Domain ExternalSystem", () => {
       );
       expect(result).toEqual({ refundId: 42 });
     }),
+  );
+
+  it.effect("refuses an operation named after a static of the class", () =>
+    Effect.gen(function* () {
+      class Clash extends Domain.ExternalSystem("Clash", {
+        // @ts-expect-error toLayer is the class's own static
+        toLayer: {},
+      }) {}
+      const exit = yield* Effect.exit(
+        Layer.build(Clash.toLayer(Effect.succeed({} as never))).pipe(Effect.scoped),
+      );
+      expect(defectOf(exit)).toMatchObject({
+        _tag: "DefinitionError",
+        reason: { _tag: "ReservedOperation", system: "Clash", operation: "toLayer" },
+      });
+    }),
+  );
+
+  it.effect(
+    "refuses an operation named annotations, which the class keeps its annotations in",
+    () =>
+      Effect.gen(function* () {
+        class Clash extends Domain.ExternalSystem(
+          "Clash",
+          {
+            // @ts-expect-error annotations is the class's own static
+            annotations: {},
+          },
+          { description: "Clashes." },
+        ) {}
+        expect(Clash.annotations).toEqual({ description: "Clashes." });
+        const exit = yield* Effect.exit(
+          Layer.build(Clash.toLayer(Effect.succeed({} as never))).pipe(Effect.scoped),
+        );
+        expect(defectOf(exit)).toMatchObject({
+          _tag: "DefinitionError",
+          reason: { _tag: "ReservedOperation", system: "Clash", operation: "annotations" },
+        });
+      }),
   );
 });

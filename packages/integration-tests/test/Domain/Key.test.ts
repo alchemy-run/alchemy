@@ -158,7 +158,7 @@ export const streamedByRef = Story.streamed(OrgFeed, Tour.ref("t-1"));
 const acme = OrgId.make("acme");
 const globex = OrgId.make("globex");
 
-describe("Domain keyed by a schema", () => {
+describe("Domain keyed by a schema", { tags: ["unit", "local"] }, () => {
   it.effect("folds every aggregate's events into the org they name", () =>
     story(
       Story.when(Tour.ref("t-1"), new BookTour({ orgId: acme, unit: "1A" })),
@@ -237,7 +237,7 @@ describe("Domain keyed by a schema", () => {
       const first = yield* tours.send("t-1", new BookTour({ orgId: acme, unit: "1A" }));
       const second = yield* tours.send("t-2", new BookTour({ orgId: acme, unit: "2B" }));
       expect(yield* Fiber.join(watched)).toEqual([1, 2]);
-      const state = yield* schedules.query(acme, {
+      const state = yield* schedules.get(acme, {
         atLeast: { stream: second.stream, version: second.version },
       });
       expect(Option.getOrNull(state)).toEqual({ org: "acme", tours: { "t-1": "1A", "t-2": "2B" } });
@@ -250,7 +250,11 @@ describe("Domain keyed by a schema", () => {
 
   it.live("is served through an Api by its key", () =>
     Effect.gen(function* () {
-      class TourApi extends Domain.Api("TourApi", OrgSchedule, OrgFeed) {}
+      class TourApi extends Domain.Api("TourApi", {
+        model: Tours,
+        views: ["OrgSchedule"],
+        streams: ["OrgFeed"],
+      }) {}
       const client = yield* TourApi.clientInProcess;
       const tours = yield* Tour;
       const receipt = yield* tours.send("t-1", new BookTour({ orgId: acme, unit: "1A" }));

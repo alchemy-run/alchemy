@@ -29,8 +29,26 @@ export type TestBody = () => Effect.Effect<unknown, unknown, never>;
 /** A hook body. Same contract as {@link TestBody}. */
 export type HookBody = () => Effect.Effect<unknown, unknown, never>;
 
-/** `true` for the whole-process lock, or a label naming a narrower lock. */
-export type Exclusive = boolean | string;
+/**
+ * A counted lock: at most `permits` tests and hooks holding `label` run at
+ * once, across every file in the run. Use it for a shared cloud API budget
+ * (e.g. a rate-limited control plane) rather than serializing on a label.
+ * Waiting for a permit doesn't count against a test's timeout.
+ */
+export interface Limit {
+  readonly label: string;
+  readonly permits: number;
+}
+
+/**
+ * `true` for the whole-process lock, a label naming a narrower lock (one
+ * holder at a time), or a {@link Limit}. A list holds several at once.
+ */
+export type Exclusive =
+  | boolean
+  | string
+  | Limit
+  | ReadonlyArray<boolean | string | Limit | undefined>;
 
 export interface Hook {
   readonly body: HookBody;

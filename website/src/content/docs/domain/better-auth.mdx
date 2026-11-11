@@ -2,16 +2,15 @@
 title: Sign in with better-auth
 description: Sign users in to a Domain Api with GitHub or Google through better-auth, and give every command and view the signed-in user.
 ---
+import PackageManagers from "../../../components/PackageManagers.astro";
 
 [better-auth](https://better-auth.com) signs users in with GitHub, Google and many other providers, and keeps their sessions in your database. A Domain Api reads that session in middleware, so every command and view knows who is asking.
 
-This page builds a small notes app on Cloudflare, with a [foldkit](https://foldkit.dev) UI: users sign in with GitHub or Google and write notes only they can read. The whole app is in [`examples/cloudflare-domain-better-auth`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-domain-better-auth).
+Take a small notes app on Cloudflare, with a [foldkit](https://foldkit.dev) UI: users sign in with GitHub or Google and write notes only they can read. The whole app is in [`examples/cloudflare-domain-better-auth`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-domain-better-auth).
 
 ## Install
 
-```sh
-bun add @alchemy.run/domain @alchemy.run/better-auth @alchemy.run/cloudflare better-auth
-```
+<PackageManagers add="@alchemy.run/domain @alchemy.run/better-auth @alchemy.run/cloudflare better-auth" />
 
 ## Declare who is asking
 
@@ -113,7 +112,7 @@ export class Notebook extends Domain.Aggregate("Notebook", {
   initial: { notes: 0 },
   commands: [WriteNote],
   decide: {
-    WriteNote: Effect.fn(function* (_s, cmd, { id }) {
+    WriteNote: Effect.fn(function* (_, cmd, { id }) {
       const user = yield* CurrentUser;
       if (user.userId !== id) return yield* new NotYours();
       return [new NoteWritten({ text: cmd.text, author: user.name })];
@@ -150,11 +149,17 @@ export class Notes extends Domain.View("Notes", {
   evolve: {
     NoteWritten: (v, e) => ({ notes: [...v.notes, e.text] }),
   },
-  validate: Effect.fn(function* (request) {
-    const user = yield* CurrentUser;
-    if (request.key.id !== user.userId) return yield* new NotYours();
-  }),
 }) {}
+
+/** Only a notebook's owner reads its notes. */
+export const NotesLive = Notes.toLayer(
+  Effect.succeed(
+    Effect.fn(function* (request) {
+      const user = yield* CurrentUser;
+      if (request.key.id !== user.userId) return yield* new NotYours();
+    }),
+  ),
+);
 ```
 
 ```typescript
@@ -172,14 +177,17 @@ export class NotesModel extends Domain.Model("Notes", {
 ```typescript
 // src/NotesApi.api.ts
 import * as Domain from "@alchemy.run/domain";
-import { Notes } from "./Notes.view.ts";
-import { WriteNote } from "./WriteNote.command.ts";
+import { NotesModel } from "./Notes.model.ts";
 
 /** What the browser reaches. */
-export class NotesApi extends Domain.Api("NotesApi", WriteNote, Notes) {}
+export class NotesApi extends Domain.Api("NotesApi", {
+  model: NotesModel,
+  commands: ["WriteNote"],
+  views: ["Notes"],
+}) {}
 ```
 
-`validate` runs on every read, so only the owner reads a notebook's notes.
+`validate`, on the view's Layer, runs on every read, so only the owner reads a notebook's notes.
 
 ## Configure better-auth
 
@@ -285,19 +293,20 @@ export const AuthDb = Cloudflare.D1.Database("AuthDb");
 // src/NotesWorker.ts
 import { CloudflareD1 } from "@alchemy.run/better-auth/CloudflareD1";
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as Layer from "effect/Layer";
 import { Auth, AuthLive } from "./Auth.ts";
 import { AuthDb } from "./Database.ts";
 import { NotesModel } from "./Notes.model.ts";
+import { NotesLive } from "./Notes.view.ts";
 import { NotesApi } from "./NotesApi.api.ts";
 import { SessionLive } from "./Session.ts";
 
-const NotesLive = SessionLive.pipe(
+const ServerLive = SessionLive.pipe(
   Layer.provideMerge(AuthLive),
-  Layer.provideMerge(NotesModel.layer(Layer.empty)),
+  Layer.provideMerge(NotesModel.layer(NotesLive)),
   Layer.provide(Layer.mergeAll(DomainCloudflare.layerDurableObjects(), CloudflareD1(AuthDb))),
 );
 
@@ -319,7 +328,7 @@ export default class NotesWorker extends Cloudflare.Worker<NotesWorker>()(
         return yield* api.fetch;
       }),
     };
-  }).pipe(Effect.provide(NotesLive)),
+  }).pipe(Effect.provide(ServerLive)),
 ) {}
 ```
 
@@ -327,10 +336,7 @@ The Notes Worker serves better-auth's routes under `/api/auth` and the NotesApi 
 
 ## Install foldkit
 
-```sh
-bun add foldkit @effect/platform-browser
-bun add -d vite @foldkit/vite-plugin
-```
+<PackageManagers add="foldkit @effect/platform-browser" dev="vite @foldkit/vite-plugin" />
 
 ## Configure Vite
 
@@ -620,13 +626,18 @@ The app's Worker serves the built page and forwards `/api` to the Notes Worker. 
 ```typescript
 // alchemy.run.ts
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import NotesWorker from "./src/NotesWorker.ts";
 
 export default Alchemy.Stack(
   "DomainBetterAuth",
-  { providers: Cloudflare.providers(), state: Cloudflare.state() },
+  {
+    providers: Layer.mergeAll(Cloudflare.providers(), DomainCloudflare.providers()),
+    state: Cloudflare.state(),
+  },
   Effect.gen(function* () {
     const notes = yield* NotesWorker;
     // The foldkit app, built with Vite. Its Worker serves the build and
@@ -673,9 +684,7 @@ Keep `.env` out of source control. For production, register the deployed app's c
 
 ## Run it
 
-```sh
-bun alchemy dev
-```
+<PackageManagers run="alchemy dev" />
 
 Open the app's URL, sign in with GitHub or Google, and write a note.
 

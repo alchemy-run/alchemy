@@ -1,0 +1,52 @@
+---
+title: Persistent sandboxes
+description: One Modal sandbox whose filesystem outlives its sessions, resumed from a Worker.
+---
+
+import Timeline from "../../../../components/diagrams/Timeline.astro";
+
+A **persistent sandbox** is one sandbox whose files outlive the container that runs it. It runs in **sessions**: each one up to an hour, paused after five idle minutes, and resumed with the files the last one left.
+
+## Sessions come and go, the files stay
+
+<Timeline
+  end={10}
+  lanes={[{ id: "box", label: "DevBox", type: "persistent sandbox" }]}
+  bars={[
+    { lane: "box", start: 0, end: 3, label: "session 1", tone: "accent" },
+    { lane: "box", start: 3, end: 6, label: "paused", tone: "muted" },
+    { lane: "box", start: 6, end: 10, label: "session 2", tone: "accent" },
+  ]}
+  marks={[{ at: 3, label: "5 idle minutes" }, { at: 6, label: "session()" }]}
+  caption="Session 1 pauses after five idle minutes. The next call to session() starts session 2 from the files session 1 left."
+/>
+
+## Declare a box
+
+```typescript title="src/DevBox.ts"
+import * as Modal from "@alchemy.run/modal";
+import { Coder, Warm } from "./Coder.ts";
+
+export const DevBox = Modal.PersistentSandbox("DevBox", { app: Coder, image: Warm, workdir: "/work" });
+```
+
+## Resume it from a Worker
+
+```typescript
+// construction phase
+const box = yield* Modal.ConnectSandbox(DevBox);
+// in fetch:
+const session = yield* box.session();
+const status = yield* session.exec("git status");
+```
+
+`session()` returns the running session, or resumes the box from its last session's files.
+
+## Create one per user while your app runs
+
+```typescript
+const box = yield* sandboxes.createPersistent({ image: "node:22-bookworm" });
+// store box.persistentSandboxId with the user
+```
+
+Persistent sandboxes are experimental on Modal: no names, GPUs, `env` or tags yet.

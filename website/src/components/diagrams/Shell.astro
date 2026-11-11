@@ -1,0 +1,54 @@
+---
+/**
+ * `<Shell />` — boxes inside boxes. Each shell wraps the ones it holds, laid
+ * out in a row, so the figure reads like a call: Worker(Git.Api(Repository,
+ * Registry, …)). Use it to show what runs inside what.
+ *
+ *   <Shell
+ *     shell={{
+ *       label: "Worker",
+ *       children: [{
+ *         label: "Git.Api",
+ *         tone: "accent",
+ *         children: [{ label: "Repository", type: "Durable Object" }, { label: "Registry" }],
+ *       }],
+ *     }}
+ *   />
+ */
+import Tree from "./Tree.astro";
+
+interface Node {
+  label: string;
+  type?: string;
+  tone?: "accent" | "muted" | "default";
+  /** A lucide icon name, or `brand:<file>`. */
+  icon?: string;
+  children?: Node[];
+}
+interface Props {
+  shell: Node;
+  caption?: string;
+}
+
+const { shell, caption } = Astro.props as Props;
+
+// A shell is a Tree: boxes in boxes, drawn in HTML so they rewrap on a phone
+// instead of shrinking.
+let n = 0;
+const nodes: { id: string; label: string; type?: string; parent?: string; tone?: "accent" | "muted"; icon?: string }[] = [];
+const walk = (node: Node, parent?: string) => {
+  const id = `n${n++}`;
+  nodes.push({
+    id,
+    label: node.label,
+    type: node.type,
+    parent,
+    tone: node.tone === "default" ? undefined : node.tone,
+    icon: node.icon,
+  });
+  node.children?.forEach((c) => walk(c, id));
+};
+walk(shell);
+---
+
+<Tree nodes={nodes} caption={caption} />

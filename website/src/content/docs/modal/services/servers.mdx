@@ -1,0 +1,171 @@
+---
+title: Servers
+description: Run a long-running HTTP server on Modal with regional routing and concurrency-based autoscaling.
+---
+
+import Timeline from "../../../../components/diagrams/Timeline.astro";
+
+A `Modal.Server` runs your program as an HTTP server. Requests are routed through one region, and Modal scales containers on concurrent requests.
+
+## Each container serves many requests at once
+
+A Function's container takes one call at a time unless you raise it. A Server's container serves requests side by side, and Modal adds a container when they pass its target:
+
+<Timeline
+  end={10}
+  lanes={[
+    { id: "c1", label: "container 1" },
+    { id: "c2", label: "container 2" },
+  ]}
+  bars={[
+    { lane: "c1", start: 0, end: 4, label: "GET /", tone: "accent" },
+    { lane: "c1", start: 1, end: 5, label: "GET /a", tone: "accent" },
+    { lane: "c1", start: 2, end: 6, label: "GET /b", tone: "accent" },
+    { lane: "c2", start: 3, end: 3.8, tone: "warn" },
+    { lane: "c2", start: 3.8, end: 8, label: "GET /c", tone: "accent" },
+  ]}
+  marks={[{ at: 3, label: "past the target" }]}
+  legend={[{ tone: "accent", label: "request" }, { tone: "warn", label: "cold start" }]}
+  caption="Container 1 serves three requests at once. When concurrency passes the target, Modal starts container 2."
+/>
+
+## Declare the Server
+
+```typescript
+// src/Api.ts
+import * as Modal from "@alchemy.run/modal";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Backend } from "./Backend.ts";
+
+export default class Api extends Modal.Server<Api>()(
+  "Api",
+  { main: import.meta.url, app: Backend, routingRegion: "us-east" },
+  Effect.gen(function* () {
+    return { fetch: Effect.succeed(HttpServerResponse.text("ok")) };
+  }),
+) {}
+```
+
+## Call it from a Worker
+
+```typescript
+// src/Gateway.ts
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Modal from "@alchemy.run/modal";
+import * as Effect from "effect/Effect";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import Api from "./Api.ts";
+
+export default class Gateway extends Cloudflare.Worker<Gateway>()(
+  "Gateway",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const api = yield* Modal.FetchServer(Api);
+    return {
+      fetch: Effect.gen(function* () {
+        const response = yield* api.fetch(HttpClientRequest.get("/"));
+        return HttpServerResponse.text(yield* response.text);
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(Modal.FetchServerHttp)),
+) {}
+```
+
+Servers require Modal's proxy auth. The binding creates a `Modal.WebhookToken` for the Worker and sends its headers with every request.
+
+## Add RPC methods
+
+```diff lang="typescript"
+Effect.gen(function* () {
+  return {
++    greet: Effect.fn(function* (name: string) {
++      return `hello ${name}`;
++    }),
+    fetch: Effect.succeed(HttpServerResponse.text("ok")),
+  };
+}),
+```
+
+Every function the program returns besides `fetch` is an RPC method, served at `POST /__rpc__/<method>` next to your routes.
+
+## Call a method
+
+```typescript
+const api = yield* Modal.FetchServer(Api);
+const greeting = yield* api.greet("modal");
+```
+
+The client is typed from `Api`'s methods and goes through Modal's proxy auth like `fetch`. The binding also gives the Worker its own key, which the Server checks on every method call: callers without a binding get `401`. A method that returns a `Stream` streams to the caller as values are produced. See [schemaless RPC](/apis/schemaless/) for what methods can take and return.
+
+## Call it from a Function
+
+```typescript
+// src/Relay.ts
+import * as Modal from "@alchemy.run/modal";
+import * as Effect from "effect/Effect";
+import Api from "./Api.ts";
+import { Backend } from "./Backend.ts";
+
+export default class Relay extends Modal.Function<Relay>()(
+  "Relay",
+  { main: import.meta.url, app: Backend },
+  Effect.gen(function* () {
+    const api = yield* Modal.FetchServer(Api);
+    return {
+      relay: Effect.fn(function* (name: string) {
+        return yield* api.greet(name);
+      }),
+    };
+  }).pipe(Effect.provide(Modal.FetchServerHttp)),
+) {}
+```
+
+The binding is the same one a Worker uses. A Server sits behind proxy auth even for programs inside Modal, so `Relay` still gets its own `Modal.WebhookToken`, and its method calls carry the key its binding issued.
+
+## Callers without a binding reach only fetch
+
+Any caller with a proxy auth token Modal accepts for the Server can reach the Server's `fetch` routes. Only callers whose binding issued a key can call its methods: everyone else gets `401`.
+
+## Serve the public without a token
+
+```typescript
+{ main: import.meta.url, app: Backend, unauthenticated: true }
+```
+
+An unauthenticated Server serves only `fetch`. Its RPC methods answer `404`, so the public can't call them.
+
+## Scale on concurrent requests
+
+```typescript
+{
+  main: import.meta.url,
+  app: Backend,
+  minContainers: 2,
+  targetConcurrency: 20,
+  maxConcurrency: 50,
+  exitGracePeriod: "30 seconds",
+}
+```
+
+Each container aims for 20 requests at once and turns away more than 50 with `429`.
+
+## Write it without Effect
+
+```typescript
+// src/Api.ts
+import * as Modal from "@alchemy.run/modal";
+import { Backend } from "./Backend.ts";
+
+export const Api = Modal.Server("Api", {
+  main: "./src/api-server.ts",
+  app: Backend,
+  unauthenticated: true,
+});
+```
+
+```typescript
+// src/api-server.ts
+Bun.serve({ port: Number(process.env.PORT), fetch: () => new Response("ok") });
+```

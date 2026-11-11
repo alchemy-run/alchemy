@@ -1,0 +1,94 @@
+---
+title: Snapshots & forks
+description: Save a Boat sandbox's disk as a named snapshot, start sandboxes from it, and fork a sandbox into copies.
+---
+
+import BranchGraph from "../../../../components/diagrams/BranchGraph.astro";
+
+A **snapshot** is a sandbox's disk saved under a name: installed packages, a cloned repository, a warm build cache. A sandbox started from it begins exactly there. A **fork** copies one sandbox into a new one from its last snapshot, which Boat takes now and then while it runs, and every time it stops.
+
+## Every sandbox starts from the same disk
+
+The setup runs once, at deploy. Every sandbox after it starts with the work already done, and changes only its own copy:
+
+<BranchGraph
+  end={6}
+  branches={[
+    { id: "setup", label: "setup sandbox", type: "deleted once saved", until: 2.4 },
+    { id: "a", label: "task-1", type: "from Golden", from: { branch: "setup", at: 2 }, tone: "accent" },
+    { id: "b", label: "task-2", type: "from Golden", from: { branch: "setup", at: 2 }, tone: "accent" },
+  ]}
+  points={[
+    { branch: "setup", at: 1, label: "run" },
+    { branch: "setup", at: 2, label: "Golden" },
+    { branch: "a", at: 4, label: "agent edits" },
+  ]}
+  caption="Alchemy runs the snapshot's commands in a sandbox of its own, saves it as Golden and deletes it. Every task sandbox starts from Golden, with the setup already done, and changes only its own copy."
+/>
+
+## Build a snapshot from commands
+
+List the commands that set it up:
+
+```typescript title="src/Golden.ts"
+import * as Boat from "@alchemy.run/boat";
+
+export const Golden = Boat.Snapshot("Golden", {
+  run: [
+    "git clone https://github.com/alchemy-run/alchemy ~/alchemy",
+    "cd ~/alchemy && pnpm install",
+  ],
+});
+```
+
+Alchemy starts a sandbox with none of your account's secrets, runs the commands in order, saves its disk and deletes the sandbox. A command that exits non-zero fails the deploy with `SnapshotSetupFailed`. A deploy runs them again only when the commands, `env`, `cwd`, `type` or `from` change, and saves the new disk under the same name. Destroying the resource deletes it.
+
+Build one snapshot on another with `from`:
+
+```typescript
+export const Tools = Boat.Snapshot("Tools", { run: ["npm i -g pnpm"] });
+export const Golden = Boat.Snapshot("Golden", { from: Tools, run: ["pnpm dlx playwright install"] });
+```
+
+## Start sandboxes from a snapshot
+
+A declared sandbox starts from a snapshot with `snapshot`:
+
+```typescript
+export const Box = Boat.Sandbox("Box", { snapshot: Golden });
+```
+
+When the snapshot is rebuilt, the sandbox is replaced, so it starts from the new disk.
+
+So do the sandboxes a binding creates, when you bind the snapshot:
+
+```typescript
+const sandboxes = yield* Boat.CreateSandbox(Golden);
+const sandbox = yield* sandboxes.create({ autoStop: "10 minutes" });
+```
+
+A sandbox from a snapshot takes its machine size unless you pass `type`.
+
+## Fork a sandbox into a copy
+
+`fork` starts a copy of a sandbox your code created, from its last snapshot:
+
+```typescript
+yield* sandbox.stop(); // stopping takes a snapshot
+const copy = yield* sandbox.fork({ autoStop: "10 minutes" });
+yield* sandbox.resume();
+```
+
+Before a sandbox has a snapshot, `fork` fails with `ForkNeedsSnapshot`. Boat never copies labels onto a fork; Alchemy adds the host's `alchemy.*` labels again.
+
+## Save a running sandbox under a name
+
+A handle saves its sandbox under a name of your own, and waits until it's ready:
+
+```typescript
+const saved = yield* sandbox.snapshot("after-install");
+```
+
+Snapshots your code saves aren't deleted with the Stack.
+
+To give sandboxes variables, secret files and credentials, see [Environments & secrets](/boat/security/environments).

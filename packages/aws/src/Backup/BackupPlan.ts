@@ -117,8 +117,18 @@ export interface BackupPlan extends Resource<
     versionId: string;
   },
   never,
-  Providers
+  Providers,
+  BackupPlanLookup
 > {}
+
+/**
+ * Props for {@link BackupPlan.lookup}: find a backup plan this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface BackupPlanLookup {
+  /** The id of the existing backup plan. */
+  backupPlanId: string;
+}
 
 /**
  * An AWS Backup plan — a policy expression that defines *when* and *how* you
@@ -163,6 +173,22 @@ export interface BackupPlan extends Resource<
  *       },
  *     },
  *   ],
+ * });
+ * ```
+ *
+ * ### Looking up an existing backup plan
+ * `BackupPlan.lookup` references a backup plan Alchemy doesn't manage (created in the
+ * console or by another stack), found by `backupPlanId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Select resources into an existing plan
+ * ```typescript
+ * const nightly = AWS.Backup.BackupPlan.lookup({ backupPlanId });
+ *
+ * yield* AWS.Backup.BackupSelection("Tables", {
+ *   backupPlanId: nightly.backupPlanId,
+ *   iamRoleArn: backupRole.roleArn,
+ *   resources: [table.tableArn],
  * });
  * ```
  *
@@ -225,6 +251,18 @@ export const BackupPlanProvider = () =>
                 })),
             ),
           ),
+        lookup: Effect.fn(function* ({ backupPlanId }) {
+          const found = yield* backup
+            .getBackupPlan({ BackupPlanId: backupPlanId })
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
+          if (!found?.BackupPlanArn) return undefined;
+          return {
+            backupPlanId,
+            backupPlanArn: found.BackupPlanArn,
+            backupPlanName: found.BackupPlan?.BackupPlanName ?? "",
+            versionId: found.VersionId ?? "",
+          };
+        }),
         read: Effect.fn(function* ({ id, output }) {
           if (!output?.backupPlanId) return undefined;
           const found = yield* backup

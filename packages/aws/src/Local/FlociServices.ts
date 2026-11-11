@@ -1,5 +1,3 @@
-/** @effect-diagnostics anyUnknownInErrorContext:off */
-
 import { Credentials } from "@distilled.cloud/aws/Credentials";
 import type { RegionName } from "@distilled.cloud/aws/Region";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";

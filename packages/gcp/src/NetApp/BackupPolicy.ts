@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -109,8 +110,33 @@ export type BackupPolicy = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  BackupPolicyLookup
 >;
+
+/**
+ * Props for {@link BackupPolicy.lookup}: find a backup policy this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface BackupPolicyLookup {
+  /**
+   * Backup policy id (the `{backupPolicy}` segment of
+   * `projects/{project}/lo
+   * cations/{location}/backupPolicies/{backupPolicy}`).
+   */
+  backupPolicyId: string;
+  /**
+   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud NetApp Volumes backup policy that schedules daily, weekly, and
@@ -143,6 +169,19 @@ export type BackupPolicy = Resource<
  * const policy = yield* GCP.NetApp.BackupPolicy("Nightly", {
  *   description: "nightly backups v2",
  *   labels: { env: "prod", team: "storage" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing backup policy
+ * `BackupPolicy.lookup` references a backup policy Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * backup policy.
+ *
+ * **Example:** Reference an existing backup policy
+ * ```typescript
+ * const backupPolicy = GCP.NetApp.BackupPolicy.lookup({
+ *   backupPolicyId: "my-backup-policy",
  * });
  * ```
  *
@@ -207,6 +246,15 @@ export const BackupPolicyProvider = () =>
         ),
       });
     }),
+
+    lookup: Effect.fn(function* ({ backupPolicyId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, backupPolicyId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

@@ -2,10 +2,9 @@
 title: CLI
 description: Every alchemy command at a glance — the command map, common options, and how the interactive TUI decides when to render.
 ---
+import PackageManagers from "../../../components/PackageManagers.astro";
 
-```sh
-bun alchemy <command> [options]
-```
+<PackageManagers run="alchemy <command> [options]" />
 
 Every command operates on an `alchemy.run.ts` stack file (or a custom entrypoint passed with `--config <file>`, which must exist) and targets a [stage](/environments/stages).
 

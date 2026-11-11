@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   collectPages,
@@ -132,8 +133,36 @@ export type AppsTool = Resource<
     etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AppsToolLookup
 >;
+
+/**
+ * Props for {@link AppsTool.lookup}: find an apps tool this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface AppsToolLookup {
+  /**
+   * Tool id.
+   */
+  toolId: string;
+  /**
+   * Region used when `app` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent CES app. Full name
+   * `projects/{project}/locations/{location}/apps/{app}` or the app id
+   * (combined with `location`).
+   */
+  app: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Customer Engagement Suite tool inside an app (client function,
@@ -158,6 +187,19 @@ export type AppsTool = Resource<
  *       properties: { orderId: { type: "STRING" } },
  *     },
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing apps tool
+ * `AppsTool.lookup` references an apps tool Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared apps tool.
+ *
+ * **Example:** Reference an existing apps tool
+ * ```typescript
+ * const appsTool = GCP.CES.AppsTool.lookup({
+ *   toolId: "my-tool",
+ *   app: "my-app",
  * });
  * ```
  *
@@ -278,6 +320,16 @@ export const AppsToolProvider = () =>
         extra: previousKind !== nextKind && previousKind !== "clientFunction",
       });
     }),
+
+    lookup: Effect.fn(function* ({ toolId, location: lookupLocation, app: lookupApp }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const app = lookupApp ? expandApp(lookupApp, env.project, location) : undefined;
+      const name = app !== undefined ? resourceName(app, toolId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region, app);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

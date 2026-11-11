@@ -3,6 +3,7 @@ import { Snapshot, Volume } from "@alchemy.run/aws/EC2";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as EC2 from "@distilled.cloud/aws/ec2";
+import { Region } from "@distilled.cloud/aws/Region";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -12,7 +13,10 @@ const { test } = Test.make({ providers: AWS.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const AZ = "us-west-2a";
+// The first zone of the Region the stack deploys to.
+const AZ = Effect.gen(function* () {
+  return `${yield* yield* Region}a`;
+});
 
 test.provider(
   "snapshot a volume, wait for completion, then delete both",
@@ -23,7 +27,7 @@ test.provider(
       const { volume, snapshot } = yield* stack.deploy(
         Effect.gen(function* () {
           const volume = yield* Volume("SnapSourceVolume", {
-            availabilityZone: AZ,
+            availabilityZone: yield* AZ,
             size: 1,
             volumeType: "gp3",
           });

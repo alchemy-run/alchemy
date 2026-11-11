@@ -2,7 +2,7 @@ import * as workers from "@distilled.cloud/cloudflare/workers";
 import { type MemoOptions } from "alchemy/Command/Memo";
 import type { Dependencies } from "alchemy/Dependencies";
 import type { DnsConfig } from "alchemy/DNS/Adapter";
-import type { InputProps } from "alchemy/Input";
+import type { InputProps, PropsInput } from "alchemy/Input";
 import type { Named, Tag } from "alchemy/Named";
 import type * as Output from "alchemy/Output";
 import {
@@ -26,6 +26,7 @@ import type { Self as SelfService } from "alchemy/Self";
 import { isPathWithin } from "alchemy/Util/isPathWithin";
 import type { WebhookHost } from "alchemy/WebhookHost";
 import type { ConfigError } from "effect/Config";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -43,7 +44,6 @@ import { Request } from "./Request.ts";
 import type { ModuleRule } from "./Sources/Prebuilt.ts";
 import type { WorkerBuildOptions } from "./Sources/Rolldown.ts";
 import type { WorkerAccessConfig, WorkerAccessIdentity } from "./WorkerAccess.ts";
-import { bindWorkerAsyncBindings } from "./WorkerAsyncBindings.ts";
 import type { WorkerBinding, WorkerBindingResource } from "./WorkerBinding.ts";
 import { transformWorkerDomainProps } from "./WorkerDomainDns.ts";
 import { WorkerEnvironment, WorkerTypeId } from "./WorkerRuntime.ts";
@@ -103,6 +103,32 @@ export interface WorkerEntrypointSettings {
 }
 
 export type WorkerPlacement = Exclude<workers.PutScriptRequest["metadata"]["placement"], undefined>;
+
+/**
+ * How a deploy rolls new code out to the Worker's running Durable Objects.
+ *
+ * - `{ mode: "deferred" }` — an active object keeps running its current code
+ *   while it waits to hibernate, for up to `maxDelay`, so in-flight work can
+ *   finish. Hibernation API WebSockets stay connected when the object picks
+ *   up the new code after hibernating.
+ * - `{ mode: "immediate" }` — every object resets onto the new code as soon
+ *   as the deploy lands.
+ *
+ * Deferral is best effort: an object can still reset before `maxDelay`
+ * elapses, e.g. during a Cloudflare runtime update.
+ */
+export type WorkerCodeUpdateStrategy =
+  | { mode: "immediate" }
+  | {
+      mode: "deferred";
+      /**
+       * The longest an active Durable Object may keep running old code before
+       * it is forced onto the new code — e.g. `"1 minute"`, `"30 seconds"`, or
+       * a `Duration`. Between 0 and 24 hours, millisecond precision.
+       * @default "5 minutes"
+       */
+      maxDelay?: Duration.Input;
+    };
 
 export type WorkerServices =
   | Worker
@@ -512,6 +538,11 @@ export interface WorkerPreviewOptions {
    * Preview Worker. Locally-hosted Durable Object and Workflow classes
    * *are* allowed: each Preview gets its own isolated namespace.
    *
+   * `observability` and `Cloudflare.Telemetry()` apply to the Preview
+   * itself: Cloudflare keeps Workers Logs and Traces settings per
+   * Preview, independent of the parent, so a Preview records logs by
+   * default and traces when it provides `Cloudflare.Telemetry()`.
+   *
    * Changing the parent replaces the resource (a Preview belongs to
    * exactly one script).
    */
@@ -695,6 +726,8 @@ export interface WorkerProps<
    * across full deployments. Setting it to `false` or omitting `issues`
    * disables Issues on the next full deployment. Version-only uploads and
    * gradual rollouts keep the parent's live observability settings.
+   * A Preview Worker (`preview.of`) applies these settings to its own
+   * Preview, which Cloudflare configures separately from the parent.
    */
   observability?: WorkerObservability;
   /**
@@ -775,6 +808,12 @@ export interface WorkerProps<
      * - Python Workers get `python_workers` instead of the JavaScript defaults.
      *
      * Duplicate flags are removed when defaults are applied.
+     *
+     * Add `enable_request_signal` to interrupt an Effect `fetch` handler when
+     * the client disconnects: the handler's finalizers run as an interruption
+     * and the Worker stays alive until they finish. Without the flag,
+     * Cloudflare cancels the request and its finalizers never run. `alchemy
+     * dev` does not report client disconnects.
      */
     flags?: (
       | "nodejs_compat"
@@ -791,6 +830,21 @@ export interface WorkerProps<
   };
   limits?: WorkerLimits;
   placement?: WorkerPlacement;
+  /**
+   * How each deploy rolls new code out to this Worker's running Durable
+   * Objects. Cloudflare defers updates by default: an active object keeps
+   * running its current code for up to 5 minutes while it waits to
+   * hibernate. Use `{ mode: "immediate" }` when an object must run the new
+   * code right after the deploy (during an incident, or when a test drives
+   * it straight away), or set a different `maxDelay`.
+   *
+   * Applies per deploy, not as a stored setting: changing only this prop
+   * does not redeploy the Worker; the next deploy uses it. See
+   * {@link WorkerCodeUpdateStrategy}.
+   *
+   * @default { mode: "deferred", maxDelay: "5 minutes" }
+   */
+  codeUpdateStrategy?: WorkerCodeUpdateStrategy;
   /**
    * Tracks Durable Object and Workflow exports and captured SQL migrations
    * for Effect-native Workers only.
@@ -1417,13 +1471,17 @@ export type Worker<Bindings = any> = Resource<
      */
     cache?: WorkerCache;
     /**
-     * Workers Observability traces settings contributed by
-     * `Cloudflare.Telemetry()`. Deep-merged into upload metadata: bound
-     * traces fill in when `WorkerProps.observability.traces` is omitted,
-     * and never clobber the default logs config. An explicit
-     * `observability.traces` object wins.
+     * Workers Observability traces and logs fields set on
+     * `Cloudflare.Telemetry()` — only the fields its caller set, so
+     * they can be merged with `WorkerProps.observability` field by field.
+     * Where the props omit `traces` / `logs`, these fill in over the
+     * defaults (on); a field set to different values in both fails the
+     * deploy with `ObservabilityConflictError`.
      */
-    observability?: Pick<WorkerObservability, "traces">;
+    observability?: {
+      traces?: Partial<NonNullable<WorkerObservability["traces"]>>;
+      logs?: Partial<NonNullable<WorkerObservability["logs"]>>;
+    };
     containers?: {
       className: string;
       /** Set when an async `Cloudflare.DurableObject(name, { containers })` binding contributed the row. */
@@ -1456,8 +1514,15 @@ export type Worker<Bindings = any> = Resource<
      */
     devRemote?: Record<string, boolean>;
   },
-  Providers
+  Providers,
+  WorkerLookup
 >;
+
+/** Props for {@link Worker.lookup}: find a Worker this stack doesn't manage. */
+export interface WorkerLookup {
+  /** The script name of the Worker, e.g. `"auth-service"`. */
+  name: string;
+}
 
 /** An external/async Worker declared without an Effect implementation. */
 export type ExternalWorker<Bindings = {}> = Worker<Bindings> & {
@@ -2537,13 +2602,16 @@ const withDeclarationRef = <P extends Pick<ResourceClass<Worker>, "ref">>(platfo
  * registers the close promise with workerd's `ctx.waitUntil` — so
  * finalizers added with `Effect.addFinalizer` inside a handler run *after*
  * the response is sent, without blocking it, and the Worker stays alive
- * until they settle. Streaming responses transfer the scope to the stream,
- * so those finalizers run when the stream completes instead.
+ * until they settle. A streamed response body or RPC result keeps the
+ * scope open until it has been sent.
  *
  * For ad-hoc background work, `Cloudflare.waitUntil(effect)` forks an
  * Effect with the caller's full context and keeps the invocation alive
- * until it settles. It is `RuntimeContext`-colored, so it can only run
- * inside a handler.
+ * until it settles. The event's scope stays open until then too, so the
+ * work can use what the handler acquired on it, and its spans and logs are
+ * exported with the event's. What the work acquires itself is released when
+ * it finishes. It is `RuntimeContext`-colored, so it can only run inside a
+ * handler.
  *
  * The constructor is evaluated once per isolate: the bridge builds the
  * Worker's layer stack on the first event and every later event reuses the
@@ -2644,6 +2712,26 @@ const withDeclarationRef = <P extends Pick<ResourceClass<Worker>, "ref">>(platfo
  * };
  * ```
  *
+ * ### Looking up an existing Worker
+ * `Cloudflare.Worker.lookup` finds a Worker that Alchemy doesn't manage
+ * (deployed with Wrangler, from the dashboard, or by another pipeline) by
+ * its script name. Bind it like a declared Worker; the deploy fails if no
+ * Worker has that name, and Alchemy never updates or deletes it.
+ *
+ * **Example:** Bind a Worker deployed outside Alchemy
+ * ```typescript
+ * const worker = yield* Cloudflare.Worker("Api", {
+ *   main: "./src/api.ts",
+ *   env: {
+ *     AUTH: Cloudflare.Worker.lookup({ name: "auth-service" }),
+ *     ADMIN: Cloudflare.WorkerEntrypoint(
+ *       Cloudflare.Worker.lookup({ name: "auth-service" }),
+ *       "Admin",
+ *     ),
+ *   },
+ * });
+ * ```
+ *
  * ### R2 Bucket
  * Bind an R2 bucket in the Construction phase with `Cloudflare.R2.ReadWriteBucket`.
  * The returned handle exposes `get`, `put`, `delete`, and `list`
@@ -2730,6 +2818,27 @@ const withDeclarationRef = <P extends Pick<ResourceClass<Worker>, "ref">>(platfo
  * };
  * ```
  *
+ * By default a deploy lets an active Durable Object keep running its
+ * current code for up to 5 minutes while it waits to hibernate.
+ * `codeUpdateStrategy` changes how long, or applies the new code at once.
+ * See [Code updates](/cloudflare/compute/code-updates).
+ *
+ * **Example:** Shorter deferral for Durable Object code updates
+ * ```typescript
+ * {
+ *   main: import.meta.url,
+ *   codeUpdateStrategy: { mode: "deferred", maxDelay: "1 minute" },
+ * }
+ * ```
+ *
+ * **Example:** Apply Durable Object code updates immediately
+ * ```typescript
+ * {
+ *   main: import.meta.url,
+ *   codeUpdateStrategy: { mode: "immediate" },
+ * }
+ * ```
+ *
  * ### Containers
  * Containers run long-lived processes alongside Durable Objects.
  * `yield* Sandbox` binds the container to the DO and returns its handle
@@ -2804,6 +2913,12 @@ export const Worker: ResourceClassLike<Worker> & {
    * bindings from another stack.
    */
   ref: WorkerRef;
+  /**
+   * Reference a Worker deployed outside this stack (Wrangler, the dashboard,
+   * another pipeline) by its script name, without managing it. Resolves
+   * during plan/deploy and fails the deploy when no such Worker exists.
+   */
+  lookup(props: PropsInput<WorkerLookup>): Worker;
 } & Effect.Effect<Worker & WorkerRuntimeContext & RuntimeContext, never, Worker> & {
     <Self, Shape extends WorkerShape, Deps = never>(): {
       <const Id extends string>(
@@ -2935,9 +3050,19 @@ export const Worker: ResourceClassLike<Worker> & {
   Platform(
     WorkerTypeId,
     {
-      // WorkerAsyncBindings imports isWorker; defer access until module initialization completes.
+      // Binding wiring is deploy-time only and its imports reach the local
+      // runtime, so load it on first use: a runtime bundle folds the guard and
+      // never reads `WorkerAsyncBindings` (#3227). The lazy import also defers
+      // its `isWorker` access until this module has initialized.
       // `props` is `undefined` for a bare tag whose `.make` Layer has not built yet.
-      onCreate: (resource, props) => bindWorkerAsyncBindings(resource as Worker, props ?? {}),
+      onCreate: (resource, props) =>
+        globalThis.__ALCHEMY_RUNTIME__
+          ? Effect.void
+          : Effect.promise(() => import("./WorkerAsyncBindings.ts")).pipe(
+              Effect.flatMap(({ bindWorkerAsyncBindings }) =>
+                bindWorkerAsyncBindings(resource as Worker, props ?? {}),
+              ),
+            ),
       createRuntimeContext: (id) => makeWorkerRuntimeContext(id),
       // Normalize `main` relative to the cwd, then let `domain.dns` naming a
       // non-Cloudflare DNS host compose Cloudflare for SaaS custom hostnames +

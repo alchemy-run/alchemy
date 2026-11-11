@@ -2,6 +2,7 @@
 title: Cloud Storage
 description: Create Cloud Storage buckets, read and write objects from Cloud Run with Read, Write, and ReadWrite bindings, and hand out signed download URLs.
 ---
+import Records from "../../../../components/diagrams/Records.astro";
 
 Cloud Storage holds files. Declare a Bucket, bind it to your service,
 and `get`, `put`, `list`, and `delete` objects.
@@ -97,6 +98,19 @@ const { objects, prefixes, nextPageToken } = yield* files.list({
   delimiter: "/",
 });
 ```
+
+<Records
+  title="Uploads · Bucket"
+  columns={["name", "size"]}
+  rows={[
+    ["avatars/ana.png", "48 KB"],
+    ["reports/2025.json", "12 KB"],
+    ["reports/2026.json", "14 KB"],
+    ["uploads/scan-0412.pdf", "2.1 MB"],
+  ]}
+  query={{ label: 'list({ prefix: "reports/" })', rows: [1, 2], prefix: "reports/" }}
+  caption="A Bucket stores objects flat, by name. A folder is only a shared prefix, and listing one reads the names that start with it."
+/>
 
 ## Signed download URLs
 

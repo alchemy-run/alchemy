@@ -34,8 +34,18 @@ export interface SecurityConfiguration extends Resource<
     securityConfiguration: string;
   },
   never,
-  Providers
+  Providers,
+  SecurityConfigurationLookup
 > {}
+
+/**
+ * Props for {@link SecurityConfiguration.lookup}: find a security configuration this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface SecurityConfigurationLookup {
+  /** The security configuration name of the existing security configuration. */
+  securityConfigurationName: string;
+}
 
 /**
  * An Amazon EMR security configuration — a reusable JSON document of
@@ -81,6 +91,16 @@ export interface SecurityConfiguration extends Resource<
  *   jobFlowRole: instanceProfile.instanceProfileName,
  *   securityConfiguration: config.securityConfigurationName,
  * });
+ * ```
+ *
+ * ### Looking up an existing security configuration
+ * `SecurityConfiguration.lookup` references a security configuration Alchemy doesn't manage (created in the
+ * console or by another stack), found by `securityConfigurationName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing security configuration
+ * ```typescript
+ * const existing = AWS.EMR.SecurityConfiguration.lookup({ securityConfigurationName: "my-security-configuration" });
  * ```
  *
  * @resource
@@ -153,6 +173,11 @@ export const SecurityConfigurationProvider = () =>
           // recreates the immutable document under the same name).
         }),
 
+        lookup: Effect.fn(function* ({ securityConfigurationName: name }) {
+          const found = yield* readConfiguration(name);
+          if (found === undefined) return undefined;
+          return toAttrs(name, found.SecurityConfiguration ?? "");
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.securityConfigurationName ?? (yield* toName(id, olds ?? {}));
           const found = yield* readConfiguration(name);

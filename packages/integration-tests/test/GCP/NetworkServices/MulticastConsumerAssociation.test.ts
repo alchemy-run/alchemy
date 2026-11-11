@@ -6,6 +6,7 @@ import * as networkservices from "@distilled.cloud/gcp/networkservices_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { withNetworkSlot } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -71,6 +72,13 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { vpc, association };
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkServices.MulticastConsumerAssociation.lookup({
+          multicastConsumerAssociationId: created.association.multicastConsumerAssociationId,
+          location: created.association.location,
+        }),
+        created.association,
       );
 
       expect(created.association.name).toContain("/multicastConsumerAssociations/");

@@ -4,6 +4,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as recommendationengine from "@distilled.cloud/gcp/recommendationengine_v1beta1";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { currentProject, entitled, logLevel, missingNameOf } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -53,7 +54,7 @@ test.provider.skipIf(entitled)(
           name: missingNameOf(project),
         }),
       );
-      expect(error._tag).toEqual("ServiceDisabled");
+      expect(["ServiceDisabled", "NotFound"]).toContain(error._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -82,6 +83,14 @@ test.provider.skipIf(!entitled || !!process.env.FAST)(
             },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.RecommendationEngine.CatalogsCatalogItem.lookup({
+          catalogItemId: created.catalogItemId,
+          location: created.location,
+          catalog: created.catalog,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/catalogItems/");

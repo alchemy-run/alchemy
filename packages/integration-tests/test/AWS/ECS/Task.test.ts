@@ -7,6 +7,8 @@ import * as ecs from "@distilled.cloud/aws/ecs";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import { reclaimTaskDefinitionFamily } from "./reclaimTaskDefinitionFamily.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -305,5 +307,55 @@ test.provider(
   {
     tags: ["provider:aws", "provider:aws:ecs", "provider:aws:iam", "live"],
     timeout: 240_000,
+  },
+);
+
+// https://github.com/alchemy-run/alchemy/issues/3117: a Task built from a
+// `context` subfolder must not plan an update when only the project lockfile
+// above that folder changes — Docker never receives it. A file inside the
+// context still does. This is the deploy diff: under the emulator
+// (`ALCHEMY_TEST_DEV=1`) the dev provider never builds in its diff, and its
+// file watcher rebuilds the image instead.
+test.provider.skipIf(process.env.ALCHEMY_TEST_DEV === "1")(
+  "a lockfile outside the build context does not plan an update",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-ecs-task-context-" });
+      const context = path.join(root, "app");
+      yield* fs.makeDirectory(context, { recursive: true });
+      yield* fs.writeFileString(path.join(root, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
+      yield* fs.writeFileString(
+        path.join(context, "Dockerfile"),
+        'FROM public.ecr.aws/docker/library/busybox:1.36\nCOPY hello.txt /\nCMD ["cat", "/hello.txt"]\n',
+      );
+      yield* fs.writeFileString(path.join(context, "hello.txt"), "hello\n");
+
+      const task = Task("ContextTask", {
+        context,
+        cpu: 256,
+        memory: 512,
+        // Matches an image built on an Apple Silicon host to Graviton.
+        runtimePlatform: { cpuArchitecture: "ARM64", operatingSystemFamily: "LINUX" },
+      });
+      yield* stack.deploy(task);
+
+      yield* fs.writeFileString(
+        path.join(root, "pnpm-lock.yaml"),
+        "lockfileVersion: '9.0'\nsettings: {}\n",
+      );
+      expect((yield* stack.plan(task)).resources.ContextTask?.action).toBe("noop");
+
+      yield* fs.writeFileString(path.join(context, "hello.txt"), "hello again\n");
+      expect((yield* stack.plan(task)).resources.ContextTask?.action).toBe("update");
+
+      yield* stack.destroy();
+    }),
+  {
+    tags: ["provider:aws", "provider:aws:ecs", "provider:docker", "live"],
+    timeout: 300_000,
   },
 );

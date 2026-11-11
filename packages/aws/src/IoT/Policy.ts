@@ -54,8 +54,18 @@ export interface Policy extends Resource<
     policyArn: string;
   },
   never,
-  Providers
+  Providers,
+  PolicyLookup
 > {}
+
+/**
+ * Props for {@link Policy.lookup}: find a policy this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface PolicyLookup {
+  /** The policy name of the existing policy. */
+  policyName: string;
+}
 
 /**
  * An AWS IoT policy that grants MQTT permissions (connect, publish,
@@ -73,6 +83,16 @@ export interface Policy extends Resource<
  *     ],
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing policy
+ * `Policy.lookup` references a policy Alchemy doesn't manage (created in the
+ * console or by another stack), found by `policyName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing policy
+ * ```typescript
+ * const existing = AWS.IoT.Policy.lookup({ policyName: "my-policy" });
  * ```
  *
  * @resource
@@ -116,6 +136,17 @@ export const PolicyProvider = () =>
               ),
             ),
           ),
+        lookup: Effect.fn(function* ({ policyName }) {
+          const found = yield* iot
+            .getPolicy({ policyName })
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
+          if (!found) return undefined;
+          const attrs = {
+            policyName,
+            policyArn: found.policyArn!,
+          };
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const policyName = output?.policyName ?? (yield* createName(id, olds ?? {}));
           const found = yield* iot

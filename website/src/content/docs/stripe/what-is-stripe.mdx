@@ -1,0 +1,104 @@
+---
+title: What is Stripe?
+description: The concepts behind Stripe — accounts and test mode, API keys, products and prices, customers, Checkout, subscriptions, the Billing Portal, webhooks and Connect — and how @alchemy.run/stripe models each of them.
+---
+
+import Tree from "../../../components/diagrams/Tree.astro";
+
+
+Stripe takes payments for you. It holds what you sell, the **products** and their **prices**, who buys it, the **customers**, and the record of every payment and **subscription**. Its hosted pages collect card details so you never touch them, and it tells your app what happened through **webhooks**.
+
+Take one small SaaS: a Pro plan at $20 a month, sold through Stripe Checkout, with a webhook that records who's subscribed. Live mode and each sandbox in your account hold their own catalog, keys and webhooks. Your Worker starts a Checkout session for the Pro price with a restricted key, and Stripe sends the subscription back to its webhook endpoint as an event.
+
+<Tree
+  nodes={[
+    { id: "account", label: "acme", type: "account", icon: "brand:stripe", areas: ["sandbox", "live"] },
+    { id: "sandbox", label: "dev", type: "sandbox", parent: "account", dashed: true, icon: "flask-conical", areas: ["sbProduct sbPrice"], phoneAreas: ["sbProduct sbPrice"], colGap: 3 },
+    { id: "sbProduct", label: "Pro", type: "product", parent: "sandbox", icon: "tag" },
+    { id: "sbPrice", label: "$20/mo", type: "price", parent: "sandbox", icon: "receipt" },
+    { id: "live", label: "Live mode", type: "real money", parent: "account", dashed: true, icon: "radio", areas: ["product price", "key hook"], phoneAreas: ["product price", "key hook"], colGap: 3 },
+    { id: "product", label: "Pro", type: "product", parent: "live", icon: "tag" },
+    { id: "price", label: "$20/mo", type: "price", parent: "live", icon: "receipt" },
+    { id: "key", label: "worker", type: "restricted key", parent: "live", icon: "key-round" },
+    { id: "hook", label: "/stripe/events", type: "webhook endpoint", parent: "live", icon: "webhook" },
+    { id: "worker", label: "your Worker", type: "outside Stripe", icon: "square-function" },
+  ]}
+  areas={["account", "worker"]}
+  links={[
+    { from: "sbProduct", to: "sbPrice", label: "price" },
+    { from: "product", to: "price", label: "price" },
+    { from: "worker", to: "key", label: "uses" },
+    { from: "hook", to: "worker", label: "events", dashed: true },
+  ]}
+  caption="An account's live mode and each sandbox hold their own products, prices, keys and webhooks. Your app calls Stripe with a restricted key, and Stripe sends events to its webhook endpoint."
+/>
+
+## Accounts and test mode
+
+A Stripe **account** holds your catalog, customers and payments. Every account has a **test mode**: a separate copy with its own data and keys, where test cards succeed and nothing is charged. Build and run previews in test mode, and use live mode for production.
+
+## API keys
+
+Code calls Stripe with an **API key**. The **secret key** can do anything in the account, so keep it to yourself. A **restricted key** can do only what you list, like creating customers and Checkout sessions, which is what an app should hold.
+
+Alchemy deploys with the key in your profile. See [Setup](/stripe/setup).
+
+## Products and prices
+
+A **product** is something you sell: "Pro". A **price** is how you charge for it: $20 a month, or $200 a year. One product has many prices, and a price can't change once customers use it: you create a new one and stop offering the old.
+
+```typescript title="src/api.ts"
+const product = yield* Stripe.Product("Pro", { name: "Pro" });
+const price = yield* Stripe.Price("ProMonthly", {
+  product,
+  currency: "usd",
+  unitAmount: 2000,
+  recurring: { interval: "month" },
+});
+```
+
+Declared like this, your catalog is reviewed in pull requests and is the same in every stage.
+
+## Customers
+
+A **customer** is someone who pays you, with their email, payment methods and history. Create one when a user first buys, and keep its id next to your own user.
+
+## Checkout
+
+**Checkout** is a page Stripe hosts that collects payment details and starts a payment or a subscription. Your app creates a **Checkout session** for a price and a customer, redirects to it, and gets the result back by webhook.
+
+## Subscriptions and the Billing Portal
+
+A **subscription** charges a customer on a schedule until it's cancelled. Stripe handles renewals, failed cards and retries. The **Billing Portal** is a page Stripe hosts where a customer updates their card, changes plan or cancels, so you don't build those screens.
+
+## Webhooks
+
+Stripe tells your app what happened by sending **events** to a **webhook endpoint**: a subscription created, an invoice paid, a payment failed. Each request is signed, so your app can tell it came from Stripe. Treat events as the source of truth for what a customer has paid for.
+
+In Alchemy, one call creates the endpoint and hands your handler each event, typed:
+
+```typescript title="src/api.ts"
+yield* Stripe.consumeEvents(
+  "Events",
+  { events: [Stripe.CustomerSubscriptionCreated] },
+  Effect.fn(function* (event) {
+    yield* Effect.log(`${event.object.customer} subscribed`);
+  }),
+);
+```
+
+See [React to Stripe events](/stripe/guides/webhooks).
+
+## Connect
+
+**Connect** lets your platform pay other businesses: a marketplace paying sellers, a booking app paying hosts. Each business gets a **connected account**, and Stripe handles their onboarding, identity checks and payouts.
+
+See [Onboard merchants with Connect](/stripe/guides/connect).
+
+## How @alchemy.run/stripe models these concepts
+
+Each of these concepts is something your Stack or your Worker declares.
+
+Your profile's key picks the account and mode, and `Stripe.providers()` deploys into it. Products, prices, coupons, webhook endpoints and the Billing Portal's configuration are resources, created and updated on deploy, and archived where Stripe won't delete them. Each call your Worker makes, like `Stripe.CreateCheckoutSession()`, is a binding: it adds exactly that permission to a restricted key the Worker holds, so the Worker never sees your secret key.
+
+Next, build one: [Sell a subscription](/stripe/guides/subscriptions) walks through a complete app.

@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -143,8 +144,32 @@ export type DataScan = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DataScanLookup
 >;
+
+/**
+ * Props for {@link DataScan.lookup}: find a data scan this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface DataScanLookup {
+  /**
+   * DataScan id. Must contain only lowercase letters, numbers and hyphens,
+   * start with a letter, end with a letter or number, and be 1-63
+   * characters.
+   */
+  dataScanId: string;
+  /**
+   * Region (`us-central1`, …).
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Dataplex DataScan that profiles, quality-checks, discovers, or
@@ -165,6 +190,18 @@ export type DataScan = Resource<
  *       "//bigquery.googleapis.com/projects/my-project/datasets/sales/tables/orders",
  *   },
  *   dataProfileSpec: {},
+ * });
+ * ```
+ *
+ * ### Looking up an existing data scan
+ * `DataScan.lookup` references a data scan Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared data scan.
+ *
+ * **Example:** Reference an existing data scan
+ * ```typescript
+ * const dataScan = GCP.Dataplex.DataScan.lookup({
+ *   dataScanId: "my-data-scan",
  * });
  * ```
  *
@@ -249,6 +286,15 @@ export const DataScanProvider = () =>
             fingerprint(olds?.executionIdentity),
       });
     }),
+
+    lookup: Effect.fn(function* ({ dataScanId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, dataScanId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

@@ -7,7 +7,7 @@ import DAG from "../../../components/DAG.astro";
 
 A view answers a question: what's the balance of this account, what's on its statement, what does this customer hold across all their accounts. It reads events, folds them into state, and keeps that state current as new events arrive.
 
-Aggregates hold only what their rules need. Views hold everything people want to see, each shaped for one question. This chapter starts with why the two are kept apart and how to design a view from a screen, then builds views up from the simplest case.
+Aggregates hold only what their rules need. Views hold everything people want to see, each shaped for one question.
 
 ## Deciding and answering need different shapes
 
@@ -91,6 +91,8 @@ export const depositThenRead = Effect.fn(function* (bank: CustomerClient, accoun
 ```
 
 `atLeast` makes `get` wait until the summary has applied that version of the account's stream. If it hasn't within 10 seconds, the read fails with `ConsistencyTimeout`.
+
+A view added to a model that already has events receives them first, so a new screen starts from the whole history (see [Consumers added later receive the history](/domain/model#consumers-added-later-receive-the-history)).
 
 ## Emit events of your own
 
@@ -194,6 +196,28 @@ emit: {
 
 One `TransferRequested` updates both accounts: the sender's as `out` and the recipient's as `in`.
 
+## Describe it
+
+A view's last argument is its [annotations](/domain/annotations). The read tools, CLI subcommand and OpenAPI operations an [Api](/domain/api) builds for the view show its `description` after the sentence that says what the call does.
+
+```typescript title="src/AccountSummary.view.ts"
+export class AccountSummary extends Domain.View(
+  "AccountSummary",
+  {
+    from: [Account],
+    key: Account,
+    state: Schema.Struct({ owner: Schema.NullOr(Schema.String), balance: Schema.Int }),
+    initial: { owner: null, balance: 0 },
+    evolve: {
+      AccountOpened: (v, e) => ({ ...v, owner: e.owner }),
+      MoneyDeposited: (v, e) => ({ ...v, balance: e.balanceAfter }),
+      MoneyWithdrawn: (v, e) => ({ ...v, balance: e.balanceAfter }),
+    },
+  },
+  { description: "An account's balance and owner." },
+) {}
+```
+
 ## Read it
 
 Through an [Api](/domain/api), a view offers these reads for one key. `get` returns its current state, or `null` if nothing has happened to that key yet. `list` returns a page of its emitted events. `watch` streams the state now and after every change, each with its cursor. `events` streams its emitted events: history first, then a `CaughtUp` frame, then new ones as they're recorded. `snapshot` returns the state with the cursor it is valid at.
@@ -246,15 +270,19 @@ A server can read the snapshot while it renders a page and send it with the page
 
 ## Decide who may read it
 
-A view that's exposed through an Api declares `middleware` to identify the caller, and `validate` to judge each read against the view's state.
+A view that's exposed through an Api declares `middleware` to identify the caller and the `rejects` a read may fail with. Its Layer's `validate` judges each read against the view's state.
 
 ```typescript title="packages/domain/src/Account/AccountSummary.view.ts"
-validate: Effect.fn(function* (_request, summary) {
-  yield* mustOwn(summary?.customerId ?? null);
-}),
+export const AccountSummaryLive = AccountSummary.toLayer(
+  Effect.succeed(
+    Effect.fn(function* (_request, summary) {
+      yield* mustOwn(summary?.customerId ?? null);
+    }),
+  ),
+);
 ```
 
-`validate` runs on every read, and again on every change while a client watches. If an account changes owner, the previous owner's watch ends with `NotOwner`. See [Views as security boundaries](/domain/view-security).
+A view that declares either needs its Layer, provided with the model's handlers. `validate` runs on every read, and again on every change while a client watches. If an account changes owner, the previous owner's watch ends with `NotOwner`. See [Views as security boundaries](/domain/view-security).
 
 Every key keeps an input log: each delivery it applied, in order, kept for good. A view's state is a fold of that log.
 

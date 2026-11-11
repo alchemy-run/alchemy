@@ -4,8 +4,8 @@ description: Add profile and CI credentials for a third-party API with a generat
 ---
 
 The [Custom Provider](/infrastructure-as-code/custom-provider) guide builds a
-Stripe `Product` provider whose lifecycle handlers need an API key. This guide
-builds a lazy `StripeCredentials` service backed
+Stripe `Product` provider whose lifecycle handlers need an API key. Give them
+a lazy `StripeCredentials` service backed
 by an Auth Provider, so the key comes from the configured
 [Profile](/environments/profiles), from env vars in CI, or from a refreshable
 session, never from props or hardcoded config. For a token-shaped credential
