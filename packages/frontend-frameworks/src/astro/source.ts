@@ -248,6 +248,7 @@ const makeAstroSourceProvider = (
             queueConsumers,
             assets: ctx.worker.assets,
           },
+          entrypoints: ctx.worker.entrypoints,
           context: ctx.runtimeContext,
         };
         const astro = yield* FrameworkCore.Framework.pipe(

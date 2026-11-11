@@ -95,11 +95,9 @@ export interface SourceContext {
       };
   readonly stack: { readonly name: string; readonly stage: string };
   /**
-   * Raw `props.env`. Deliberately unresolved: env entries may be Effects
-   * whose evaluation requires plan-phase context that is not available
-   * inside lifecycle operations — a source that needs literal values
-   * (e.g. vite's `import.meta.env` defines) resolves them itself, exactly
-   * as the vite arm always has.
+   * `props.env`. For `build` it is already resolved to string literals
+   * (`resolveBuildEnv`: `Worker.URL`, Redacted and env-bound Effects); for
+   * `hash` and `dev` it is the raw props value.
    */
   readonly env: Record<string, unknown> | undefined;
   /**
@@ -127,7 +125,15 @@ export interface SourceContext {
  */
 export type DevWorkerOptions = Pick<
   RuntimeWorker,
-  "workflows" | "crons" | "tails" | "streamingTails" | "cache" | "cf" | "access" | "workerd"
+  | "workflows"
+  | "crons"
+  | "tails"
+  | "streamingTails"
+  | "cache"
+  | "cf"
+  | "access"
+  | "workerd"
+  | "publicUrl"
 >;
 
 /**
@@ -151,6 +157,12 @@ export interface DevContext extends SourceContext {
      * here reaches every source.
      */
     readonly options: DevWorkerOptions;
+    /**
+     * Named entrypoints the Worker binds to itself. workerd resolves them
+     * before the module is evaluated, so the source hands them to the
+     * Cloudflare Vite plugin up front.
+     */
+    readonly entrypoints?: ReadonlyArray<string> | undefined;
   };
   /** RuntimeServices context for providers that embed cloudflare-runtime. */
   readonly runtimeContext: Context.Context<RuntimeServices>;

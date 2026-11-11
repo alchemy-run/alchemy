@@ -16,12 +16,11 @@ import * as Redacted from "effect/Redacted";
 import type * as vite from "vite";
 import type { FoldkitBuildMetadata } from "../../Website/FoldkitBuild.ts";
 import { readAssets } from "../Assets.ts";
+import { resolveBuildEnv } from "../BuildEnv.ts";
 import type { SourceDevHandle, SourceProvider } from "../Source.ts";
 import { runViteBuildChild } from "../ViteChild.ts";
 import { resolveViteMain } from "../ViteMain.ts";
-import { isSelfUrl, type ViteOptions } from "../Worker.ts";
-import { isContainerDecl } from "../WorkerAsyncBindings.ts";
-import { isWorkerLoader } from "../WorkerLoader.ts";
+import type { ViteOptions } from "../Worker.ts";
 
 /**
  * This module statically imports `@alchemy.run/cloudflare-runtime/vite`
@@ -284,51 +283,6 @@ async function loadVite(projectRoot: string = initialCwd): Promise<ViteModule> {
 }
 
 /**
- * Resolve `props.env` to the literal values vite's `import.meta.env`
- * defines are computed from: strings pass through, `Redacted<string>`s
- * are unwrapped, env-bound Effects are evaluated, and `WorkerLoader`s
- * (bindings that happen to be Effects) are skipped.
- */
-const resolveViteEnv = (env: Record<string, unknown>, selfUrl: string | undefined) =>
-  Effect.gen(function* () {
-    return Object.fromEntries(
-      (yield* Effect.forEach(
-        Object.entries(env),
-        Effect.fn(function* ([key, value]) {
-          return [
-            key,
-            typeof value === "string"
-              ? value
-              : Redacted.isRedacted(value) && typeof Redacted.value(value) === "string"
-                ? Redacted.value(value)
-                : // `Worker.URL` (bare tag or called) — resolved to this
-                  // Worker's own URL. The bare tag is Effect-shaped, so
-                  // check before `Effect.isEffect`.
-                  isSelfUrl(value)
-                  ? selfUrl
-                  : // A `WorkerLoader` is a real Effect that also carries
-                    // the `~alchemy/Kind` marker — it is a binding, not a
-                    // runnable env value. Check it before `Effect.isEffect`
-                    // so we don't execute it as an inlined env entry.
-                    isWorkerLoader(value)
-                    ? undefined
-                    : // A `Cloudflare.Container` declaration is likewise
-                      // Effect-shaped but is a binding (DO namespace +
-                      // ContainerApplication) — yielding it would resolve
-                      // the started-instance tag, which only exists inside
-                      // a Durable Object (#997).
-                      isContainerDecl(value)
-                      ? undefined
-                      : Effect.isEffect(value)
-                        ? yield* value as any as Effect.Effect<any>
-                        : undefined,
-          ];
-        }),
-      )).filter(([, value]) => value !== undefined),
-    );
-  });
-
-/**
  * Hash the vite project's input tree (root + workspaces + lockfiles) —
  * the rebuild-free change signal for the `input` hash slot.
  */
@@ -393,7 +347,7 @@ export const makeViteSource = (vite: ViteOptions): SourceProvider => ({
   ownsAssets: true,
   build: Effect.fn(function* (ctx) {
     const path = yield* Path.Path;
-    const env = yield* resolveViteEnv(ctx.env ?? {}, ctx.selfUrl);
+    const env = yield* resolveBuildEnv(ctx.env, ctx.selfUrl);
     const { clientDirectory, foldkit, base, serverBundle, externalWorkspaces } = yield* viteBuild(
       vite.rootDir,
       env,

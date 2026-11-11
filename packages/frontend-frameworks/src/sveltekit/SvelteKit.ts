@@ -550,7 +550,7 @@ export const make: (
       );
     });
 
-    const devInProcess: Framework["Service"]["dev"] = Effect.fn(function* (devOptions) {
+    const dev: Framework["Service"]["dev"] = Effect.fn(function* (devOptions) {
       const root = devOptions?.root ?? baseRoot;
       const target = yield* resolveTarget(root);
       yield* requireAdapterHook(target);
@@ -612,8 +612,6 @@ export const make: (
       }
       return { url };
     });
-
-    const dev = devInProcess;
 
     return Framework.of({ build, dev });
   });

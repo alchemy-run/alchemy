@@ -456,6 +456,7 @@ export const makeVinextSourceProvider = (
             queueConsumers: yield* ctx.worker.queueConsumers,
             assets: ctx.worker.assets,
           },
+          entrypoints: ctx.worker.entrypoints,
           context: ctx.runtimeContext,
         });
         const server = yield* Effect.acquireRelease(

@@ -1,4 +1,5 @@
 import * as NodeChildProcess from "node:child_process";
+import * as NodeFs from "node:fs";
 import * as NodePath from "node:path";
 import { fileURLToPath } from "node:url";
 /**
@@ -48,7 +49,16 @@ export const inProjectCwd = <A, E, R>(
 ): Effect.Effect<A, E | FrameworkError, R> =>
   Effect.suspend((): Effect.Effect<A, E | FrameworkError, R> => {
     const cwd = process.cwd();
-    return cwd === NodePath.resolve(root)
+    // Compare real paths: the child's cwd is physical, while `root` may go
+    // through a symlink (macOS `/tmp`, a linked project directory).
+    const real = (dir: string) => {
+      try {
+        return NodeFs.realpathSync.native(dir);
+      } catch {
+        return NodePath.resolve(dir);
+      }
+    };
+    return real(cwd) === real(root)
       ? effect
       : Effect.fail(
           new FrameworkError({
@@ -154,6 +164,8 @@ export interface DevChildOptions {
   readonly makeOptions: Record<string, unknown>;
   /** Options for the built service's `dev(...)`. */
   readonly devOptions: DevChildPayload["devOptions"];
+  /** Environment set on the child, over the parent's own. */
+  readonly env?: Record<string, string> | undefined;
 }
 
 interface DevChildHandle {
@@ -209,6 +221,7 @@ export const runDevChild = (
         try: (): DevChildHandle => {
           const child = NodeChildProcess.spawn(executable, args, {
             cwd: options.rootDir,
+            env: options.env === undefined ? process.env : { ...process.env, ...options.env },
             stdio: ["ignore", "pipe", "pipe"],
             detached: false,
           });

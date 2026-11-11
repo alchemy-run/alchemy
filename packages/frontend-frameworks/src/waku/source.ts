@@ -168,6 +168,7 @@ export const makeWakuSourceProvider = (
               queueConsumers,
               assets: ctx.worker.assets,
             },
+            entrypoints: ctx.worker.entrypoints,
             context: ctx.runtimeContext,
           }),
         });

@@ -324,7 +324,7 @@ export const make: (
       );
     });
 
-    const devInProcess: Framework["Service"]["dev"] = Effect.fn(function* (devOptions) {
+    const dev: Framework["Service"]["dev"] = Effect.fn(function* (devOptions) {
       const root = devOptions?.root ?? baseRoot;
       const vite = yield* loadVite(root);
       // `port: 0` (true OS-assigned) on Vite >= 8.2.1, probed ephemeral port
@@ -388,8 +388,6 @@ export const make: (
 
       return { url };
     });
-
-    const dev = devInProcess;
 
     return Framework.of({ build, dev });
   });

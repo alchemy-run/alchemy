@@ -148,10 +148,9 @@ export interface ServerProps {
   runtime?: "node";
   /**
    * Environment variables for the framework server. On deploy the
-   * composite sets these on the Lambda; during `alchemy dev` they are
-   * applied to the dev server's process environment (the dev sidecar and
-   * any child it spawns) so server code reads the same values in both
-   * modes. Changing a value restarts the dev server.
+   * composite sets these on the Lambda; during `alchemy dev` they are set
+   * on the dev server's child process, so server code reads the same values
+   * in both modes. Changing a value restarts the dev server.
    *
    * Entries whose value is `undefined` are dropped — this lets website
    * composites forward optional values (e.g. an `Output` service URL that
@@ -510,22 +509,6 @@ export const ServerProviderLocal = () =>
           }
           const dev = props.dev;
           const root = path.resolve(initialCwd, props.root ?? ".");
-          // Dev/live env parity: the composite sets these on the Lambda on
-          // deploy; in dev the framework server runs inside the sidecar
-          // (or as its child — `next dev`), so the sidecar's process env
-          // is what SSR code reads. `env` is part of the restart surface,
-          // so a changed value restarts the dev server with the new
-          // environment. Values are not unset on stop: sibling dev servers
-          // share the process, so clearing could clobber their keys.
-          if (props.env !== undefined) {
-            yield* Effect.sync(() => {
-              for (const [key, value] of Object.entries(props.env!)) {
-                if (value === undefined) continue;
-                // oxlint-disable-next-line effecttsgo/process-env-in-effect -- exports props.env into the sidecar's process env for the dev server, not config reading
-                process.env[key] = String(value);
-              }
-            });
-          }
           // Resolve the port BEFORE handing off to the framework: probe
           // the preferred port, fail on `strictPort`, otherwise walk
           // forward to the next free port. Without a preferred port the
@@ -562,6 +545,10 @@ export const ServerProviderLocal = () =>
               framework: props.framework,
               module: props.framework,
               rootDir: root,
+              // Dev/live env parity: the composite sets these on the Lambda
+              // on deploy; in dev they go on this site's child only. `env`
+              // is part of the restart surface, so a change restarts it.
+              env: definedEnv(props.env),
               makeOptions: { ...props.options, root, target: props.target },
               devOptions: {
                 root,

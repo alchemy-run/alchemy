@@ -92,8 +92,18 @@ export interface DevContext extends SourceContext {
     /** The Worker's other runtime settings, spread whole into the runtime Worker. */
     readonly options: Pick<
       RuntimeWorker,
-      "workflows" | "crons" | "tails" | "streamingTails" | "cache" | "cf" | "access" | "workerd"
+      | "workflows"
+      | "crons"
+      | "tails"
+      | "streamingTails"
+      | "cache"
+      | "cf"
+      | "access"
+      | "workerd"
+      | "publicUrl"
     >;
+    /** Named entrypoints the Worker binds to itself, for the Vite plugin. */
+    readonly entrypoints?: ReadonlyArray<string> | undefined;
   };
   readonly runtimeContext: Context.Context<RuntimeServices>;
 }
@@ -264,7 +274,6 @@ export interface WorkerSourceSpec<Config> {
   readonly displayName: string;
   /** Run the build child under Node instead of the current runtime. */
   readonly runtime?: "node" | undefined;
-  /** Project root. @default process.cwd() */
   /** Absolute project root, from the module context. */
   readonly rootDir: string;
   readonly memo: MemoOptions | undefined;

@@ -110,6 +110,36 @@ describe("hashInput workspaces", () => {
   });
 });
 
+describe("hashInput tree", () => {
+  it("follows a symlinked directory, with and without memo globs", async () => {
+    const { app, lib, greeting } = await makeMonorepo();
+    await NodeFsPromises.symlink(NodePath.join(lib, "src"), NodePath.join(app, "linked"), "dir");
+    for (const memo of [undefined, { include: ["**/*.ts"] }]) {
+      const before = await hash(app, [], memo);
+      await NodeFsPromises.writeFile(greeting, `export const greeting = "${Math.random()}";`);
+      expect((await hash(app, [], memo)).hash).not.toBe(before.hash);
+    }
+  });
+
+  it("ends a symlink cycle", async () => {
+    const { app } = await makeMonorepo();
+    await NodeFsPromises.symlink(app, NodePath.join(app, "src", "loop"), "dir");
+    await expect(hash(app, [])).resolves.toBeDefined();
+  });
+
+  it("never hashes node_modules, .git or output directories, with memo globs", async () => {
+    const { app } = await makeMonorepo();
+    const memo = { include: ["**/*"] };
+    const before = await hash(app, [], memo);
+    for (const file of ["node_modules/dep/index.js", ".git/HEAD", "dist/out.js"]) {
+      const full = NodePath.join(app, file);
+      await NodeFsPromises.mkdir(NodePath.dirname(full), { recursive: true });
+      await NodeFsPromises.writeFile(full, "x");
+    }
+    expect((await hash(app, [], memo)).hash).toBe(before.hash);
+  });
+});
+
 describe("makeWorkerSource hash", () => {
   it("re-hashes over a deleted recorded workspace without failing (#2606)", async () => {
     const { app, lib } = await makeMonorepo();

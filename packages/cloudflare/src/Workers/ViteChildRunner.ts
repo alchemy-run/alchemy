@@ -89,6 +89,9 @@ const program = Effect.scoped(
       },
       { accountId: config.accountId, selfUrl: config.publicUrl, stack: config.stack },
     );
+    const selfEntrypoints = bindingDescriptors.flatMap((binding) =>
+      binding.type === "self_service" && binding.entrypoint ? [binding.entrypoint] : [],
+    );
     const viteHost = "127.0.0.1";
     // `viteDev` resolves `port: 0` per the loaded Vite: a true OS-assigned
     // random port on Vite >= 8.2.1 (vitejs/vite#23158), a probed ephemeral
@@ -125,7 +128,9 @@ const program = Effect.scoped(
                   cf: runtimeWorker.cf,
                   access: devAccess,
                   workerd: runtimeWorker.workerd,
+                  publicUrl: config.publicUrl,
                 },
+                entrypoints: selfEntrypoints,
               },
               runtimeContext,
             })
@@ -169,9 +174,7 @@ const program = Effect.scoped(
                 access: devAccess,
               },
               context: runtimeContext,
-              entrypoints: bindingDescriptors.flatMap((binding) =>
-                binding.type === "self_service" && binding.entrypoint ? [binding.entrypoint] : [],
-              ),
+              entrypoints: selfEntrypoints,
             },
             { host: viteHost, port: vitePort, strictPort: false },
           ).pipe(Effect.map((server) => server.resolvedUrls?.local[0]));

@@ -123,6 +123,8 @@ export interface Website {
 
 /** Internal framework-to-Node-target wiring. */
 export interface FrameworkSiteConfig {
+  /** The JS runtime the dev server's child process runs under. @default the engine's runtime */
+  runtime?: "node";
   /** Framework integration module. */
   framework: string;
   /** Existing Node deploy-target module. */
@@ -223,6 +225,7 @@ export const makeFrameworkSite = Effect.fn(function* (
   const build = yield* Server("Build", {
     framework: config.framework,
     target: config.target,
+    runtime: config.runtime,
     root: props.rootDir,
     env: websiteBuildEnv(props.env),
     options: { ...config.options, ...targetConfig, targetConfig },

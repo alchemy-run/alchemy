@@ -351,6 +351,8 @@ describe.concurrent(
                     TEST_MARKER: marker,
                     SITE_KV: siteKv,
                     PUBLIC_SITE_MARKER: "ASTRO_PUBLIC_ENV_MARKER",
+                    // Resolved to this Worker's own URL before the build.
+                    PUBLIC_SITE_URL: Cloudflare.Worker.URL,
                   },
                   assets: { htmlHandling: "auto-trailing-slash", notFoundHandling: "none" },
                 });
@@ -378,6 +380,10 @@ describe.concurrent(
           yield* expectUrlContains(`${site1.url!}/public-env/`, "ASTRO_PUBLIC_ENV_MARKER", {
             timeout: "60 seconds",
             label: "astro public env",
+          });
+          yield* expectUrlContains(`${site1.url!}/public-env/`, site1.url!, {
+            timeout: "60 seconds",
+            label: "astro Worker.URL env",
           });
           // Prerendered page served from static assets. Keep the body — the
           // hashed-asset assertion below extracts the `/_astro/*.css` href.

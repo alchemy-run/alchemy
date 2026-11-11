@@ -5,6 +5,7 @@ import {
   parseIgnoreRules,
   walkIgnoring,
   type IgnoreRules,
+  type WalkEntryType,
 } from "@alchemy.run/node-utils/ignore-rules";
 import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
@@ -116,10 +117,55 @@ const readGitIgnoreScopes = Effect.fn(function* (rootDir: string) {
 });
 
 /**
+ * `alwaysExclude`'s directory rules (`node_modules/`, `/dist/`) as globs, so
+ * the glob crawl never descends into them.
+ */
+const directoryGlobs = (rules: ReadonlyArray<string>) =>
+  rules.map((rule) => {
+    const dir = rule.replace(/^\/|\/$/g, "");
+    return rule.startsWith("/") ? `${dir}/**` : `**/${dir}/**`;
+  });
+
+/**
+ * A {@link listFileSystemDirectory} that follows symlinked directories, so a
+ * linked source tree is hashed like a real one. Each link target is entered
+ * once, so a link cycle ends.
+ */
+interface ListedEntry {
+  readonly name: string;
+  readonly type: WalkEntryType;
+}
+
+const listFollowingLinks = Effect.fn(function* (rootDir: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const list = yield* listFileSystemDirectory(rootDir);
+  const entered = new Set<string>();
+  const follow = (relativeDirectory: string, entry: ListedEntry): Effect.Effect<ListedEntry> => {
+    if (entry.type !== "SymbolicLink") return Effect.succeed(entry);
+    const full = path.join(rootDir, relativeDirectory, entry.name);
+    return Effect.all([fs.stat(full), fs.realPath(full)]).pipe(
+      Effect.map(([info, real]): ListedEntry => {
+        if (info.type !== "Directory" || entered.has(real)) return entry;
+        entered.add(real);
+        return { name: entry.name, type: "Directory" };
+      }),
+      // A dangling link: keep it as a link, which hashes nothing.
+      Effect.orElseSucceed(() => entry),
+    );
+  };
+  return (relativeDirectory: string): Effect.Effect<Array<ListedEntry>, PlatformError> =>
+    Effect.flatMap(list(relativeDirectory), (entries) =>
+      Effect.forEach(entries, (entry) => follow(relativeDirectory, entry)),
+    );
+});
+
+/**
  * Files under `rootDir` to hash, as sorted posix paths. Explicit `exclude`
  * globs replace the gitignore rules; otherwise the tree is walked with them,
  * never reading an excluded directory. `alwaysExclude` (gitignore syntax)
- * applies either way.
+ * applies either way, and its directories are never crawled. Symlinked files
+ * and directories are followed in both modes.
  */
 const listInputFiles = Effect.fn(function* (
   rootDir: string,
@@ -133,7 +179,7 @@ const listInputFiles = Effect.fn(function* (
     const files = yield* Effect.promise(() =>
       glob(memo.include ?? ["**/*"], {
         cwd: rootDir,
-        ignore: memo.exclude ?? [],
+        ignore: [...(memo.exclude ?? []), ...directoryGlobs(alwaysExclude)],
         onlyFiles: true,
         expandDirectories: false,
         dot: true,
@@ -146,7 +192,7 @@ const listInputFiles = Effect.fn(function* (
     return files.filter((file) => !always.ignores(file) && !(gitignore?.ignores(file) ?? false));
   }
   const entries = yield* walkIgnoring({
-    list: yield* listFileSystemDirectory(rootDir),
+    list: yield* listFollowingLinks(rootDir),
     rules: combineIgnoreRules("gitignore", [always, ...(yield* readGitIgnoreScopes(rootDir))]),
   });
   // Like tinyglobby, keep symlinks that resolve to files.
