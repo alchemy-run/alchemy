@@ -1,5 +1,8 @@
+export * as Functions from "./Functions/index.ts";
 export * as GenAI from "./GenAI/index.ts";
+export * as Inference from "./Inference/index.ts";
 export * as Monitoring from "./Monitoring/index.ts";
+export * as Security from "./Security/index.ts";
 export * as Spaces from "./Spaces/index.ts";
 export * from "./AuthProvider.ts";
 export * from "./Certificate.ts";

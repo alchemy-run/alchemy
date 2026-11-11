@@ -6,7 +6,7 @@ import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { logLevel, skipSlow } from "../support.ts";
+import { logLevel, skipSlow, waitForAppHost } from "../support.ts";
 import AgentApp, { Echo } from "./fixtures/agent-app.ts";
 
 const { test } = Test.make({ providers: DigitalOcean.providers() });
@@ -31,6 +31,7 @@ test.provider.skipIf(skipSlow)(
         .pipe(Stream.runCollect);
       expect(keys.length).toEqual(1);
 
+      yield* waitForAppHost(url);
       const client = yield* HttpClient.HttpClient;
       const answer = yield* client.get(url).pipe(
         Effect.flatMap((response) =>

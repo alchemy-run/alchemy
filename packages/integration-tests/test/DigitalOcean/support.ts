@@ -4,6 +4,7 @@ import { getAccount, type NotFound } from "@distilled.cloud/digitalocean";
 import { isActionState, State } from "alchemy/State/State";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { waitForDns } from "../Cloudflare/Utils/Http.ts";
 
 export const logLevel = Effect.provideService(
   MinimumLogLevel,
@@ -87,3 +88,10 @@ export const accountEmail = getAccount({}).pipe(
   Effect.flatMap((response) => Effect.fromNullishOr(response.account?.email)),
   Effect.orDie,
 );
+
+/**
+ * Waits until a fresh App hostname (`*.ondigitalocean.app`) answers on its
+ * authoritative nameservers, so the first fetch never caches NXDOMAIN on
+ * this machine.
+ */
+export const waitForAppHost = (url: string) => waitForDns(new URL(url).hostname, ["A"]);

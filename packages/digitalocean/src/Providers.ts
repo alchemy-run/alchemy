@@ -15,6 +15,7 @@ import { Domain, DomainProvider } from "./Domain.ts";
 import { DomainRecord, DomainRecordProvider } from "./DomainRecord.ts";
 import { Droplet, DropletProvider } from "./Droplet.ts";
 import { Firewall, FirewallProvider } from "./Firewall.ts";
+import * as Functions from "./Functions/index.ts";
 import * as GenAI from "./GenAI/index.ts";
 import { Image, ImageProvider } from "./Image.ts";
 import * as Kubernetes from "./Kubernetes/index.ts";
@@ -33,6 +34,7 @@ import {
   ReservedIpv6AssignmentProvider,
 } from "./ReservedIpv6Assignment.ts";
 import * as Sandboxes from "./Sandboxes/index.ts";
+import * as Security from "./Security/index.ts";
 import * as Spaces from "./Spaces/index.ts";
 import { SshKey, SshKeyProvider } from "./SshKey.ts";
 import { Tag, TagProvider } from "./Tag.ts";
@@ -122,6 +124,11 @@ export const providers = () =>
       GenAI.Agent,
       GenAI.AgentApiKey,
       GenAI.KnowledgeBase,
+      Security.Secret,
+      Functions.Namespace,
+      Functions.AccessKey,
+      Functions.Action,
+      Functions.Trigger,
     ]),
   ).pipe(
     Layer.provide(
@@ -170,6 +177,11 @@ export const providers = () =>
         GenAI.AgentProvider(),
         GenAI.AgentApiKeyProvider(),
         GenAI.KnowledgeBaseProvider(),
+        Security.SecretProvider(),
+        Functions.NamespaceProvider(),
+        Functions.AccessKeyProvider(),
+        Functions.ActionProvider(),
+        Functions.TriggerProvider(),
       ),
     ),
     // Spaces' S3 API signs with Spaces keys, not the token.

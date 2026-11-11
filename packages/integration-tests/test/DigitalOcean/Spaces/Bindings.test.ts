@@ -4,7 +4,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
-import { logLevel, skipSlow } from "../support.ts";
+import { logLevel, skipSlow, waitForAppHost } from "../support.ts";
 import BindingsApp, { Files } from "./fixtures/bindings-app.ts";
 
 const { test } = Test.make({ providers: DigitalOcean.providers() });
@@ -34,6 +34,7 @@ test.provider.skipIf(skipSlow)(
         }),
       );
 
+      yield* waitForAppHost(url);
       // PutObject writes with the app's scoped key.
       expect((yield* call(url, "/put?key=hello.txt")).text).toEqual("put");
       // GetObject reads it back.

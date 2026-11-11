@@ -7,7 +7,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
 import EffectApp from "./fixtures/app/effect-app.ts";
 import { TestRegistry } from "./fixtures/app/shared.ts";
-import { isGone, logLevel, skipSlow } from "./support.ts";
+import { isGone, logLevel, skipSlow, waitForAppHost } from "./support.ts";
 
 const { test } = Test.make({ providers: DigitalOcean.providers() });
 
@@ -45,6 +45,8 @@ test.provider.skipIf(skipSlow)(
         }),
       );
 
+      yield* waitForAppHost(effectUrl);
+      yield* waitForAppHost(asyncUrl);
       expect(effectUrl).toMatch(/^https:\/\/.+\.ondigitalocean\.app/);
       expect(yield* getJson(effectUrl)).toEqual({ runtime: "effect", ok: true });
       expect(yield* getJson(`${asyncUrl}/hello`)).toEqual({

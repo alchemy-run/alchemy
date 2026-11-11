@@ -109,7 +109,7 @@ export type CertificateAttributes = Certificate["Attributes"];
  * ```typescript
  * const cert = yield* DigitalOcean.Certificate("shop-cert", {
  *   type: "custom",
- *   privateKey: yield* Config.redacted("TLS_PRIVATE_KEY"),
+ *   privateKey: yield* Config.Redacted("TLS_PRIVATE_KEY"),
  *   leafCertificate: yield* Config.string("TLS_CERTIFICATE"),
  *   certificateChain: yield* Config.string("TLS_CHAIN"),
  * });
