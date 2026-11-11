@@ -5,6 +5,7 @@ import type * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import type { Cluster } from "./Cluster.ts";
 import type { ConnectionPool } from "./ConnectionPool.ts";
+import type { Database } from "./Database.ts";
 
 export class ConnectionStringMissing extends Data.TaggedError(
   "DigitalOcean.Databases.ConnectionStringMissing",
@@ -29,6 +30,12 @@ export interface ConnectClient {
     ConnectionStringMissing,
     RuntimeContext
   >;
+  /**
+   * The PEM certificate of the CA that signs the cluster's TLS certificate.
+   * DigitalOcean signs it with its own CA, so pass it to the driver to
+   * verify the connection: `new pg.Client({ connectionString, ssl: { ca } })`.
+   */
+  readonly caCertificate: Effect.Effect<string, ConnectionStringMissing, RuntimeContext>;
 }
 
 /**
@@ -67,7 +74,7 @@ export interface ConnectClient {
 export interface Connect extends Binding.Service<
   Connect,
   "DigitalOcean.Databases.Connect",
-  (target: Cluster | ConnectionPool) => Effect.Effect<ConnectClient>
+  (target: Cluster | ConnectionPool | Database) => Effect.Effect<ConnectClient>
 > {}
 
 export const Connect = Binding.Service<Connect>("DigitalOcean.Databases.Connect");

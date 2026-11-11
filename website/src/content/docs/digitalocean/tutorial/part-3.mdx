@@ -21,7 +21,7 @@ import * as DigitalOcean from "@alchemy.run/digitalocean";
 
 export const Registry = DigitalOcean.Registry("Registry", { tier: "starter" });
 
-export const Uploads = DigitalOcean.Spaces.Bucket("Uploads", { region: "nyc3" });
+export const Uploads = DigitalOcean.Spaces.Bucket("Uploads", { region: "nyc3", forceDestroy: true });
 +
 +export const Db = DigitalOcean.Databases.Cluster("Db", {
 +  engine: "pg",
@@ -44,43 +44,44 @@ CREATE TABLE visits (
 );
 ```
 
-## Apply migrations on deploy
+## Declare the App's database
 
 ```diff lang="typescript"
-// alchemy.run.ts
+// src/resources.ts
 import * as DigitalOcean from "@alchemy.run/digitalocean";
-import * as Alchemy from "alchemy";
-import * as Effect from "effect/Effect";
-import Api from "./src/api.ts";
-+import { Db } from "./src/resources.ts";
++import * as Effect from "effect/Effect";
 
-export default Alchemy.Stack(
-  "MyApp",
-  { providers: DigitalOcean.providers(), state: Alchemy.localState() },
-  Effect.gen(function* () {
-+    const db = yield* Db;
-+    yield* DigitalOcean.Databases.Database("App", {
-+      clusterId: db.clusterId,
-+      migrations: "./migrations",
-+    });
-    const api = yield* Api;
-    return { url: api.url };
-  }),
-);
+export const Registry = DigitalOcean.Registry("Registry", { tier: "starter" });
+
+export const Uploads = DigitalOcean.Spaces.Bucket("Uploads", { region: "nyc3", forceDestroy: true });
+
+export const Db = DigitalOcean.Databases.Cluster("Db", {
+  engine: "pg",
+  size: "db-s-1vcpu-1gb",
+  region: "nyc3",
+});
++
++export const AppDb = Effect.gen(function* () {
++  const db = yield* Db;
++  return yield* DigitalOcean.Databases.Database("App", {
++    clusterId: db.clusterId,
++    migrations: "./migrations",
++  });
++});
 ```
 
-`Database` creates a database in the cluster and applies every migration it hasn't run yet. Alchemy records each applied file in an `__alchemy_migrations` table, so a later deploy runs only new files.
+`Database` creates a database named `App` in the cluster and applies every migration it hasn't run yet, on every deploy. Alchemy records each applied file in an `__alchemy_migrations` table, so a later deploy runs only new files. It's declared inside an `Effect.gen` because it needs the cluster's id.
 
 ## Install a driver
 
 <PackageManagers add="pg" dev="@types/pg" />
 
-## Bind the cluster
+## Bind the database
 
 ```diff lang="typescript"
 // src/api.ts
 -import { Registry, Uploads } from "./resources.ts";
-+import { Db, Registry, Uploads } from "./resources.ts";
++import { AppDb, Registry, Uploads } from "./resources.ts";
 
 export default class Api extends DigitalOcean.App<Api>()(
   "Api",
@@ -88,10 +89,10 @@ export default class Api extends DigitalOcean.App<Api>()(
   Effect.gen(function* () {
     const putObject = yield* DigitalOcean.Spaces.PutObject(Uploads);
     const getObject = yield* DigitalOcean.Spaces.GetObject(Uploads);
-+    const conn = yield* DigitalOcean.Databases.Connect(Db);
++    const conn = yield* DigitalOcean.Databases.Connect(AppDb);
 ```
 
-`Connect(Db)` gives the App the cluster's connection string as a secret. `conn.connectionString` reads it.
+`Connect(AppDb)` gives the App the database's connection string as a secret, and the certificate of the CA DigitalOcean signs the cluster's TLS certificate with. The App's deploy now waits for the migrations.
 
 ## Provide its client
 
@@ -118,8 +119,14 @@ Add a small helper inside the Effect, after `conn`:
 const query = (sql: string, params: unknown[] = []) =>
   Effect.gen(function* () {
     const uri = yield* conn.connectionString;
+    const ca = yield* conn.caCertificate;
     return yield* Effect.tryPromise(async () => {
-      const client = new pg.Client({ connectionString: Redacted.value(uri) });
+      const client = new pg.Client({
+        // `ssl` verifies the server against DigitalOcean's CA; pg ignores it
+        // while the string carries `sslmode`.
+        connectionString: Redacted.value(uri).replace(/[?&]sslmode=[^&]*/, ""),
+        ssl: { ca },
+      });
       await client.connect();
       try {
         return (await client.query(sql, params)).rows;

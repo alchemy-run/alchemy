@@ -60,7 +60,21 @@ yield* DigitalOcean.Databases.Database("App", {
 
 ## Connect from a runtime
 
-`Connect` gives a runtime the cluster's connection string as a secret:
+`Connect` gives a runtime a database's connection string as a secret, with the CA certificate to verify it. Declare the database inside an `Effect.gen` that yields the cluster:
+
+```typescript title="src/resources.ts"
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+import * as Effect from "effect/Effect";
+
+export const Db = DigitalOcean.Databases.Cluster("Db", { engine: "pg", size: "db-s-1vcpu-1gb", region: "nyc3" });
+
+export const AppDb = Effect.gen(function* () {
+  const db = yield* Db;
+  return yield* DigitalOcean.Databases.Database("App", { clusterId: db.clusterId, migrations: "./migrations" });
+});
+```
+
+Then bind it:
 
 ```typescript title="src/api.ts"
 import * as DigitalOcean from "@alchemy.run/digitalocean";
@@ -68,18 +82,22 @@ import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Redacted from "effect/Redacted";
 import pg from "pg";
-import { Db } from "./resources.ts";
+import { AppDb } from "./resources.ts";
 
 export default class Api extends DigitalOcean.App<Api>()(
   "Api",
   { main: import.meta.url },
   Effect.gen(function* () {
-    const conn = yield* DigitalOcean.Databases.Connect(Db);
+    const conn = yield* DigitalOcean.Databases.Connect(AppDb);
     return {
       fetch: Effect.gen(function* () {
         const uri = yield* conn.connectionString;
+        const ca = yield* conn.caCertificate;
         const rows = yield* Effect.tryPromise(async () => {
-          const client = new pg.Client({ connectionString: Redacted.value(uri) });
+          const client = new pg.Client({
+            connectionString: Redacted.value(uri).replace(/[?&]sslmode=[^&]*/, ""),
+            ssl: { ca },
+          });
           await client.connect();
           try {
             return (await client.query("SELECT now()")).rows;
@@ -94,7 +112,7 @@ export default class Api extends DigitalOcean.App<Api>()(
 ) {}
 ```
 
-`conn.privateConnectionString` is the address inside the cluster's VPC, for Droplets and Kubernetes nodes in it. The string works with any driver, or with `Drizzle.Postgres(conn.connectionString)`.
+DigitalOcean signs each cluster's TLS certificate with its own CA, so a driver that verifies certificates needs `conn.caCertificate`; `pg` uses it only when the string carries no `sslmode`. `Connect(Db)` on the cluster itself connects to its default database, `defaultdb`. `conn.privateConnectionString` is the address inside the cluster's VPC, for Droplets and Kubernetes nodes in it.
 
 ## Add users and pools
 

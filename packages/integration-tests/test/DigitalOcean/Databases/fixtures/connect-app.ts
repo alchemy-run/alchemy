@@ -11,30 +11,40 @@ export const Db = DigitalOcean.Databases.Cluster("Db", {
   region: "nyc3",
 });
 
-/** Queries the bound cluster with the connection string Connect hands it. */
+export const AppDb = Effect.gen(function* () {
+  const db = yield* Db;
+  return yield* DigitalOcean.Databases.Database("App", { clusterId: db.clusterId });
+});
+
+/**
+ * Queries the bound database with the connection string Connect hands it,
+ * verifying the server against the cluster's CA.
+ */
 export default class ConnectApp extends DigitalOcean.App<ConnectApp>()(
   "ConnectApp",
   { main: import.meta.url, registry: TestRegistry, region: "nyc" },
   Effect.gen(function* () {
-    const db = yield* Db;
-    const conn = yield* DigitalOcean.Databases.Connect(db);
+    const conn = yield* DigitalOcean.Databases.Connect(AppDb);
     return {
       fetch: Effect.gen(function* () {
         const uri = yield* conn.connectionString;
-        const value = yield* Effect.tryPromise(async () => {
+        const ca = yield* conn.caCertificate;
+        const row = yield* Effect.tryPromise(async () => {
           const client = new pg.Client({
-            connectionString: Redacted.value(uri).replace(/\?.*$/, ""),
-            ssl: { rejectUnauthorized: false },
+            connectionString: Redacted.value(uri).replace(/[?&]sslmode=[^&]*/, ""),
+            ssl: { ca },
           });
           await client.connect();
           try {
-            const result = await client.query("SELECT 41 + 1 AS answer");
-            return result.rows[0].answer as number;
+            const result = await client.query(
+              "SELECT 41 + 1 AS answer, current_database() AS database",
+            );
+            return result.rows[0] as { answer: number; database: string };
           } finally {
             await client.end();
           }
         });
-        return yield* HttpServerResponse.json({ answer: value });
+        return yield* HttpServerResponse.json(row);
       }).pipe(Effect.orDie),
     };
   }).pipe(Effect.provide(DigitalOcean.Databases.ConnectHttp)),

@@ -108,6 +108,12 @@ export type Cluster = Resource<
     tags: string[];
     /** ISO 8601 creation time. */
     createdAt: string;
+    /**
+     * The PEM certificate of the CA that signs the cluster's TLS
+     * certificate. Drivers verify the connection with it, e.g. `pg`'s
+     * `ssl: { ca }`.
+     */
+    caCertificate: string | undefined;
   },
   never,
   Providers
@@ -236,7 +242,10 @@ const DELETE_POLL: PollBudget = { maxDelay: "10 seconds", times: 36 };
 const physicalName = (id: string) =>
   createPhysicalName({ id, lowercase: true, maxLength: NAME_MAX_LENGTH });
 
-export const toClusterAttrs = (cluster: DatabaseClusterRead): ClusterAttributes => ({
+export const toClusterAttrs = (
+  cluster: DatabaseClusterRead,
+  caCertificate?: string,
+): ClusterAttributes => ({
   clusterId: cluster.id,
   urn: `do:dbaas:${cluster.id}`,
   name: cluster.name,
@@ -257,7 +266,17 @@ export const toClusterAttrs = (cluster: DatabaseClusterRead): ClusterAttributes 
   vpcUuid: cluster.private_network_uuid || undefined,
   tags: withoutAlchemyTags(cluster.tags ?? []),
   createdAt: cluster.created_at,
+  caCertificate,
 });
+
+/** The cluster's CA certificate as PEM; `undefined` for engines without one. */
+export const clusterCaCertificate = (clusterId: string) =>
+  DO.getDatabaseCa({ database_cluster_uuid: clusterId }).pipe(
+    Effect.flatMap((r) =>
+      Effect.sync(() => Buffer.from(r.ca.certificate, "base64").toString("utf8")),
+    ),
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+  );
 
 export const observeCluster = (clusterId: string) =>
   noneIfNotFound(
@@ -311,11 +330,11 @@ export const ClusterProvider = () =>
       const response = yield* DO.listDatabaseClusters({});
       return (response.databases ?? [])
         .filter((cluster) => (cluster.tags ?? []).some(isAlchemyTag))
-        .map(toClusterAttrs);
+        .map((cluster) => toClusterAttrs(cluster));
     }),
     read: Effect.fn(function* ({ fqn, instanceId, olds, output }) {
       const owned = yield* observeGeneration(output, instanceId);
-      if (Option.isSome(owned)) return toClusterAttrs(owned.value);
+      if (Option.isSome(owned)) return toClusterAttrs(owned.value, output?.caCertificate);
       if (olds.name === undefined) return undefined;
       const ownershipTag = yield* ownershipTagFor(fqn);
       const named = yield* observeByName(olds.name);
@@ -325,7 +344,7 @@ export const ClusterProvider = () =>
         Option.getOrUndefined,
       );
     }),
-    diff: Effect.fn(function* ({ olds, news }) {
+    diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;
       const downgraded =
         news.version !== undefined &&
@@ -339,6 +358,10 @@ export const ClusterProvider = () =>
       ) {
         // Names are unique, so a chosen name frees up before the new cluster takes it.
         return { action: "replace", deleteFirst: news.name !== undefined } as const;
+      }
+      // Clusters deployed before `caCertificate` existed record it on their next deploy.
+      if (output !== undefined && output.caCertificate === undefined) {
+        return { action: "update" } as const;
       }
     }),
     reconcile: Effect.fn(function* ({ id, fqn, instanceId, news, output }) {
@@ -413,7 +436,8 @@ export const ClusterProvider = () =>
         });
       }
 
-      return toClusterAttrs(yield* waitUntilOnline(cluster.id, (c) => setEquals(c.tags, tags)));
+      const online = yield* waitUntilOnline(cluster.id, (c) => setEquals(c.tags, tags));
+      return toClusterAttrs(online, yield* clusterCaCertificate(cluster.id));
     }),
     delete: Effect.fn(function* ({ fqn, instanceId, output }) {
       const observed = yield* observeCluster(output.clusterId);

@@ -16,7 +16,7 @@ App Platform runs **scheduled jobs** on a cron schedule. A job runs the App's ow
   Effect.gen(function* () {
     const putObject = yield* DigitalOcean.Spaces.PutObject(Uploads);
     const getObject = yield* DigitalOcean.Spaces.GetObject(Uploads);
-    const conn = yield* DigitalOcean.Databases.Connect(Db);
+    const conn = yield* DigitalOcean.Databases.Connect(AppDb);
     // the query helper from part 3
 +
 +    yield* DigitalOcean.cron("0 3 * * *", () =>

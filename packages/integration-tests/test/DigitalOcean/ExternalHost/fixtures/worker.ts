@@ -47,6 +47,8 @@ export default class ExternalHostWorker extends Cloudflare.Worker<ExternalHostWo
     const token = yield* Config.Redacted("DO_TEST_KEY");
     const queryMetrics = yield* DigitalOcean.Insights.QueryMetrics({ token });
     const searchLogs = yield* DigitalOcean.Insights.SearchLogs({ token });
+    const createResponse = yield* DigitalOcean.Inference.CreateResponse({ key: token });
+    const createMessage = yield* DigitalOcean.Inference.CreateMessage({ key: token });
 
     const respond = (effect: Effect.Effect<unknown, unknown, RuntimeContext>) =>
       effect.pipe(
@@ -93,6 +95,28 @@ export default class ExternalHostWorker extends Cloudflare.Worker<ExternalHostWo
                 return { metrics, logs };
               }),
             );
+          case "/responses":
+            return yield* respond(
+              Effect.map(
+                createResponse({
+                  model: "mistral-3-14B",
+                  input: "Reply with exactly the word pong.",
+                  max_output_tokens: 16,
+                }),
+                (out) => ({ outputs: out.output.length }),
+              ),
+            );
+          case "/messages":
+            return yield* respond(
+              Effect.map(
+                createMessage({
+                  model: "mistral-3-14B",
+                  max_tokens: 16,
+                  messages: [{ role: "user", content: "Reply with exactly the word pong." }],
+                }),
+                (out) => ({ blocks: out.content.length }),
+              ),
+            );
           default:
             return HttpServerResponse.text("ok");
         }
@@ -107,6 +131,8 @@ export default class ExternalHostWorker extends Cloudflare.Worker<ExternalHostWo
         DigitalOcean.Functions.InvokeFunctionHttp,
         DigitalOcean.Insights.QueryMetricsHttp,
         DigitalOcean.Insights.SearchLogsHttp,
+        DigitalOcean.Inference.CreateResponseHttp,
+        DigitalOcean.Inference.CreateMessageHttp,
       ),
     ),
   ),

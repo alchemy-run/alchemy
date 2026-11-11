@@ -17,10 +17,10 @@ import * as DigitalOcean from "@alchemy.run/digitalocean";
 
 export const Registry = DigitalOcean.Registry("Registry", { tier: "starter" });
 +
-+export const Uploads = DigitalOcean.Spaces.Bucket("Uploads", { region: "nyc3" });
++export const Uploads = DigitalOcean.Spaces.Bucket("Uploads", { region: "nyc3", forceDestroy: true });
 ```
 
-A bucket lives in one region. `nyc3` sits next to the App's `nyc` region.
+A bucket lives in one region. `nyc3` sits next to the App's `nyc` region. `forceDestroy` lets `alchemy destroy` delete the bucket while it still holds objects.
 
 ## Bind the bucket for writing
 

@@ -6,7 +6,7 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import pg from "pg";
-import { Db, Uploads } from "./resources.ts";
+import { AppDb, Registry, Uploads } from "./resources.ts";
 
 /**
  * An Effect HTTP API on App Platform. It stores files in Spaces with a key
@@ -15,19 +15,23 @@ import { Db, Uploads } from "./resources.ts";
  */
 export default class Api extends DigitalOcean.App<Api>()(
   "Api",
-  { main: import.meta.url, region: "nyc" },
+  { main: import.meta.url, region: "nyc", registry: Registry },
   Effect.gen(function* () {
     const bucket = yield* Uploads;
     const putObject = yield* DigitalOcean.Spaces.PutObject(bucket);
     const getObject = yield* DigitalOcean.Spaces.GetObject(bucket);
-    const db = yield* Db;
-    const conn = yield* DigitalOcean.Databases.Connect(db);
+    const conn = yield* DigitalOcean.Databases.Connect(AppDb);
 
     const query = (sql: string, params: unknown[] = []) =>
       Effect.gen(function* () {
         const uri = yield* conn.connectionString;
+        // DigitalOcean signs the cluster's certificate with its own CA.
+        const ca = yield* conn.caCertificate;
         return yield* Effect.tryPromise(async () => {
-          const client = new pg.Client({ connectionString: Redacted.value(uri) });
+          const client = new pg.Client({
+            connectionString: Redacted.value(uri).replace(/[?&]sslmode=[^&]*/, ""),
+            ssl: { ca },
+          });
           await client.connect();
           try {
             return (await client.query(sql, params)).rows;

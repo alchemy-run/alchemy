@@ -20,13 +20,13 @@ import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import { ignoreNotFound, noneIfNotFound } from "../internal/notFound.ts";
 import type { Providers } from "../Providers.ts";
-import { observeCluster, waitUntilOnline } from "./Cluster.ts";
+import { clusterCaCertificate, observeCluster, waitUntilOnline } from "./Cluster.ts";
 
 export type DatabaseProps = {
   /** The cluster that holds the database. A change replaces the database. */
   clusterId: string;
   /**
-   * Database name. A change replaces the database.
+   * Database name, at most 40 characters. A change replaces the database.
    *
    * @default a generated physical name
    */
@@ -50,6 +50,12 @@ export type Database = Resource<
     clusterId: string;
     /** Database name. */
     name: string;
+    /** Public connection URI to this database, with the admin credentials. */
+    uri: Redacted.Redacted<string> | undefined;
+    /** Connection URI to this database inside the cluster's VPC. */
+    privateUri: Redacted.Redacted<string> | undefined;
+    /** The PEM certificate of the CA that signs the cluster's TLS certificate. */
+    caCertificate: string | undefined;
     /** Directory of the applied SQL migrations. */
     migrationsDir: string | undefined;
     /** Migration bookkeeping table. */
@@ -114,7 +120,7 @@ export type DatabaseAttributes = Database["Attributes"];
 export const Database = Resource<Database>("DigitalOcean.Databases.Database");
 
 const physicalName = (id: string) =>
-  createPhysicalName({ id, lowercase: true, maxLength: 63, delimiter: "_" });
+  createPhysicalName({ id, lowercase: true, maxLength: 40, delimiter: "_" });
 
 const observe = (clusterId: string, name: string) =>
   noneIfNotFound(
@@ -169,6 +175,28 @@ const withExecutor = Effect.fn(function* <A, E, R>(
     : withPgExecutor({ ...config, ssl: tls }, use, { retryConnect });
 });
 
+// The cluster's URIs point at its default database; point them at this one.
+const withDatabase = (uri: string | Redacted.Redacted<string> | undefined, database: string) =>
+  Effect.sync(() => {
+    const raw = uri === undefined || typeof uri === "string" ? uri : Redacted.value(uri);
+    if (raw === undefined || raw === "") return undefined;
+    const url = new URL(raw);
+    url.pathname = `/${encodeURIComponent(database)}`;
+    return Redacted.make(url.toString());
+  });
+
+const connectionAttrs = Effect.fn(function* (clusterId: string, database: string) {
+  const cluster = yield* observeCluster(clusterId);
+  if (Option.isNone(cluster)) {
+    return { uri: undefined, privateUri: undefined, caCertificate: undefined };
+  }
+  return {
+    uri: yield* withDatabase(cluster.value.connection?.uri, database),
+    privateUri: yield* withDatabase(cluster.value.private_connection?.uri, database),
+    caCertificate: yield* clusterCaCertificate(clusterId),
+  };
+});
+
 export const DatabaseProvider = () =>
   Provider.succeed(Database, {
     stables: ["clusterId", "name"],
@@ -182,6 +210,9 @@ export const DatabaseProvider = () =>
       return {
         clusterId,
         name,
+        uri: output?.uri,
+        privateUri: output?.privateUri,
+        caCertificate: output?.caCertificate,
         migrationsDir: output?.migrationsDir,
         migrationsTable: output?.migrationsTable,
         migrationsHashes: output?.migrationsHashes ?? {},
@@ -195,6 +226,8 @@ export const DatabaseProvider = () =>
       }
       // Pending migration files update the database in place.
       if (yield* diffMigrations({ news, output })) return { action: "update" } as const;
+      // Databases deployed before they carried connection strings record them now.
+      if (output !== undefined && output.uri === undefined) return { action: "update" } as const;
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const name = output?.name ?? news.name ?? (yield* physicalName(id));
@@ -214,6 +247,7 @@ export const DatabaseProvider = () =>
       return {
         clusterId: news.clusterId,
         name,
+        ...(yield* connectionAttrs(news.clusterId, name)),
         ...migrationsAttrs({ input: migrationsInput, run, output }),
       };
     }),

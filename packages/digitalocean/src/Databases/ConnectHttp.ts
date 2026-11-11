@@ -5,10 +5,15 @@ import * as Redacted from "effect/Redacted";
 import type { Cluster } from "./Cluster.ts";
 import { Connect, ConnectionStringMissing, type ConnectClient } from "./Connect.ts";
 import type { ConnectionPool } from "./ConnectionPool.ts";
+import type { Database } from "./Database.ts";
 
 const envKeys = (target: { readonly LogicalId: string }) => {
   const id = target.LogicalId.replaceAll(/[^a-zA-Z0-9]/g, "_").toUpperCase();
-  return { public: `DO_DATABASE_${id}_URI`, private: `DO_DATABASE_${id}_PRIVATE_URI` };
+  return {
+    public: `DO_DATABASE_${id}_URI`,
+    private: `DO_DATABASE_${id}_PRIVATE_URI`,
+    ca: `DO_DATABASE_${id}_CA`,
+  };
 };
 
 /**
@@ -21,13 +26,14 @@ const envKeys = (target: { readonly LogicalId: string }) => {
  */
 export const ConnectHttp = Layer.succeed(
   Connect,
-  Effect.fn(function* (target: Cluster | ConnectionPool) {
+  Effect.fn(function* (target: Cluster | ConnectionPool | Database) {
     const keys = envKeys(target);
     if (!globalThis.__ALCHEMY_RUNTIME__) {
       const runtime = yield* CurrentRuntimeContext;
       if (runtime !== undefined) {
         yield* runtime.set(keys.public, target.uri);
         yield* runtime.set(keys.private, target.privateUri);
+        yield* runtime.set(keys.ca, target.caCertificate);
       }
     }
     // Read in the construction phase, where the host's runtime context is
@@ -40,6 +46,7 @@ export const ConnectHttp = Layer.succeed(
     });
     const boundPublic = yield* lookup(keys.public);
     const boundPrivate = yield* lookup(keys.private);
+    const boundCa = yield* lookup(keys.ca);
     const read = (value: string | Redacted.Redacted<string> | undefined) =>
       value === undefined || value === ""
         ? Effect.fail(new ConnectionStringMissing({ resourceName: target.LogicalId }))
@@ -47,6 +54,7 @@ export const ConnectHttp = Layer.succeed(
     return {
       connectionString: read(boundPublic),
       privateConnectionString: read(boundPrivate),
+      caCertificate: Effect.map(read(boundCa), Redacted.value),
     } satisfies ConnectClient;
   }),
 );

@@ -10,7 +10,7 @@ import type * as Redacted from "effect/Redacted";
 import { ignoreNotFound, noneIfNotFound } from "../internal/notFound.ts";
 import { toRedactedOrUndefined } from "../internal/redacted.ts";
 import type { Providers } from "../Providers.ts";
-import { waitUntilOnline } from "./Cluster.ts";
+import { clusterCaCertificate, waitUntilOnline } from "./Cluster.ts";
 
 export type ConnectionPoolMode = "transaction" | "session" | "statement";
 
@@ -50,6 +50,8 @@ export type ConnectionPool = Resource<
     uri: Redacted.Redacted<string> | undefined;
     /** Connection URI of the pool inside the VPC. */
     privateUri: Redacted.Redacted<string> | undefined;
+    /** The PEM certificate of the CA that signs the cluster's TLS certificate. */
+    caCertificate: string | undefined;
   },
   never,
   Providers
@@ -96,13 +98,14 @@ const observe = (clusterId: string, name: string) =>
     ),
   );
 
-const toAttrs = (clusterId: string, pool: ApiConnectionPool) => ({
+const toAttrs = (clusterId: string, pool: ApiConnectionPool, caCertificate?: string) => ({
   clusterId,
   name: pool.name,
   host: pool.connection?.host,
   port: pool.connection?.port,
   uri: toRedactedOrUndefined(pool.connection?.uri),
   privateUri: toRedactedOrUndefined(pool.private_connection?.uri),
+  caCertificate,
 });
 
 export const ConnectionPoolProvider = () =>
@@ -112,12 +115,18 @@ export const ConnectionPoolProvider = () =>
       const name = output?.name ?? olds.name ?? (yield* physicalName(id));
       const clusterId = output?.clusterId ?? olds.clusterId;
       const observed = yield* observe(clusterId, name);
-      return Option.getOrUndefined(Option.map(observed, (p) => toAttrs(clusterId, p)));
+      return Option.getOrUndefined(
+        Option.map(observed, (p) => toAttrs(clusterId, p, output?.caCertificate)),
+      );
     }),
-    diff: Effect.fn(function* ({ olds, news }) {
+    diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;
       if (news.clusterId !== olds.clusterId || news.name !== olds.name) {
         return { action: "replace" } as const;
+      }
+      // Pools deployed before `caCertificate` existed record it on their next deploy.
+      if (output !== undefined && output.caCertificate === undefined) {
+        return { action: "update" } as const;
       }
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -136,7 +145,7 @@ export const ConnectionPoolProvider = () =>
           name,
           ...desired,
         });
-        return toAttrs(news.clusterId, pool);
+        return toAttrs(news.clusterId, pool, yield* clusterCaCertificate(news.clusterId));
       }
       const pool = observed.value;
       const inSync =
@@ -151,7 +160,7 @@ export const ConnectionPoolProvider = () =>
           ...desired,
         });
       }
-      return toAttrs(news.clusterId, pool);
+      return toAttrs(news.clusterId, pool, yield* clusterCaCertificate(news.clusterId));
     }),
     delete: Effect.fn(function* ({ output }) {
       yield* ignoreNotFound(

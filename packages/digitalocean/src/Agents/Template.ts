@@ -28,7 +28,10 @@ export type TemplateProps = {
   name?: string;
   /** The base the image builds on. Updates in place (rebuilds). */
   baseTemplate: BaseTemplate;
-  /** The OCI image to build the sandbox from. Updates in place (rebuilds). */
+  /**
+   * The OCI image to build the sandbox from. It must be Debian- or
+   * Ubuntu-based: the base templates are Ubuntu. Updates in place (rebuilds).
+   */
   image: string;
 };
 
@@ -76,9 +79,10 @@ export class TemplateBuildFailed extends Data.TaggedError(
 )<{
   readonly templateId: string;
   readonly status: string | undefined;
+  readonly reason?: string | undefined;
 }> {
   override get message() {
-    return `Template ${this.templateId} did not build (status: ${this.status ?? "missing"}).`;
+    return `Template ${this.templateId} did not build (status: ${this.status ?? "missing"})${this.reason ? `: ${this.reason}` : "."}`;
   }
 }
 
@@ -98,6 +102,16 @@ const observe = (templateId: string) =>
     DO.getHarnessTemplate({ template_id: templateId }).pipe(Effect.map((r) => r.template)),
   );
 
+// The newest build's error, to say why a template failed.
+const latestBuildError = (templateId: string) =>
+  DO.listHarnessTemplateBuilds({ template_id: templateId }).pipe(
+    Effect.map(
+      (r) =>
+        [...(r.builds ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at))[0]?.error,
+    ),
+    Effect.catch(() => Effect.succeed(undefined)),
+  );
+
 const waitUntilBuilt = (templateId: string) =>
   pollUntil(observe(templateId), {
     ...BUILD_POLL,
@@ -110,8 +124,16 @@ const waitUntilBuilt = (templateId: string) =>
     Effect.flatMap((o) =>
       Option.isSome(o) && o.value.status === "TEMPLATE_STATUS_READY"
         ? Effect.succeed(o.value)
-        : Effect.fail(
-            new TemplateBuildFailed({ templateId, status: Option.getOrUndefined(o)?.status }),
+        : latestBuildError(templateId).pipe(
+            Effect.flatMap((reason) =>
+              Effect.fail(
+                new TemplateBuildFailed({
+                  templateId,
+                  status: Option.getOrUndefined(o)?.status,
+                  reason,
+                }),
+              ),
+            ),
           ),
     ),
   );

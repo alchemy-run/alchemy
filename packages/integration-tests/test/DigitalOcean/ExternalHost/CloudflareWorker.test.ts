@@ -96,6 +96,19 @@ describe(
     );
 
     test(
+      "Inference CreateResponse and CreateMessage",
+      Effect.gen(function* () {
+        const responses = yield* call("/responses");
+        expectOk(responses);
+        expect(responses.result.outputs).toBeGreaterThan(0);
+        const messages = yield* call("/messages");
+        expectOk(messages);
+        expect(messages.result.blocks).toBeGreaterThan(0);
+      }),
+      { timeout: 240_000 },
+    );
+
+    test(
       "Insights QueryMetrics and SearchLogs with the token the caller passed",
       Effect.gen(function* () {
         const body = yield* call("/insights");

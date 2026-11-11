@@ -93,7 +93,7 @@ yield* session.delete;
 
 ## Add your tools
 
-A template builds a sandbox image from one of DigitalOcean's base templates plus your image:
+A template builds a sandbox image from one of DigitalOcean's base templates plus your image, which must be Debian- or Ubuntu-based:
 
 ```typescript
 yield* DigitalOcean.Agents.Template("Tools", {

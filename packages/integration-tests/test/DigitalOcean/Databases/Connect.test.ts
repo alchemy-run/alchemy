@@ -28,7 +28,9 @@ test.provider.skipIf(skipSlow)(
         Effect.flatMap((response) => response.json),
         Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 24 }),
       );
-      expect(body).toEqual({ answer: 42 });
+      expect(body).toMatchObject({ answer: 42 });
+      // Connect(AppDb) reaches the database, not the cluster's defaultdb.
+      expect((body as { database: string }).database).not.toEqual("defaultdb");
       yield* stack.destroy();
     }).pipe(logLevel),
   {
