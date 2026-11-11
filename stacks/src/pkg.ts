@@ -27,6 +27,7 @@ export default Alchemy.Stack(
       policy: {
         repos: ["alchemy-run/alchemy", "alchemy-run/distilled"],
         ttl: Duration.weeks(1),
+        keepLatest: ["main"],
         maxPackageSize: ByteSize.megabytes(100),
       },
     });

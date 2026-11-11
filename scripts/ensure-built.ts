@@ -150,22 +150,27 @@ const emitDistilled = Effect.fn(function* (root: string) {
   );
   if (missing.length === 0) return;
   yield* Effect.logInfo(`Emitting distilled packages: ${missing.join(", ")}`);
-  const exitCode = yield* spawner.exitCode(
-    yield* platformCommand(
-      "pnpm",
-      [
-        "exec",
-        "tsrs",
-        "-b",
-        ...missing.map((name) => path.join(packagesDir, name, "tsconfig.json")),
-      ],
-      { cwd: root, stdin: "inherit", stdout: "inherit", stderr: "inherit" },
-    ),
+  // Windows caps a command line at 8191 characters, so emit in batches of
+  // root-relative paths instead of one command naming every package.
+  const tsconfigs = missing.map((name) =>
+    path.join("submodules", "distilled", "packages", name, "tsconfig.json"),
   );
-  if (exitCode !== 0) {
-    return yield* Effect.fail(new Error(`Distilled emit failed with exit code ${exitCode}`));
+  for (let start = 0; start < tsconfigs.length; start += EMIT_BATCH_SIZE) {
+    const exitCode = yield* spawner.exitCode(
+      yield* platformCommand(
+        "pnpm",
+        ["exec", "tsrs", "-b", ...tsconfigs.slice(start, start + EMIT_BATCH_SIZE)],
+        { cwd: root, stdin: "inherit", stdout: "inherit", stderr: "inherit" },
+      ),
+    );
+    if (exitCode !== 0) {
+      return yield* Effect.fail(new Error(`Distilled emit failed with exit code ${exitCode}`));
+    }
   }
 });
+
+/** Packages per `tsrs -b` call: ~60 chars each keeps a batch far under Windows' limit. */
+const EMIT_BATCH_SIZE = 40;
 
 /** Where the last successful bundle of a distilled package is recorded. */
 const distilledStamp = (root: string, path: Path.Path, name: string) =>

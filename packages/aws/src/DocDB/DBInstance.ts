@@ -440,7 +440,22 @@ export const DBInstanceProvider = () =>
             .deleteDBInstance({
               DBInstanceIdentifier: output.dbInstanceIdentifier,
             })
-            .pipe(Effect.catchTag("DBInstanceNotFoundFault", () => Effect.void));
+            .pipe(
+              Effect.catchTags({
+                DBInstanceNotFoundFault: () => Effect.void,
+                // An instance already `deleting` rejects a second delete: an
+                // interrupted destroy, or a delete started outside the stack.
+                // The delete is under way either way, so wait for it below.
+                InvalidDBInstanceStateFault: (error) =>
+                  readInstance(output.dbInstanceIdentifier).pipe(
+                    Effect.flatMap((instance) =>
+                      instance === undefined || instance.DBInstanceStatus === "deleting"
+                        ? Effect.void
+                        : Effect.fail(error),
+                    ),
+                  ),
+              }),
+            );
           // Block until the instance is fully gone so a dependent cluster or
           // subnet group is not torn down while DocumentDB still references it.
           yield* Effect.repeat(
