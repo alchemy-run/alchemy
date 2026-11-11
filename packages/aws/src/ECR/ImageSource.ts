@@ -1,10 +1,15 @@
 import {
   makeContainerImageSource,
+  type ImageAgent,
   type ImageRegistryTarget,
   type ImageSourceLike,
 } from "@alchemy.run/docker/ImageSource";
 import * as ecr from "@distilled.cloud/aws/ecr";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Schema from "effect/Schema";
 import { roleHostBundle } from "../AWSBindings.ts";
 import { getEcrRegistryCredentials } from "./Image.ts";
 
@@ -23,10 +28,13 @@ import { getEcrRegistryCredentials } from "./Image.ts";
 
 export {
   computeStaticSourceHash,
+  IMAGE_AGENT_DIR,
+  imageAgentEntryPoint,
   imageSourceKind,
   validateImageSource,
   type BundledImageSource,
   type DockerfileImageSource,
+  type ImageAgent,
   type ImageSourceKind,
   type ImageSourceLike,
   type ImageSourceProps,
@@ -41,9 +49,56 @@ export interface ResolvedImage {
   repositoryName: string;
   /** URI of the ECR repository the image was pushed to. */
   repositoryUri: string;
-  /** Content hash identifying the image (also the image tag). */
+  /**
+   * Content hash identifying the image. It is the image's tag, unless an
+   * agent was published beside the image: the hash then covers both.
+   */
   codeHash: string;
+  /** The agent published beside the image, when one was asked for. */
+  agent: ResolvedImageAgent | undefined;
 }
+
+/**
+ * An agent published beside an image, and what the image starts by itself,
+ * so a platform that starts the agent first can have it start the image's
+ * own process.
+ */
+export interface ResolvedImageAgent {
+  /** The agent's own image, `<repositoryUri>:agent-<hash>`. */
+  imageUri: string;
+  /** The image's `ENTRYPOINT`. Empty when it has none. */
+  entryPoint: string[];
+  /** The image's `CMD`. Empty when it has none. */
+  command: string[];
+}
+
+/** An image's configuration could not be read back from its ECR repository. */
+export class ImageConfigUnreadable extends Data.TaggedError("ImageConfigUnreadable")<{
+  readonly message: string;
+  readonly imageUri: string;
+}> {}
+
+/** An image manifest, or the index of the manifests of a multi-platform image. */
+const decodeImageManifest = Schema.Struct({
+  config: Schema.Struct({ digest: Schema.String }).pipe(Schema.optional),
+  manifests: Schema.Array(
+    Schema.Struct({
+      digest: Schema.String,
+      platform: Schema.Struct({
+        os: Schema.String.pipe(Schema.optional),
+        architecture: Schema.String.pipe(Schema.optional),
+      }).pipe(Schema.optional),
+    }),
+  ).pipe(Schema.optional),
+}).pipe(Schema.fromJsonString, (schema) => Schema.decodeEffect(schema));
+
+/** The part of an image's configuration that says what it starts. */
+const decodeImageConfig = Schema.Struct({
+  config: Schema.Struct({
+    Entrypoint: Schema.Array(Schema.String).pipe(Schema.NullOr, Schema.optional),
+    Cmd: Schema.Array(Schema.String).pipe(Schema.NullOr, Schema.optional),
+  }).pipe(Schema.NullOr, Schema.optional),
+}).pipe(Schema.fromJsonString, (schema) => Schema.decodeEffect(schema));
 
 export interface ResolveImageOptions {
   /** Logical resource id — keys the stable build-context directory. */
@@ -84,6 +139,12 @@ export interface ResolveImageOptions {
    * differ per platform), so the caller supplies it.
    */
   bootstrap: (importPath: string) => string;
+  /**
+   * Publish a sandbox agent beside an image that has no `main`. The image
+   * itself is not changed: the agent is an image of its own in the same
+   * repository, for the platform to mount into the image's container.
+   */
+  agent?: ImageAgent;
   /** Plan-status session used to emit build/push progress notes. */
   session: { note: (message: string) => Effect.Effect<void> };
 }
@@ -171,6 +232,125 @@ export const makeImageSource = Effect.gen(function* () {
       return described?.imageDetails?.[0] !== undefined;
     });
 
+  /** Observe the manifest of one image of a repository, by tag or by digest. */
+  const readManifest = Effect.fn(function* (options: {
+    repositoryName: string;
+    imageUri: string;
+    imageId: ecr.ImageIdentifier;
+  }) {
+    const { repositoryName, imageUri } = options;
+    const response = yield* ecr.batchGetImage({ repositoryName, imageIds: [options.imageId] });
+    const text = response.images?.[0]?.imageManifest;
+    if (text === undefined) {
+      return yield* new ImageConfigUnreadable({
+        imageUri,
+        message: `ECR returned no manifest for ${imageUri}: ${
+          response.failures?.[0]?.failureReason ?? "the image is missing"
+        }`,
+      });
+    }
+    return yield* decodeImageManifest(text).pipe(
+      Effect.mapError(
+        (cause) =>
+          new ImageConfigUnreadable({
+            imageUri,
+            message: `The manifest of ${imageUri} is not one this deploy can read: ${cause.message}`,
+          }),
+      ),
+    );
+  });
+
+  /**
+   * Observe the digest of an image's configuration. A multi-platform tag
+   * holds an index, which is followed to the manifest of `platform`.
+   */
+  const readConfigDigest = Effect.fn(function* (options: {
+    repositoryName: string;
+    imageUri: string;
+    imageTag: string;
+    platform: string;
+  }) {
+    const { repositoryName, imageUri, platform } = options;
+    const tagged = yield* readManifest({
+      repositoryName,
+      imageUri,
+      imageId: { imageTag: options.imageTag },
+    });
+    if (tagged.config !== undefined) return tagged.config.digest;
+    const [os, architecture] = platform.split("/");
+    const entry = tagged.manifests?.find(
+      (candidate) =>
+        candidate.platform?.os === os && candidate.platform?.architecture === architecture,
+    );
+    if (entry === undefined) {
+      return yield* new ImageConfigUnreadable({
+        imageUri,
+        message: `${imageUri} has no image for ${platform}`,
+      });
+    }
+    const manifest = yield* readManifest({
+      repositoryName,
+      imageUri,
+      imageId: { imageDigest: entry.digest },
+    });
+    if (manifest.config === undefined) {
+      return yield* new ImageConfigUnreadable({
+        imageUri,
+        message: `The ${platform} manifest of ${imageUri} names no configuration`,
+      });
+    }
+    return manifest.config.digest;
+  });
+
+  /**
+   * Observe what an image starts by itself: its `ENTRYPOINT` and `CMD`, read
+   * from the image's configuration in ECR. Reading it back from the registry
+   * covers every source alike (a mirrored image, a build, a tag pushed by an
+   * earlier deploy) and needs no Docker.
+   */
+  const readImageProcess = Effect.fn(function* (options: {
+    repositoryName: string;
+    imageUri: string;
+    imageTag: string;
+    platform: string;
+  }) {
+    const { repositoryName, imageUri } = options;
+    const layerDigest = yield* readConfigDigest(options);
+    const { downloadUrl } = yield* ecr.getDownloadUrlForLayer({ repositoryName, layerDigest });
+    if (downloadUrl === undefined) {
+      return yield* new ImageConfigUnreadable({
+        imageUri,
+        message: `ECR returned no download URL for the configuration of ${imageUri}`,
+      });
+    }
+    // The URL is the one ECR hands back for the blob: it is fetched as it
+    // is, with no credentials. It is signed, so it stays out of the error.
+    const client = (yield* HttpClient.HttpClient).pipe(HttpClient.filterStatusOk);
+    const text = yield* client.get(downloadUrl).pipe(
+      Effect.flatMap((response) => response.text),
+      Effect.mapError(
+        (cause) =>
+          new ImageConfigUnreadable({
+            imageUri,
+            message: `The configuration of ${imageUri} could not be downloaded from ECR (${cause._tag})`,
+          }),
+      ),
+    );
+    const { config } = yield* decodeImageConfig(text).pipe(
+      Effect.mapError(
+        (cause) =>
+          new ImageConfigUnreadable({
+            imageUri,
+            message: `The configuration of ${imageUri} is not one this deploy can read: ${cause.message}`,
+          }),
+      ),
+    );
+    return {
+      entryPoint: [...(config?.Entrypoint ?? [])],
+      command: [...(config?.Cmd ?? [])],
+    };
+  }, Effect.provide(FetchHttpClient.layer));
+
   /**
    * Resolve the image for a props bag: ensure the repository, compute the
    * content-addressed tag, then build/mirror + push only when that exact
@@ -194,6 +374,18 @@ export const makeImageSource = Effect.gen(function* () {
       repositoryName: options.repositoryName,
       repositoryUri: resolved.repositoryUri,
       codeHash: resolved.codeHash,
+      agent:
+        resolved.agent === undefined
+          ? undefined
+          : {
+              imageUri: resolved.agent.imageUri,
+              ...(yield* readImageProcess({
+                repositoryName: options.repositoryName,
+                imageUri: resolved.imageUri,
+                imageTag: resolved.imageUri.slice(resolved.repositoryUri.length + 1),
+                platform: options.platform ?? "linux/amd64",
+              })),
+            },
     } satisfies ResolvedImage;
   });
 
