@@ -8,7 +8,7 @@ Host your model on [Effect Cluster](/cluster), and every aggregate instance, vie
 
 ## Host the model
 
-Provide `DomainCluster.layerEntities` to the model's Layer, as you would `DomainCloudflare.layerDurableObjects()` or `Domain.InMemory`. Name the entity that holds the model, point `main` and `handler` at the export the runners load, and give it a pool.
+Provide `DomainCluster.layerEntities` to the model's Layer, as you would `DomainCloudflare.layerDurableObjects()` or `Domain.InMemory`. Name the entity that holds the model, point `main` at the file whose default export the runners load, and give it a pool.
 
 ```typescript
 // packages/server/src/BankLive.ts
@@ -21,13 +21,12 @@ import { SiftFraudCheck } from "./Fraud/SiftFraudCheck.ts";
 export const Database = ClusterDocker.Database("Cluster");
 const Default = ClusterDocker.SwarmPool("Default", { replicas: 2 }).pipe(Layer.provide(Database));
 
-export const BankLive = Bank.layer(BankHandlers).pipe(
+export default Bank.layer(BankHandlers).pipe(
   Layer.provide(
     Layer.mergeAll(
       DomainCluster.layerEntities({
         name: "Bank",
         main: import.meta.url,
-        handler: "BankLive",
         pool: Default,
       }),
       SiftFraudCheck,
@@ -48,7 +47,7 @@ import * as Docker from "@alchemy.run/docker";
 import * as Cluster from "@alchemy.run/effect-cluster";
 import { CustomerApi } from "@bank/domain/CustomerApi.api";
 import * as Effect from "effect/Effect";
-import { BankLive, Database } from "./BankLive.ts";
+import BankLive, { Database } from "./BankLive.ts";
 
 export default class BankApi extends Docker.Service<BankApi>()(
   "BankApi",
