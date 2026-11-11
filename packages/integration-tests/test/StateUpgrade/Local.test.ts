@@ -6,6 +6,7 @@ import {
   current,
   deployArgs,
   fails,
+  MAIN,
   planLine,
   released,
   RELEASED,
@@ -59,13 +60,20 @@ describe(`local state written by ${RELEASED}`, { tags: ["local"] }, () => {
         const upgraded = yield* succeeds(next, deployArgs("one"), on());
         expect(planLine(upgraded)).toBe("Plan: no changes");
         expect(yield* stageFiles(cwd, "one")).toEqual(original);
-        expect(
-          JSON.parse(yield* fs.readFileString(`${cwd}/.alchemy/state/__alchemy_store__.json`)),
-        ).toEqual({ format: 1 });
+        expect(JSON.parse(yield* fs.readFileString(`${cwd}/.alchemy/state.format.json`))).toEqual({
+          format: 1,
+        });
 
-        // The released version still deploys it.
+        // The released version still deploys it, and its `state` commands,
+        // which list every entry of the state directory as a stack, still
+        // walk the whole store.
         const stillOld = yield* succeeds(old, deployArgs("one"), on());
         expect(planLine(stillOld)).toBe("Plan: no changes");
+        expect(yield* fs.readDirectory(`${cwd}/.alchemy/state`)).toEqual([STACK]);
+        const listed = yield* succeeds(old, ["state", "ls", "--recursive", "-c", MAIN], on());
+        for (const fqn of ["Secret", "Token"]) expect(listed.output).toContain(fqn);
+        const read = yield* succeeds(old, ["state", "cat", "--recursive", "-c", MAIN], on());
+        for (const secret of secrets) expect(read.output).toContain(secret);
 
         // The passphrase layer seals the stage as it deploys.
         const sealing = yield* succeeds(next, deployArgs("one"), withPassphrase("passphrase"));

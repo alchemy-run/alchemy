@@ -249,6 +249,7 @@ export const makeBucketState = (options: BucketStateOptions) =>
           if (object === undefined) return undefined;
           const value = yield* codec.decode<T>(scope, object.text, `state object '${key}'`);
           if (codec.stale(object.text)) {
+            yield* stampFormat;
             const rewritten = yield* codec.encode(scope, value, 2);
             yield* o.write(key, rewritten, { ifVersion: object.version });
           }

@@ -12,12 +12,14 @@ import { initialCwd } from "../Util/Node.ts";
 import { STATE_STORE_VERSION } from "./HttpStateApi.ts";
 import { State, StateStoreError, type StateService } from "./State.ts";
 import { type SealingScope, stateCodec } from "./StateEncryption.ts";
-import {
-  checkStoreFormat,
-  currentStoreFormat,
-  parseStoreFormat,
-  STORE_FORMAT_FILE,
-} from "./StoreFormat.ts";
+import { checkStoreFormat, currentStoreFormat, parseStoreFormat } from "./StoreFormat.ts";
+
+/**
+ * The local store's format record, kept beside the state directory rather
+ * than in it: versions from before format records list every entry of the
+ * state directory as a stack, and fail on one that isn't a directory.
+ */
+export const LOCAL_STORE_FORMAT_FILE = "state.format.json";
 
 export const localState = () =>
   Layer.effect(
@@ -127,7 +129,7 @@ export const makeLocalState = () =>
 
     // The store's format record: checked before reading, written before the
     // first write, so a directory this version never wrote to stays as it is.
-    const formatFile = path.join(stateDir, STORE_FORMAT_FILE);
+    const formatFile = path.resolve(initialCwd, dotAlchemy, LOCAL_STORE_FORMAT_FILE);
     const checkFormat = yield* Effect.cached(
       fs.readFileString(formatFile).pipe(
         recover,
@@ -142,7 +144,7 @@ export const makeLocalState = () =>
     const stampFormat = yield* Effect.cached(
       checkFormat.pipe(
         Effect.andThen(
-          ensure(stateDir).pipe(
+          ensure(path.dirname(formatFile)).pipe(
             Effect.andThen(writeAtomic(formatFile, JSON.stringify(currentStoreFormat(), null, 2))),
             recover,
           ),
@@ -161,6 +163,7 @@ export const makeLocalState = () =>
       if (contents === undefined) return undefined;
       const value = yield* parseState<T>(scope, file, contents);
       if (rewrite && value !== undefined && codec.stale(contents)) {
+        yield* stampFormat;
         const text = yield* codec.encode(scope, value, 2);
         yield* writeAtomic(file, text).pipe(recover);
       }
@@ -173,7 +176,7 @@ export const makeLocalState = () =>
       listStacks: () =>
         fs.readDirectory(stateDir).pipe(
           recover,
-          Effect.map((files) => (files ?? []).filter((file) => file !== STORE_FORMAT_FILE)),
+          Effect.map((files) => files ?? []),
         ),
       listStages: (stack: string) =>
         fs.readDirectory(path.join(stateDir, stack)).pipe(

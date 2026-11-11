@@ -9,7 +9,7 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import { makeBucketState, type BucketObjects } from "@/State/BucketState.ts";
-import { makeLocalState } from "@/State/LocalState.ts";
+import { LOCAL_STORE_FORMAT_FILE, makeLocalState } from "@/State/LocalState.ts";
 import { StateStoreError } from "@/State/State.ts";
 import { encodeState, reviveState } from "@/State/StateEncoding.ts";
 import {
@@ -400,6 +400,30 @@ describe("store format record", { tags: ["unit", "local"] }, () => {
     });
   });
 
+  test("a bucket store records its format before it seals a record it reads", async () => {
+    const { objects, bucket } = memoryObjects();
+    const { keyring } = memoryKeyring();
+    const key = "app/prod/Database.json";
+    objects.set(key, { text: JSON.stringify(encodeState(record), null, 2), version: "0" });
+    await Effect.runPromise(
+      makeBucketState({
+        id: "memory",
+        label: "memory",
+        objects: Effect.succeed(bucket),
+        codec: makeSealingCodec(keyring),
+      }).pipe(
+        Effect.flatMap((state) => state.get({ ...scope, fqn: "Database" })),
+        Effect.scoped,
+        Effect.provide(SecureRandom.layerWebCrypto),
+      ),
+    );
+    // Sealing the record is a write an earlier version can't read.
+    expect(objects.get(key)?.text.startsWith(SEALED_PREFIX)).toBe(true);
+    expect(JSON.parse(objects.get(STORE_FORMAT_FILE)!.text)).toEqual({
+      format: STATE_STORE_FORMAT,
+    });
+  });
+
   test("a store in a newer format is refused", async () => {
     const { objects, bucket } = memoryObjects();
     objects.set(STORE_FORMAT_FILE, {
@@ -434,7 +458,17 @@ describe("local state with StateEncryption", { tags: ["unit", "local"] }, () => 
       const sealing = yield* withEncryption(keyring);
       yield* sealing.set({ ...local, fqn: "Database", value: record as never });
       expect((yield* fs.readFileString(file)).startsWith(`${SEALED_PREFIX}memory:`)).toBe(true);
-      expect(yield* sealing.listStacks()).not.toContain(STORE_FORMAT_FILE);
+      // The format record sits beside the state directory, which holds only
+      // stacks: earlier versions list every entry of it as one.
+      expect(
+        JSON.parse(
+          yield* fs.readFileString(path.join(initialCwd, ".alchemy", LOCAL_STORE_FORMAT_FILE)),
+        ),
+      ).toEqual({ format: STATE_STORE_FORMAT });
+      for (const entry of yield* fs.readDirectory(path.join(initialCwd, ".alchemy", "state"))) {
+        const info = yield* fs.stat(path.join(initialCwd, ".alchemy", "state", entry));
+        expect(`${entry}: ${info.type}`).toBe(`${entry}: Directory`);
+      }
 
       const off = yield* withEncryption({ ...keyring, decryptOnly: true });
       const read = (yield* off.get({ ...local, fqn: "Database" })) as unknown as typeof record;
