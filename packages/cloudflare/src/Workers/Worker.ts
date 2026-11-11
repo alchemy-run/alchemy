@@ -538,6 +538,11 @@ export interface WorkerPreviewOptions {
    * Preview Worker. Locally-hosted Durable Object and Workflow classes
    * *are* allowed: each Preview gets its own isolated namespace.
    *
+   * `observability` and `Cloudflare.Telemetry()` apply to the Preview
+   * itself: Cloudflare keeps Workers Logs and Traces settings per
+   * Preview, independent of the parent, so a Preview records logs by
+   * default and traces when it provides `Cloudflare.Telemetry()`.
+   *
    * Changing the parent replaces the resource (a Preview belongs to
    * exactly one script).
    */
@@ -721,6 +726,8 @@ export interface WorkerProps<
    * across full deployments. Setting it to `false` or omitting `issues`
    * disables Issues on the next full deployment. Version-only uploads and
    * gradual rollouts keep the parent's live observability settings.
+   * A Preview Worker (`preview.of`) applies these settings to its own
+   * Preview, which Cloudflare configures separately from the parent.
    */
   observability?: WorkerObservability;
   /**

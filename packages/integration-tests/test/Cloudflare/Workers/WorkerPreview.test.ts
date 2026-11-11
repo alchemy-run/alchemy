@@ -6,6 +6,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 import { expectUrlContains } from "../Utils/Http.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -14,6 +15,26 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 
 const script = (marker: string) =>
   `export default { fetch() { return new Response("${marker}"); } };`;
+
+const loggingScript = `export default { fetch(request) { console.log("preview-log:" + new URL(request.url).searchParams.get("m")); return new Response("logged"); } };`;
+
+/** Workers Logs events whose message carries `marker`, from the last 15 minutes. */
+const logEvents = (accountId: string, marker: string) =>
+  // Re-evaluate the timeframe per poll: rows are keyed by ingestion time.
+  Effect.suspend(() =>
+    workers.queryObservabilityTelemetry({
+      accountId,
+      queryId: "adhoc-preview-observability",
+      view: "events",
+      timeframe: { from: Date.now() - 15 * 60 * 1000, to: Date.now() },
+      limit: 50,
+      parameters: {
+        filters: [
+          { key: "$metadata.message", operation: "includes", type: "string", value: marker },
+        ],
+      },
+    }),
+  ).pipe(Effect.map((response) => response.events?.events ?? []));
 
 const envScript = `export default { fetch(_request, env) { return new Response([env.LINEAR.teamIds.FIN, env.LINEAR.stateIds["FIN/Triage"], env.LINEAR.stateIds["In Review"], env.SIGNING_KEY.algorithm.namedCurve].join("|")); } };`;
 
@@ -111,6 +132,90 @@ describe.concurrent(
           expect(gone).toBe(true);
         }).pipe(logLevel),
       { timeout: 240_000 },
+    );
+
+    test.provider(
+      "Preview records logs by default and syncs observability from props",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const getObservability = (parent: string, previewId: string) =>
+            workers
+              .getPreview({ accountId, workerId: parent, previewId })
+              .pipe(Effect.map((preview) => preview.observability));
+
+          const v1 = yield* stack.deploy(
+            Effect.gen(function* () {
+              const parent = yield* Cloudflare.Worker("ObsParent", { script: loggingScript });
+              const preview = yield* Cloudflare.Worker("ObsPreview", {
+                script: loggingScript,
+                preview: { of: parent },
+              });
+              return { parent, preview };
+            }),
+          );
+
+          // A new Preview starts with observability off; the Worker's
+          // default (logs on) must be on it before the deployment.
+          const observed = yield* getObservability(v1.parent.workerName, v1.preview.previewId!);
+          expect(observed?.logs?.enabled).toBe(true);
+          expect(observed?.logs?.invocationLogs).toBe(true);
+          expect(observed?.traces?.enabled ?? false).toBe(false);
+
+          const marker = `${v1.preview.previewSlug}-${Date.now()}`;
+          yield* expectUrlContains(`${v1.preview.url!}?m=${marker}`, "logged", {
+            label: "Preview serves the logging script",
+          });
+          const events = yield* logEvents(accountId, marker).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("5 seconds"),
+              until: (events) => events.length > 0,
+              times: 24,
+            }),
+          );
+          expect(events.length).toBeGreaterThan(0);
+
+          const withTraces = Effect.gen(function* () {
+            const parent = yield* Cloudflare.Worker("ObsParent", { script: loggingScript });
+            const preview = yield* Cloudflare.Worker("ObsPreview", {
+              script: loggingScript,
+              preview: { of: parent },
+              observability: {
+                enabled: true,
+                logs: { enabled: true, invocationLogs: true },
+                traces: { enabled: true },
+              },
+            });
+            return { parent, preview };
+          });
+          const v2 = yield* stack.deploy(withTraces);
+          expect(v2.preview.previewId).toEqual(v1.preview.previewId);
+          const traced = yield* getObservability(v2.parent.workerName, v2.preview.previewId!);
+          expect(traced?.traces?.enabled).toBe(true);
+          expect(traced?.logs?.enabled).toBe(true);
+
+          const plan = yield* stack.plan(withTraces);
+          expect(plan.resources.ObsPreview?.action).toBe("noop");
+
+          // Removing traces from the props turns them off on the Preview.
+          const v3 = yield* stack.deploy(
+            Effect.gen(function* () {
+              const parent = yield* Cloudflare.Worker("ObsParent", { script: loggingScript });
+              const preview = yield* Cloudflare.Worker("ObsPreview", {
+                script: loggingScript,
+                preview: { of: parent },
+              });
+              return { parent, preview };
+            }),
+          );
+          const untraced = yield* getObservability(v3.parent.workerName, v3.preview.previewId!);
+          expect(untraced?.traces?.enabled ?? false).toBe(false);
+          expect(untraced?.logs?.enabled).toBe(true);
+
+          yield* stack.destroy();
+        }).pipe(logLevel),
+      { timeout: 300_000 },
     );
 
     test.provider(
