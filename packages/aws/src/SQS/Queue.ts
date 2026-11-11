@@ -167,12 +167,35 @@ export interface Queue extends Resource<
     queueUrl: string;
     queueName: QueueName;
     queueArn: QueueArn;
+    /**
+     * The queue attributes this resource manages (every attribute whose
+     * prop is set, plus the removable policy attributes), as observed. Lets
+     * `alchemy drift` detect out-of-band changes.
+     */
+    attributes?: Record<string, string>;
+    /**
+     * Tags on the queue, as observed. Lets `alchemy drift` detect
+     * out-of-band changes.
+     */
+    tags?: Record<string, string>;
   },
   {
     policyStatements: PolicyStatement[];
   },
-  Providers
+  Providers,
+  QueueLookup
 > {}
+
+/**
+ * Props for {@link Queue.lookup}: find a queue this stack doesn't manage, in
+ * the ambient account and region, by its name.
+ */
+export interface QueueLookup {
+  /**
+   * The name of the existing queue (a FIFO queue's name ends in `.fifo`).
+   */
+  queueName: string;
+}
 
 class QueueStillExists extends Data.TaggedError("QueueStillExists")<{
   readonly queueUrl: string;
@@ -187,8 +210,10 @@ class QueueStillExists extends Data.TaggedError("QueueStillExists")<{
  * for explicit names. Changing queue mode replaces the physical queue and
  * updates downstream references; existing messages are not migrated.
  *
- * `queueName` and `fifo` must be known before the queue is precreated; unresolved
- * resource outputs in these identity properties fail with `UnresolvedQueueIdentity`.
+ * `queueName` and `fifo` must be known before the queue is precreated. Outputs
+ * of resources outside the queue's binding cycle resolve before precreation;
+ * an identity that depends on a resource inside the cycle fails with
+ * `UnresolvedQueueIdentity`.
  * Mutable settings and policy bindings may reference other resource outputs,
  * including the queue's own ARN.
  *
@@ -306,6 +331,20 @@ class QueueStillExists extends Data.TaggedError("QueueStillExists")<{
  *     }
  *   }),
  * );
+ * ```
+ *
+ * ### Looking up an existing queue
+ * `Queue.lookup` references a queue Alchemy doesn't manage (created in the
+ * console or by another stack), found by `queueName`. It is read during
+ * plan/deploy and never created, updated or deleted, and binds like a
+ * declared queue.
+ *
+ * **Example:** Send to an existing queue
+ * ```typescript
+ * const queue = SQS.Queue.lookup({ queueName: "orders" });
+ *
+ * // init
+ * const sendMessage = yield* SQS.SendMessage(queue);
  * ```
  *
  * @resource
@@ -435,6 +474,25 @@ export const QueueProvider = () =>
 
         return baseAttributes;
       };
+      /**
+       * The managed slice of an observed attribute map: the keys reconcile
+       * converges for `props` (an absent removable attribute reads as "").
+       * `read` and `reconcile` share it so a converged queue reads unchanged.
+       */
+      const observeManagedAttributes = (
+        props: QueueProps,
+        observed: Record<string, string | undefined>,
+      ): Record<string, string> =>
+        Object.fromEntries(
+          Object.entries(createAttributes(props, []))
+            .filter(([key, value]) => value !== undefined && key !== "FifoQueue")
+            .map(([key]) => [key, observed[key] ?? ""] as const)
+            .sort(([a], [b]) => a.localeCompare(b)),
+        );
+      const definedTags = (tags: Record<string, string | undefined>) =>
+        Object.fromEntries(
+          Object.entries(tags).filter((entry): entry is [string, string] => entry[1] !== undefined),
+        );
       const ensureQueueExists = Effect.fn(function* ({
         id,
         news = {},
@@ -521,6 +579,25 @@ export const QueueProvider = () =>
             );
             return items.filter((item): item is Queue["Attributes"] => item !== undefined);
           }),
+        lookup: Effect.fn(function* ({ queueName }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const queueUrl = yield* sqs.getQueueUrl({ QueueName: queueName }).pipe(
+            Effect.map((r) => r.QueueUrl),
+            Effect.catchTag("QueueDoesNotExist", () => Effect.undefined),
+          );
+          if (!queueUrl) return undefined;
+          const tags = yield* sqs.listQueueTags({ QueueUrl: queueUrl }).pipe(
+            Effect.map((r) => r.Tags ?? {}),
+            Effect.catchTag("QueueDoesNotExist", () => Effect.undefined),
+          );
+          if (tags === undefined) return undefined;
+          return {
+            queueName,
+            queueUrl,
+            queueArn: `arn:aws:sqs:${region}:${accountId}:${queueName}` as const,
+            tags: definedTags(tags),
+          };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const queueName = output?.queueName ?? (yield* createQueueName(id, olds ?? {}));
@@ -535,10 +612,19 @@ export const QueueProvider = () =>
             Effect.catchTag("QueueDoesNotExist", () => Effect.undefined),
           );
           if (tagsResp === undefined) return undefined;
+          const observed = yield* sqs
+            .getQueueAttributes({ QueueUrl: url, AttributeNames: ["All"] })
+            .pipe(
+              Effect.map((r) => r.Attributes ?? {}),
+              Effect.catchTag("QueueDoesNotExist", () => Effect.undefined),
+            );
+          if (observed === undefined) return undefined;
           const attrs = {
             queueName,
             queueUrl: url,
             queueArn,
+            attributes: observeManagedAttributes(olds ?? {}, observed),
+            tags: definedTags(tagsResp),
           };
           return (yield* hasAlchemyTags(id, tagsResp)) ? attrs : Unowned(attrs);
         }),
@@ -725,6 +811,11 @@ export const QueueProvider = () =>
             queueName,
             queueUrl,
             queueArn,
+            attributes: observeManagedAttributes(news, {
+              ...currentAttributes,
+              ...attributeDelta,
+            }),
+            tags: desiredTags,
           };
         }),
         delete: Effect.fn(function* (input) {

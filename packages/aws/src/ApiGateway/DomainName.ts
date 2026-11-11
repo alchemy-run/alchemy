@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { plainJson } from "../internal/Observe.ts";
 import type { Providers } from "../Providers.ts";
 import { syncTags } from "./common.ts";
 
@@ -64,10 +65,33 @@ export interface DomainName extends Resource<
     distributionHostedZoneId: string | undefined;
     domainNameArn: string | undefined;
     tags: Record<string, string>;
+    /**
+     * Certificates, TLS policy, endpoint configuration and mutual TLS
+     * settings, as observed. Lets `alchemy drift` detect out-of-band
+     * changes.
+     */
+    configuration?: {
+      certificateArn?: string;
+      regionalCertificateArn?: string;
+      securityPolicy?: string;
+      endpointTypes?: string[];
+      ipAddressType?: string;
+      mutualTlsAuthentication?: { truststoreUri?: string; truststoreVersion?: string };
+    };
   },
   never,
-  Providers
+  Providers,
+  DomainNameLookup
 > {}
+
+/**
+ * Props for {@link DomainName.lookup}: find a custom domain name this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DomainNameLookup {
+  /** The custom domain, e.g. `api.example.com`. */
+  domainName: string;
+}
 
 /**
  * Custom domain name for an Amazon API Gateway REST API.
@@ -82,6 +106,17 @@ export interface DomainName extends Resource<
  *   securityPolicy: "TLS_1_2",
  * });
  * ```
+ *
+ * ### Looking up an existing custom domain name
+ * `DomainName.lookup` references a custom domain name Alchemy doesn't manage (created in the
+ * console or by another stack), found by `domainName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Map an API onto an existing domain
+ * ```typescript
+ * const domain = AWS.ApiGateway.DomainName.lookup({ domainName: "api.example.com" });
+ * const regionalDomainName = domain.regionalDomainName;
+ * ```
  */
 const DomainNameResource = Resource<DomainName>("AWS.ApiGateway.DomainName");
 
@@ -91,11 +126,35 @@ export { DomainNameResource as DomainName };
 const redactedValue = (value: Redacted.Redacted<string> | undefined) =>
   value === undefined ? undefined : Redacted.value(value);
 
-const retryDomainNameMutation = Effect.retry({
-  while: (e: any) => e._tag === "ConflictException" || e._tag === "TooManyRequestsException",
-  schedule: Schedule.spaced("1 second"),
-  times: 8,
-});
+const retryDomainNameMutation = <A, E extends { readonly _tag: string }, R>(
+  effect: Effect.Effect<A, E, R>,
+) =>
+  effect.pipe(
+    Effect.retry({
+      while: (e) => e._tag === "ConflictException" || e._tag === "TooManyRequestsException",
+      schedule: Schedule.spaced("1 second"),
+      times: 8,
+    }),
+  );
+
+/**
+ * The settings `read` and `reconcile` both report, so a converged domain
+ * name reads unchanged.
+ */
+const observeDomainNameConfiguration = (d: ag.DomainName) =>
+  plainJson({
+    certificateArn: d.certificateArn,
+    regionalCertificateArn: d.regionalCertificateArn,
+    securityPolicy: d.securityPolicy,
+    endpointTypes: d.endpointConfiguration?.types,
+    ipAddressType: d.endpointConfiguration?.ipAddressType,
+    mutualTlsAuthentication: d.mutualTlsAuthentication?.truststoreUri
+      ? {
+          truststoreUri: d.mutualTlsAuthentication.truststoreUri,
+          truststoreVersion: d.mutualTlsAuthentication.truststoreVersion,
+        }
+      : undefined,
+  });
 
 export const DomainNameProvider = () =>
   Provider.effect(
@@ -166,6 +225,22 @@ export const DomainNameProvider = () =>
               ),
             ),
           ),
+        lookup: Effect.fn(function* ({ domainName }) {
+          const d = yield* ag
+            .getDomainName({ domainName })
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
+          if (!d?.domainName) return undefined;
+          return {
+            domainName: d.domainName,
+            regionalDomainName: d.regionalDomainName,
+            regionalHostedZoneId: d.regionalHostedZoneId,
+            distributionDomainName: d.distributionDomainName,
+            distributionHostedZoneId: d.distributionHostedZoneId,
+            domainNameArn: d.domainNameArn,
+            tags: tagRecord(d.tags),
+            configuration: observeDomainNameConfiguration(d),
+          };
+        }),
         read: Effect.fn(function* ({ output }) {
           if (!output?.domainName) return undefined;
           const d = yield* ag
@@ -180,6 +255,7 @@ export const DomainNameProvider = () =>
             distributionHostedZoneId: d.distributionHostedZoneId,
             domainNameArn: d.domainNameArn,
             tags: tagRecord(d.tags),
+            configuration: observeDomainNameConfiguration(d),
           };
         }),
         reconcile: Effect.fn(function* ({ id, news: newsIn, output, session }) {
@@ -246,6 +322,44 @@ export const DomainNameProvider = () =>
               value: news.certificateArn,
             });
           }
+          // The endpoint type and mutual TLS trust store are replacement
+          // props, so they only differ here after an out-of-band change.
+          const desiredType = news.endpointConfiguration?.types?.[0];
+          const observedType = observed.endpointConfiguration?.types?.[0];
+          if (
+            desiredType !== undefined &&
+            observedType !== undefined &&
+            desiredType !== observedType
+          ) {
+            patches.push({
+              op: "replace",
+              path: `/endpointConfiguration/types/${observedType}`,
+              value: desiredType,
+            });
+          }
+          const desiredTrustStore = news.mutualTlsAuthentication;
+          if (desiredTrustStore?.truststoreUri !== undefined) {
+            if (
+              desiredTrustStore.truststoreUri !== observed.mutualTlsAuthentication?.truststoreUri
+            ) {
+              patches.push({
+                op: "replace",
+                path: "/mutualTlsAuthentication/truststoreUri",
+                value: desiredTrustStore.truststoreUri,
+              });
+            }
+            if (
+              desiredTrustStore.truststoreVersion !== undefined &&
+              desiredTrustStore.truststoreVersion !==
+                observed.mutualTlsAuthentication?.truststoreVersion
+            ) {
+              patches.push({
+                op: "replace",
+                path: "/mutualTlsAuthentication/truststoreVersion",
+                value: desiredTrustStore.truststoreVersion,
+              });
+            }
+          }
           if (patches.length > 0) {
             // Domain name mutations can briefly conflict while API Gateway
             // propagates certificate, policy, or routing changes.
@@ -278,6 +392,7 @@ export const DomainNameProvider = () =>
             distributionHostedZoneId: final.distributionHostedZoneId,
             domainNameArn: final.domainNameArn,
             tags: tagRecord(final.tags),
+            configuration: observeDomainNameConfiguration(final),
           };
         }),
         delete: Effect.fn(function* ({ output, session }) {

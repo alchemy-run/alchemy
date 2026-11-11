@@ -128,12 +128,75 @@ export interface Schedule extends Resource<
      * Current state of the schedule (`ENABLED` or `DISABLED`).
      */
     state: string | undefined;
+    /**
+     * The schedule definition (expression, timezone, dates, target,
+     * flexible window, KMS key, completion action), as observed. Lets
+     * `alchemy drift` detect out-of-band changes.
+     */
+    configuration?: ScheduleConfiguration;
   },
   never,
-  Providers
+  Providers,
+  ScheduleLookup
 > {}
 
+/**
+ * Props for {@link Schedule.lookup}: find a schedule this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ScheduleLookup {
+  /** The name of the existing schedule. */
+  scheduleName: string;
+  /**
+   * The schedule group it belongs to.
+   * @default "default"
+   *
+   * ### Looking up an existing schedule
+   * `Schedule.lookup` references a schedule Alchemy doesn't manage (created in the
+   * console or by another stack), found by `scheduleName` and `groupName`. It is read during
+   * plan/deploy and never created, updated or deleted.
+   *
+   * **Example:** Reference an existing schedule
+   * ```typescript
+   * const nightly = AWS.Scheduler.Schedule.lookup({ scheduleName: "nightly", groupName: "billing" });
+   * const scheduleArn = nightly.scheduleArn;
+   * ```
+   */
+  groupName?: string;
+}
+
 export const Schedule = Resource<Schedule>("AWS.Scheduler.Schedule");
+
+/** The managed configuration of a schedule, as observed. */
+export interface ScheduleConfiguration {
+  scheduleExpression?: string;
+  scheduleExpressionTimezone?: string;
+  startDate?: string;
+  endDate?: string;
+  description?: string;
+  kmsKeyArn?: string;
+  target?: scheduler.Target;
+  flexibleTimeWindow?: scheduler.FlexibleTimeWindow;
+  actionAfterCompletion?: string;
+}
+
+/**
+ * The configuration `read` and `reconcile` both report, so a converged
+ * schedule reads unchanged.
+ */
+const observeScheduleConfiguration = (
+  described: scheduler.GetScheduleOutput,
+): ScheduleConfiguration => ({
+  scheduleExpression: described.ScheduleExpression,
+  scheduleExpressionTimezone: described.ScheduleExpressionTimezone,
+  startDate: described.StartDate?.toISOString(),
+  endDate: described.EndDate?.toISOString(),
+  description: described.Description || undefined,
+  kmsKeyArn: described.KmsKeyArn,
+  target: described.Target,
+  flexibleTimeWindow: described.FlexibleTimeWindow,
+  actionAfterCompletion: described.ActionAfterCompletion,
+});
 
 export const ScheduleProvider = () =>
   Provider.effect(
@@ -153,6 +216,22 @@ export const ScheduleProvider = () =>
           if ((olds.groupName ?? "default") !== (news.groupName ?? "default")) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ scheduleName, groupName = "default" }) {
+          const described = yield* scheduler
+            .getSchedule({
+              Name: scheduleName,
+              GroupName: groupName !== "default" ? groupName : undefined,
+            })
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
+          if (!described?.Arn || !described.Name) return undefined;
+          return {
+            scheduleArn: described.Arn,
+            scheduleName: described.Name,
+            groupName: described.GroupName ?? groupName,
+            state: described.State,
+            configuration: observeScheduleConfiguration(described),
+          };
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const scheduleName = output?.scheduleName ?? (yield* toName(id, olds));
@@ -174,6 +253,7 @@ export const ScheduleProvider = () =>
             scheduleName: described.Name,
             groupName: described.GroupName ?? groupName,
             state: described.State,
+            configuration: observeScheduleConfiguration(described),
           };
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -247,11 +327,16 @@ export const ScheduleProvider = () =>
 
           yield* session.note(scheduleArn);
 
+          const final = yield* scheduler.getSchedule({
+            Name: scheduleName,
+            GroupName: groupNameParam,
+          });
           return {
             scheduleArn,
             scheduleName,
             groupName,
-            state: news.state ?? observed.State,
+            state: final.State,
+            configuration: observeScheduleConfiguration(final),
           };
         }),
         list: () =>

@@ -1,15 +1,17 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import { requestWorker } from "../Utils/WorkerRequest.ts";
 import Stack from "./fixtures/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
-  providers: Cloudflare.providers(),
+  providers: Layer.mergeAll(Cloudflare.providers(), DomainCloudflare.providers()),
 });
 
 const stack = beforeAll(deploy(Stack));
@@ -94,5 +96,5 @@ test(
     expect(receipt.at).toBeLessThan(before + 15_000 + 30_000);
     expect(yield* cancel(base, `direct-${run}`)).toBe("Cancelled");
   }),
-  { timeout: 180_000 },
+  { timeout: 180_000, tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"] },
 );

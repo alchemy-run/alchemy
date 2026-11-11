@@ -12,7 +12,6 @@ import * as AccessApp from "./Access/Application.ts";
 import * as Bookmark from "./Access/Bookmark.ts";
 import * as AccessCert from "./Access/Certificate.ts";
 import * as CustomPage from "./Access/CustomPage.ts";
-import { GetIdentityProviderHttp } from "./Access/GetIdentityProviderHttp.ts";
 import * as Group from "./Access/Group.ts";
 import * as AccessIdp from "./Access/IdentityProvider.ts";
 import * as AccessInfraTarget from "./Access/InfrastructureTarget.ts";
@@ -244,6 +243,7 @@ export const providers = () =>
       Email.Domain,
       Email.ImpersonationRegistryEntry,
       Email.Routing,
+      Email.RoutingSubdomain,
       Email.Rule,
       Email.SendingSubdomain,
       Email.TrustedDomain,
@@ -509,6 +509,7 @@ export const providers = () =>
           Email.DomainProvider(),
           Email.ImpersonationRegistryEntryProvider(),
           Email.RoutingProvider(),
+          Email.RoutingSubdomainProvider(),
           Email.RuleProvider(),
           Email.SendingSubdomainProvider(),
           Email.TrustedDomainProvider(),
@@ -678,8 +679,6 @@ export const providers = () =>
         Dns.AdapterLive,
       ),
     ),
-    // Plan-executable data-source capabilities (`Binding.Service.execute`).
-    Layer.provideMerge(GetIdentityProviderHttp),
     Layer.provideMerge(DockerLive),
     // Note: `localRuntimeServices()` is no longer provided globally — each
     // local provider composes it into its `ProviderLayer.dual` local thunk,

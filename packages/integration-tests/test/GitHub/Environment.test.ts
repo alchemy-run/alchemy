@@ -7,6 +7,7 @@ import * as Output from "alchemy/Output";
 import { destroy } from "alchemy/RemovalPolicy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { repoOf, expectFound } from "./lookup.ts";
 import { gh } from "./scope.ts";
 
 const { test } = Test.make({ providers: GitHub.providers() });
@@ -85,6 +86,10 @@ test.provider.skipIf(!owner)(
             },
           }).pipe(destroy());
         }),
+      );
+      yield* expectFound(
+        GitHub.Environment.lookup({ ...repoOf(created.htmlUrl), name: created.name }),
+        created,
       );
 
       expect(created.environmentId).toBeGreaterThan(0);

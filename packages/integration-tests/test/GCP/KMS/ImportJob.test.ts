@@ -6,6 +6,7 @@ import * as kms from "@distilled.cloud/gcp/cloudkms_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { KEY_RING_ID } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -62,6 +63,14 @@ test.provider(
             protectionLevel: "SOFTWARE",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.KMS.ImportJob.lookup({
+          importJobId: created.importJobId,
+          keyRing: created.keyRing,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.importJobId).toEqual(IMPORT_JOB_ID);

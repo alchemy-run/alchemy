@@ -7,6 +7,7 @@ import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -75,6 +76,7 @@ test.provider(
           return { topic, feed };
         }),
       );
+      yield* expectFound(GCP.CloudAsset.Feed.lookup({ feedId: created.feed.feedId }), created.feed);
 
       expect(created.feed.name).toContain("/feeds/");
       expect(created.feed.feedId).toEqual(expect.any(String));

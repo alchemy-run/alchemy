@@ -1,9 +1,11 @@
+import { logChildLine } from "alchemy/Util/LogRecord";
 import { sha256 } from "alchemy/Util/sha256";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
+import * as Stream from "effect/Stream";
 import type { WebsiteArtifactProps } from "./Artifact.ts";
 
 export class PackageOperationFailed extends Data.TaggedError("PackageOperationFailed")<{
@@ -39,9 +41,20 @@ export const packageWebsiteInChild = Effect.fn(
         inputPath,
         outputPath,
       ],
-      { stdin: "ignore", stdout: "ignore", stderr: "inherit" },
+      { stdin: "ignore", stdout: "ignore", stderr: "pipe" },
     );
-    const code = yield* child.exitCode;
+    // The runner's diagnostics become log records instead of raw terminal writes.
+    const [code] = yield* Effect.all(
+      [
+        child.exitCode,
+        child.stderr.pipe(
+          Stream.decodeText,
+          Stream.splitLines,
+          Stream.runForEach((line) => logChildLine(line, { stream: "stderr" })),
+        ),
+      ],
+      { concurrency: "unbounded" },
+    );
     if (code !== 0)
       return yield* new PackageOperationFailed({ message: `Website packaging exited ${code}` });
     const archive = yield* fs.readFile(outputPath);

@@ -12,6 +12,9 @@
       "path": "./submodules/distilled/packages/aws4signer/tsconfig.json"
     },
     {
+      "path": "./submodules/distilled/packages/s3/tsconfig.json"
+    },
+    {
       "path": "./submodules/distilled/packages/aws/tsconfig.json"
     },
     {
@@ -22,6 +25,24 @@
     },
     {
       "path": "./submodules/distilled/packages/turso/tsconfig.json"
+    },
+    {
+      "path": "./submodules/distilled/packages/daytona/tsconfig.json"
+    },
+    {
+      "path": "./submodules/distilled/packages/archil/tsconfig.json"
+    },
+    {
+      "path": "./submodules/distilled/packages/boat-dev/tsconfig.json"
+    },
+    {
+      "path": "./submodules/distilled/packages/rivet/tsconfig.json"
+    },
+    {
+      "path": "./submodules/distilled/packages/e2b/tsconfig.json"
+    },
+    {
+      "path": "./submodules/distilled/packages/modal/tsconfig.json"
     },
     {
       "path": "./submodules/distilled/packages/axiom/tsconfig.json"
@@ -112,6 +133,27 @@
       "path": "./packages/turso/tsconfig.json"
     },
     {
+      "path": "./packages/daytona/tsconfig.json"
+    },
+    {
+      "path": "./packages/archil/tsconfig.json"
+    },
+    {
+      "path": "./packages/boat/tsconfig.json"
+    },
+    {
+      "path": "./packages/rivet/tsconfig.json"
+    },
+    {
+      "path": "./packages/effect-cluster/tsconfig.json"
+    },
+    {
+      "path": "./packages/e2b/tsconfig.json"
+    },
+    {
+      "path": "./packages/modal/tsconfig.json"
+    },
+    {
       "path": "./packages/planetscale/tsconfig.json"
     },
     {
@@ -161,6 +203,18 @@
     },
     {
       "path": "./packages/integration-tests/tsconfig.json"
+    },
+    {
+      "path": "./packages/integration-tests/test/Cloudflare/Workers/fixtures/ambient-types/tsconfig.json"
+    },
+    {
+      "path": "./packages/integration-tests/test/Cloudflare/Workers/fixtures/ambient-types/declarations/tsconfig.ambient.json"
+    },
+    {
+      "path": "./packages/integration-tests/test/Cloudflare/Workers/fixtures/ambient-types/declarations/tsconfig.module.json"
+    },
+    {
+      "path": "./packages/integration-tests/test/Cloudflare/Workers/fixtures/ambient-types/declarations/tsconfig.cloudflare-module.json"
     },
     {
       "path": "./packages/pkg/tsconfig.json"
@@ -336,6 +390,30 @@
     },
     {
       "path": "./examples/cloudflare-turso-drizzle/tsconfig.json"
+    },
+    {
+      "path": "./examples/e2b-agent-sandbox/tsconfig.json"
+    },
+    {
+      "path": "./examples/e2b-program/tsconfig.json"
+    },
+    {
+      "path": "./examples/boat-agent-sandbox/tsconfig.json"
+    },
+    {
+      "path": "./examples/boat-program/tsconfig.json"
+    },
+    {
+      "path": "./examples/e2b-program-async/tsconfig.json"
+    },
+    {
+      "path": "./examples/daytona-sandboxes/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-modal-sandbox/tsconfig.json"
+    },
+    {
+      "path": "./examples/modal-functions/tsconfig.json"
     },
     {
       "path": "./examples/cloudflare-secrets-store/tsconfig.json"

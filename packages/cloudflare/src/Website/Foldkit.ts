@@ -14,7 +14,7 @@ import {
 
 export interface FoldkitProps<Bindings extends WorkerBindingProps = {}> extends Omit<
   WorkerProps<Bindings>,
-  "vite" | "main" | "assets" | "source" | "script" | "bundle"
+  "vite" | "main" | "assets" | "source" | "script" | "bundle" | "rules"
 > {
   /**
    * Custom Worker entry for a client-only app. Relative paths resolve from

@@ -40,22 +40,20 @@ export interface KeyValueStore extends Resource<
      * Current comment.
      */
     comment: string;
-    /**
-     * Current status.
-     */
-    status: string;
-    /**
-     * Last modified time.
-     */
-    lastModifiedTime: Date | undefined;
-    /**
-     * Latest entity tag for update/delete operations.
-     */
-    etag: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  KeyValueStoreLookup
 > {}
+
+/**
+ * Props for {@link KeyValueStore.lookup}: find a key value store this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface KeyValueStoreLookup {
+  /** The name of the existing key value store. */
+  keyValueStoreName: string;
+}
 
 /**
  * A CloudFront KeyValueStore for edge metadata.
@@ -68,6 +66,16 @@ export interface KeyValueStore extends Resource<
  * const store = yield* KeyValueStore("RouterStore", {
  *   comment: "Route metadata",
  * });
+ * ```
+ *
+ * ### Looking up an existing key value store
+ * `KeyValueStore.lookup` references a key value store Alchemy doesn't manage (created in the
+ * console or by another stack), found by `keyValueStoreName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Read an existing key value store from a CloudFront function
+ * ```typescript
+ * const flags = AWS.CloudFront.KeyValueStore.lookup({ keyValueStoreName: "flags" });
  * ```
  *
  * @resource
@@ -103,6 +111,15 @@ export const KeyValueStoreProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        lookup: Effect.fn(function* ({ keyValueStoreName: name }) {
+          const current = yield* cloudfront
+            .describeKeyValueStore({ Name: name })
+            .pipe(Effect.catchTag("EntityNotFound", () => getByName(name)));
+          if (!current?.KeyValueStore) {
+            return undefined;
+          }
+          return toAttrs(current.KeyValueStore, name);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.keyValueStoreName ?? (yield* createName(id, olds ?? {}));
           const current = yield* cloudfront
@@ -111,19 +128,16 @@ export const KeyValueStoreProvider = () =>
           if (!current?.KeyValueStore) {
             return undefined;
           }
-          return toAttrs(current.KeyValueStore, current.ETag, name);
+          return toAttrs(current.KeyValueStore, name);
         }),
         // CloudFront is global; `listKeyValueStores` enumerates every store in
-        // the account. The list summary carries no ETag, so it's undefined here
-        // (matches the `etag: string | undefined` attribute).
+        // the account.
         list: () =>
           cloudfront.listKeyValueStores.pages({}).pipe(
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.KeyValueStoreList?.Items ?? []).map((store) =>
-                  toAttrs(store, undefined, store.Name),
-                ),
+                (page.KeyValueStoreList?.Items ?? []).map((store) => toAttrs(store, store.Name)),
               ),
             ),
           ),
@@ -158,7 +172,7 @@ export const KeyValueStoreProvider = () =>
               return yield* Effect.die("createKeyValueStore returned no key value store");
             }
             yield* session.note(created.KeyValueStore.Id);
-            return toAttrs(created.KeyValueStore, created.ETag, name);
+            return toAttrs(created.KeyValueStore, name);
           }
 
           // Sync — patch the observed comment via `updateKeyValueStore`
@@ -172,7 +186,7 @@ export const KeyValueStoreProvider = () =>
             return yield* Effect.die("updateKeyValueStore returned no key value store");
           }
           yield* session.note(updated.KeyValueStore.Id);
-          return toAttrs(updated.KeyValueStore, updated.ETag, observed.KeyValueStore.Name);
+          return toAttrs(updated.KeyValueStore, observed.KeyValueStore.Name);
         }),
         delete: Effect.fn(
           function* ({ output }) {
@@ -212,16 +226,15 @@ const createName = (id: string, props: KeyValueStoreProps) =>
     ? Effect.succeed(props.name)
     : createPhysicalName({ id, maxLength: 64, lowercase: true });
 
+// Status, last-modified time and ETag change on their own (provisioning
+// finishes, every key write bumps them), so they are not attributes: drift
+// would never read a store as unchanged.
 const toAttrs = (
   store: cloudfront.KeyValueStore,
-  etag: string | undefined,
   fallbackName: string,
 ): KeyValueStore["Attributes"] => ({
   keyValueStoreId: store.Id,
   keyValueStoreArn: store.ARN,
   keyValueStoreName: store.Name || fallbackName,
   comment: store.Comment ?? "",
-  status: store.Status ?? "UNKNOWN",
-  lastModifiedTime: store.LastModifiedTime,
-  etag,
 });

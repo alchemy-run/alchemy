@@ -1,5 +1,8 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import { WorkerBundle } from "@alchemy.run/cloudflare/Workers/Sources/Rolldown";
+import {
+  WorkerBundle,
+  type WorkerBundleOptions,
+} from "@alchemy.run/cloudflare/Workers/Sources/Rolldown";
 import { describe, expect, layer } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -82,6 +85,75 @@ layer(NodeServices.layer)("WorkerBundle", (it) => {
           if (!file.path.endsWith(".js")) continue;
           expect(decode(file.content)).not.toContain("Calling `require` for");
         }
+      }),
+    { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"] },
+  );
+  // #2729: an import with an extension rolldown can't load is emitted as its
+  // own module when it matches the Worker's `rules`, instead of failing.
+  it.effect(
+    "emits imports matching rules as separate modules",
+    () =>
+      Effect.gen(function* () {
+        const path = yield* Path.Path;
+        const root = yield* writeFixture({
+          "package.json": "{}",
+          "src/font.ttf": "FONT_BYTES",
+          "src/skip.ttf": "SKIP_BYTES",
+          "shared/logo.png": "LOGO_BYTES",
+          "src/notes.md": "# NOTES",
+          "src/worker.mjs": `import font from "./font.ttf"; import logo from "../shared/logo.png"; import notes from "./notes.md"; export default { fetch: () => new Response(font + logo + notes) };`,
+        });
+        const bundler = yield* WorkerBundle;
+        const build = (rules: WorkerBundleOptions["rules"]) =>
+          bundler.build({
+            id: "worker-bundle-rules",
+            main: path.join(root, "src/worker.mjs"),
+            compatibility: { date: "2026-03-17", flags: [] },
+            entry: { kind: "external" },
+            stack: { name: "worker-bundle-test", stage: "test" },
+            extraOptions: undefined,
+            rules,
+          });
+
+        const output = yield* build([
+          { globs: ["**/*.ttf", `${root}/shared/*.png`] },
+          { type: "Text", globs: ["**/*.md"] },
+        ]);
+        const entry = decode(output.files[0].content);
+        // `font.ttf` is in the entry's directory; `logo.png` is outside it
+        // and matches an absolute glob.
+        for (const [ext, bytes] of [
+          [".ttf", "FONT_BYTES"],
+          [".png", "LOGO_BYTES"],
+        ]) {
+          const file = output.files.find((file) => file.path.endsWith(ext));
+          expect(file && decode(file.content)).toBe(bytes);
+          expect(entry).toContain(path.basename(file!.path));
+        }
+        // A `Text` rule over an extension uploads would read as Data gets
+        // the `.txt` extension the upload types it by.
+        const notes = output.files.find((file) => /notes.*\.txt$/.test(file.path));
+        expect(notes && decode(notes.content)).toBe("# NOTES");
+        expect(entry).toContain(path.basename(notes!.path));
+
+        // `!` globs exclude, as in the prebuilt walk: the excluded import is
+        // left to rolldown. Its text parses as JavaScript, so the build fails
+        // on the missing default export, and the hint still names the rule.
+        const excluded = yield* Effect.flip(
+          build([{ globs: ["**/*.ttf", "**/*.png", "**/*.md", `!${root}/src/font.ttf`] }]),
+        );
+        expect(excluded.message).toContain('add rules: [{ type: "Data", globs: ["**/*.ttf"] }]');
+
+        // Without rules, the error names the rule that would import them.
+        const error = yield* Effect.flip(build(undefined));
+        expect(error.message).toContain('{ type: "Text", globs: ["**/*.md"] }');
+
+        // `../` globs match files outside the entry's directory.
+        const relative = yield* build([
+          { globs: ["**/*.ttf", "../shared/*.png"] },
+          { type: "Text", globs: ["**/*.md"] },
+        ]);
+        expect(relative.files.some((file) => file.path.endsWith(".png"))).toBe(true);
       }),
     { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"] },
   );
@@ -322,7 +394,16 @@ describe(
             },
           },
         });
-        return { url: worker.url.as<string>(), aliasUrl: aliased.url.as<string>() };
+        const moduleRules = yield* Cloudflare.Worker("ModuleRulesWorker", {
+          main: new URL("./fixtures/module-rules/worker.mjs", import.meta.url).href,
+          compatibility: { date: "2025-04-01" },
+          rules: [{ globs: ["**/*.ttf"] }, { type: "Text", globs: ["**/*.md"] }],
+        });
+        return {
+          url: worker.url.as<string>(),
+          aliasUrl: aliased.url.as<string>(),
+          moduleRulesUrl: moduleRules.url.as<string>(),
+        };
       }),
     );
 
@@ -347,6 +428,32 @@ describe(
           execa: "aliased:package",
           readable: "aliased:package",
           event: "builtin:ok",
+        });
+      }),
+    );
+
+    // #2729: a bundled Worker imports a file rolldown can't load (`.ttf`)
+    // through `rules`, next to the built-in `.bin` and `.txt` rules. The
+    // font's bytes cover every value, so any text decoding along the way
+    // (bundle, upload, runtime) would change them.
+    test(
+      "bundled worker serves imports matched by rules as modules of their type",
+      Effect.gen(function* () {
+        const { moduleRulesUrl } = yield* stack;
+        const client = yield* HttpClient.HttpClient;
+        const body = yield* client.get(moduleRulesUrl).pipe(
+          Effect.flatMap((response) => response.json),
+          Effect.retry({ schedule: Schedule.spaced("1 second"), times: 8 }),
+        );
+        const hex = (bytes: Uint8Array) => Buffer.from(bytes).toString("hex");
+        const fs = yield* FileSystem.FileSystem;
+        const fixture = (name: string) =>
+          fs.readFile(new URL(`./fixtures/module-rules/${name}`, import.meta.url).pathname);
+        expect(body).toEqual({
+          font: { type: "[object ArrayBuffer]", hex: hex(yield* fixture("font.ttf")) },
+          data: hex(yield* fixture("data.bin")),
+          notice: "module-rules-notice\n",
+          readme: "module-rules-readme\n",
         });
       }),
     );

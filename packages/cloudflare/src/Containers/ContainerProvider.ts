@@ -1,12 +1,14 @@
+import { buildCacheRef, resolveBuildCache } from "@alchemy.run/docker/BuildCache";
 import { hashDockerBuildInputs } from "@alchemy.run/docker/BuildHash";
 import { Docker } from "@alchemy.run/docker/Docker";
 import { isInlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import { repositoryFromImageRef } from "@alchemy.run/docker/Registry";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
-import { Unowned, Unresolved } from "alchemy/AdoptPolicy";
+import { Unowned, Unresolved, UnresolvedIdentity } from "alchemy/AdoptPolicy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { getStableContextDir } from "alchemy/Bundle/TempRoot";
-import { deepEqual, isResolved } from "alchemy/Diff";
+import { deepEqual, isResolved, stripEffects } from "alchemy/Diff";
+import { collectMountCapabilities, mountInstallLines, MountUnsupported } from "alchemy/Mount";
 import * as Provider from "alchemy/Provider";
 import type { ScopedPlanStatusSession } from "alchemy/Report";
 import { type ResourceBinding } from "alchemy/Resource";
@@ -89,6 +91,8 @@ type ImageBuild =
       readonly kind: "external";
       readonly context: string;
       readonly dockerfile: string;
+      readonly buildArgs?: Record<string, string>;
+      readonly buildSecrets?: Record<string, Redacted.Redacted<string>>;
     }
   | {
       readonly kind: "remote";
@@ -153,6 +157,37 @@ const digestFromImageRef = (imageRef: string) => {
   if (separator === -1) return undefined;
   const digest = imageRef.slice(separator + 1);
   return isRegistryDigest(digest) ? digest : undefined;
+};
+
+/**
+ * Fold the capabilities mount bindings bound onto the Container into its
+ * props, so every path that builds the image (diff and reconcile) sees the
+ * same install lines. Mount clients can only be installed into an image
+ * Alchemy generates (`main`), not a pre-built `image` or a Dockerfile path
+ * built verbatim.
+ */
+const withMountCapabilities = <P extends AnyContainerApplicationProps>(
+  id: string,
+  news: P,
+  bindings: ReadonlyArray<ResourceBinding<ContainerApplication["Binding"]>>,
+): Effect.Effect<P, MountUnsupported> => {
+  const capabilities = collectMountCapabilities(bindings);
+  if (capabilities.length === 0) return Effect.succeed(news);
+  if (!news.main) {
+    return Effect.fail(
+      new MountUnsupported({
+        host: id,
+        capability: capabilities[0]!.id,
+        requirement: "image",
+        message: `Container ${id} can't install the ${capabilities
+          .map((c) => c.id)
+          .join(
+            ", ",
+          )} mount client: it runs a pre-built image. Give it a \`main\` (optionally with \`image\` or an inline \`dockerfile\` as its base).`,
+      }),
+    );
+  }
+  return Effect.succeed({ ...news, imageInstall: mountInstallLines(capabilities) });
 };
 
 export const LiveContainerProvider = () =>
@@ -409,7 +444,7 @@ export const LiveContainerProvider = () =>
         const makeRef = (imageHash: string) =>
           `${registryId}/${accountId}/${repositoryName}:${imageHash}`;
 
-        yield* validateContainerImageProps(props);
+        yield* validateContainerImageProps(id, props);
 
         // Preserve serialized imageName keys so existing publication hashes remain valid.
         // Variant 1 — Effect-native program. Bundle `main` and build a
@@ -431,6 +466,7 @@ export const LiveContainerProvider = () =>
             runtime,
             props.external,
             props.autoInstallExternals,
+            props.imageInstall,
           );
           const imageHash = (yield* sha256Object({
             bundleHash,
@@ -506,16 +542,26 @@ export const LiveContainerProvider = () =>
           const { context, dockerfile } = yield* materializeInlineDockerfileContext(id, content);
           const imageHash = (yield* sha256Object({
             dockerfile: content,
+            // Absent rather than `{}` when unset, so existing hashes hold.
+            buildArgs: props.build?.args,
             imageName: props.publish?.repository?.toLowerCase(),
           })).slice(0, 16);
           return {
-            build: { kind: "external" as const, context, dockerfile },
+            build: {
+              kind: "external" as const,
+              context,
+              dockerfile,
+              buildArgs: props.build?.args,
+              buildSecrets: props.build?.secrets,
+            },
             imageRef: makeRef(imageHash),
             imageHash,
             // The local runtime builds the same materialized context.
             dev: {
               context: path.relative(process.cwd(), context),
               dockerfile: "Dockerfile",
+              buildArgs: props.build?.args,
+              buildSecrets: props.build?.secrets,
               env,
             },
           };
@@ -530,7 +576,7 @@ export const LiveContainerProvider = () =>
         // Hash what Docker can consume, including gitignored files and file
         // modes, but excluding ancestor lockfiles outside the build context.
         const contextHash = yield* hashDockerBuildInputs(
-          { context, dockerfile, platform: publicationPlatform },
+          { context, dockerfile, platform: publicationPlatform, buildArgs: props.build?.args },
           "effective",
         );
         const imageHash = (yield* sha256Object({
@@ -538,7 +584,13 @@ export const LiveContainerProvider = () =>
           imageName: props.publish?.repository?.toLowerCase(),
         })).slice(0, 16);
         return {
-          build: { kind: "external" as const, context, dockerfile },
+          build: {
+            kind: "external" as const,
+            context,
+            dockerfile,
+            buildArgs: props.build?.args,
+            buildSecrets: props.build?.secrets,
+          },
           imageRef: makeRef(imageHash),
           imageHash,
           // The local runtime builds the user's Dockerfile against the same
@@ -546,6 +598,8 @@ export const LiveContainerProvider = () =>
           dev: {
             context: path.relative(process.cwd(), context),
             dockerfile: path.relative(context, dockerfile),
+            buildArgs: props.build?.args,
+            buildSecrets: props.build?.secrets,
             env,
           },
         };
@@ -588,11 +642,7 @@ export const LiveContainerProvider = () =>
             return { imageRef: published, digest };
           }
         }
-        const cacheRef = `${repositoryFromImageRef(imageRef)}:buildcache`;
-        const cacheOptions = {
-          "cache-from": [`type=registry,ref=${cacheRef}`],
-          "cache-to": ["type=inline"],
-        };
+        const cacheOptions = resolveBuildCache(props.build?.cache, buildCacheRef(imageRef));
 
         if (build.kind === "remote") {
           // Pull the pre-built image and re-tag it to the Cloudflare registry
@@ -601,7 +651,37 @@ export const LiveContainerProvider = () =>
           if (session) {
             yield* session.note(`Pulling container image ${build.image}...`);
           }
-          yield* docker.image.pull(build.image, platform, undefined, session);
+          // Pull every time so a mutable tag publishes the newest image. An
+          // image built on this machine or `docker load`ed has no registry
+          // to pull from, so when the pull fails and the image is present
+          // locally, publish the local copy.
+          const usedLocalImage = yield* docker.image
+            .pull(build.image, platform, undefined, session)
+            .pipe(
+              Effect.as(false),
+              Effect.catch((pullError) =>
+                docker.image.inspect(build.image).pipe(
+                  Effect.flatMap((local) =>
+                    local
+                      ? Effect.logInfo(
+                          `Cloudflare Container image: ${build.image} could not be pulled, publishing the local image`,
+                        ).pipe(Effect.as(true))
+                      : Effect.fail(pullError),
+                  ),
+                  Effect.mapError(
+                    () =>
+                      new ContainerProviderOperationFailed({
+                        message:
+                          `Container image "${build.image}" could not be pulled and is not in the local Docker. ` +
+                          `If it is in a registry, check the name and tag, and run \`docker login\` for a private registry. ` +
+                          `If it is built on this machine, build or load it before deploying: ` +
+                          `\`docker build --platform ${platform} -t ${build.image} .\` or \`docker load\`.`,
+                        cause: pullError,
+                      }),
+                  ),
+                ),
+              ),
+            );
           yield* docker.image.tag(build.image, imageRef);
           yield* Effect.logInfo(`Cloudflare Container image: pushing ${imageRef}`);
           if (session) {
@@ -609,9 +689,19 @@ export const LiveContainerProvider = () =>
           }
           // Push the same platform that was pulled. A containerd image store
           // may also hold a host-architecture variant under this tag.
-          yield* docker.image
-            .push(imageRef, credentials, platform, undefined, session)
-            .pipe(retryContainerPublication);
+          yield* docker.image.push(imageRef, credentials, platform, undefined, session).pipe(
+            retryContainerPublication,
+            Effect.mapError((pushError) =>
+              usedLocalImage
+                ? new ContainerProviderOperationFailed({
+                    message:
+                      `Could not publish the local image "${build.image}" as ${platform}, the platform Cloudflare runs. ` +
+                      `Rebuild it for that platform: \`docker build --platform ${platform} -t ${build.image} .\`.`,
+                    cause: pushError,
+                  })
+                : pushError,
+            ),
+          );
         } else if (build.kind === "external") {
           // Build the user's Dockerfile directly against their context dir so
           // relative `COPY`/`ADD` paths resolve as the author intended.
@@ -623,10 +713,12 @@ export const LiveContainerProvider = () =>
             .build(
               {
                 ...cacheOptions,
-                tag: [imageRef, cacheRef],
+                tag: imageRef,
                 context: build.context,
                 platform,
                 file: build.dockerfile,
+                "build-arg": build.buildArgs,
+                secrets: build.buildSecrets,
               },
               session,
               credentials,
@@ -650,6 +742,7 @@ export const LiveContainerProvider = () =>
             runtime,
             props.external,
             props.autoInstallExternals,
+            props.imageInstall,
           );
           yield* docker.materialize({
             context: contextDir,
@@ -663,7 +756,7 @@ export const LiveContainerProvider = () =>
             .build(
               {
                 ...cacheOptions,
-                tag: [imageRef, cacheRef],
+                tag: imageRef,
                 context: contextDir,
                 platform,
               },
@@ -1120,9 +1213,10 @@ export const LiveContainerProvider = () =>
             `Cloudflare Container update: ${existing.applicationName} has no effective changes`,
           );
           yield* session.note(`Container application ${existing.applicationName} is unchanged.`);
+          // `existing` is the observed application; keep its configuration,
+          // which `read` reports with Cloudflare's defaults filled in.
           return {
             ...existing,
-            configuration,
             hash: {
               image: imageHash,
               digest: imageDigest,
@@ -1182,10 +1276,32 @@ export const LiveContainerProvider = () =>
             configuration,
             rollout: news.rollout,
           });
+          yield* session.note(`Waiting for the rollout of ${updated.applicationName} to land...`);
+        }
+        // Cloudflare keeps reporting the previous version and configuration
+        // until the rollout lands, then reports the configuration with its
+        // defaults filled in. Save the application as `read` will see it.
+        const observed = yield* retryForContainerApplicationReadiness(
+          "read",
+          updated.applicationId,
+          Containers.getContainerApplication({ accountId, applicationId: updated.applicationId }),
+        ).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("2 seconds"),
+            until: (app) => !hasActiveRollout(app),
+            times: 30,
+          }),
+        );
+        if (hasActiveRollout(observed)) {
+          yield* Effect.logInfo(
+            `Cloudflare Container update: rollout of ${updated.applicationName} is still in progress`,
+          );
+          yield* session.note(
+            `Rollout of ${updated.applicationName} is still in progress; saved the application as it was before the rollout.`,
+          );
         }
         return {
-          ...updated,
-          configuration,
+          ...toAttributes(observed),
           hash: {
             image: imageHash,
             digest: imageDigest,
@@ -1221,10 +1337,22 @@ export const LiveContainerProvider = () =>
 
       return ContainerPlatform.Provider.of({
         stables: ["accountId", "applicationId"],
-        diff: Effect.fn(function* ({ id, olds = {}, news = {}, output, newBindings, oldBindings }) {
-          if (!isResolved(news)) return;
-          yield* validateContainerConfiguration(news, output?.schedulingPolicy);
+        diff: Effect.fn(function* ({
+          id,
+          olds = {},
+          news: desired = {},
+          output,
+          newBindings,
+          oldBindings,
+        }) {
+          // An Effect-native (`main`) Container carries its program as an
+          // Effect in `exports`, which `isResolved` never accepts. Strip it so
+          // a guest-code change still reaches the image hash comparison.
+          const declared = stripEffects(desired);
+          if (!isResolved(declared)) return;
+          yield* validateContainerConfiguration(declared, output?.schedulingPolicy);
           if (!isResolved(newBindings)) return;
+          const news = yield* withMountCapabilities(id, declared, newBindings);
           const { accountId } = yield* yield* CloudflareEnvironment;
 
           const oldName =
@@ -1315,6 +1443,16 @@ export const LiveContainerProvider = () =>
             : Unowned(observed);
         }),
         precreate: Effect.fn(function* ({ id, news = {}, session }) {
+          if (!isResolved(nameOf(news))) {
+            return yield* new UnresolvedIdentity({
+              message:
+                `Container(${id}): its name depends on a resource in this ` +
+                "Container's dependency cycle, so precreate cannot name the application. " +
+                "Use a literal name, or one from outside the cycle.",
+              resourceType: "Cloudflare.Container",
+              logicalId: id,
+            });
+          }
           yield* validateContainerConfiguration(news);
           const name = yield* createApplicationName(id, nameOf(news));
           yield* Effect.logInfo(`Cloudflare Container precreate: starting ${name}`);
@@ -1376,7 +1514,8 @@ export const LiveContainerProvider = () =>
             dev,
           };
         }),
-        reconcile: Effect.fn(function* ({ id, news = {}, bindings, output, session }) {
+        reconcile: Effect.fn(function* ({ id, news: declared = {}, bindings, output, session }) {
+          const news = yield* withMountCapabilities(id, declared, bindings);
           yield* validateContainerConfiguration(news, output?.schedulingPolicy);
           // Prefer the deployed name: regenerating would target a different
           // resource if the generator's output for this id ever drifts.
@@ -1766,6 +1905,10 @@ const isOwnedApplication = (
   observed: { applicationId: string },
   previous: { applicationId: string } | undefined,
 ) => explicitName === undefined || observed.applicationId === previous?.applicationId;
+
+// Durable Object applications have no rollouts.
+const hasActiveRollout = (application: Containers.GetContainerApplicationResponse) =>
+  "activeRolloutId" in application && !!application.activeRolloutId;
 
 const toAttributes = (
   application: Containers.CreateContainerApplicationResponse,

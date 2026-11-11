@@ -1,9 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
-import { Progress } from "../../../Alchemist/Progress.ts";
-import * as Profiles from "../../../Alchemist/routes/profile.ts";
-import { importStack } from "../../../Alchemist/Session.ts";
+import * as Alchemist from "../../../Alchemist/index.ts";
 import { DEFAULT_PROFILE_NAME } from "../../../Auth/Profile.ts";
 import { Interaction } from "../../../Interaction.ts";
 import { isPromptCancellation } from "../errors.ts";
@@ -13,7 +11,7 @@ export const profileHub = Effect.fn(function* (options: {
   main: string;
 }) {
   const envFile = Option.getOrUndefined(options.envFile);
-  const computeEntries = Profiles.list().pipe(
+  const computeEntries = Alchemist.Profile.list().pipe(
     Effect.map((profiles) =>
       profiles.map((profile) => ({
         name: profile.name,
@@ -45,7 +43,7 @@ export const profileHub = Effect.fn(function* (options: {
       });
       // let the row paint before synchronous module evaluation starts
       yield* Effect.sleep("1 millis");
-      yield* importStack(options.main).pipe(Effect.ignore);
+      yield* Alchemist.importStack(options.main).pipe(Effect.ignore);
     }),
   );
 
@@ -55,13 +53,13 @@ export const profileHub = Effect.fn(function* (options: {
     loadDetails: (name) =>
       Effect.gen(function* () {
         const [profile, providers] = yield* Effect.all([
-          Profiles.get({
+          Alchemist.Profile.get({
             name,
             includeProviderStatus: true,
             entrypoint: options.main,
             envFile,
           }),
-          Profiles.providers({
+          Alchemist.Profile.providers({
             profile: name,
             entrypoint: options.main,
             envFile,
@@ -92,18 +90,18 @@ export const profileHub = Effect.fn(function* (options: {
         let selected: string | undefined;
         let message: string;
         if (action.kind === "create") {
-          yield* Profiles.create({ name: action.name });
+          yield* Alchemist.Profile.create({ name: action.name });
           selected = action.name;
           message = `Created profile '${action.name}'.`;
         } else if (action.kind === "rename") {
-          yield* Profiles.rename({
+          yield* Alchemist.Profile.rename({
             name: action.name,
             newName: action.newName,
           });
           selected = action.newName;
           message = `Renamed '${action.name}' to '${action.newName}'.`;
         } else {
-          yield* Profiles.deleteProfile({ name: action.name });
+          yield* Alchemist.Profile.deleteProfile({ name: action.name });
           message = `Deleted '${action.name}' and its credentials.`;
         }
         const entries = yield* refreshEntries;
@@ -120,14 +118,14 @@ export const profileHub = Effect.fn(function* (options: {
     runFlow: (action, events) =>
       Effect.gen(function* () {
         if (action.kind === "refresh") {
-          yield* Profiles.refresh({
+          yield* Alchemist.Profile.refresh({
             profile: action.name,
             providers: action.provider === undefined ? undefined : [action.provider],
             entrypoint: options.main,
             envFile,
           }).pipe(
-            Effect.provideService(Progress, (event) =>
-              event._tag === "provider.refresh.started"
+            Alchemist.onEvent((event) =>
+              event.type === "provider.refresh.started"
                 ? events.onProviderStart(event.provider)
                 : Effect.void,
             ),
@@ -143,7 +141,7 @@ export const profileHub = Effect.fn(function* (options: {
 
         const outcomes: string[] = [];
         for (const provider of action.remove) {
-          yield* Profiles.removeProvider({
+          yield* Alchemist.Profile.removeProvider({
             profile: action.name,
             provider,
             entrypoint: options.main,
@@ -156,7 +154,7 @@ export const profileHub = Effect.fn(function* (options: {
           ["reconfigure", action.reconfigure],
         ] as const) {
           for (const provider of names) {
-            yield* Profiles.configure({
+            yield* Alchemist.Profile.configure({
               profile: action.name,
               provider,
               entrypoint: options.main,

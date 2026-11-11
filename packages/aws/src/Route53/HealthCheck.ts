@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { durationToSeconds } from "../IAM/common.ts";
+import { plainJson } from "../internal/Observe.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface HealthCheckProps {
@@ -100,10 +101,37 @@ export interface HealthCheck extends Resource<
      * Health check type.
      */
     type: route53.HealthCheckType;
+    /**
+     * Endpoint, path, port, thresholds, disabled/inverted state, SNI and
+     * tags, as observed. Lets `alchemy drift` detect out-of-band changes.
+     */
+    configuration?: {
+      ipAddress?: string;
+      port?: number;
+      resourcePath?: string;
+      fullyQualifiedDomainName?: string;
+      searchString?: string;
+      failureThreshold?: number;
+      inverted?: boolean;
+      disabled?: boolean;
+      healthThreshold?: number;
+      enableSNI?: boolean;
+      tags: Record<string, string>;
+    };
   },
   never,
-  Providers
+  Providers,
+  HealthCheckLookup
 > {}
+
+/**
+ * Props for {@link HealthCheck.lookup}: find a health check this stack doesn't
+ * manage, in the ambient account.
+ */
+export interface HealthCheckLookup {
+  /** The id of the existing health check. */
+  healthCheckId: string;
+}
 
 /**
  * A Route 53 health check.
@@ -144,6 +172,17 @@ export interface HealthCheck extends Resource<
  *   failover: "PRIMARY",
  *   healthCheckId: check.id,
  * });
+ * ```
+ *
+ * ### Looking up an existing health check
+ * `HealthCheck.lookup` references a health check Alchemy doesn't manage (created in the
+ * console or by another stack), found by `healthCheckId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Fail over on an existing health check
+ * ```typescript
+ * const primary = AWS.Route53.HealthCheck.lookup({ healthCheckId: "abcdef12-3456-7890-abcd-ef1234567890" });
+ * const healthCheckId = primary.healthCheckId;
  * ```
  *
  * @resource
@@ -188,8 +227,10 @@ const mutableFields = (props: HealthCheckProps) => ({
   FullyQualifiedDomainName: props.fullyQualifiedDomainName,
   SearchString: props.searchString,
   FailureThreshold: props.failureThreshold,
-  Inverted: props.inverted,
-  Disabled: props.disabled,
+  // Omitted means AWS's default (false), so a check disabled or inverted
+  // out of band converges back.
+  Inverted: props.inverted ?? false,
+  Disabled: props.disabled ?? false,
   HealthThreshold: props.healthThreshold,
   ChildHealthChecks: props.childHealthChecks,
   EnableSNI: props.enableSNI,
@@ -208,12 +249,34 @@ const mutableDiffers = (
     observed.FullyQualifiedDomainName !== d.FullyQualifiedDomainName ||
     observed.SearchString !== d.SearchString ||
     (observed.FailureThreshold ?? undefined) !== d.FailureThreshold ||
-    (observed.Inverted ?? undefined) !== d.Inverted ||
-    (observed.Disabled ?? undefined) !== d.Disabled ||
+    (observed.Inverted ?? false) !== d.Inverted ||
+    (observed.Disabled ?? false) !== d.Disabled ||
     (observed.HealthThreshold ?? undefined) !== d.HealthThreshold ||
     (observed.EnableSNI ?? undefined) !== d.EnableSNI
   );
 };
+
+/**
+ * The settings reconcile converges, as observed. `read` and `reconcile`
+ * share it so a converged health check reads unchanged.
+ */
+const observeHealthCheckConfiguration = (
+  observed: route53.HealthCheckConfig,
+  tags: Record<string, string>,
+) =>
+  plainJson({
+    ipAddress: observed.IPAddress,
+    port: observed.Port,
+    resourcePath: observed.ResourcePath,
+    fullyQualifiedDomainName: observed.FullyQualifiedDomainName,
+    searchString: observed.SearchString,
+    failureThreshold: observed.FailureThreshold,
+    inverted: observed.Inverted ?? false,
+    disabled: observed.Disabled ?? false,
+    healthThreshold: observed.HealthThreshold,
+    enableSNI: observed.EnableSNI,
+    tags,
+  });
 
 export const HealthCheckProvider = () =>
   Provider.effect(
@@ -250,7 +313,7 @@ export const HealthCheckProvider = () =>
         const oldTags = yield* observedTags(id);
         const { upsert, removed } = diffTags(oldTags, newTags);
         if (upsert.length === 0 && removed.length === 0) {
-          return;
+          return newTags;
         }
         yield* route53.changeTagsForResource({
           ResourceType: "healthcheck",
@@ -258,6 +321,7 @@ export const HealthCheckProvider = () =>
           AddTags: upsert.length > 0 ? upsert : undefined,
           RemoveTagKeys: removed.length > 0 ? removed : undefined,
         });
+        return newTags;
       });
 
       return {
@@ -286,6 +350,19 @@ export const HealthCheckProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        lookup: Effect.fn(function* ({ healthCheckId }) {
+          const check = yield* observe(healthCheckId);
+          if (!check) return undefined;
+          return {
+            id: check.Id,
+            healthCheckId: check.Id,
+            type: check.HealthCheckConfig.Type,
+            configuration: observeHealthCheckConfiguration(
+              check.HealthCheckConfig,
+              yield* observedTags(check.Id),
+            ),
+          };
+        }),
         read: Effect.fn(function* ({ output }) {
           if (!output?.id) {
             return undefined;
@@ -298,6 +375,10 @@ export const HealthCheckProvider = () =>
             id: check.Id,
             healthCheckId: check.Id,
             type: check.HealthCheckConfig.Type,
+            configuration: observeHealthCheckConfiguration(
+              check.HealthCheckConfig,
+              yield* observedTags(check.Id),
+            ),
           };
         }),
         reconcile: Effect.fn(function* ({ id, instanceId, news, output }) {
@@ -353,12 +434,13 @@ export const HealthCheckProvider = () =>
           }
 
           // Sync tags.
-          yield* syncTags(check.Id, id, news.tags);
+          const tags = yield* syncTags(check.Id, id, news.tags);
 
           return {
             id: check.Id,
             healthCheckId: check.Id,
             type: check.HealthCheckConfig.Type,
+            configuration: observeHealthCheckConfiguration(check.HealthCheckConfig, tags),
           };
         }),
         delete: Effect.fn(function* ({ output }) {

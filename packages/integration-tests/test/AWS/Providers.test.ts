@@ -6,12 +6,13 @@ import * as s3 from "@distilled.cloud/aws/s3";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
-import { AuthProviders } from "alchemy/Auth/AuthProvider";
+import { AuthProvidersLive } from "alchemy/Auth/AuthProvider";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
 import { Stack } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
 import { State, type ResourceState } from "alchemy/State";
 import * as ConfigProvider from "effect/ConfigProvider";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
@@ -36,7 +37,7 @@ it.live(
     }).pipe(
       Effect.provide(
         Layer.mergeAll(
-          Layer.succeed(AuthProviders, {}),
+          AuthProvidersLive,
           Layer.sync(ArtifactStore, createArtifactStore),
           Layer.succeed(Stage, "test"),
           Layer.succeed(Stack, {
@@ -51,7 +52,11 @@ it.live(
             ConfigProvider.fromUnknown({ ALCHEMY_PROFILE: `non-existent-${uuidv4()}` }),
           ),
           ProfileStoreLive,
-        ).pipe(Layer.provideMerge(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer))),
+        ).pipe(
+          Layer.provideMerge(
+            Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer, SecureRandom.layerWebCrypto),
+          ),
+        ),
       ),
     ),
   { tags: ["unit", "provider:aws", "local"] },

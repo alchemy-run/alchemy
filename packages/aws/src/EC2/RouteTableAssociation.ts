@@ -216,6 +216,44 @@ export const RouteTableAssociationProvider = () =>
           // Route table change can be done via ReplaceRouteTableAssociation
         }),
 
+        // A subnet (or gateway) has at most one route table association, so
+        // look it up by the subnet/gateway rather than the association id: a
+        // route table swapped out of band gets a new association id, which
+        // drift then reports as a changed route table (and repair swaps
+        // back) instead of a missing association.
+        read: Effect.fn(function* ({ olds, output }) {
+          const subnetId = output?.subnetId ?? olds?.subnetId;
+          const gatewayId = output?.gatewayId ?? olds?.gatewayId;
+          if (subnetId === undefined && gatewayId === undefined) return undefined;
+          const lookup = yield* ec2.describeRouteTables({
+            Filters: [
+              subnetId !== undefined
+                ? { Name: "association.subnet-id", Values: [subnetId] }
+                : { Name: "association.gateway-id", Values: [gatewayId!] },
+            ],
+          });
+          const assoc = (lookup.RouteTables ?? [])
+            .flatMap((rt) => rt.Associations ?? [])
+            .find(
+              (a) =>
+                a.Main !== true &&
+                (subnetId !== undefined ? a.SubnetId === subnetId : a.GatewayId === gatewayId) &&
+                a.AssociationState?.State !== "disassociated" &&
+                a.AssociationState?.State !== "disassociating",
+            );
+          if (!assoc?.RouteTableAssociationId || !assoc.RouteTableId) return undefined;
+          return {
+            associationId: assoc.RouteTableAssociationId as RouteTableAssociationId,
+            routeTableId: assoc.RouteTableId as RouteTableId,
+            subnetId: assoc.SubnetId as SubnetId | undefined,
+            gatewayId: assoc.GatewayId,
+            associationState: {
+              state: assoc.AssociationState?.State ?? "associated",
+              statusMessage: assoc.AssociationState?.StatusMessage,
+            },
+          };
+        }),
+
         reconcile: Effect.fn(function* ({ news, output, session }) {
           // Observe — try the cached associationId first; if the association
           // was disassociated out-of-band, fall through to AssociateRouteTable.
@@ -287,10 +325,8 @@ export const RouteTableAssociationProvider = () =>
               routeTableId: news.routeTableId as RouteTableId,
               subnetId: news.subnetId as SubnetId | undefined,
               gatewayId: news.gatewayId as string | undefined,
-              associationState: {
-                state: result.AssociationState?.State ?? "associated",
-                statusMessage: result.AssociationState?.StatusMessage,
-              },
+              // Waited for above; matches what `read` observes.
+              associationState: { state: "associated" as const },
             };
           }
 
@@ -316,10 +352,8 @@ export const RouteTableAssociationProvider = () =>
               routeTableId: news.routeTableId as RouteTableId,
               subnetId: news.subnetId as SubnetId | undefined,
               gatewayId: news.gatewayId as string | undefined,
-              associationState: {
-                state: result.AssociationState?.State ?? "associated",
-                statusMessage: result.AssociationState?.StatusMessage,
-              },
+              // Waited for above; matches what `read` observes.
+              associationState: { state: "associated" as const },
             };
           }
 

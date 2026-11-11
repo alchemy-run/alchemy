@@ -1,6 +1,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Neon from "@alchemy.run/neon";
 import * as SQL from "@alchemy.run/sql/Postgres";
+import { Stage } from "alchemy/Stage";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -13,8 +14,8 @@ import { lookupConfigName } from "./lookup.ts";
  */
 export const LocalLookupHyperdrive = Effect.gen(function* () {
   const project = yield* Neon.Project("HyperdriveLookupLocalProject");
-  return Cloudflare.Hyperdrive.lookup("HyperdriveLookupLocal", {
-    name: lookupConfigName("local"),
+  return Cloudflare.Hyperdrive.Connection.lookup({
+    name: lookupConfigName("local", yield* Stage),
     dev: project.origin,
   });
 });

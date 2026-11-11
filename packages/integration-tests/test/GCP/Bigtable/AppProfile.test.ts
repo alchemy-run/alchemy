@@ -6,6 +6,7 @@ import * as bigtableadmin from "@distilled.cloud/gcp/bigtableadmin_v2";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -77,6 +78,17 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { instance, profile };
         }),
+      );
+      yield* expectFound(
+        GCP.Bigtable.AppProfile.lookup({
+          appProfileId: created.profile.appProfileId,
+          instance: created.profile.instance,
+        }),
+        created.profile,
+      );
+      yield* expectFound(
+        GCP.Bigtable.Instance.lookup({ instanceId: created.instance.instanceId }),
+        created.instance,
       );
 
       expect(created.profile.name).toContain("/appProfiles/");

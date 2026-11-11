@@ -1,0 +1,2 @@
+FROM alpine
+ONBUILD ONBUILD RUN x

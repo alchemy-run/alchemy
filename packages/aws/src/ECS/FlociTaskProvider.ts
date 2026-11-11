@@ -27,6 +27,7 @@
  *   to [FlociServiceProvider](./FlociServiceProvider.ts).
  */
 
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { makeImageSource, type ImageSourceLike } from "../ECR/ImageSource.ts";
@@ -46,7 +47,8 @@ export const FlociTaskProvider = () =>
         repositoryName: attrs.repositoryName,
         main: source.main,
         handler: source.handler,
-        build: source.build,
+        // Secrets stay out, as in the image hash: rotating one does not rebuild.
+        build: source.build === undefined ? undefined : { ...source.build, secrets: undefined },
         isExternal: news.isExternal,
         context: source.context,
         dockerfile: source.dockerfile,
@@ -66,23 +68,19 @@ export const FlociTaskProvider = () =>
     // Fires on every reconcile — watcher-triggered AND engine-driven
     // (prop changes never produce a file event, so restarting only from
     // the watch loop left running tasks on the old revision).
-    onReconciled: ({ id, previous, attrs }) =>
+    onReconciled: ({ previous, attrs }) =>
       Effect.gen(function* () {
         if (previous?.taskDefinitionArn === attrs.taskDefinitionArn) return;
-        const startedAt = Date.now();
+        const startedAt = yield* Clock.currentTimeMillis;
         const restarted = yield* restartFamilyTasks({
           family: attrs.taskFamily,
           nextTaskDefinitionArn: attrs.taskDefinitionArn,
           serviceManaged: false,
         });
         yield* Effect.logInfo(
-          `[alchemy dev] ${attrs.taskFamily}: task definition swapped (${restarted} task(s) restarted) in ${Date.now() - startedAt}ms`,
+          `task definition swapped (${restarted} task(s) restarted) in ${(yield* Clock.currentTimeMillis) - startedAt}ms`,
         );
-      }).pipe(
-        Effect.catchCause((cause) =>
-          Effect.logWarning(`[alchemy dev] ${id}: task restart failed`, cause),
-        ),
-      ),
+      }).pipe(Effect.catchCause((cause) => Effect.logWarning(`task restart failed`, cause))),
     startWatch: (ctx) =>
       Effect.gen(function* () {
         const imageSource = yield* makeImageSource;
@@ -109,11 +107,7 @@ export const FlociTaskProvider = () =>
                   return hash === undefined || hash !== current.code.hash;
                 }),
               )
-              .pipe(
-                Effect.catchCause((cause) =>
-                  Effect.logWarning(`[alchemy dev] ${ctx.id}: image swap failed`, cause),
-                ),
-              ),
+              .pipe(Effect.catchCause((cause) => Effect.logWarning(`image swap failed`, cause))),
           ),
         );
       }),

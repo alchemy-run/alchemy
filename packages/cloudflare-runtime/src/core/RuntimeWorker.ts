@@ -1,10 +1,49 @@
 import type * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import type { HyperdriveOrigin } from "./bindings/hyperdrive/HyperdriveOrigin.shared.ts";
 import type { QueueConsumer } from "./bindings/queue/QueueOptions.shared.ts";
 import type { ContainerImage } from "./Docker.ts";
 import type { BindingHook } from "./PluginContext.ts";
+import { RuntimeError } from "./RuntimeError.shared.ts";
 import type * as WorkerdConfig from "./workerd/Config.ts";
-import type { OutputSink, WorkerdExit } from "./workerd/Workerd.ts";
+import { type OutputSink, WorkerdExit } from "./workerd/Workerd.ts";
+
+/**
+ * The lifecycle events of the `workerd` processes serving a worker, as one
+ * schema union discriminated by `type` (`domain.subject.verb`), so a host can
+ * log or send them as JSON.
+ */
+export const WorkerdEvent = Schema.Union([
+  /**
+   * A process is serving the worker. `generation` is 0 for the first start
+   * and counts replacements after it. Connections into a previous generation
+   * are gone, so a caller that keeps any (such as the Vite module runner
+   * sockets) reconnects on a generation above 0.
+   */
+  Schema.Struct({
+    type: Schema.Literal("workerd.process.started"),
+    pid: Schema.Number,
+    generation: Schema.Number,
+  }),
+  /** The process exited on its own. */
+  Schema.Struct({ type: Schema.Literal("workerd.process.exited"), exit: WorkerdExit }),
+  /** A replacement starts after `delayMs`, on the same ports. */
+  Schema.Struct({
+    type: Schema.Literal("workerd.restart.scheduled"),
+    attempt: Schema.Number,
+    delayMs: Schema.Number,
+  }),
+  /**
+   * Recovery gave up: `restart-limit` after three restarts within a minute,
+   * `restart-failed` when a replacement failed to start.
+   */
+  Schema.Struct({
+    type: Schema.Literal("workerd.recovery.stopped"),
+    reason: Schema.Literals(["restart-limit", "restart-failed"]),
+    error: Schema.optionalKey(RuntimeError),
+  }),
+]);
+export type WorkerdEvent = typeof WorkerdEvent.Type;
 
 export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
   readonly name: string;
@@ -85,12 +124,6 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
    */
   readonly cf?: Record<string, unknown>;
   /**
-   * The zone outbound `fetch()`es report in their `CF-Worker` header, as on
-   * Cloudflare's edge: the host of the Worker's first route or custom
-   * domain. Defaults to Miniflare's `<name>.example.com`.
-   */
-  readonly zone?: string;
-  /**
    * Simulates a request that passed Cloudflare Access: every request's
    * `ctx.access` carries `aud`, and `ctx.access.getIdentity()` resolves
    * `identity`. Mirrors Wrangler's `access.dev` config.
@@ -109,16 +142,24 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
    * process output instead of inheriting the parent process's stdio.
    */
   readonly logging?: WorkerdLogging;
+  /** Overrides for the `workerd` process that serves this worker. */
+  readonly workerd?: WorkerdOptions;
   /**
-   * Called after the `workerd` process exited on its own (for example when
-   * V8 ran out of heap) and a replacement process is serving on the same
-   * ports again. The URL returned by `start` stays valid. Connections into
-   * the old process are gone, so a caller that keeps any (such as the Vite
-   * module runner sockets) reconnects here.
+   * Reports the lifecycle of the `workerd` processes that serve this worker,
+   * so an embedding host can track the child PID, save state while workerd
+   * is down, or stop when recovery gives up. See {@link WorkerdEvent}.
+   *
+   * A process that exits on its own (for example when V8 ran out of heap) is
+   * replaced on the same ports, so the URL returned by `start` stays valid.
    * Automatic recovery is limited to three restarts within a rolling minute,
    * with backoff between attempts. A failed replacement stops recovery.
+   * Closing the runtime's scope kills the process and cancels a pending
+   * replacement without reporting an exit.
+   *
+   * Recovery never waits for the callback. One that throws or returns a
+   * rejected promise is logged, and recovery continues.
    */
-  readonly onRestart?: (exit: WorkerdExit) => void;
+  readonly onEvent?: (event: WorkerdEvent) => void | PromiseLike<void>;
   /**
    * Runs once, after bindings are prepared and container images are built or
    * pulled, immediately before the first `workerd` process is spawned. A
@@ -147,6 +188,22 @@ export interface WorkerdLogging {
    * errors instead.
    */
   readonly onOutput?: OutputSink;
+}
+
+export interface WorkerdOptions {
+  /**
+   * Path to the workerd binary, instead of the one from the `workerd`
+   * package and `ALCHEMY_WORKERD_PATH`. Useful where the npm binary can't
+   * run, e.g. NixOS.
+   */
+  readonly path?: string;
+  /**
+   * Extra V8 flags, e.g. `["--max-old-space-size=4096"]`. Applied after
+   * `ALCHEMY_WORKERD_V8_FLAGS`, so they win when both set the same flag.
+   */
+  readonly v8Flags?: ReadonlyArray<string>;
+  /** Extra environment variables for the workerd process. */
+  readonly env?: Record<string, string>;
 }
 
 export type BindingHooks = ReadonlyArray<BindingHook<any>>;

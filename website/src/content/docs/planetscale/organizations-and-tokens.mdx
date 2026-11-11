@@ -1,0 +1,50 @@
+---
+title: Organizations and tokens
+description: How a PlanetScale organization holds your databases and members, how Alchemy signs in with OAuth or a service token, and how database credentials differ from deploy credentials.
+---
+import Tree from "../../../components/diagrams/Tree.astro";
+
+Everything on PlanetScale belongs to an **organization**: its databases and their branches, its members, and its bill. There are two kinds of access to keep apart. A deploy credential lets Alchemy create and change databases. A **database credential** lets your app connect to one branch.
+
+<Tree
+  nodes={[
+    { id: "org", label: "acme", type: "organization" },
+    { id: "db", label: "app", type: "database", parent: "org" },
+    { id: "main", label: "main", type: "branch · production", parent: "db" },
+    { id: "r1", label: "app_rw", type: "role · readwriter", parent: "main", tone: "accent" },
+    { id: "pr", label: "pr-42", type: "branch", parent: "db" },
+    { id: "r2", label: "app_rw", type: "role · readwriter", parent: "pr", tone: "accent" },
+  ]}
+  scopes={[{ on: "org", label: "service token: deploys" }]}
+  caption="The service token Alchemy deploys with reaches the organization. Your app gets a role on one branch, which reaches that branch's data and nothing else."
+/>
+
+## Sign in with a profile
+
+Alchemy reaches an organization through a [profile](/environments/profiles):
+
+```sh
+alchemy profile edit --add Planetscale
+```
+
+**OAuth** signs you in through the browser, and Alchemy refreshes the session for you. Or store a **service token**: a token that belongs to the organization, not to a person, carrying the permissions you give it. Alchemy deploys into the organization in your profile: the one your service token belongs to, or the one you pick when you sign in with OAuth. See [Setup](/planetscale/setup).
+
+## One profile per organization
+
+A [stage](/environments/stages) decides what you deploy. A profile decides where. If production lives in its own organization, give it its own profile:
+
+```sh
+alchemy profile create prod
+alchemy profile edit --profile prod --add Planetscale
+alchemy deploy --stage prod --profile prod
+```
+
+Within one organization, stages get their own branches, so a pull request never touches production's data.
+
+## Database credentials
+
+Your app never holds the deploy token. It connects with credentials that reach one branch, and only as far as their role allows: a Postgres **role** inherits Postgres's own roles, and a MySQL **password** carries a role like `readwriter`. Give a reporting job a read-only credential and the API a read-write one. See [Credentials](/planetscale/data/credentials).
+
+## In CI
+
+With `CI=true`, Alchemy skips the profile and reads `PLANETSCALE_API_TOKEN_ID`, `PLANETSCALE_API_TOKEN` and `PLANETSCALE_ORGANIZATION` from the environment. Use a service token there, so it outlives anyone's login. See [CI](/environments/ci).

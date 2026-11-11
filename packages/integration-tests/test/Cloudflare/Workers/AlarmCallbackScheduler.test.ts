@@ -283,6 +283,38 @@ describe(
         }).pipe(Effect.provide(RuntimeContext.phantom)),
     );
 
+    it.effect("weighs another callback's cursor without letting it hide a schedule", () =>
+      Effect.gen(function* () {
+        const fixture = yield* makeAlarmScheduler;
+        const delivered: string[] = [];
+        const target = yield* fixture.register(
+          "target",
+          (id: string) => Effect.sync(() => delivered.push(id)),
+          { retry: { delay: "1 second" } },
+        );
+        const source = yield* fixture.register(
+          "source",
+          () =>
+            Effect.gen(function* () {
+              yield* target.schedule("behind", { after: 0, payload: "behind", progress: 1 });
+              yield* target.schedule("past", { after: 0, payload: "past", progress: 101 });
+            }),
+          { retry: { delay: "1 second" } },
+        );
+        fixture.seal();
+        yield* source.schedule("s", { after: 0, payload: null, progress: 100 });
+        yield* fixture.fire;
+        // Behind the source's cursor: scheduled under its own cursor, with the
+        // source's budget. Past it: progress, so a fresh budget.
+        expect(yield* target.getStatus("behind")).toMatchObject({ attempts: 1, progress: 1 });
+        expect(yield* target.getStatus("past")).toMatchObject({ attempts: 0, progress: 101 });
+        yield* fixture.fire;
+        expect(delivered).toEqual(["past"]);
+        yield* fixture.fire;
+        expect(delivered).toEqual(["past", "behind"]);
+      }).pipe(Effect.provide(RuntimeContext.phantom)),
+    );
+
     for (const changeId of [false, true]) {
       it.effect(
         `resets the budget for committed forward progress${changeId ? " across IDs" : ""}`,

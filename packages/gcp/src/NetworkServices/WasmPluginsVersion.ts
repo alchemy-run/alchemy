@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -117,8 +118,40 @@ export type WasmPluginsVersion = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  WasmPluginsVersionLookup
 >;
+
+/**
+ * Props for {@link WasmPluginsVersion.lookup}: find a wasm plugins version
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface WasmPluginsVersionLookup {
+  /**
+   * Version id (the `{wasmPluginVersion}` segment of
+   * `.../wasmPlugins/{wasmPlugin}/versions/{wasmPluginVersion}`). Must be
+   * 1-63 characters and not start with a number.
+   */
+  wasmPluginVersionId: string;
+  /**
+   * Location of the parent plugin. Used when `wasmPlugin` is a bare id.
+   * Wasm plugins live in `global`. `GLOBAL` is accepted and normalized to
+   * `global`.
+   */
+  location?: string;
+  /**
+   * Parent WasmPlugin. Full name
+   * `projects/{project}/locations/{location}/wasmPlugins/{wasmPlugin}` or
+   * the plugin id (combined with `location`).
+   */
+  wasmPlugin: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An immutable WasmPluginVersion nested under a WasmPlugin. Each
@@ -148,6 +181,20 @@ export type WasmPluginsVersion = Resource<
  *   imageUri:
  *     "projects/my-project/locations/us-central1/repositories/plugins/genericArtifacts/edge:v1",
  *   pluginConfigData: "e30=",
+ * });
+ * ```
+ *
+ * ### Looking up an existing wasm plugins version
+ * `WasmPluginsVersion.lookup` references a wasm plugins version Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared wasm plugins version.
+ *
+ * **Example:** Reference an existing wasm plugins version
+ * ```typescript
+ * const wasmPluginsVersion = GCP.NetworkServices.WasmPluginsVersion.lookup({
+ *   wasmPluginVersionId: "my-wasm-plugin-version",
+ *   wasmPlugin: "my-wasm-plugin",
  * });
  * ```
  *
@@ -262,6 +309,19 @@ export const WasmPluginsVersionProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ wasmPluginVersionId, location: lookupLocation, wasmPlugin }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(
+        lookupLocation ?? (wasmPlugin ? locationFromParent(wasmPlugin, DEFAULT_GLOBAL) : undefined),
+        DEFAULT_GLOBAL,
+      );
+      const parent = parentPluginName(env.project, location, wasmPlugin ?? "");
+      const name = resourceNameOf(parent, wasmPluginVersionId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

@@ -21,7 +21,7 @@ const NUXT_SOURCE_PROVIDER = "@alchemy.run/frontend-frameworks/nuxt/source";
 
 export interface NuxtProps<Bindings extends WorkerBindingProps = {}> extends Omit<
   WorkerProps<Bindings>,
-  "vite" | "main" | "assets" | "source" | "script" | "bundle"
+  "vite" | "main" | "assets" | "source" | "script" | "bundle" | "rules"
 > {
   /**
    * Nuxt project root (the directory containing `nuxt.config.ts`).

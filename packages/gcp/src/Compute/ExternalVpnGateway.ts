@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -108,8 +109,26 @@ export type ExternalVpnGateway = Resource<
     creationTimestamp: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ExternalVpnGatewayLookup
 >;
+
+/**
+ * Props for {@link ExternalVpnGateway.lookup}: find an external vpn gateway
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface ExternalVpnGatewayLookup {
+  /**
+   * Gateway name.
+   */
+  externalVpnGatewayName: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A global Compute Engine external VPN gateway — the on-premises or
@@ -139,6 +158,19 @@ export type ExternalVpnGateway = Resource<
  *   redundancyType: "SINGLE_IP_INTERNALLY_REDUNDANT",
  *   interfaces: [{ id: 0, ipAddress: "203.0.113.10" }],
  *   labels: { env: "prod" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing external vpn gateway
+ * `ExternalVpnGateway.lookup` references an external vpn gateway Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared external vpn gateway.
+ *
+ * **Example:** Reference an existing external vpn gateway
+ * ```typescript
+ * const externalVpnGateway = GCP.Compute.ExternalVpnGateway.lookup({
+ *   externalVpnGatewayName: "my-external-vpn-gateway",
  * });
  * ```
  *
@@ -296,7 +328,14 @@ export const ExternalVpnGatewayProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ externalVpnGatewayName }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(env.project, externalVpnGatewayName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const externalVpnGatewayName = yield* toName(
         id,
@@ -306,7 +345,9 @@ export const ExternalVpnGatewayProvider = () =>
       const existing = yield* getByName(env.project, externalVpnGatewayName);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels)))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "externalVpnGatewayName");
     }),
 
     list: () =>

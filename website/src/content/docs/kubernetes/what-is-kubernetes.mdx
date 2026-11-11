@@ -1,0 +1,117 @@
+---
+title: What is Kubernetes?
+description: The concepts behind Kubernetes — clusters, nodes, the API server, namespaces, Pods, Deployments, Services, Jobs, ConfigMaps and Secrets, images, manifests, server-side apply and Helm — and how @alchemy.run/kubernetes models each of them.
+---
+
+import Tree from "../../../components/diagrams/Tree.astro";
+
+
+Kubernetes runs containers on a group of machines and keeps them running. You tell it what should exist: three copies of this server, a job that runs every night, an address in front of the server. It works continuously to make the cluster match, restarting what crashes and rescheduling what was on a machine that died.
+
+Take one small app: a web server with two replicas behind a Service, and a nightly job, on a cluster that might be on your laptop or in a cloud. You send objects to the cluster's API server, which keeps them in a namespace. The Deployment creates Pods, the Service selects them, and the CronJob creates a Job on schedule.
+
+<Tree
+  nodes={[
+    { id: "cluster", label: "cluster", type: "control plane + nodes", icon: "brand:kubernetes" },
+    { id: "api", label: "API server", type: "stores what you apply", parent: "cluster", tone: "accent", icon: "server" },
+    {
+      id: "ns", label: "app", type: "namespace", parent: "cluster", dashed: true, icon: "folder", colGap: 3.5,
+      areas: ["deploy pods svc", "cron cron cron"],
+      phoneAreas: ["deploy svc", "pods pods", "cron cron"],
+    },
+    { id: "deploy", label: "web", type: "Deployment", parent: "ns", icon: "layers" },
+    { id: "pods", label: "web-…", type: "Pods × 2", parent: "ns", icon: "boxes" },
+    { id: "svc", label: "web", type: "Service", parent: "ns", icon: "network" },
+    { id: "cron", label: "nightly", type: "CronJob", parent: "ns", icon: "clock", specs: [["on schedule", "Job · Pod"]] },
+  ]}
+  links={[
+    { from: "deploy", to: "pods", label: "creates" },
+    { from: "svc", to: "pods", label: "selects" },
+  ]}
+  caption="Alchemy applies objects to the API server, which stores them, and the cluster keeps running what they describe. Objects live in a namespace, and Pods run on the cluster's nodes."
+/>
+
+## Clusters, nodes and the API server
+
+A **cluster** is a **control plane** and a set of **nodes**. Nodes are the machines that run your containers. The control plane decides what runs where, and its **API server** is the one door into the cluster: every change, from `kubectl` or from Alchemy, is a request to it.
+
+Clusters come from many places: [kind](https://kind.sigs.k8s.io) on your laptop, k3s on a VM, an on-prem fleet, or a managed service like EKS, GKE or AKS where the cloud runs the control plane. Alchemy works with all of them. Every resource takes a `cluster` that says where to apply it:
+
+```typescript title="alchemy.run.ts"
+const cluster = yield* Kubernetes.LocalCluster("Cluster", { name: "alchemy" });
+```
+
+See [Connecting to clusters](/kubernetes/clusters/connecting) and [Local clusters](/kubernetes/clusters/local).
+
+## Objects and manifests
+
+Everything in Kubernetes is an **object**: a Deployment, a Service, a Namespace, a ConfigMap. Each one has a kind, a name, and a **spec** saying what you want. A **manifest** is an object written down, usually as YAML.
+
+Kubernetes stores the objects and **reconciles** them: controllers watch each kind and act until reality matches the spec. You never start a container yourself. You change an object, and Kubernetes makes it so.
+
+## Namespaces
+
+A **namespace** divides a cluster into named groups of objects. Names only have to be unique within one, so `web` in `staging` and `web` in `production` are different Deployments. Many policies, quotas and permissions are set per namespace.
+
+## Pods
+
+A **Pod** is the smallest thing Kubernetes runs: one or more containers scheduled together on a node, sharing an address. Pods are disposable. When one dies, it isn't repaired, it's replaced with a new one, with a new address. So you rarely create Pods directly. Something else creates them for you.
+
+## Deployments and Services
+
+A **Deployment** keeps a number of identical Pods running. Change its image, and it replaces them a few at a time, so the server keeps answering. A **Service** gives those Pods one stable name and address, and spreads traffic across whichever Pods are running. A `LoadBalancer` Service also gets an address outside the cluster.
+
+In Alchemy, `Kubernetes.Deployment` creates the Deployment, its Service and a ServiceAccount together:
+
+```typescript title="alchemy.run.ts"
+const web = yield* Kubernetes.Deployment("Web", {
+  cluster,
+  image: "ghcr.io/stefanprodan/podinfo:6.15.0",
+  port: 9898,
+  replicas: 2,
+});
+```
+
+See [Deployments](/kubernetes/workloads/deployments).
+
+## Jobs and CronJobs
+
+A **Job** runs Pods until they finish successfully: a migration, a seed, a report. A **CronJob** creates a Job on a schedule. In Alchemy, a Job with a `schedule` becomes a CronJob.
+
+See [Jobs & CronJobs](/kubernetes/workloads/jobs).
+
+## Images and registries
+
+Every container runs an **image**, pulled from a **registry** by the node it lands on. An image from a public registry needs nothing more. An image built from your code must be pushed somewhere the cluster can pull from.
+
+In Alchemy, a workload runs an `image` you name, a Dockerfile `context` it builds, or a `main` Effect program it bundles and builds. Built images are pushed to the cluster's registry for you.
+
+See [Container images](/kubernetes/workloads/images) and [Container registries](/kubernetes/clusters/registries).
+
+## Configuration and secrets
+
+Containers get their configuration from environment variables, **ConfigMaps** and **Secrets**. A ConfigMap holds plain settings. A Secret holds sensitive values, kept apart so access to them can be restricted. A **ServiceAccount** is the identity a Pod runs as, and on a cloud cluster it can carry cloud permissions too.
+
+See [Configuration & bindings](/kubernetes/workloads/bindings).
+
+## Server-side apply
+
+Alchemy sends objects with **server-side apply**: the API server merges the fields Alchemy sends into the object, and records Alchemy as their owner. A field Alchemy sends wins over a value someone else set. A field Alchemy never sends, like an object's status or an annotation another tool adds, is left alone. And a field you remove from your declaration is removed from the object.
+
+See [How objects are managed](/kubernetes/workloads/object-lifecycle).
+
+## Helm charts and custom resources
+
+A **Helm chart** is a package of manifests with settings, the usual way to install software like an ingress controller or a monitoring stack. A **custom resource** is a new kind of object, added by an operator, like a `Certificate` or a `PostgresCluster`.
+
+In Alchemy, `Kubernetes.HelmChart` renders a chart and applies its objects, and `Kubernetes.Manifest` applies any object at all, custom resources included.
+
+See [Helm charts](/kubernetes/objects/helm-charts) and [Manifests](/kubernetes/objects/manifests).
+
+## How @alchemy.run/kubernetes models these concepts
+
+Each of these concepts is something your Stack declares.
+
+A cluster is a value every resource takes, from a local cluster, a kubeconfig, or a managed cluster declared in the same Stack, like EKS. Deployments and Jobs are resources that build their images and create the objects around them. Anything else is a Manifest or a Helm chart. Alchemy applies them all with server-side apply, records them in its state, and deletes them on destroy, so there's no YAML to keep and no `kubectl apply` to run.
+
+Next, build one: the [tutorial](/kubernetes/tutorial/part-1) puts these ideas to work, one step at a time. Or read the concepts in depth, starting with [Connecting to clusters](/kubernetes/clusters/connecting).

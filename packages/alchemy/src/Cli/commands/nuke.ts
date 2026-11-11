@@ -4,7 +4,7 @@ import * as Console from "effect/Console";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as Nuke from "../../Alchemist/routes/nuke.ts";
+import * as Alchemist from "../../Alchemist/index.ts";
 import * as Interaction from "../../Interaction.ts";
 import { renderNukeScan, renderNukeDelete, reviewNuke } from "../components/view/Nuke.tsx";
 import { formatElapsed } from "../Format.ts";
@@ -32,8 +32,13 @@ const concurrencyFlag = Flag.Int("concurrency").pipe(
   Flag.map((value): number | "unbounded" => (value <= 0 ? "unbounded" : value)),
 );
 const timeoutFlag = Flag.Int("timeout").pipe(
-  Flag.withDescription("Per-provider timeout in seconds"),
+  Flag.withDescription("Per-provider delete timeout in seconds"),
   Flag.withDefault(120),
+  Flag.map(Duration.seconds),
+);
+const scanTimeoutFlag = Flag.Int("scan-timeout").pipe(
+  Flag.withDescription("Per-provider scan (list) timeout in seconds"),
+  Flag.withDefault(60),
   Flag.map(Duration.seconds),
 );
 const independentFlag = Flag.Boolean("independent").pipe(
@@ -90,6 +95,7 @@ const nukeCommand = Command.make(
     dryRun: dryRunFlag,
     concurrency: concurrencyFlag,
     timeout: timeoutFlag,
+    scanTimeout: scanTimeoutFlag,
     independent: independentFlag,
     retries: retriesFlag,
     include: includeFlag,
@@ -105,16 +111,18 @@ const nukeCommand = Command.make(
           "alchemy.main": args.main,
         }))(
           Effect.fn(function* (args) {
-            const scan = yield* Nuke.scan({
-              entrypoint: args.main,
-              profile: args.profile,
-              envFile: Option.getOrUndefined(args.envFile),
-              mode: args.local ? "local" : "live",
-              include: args.include,
-              exclude: args.exclude,
-              concurrency: args.concurrency,
-              providerTimeoutSeconds: Duration.toSeconds(args.timeout),
-            }).pipe(renderNukeScan());
+            const scan = yield* Effect.flatMap(Alchemist.importStack(args.main), (stack) =>
+              Alchemist.Nuke.scan({
+                stack,
+                profile: args.profile,
+                envFile: Option.getOrUndefined(args.envFile),
+                dev: args.local,
+                include: args.include,
+                exclude: args.exclude,
+                concurrency: args.concurrency,
+                providerTimeoutSeconds: Duration.toSeconds(args.scanTimeout),
+              }),
+            ).pipe(renderNukeScan());
             const predicates = yield* Effect.forEach(args.filter, compileFilter);
             const targets: Array<(typeof scan.resources)[number]> = [];
             for (const resource of scan.resources) {
@@ -145,12 +153,12 @@ const nukeCommand = Command.make(
               return;
             }
             const deleteStartedAt = yield* Clock.currentTimeMillis;
-            const result = yield* Nuke.execute({
+            const result = yield* Alchemist.Nuke.execute({
               scan,
               resources: targets,
               strategy: args.independent
-                ? { _tag: "independent", retries: args.retries }
-                : { _tag: "coordinated" },
+                ? { type: "independent", retries: args.retries }
+                : { type: "coordinated" },
               concurrency: args.concurrency,
               providerTimeoutSeconds: Duration.toSeconds(args.timeout),
             }).pipe(renderNukeDelete(targets, scan.mode));

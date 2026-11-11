@@ -2,6 +2,7 @@
 title: "Local services: Postgres with containers, networks, and volumes"
 description: Run a local Postgres for development as alchemy resources — a pinned image, a named network and volume, a Redacted password, and a healthchecked container that converges on every deploy.
 ---
+import Tree from "../../../components/diagrams/Tree.astro";
 
 A Docker `Container` runs an image; a `Network` gives containers a
 stable DNS name to reach each other; a `Volume` keeps data alive
@@ -16,6 +17,21 @@ You'll need a Docker daemon reachable from your CLI and the provider
 registered — see [Setup](/docker/setup) and the
 [Docker overview](/docker). The full program below is the checked-in
 [`examples/docker-postgres`](https://github.com/alchemy-run/alchemy/tree/main/examples/docker-postgres).
+
+<Tree
+  nodes={[
+    { id: "engine", label: "local Docker", type: "engine", areas: ["net vol"], colGap: 3 },
+    { id: "net", label: "app-network", type: "Network · DNS by name", parent: "engine", areas: ["worker pg"], colGap: 3 },
+    { id: "worker", label: "worker", type: "Container", parent: "net" },
+    { id: "pg", label: "postgres", type: "Container", parent: "net", tone: "accent", specs: [["image", "postgres@sha256:…"]] },
+    { id: "vol", label: "postgres-data", type: "Volume", parent: "engine" },
+  ]}
+  links={[
+    { from: "worker", to: "pg", label: ":5432" },
+    { from: "pg", to: "vol", label: "mounts" },
+  ]}
+  caption="The containers find each other by name on their network. The data lives in a Volume, so replacing the postgres container keeps it."
+/>
 
 ## Pin the image
 
@@ -61,6 +77,50 @@ from the app, stage, and logical ID. Note that changing a `Network`
 or `Volume` prop (driver, labels, IPv6) is a replacement: the old
 one is deleted and a new one created, so treat a Volume's props as
 fixed once it holds data you care about.
+
+### Configure a network
+
+A network can be internal, attachable, and pinned to an explicit subnet:
+
+```typescript
+const privateNetwork = yield* Docker.Network("private-network", {
+  internal: true,
+  attachable: true,
+  driverOpts: { "com.docker.network.driver.mtu": "1420" },
+  ipam: {
+    config: [{
+      subnet: "10.50.0.0/24",
+      gateway: "10.50.0.1",
+      ipRange: "10.50.0.128/25",
+      auxAddresses: { reserved: "10.50.0.5" },
+    }],
+  },
+});
+```
+
+Without `ipam`, Docker picks the subnet and gateway, and Alchemy doesn't treat
+them as drift. Subnets are network prefixes (`10.50.0.0/24`, not
+`10.50.0.1/24`); a bad one fails with `InvalidNetworkOptions` naming the field,
+before the old network is touched.
+
+A dual-stack bridge network enables IPv6 and declares both families:
+
+```typescript
+const dualStack = yield* Docker.Network("dual-stack", {
+  enableIPv6: true,
+  ipam: {
+    config: [
+      { subnet: "10.51.0.0/24", gateway: "10.51.0.1" },
+      { subnet: "fd51:3456:789a::/64", gateway: "fd51:3456:789a::1" },
+    ],
+  },
+});
+```
+
+`internal` cuts external access through that network only; a container on
+another network can still reach out. Every network setting is fixed at
+creation, so changing one replaces the network, and Docker refuses to remove
+it while containers are attached.
 
 ## A Redacted password
 
@@ -134,6 +194,110 @@ port and protocol — here `"5432/tcp"` maps to `15432` — which is
 what your app's connection string needs; `Docker.inspectContainer`
 reads the same normalized attributes fresh from the daemon for any
 container by name, bound host ports included.
+
+The following examples show optional runtime controls on separate
+worker containers. Check your image's filesystem and user requirements
+before applying them to the Postgres container above.
+
+## Limit memory, CPU, and processes
+
+```typescript
+const worker = yield* Docker.Container("worker", {
+  image: "alpine:3.22",
+  command: ["sleep", "3600"],
+  memory: "256m",
+  memorySwap: "256m",
+  memoryReservation: "128m",
+  cpus: 0.5,
+  pidsLimit: 128,
+  start: true,
+});
+```
+
+`memory` is a hard RAM limit; `memoryReservation` is a soft
+limit under contention. `memorySwap` limits **RAM plus swap**, not
+swap alone. Setting it equal to `memory` disables swap for this
+container where supported. `cpus: 0.5` limits CPU time to half
+a core, and `pidsLimit` limits the number of processes and threads.
+These limits apply to ordinary Docker Engine containers, not Swarm
+services.
+
+## Restrict privileges and writable paths
+
+```typescript
+const worker = yield* Docker.Container("restricted-worker", {
+  image: "alpine:3.22",
+  command: ["sleep", "3600"],
+  readOnlyRootFilesystem: true,
+  capDrop: ["ALL"],
+  noNewPrivileges: true,
+  user: "1000:1000",
+  init: true,
+  tmpfs: [{ path: "/tmp", size: "32m", mode: 0o1777 }],
+  start: true,
+});
+```
+
+`readOnlyRootFilesystem` is Alchemy's name for Docker's `--read-only`:
+writeable directories must be mounted separately. The `tmpfs`
+above provides ephemeral scratch space; use a named `Volume` for
+data that must survive replacement. `capDrop: ["ALL"]` removes
+Linux capabilities, `noNewPrivileges` prevents gaining privileges
+through exec, and `user` sets the runtime UID/GID. `init` handles
+signal forwarding and reaping child processes. Only grant the
+capabilities and filesystem access your image actually requires.
+
+## Configure host security profiles
+
+```typescript
+const worker = yield* Docker.Container("profiled-worker", {
+  image: "alpine:3.22",
+  seccompProfile: "./security/worker-seccomp.json",
+  appArmorProfile: "worker-profile",
+});
+```
+
+`seccompProfile` points to a JSON file on the machine running
+Alchemy's Docker CLI. Alchemy hashes its **contents**, so editing
+the file recreates the container even when its path stays the
+same. `appArmorProfile` names an AppArmor policy that must already
+be loaded on the Docker host; its availability is host-dependent.
+Docker's default confinement applies when you leave these settings
+unset. Avoid `"unconfined"` unless disabling a policy is intentional.
+
+You can also provide `groupAdd: ["2000"]` for supplementary groups
+and `ulimits: { nofile: { soft: 1024, hard: 4096 } }` for per-process
+limits. `userNamespace` selects a user-namespace mode; `userNamespace: "host"`
+**opts out of** daemon user remapping rather than strengthening
+isolation.
+
+## Rotate logs and control shutdown
+
+```typescript
+const worker = yield* Docker.Container("logged-worker", {
+  image: "alpine:3.22",
+  logDriver: "local",
+  logOptions: { "max-size": "10m", "max-file": "3" },
+  oomScoreAdjustment: 200,
+  stopSignal: "SIGTERM",
+  stopTimeout: "15 seconds",
+});
+```
+
+`logDriver` and `logOptions` configure Docker-managed logging;
+supported options depend on the selected driver. `oomScoreAdjustment`
+adjusts Linux's preference for choosing a process under memory
+pressure; it does **not** disable the OOM killer. `stopSignal`
+selects the graceful-stop signal, and `stopTimeout` sets the
+grace period before Docker forces termination.
+
+Changing these create-time settings replaces a managed container.
+Replacement is **delete-first**, so account for downtime and keep
+persistent data in volumes. Unset options preserve Docker defaults;
+invalid combinations such as `memorySwap` without `memory` fail
+validation before container creation. See the
+[Container API reference](/providers/docker/container) for all
+properties and their types.
 
 ## Where next
 

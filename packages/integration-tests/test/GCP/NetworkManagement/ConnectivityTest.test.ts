@@ -6,6 +6,7 @@ import * as networkmanagement from "@distilled.cloud/gcp/networkmanagement_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { defaultNetworkSelfLink } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -72,6 +73,13 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { test };
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkManagement.ConnectivityTest.lookup({
+          testId: created.test.testId,
+          location: created.test.location,
+        }),
+        created.test,
       );
 
       expect(created.test.name).toContain("/connectivityTests/");

@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import { driftOf, repairDrift, waitForDrift } from "../drift.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -233,5 +234,61 @@ test.provider(
   {
     tags: ["provider:aws", "provider:aws:stepfunctions", "live"],
     timeout: 120_000,
+  },
+);
+
+// #2688: `read` must observe the definition, tracing, tags and the managed
+// execution-role policy, or out-of-band changes read as `unchanged`.
+test.provider(
+  "drift detects and repairs out-of-band definition, tracing and role policy changes",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const machine = yield* stack.deploy(
+        StateMachine("DriftWorkflow", {
+          definition: passDefinition("declared"),
+          tags: { team: "declared" },
+        }),
+      );
+      expect((yield* driftOf(stack, "DriftWorkflow"))?.action).toBe("unchanged");
+
+      yield* sfn.updateStateMachine({
+        stateMachineArn: machine.stateMachineArn,
+        definition: JSON.stringify(passDefinition("out-of-band")),
+        tracingConfiguration: { enabled: true },
+      });
+      const { PolicyNames } = yield* iam.listRolePolicies({ RoleName: machine.roleName! });
+      for (const PolicyName of PolicyNames ?? []) {
+        yield* iam.putRolePolicy({
+          RoleName: machine.roleName!,
+          PolicyName,
+          PolicyDocument: JSON.stringify({
+            Version: "2012-10-17",
+            Statement: [{ Effect: "Allow", Action: ["sqs:SendMessage"], Resource: ["*"] }],
+          }),
+        });
+      }
+
+      const drifted = yield* waitForDrift(stack, "DriftWorkflow", "drifted");
+      expect(drifted?.attr?.configuration?.tracingEnabled).toBe(true);
+      expect(drifted?.attr?.configuration?.definition).toContain("out-of-band");
+
+      const repaired = yield* repairDrift(stack);
+      expect(repaired.resources.DriftWorkflow?.action).toBe("repaired");
+      expect((yield* waitForDrift(stack, "DriftWorkflow", "unchanged"))?.action).toBe("unchanged");
+      const restored = yield* sfn.describeStateMachine({
+        stateMachineArn: machine.stateMachineArn,
+      });
+      expect(JSON.parse(plain(restored.definition)).Comment).toBe("declared");
+      expect(restored.tracingConfiguration?.enabled ?? false).toBe(false);
+
+      yield* stack.destroy();
+      yield* assertStateMachineDeleted(machine.stateMachineArn);
+      yield* assertRoleDeleted(machine.roleName!);
+    }),
+  {
+    tags: ["provider:aws", "provider:aws:iam", "provider:aws:stepfunctions", "live"],
+    timeout: 180_000,
   },
 );

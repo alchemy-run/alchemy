@@ -57,8 +57,8 @@ export class Customer extends Domain.Aggregate("Customer", {
   initial: { name: null },
   commands: [RegisterCustomer],
   decide: {
-    RegisterCustomer: (s, cmd) =>
-      s.name !== null ? new AlreadyRegistered() : [new CustomerRegistered({ name: cmd.name })],
+    RegisterCustomer: (customer, cmd) =>
+      customer.name !== null ? new AlreadyRegistered() : [new CustomerRegistered({ name: cmd.name })],
   },
   evolve: {
     CustomerRegistered: (_, e) => ({ name: e.name }),
@@ -211,7 +211,7 @@ The policy runs for real. The registration's events, the account the policy open
 bun vitest run
 ```
 
-Three aggregates and views are now connected by a policy, and each step can be checked in a story.
+Two aggregates and two views are now connected by a policy, and each step can be checked in a story.
 
 :::note
 Next, let customers reach the bank through an [Api](/domain/tutorial/part-4). Policies can also call external systems: see [Policy](/domain/policy#call-an-external-system).

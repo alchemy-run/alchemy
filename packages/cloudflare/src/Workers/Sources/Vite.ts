@@ -8,8 +8,9 @@ import { hashDirectory, type MemoOptions } from "alchemy/Command/Memo";
 import { findAvailablePort, initialCwd } from "alchemy/Util/Node";
 import { makeResourceLogger } from "alchemy/Util/ResourceOutput";
 import { sha256Object } from "alchemy/Util/sha256";
-import * as ConsoleService from "effect/Console";
+import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import type * as vite from "vite";
@@ -32,28 +33,28 @@ import { isWorkerLoader } from "../WorkerLoader.ts";
  */
 
 /**
- * Route Vite's logger through the ambient Effect `Console` service instead of
- * its default stdout logger. Under the CLI this is the global console
- * (identical output); under environments that override the Console — e.g.
- * alchemy-test's per-test buffering console — the build output is captured
- * with the test instead of leaking to the terminal.
+ * Route Vite's logger into log records through the services of the Effect
+ * that built it, instead of its default stdout logger: the process that
+ * renders logs shows them (raw or stripped), JSON output carries them, and
+ * alchemy-test's per-test log capture sees them.
  */
-const makeViteLogger = (console: ConsoleService.Console): vite.Logger => {
+const makeViteLogger = (context: Context.Context<never>): vite.Logger => {
   const loggedErrors = new WeakSet<object>();
   let hasWarned = false;
+  const log = (effect: Effect.Effect<void>) => Effect.runSyncWith(context)(effect);
   return {
-    info: (msg) => console.log(msg),
+    info: (msg) => log(Effect.logInfo(msg)),
     warn: (msg) => {
       hasWarned = true;
-      console.warn(msg);
+      log(Effect.logWarning(msg));
     },
     warnOnce: (msg) => {
       hasWarned = true;
-      console.warn(msg);
+      log(Effect.logWarning(msg));
     },
     error: (msg, options) => {
       if (options?.error != null) loggedErrors.add(options.error);
-      console.error(msg);
+      log(Effect.logError(msg));
     },
     clearScreen: () => {},
     hasErrorLogged: (error) => loggedErrors.has(error),
@@ -106,6 +107,7 @@ export const viteDev = (
 ) =>
   Effect.gen(function* () {
     yield* Effect.sync(() => {
+      // oxlint-disable-next-line effecttsgo/process-env-in-effect -- writes a process-wide flag the Vite plugin reads; Config is read-only
       process.env[ALCHEMY_CLOUDFLARE_VITE_INJECTED] = "1";
     });
     const vite = yield* Effect.promise(() => loadVite(rootDir));
@@ -125,14 +127,14 @@ export const viteDev = (
           }
         : serverOptions;
     return yield* Effect.acquireRelease(
-      ConsoleService.consoleWith((console) =>
+      Effect.flatMap(Effect.context<never>(), (context) =>
         Effect.promise(async () => {
           const devServer = await vite.createServer({
             root: rootDir,
             define: getDefine(env),
             plugins: [cloudflare(pluginOptions)],
             server,
-            customLogger: makeViteLogger(console),
+            customLogger: makeViteLogger(context),
           });
           await devServer.listen();
           return devServer;
@@ -210,8 +212,9 @@ export const viteBuildInProcess = (
     const outputPlugin = yield* viteBuildOutputPlugin({
       entryEnvironment: pluginOptions.viteEnvironments?.entry ?? "ssr",
     });
-    const console = yield* ConsoleService.Console;
+    const context = yield* Effect.context<never>();
     const foldkit = yield* Effect.promise(async () => {
+      // oxlint-disable-next-line effecttsgo/process-env-in-effect -- writes a process-wide flag the Vite plugin reads; Config is read-only
       process.env[ALCHEMY_CLOUDFLARE_VITE_INJECTED] = "1";
       const vite = await loadVite(rootDir);
       const builder = await vite.createBuilder(
@@ -219,7 +222,7 @@ export const viteBuildInProcess = (
           root: rootDir,
           define: getDefine(env),
           plugins: [cloudflare(pluginOptions), outputPlugin.plugin],
-          customLogger: makeViteLogger(console),
+          customLogger: makeViteLogger(context),
           // Disables the NATIVE rolldown progress reporter ("transforming…",
           // "rendering chunks…", "computing gzip size…"): it prints from
           // Rust straight to fd 1 and cannot be intercepted from JS — vite
@@ -460,10 +463,23 @@ export const makeViteSource = (vite: ViteOptions): SourceProvider => ({
     };
   }),
   hash: Effect.fn(function* (_ctx, previous) {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const root = path.resolve(initialCwd, vite.rootDir ?? ".");
+    // A workspace the previous build recorded can be gone by now: its
+    // package was deleted, or `rootDir` moved and the stored relative
+    // path resolves nowhere (#2606). Leave it out, as the next build
+    // would. The input hash then differs from state, so the Worker
+    // rebuilds and records a fresh workspace set.
+    const previousWorkspaces = yield* Effect.filter(
+      previous?.additionalWorkspaces ?? [],
+      (cwd) => fs.exists(path.resolve(root, cwd)),
+      { concurrency: "unbounded" },
+    );
     const { hash, workspaces } = yield* hashViteInput(
       vite.rootDir,
       vite.memo,
-      Effect.succeed(previous?.additionalWorkspaces ?? []),
+      Effect.succeed(previousWorkspaces),
     );
     return { input: hash, additionalWorkspaces: workspaces };
   }),

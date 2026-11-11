@@ -71,8 +71,18 @@ export interface DBSubnetGroup extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DBSubnetGroupLookup
 > {}
+
+/**
+ * Props for {@link DBSubnetGroup.lookup}: find a DB subnet group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DBSubnetGroupLookup {
+  /** The db subnet group name of the existing DB subnet group. */
+  dbSubnetGroupName: string;
+}
 
 /**
  * An RDS DB subnet group for Aurora clusters, instances, and proxies.
@@ -97,6 +107,16 @@ export interface DBSubnetGroup extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing DB subnet group
+ * `DBSubnetGroup.lookup` references a DB subnet group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `dbSubnetGroupName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing DB subnet group
+ * ```typescript
+ * const existing = AWS.RDS.DBSubnetGroup.lookup({ dbSubnetGroupName: "my-db-subnet-group" });
+ * ```
+ *
  * @resource
  */
 export const DBSubnetGroup = Resource<DBSubnetGroup>("AWS.RDS.DBSubnetGroup");
@@ -109,6 +129,16 @@ export const DBSubnetGroupProvider = () =>
         props.dbSubnetGroupName
           ? Effect.succeed(props.dbSubnetGroupName)
           : createPhysicalName({ id, maxLength: 255 });
+
+      const readTags = Effect.fn(function* (arn: string | undefined) {
+        if (!arn) return {} as Record<string, string>;
+        const response = yield* rds.listTagsForResource({ ResourceName: arn });
+        return Object.fromEntries(
+          (response.TagList ?? []).flatMap(({ Key, Value }) =>
+            Key !== undefined && Value !== undefined ? [[Key, Value]] : [],
+          ),
+        ) as Record<string, string>;
+      });
 
       const readGroup = Effect.fn(function* (groupName: string) {
         const response = yield* rds
@@ -126,6 +156,23 @@ export const DBSubnetGroupProvider = () =>
           if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ dbSubnetGroupName: name }) {
+          const group = yield* readGroup(name);
+          if (!group?.DBSubnetGroupName) {
+            return undefined;
+          }
+          return {
+            dbSubnetGroupName: group.DBSubnetGroupName,
+            dbSubnetGroupArn: group.DBSubnetGroupArn,
+            vpcId: group.VpcId,
+            subnetIds: (group.Subnets ?? []).flatMap((subnet) =>
+              subnet.SubnetIdentifier ? [subnet.SubnetIdentifier] : [],
+            ),
+            status: group.SubnetGroupStatus,
+            supportedNetworkTypes: group.SupportedNetworkTypes,
+            tags: yield* readTags(group.DBSubnetGroupArn),
+          };
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =
@@ -145,7 +192,7 @@ export const DBSubnetGroupProvider = () =>
             ),
             status: group.SubnetGroupStatus,
             supportedNetworkTypes: group.SupportedNetworkTypes,
-            tags: output?.tags ?? {},
+            tags: yield* readTags(group.DBSubnetGroupArn),
           };
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -196,9 +243,9 @@ export const DBSubnetGroupProvider = () =>
 
           const dbSubnetGroupArn = observed.DBSubnetGroupArn;
 
-          // Sync tags — diff prior recorded tags against desired (describe
+          // Sync tags — diff observed cloud tags against desired (describe
           // does not surface tags inline).
-          const observedTags = output?.tags ?? {};
+          const observedTags = yield* readTags(dbSubnetGroupArn);
           const { removed, upsert } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0 && dbSubnetGroupArn) {
             yield* rds.addTagsToResource({
@@ -229,10 +276,8 @@ export const DBSubnetGroupProvider = () =>
         list: () =>
           // AWS account/region collection: `describeDBSubnetGroups` is
           // paginated (items field `DBSubnetGroups`). Collect every page and
-          // map each group into the exact `read` Attributes shape. `read` does
-          // not hydrate tags from the cloud (it returns the cached
-          // `output.tags`), so we mirror that here with an empty tag map rather
-          // than issuing a per-item `listTagsForResource` call.
+          // map each group into the `read` Attributes shape, with an empty
+          // tag map rather than a per-item `listTagsForResource` call.
           rds.describeDBSubnetGroups.pages({}).pipe(
             Stream.runCollect,
             Effect.map((chunk) =>

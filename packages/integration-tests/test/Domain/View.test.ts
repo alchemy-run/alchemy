@@ -32,7 +32,11 @@ class Totals extends Domain.View("Totals", {
 }) {}
 
 class Counters extends Domain.Model("Counters", { aggregates: [Counter], views: [Totals] }) {}
-class CounterApi extends Domain.Api("CounterApi", Increment, Totals) {}
+class CounterApi extends Domain.Api("CounterApi", {
+  model: Counters,
+  commands: ["Increment"],
+  views: ["Totals"],
+}) {}
 
 const Hosted = Counters.layer(Layer.empty).pipe(Layer.provide(InMemory));
 const InProcess = Layer.effect(CounterApi.Client, CounterApi.clientInProcess).pipe(
@@ -85,7 +89,7 @@ const snapshotThenFeed = Effect.gen(function* () {
   return { snapshot, entries, now };
 });
 
-describe("Domain View reads", () => {
+describe("Domain View reads", { tags: ["unit", "local"] }, () => {
   it.live("gives the state and the cursor it is valid at", () =>
     Effect.gen(function* () {
       const api = yield* CounterApi.Client;

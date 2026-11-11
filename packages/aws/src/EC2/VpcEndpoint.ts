@@ -11,6 +11,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { nameTagFilter, single } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import type { RouteTableId } from "./RouteTable.ts";
@@ -215,8 +216,29 @@ export interface VpcEndpoint extends Resource<
     };
   },
   never,
-  Providers
+  Providers,
+  VpcEndpointLookup
 > {}
+
+/**
+ * Props for {@link VpcEndpoint.lookup}: find a VPC endpoint this stack
+ * doesn't manage, in the ambient account and region.
+ */
+export type VpcEndpointLookup =
+  | {
+      /** The endpoint's id. */
+      vpcEndpointId: string;
+    }
+  | {
+      /** The value of its `Name` tag; fails when several match. */
+      name: string;
+    }
+  | {
+      /** The VPC the endpoint belongs to. */
+      vpcId: string;
+      /** The endpoint's service, e.g. `com.amazonaws.us-west-2.s3`. */
+      serviceName: string;
+    };
 /**
  * A VPC endpoint that connects your VPC privately to an AWS service (or a
  * service behind a Gateway Load Balancer) without traversing the public
@@ -300,6 +322,21 @@ export interface VpcEndpoint extends Resource<
  * `policyDocument` attaches an endpoint policy (JSON) that constrains which
  * service actions and resources can be reached through the endpoint; omit it to
  * allow full access to the service.
+ *
+ * ### Looking up an existing VPC endpoint
+ * `VpcEndpoint.lookup` references a VPC endpoint Alchemy doesn't manage (created in the
+ * console or by another stack), found by `vpcEndpointId`, its `Name` tag, or
+`vpcId` and `serviceName`. It is read during plan/deploy
+ * and never created, updated or deleted. A lookup by `name` fails with
+ * `AmbiguousLookupError` when several match.
+ *
+ * **Example:** Reference an existing S3 gateway endpoint
+ * ```typescript
+ * const s3 = AWS.EC2.VpcEndpoint.lookup({
+ *   vpcId,
+ *   serviceName: "com.amazonaws.us-west-2.s3",
+ * });
+ * ```
  *
  * @resource
  */
@@ -386,6 +423,41 @@ export const VpcEndpointProvider = () =>
 
       return {
         stables: ["vpcEndpointId", "vpcEndpointArn", "ownerId"],
+
+        lookup: Effect.fn(function* (props) {
+          const found = yield* ec2
+            .describeVpcEndpoints(
+              "vpcEndpointId" in props
+                ? { VpcEndpointIds: [props.vpcEndpointId] }
+                : "name" in props
+                  ? { Filters: [nameTagFilter(props.name)] }
+                  : {
+                      Filters: [
+                        { Name: "vpc-id", Values: [props.vpcId] },
+                        { Name: "service-name", Values: [props.serviceName] },
+                      ],
+                    },
+            )
+            .pipe(
+              Effect.catchTag("InvalidVpcEndpointId.NotFound", () =>
+                Effect.succeed({ VpcEndpoints: [] }),
+              ),
+            );
+          const match = yield* single(
+            "AWS.EC2.VpcEndpoint",
+            "vpcEndpointId" in props
+              ? props.vpcEndpointId
+              : "name" in props
+                ? `Name=${props.name}`
+                : `${props.vpcId}/${props.serviceName}`,
+            (found.VpcEndpoints ?? []).filter(
+              (x) => x.State !== "deleted" && x.State !== "deleting",
+            ),
+            (x) => x.VpcEndpointId,
+          );
+          if (!match?.VpcEndpointId) return undefined;
+          return yield* toAttrs(match);
+        }),
 
         read: Effect.fn(function* ({ output }) {
           if (!output) return undefined;
@@ -774,9 +846,11 @@ const waitForVpcEndpointDeleted = (vpcEndpointId: string, session: ScopedPlanSta
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "VpcEndpointDeleting",
-      schedule: Schedule.max([Schedule.fixed(3000), Schedule.recurs(60)]).pipe(
+      // Interface endpoints sometimes take well over 3 minutes to leave
+      // `deleting`; budget 10.
+      schedule: Schedule.max([Schedule.fixed(5000), Schedule.recurs(120)]).pipe(
         Schedule.tap(({ attempt }) =>
-          session.note(`Waiting for VPC Endpoint deletion... (${attempt * 3}s)`),
+          session.note(`Waiting for VPC Endpoint deletion... (${attempt * 5}s)`),
         ),
       ),
     }),

@@ -133,6 +133,22 @@ export interface StateMachine extends Resource<
      * {@link StateMachineProps.roleArn} is used.
      */
     roleName: string | undefined;
+    /**
+     * The definition, logging, tracing, tags and (for the auto-created role)
+     * the execution-role inline policy, as observed. Lets `alchemy drift`
+     * detect out-of-band changes.
+     */
+    configuration?: {
+      definition: string;
+      logging: {
+        level: string;
+        includeExecutionData?: boolean;
+        destinations?: string[];
+      };
+      tracingEnabled: boolean;
+      tags: Record<string, string>;
+      executionRolePolicy?: unknown;
+    };
   },
   {
     /**
@@ -141,8 +157,23 @@ export interface StateMachine extends Resource<
      */
     policyStatements: PolicyStatement[];
   },
-  Providers
+  Providers,
+  StateMachineLookup
 > {}
+
+/**
+ * Props for {@link StateMachine.lookup}: find a state machine this stack
+ * doesn't manage, in the ambient account and region.
+ */
+export type StateMachineLookup =
+  | {
+      /** The name of the existing state machine. */
+      stateMachineName: string;
+    }
+  | {
+      /** The ARN of the existing state machine. */
+      stateMachineArn: string;
+    };
 
 /**
  * The definition failed AWS's `validateStateMachineDefinition` pre-flight
@@ -339,6 +370,20 @@ const fromProgram = (id: string, props: FromProgramProps) =>
  *     return { doubled: result.doubled, size };
  *   }),
  * });
+ * ```
+ *
+ * ### Looking up an existing state machine
+ * `StateMachine.lookup` references a state machine Alchemy doesn't manage (created in the
+ * console or by another stack), found by `stateMachineName` or
+`stateMachineArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Start executions of an existing state machine
+ * ```typescript
+ * const checkout = AWS.StepFunctions.StateMachine.lookup({ stateMachineName: "checkout" });
+ *
+ * // init
+ * const startExecution = yield* AWS.StepFunctions.StartExecution(checkout);
  * ```
  *
  * @resource
@@ -663,6 +708,54 @@ export const StateMachineProvider = () =>
         return role.Role.Arn;
       });
 
+      /**
+       * Everything reconcile converges on a state machine, as observed.
+       * `read` and `reconcile` share it so a converged machine reads
+       * unchanged.
+       */
+      const observeStateMachineConfiguration = Effect.fn(function* (
+        id: string,
+        machine: sfn.DescribeStateMachineOutput,
+        roleName: string | undefined,
+      ) {
+        const level = machine.loggingConfiguration?.level ?? "OFF";
+        const [tags, executionRolePolicy] = yield* Effect.all(
+          [
+            fetchObservedTags(machine.stateMachineArn),
+            roleName === undefined
+              ? Effect.undefined
+              : iam
+                  .getRolePolicy({
+                    RoleName: roleName,
+                    PolicyName: yield* createPolicyName(id),
+                  })
+                  .pipe(
+                    Effect.map((policy): unknown =>
+                      JSON.parse(decodeURIComponent(policy.PolicyDocument)),
+                    ),
+                    Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
+                  ),
+          ],
+          { concurrency: "unbounded" },
+        );
+        return {
+          definition: normalizeDefinition(plain(machine.definition)),
+          logging:
+            level === "OFF"
+              ? { level }
+              : {
+                  level,
+                  includeExecutionData: machine.loggingConfiguration?.includeExecutionData ?? false,
+                  destinations: (machine.loggingConfiguration?.destinations ?? [])
+                    .map((d) => d.cloudWatchLogsLogGroup?.logGroupArn ?? "")
+                    .sort(),
+                },
+          tracingEnabled: machine.tracingConfiguration?.enabled ?? false,
+          tags,
+          executionRolePolicy,
+        };
+      });
+
       return StateMachine.Provider.of({
         stables: ["stateMachineName", "stateMachineArn", "type"],
 
@@ -700,6 +793,24 @@ export const StateMachineProvider = () =>
             return results.filter((item): item is StateMachine["Attributes"] => item !== undefined);
           }),
 
+        lookup: Effect.fn(function* (props) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const found = yield* describeOrUndefined(
+            "stateMachineArn" in props
+              ? props.stateMachineArn
+              : stateMachineArnOf(region, accountId, props.stateMachineName),
+          );
+          if (!found || found.status === "DELETING") return undefined;
+          return {
+            stateMachineName: found.name,
+            stateMachineArn: found.stateMachineArn,
+            type: found.type as StateMachineType,
+            roleArn: found.roleArn,
+            roleName: undefined,
+            configuration: yield* observeStateMachineConfiguration("", found, undefined),
+          };
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const name = output?.stateMachineName ?? (yield* createName(id, olds ?? {}));
@@ -707,15 +818,20 @@ export const StateMachineProvider = () =>
             output?.stateMachineArn ?? stateMachineArnOf(region, accountId, name);
           const found = yield* describeOrUndefined(stateMachineArn);
           if (!found || found.status === "DELETING") return undefined;
+          const configuration = yield* observeStateMachineConfiguration(
+            id,
+            found,
+            output?.roleName,
+          );
           const attrs = {
             stateMachineName: found.name,
             stateMachineArn: found.stateMachineArn,
             type: found.type as StateMachineType,
             roleArn: found.roleArn,
             roleName: output?.roleName,
+            configuration,
           };
-          const tags = yield* fetchObservedTags(stateMachineArn);
-          return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, configuration.tags)) ? attrs : Unowned(attrs);
         }),
 
         diff: Effect.fn(function* ({ id, news, olds }) {
@@ -841,12 +957,14 @@ export const StateMachineProvider = () =>
           }
 
           yield* session.note(stateMachineArn);
+          const final = yield* sfn.describeStateMachine({ stateMachineArn });
           return {
             stateMachineName: name,
             stateMachineArn,
             type,
             roleArn,
             roleName,
+            configuration: yield* observeStateMachineConfiguration(id, final, roleName),
           };
         }),
 

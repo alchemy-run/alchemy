@@ -78,8 +78,18 @@ export interface RuleGroup extends Resource<
     capacity: number;
   },
   never,
-  Providers
+  Providers,
+  RuleGroupLookup
 > {}
+
+/**
+ * Props for {@link RuleGroup.lookup}: find a rule group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface RuleGroupLookup {
+  /** The ARN of the existing rule group. */
+  ruleGroupArn: string;
+}
 
 /**
  * An AWS Network Firewall rule group — a reusable collection of stateless
@@ -140,6 +150,16 @@ export interface RuleGroup extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing rule group
+ * `RuleGroup.lookup` references a rule group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `ruleGroupArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing rule group
+ * ```typescript
+ * const blocklist = AWS.NetworkFirewall.RuleGroup.lookup({ ruleGroupArn });
+ * ```
+ *
  * @resource
  */
 export const RuleGroup = Resource<RuleGroup>("AWS.NetworkFirewall.RuleGroup");
@@ -181,6 +201,12 @@ export const RuleGroupProvider = () =>
             return items.filter((item): item is RuleGroup["Attributes"] => item !== undefined);
           }),
 
+        lookup: Effect.fn(function* ({ ruleGroupArn }) {
+          const found = yield* nfw
+            .describeRuleGroup({ RuleGroupArn: ruleGroupArn })
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
+          return found === undefined ? undefined : toAttrs(found.RuleGroupResponse);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const found =
             output?.ruleGroupArn !== undefined

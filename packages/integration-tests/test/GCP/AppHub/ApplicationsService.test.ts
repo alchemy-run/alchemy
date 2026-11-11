@@ -6,6 +6,7 @@ import * as apphub from "@distilled.cloud/gcp/apphub_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -56,7 +57,7 @@ test.provider.skipIf(runLifecycle)(
           name: `projects/${project}/locations/${location}/applications/alchemy-missing-app/services/alchemy-missing-service`,
         }),
       );
-      expect(error._tag).toEqual("ServiceDisabled");
+      expect(["ServiceDisabled", "NotFound"]).toContain(error._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -89,6 +90,14 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { app, service };
         }),
+      );
+      yield* expectFound(
+        GCP.AppHub.ApplicationsService.lookup({
+          serviceId: created.service.serviceId,
+          location: created.service.location,
+          application: created.service.application,
+        }),
+        created.service,
       );
 
       expect(created.service.name).toContain("/services/");

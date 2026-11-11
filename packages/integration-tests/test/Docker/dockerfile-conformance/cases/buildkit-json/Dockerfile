@@ -1,0 +1,9 @@
+FROM scratch
+CMD []
+CMD [""]
+CMD ["a"]
+CMD ["a","b"]
+CMD [ "a", "b" ]
+CMD [	"a",	"b"	]
+CMD	[	"a",	"b"	]	
+CMD ["abc 123", "♥", "☃", "\" \\ \/ \b \f \n \r \t \u0000"]

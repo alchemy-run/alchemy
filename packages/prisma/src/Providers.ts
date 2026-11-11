@@ -1,14 +1,11 @@
 import { Retry } from "@distilled.cloud/prisma";
-import { AuthProviders } from "alchemy/Auth/AuthProvider";
+import { AuthProvidersLive } from "alchemy/Auth/AuthProvider";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
-import { ProfileStore, ProfileStoreLive } from "alchemy/Auth/Profile";
+import { ProfileStoreLive } from "alchemy/Auth/Profile";
 import * as Command from "alchemy/Command";
 import * as Provider from "alchemy/Provider";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
-import { proxyChain } from "alchemy/Util/proxy-chain";
 import { Server, ServerProvider } from "alchemy/Website/Server";
-import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import { App, AppProvider } from "./App.ts";
@@ -16,7 +13,7 @@ import { PrismaAuth } from "./AuthProvider.ts";
 import { Branch, BranchProvider } from "./Branch.ts";
 import { Bucket, BucketProvider } from "./Bucket.ts";
 import { BucketAccessKey, BucketAccessKeyProvider } from "./BucketAccessKey.ts";
-import { PrismaClient, PrismaClientLive, type PrismaManagementClient } from "./Client.ts";
+import { PrismaClientLive } from "./Client.ts";
 import { Compute, ComputeProvider } from "./Compute.ts";
 import { Connection, ConnectionProvider } from "./Connection.ts";
 import { CustomDomain, CustomDomainProvider } from "./CustomDomain.ts";
@@ -54,7 +51,7 @@ const standaloneManagementApiLayer = () =>
     Layer.provideMerge(PrismaAuth),
     Layer.provideMerge(
       Layer.mergeAll(
-        Layer.succeed(AuthProviders, {}),
+        AuthProvidersLive,
         // The Prisma-scoped upload client (node transport) rides the
         // providers' output so artifact uploads can reach it at op time.
         PrismaUploadClientLive,
@@ -73,37 +70,14 @@ const standaloneManagementApiLayer = () =>
 
 /**
  * Stack provider discovery must register auth without requiring credentials.
- * The management client is resolved on its first API operation, after
- * `alchemy profile edit` has had a chance to configure the registered Prisma
- * auth provider. The nested client layer shares the provider layer's lifetime.
+ * The client exists at once and resolves its environment on every request,
+ * so the environment is the one deferred piece (see
+ * {@link Credentials.environmentFromAuthProvider}).
  */
 const stackManagementApiLayer = () =>
-  Layer.effect(
-    PrismaClient,
-    Effect.gen(function* () {
-      const scope = yield* Effect.scope;
-      const authProviders = yield* AuthProviders;
-      const profileStore = yield* ProfileStore;
-      const client = Layer.buildWithScope(
-        PrismaClientLive.pipe(
-          Layer.provideMerge(
-            fromProfile().pipe(
-              Layer.provide(
-                Layer.mergeAll(
-                  Layer.succeed(AuthProviders, authProviders),
-                  Layer.succeed(ProfileStore, profileStore),
-                ),
-              ),
-            ),
-          ),
-          Layer.provide(PrismaHttpClientLive),
-        ),
-        scope,
-      ).pipe(Effect.map((context) => Context.get(context, PrismaClient)));
-      const cached = yield* Effect.cached(client);
-      return proxyChain(cached) as PrismaManagementClient;
-    }),
-  ).pipe(
+  PrismaClientLive.pipe(
+    Layer.provide(Credentials.environmentFromAuthProvider()),
+    Layer.provide(PrismaHttpClientLive),
     Layer.provideMerge(
       Layer.mergeAll(Credentials.fromAuthProvider(), Layer.succeed(Retry.Retry, Retry.makeDefault)),
     ),
@@ -176,8 +150,7 @@ export const managementApi = () =>
  * ```typescript
  * import * as Alchemy from "alchemy";
  * import * as Prisma from "@alchemy.run/prisma";
- * import * as Effect from "effect/Effect";
- *
+ *  *
  * export default Alchemy.Stack(
  *   "MyStack",
  *   { providers: Prisma.providers(), state: Alchemy.localState() },

@@ -6,6 +6,7 @@ import * as dlp from "@distilled.cloud/gcp/dlp_v2";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -67,6 +68,10 @@ test.provider(
             deidentifyConfig: redact(["EMAIL_ADDRESS"]),
           });
         }),
+      );
+      yield* expectFound(
+        GCP.DLP.DeidentifyTemplate.lookup({ templateId: created.templateId }),
+        created,
       );
 
       expect(created.templateId).toEqual(expect.any(String));

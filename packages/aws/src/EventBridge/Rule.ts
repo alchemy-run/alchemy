@@ -5,10 +5,17 @@ import type { Input } from "alchemy/Input";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
-import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import {
+  createInternalTags,
+  createTagsList,
+  diffTags,
+  hasAlchemyTags,
+  tagRecord,
+} from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { canonicalJson } from "../internal/Observe.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
@@ -269,6 +276,20 @@ export interface Rule extends Resource<
     ruleArn: RuleArn;
     /** The event bus associated with the rule. */
     eventBusName: string;
+    /**
+     * The rule definition (pattern, schedule, state, role, description), its
+     * targets and its tags, as observed. Lets `alchemy drift` detect
+     * out-of-band changes.
+     */
+    configuration?: {
+      description?: string;
+      eventPattern?: string;
+      scheduleExpression?: string;
+      state?: string;
+      roleArn?: string;
+      targets: eventbridge.Target[];
+      tags: Record<string, string>;
+    };
   },
   never,
   Providers
@@ -288,6 +309,34 @@ export const RuleProvider = () =>
           maxLength: 64,
         });
       };
+
+      /**
+       * Everything reconcile converges on a rule, as observed. `read` and
+       * `reconcile` share it so a converged rule reads unchanged.
+       */
+      const observeRuleConfiguration = Effect.fn(function* (
+        described: eventbridge.DescribeRuleResponse,
+        eventBusParam: string | undefined,
+        tags: eventbridge.Tag[],
+      ) {
+        const targets = yield* eventbridge
+          .listTargetsByRule({ Rule: described.Name!, EventBusName: eventBusParam })
+          .pipe(
+            Effect.map((r) => r.Targets ?? []),
+            Effect.catchTag("ResourceNotFoundException", () =>
+              Effect.succeed([] as eventbridge.Target[]),
+            ),
+          );
+        return {
+          description: described.Description || undefined,
+          eventPattern: canonicalJson(described.EventPattern),
+          scheduleExpression: described.ScheduleExpression,
+          state: described.State,
+          roleArn: described.RoleArn,
+          targets: [...targets].sort((a, b) => a.Id.localeCompare(b.Id)),
+          tags: tagRecord(tags),
+        };
+      });
 
       return {
         stables: ["ruleName", "ruleArn", "eventBusName"],
@@ -331,6 +380,11 @@ export const RuleProvider = () =>
             ruleName: described.Name,
             ruleArn,
             eventBusName: resolvedEventBusName,
+            configuration: yield* observeRuleConfiguration(
+              described,
+              resolvedEventBusName !== "default" ? resolvedEventBusName : undefined,
+              Tags ?? [],
+            ),
           };
           return (yield* hasAlchemyTags(id, Tags ?? [])) ? attrs : Unowned(attrs);
         }),
@@ -524,10 +578,19 @@ export const RuleProvider = () =>
           }
 
           yield* session.note(ruleArn);
+          const described = yield* eventbridge.describeRule({
+            Name: ruleName,
+            EventBusName: eventBusParam,
+          });
           return {
             ruleName,
             ruleArn,
             eventBusName,
+            configuration: yield* observeRuleConfiguration(
+              described,
+              eventBusParam,
+              createTagsList(desiredTags),
+            ),
           };
         }),
         delete: Effect.fn(function* (input) {

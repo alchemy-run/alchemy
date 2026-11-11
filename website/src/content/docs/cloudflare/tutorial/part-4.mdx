@@ -4,17 +4,16 @@ description: Run your stack locally with alchemy dev for hot reloading and insta
 sidebar:
   order: 4
 ---
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 In [Part 3](/cloudflare/tutorial/part-3) you wrote integration tests against
 your deployed stack. But deploying to Cloudflare on every code change
-is slow. In this part you'll use `bun alchemy dev` to run everything
+is slow. In this part you'll use `alchemy dev` to run everything
 locally with hot reloading.
 
 ## Start dev mode
 
-```sh
-bun alchemy dev
-```
+<PackageManagers run="alchemy dev" />
 
 That's it. Alchemy deploys your stack to the cloud and proxies
 requests to Workers running locally in workerd. It watches for file
@@ -28,7 +27,7 @@ curl http://localhost:1337/hello.txt
 
 ## How it works
 
-`bun alchemy dev` does three things:
+`alchemy dev` does three things:
 
 1. **Deploys to the cloud** — resources like R2 Buckets are created
    on Cloudflare, while Workers run locally in workerd
@@ -60,10 +59,10 @@ export default Cloudflare.Worker(
 
 ## Run tests in dev mode
 
-You don't need to run `bun alchemy dev` in a separate terminal to test
+You don't need to run `alchemy dev` in a separate terminal to test
 against locally-emulated resources. The test harness has its own
 `dev` flag that flips every Worker over to workerd inside the test
-process — same wiring as `bun alchemy dev`, no extra terminal.
+process — same wiring as `alchemy dev`, no extra terminal.
 
 ```diff lang="typescript"
 // test/integ.test.ts
@@ -105,7 +104,7 @@ ALCHEMY_DEV=1 bun test test/integ.test.ts
 
 You now have:
 
-- Local development with `bun alchemy dev`
+- Local development with `alchemy dev`
 - Hot reloading on file changes
 - Local emulation of Cloudflare resources
 

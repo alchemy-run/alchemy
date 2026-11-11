@@ -5,12 +5,13 @@ import * as secretsStore from "@distilled.cloud/cloudflare/secrets-store";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const GATEWAY_ID = "alchemy-test-aigw-providerkey";
+const GATEWAY_ID = testName("alchemy-test-aigw-providerkey");
 const PROVIDER_SLUG = "openai";
 
 test.provider(

@@ -1,6 +1,7 @@
 import * as http from "node:http";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
@@ -120,7 +121,7 @@ describe.skipIf(!usesUnixSocketLoopback())("Docker loopback forwarders", () => {
           }),
         );
         expect(yield* helpers).toBe("");
-      }).pipe(Effect.provide(NodeServices.layer)),
+      }).pipe(Effect.provide(NodeServices.layer), Effect.provide(SecureRandom.layerWebCrypto)),
     90_000,
   );
 
@@ -158,7 +159,7 @@ describe.skipIf(!usesUnixSocketLoopback())("Docker loopback forwarders", () => {
           expect(result.failure.message).toContain("EADDRINUSE");
         }
         expect(yield* helpers).toBe("");
-      }).pipe(Effect.provide(NodeServices.layer)),
+      }).pipe(Effect.provide(NodeServices.layer), Effect.provide(SecureRandom.layerWebCrypto)),
     90_000,
   );
 });

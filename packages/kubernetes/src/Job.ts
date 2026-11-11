@@ -1,3 +1,6 @@
+import type { BuildCacheOptions } from "@alchemy.run/docker/BuildCache";
+import type { DockerfileBuildOptions } from "@alchemy.run/docker/ImageSource";
+import type * as Bundle from "alchemy/Bundle/Bundle";
 import { isResolved } from "alchemy/Diff";
 import * as Output from "alchemy/Output";
 import { createPhysicalName } from "alchemy/PhysicalName";
@@ -113,6 +116,14 @@ export interface JobPropsBase extends PlatformProps {
    */
   architecture?: "amd64" | "arm64";
   /**
+   * Kubernetes `RuntimeClass` the pods run under. On EKS, `isolated-sandbox`
+   * runs each pod in its own Nitro Sandbox, a lightweight VM isolated by the
+   * AWS Nitro hypervisor, and `confidential-sandbox` also hides the pod's
+   * memory from the node. EKS Auto Mode needs no other setup. Any other
+   * RuntimeClass on the cluster (gVisor, Kata) works too.
+   */
+  runtimeClassName?: "isolated-sandbox" | "confidential-sandbox" | (string & {});
+  /**
    * Deep-partial Kubernetes Pod template merged into the synthesized
    * template (objects merge recursively; arrays and primitives replace) —
    * a literal object in the shape of `PodTemplateSpec`, e.g.
@@ -154,8 +165,8 @@ export interface BundledJobProps extends JobPropsBase {
   image?: string;
   /** Named export to load from `main`. @default "default" */
   handler?: string;
-  /** Bundler configuration for the entrypoint. */
-  build?: WorkloadImageSource["build"];
+  /** Bundler configuration for the entrypoint, and the image build's layer `cache`. */
+  build?: Bundle.BundleConfig & BuildCacheOptions;
   /** Environment Dockerfile (path or inline content). */
   dockerfile?: WorkloadImageSource["dockerfile"];
   /** Build context for a path {@link dockerfile} environment. */
@@ -163,7 +174,7 @@ export interface BundledJobProps extends JobPropsBase {
 }
 
 /** Build the user's own Dockerfile (`context` + optional `dockerfile` path). */
-export interface DockerfileJobProps extends JobPropsBase {
+export interface DockerfileJobProps extends JobPropsBase, DockerfileBuildOptions {
   /** Docker build context directory. */
   context?: string;
   /**
@@ -268,6 +279,23 @@ export interface JobRuntimeContext extends HostRuntimeContext {
  * });
  * ```
  *
+ * **Example:** Your own Dockerfile with build args and secrets
+ * ```typescript
+ * // Dockerfile:
+ * //   ARG NODE_ENV
+ * //   RUN --mount=type=secret,id=NPM_TOKEN,env=NPM_TOKEN npm ci
+ * const migrate = yield* Kubernetes.Job("DbMigrate", {
+ *   cluster,
+ *   context: "./migrator",
+ *   build: {
+ *     args: { NODE_ENV: "production" },
+ *     // Mounted only into the RUN step that asks for it; never in the image.
+ *     secrets: { NPM_TOKEN: Config.Redacted("NPM_TOKEN") },
+ *   },
+ *   backoffLimit: 2,
+ * });
+ * ```
+ *
  * **Example:** Inline Effect program
  * ```typescript
  * const cluster = yield* Kubernetes.LocalCluster("Cluster", {
@@ -316,6 +344,37 @@ export interface JobRuntimeContext extends HostRuntimeContext {
  *     };
  *   }),
  * );
+ * ```
+ *
+ * ### Caching Build Layers
+ * Builds reuse the local BuildKit cache of the machine they run on, and
+ * nothing but the image is pushed. A builder that has never built the image,
+ * such as a fresh CI runner, reruns every step. Set `build.cache: true` to keep
+ * every stage's layers at the image repository's `:buildcache` tag, so fresh
+ * builders skip unchanged steps. For another backend, pass BuildKit's own
+ * `--cache-from` / `--cache-to` values as `from` and `to`.
+ *
+ * **Example:** Cache layers in the image repository
+ * ```typescript
+ * const migrate = yield* Kubernetes.Job("Migrate", {
+ *   cluster,
+ *   context: "./migrate",
+ *   build: { cache: true },
+ * });
+ * ```
+ *
+ * **Example:** Cache layers in GitHub Actions
+ * ```typescript
+ * const migrate = yield* Kubernetes.Job("Migrate", {
+ *   cluster,
+ *   context: "./migrate",
+ *   build: {
+ *     cache: {
+ *       from: ["type=gha,scope=migrate"],
+ *       to: ["type=gha,scope=migrate,mode=max"],
+ *     },
+ *   },
+ * });
  * ```
  *
  * ### Bundling & Tree-shaking
@@ -377,6 +436,7 @@ export const Job: Platform<Job, JobServices, JobShape, JobRuntimeContext> = Plat
             env[key] = output.pipe(Output.map(packEnvValue));
             return key;
           }),
+        // oxlint-disable-next-line effecttsgo/process-env-in-effect -- runtime ctx.get must read raw env, never Config (see unpackEnvValue)
         get: <T>(key: string) => Effect.sync(() => unpackEnvValue<T>(process.env[key]) as T),
         run: (effect: Effect.Effect<void, never, any>) =>
           Effect.sync(() => {
@@ -571,6 +631,7 @@ export const JobProvider = () =>
               metadata: { labels },
               spec: {
                 serviceAccountName,
+                ...(news.runtimeClassName ? { runtimeClassName: news.runtimeClassName } : {}),
                 restartPolicy: news.restartPolicy ?? "Never",
                 containers: [
                   {

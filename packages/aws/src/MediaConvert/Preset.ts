@@ -47,8 +47,18 @@ export interface Preset extends Resource<
     category: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  PresetLookup
 > {}
+
+/**
+ * Props for {@link Preset.lookup}: find a preset this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface PresetLookup {
+  /** The preset name of the existing preset. */
+  presetName: string;
+}
 
 /**
  * An AWS Elemental MediaConvert output preset — a reusable, named bundle of
@@ -86,6 +96,16 @@ export interface Preset extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing preset
+ * `Preset.lookup` references a preset Alchemy doesn't manage (created in the
+ * console or by another stack), found by `presetName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing preset
+ * ```typescript
+ * const existing = AWS.MediaConvert.Preset.lookup({ presetName: "my-preset" });
+ * ```
+ *
  * @resource
  */
 export const Preset = Resource<Preset>("AWS.MediaConvert.Preset");
@@ -121,6 +141,13 @@ export const PresetProvider = () =>
           const oldName = yield* createName(id, olds);
           const newName = yield* createName(id, news);
           if (oldName !== newName) return { action: "replace" } as const;
+        }),
+
+        lookup: Effect.fn(function* ({ presetName: name }) {
+          const preset = yield* getPreset(name);
+          if (preset === undefined) return undefined;
+          const attrs = toAttrs(preset);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

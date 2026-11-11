@@ -1,4 +1,6 @@
 import { inlineSqlParams, MigrationError, type SqlExecutor } from "@alchemy.run/sql/Migrations";
+import * as Retry from "@distilled.cloud/cloudflare/Retry";
+import { isTransientError } from "@distilled.cloud/core/category";
 import * as Effect from "effect/Effect";
 
 /**
@@ -44,6 +46,9 @@ export const makeD1MigrationExecutor = <E>(raw: D1SqlExecutor<E>): SqlExecutor =
           }),
       ),
     ),
+  // D1 may run a batch and still fail its reply; a blind resend would run its
+  // DDL twice (#1889). The migration engine checks `__alchemy_migrations`
+  // before it resends a transient failure.
   batch: (statements) =>
     raw(
       statements
@@ -52,12 +57,14 @@ export const makeD1MigrationExecutor = <E>(raw: D1SqlExecutor<E>): SqlExecutor =
         .map((statement) => (statement.endsWith(";") ? statement : `${statement};`))
         .join("\n"),
     ).pipe(
+      Retry.none,
       Effect.asVoid,
       Effect.mapError(
         (cause) =>
           new MigrationError({
             message: `D1 migration batch failed: ${String(cause)}`,
             cause,
+            transient: isTransientError(cause),
           }),
       ),
     ),

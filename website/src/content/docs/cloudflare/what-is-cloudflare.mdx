@@ -1,0 +1,185 @@
+---
+title: What is Cloudflare?
+description: The concepts behind Cloudflare — accounts, zones, the global network, Workers, bindings, Durable Objects, storage, queues, workflows, containers and API tokens — and how @alchemy.run/cloudflare models each of them.
+---
+
+import Tree from "../../../components/diagrams/Tree.astro";
+
+
+Cloudflare runs one network in more than 340 cities, and it runs your code on every machine in it. A request reaches the nearest city, and your **Worker** answers it there. Around Workers sit storage, databases, queues and stateful objects, which a Worker reaches through **bindings**.
+
+Take one small app: a Worker that stores uploads in R2, counts visits in a Durable Object, and queues jobs for a consumer. Everything lives in your account. A zone holds your domain, which routes requests to a Worker in every city. The Worker reaches a Bucket, Durable Objects and a Queue through bindings, and each Durable Object lives in one city.
+
+<Tree
+  nodes={[
+    {
+      id: "account", label: "acme", type: "account", icon: "brand:cloudflare", colGap: 2.75,
+      areas: ["zone api uploads", "zone api rooms", "zone api jobs", "zone api consumer"],
+    },
+    { id: "zone", label: "example.com", type: "zone", parent: "account", dashed: true, icon: "globe" },
+    { id: "domain", label: "app.example.com", type: "custom domain", parent: "zone", icon: "link" },
+    { id: "api", label: "Api", type: "Worker · every city", parent: "account", tone: "accent", icon: "square-function" },
+    { id: "uploads", label: "Uploads", type: "R2 Bucket", parent: "account", icon: "archive" },
+    { id: "rooms", label: "Rooms", type: "Durable Object namespace", parent: "account", dashed: true, icon: "boxes" },
+    { id: "roomA", label: "room-a", type: "one city", parent: "rooms", icon: "box" },
+    { id: "roomB", label: "room-b", type: "one city", parent: "rooms", icon: "box" },
+    { id: "jobs", label: "Jobs", type: "Queue", parent: "account", icon: "inbox" },
+    { id: "consumer", label: "Consumer", type: "Worker", parent: "account", icon: "square-function" },
+  ]}
+  links={[
+    { from: "domain", to: "api", label: "routes" },
+    { from: "api", to: "uploads", label: "binds" },
+    { from: "api", to: "rooms", label: "binds" },
+    { from: "api", to: "jobs", label: "binds" },
+    { from: "jobs", to: "consumer", label: "delivers", dashed: true },
+  ]}
+  caption="There are no regions to pick. The zone holds your domains, and Workers and storage belong to the account and run across the whole network. Each Durable Object lives in one city. Api binds the bucket, the namespace and the queue, and the queue delivers to Consumer."
+/>
+
+## Accounts: where everything lives
+
+A Cloudflare **account** holds your Workers, storage, databases and domains, and the bill for all of them. Several people can be members of one account, each with a role.
+
+Alchemy deploys into the account your [profile](/environments/profiles) names. Sign in once, in [Setup](/cloudflare/setup), with OAuth or an API token:
+
+```sh
+alchemy profile edit --add Cloudflare
+```
+
+Many stages share one account. Your `dev` stage and each pull request get their own Worker, Bucket and database, named apart. Use a separate account for production when you want its data out of reach of everything else.
+
+## Zones: your domains
+
+A **zone** is a domain on Cloudflare: `example.com` and every name under it. Cloudflare becomes its DNS host, and traffic for the zone flows through Cloudflare's network, where Workers, caching, firewall rules and redirects apply to it.
+
+You add a zone to an account, then point your registrar at the name servers Cloudflare gives you:
+
+```typescript title="alchemy.run.ts"
+const zone = yield* Cloudflare.Zone.Zone("Site", { name: "example.com" });
+```
+
+Most zones already exist when you start, and Alchemy adopts them only when you ask. See [Domains & DNS](/cloudflare/networking/domains).
+
+## Workers: code on every machine
+
+A **Worker** is a program Cloudflare runs in every city. It starts in milliseconds, in a V8 isolate rather than a container, so there's no warm-up to plan around and nothing to run while nobody calls it.
+
+A Worker handles a request with a `fetch` handler. In Alchemy, its code and its configuration live in one file:
+
+```typescript title="src/worker.ts"
+export default Cloudflare.Worker(
+  "Worker",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("Hello, world!")),
+    };
+  }),
+);
+```
+
+Every Worker gets a URL on your account's `workers.dev` subdomain. Give it a domain in one of your zones, and Cloudflare creates the DNS record and the certificate:
+
+```typescript title="src/worker.ts"
+{ main: import.meta.url, domain: "api.example.com" }
+```
+
+Workers also run on a schedule, consume queues and receive email. See [Workers](/cloudflare/compute/workers).
+
+## Bindings: how a Worker reaches everything else
+
+A Worker can't open a connection to your Bucket or your database. Instead, Cloudflare hands it **bindings**: objects in its environment that talk to one resource, already authorized. A Worker with a binding to a Bucket can read and write that Bucket, and nothing else.
+
+In Alchemy, you bind a resource in the Worker's Construction phase and get a typed client. The access level is in the name:
+
+```typescript title="src/worker.ts"
+const uploads = yield* Cloudflare.R2.ReadWriteBucket(Uploads);
+```
+
+Deploying the Worker adds the binding to it. Remove the line, and the next deploy removes the binding. So the Worker's access is always exactly what its code uses.
+
+See [Bindings](/infrastructure-as-effects/binding).
+
+## Storage: KV, R2 and D1
+
+Cloudflare has a store for each shape of data, all reached through bindings.
+
+**KV** is a key-value store replicated to every city. Reads are fast everywhere, and a write takes up to a minute to reach every city. It fits configuration, sessions and cached lookups. **R2** is object storage, compatible with S3, with no fee for data leaving it. It fits files of any size. **D1** is a SQLite database, with migrations applied as part of each deploy. It fits relational data that one app owns.
+
+```typescript title="src/db.ts"
+export const Database = Cloudflare.D1.Database("Database", { migrations: "./migrations" });
+```
+
+A database that lives elsewhere, like Postgres on Neon or AWS, is reached through **Hyperdrive**, which pools connections near the database so each request doesn't pay to open one.
+
+See [KV](/cloudflare/data/kv), [R2](/cloudflare/data/r2), [D1](/cloudflare/data/d1) and [Hyperdrive](/cloudflare/data/hyperdrive).
+
+## Durable Objects: one instance per name
+
+A Worker has no memory between requests, and two requests for the same thing may run in two cities. Some things need one place that sees every request: a chat room, a game, a counter, a user's session.
+
+A **Durable Object** is that place. It's a class with one instance per name. Every request for `"lobby"`, from any Worker anywhere, reaches the same instance, which handles them one at a time and keeps its own SQLite storage:
+
+```typescript title="src/worker.ts"
+const counters = yield* Counter;
+const visits = yield* counters.getByName("lobby").increment();
+```
+
+An instance sleeps when idle and wakes on the next call with its storage intact. It can also set an **alarm** to wake itself later, and hold WebSockets open while asleep.
+
+See [Durable Objects](/cloudflare/compute/durable-objects).
+
+## Queues: work for later
+
+A **Queue** carries messages from producers to a consumer Worker. A producer sends and returns at once. Cloudflare delivers the messages in batches, retries a batch that fails, and moves messages that keep failing to a dead-letter queue.
+
+```typescript title="src/worker.ts"
+const jobs = yield* Cloudflare.Queues.WriteQueue(Jobs);
+```
+
+See [Queues](/cloudflare/messaging/queues).
+
+## Workflows: work that must finish
+
+A **Workflow** runs a job made of steps, and finishes it even if a machine fails partway through. Each completed step's result is saved, so a retry resumes after the last step that succeeded instead of starting over. A step can also sleep for days or wait for an event.
+
+See [Workflows](/cloudflare/compute/workflows).
+
+## Containers: everything else
+
+Some programs don't fit in an isolate: a binary, a language runtime Workers don't support, a process that needs a filesystem. A **Container** runs a Docker image on Cloudflare's network, started on demand and addressed through a Durable Object, so each name gets its own container.
+
+See [Containers](/cloudflare/compute/containers).
+
+## API tokens: access from outside
+
+Bindings are how a Worker reaches its own account. Everything outside a Worker, including Alchemy itself, a CI job, or code on another cloud, calls Cloudflare's API with an **API token**. A token carries **permission groups**, like "Workers R2 Storage Write", and works only on the accounts and zones you choose.
+
+When a binding is used from outside Cloudflare, Alchemy creates a token for it with only the permissions it needs.
+
+## State: Alchemy's record on Cloudflare
+
+Alchemy remembers what each Stack created, so the next deploy knows what to change. `Cloudflare.state()` keeps that record in a Worker and a Durable Object in your own account. Deploys from your machine and from CI read the same one.
+
+```typescript title="alchemy.run.ts"
+export default Alchemy.Stack(
+  "MyApp",
+  { providers: Cloudflare.providers(), state: Cloudflare.state() },
+  Effect.gen(function* () {
+    const worker = yield* Worker;
+    return { url: worker.url };
+  }),
+);
+```
+
+See [State store](/state-store).
+
+## How @alchemy.run/cloudflare models these concepts
+
+Each of these concepts is something your Stack declares.
+
+Your profile picks the account, and `Cloudflare.providers()` deploys into it. Zones, DNS records, Buckets, databases and Queues are declarations like `Cloudflare.R2.Bucket("Uploads")`, named per stage. A Worker, a Durable Object, a Workflow and a Container are each a declaration that holds its own code. Every binding is one line in the code that uses it, and deploys as a native binding on the Worker.
+
+The same Stack runs on your machine under `alchemy dev`, on the same runtime Cloudflare uses, with no account at all. See [Local development](/cloudflare/local-development).
+
+Next, build one: the [tutorial](/cloudflare/tutorial/part-1) puts these ideas to work, one step at a time. Or read the concepts in depth, starting with [Workers](/cloudflare/compute/workers).

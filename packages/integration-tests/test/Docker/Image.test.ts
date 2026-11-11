@@ -6,6 +6,9 @@ import { inMemoryState, State } from "alchemy/State";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import { authenticatedRegistry, scopedBuildx } from "./Runtime.ts";
@@ -199,23 +202,30 @@ describe(
               // command, contains the expected text.
               'FROM alpine:3.19\nRUN echo "npm ERR! missing script: build-$((40 + 2))" && exit 3\n',
             );
-            yield* Effect.acquireRelease(
-              Effect.sync(() => {
-                const previous = process.env.DOCKER_BUILDKIT;
-                if (buildkit === undefined) delete process.env.DOCKER_BUILDKIT;
-                else process.env.DOCKER_BUILDKIT = buildkit;
-                return previous;
+            // Scoped to the deploy: the test's own scope closes later, and the
+            // override would otherwise leak into the tests that follow.
+            const error = yield* Effect.scoped(
+              Effect.gen(function* () {
+                yield* Effect.acquireRelease(
+                  Effect.sync(() => {
+                    const previous = process.env.DOCKER_BUILDKIT;
+                    if (buildkit === undefined) delete process.env.DOCKER_BUILDKIT;
+                    else process.env.DOCKER_BUILDKIT = buildkit;
+                    return previous;
+                  }),
+                  (previous) =>
+                    Effect.sync(() => {
+                      if (previous === undefined) delete process.env.DOCKER_BUILDKIT;
+                      else process.env.DOCKER_BUILDKIT = previous;
+                    }),
+                );
+                return yield* stack
+                  .deploy(
+                    Docker.Image("failing-image", { tag: "latest", build: { context: root } }),
+                  )
+                  .pipe(Effect.flip);
               }),
-              (previous) =>
-                Effect.sync(() => {
-                  if (previous === undefined) delete process.env.DOCKER_BUILDKIT;
-                  else process.env.DOCKER_BUILDKIT = previous;
-                }),
             );
-
-            const error = yield* stack
-              .deploy(Docker.Image("failing-image", { tag: "latest", build: { context: root } }))
-              .pipe(Effect.flip);
 
             const report = yield* Effect.sync(() => String(error) + JSON.stringify(error));
             expect(report).toContain("npm ERR! missing script: build-42");
@@ -296,6 +306,53 @@ describe(
         yield* fs.writeFileString(path.join(root, "Dockerfile"), dockerfile);
         return root;
       });
+
+    test.provider(
+      "exports a registry layer cache next to the image with the registry credentials",
+      (stack) =>
+        Effect.gen(function* () {
+          const docker = yield* Docker.Docker;
+          const client = yield* HttpClient.HttpClient;
+          const registry = yield* authenticatedRegistry();
+          const name = `${registry.host}/cache-app`;
+          yield* Effect.addFinalizer(() =>
+            docker.image.remove(`${name}:v1`, true).pipe(Effect.ignore),
+          );
+          const root = yield* dockerfileContext("FROM busybox\nRUN echo cached > /layer\n");
+          // `<name>:buildcache`, which only the registry credentials can
+          // read and write.
+          yield* stack.deploy(
+            Docker.Image("cache-app", {
+              name,
+              tag: "v1",
+              registry: registry.credentials,
+              build: {
+                context: root,
+                cache: true,
+              },
+            }),
+          );
+          const cache = yield* client
+            .execute(
+              HttpClientRequest.get(
+                `http://${registry.host}/v2/cache-app/manifests/buildcache`,
+              ).pipe(
+                HttpClientRequest.basicAuth("alchemy", "alchemy-test-password"),
+                HttpClientRequest.setHeader(
+                  "accept",
+                  "application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json",
+                ),
+              ),
+            )
+            .pipe(
+              Effect.flatMap(HttpClientResponse.filterStatusOk),
+              Effect.flatMap((response) => response.text),
+            );
+          // A BuildKit cache export, not another copy of the image.
+          expect(cache).toContain("application/vnd.buildkit.cacheconfig.v0");
+        }),
+      { timeout: 180_000 },
+    );
 
     test.provider("authenticates the build but does not push when skipPush is set", (stack) =>
       Effect.gen(function* () {

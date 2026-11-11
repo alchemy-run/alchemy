@@ -74,6 +74,27 @@ pass a path relative to the directory you deploy from.
 Editing any file in the context triggers a rebuild and a rollout on
 the next deploy.
 
+## Cache build layers
+
+Builds reuse the local BuildKit cache of the machine they run on. A
+fresh CI runner has none and rebuilds every step. Keep the layers in
+the cluster's registry with `build.cache`:
+
+```typescript
+const legacy = yield* Kubernetes.Deployment("Legacy", {
+  cluster,
+  context: "./legacy",
+  port: 8080,
+  build: { cache: true },
+});
+```
+
+Builds then import and export every stage's layers at the image
+repository's `:buildcache` tag. It works the same for `main` programs.
+The cache is off by default and never changes the image, so turning
+it on doesn't trigger a rollout. Other backends take BuildKit's cache
+backends, as in [Docker builds](/docker/build-and-push#cache-layers-in-a-registry).
+
 ## Bundle an Effect program
 
 With `main`, the workload's implementation is an Effect in the same

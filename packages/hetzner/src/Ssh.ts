@@ -1,4 +1,5 @@
 import * as Binding from "alchemy/Binding";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -157,6 +158,7 @@ export const openSshClient = Effect.fn(function* (input: {
 }) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+  const random = yield* SecureRandom.SecureRandom;
   const user = input.user ?? "root";
   const dest = `${user}@${input.host}`;
   const dir = yield* fs.makeTempDirectory({ prefix: "alchemy-hetzner-ssh-" });
@@ -214,7 +216,7 @@ export const openSshClient = Effect.fn(function* (input: {
       if (typeof local === "string") {
         localPath = local;
       } else {
-        const stamp = yield* Effect.sync(() => crypto.randomUUID());
+        const stamp = yield* random.uuidV4();
         staged = path.join(dir, `payload-${stamp}`);
         yield* fs.writeFile(staged, local);
         localPath = staged;
@@ -282,13 +284,16 @@ export const sshClientForServer = Effect.fn(function* (server: Server, options?:
 
 export const SshLive = Layer.effect(
   Ssh,
-  Effect.succeed(
-    Effect.fn(function* (server: Server, options?: SshOptions) {
-      const session = yield* sshClientForServer(server, options);
+  Effect.gen(function* () {
+    const random = yield* SecureRandom.SecureRandom;
+    return Effect.fn(function* (server: Server, options?: SshOptions) {
+      const session = yield* sshClientForServer(server, options).pipe(
+        Effect.provideService(SecureRandom.SecureRandom, random),
+      );
       return {
         exec: session.exec,
         scp: session.scp,
       };
-    }),
-  ),
+    });
+  }),
 );

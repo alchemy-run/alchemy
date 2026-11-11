@@ -9,14 +9,14 @@ export const pkgs = `alchemy@latest @alchemy.run/kubernetes@latest effect @effec
 
 Alchemy deploys to any Kubernetes cluster whose API server it can
 reach. That includes a cluster on your machine, GKE, AKS, EKS,
-DigitalOcean, k3s, or an on-prem fleet. This page covers what you
-need before the first deploy. You need the `alchemy` and `@alchemy.run/kubernetes` packages, a
+DigitalOcean, k3s, or an on-prem fleet.
+You need the `alchemy` and `@alchemy.run/kubernetes` packages, a
 cluster to deploy to, a registry for images built from your code,
 and permission to manage objects in the cluster.
 
 ## Prerequisites
 
-- [Bun](https://bun.sh) or Node.js 22+
+- [Node.js](https://nodejs.org) 24.11.1+ or [Bun](https://bun.sh)
 - [Docker](https://docs.docker.com/get-started/get-docker/), to build
   images from your code and to run a local cluster
 - A cluster. Use [kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation)

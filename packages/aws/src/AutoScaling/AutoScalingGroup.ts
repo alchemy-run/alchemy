@@ -101,6 +101,22 @@ export interface AutoScalingGroupProps {
    */
   terminationPolicies?: string[];
   /**
+   * Instance attributes (vCPUs, memory, burstable, generations, …) to launch
+   * by instead of the launch template's instance type. Auto Scaling picks
+   * every instance type that matches.
+   *
+   * When set, the group is configured with a mixed instances policy whose
+   * single override carries these requirements; removing it switches the
+   * group back to the plain launch template.
+   */
+  instanceRequirements?: autoscaling.InstanceRequirements;
+  /**
+   * How capacity is spread across Availability Zones. Removing it resets the
+   * group to the AWS default.
+   * @default { CapacityDistributionStrategy: "balanced-best-effort" }
+   */
+  availabilityZoneDistribution?: autoscaling.AvailabilityZoneDistribution;
+  /**
    * Tags to apply to the Auto Scaling Group itself.
    */
   tags?: Record<string, string>;
@@ -168,13 +184,32 @@ export interface AutoScalingGroup extends Resource<
      */
     terminationPolicies?: string[];
     /**
+     * Instance requirements of the group's mixed instances policy, when it
+     * launches by attributes rather than a fixed instance type.
+     */
+    instanceRequirements?: autoscaling.InstanceRequirements;
+    /**
+     * How capacity is spread across Availability Zones.
+     */
+    availabilityZoneDistribution?: autoscaling.AvailabilityZoneDistribution;
+    /**
      * Tags on the Auto Scaling Group.
      */
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  AutoScalingGroupLookup
 > {}
+
+/**
+ * Props for {@link AutoScalingGroup.lookup}: find an auto scaling group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface AutoScalingGroupLookup {
+  /** The auto scaling group name of the existing auto scaling group. */
+  autoScalingGroupName: string;
+}
 
 /**
  * An EC2 Auto Scaling Group that manages a fleet of instances from a launch
@@ -235,6 +270,26 @@ export interface AutoScalingGroup extends Resource<
  * });
  * ```
  *
+ * ### Choosing Instance Types by Attributes
+ * **Example:** Launch any burstable type with 2 vCPUs and 4–8 GiB
+ * ```typescript
+ * const group = yield* AutoScalingGroup("Fleet", {
+ *   launchTemplate: template,
+ *   subnetIds: [subnetA.subnetId, subnetB.subnetId],
+ *   minSize: 1,
+ *   maxSize: 4,
+ *   instanceRequirements: {
+ *     VCpuCount: { Min: 2, Max: 2 },
+ *     MemoryMiB: { Min: 4096, Max: 8192 },
+ *     BurstablePerformance: "required",
+ *   },
+ *   // keep zones strictly balanced instead of launching elsewhere
+ *   availabilityZoneDistribution: {
+ *     CapacityDistributionStrategy: "balanced-only",
+ *   },
+ * });
+ * ```
+ *
  * ### Scaling
  * **Example:** Track average CPU utilization
  * ```typescript
@@ -247,9 +302,21 @@ export interface AutoScalingGroup extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing auto scaling group
+ * `AutoScalingGroup.lookup` references an auto scaling group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `autoScalingGroupName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing auto scaling group
+ * ```typescript
+ * const existing = AWS.AutoScaling.AutoScalingGroup.lookup({ autoScalingGroupName: "my-auto-scaling-group" });
+ * ```
+ *
  * @resource
  */
 export const AutoScalingGroup = Resource<AutoScalingGroup>("AWS.AutoScaling.AutoScalingGroup");
+
+const DEFAULT_CAPACITY_DISTRIBUTION_STRATEGY = "balanced-best-effort";
 
 const sortStrings = (values: readonly string[] = []) =>
   [...values].sort((a, b) => a.localeCompare(b));
@@ -392,31 +459,40 @@ export const AutoScalingGroupProvider = () =>
 
       const toAttributes = (
         group: autoscaling.AutoScalingGroup,
-      ): AutoScalingGroup["Attributes"] => ({
-        autoScalingGroupArn: group.AutoScalingGroupARN!,
-        autoScalingGroupName: group.AutoScalingGroupName!,
-        launchTemplateId: group.LaunchTemplate?.LaunchTemplateId,
-        launchTemplateName: group.LaunchTemplate?.LaunchTemplateName,
-        launchTemplateVersion: group.LaunchTemplate?.Version,
-        subnetIds: String(group.VPCZoneIdentifier ?? "")
-          .split(",")
-          .filter(Boolean),
-        minSize: group.MinSize ?? 0,
-        maxSize: group.MaxSize ?? 0,
-        desiredCapacity: group.DesiredCapacity ?? 0,
-        targetGroupArns: sortStrings(group.TargetGroupARNs ?? []),
-        healthCheckType: group.HealthCheckType,
-        healthCheckGracePeriod: group.HealthCheckGracePeriod,
-        defaultCooldown: group.DefaultCooldown,
-        terminationPolicies: group.TerminationPolicies ?? [],
-        tags: Object.fromEntries(
-          (group.Tags ?? [])
-            .filter((tag): tag is { Key: string; Value: string } =>
-              Boolean(tag.Key && tag.Value !== undefined),
-            )
-            .map((tag) => [tag.Key, tag.Value]),
-        ),
-      });
+      ): AutoScalingGroup["Attributes"] => {
+        // A group launching by attributes carries its template inside the
+        // mixed instances policy instead of `LaunchTemplate`.
+        const mixed = group.MixedInstancesPolicy?.LaunchTemplate;
+        const launchTemplate = group.LaunchTemplate ?? mixed?.LaunchTemplateSpecification;
+        return {
+          autoScalingGroupArn: group.AutoScalingGroupARN!,
+          autoScalingGroupName: group.AutoScalingGroupName!,
+          launchTemplateId: launchTemplate?.LaunchTemplateId,
+          launchTemplateName: launchTemplate?.LaunchTemplateName,
+          launchTemplateVersion: launchTemplate?.Version,
+          subnetIds: String(group.VPCZoneIdentifier ?? "")
+            .split(",")
+            .filter(Boolean),
+          minSize: group.MinSize ?? 0,
+          maxSize: group.MaxSize ?? 0,
+          desiredCapacity: group.DesiredCapacity ?? 0,
+          targetGroupArns: sortStrings(group.TargetGroupARNs ?? []),
+          healthCheckType: group.HealthCheckType,
+          healthCheckGracePeriod: group.HealthCheckGracePeriod,
+          defaultCooldown: group.DefaultCooldown,
+          terminationPolicies: group.TerminationPolicies ?? [],
+          instanceRequirements: mixed?.Overrides?.find((o) => o.InstanceRequirements)
+            ?.InstanceRequirements,
+          availabilityZoneDistribution: group.AvailabilityZoneDistribution,
+          tags: Object.fromEntries(
+            (group.Tags ?? [])
+              .filter((tag): tag is { Key: string; Value: string } =>
+                Boolean(tag.Key && tag.Value !== undefined),
+              )
+              .map((tag) => [tag.Key, tag.Value]),
+          ),
+        };
+      };
 
       return {
         stables: ["autoScalingGroupArn", "autoScalingGroupName"],
@@ -445,6 +521,10 @@ export const AutoScalingGroupProvider = () =>
             } as const;
           }
         }),
+        lookup: Effect.fn(function* ({ autoScalingGroupName: name }) {
+          const group = yield* describeGroup(name);
+          return group ? toAttributes(group) : undefined;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.autoScalingGroupName ?? (yield* toName(id, olds ?? {}));
           const group = yield* describeGroup(name);
@@ -457,7 +537,22 @@ export const AutoScalingGroupProvider = () =>
             ...news.tags,
           };
           const targetGroupArns = sortStrings((news.targetGroupArns ?? []) as string[]);
-          const launchTemplate = toLaunchTemplateSpec(news.launchTemplate);
+          // With instance requirements the template goes inside a mixed
+          // instances policy; without, it is the plain `LaunchTemplate`.
+          // Either form replaces the other on `updateAutoScalingGroup`.
+          const launchTemplate = news.instanceRequirements
+            ? {
+                MixedInstancesPolicy: {
+                  LaunchTemplate: {
+                    LaunchTemplateSpecification: toLaunchTemplateSpec(news.launchTemplate),
+                    Overrides: [{ InstanceRequirements: news.instanceRequirements }],
+                  },
+                },
+              }
+            : { LaunchTemplate: toLaunchTemplateSpec(news.launchTemplate) };
+          const capacityDistributionStrategy =
+            news.availabilityZoneDistribution?.CapacityDistributionStrategy ??
+            DEFAULT_CAPACITY_DISTRIBUTION_STRATEGY;
           const healthCheckType =
             news.healthCheckType ?? (targetGroupArns.length > 0 ? "ELB" : "EC2");
 
@@ -476,7 +571,10 @@ export const AutoScalingGroupProvider = () =>
                 MinSize: news.minSize,
                 MaxSize: news.maxSize,
                 DesiredCapacity: news.desiredCapacity ?? news.minSize,
-                LaunchTemplate: launchTemplate,
+                ...launchTemplate,
+                AvailabilityZoneDistribution: {
+                  CapacityDistributionStrategy: capacityDistributionStrategy,
+                },
                 VPCZoneIdentifier: (news.subnetIds as string[]).join(","),
                 TargetGroupARNs: targetGroupArns,
                 HealthCheckType: healthCheckType,
@@ -508,14 +606,23 @@ export const AutoScalingGroupProvider = () =>
           // Sync core ASG configuration — `updateAutoScalingGroup`
           // overwrites min/max/desired/template/subnets/health-check
           // settings in one call, so we issue it unconditionally
-          // (idempotent for matching values).
+          // (idempotent for matching values). The zone distribution is
+          // diffed against the observed group (absent = the AWS default)
+          // and sent only when it differs.
+          const observedCapacityDistributionStrategy =
+            existing.AvailabilityZoneDistribution?.CapacityDistributionStrategy ??
+            DEFAULT_CAPACITY_DISTRIBUTION_STRATEGY;
           yield* autoscaling
             .updateAutoScalingGroup({
               AutoScalingGroupName: autoScalingGroupName,
               MinSize: news.minSize,
               MaxSize: news.maxSize,
               DesiredCapacity: news.desiredCapacity,
-              LaunchTemplate: launchTemplate,
+              ...launchTemplate,
+              AvailabilityZoneDistribution:
+                observedCapacityDistributionStrategy === capacityDistributionStrategy
+                  ? undefined
+                  : { CapacityDistributionStrategy: capacityDistributionStrategy },
               VPCZoneIdentifier: (news.subnetIds as string[]).join(","),
               HealthCheckType: healthCheckType,
               HealthCheckGracePeriod: toSeconds(news.healthCheckGracePeriod),

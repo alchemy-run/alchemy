@@ -1,5 +1,6 @@
 import { Docker } from "@alchemy.run/docker/Docker";
 import { isInlineDockerfile } from "@alchemy.run/docker/Dockerfile";
+import { validateDockerfileBuild } from "@alchemy.run/docker/ImageSource";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Bundle from "alchemy/Bundle/Bundle";
 import { findCwdForBundle, getStableContextDir, resolveMainPath } from "alchemy/Bundle/TempRoot";
@@ -96,12 +97,24 @@ export const createContainerApplicationName = (id: string, name: string | undefi
  * - `image` alone — a pre-built remote image, exclusive with `dockerfile`
  *   and `context`.
  * - `dockerfile` (string path against `context`, or inline content with no
- *   `context`) — the user-Dockerfile build.
+ *   `context`) — the user-Dockerfile build. Only this source takes
+ *   `build.args` / `build.secrets`.
  *
  * Invalid combinations are programmer errors, surfaced as plan-time defects
  * (`Effect.die`) rather than typed errors.
  */
 export const validateContainerImageProps = (
+  id: string,
+  props: Pick<AnyContainerApplicationProps, "main" | "image" | "dockerfile" | "context" | "build">,
+): Effect.Effect<void> =>
+  validateImageSources(props).pipe(
+    Effect.andThen(
+      // An empty `main` declares no program, as in `validateImageSources`.
+      validateDockerfileBuild(id, { ...props, main: props.main || undefined }),
+    ),
+  );
+
+const validateImageSources = (
   props: Pick<AnyContainerApplicationProps, "main" | "image" | "dockerfile" | "context">,
 ): Effect.Effect<void> => {
   const df = props.dockerfile;
@@ -209,6 +222,7 @@ export const buildFinalDockerfile = (
   runtime: "bun" | "node",
   external: string[] = [],
   autoInstallExternals = true,
+  install: ReadonlyArray<string> = [],
 ): string => {
   const base = envPreamble ?? (runtime === "bun" ? "FROM oven/bun:1" : "FROM node:22-slim");
   const runtimeBin = runtime === "bun" ? "bun" : "node";
@@ -218,14 +232,19 @@ export const buildFinalDockerfile = (
   return [
     base,
     "",
+    // Mount-binding clients (e.g. the Archil FUSE client) go below the base
+    // and above the program, so a program change doesn't reinstall them.
+    ...(install.length > 0 ? [...install, ""] : []),
     "WORKDIR /app",
     ...(installStep ? [installStep, ""] : []),
-    "COPY index.mjs /app/index.mjs",
+    // Linked copies don't depend on the layers below them, so the registry
+    // exporter reuses cached base layers instead of downloading them first.
+    "COPY --link index.mjs /app/index.mjs",
     // Copy any additional rolldown chunks (`chunk-XXX.js`,
     // `BunServices-YYY.js`, …). The glob matches zero or more files;
     // non-trivial bundles always emit at least one chunk, minimal
     // bundles emit none and the COPY no-ops.
-    "COPY *.js /app/",
+    "COPY --link *.js /app/",
     "EXPOSE 3000",
     `ENTRYPOINT ["${runtimeBin}", "/app/index.mjs"]`,
     "",
@@ -380,7 +399,7 @@ export const prepareContainerBuildContext = Effect.fn(function* (
   if (!main) {
     return yield* Effect.die(new Error("Container requires a `main` entrypoint."));
   }
-  yield* validateContainerImageProps(news);
+  yield* validateContainerImageProps(id, news);
   const runtime = news.runtime ?? "bun";
   const context = yield* getStableContextDir(process.cwd(), dotAlchemy, `${id}-container`);
   const dockerfileContent = buildFinalDockerfile(
@@ -388,6 +407,7 @@ export const prepareContainerBuildContext = Effect.fn(function* (
     runtime,
     news.external,
     news.autoInstallExternals,
+    news.imageInstall,
   );
   const [bundle] = yield* Effect.all(
     [

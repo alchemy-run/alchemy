@@ -11,6 +11,7 @@ import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import type { PolicyDocument } from "../IAM/Policy.ts";
 import { normalizePolicyDocument, stringifyPolicyDocument } from "../IAM/Policy.ts";
+import { canonicalJson, tagListRecord } from "../internal/Observe.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
@@ -80,8 +81,18 @@ export interface Repository extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  RepositoryLookup
 > {}
+
+/**
+ * Props for {@link Repository.lookup}: find a repository this stack doesn't
+ * manage, in the ambient account and region, by name.
+ */
+export interface RepositoryLookup {
+  /** The name of the existing repository. */
+  repositoryName: string;
+}
 
 /**
  * An Amazon ECR repository for container images.
@@ -109,6 +120,17 @@ export interface Repository extends Resource<
  *     ],
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing repository
+ * `Repository.lookup` references a repository Alchemy doesn't manage (created in the
+ * console or by another stack), found by `repositoryName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference images in an existing repository
+ * ```typescript
+ * const repo = AWS.ECR.Repository.lookup({ repositoryName: "web" });
+ * const image = Output.interpolate`${repo.repositoryUri}:latest`;
  * ```
  *
  * @resource
@@ -144,6 +166,19 @@ export const RepositoryProvider = () =>
           ),
         );
 
+      // The lifecycle policy is managed only when declared, so it is only
+      // observed then (canonical JSON — ECR may reformat the document).
+      const readLifecyclePolicy = (repositoryName: string, declared: string | undefined) =>
+        declared === undefined
+          ? Effect.undefined
+          : ecr.getLifecyclePolicy({ repositoryName }).pipe(
+              Effect.map((res) => canonicalJson(res.lifecyclePolicyText)),
+              Effect.catchTag(
+                ["LifecyclePolicyNotFoundException", "RepositoryNotFoundException"],
+                () => Effect.undefined,
+              ),
+            );
+
       // Sync the repository policy — compare the OBSERVED policy against the
       // desired one via `normalizePolicyDocument` (key order / whitespace
       // insensitive) so a re-deploy of an equivalent document is a no-op.
@@ -176,6 +211,27 @@ export const RepositoryProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        lookup: Effect.fn(function* ({ repositoryName }) {
+          const described = yield* ecr
+            .describeRepositories({ repositoryNames: [repositoryName] })
+            .pipe(Effect.catchTag("RepositoryNotFoundException", () => Effect.undefined));
+          const repository = described?.repositories?.[0];
+          if (!repository?.repositoryArn || !repository.repositoryUri) return undefined;
+          const listedTags = yield* ecr.listTagsForResource({
+            resourceArn: repository.repositoryArn,
+          });
+          return {
+            repositoryName,
+            repositoryArn: repository.repositoryArn as RepositoryArn,
+            repositoryUri: repository.repositoryUri as RepositoryUri,
+            registryId: repository.registryId!,
+            imageTagMutability: repository.imageTagMutability ?? "MUTABLE",
+            scanOnPush: repository.imageScanningConfiguration?.scanOnPush ?? false,
+            lifecyclePolicyText: undefined,
+            policy: yield* readPolicy(repositoryName),
+            tags: tagListRecord(listedTags.tags),
+          };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const repositoryName =
             output?.repositoryName ?? (yield* toRepositoryName(id, olds ?? {}));
@@ -200,9 +256,12 @@ export const RepositoryProvider = () =>
               repository.imageTagMutability ?? output?.imageTagMutability ?? "MUTABLE",
             scanOnPush:
               repository.imageScanningConfiguration?.scanOnPush ?? output?.scanOnPush ?? false,
-            lifecyclePolicyText: output?.lifecyclePolicyText,
+            lifecyclePolicyText: yield* readLifecyclePolicy(
+              repositoryName,
+              olds?.lifecyclePolicyText,
+            ),
             policy: yield* readPolicy(repositoryName),
-            tags: output?.tags ?? {},
+            tags: tagListRecord(listedTags.tags),
           };
           return (yield* hasAlchemyTags(id, listedTags.tags ?? [])) ? attrs : Unowned(attrs);
         }),
@@ -326,8 +385,11 @@ export const RepositoryProvider = () =>
             registryId: repository.registryId!,
             imageTagMutability: desiredImageTagMutability,
             scanOnPush: desiredScanOnPush,
-            lifecyclePolicyText: news.lifecyclePolicyText,
-            policy: desiredPolicy,
+            lifecyclePolicyText: yield* readLifecyclePolicy(
+              repositoryName,
+              news.lifecyclePolicyText,
+            ),
+            policy: yield* readPolicy(repositoryName),
             tags: desiredTags,
           };
         }),

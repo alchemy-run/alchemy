@@ -118,8 +118,23 @@ export interface Directory extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DirectoryLookup
 > {}
+
+/**
+ * Props for {@link Directory.lookup}: find a directory this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type DirectoryLookup =
+  | {
+      /** The id of the existing directory. */
+      directoryId: string;
+    }
+  | {
+      /** The fully qualified name of the existing directory. */
+      name: string;
+    };
 
 /**
  * An AWS Directory Service managed directory — either Simple AD (Samba) or
@@ -160,6 +175,17 @@ export interface Directory extends Resource<
  * const directory = yield* Directory("Corp", { ... });
  * // the directory-provided DNS servers, one per Availability Zone
  * const dns = directory.dnsIpAddrs;
+ * ```
+ *
+ * ### Looking up an existing directory
+ * `Directory.lookup` references a directory Alchemy doesn't manage (created in the
+ * console or by another stack), found by `directoryId` or `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing directory
+ * ```typescript
+ * const corp = AWS.DirectoryService.Directory.lookup({ name: "corp.example.com" });
+ * const directoryId = corp.directoryId;
  * ```
  *
  * @resource
@@ -335,6 +361,13 @@ export const DirectoryProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* (props) {
+          const directory = yield* observe(
+            "directoryId" in props ? props.directoryId : undefined,
+            "name" in props ? props.name : undefined,
+          );
+          return directory === undefined ? undefined : yield* toAttrs(directory);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const directory = yield* observe(output?.directoryId, olds?.name);
           if (directory === undefined) return undefined;

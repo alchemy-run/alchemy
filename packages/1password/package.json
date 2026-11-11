@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/1password",
-  "version": "2.0.0-beta.84",
+  "version": "2.0.0-beta.85",
   "description": "1Password Environments, vault references and desktop authentication for Alchemy.",
   "keywords": [
     "1password",

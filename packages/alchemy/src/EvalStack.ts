@@ -3,19 +3,26 @@ import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
 import { AlchemyContext, AlchemyContextLive } from "./AlchemyContext.ts";
 import { provideFreshArtifactStore } from "./Artifacts.ts";
-import { AuthProviders } from "./Auth/AuthProvider.ts";
 import { CredentialsStoreLive } from "./Auth/Credentials.ts";
 import { ProfileStoreLive } from "./Auth/Profile.ts";
 import { type StackEffect, StateScope } from "./Stack.ts";
 import { Stage } from "./Stage.ts";
 import { loadConfigProvider } from "./Util/ConfigProvider.ts";
-import { fileLogger } from "./Util/FileLogger.ts";
 import { PlatformServices } from "./Util/PlatformServices.ts";
+
+// TODO(unify stack builds): this is one of several ways to build a stack;
+// the others are `Alchemist/Operations.ts` (`buildStack`,
+// `buildWithoutProgram`) and the test harness's scratch stacks
+// (`alchemy-test/src/Core.ts`). They differ in config (this one reloads `.env`
+// and drops the caller's ConfigProvider), adopt/updateStateStore, and how
+// the state-store lease is scoped. Migrate everything to `Alchemist.plan` /
+// `Alchemist.apply`: give Alchemist this file's per-call lease scope
+// (`StateScope`), reimplement `Deploy.deploy` / `Destroy.destroy` on it,
+// move scratch stacks onto it, then delete this file.
 
 // Deploy-time only: kept out of `Stack.ts` because every runtime imports the
 // `Stack` tag, and this module's top-level platform layer (Node + Bun
@@ -24,7 +31,6 @@ import { PlatformServices } from "./Util/PlatformServices.ts";
 const platform = Layer.mergeAll(
   PlatformServices,
   FetchHttpClient.layer,
-  Layer.provide(Logger.layer([fileLogger("out")], { mergeWithExisting: true }), PlatformServices),
   Layer.provide(ProfileStoreLive, PlatformServices),
   Layer.provide(CredentialsStoreLive, PlatformServices),
 );
@@ -74,11 +80,7 @@ export const evalStack = <S extends { services: Context.Context<any> }, B, Stack
     );
   }).pipe(
     Effect.provide(
-      Layer.effect(
-        AuthProviders,
-        Effect.serviceOption(AuthProviders).pipe(Effect.map(Option.getOrElse(() => ({})))),
-      ).pipe(
-        Layer.provideMerge(Layer.succeed(Stage, options.stage)),
+      Layer.succeed(Stage, options.stage).pipe(
         Layer.provideMerge(Layer.provideMerge(alchemy({ dev: options.dev }), platform)),
       ),
     ),

@@ -3,7 +3,7 @@ import { expect, it } from "@alchemy.run/test";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
-import { StackEntrypointError } from "@/Alchemist/Session.ts";
+import * as Alchemist from "@/Alchemist/index.ts";
 import { AuthError } from "@/Auth/AuthProvider.ts";
 import { handleCliErrors } from "@/Cli/commands/errors.ts";
 
@@ -47,7 +47,7 @@ it.effect(
 
       const result = yield* handleCliErrors(
         Effect.fail(
-          new StackEntrypointError({
+          new Alchemist.StackEntrypointError({
             message:
               "Stack entrypoint 'alchemy.run.ts' does not exist. Run this command from an Alchemy project or pass --config <path>.",
           }),

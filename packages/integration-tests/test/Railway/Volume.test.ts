@@ -11,6 +11,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import VolumeApi, { Data, MARKER, MARKER_FILE, VOLUME_PATH } from "./fixtures/volume-api.ts";
+import { expectFound } from "./lookup.ts";
 import { suitePartition } from "./suiteProject.ts";
 import { waitUntilVolumeGone } from "./waitUntilVolumeGone.ts";
 
@@ -46,6 +47,14 @@ test.provider(
           });
           return { project, environment, volume };
         }),
+      );
+      yield* expectFound(
+        Railway.Volume.lookup({
+          projectId: created.volume.projectId,
+          environmentId: created.volume.environmentId,
+          volumeId: created.volume.volumeId,
+        }),
+        created.volume,
       );
 
       expect(created.volume.volumeId).toEqual(expect.any(String));

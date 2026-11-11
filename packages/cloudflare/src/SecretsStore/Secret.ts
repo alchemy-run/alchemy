@@ -61,8 +61,33 @@ export type Secret = Resource<
     comment: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SecretLookup
 >;
+
+/**
+ * Props for {@link Secret.lookup}: find a secret this stack doesn't manage,
+ * in a given store, by its id or its name.
+ */
+export type SecretLookup = {
+  /**
+   * The ID of the Secrets Store that holds the secret.
+   */
+  storeId: string;
+} & (
+  | {
+      /**
+       * The Cloudflare-assigned ID of the existing secret.
+       */
+      secretId: string;
+    }
+  | {
+      /**
+       * The name of the existing secret within the store.
+       */
+      name: string;
+    }
+);
 
 export const isSecret = (value: unknown): value is Secret =>
   isResourceOfType(value, "Cloudflare.SecretsStore.Secret");
@@ -98,6 +123,25 @@ const asSecretStatus = (status: string): SecretStatus => status as SecretStatus;
  * const value = yield* apiKey;
  * // Or call `.get()` explicitly:
  * const value = yield* apiKey.get();
+ * ```
+ *
+ * ### Looking up an existing Secret
+ * `Secret.lookup` binds a secret Alchemy doesn't manage (created in the
+ * dashboard, with wrangler or by another stack), found in a store by
+ * `secretId` or `name`. It is read during plan/deploy and never created,
+ * updated or deleted; its value never leaves Cloudflare.
+ *
+ * **Example:** A shared API key from the account's store
+ * ```typescript
+ * const store = Cloudflare.SecretsStore.Store.lookup({
+ *   name: "default_secrets_store",
+ * });
+ * const apiKey = yield* Cloudflare.SecretsStore.ReadSecret(
+ *   Cloudflare.SecretsStore.Secret.lookup({
+ *     storeId: store.storeId,
+ *     name: "OPENAI_API_KEY",
+ *   }),
+ * );
  * ```
  *
  * @resource
@@ -252,6 +296,32 @@ export const SecretProviderLive = () =>
             NotFound: () => Effect.void,
           }),
         );
+    }),
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const secret =
+        "secretId" in props
+          ? yield* secretsStore
+              .getStoreSecret({ accountId, storeId: props.storeId, secretId: props.secretId })
+              .pipe(
+                Effect.catchTags({
+                  SecretNotFound: () => Effect.undefined,
+                  StoreNotFound: () => Effect.undefined,
+                }),
+              )
+          : yield* findSecretByName({ accountId, storeId: props.storeId, name: props.name }).pipe(
+              Effect.catchTag("StoreNotFound", () => Effect.undefined),
+            );
+      if (!secret) return undefined;
+      return {
+        secretId: secret.id,
+        secretName: secret.name,
+        storeId: secret.storeId,
+        accountId,
+        status: asSecretStatus(secret.status),
+        scopes: resolveScopes((secret as { scopes?: string[] | null }).scopes ?? undefined),
+        comment: secret.comment ?? undefined,
+      };
     }),
     read: Effect.fn(function* ({ id, olds, output }) {
       if (output?.secretId) {
@@ -453,7 +523,8 @@ export const StoreSecretProvider = () =>
  * slow activation degrades to a retried deploy instead of a hard
  * error here.
  */
-const waitForSecretActive = (
+/** @internal Wait (bounded) for a freshly created secret to become active. */
+export const waitForSecretActive = (
   key: { accountId: string; storeId: string; secretId: string },
   initialStatus: SecretStatus,
 ) =>

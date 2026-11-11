@@ -32,7 +32,9 @@ import { Resource, type ResourceBinding } from "alchemy/Resource";
 import type { ProcessContext, ProcessServices } from "alchemy/Runtime/Process";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
+import { logChildLine } from "alchemy/Util/LogRecord";
 import { sha256Object } from "alchemy/Util/sha256";
+import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -117,6 +119,52 @@ export class ComputeUnexpectedResponse extends Data.TaggedError("ComputeUnexpect
   readonly message: string;
   readonly cause?: unknown;
 }> {}
+
+/** The Compute stable endpoint never became reachable before the wait timed out. */
+export class ComputeUrlTimeout extends Data.TaggedError("ComputeUrlTimeout")<{
+  readonly message: string;
+}> {}
+
+/** A Compute environment key is managed by Prisma and cannot be managed by Alchemy. */
+export class ComputeEnvironmentVariableSystemManaged extends Data.TaggedError(
+  "ComputeEnvironmentVariableSystemManaged",
+)<{
+  readonly message: string;
+}> {}
+
+/** A Compute environment key already exists but is not owned by this Compute resource. */
+export class ComputeEnvironmentVariableNotOwned extends Data.TaggedError(
+  "ComputeEnvironmentVariableNotOwned",
+)<{
+  readonly message: string;
+}> {}
+
+/**
+ * Rolling back environment variables created during a failed reconcile also
+ * failed. `errors` holds the reconcile failure, then each cleanup failure.
+ */
+export class ComputeEnvironmentRollbackFailed extends Data.TaggedError(
+  "ComputeEnvironmentRollbackFailed",
+)<{
+  readonly message: string;
+  readonly errors: readonly unknown[];
+  readonly cause?: unknown;
+}> {}
+
+/**
+ * Recovery of a promoted deployment (rollback, readiness, or displaced
+ * deployment cleanup) did not converge. `errors` holds every underlying failure.
+ */
+export class ComputeDeploymentRecoveryFailed extends Data.TaggedError(
+  "ComputeDeploymentRecoveryFailed",
+)<{
+  readonly message: string;
+  readonly errors: readonly unknown[];
+}> {
+  override get cause() {
+    return this.errors[0];
+  }
+}
 
 const ComputeTypeId = "Prisma.Compute" as const;
 type ComputeTypeId = typeof ComputeTypeId;
@@ -866,6 +914,7 @@ export const Compute: Platform<
         // Runtime ConfigProvider lookups call back into RuntimeContext.get.
         // Read the process env directly here to avoid re-entering that path.
         Effect.sync(() => {
+          // oxlint-disable-next-line effecttsgo/process-env-in-effect -- runtime RuntimeContext.get must read process.env directly to avoid re-entering the ConfigProvider
           const value = process.env[key];
           if (value === undefined) {
             return undefined;
@@ -1322,15 +1371,15 @@ export const waitForDeploymentUrl = Effect.fn(function* (
     });
   }
   const timeoutMs = timeoutSeconds * 1_000;
-  const startedAt = yield* Effect.sync(() => Date.now());
+  const startedAt = yield* Clock.currentTimeMillis;
   let lastStatus: number | undefined;
   let lastBody = "";
 
   while (true) {
-    const beforeRequest = yield* Effect.sync(() => Date.now());
+    const beforeRequest = yield* Clock.currentTimeMillis;
     const remainingBeforeRequest = timeoutMs - (beforeRequest - startedAt);
     if (remainingBeforeRequest <= 0) {
-      return yield* Effect.fail(deploymentUrlTimeoutError(probeUrl, lastStatus, lastBody));
+      return yield* deploymentUrlTimeoutError(probeUrl, lastStatus, lastBody);
     }
     const requestTimeoutMs = Math.min(5_000, remainingBeforeRequest);
     const response = yield* http.execute(HttpClientRequest.get(probeUrl)).pipe(
@@ -1350,7 +1399,7 @@ export const waitForDeploymentUrl = Effect.fn(function* (
       if (response.status !== 404 && acceptsStatus(response.status)) {
         return;
       }
-      const beforeBody = yield* Effect.sync(() => Date.now());
+      const beforeBody = yield* Clock.currentTimeMillis;
       const remainingBeforeBody = timeoutMs - (beforeBody - startedAt);
       if (remainingBeforeBody > 0) {
         const bodyPrefix = yield* readResponseBodyPrefix(response).pipe(
@@ -1369,9 +1418,9 @@ export const waitForDeploymentUrl = Effect.fn(function* (
       }
     }
 
-    const elapsed = yield* Effect.sync(() => Date.now() - startedAt);
+    const elapsed = (yield* Clock.currentTimeMillis) - startedAt;
     if (elapsed >= timeoutMs) {
-      return yield* Effect.fail(deploymentUrlTimeoutError(probeUrl, lastStatus, lastBody));
+      return yield* deploymentUrlTimeoutError(probeUrl, lastStatus, lastBody);
     }
 
     yield* Effect.sleep(Duration.millis(Math.min(intervalMs, timeoutMs - elapsed)));
@@ -1379,8 +1428,8 @@ export const waitForDeploymentUrl = Effect.fn(function* (
 });
 
 const deploymentUrlTimeoutError = (url: string, lastStatus: number | undefined, lastBody: string) =>
-  new Error(
-    [
+  new ComputeUrlTimeout({
+    message: [
       `Timed out waiting for Prisma Compute URL '${url}' to become reachable.`,
       lastStatus ? `Last response: HTTP ${lastStatus}.` : "No HTTP response was received.",
       lastBody.includes("There is no service on this URL")
@@ -1389,7 +1438,7 @@ const deploymentUrlTimeoutError = (url: string, lastStatus: number | undefined, 
     ]
       .filter((line): line is string => line !== undefined)
       .join(" "),
-  );
+  });
 
 const isAutoBuild = (build: ComputeProps["build"]): build is "auto" | ComputeAutoBuild =>
   build === "auto" ||
@@ -1837,21 +1886,21 @@ const findEnvironmentVariable = (
   });
 
 const systemManagedEnvironmentVariableError = (key: string) =>
-  new Error(
-    `Prisma environment variable '${key}' is managed by Prisma and cannot be managed by Alchemy.`,
-  );
+  new ComputeEnvironmentVariableSystemManaged({
+    message: `Prisma environment variable '${key}' is managed by Prisma and cannot be managed by Alchemy.`,
+  });
 
 const ensureUserManagedEnvironmentVariable = (variable: ObservedEnvironmentVariable) =>
   Effect.gen(function* () {
     if (variable.isManagedBySystem) {
-      return yield* Effect.fail(systemManagedEnvironmentVariableError(variable.key));
+      return yield* systemManagedEnvironmentVariableError(variable.key);
     }
   });
 
 const environmentVariableOwnershipError = (key: string, variableId: string) =>
-  new Error(
-    `Prisma environment variable '${key}' (${variableId}) already exists in this branch/class scope but is not owned by this Compute resource. It may be foreign or left by an interrupted prior Compute deploy; the Management API exposes no ownership marker or plaintext value that would make takeover safe. Use one standalone Prisma.EnvironmentVariable resource as the independently manageable owner, choose a different key, explicitly adopt that resource, or remove the existing variable before deploying.`,
-  );
+  new ComputeEnvironmentVariableNotOwned({
+    message: `Prisma environment variable '${key}' (${variableId}) already exists in this branch/class scope but is not owned by this Compute resource. It may be foreign or left by an interrupted prior Compute deploy; the Management API exposes no ownership marker or plaintext value that would make takeover safe. Use one standalone Prisma.EnvironmentVariable resource as the independently manageable owner, choose a different key, explicitly adopt that resource, or remove the existing variable before deploying.`,
+  });
 
 interface ComputeEnvironmentScope {
   class: "production" | "preview";
@@ -1896,9 +1945,9 @@ interface ComputeEnvironmentPlan {
   variable: ObservedEnvironmentVariable | undefined;
 }
 
-const rollbackCreatedEnvironmentVariables = Effect.fn(function* (
+const rollbackCreatedEnvironmentVariables = Effect.fn(function* <E>(
   createdIds: ReadonlyArray<{ key: string; id: string }>,
-  originalError: unknown,
+  originalError: E,
 ) {
   if (createdIds.length === 0) {
     return yield* Effect.fail(originalError);
@@ -1915,12 +1964,11 @@ const rollbackCreatedEnvironmentVariables = Effect.fn(function* (
     }
   }
   if (cleanupErrors.length > 0) {
-    return yield* Effect.fail(
-      new AggregateError(
-        [originalError, ...cleanupErrors],
-        `Failed to roll back newly created Prisma environment variables after reconcile failed. Manual cleanup: ${createdIds.map(({ id }) => `DELETE /v1/environment-variables/${id}`).join(", ")}.`,
-      ),
-    );
+    return yield* new ComputeEnvironmentRollbackFailed({
+      message: `Failed to roll back newly created Prisma environment variables after reconcile failed. Manual cleanup: ${createdIds.map(({ id }) => `DELETE /v1/environment-variables/${id}`).join(", ")}.`,
+      errors: [originalError, ...cleanupErrors],
+      cause: originalError,
+    });
   }
   return yield* Effect.fail(originalError);
 });
@@ -1951,7 +1999,7 @@ const syncComputeEnvironmentInternal = Effect.fn(function* (
     if (variable) {
       yield* ensureUserManagedEnvironmentVariable(variable);
       if (ownedIds[key] !== variable.id) {
-        return yield* Effect.fail(environmentVariableOwnershipError(key, variable.id));
+        return yield* environmentVariableOwnershipError(key, variable.id);
       }
     }
     plans.push({ key, value, variable });
@@ -2090,11 +2138,22 @@ const startDev = Effect.fn(function* (id: string, props: ComputeProps) {
     cwd,
     env,
     extendEnv: true,
-    stdin: "inherit",
-    stdout: "inherit",
-    stderr: "inherit",
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
     detached: false,
   });
+  // The dev server's output becomes log records instead of raw writes over
+  // the CLI's renderer; each drain ends when the process does.
+  for (const name of ["stdout", "stderr"] as const) {
+    yield* handle[name].pipe(
+      Stream.decodeText,
+      Stream.splitLines,
+      Stream.runForEach((line) => logChildLine(line, { stream: name })),
+      Effect.ignore,
+      Effect.forkDetach,
+    );
+  }
   devProcesses.set(processKey, handle);
   return localUrl;
 });
@@ -2246,7 +2305,7 @@ const ProviderLive = () =>
           );
           let app = ensuredApp.app;
           let preserveCreatedAppOnFailure = false;
-          const cleanupCreatedAppOnFailure = (error: unknown) =>
+          const cleanupCreatedAppOnFailure = <E>(error: E) =>
             ensuredApp.created && !preserveCreatedAppOnFailure
               ? destroyApp(app.id).pipe(
                   Effect.mapError((cleanupError) =>
@@ -2322,12 +2381,10 @@ const ProviderLive = () =>
               app.latestDeploymentId !== null &&
               app.latestDeploymentId !== terminalFailedDeploymentId
             ) {
-              return yield* Effect.fail(
-                new AggregateError(
-                  [],
-                  `Prisma Compute state preserves terminal failed deployment '${terminalFailedDeploymentId}', but App '${app.id}' reports deployment '${app.latestDeploymentId}' as latest. Alchemy cannot prove that the live deployment is the interrupted replacement, and the persisted failed deployment is not a safe rollback target. No new deployment was created and neither deployment was deleted.`,
-                ),
-              );
+              return yield* new ComputeDeploymentRecoveryFailed({
+                errors: [],
+                message: `Prisma Compute state preserves terminal failed deployment '${terminalFailedDeploymentId}', but App '${app.id}' reports deployment '${app.latestDeploymentId}' as latest. Alchemy cannot prove that the live deployment is the interrupted replacement, and the persisted failed deployment is not a safe rollback target. No new deployment was created and neither deployment was deleted.`,
+              });
             }
 
             // Apply persists the previous stable Attributes before reconcile.
@@ -2362,27 +2419,28 @@ const ProviderLive = () =>
               ).pipe(Effect.result);
 
               if (Result.isFailure(observedAfterRollback)) {
-                return yield* Effect.fail(
-                  new AggregateError(
-                    [
-                      ...(Result.isFailure(rollback) ? [rollback.failure] : []),
-                      ...(Result.isFailure(observedAfterRollback)
-                        ? [observedAfterRollback.failure]
-                        : []),
-                    ],
-                    `Prisma App '${app.id}' has live deployment '${displacedDeploymentId}', while Alchemy state preserves deployment '${persistedDeploymentId}' as the prior promoted generation. Recovery via POST /v1/services/${app.id}/rollback did not converge, so no environment variables or new deployment were changed and neither deployment was deleted.`,
-                  ),
-                );
+                return yield* new ComputeDeploymentRecoveryFailed({
+                  errors: [
+                    ...(Result.isFailure(rollback) ? [rollback.failure] : []),
+                    ...(Result.isFailure(observedAfterRollback)
+                      ? [observedAfterRollback.failure]
+                      : []),
+                  ],
+                  message: `Prisma App '${app.id}' has live deployment '${displacedDeploymentId}', while Alchemy state preserves deployment '${persistedDeploymentId}' as the prior promoted generation. Recovery via POST /v1/services/${app.id}/rollback did not converge, so no environment variables or new deployment were changed and neither deployment was deleted.`,
+                });
               }
 
               app = observedAfterRollback.success;
               yield* destroyDeployment(displacedDeploymentId, effectiveNews).pipe(
                 Effect.mapError(
                   (cleanupError) =>
-                    new AggregateError(
-                      [...(Result.isFailure(rollback) ? [rollback.failure] : []), cleanupError],
-                      `Prisma App '${app.id}' was restored to deployment '${persistedDeploymentId}', but displaced deployment '${displacedDeploymentId}' could not be deleted. No new deployment was created; retry cleanup with DELETE /v1/deployments/${displacedDeploymentId}.`,
-                    ),
+                    new ComputeDeploymentRecoveryFailed({
+                      errors: [
+                        ...(Result.isFailure(rollback) ? [rollback.failure] : []),
+                        cleanupError,
+                      ],
+                      message: `Prisma App '${app.id}' was restored to deployment '${persistedDeploymentId}', but displaced deployment '${displacedDeploymentId}' could not be deleted. No new deployment was created; retry cleanup with DELETE /v1/deployments/${displacedDeploymentId}.`,
+                    }),
                 ),
               );
             }
@@ -2457,10 +2515,7 @@ const ProviderLive = () =>
               deployment = undefined;
             }
             let createdDeploymentId: string | undefined;
-            const cleanupCreatedDeploymentOnFailure = (
-              failedDeploymentId: string,
-              error: unknown,
-            ) =>
+            const cleanupCreatedDeploymentOnFailure = <E>(failedDeploymentId: string, error: E) =>
               createdDeploymentId === failedDeploymentId
                 ? destroyDeployment(failedDeploymentId, effectiveNews).pipe(
                     Effect.mapError((cleanupError) =>
@@ -2493,7 +2548,9 @@ const ProviderLive = () =>
               if (artifact.file !== undefined && !created.uploadUrl) {
                 return yield* cleanupCreatedDeploymentOnFailure(
                   created.id,
-                  new Error("Prisma deployment creation did not return an upload URL."),
+                  new ComputeOperationFailed({
+                    message: "Prisma deployment creation did not return an upload URL.",
+                  }),
                 );
               }
               if (created.uploadUrl && artifact.file !== undefined) {
@@ -2594,23 +2651,21 @@ const ProviderLive = () =>
                     deployment.id,
                     Result.isSuccess(rollback)
                       ? readiness.failure
-                      : new AggregateError(
-                          [readiness.failure, rollback.failure],
-                          `Prisma App '${app.id}' endpoint was restored to deployment '${rollbackDeploymentId}', but the rollback response was lost.`,
-                        ),
+                      : new ComputeDeploymentRecoveryFailed({
+                          errors: [readiness.failure, rollback.failure],
+                          message: `Prisma App '${app.id}' endpoint was restored to deployment '${rollbackDeploymentId}', but the rollback response was lost.`,
+                        }),
                   );
                 }
 
-                return yield* Effect.fail(
-                  new AggregateError(
-                    [
-                      readiness.failure,
-                      ...(Result.isFailure(rollback) ? [rollback.failure] : []),
-                      observedAfterRollback.failure,
-                    ],
-                    `Prisma App '${app.id}' promoted deployment '${deployment.id}', but its stable endpoint failed readiness and rollback to deployment '${rollbackDeploymentId}' did not converge. Alchemy preserved the prior deployment in state and deleted neither deployment; the next reconcile will retry recovery via POST /v1/services/${app.id}/rollback before making any new cloud changes.`,
-                  ),
-                );
+                return yield* new ComputeDeploymentRecoveryFailed({
+                  errors: [
+                    readiness.failure,
+                    ...(Result.isFailure(rollback) ? [rollback.failure] : []),
+                    observedAfterRollback.failure,
+                  ],
+                  message: `Prisma App '${app.id}' promoted deployment '${deployment.id}', but its stable endpoint failed readiness and rollback to deployment '${rollbackDeploymentId}' did not converge. Alchemy preserved the prior deployment in state and deleted neither deployment; the next reconcile will retry recovery via POST /v1/services/${app.id}/rollback before making any new cloud changes.`,
+                });
               } else {
                 // A first deployment has no safe rollback target. Never report
                 // a successful stack deployment while the production endpoint
@@ -2622,14 +2677,12 @@ const ProviderLive = () =>
                   deploymentConverged = true;
                 }
                 if (terminalFailedDeploymentId !== undefined) {
-                  return yield* Effect.fail(
-                    new AggregateError(
-                      [readiness.failure],
-                      `Prisma App '${app.id}' promoted replacement deployment '${deployment.id}', but stable readiness failed and persisted deployment '${terminalFailedDeploymentId}' is terminal failed, so no safe rollback target exists. Neither deployment was deleted; a retry will refuse to create another generation while the live target differs from persisted state.`,
-                    ),
-                  );
+                  return yield* new ComputeDeploymentRecoveryFailed({
+                    errors: [readiness.failure],
+                    message: `Prisma App '${app.id}' promoted replacement deployment '${deployment.id}', but stable readiness failed and persisted deployment '${terminalFailedDeploymentId}' is terminal failed, so no safe rollback target exists. Neither deployment was deleted; a retry will refuse to create another generation while the live target differs from persisted state.`,
+                  });
                 }
-                return yield* Effect.fail(readiness.failure);
+                return yield* readiness.failure;
               }
             }
 

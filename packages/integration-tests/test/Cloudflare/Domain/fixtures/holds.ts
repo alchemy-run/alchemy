@@ -57,10 +57,8 @@ export const HoldDeadlineLive = HoldDeadline.toLayer(
     const holds = yield* Hold;
     return Effect.fn(function* ({ source, event }) {
       if (event._tag === "HoldPlaced") {
-        yield* holds
-          .schedule(source, new ExpireHold(), { after: HOLD_WINDOW, commandId: EXPIRY })
-          // a redelivery after the expiry ran: nothing to arm
-          .pipe(Effect.catchTag("AlreadyExecuted", () => Effect.void));
+        // a redelivery arms the same expiry again, which changes nothing
+        yield* holds.schedule(source, new ExpireHold(), { after: HOLD_WINDOW, commandId: EXPIRY });
       } else {
         yield* holds.unschedule(source, EXPIRY).pipe(
           // the hold expired first, and the release is recorded after it; a

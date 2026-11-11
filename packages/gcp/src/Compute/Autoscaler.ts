@@ -1,5 +1,5 @@
 import * as compute from "@distilled.cloud/gcp/compute_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   hasAlchemyLabels,
@@ -194,8 +195,30 @@ export type Autoscaler = Resource<
     creationTimestamp: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AutoscalerLookup
 >;
+
+/**
+ * Props for {@link Autoscaler.lookup}: find an autoscaler this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface AutoscalerLookup {
+  /**
+   * Autoscaler name (RFC1035, 1-63 characters).
+   */
+  autoscalerName: string;
+  /**
+   * Zone of the managed instance group (e.g. `us-central1-a`).
+   */
+  zone?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A zonal Compute Engine autoscaler for a managed instance group.
@@ -235,6 +258,19 @@ export type Autoscaler = Resource<
  *     mode: "OFF",
  *     cpuUtilization: { utilizationTarget: 0.5 },
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing autoscaler
+ * `Autoscaler.lookup` references an autoscaler Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * autoscaler.
+ *
+ * **Example:** Reference an existing autoscaler
+ * ```typescript
+ * const autoscaler = GCP.Compute.Autoscaler.lookup({
+ *   autoscalerName: "my-autoscaler",
  * });
  * ```
  *
@@ -492,7 +528,15 @@ export const AutoscalerProvider = () =>
       };
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ autoscalerName, zone: lookupZone }) {
+      const env = yield* GcpEnvironment.current;
+      const zone = lastSegment(lookupZone ?? DEFAULT_ZONE);
+      const existing = yield* getByName(env.project, zone, autoscalerName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const autoscalerName = yield* toName(id, olds?.autoscalerName, output?.autoscalerName);
       const zone = lastSegment(olds?.zone ?? output?.zone ?? DEFAULT_ZONE);
@@ -500,7 +544,9 @@ export const AutoscalerProvider = () =>
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseDescription(existing.description);
-      return (yield* hasAlchemyLabels(id, labels)) ? attrs : Unowned(attrs);
+      return (yield* hasAlchemyLabels(id, labels))
+        ? attrs
+        : unownedUnlessPrevious(attrs, previous, "autoscalerName");
     }),
 
     list: () =>

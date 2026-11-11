@@ -1,5 +1,6 @@
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import { identity } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
@@ -13,6 +14,7 @@ import type { ResourceClassLike, ResourceLike } from "../Resource.ts";
 import { ResourceContext } from "../ResourceContext.ts";
 import { Stack } from "../Stack.ts";
 import { Stage } from "../Stage.ts";
+import { LogAnnotation } from "../Util/LogAnnotation.ts";
 import { RpcProviderProxy } from "./RpcProviderProxy.ts";
 
 /**
@@ -65,6 +67,7 @@ type RpcProviderService<
   TailReq = never,
   LogsReq = never,
   ListReq = never,
+  LookupReq = never,
 > = Omit<
   Provider.ProviderService<
     R,
@@ -75,7 +78,8 @@ type RpcProviderService<
     DeleteReq,
     TailReq,
     LogsReq,
-    ListReq
+    ListReq,
+    LookupReq
   >,
   "list"
 > &
@@ -90,7 +94,8 @@ type RpcProviderService<
         DeleteReq,
         TailReq,
         LogsReq,
-        ListReq
+        ListReq,
+        LookupReq
       >,
       "list"
     >
@@ -113,6 +118,7 @@ const withDefaultList = <
   TailReq,
   LogsReq,
   ListReq,
+  LookupReq,
 >(
   provider: RpcProviderService<
     R,
@@ -123,7 +129,8 @@ const withDefaultList = <
     DeleteReq,
     TailReq,
     LogsReq,
-    ListReq
+    ListReq,
+    LookupReq
   >,
 ): Provider.ProviderService<
   R,
@@ -134,7 +141,8 @@ const withDefaultList = <
   DeleteReq,
   TailReq,
   LogsReq,
-  ListReq
+  ListReq,
+  LookupReq
 > =>
   (provider.list
     ? provider
@@ -150,7 +158,8 @@ const withDefaultList = <
     DeleteReq,
     TailReq,
     LogsReq,
-    ListReq
+    ListReq,
+    LookupReq
   >;
 
 export const effect = <
@@ -164,6 +173,7 @@ export const effect = <
   TailReq = never,
   LogsReq = never,
   ListReq = never,
+  LookupReq = never,
 >(
   cls: ResourceClassLike<R> | Platform<R, any, any, any, any, any>,
   providersUrl: string,
@@ -177,7 +187,8 @@ export const effect = <
       DeleteReq,
       TailReq,
       LogsReq,
-      ListReq
+      ListReq,
+      LookupReq
     >,
     never,
     Req
@@ -221,8 +232,16 @@ export const effect = <
                     )
                   : Layer.empty,
               );
+              if (Stream.isStream(result)) return result.pipe(Stream.provide(services));
+              // In a sidecar the engine's per-resource annotation doesn't
+              // cross the RPC boundary: tag the call's logs here.
+              const fqn =
+                Predicate.hasProperty(args[0], "fqn") && Predicate.isString(args[0].fqn)
+                  ? args[0].fqn
+                  : undefined;
               return result.pipe(
-                Stream.isStream(result) ? Stream.provide(services) : Effect.provide(services),
+                Effect.provide(services),
+                fqn === undefined ? identity : Effect.annotateLogs(LogAnnotation.fqn, fqn),
               );
             };
           },

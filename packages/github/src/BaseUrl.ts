@@ -1,5 +1,5 @@
 import { Credentials, DEFAULT_API_BASE_URL } from "@distilled.cloud/github/Credentials";
-import type { ConfigError } from "@distilled.cloud/github/Errors";
+import type { ConfigError, GithubAppAuthError } from "@distilled.cloud/github/Errors";
 import { AuthError } from "alchemy/Auth/AuthProvider";
 import { getEnv } from "alchemy/Auth/Env";
 import * as Effect from "effect/Effect";
@@ -103,7 +103,7 @@ export const withBaseUrl =
  */
 export const effectiveGitHubBaseUrl = (
   baseUrl: string | undefined,
-): Effect.Effect<string, AuthError | ConfigError, Credentials> =>
+): Effect.Effect<string, AuthError | ConfigError | GithubAppAuthError, Credentials> =>
   baseUrl !== undefined
     ? Effect.map(normalizeGitHubBaseUrl(baseUrl), (url) => url ?? DEFAULT_API_BASE_URL)
     : Effect.gen(function* () {
@@ -127,7 +127,7 @@ export const effectiveGitHubBaseUrl = (
 export const gitHubBaseUrlChanged = (
   olds: { baseUrl?: string },
   news: { baseUrl?: string },
-): Effect.Effect<boolean, AuthError | ConfigError, Credentials> =>
+): Effect.Effect<boolean, AuthError | ConfigError | GithubAppAuthError, Credentials> =>
   Effect.gen(function* () {
     const oldUrl = yield* effectiveGitHubBaseUrl(olds.baseUrl);
     const newUrl = yield* effectiveGitHubBaseUrl(news.baseUrl);

@@ -1,15 +1,24 @@
 import * as ec2 from "@distilled.cloud/aws/ec2";
+import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved, somePropsAreDifferent } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import type { ScopedPlanStatusSession } from "alchemy/Report";
 import { Resource } from "alchemy/Resource";
-import { createInternalTags, createTagsList, diffTags, hasTags } from "alchemy/Tags";
+import {
+  createInternalTags,
+  createTagsList,
+  diffTags,
+  hasAlchemyTags,
+  hasTags,
+} from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
+import { nameTagFilter, single } from "../internal/Lookup.ts";
+import { tagListRecord } from "../internal/Observe.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { retryWhileLingeringEnis } from "./LingeringEnis.ts";
@@ -158,11 +167,6 @@ export interface Subnet extends Resource<
     state: ec2.SubnetState;
 
     /**
-     * The number of available IPv4 addresses in the subnet.
-     */
-    availableIpAddressCount: number;
-
-    /**
      * Whether instances launched in the subnet get public IPv4 addresses.
      */
     mapPublicIpOnLaunch: boolean;
@@ -212,10 +216,31 @@ export interface Subnet extends Resource<
       enableResourceNameDnsARecord?: boolean;
       enableResourceNameDnsAAAARecord?: boolean;
     };
+
+    /**
+     * Tags on the subnet, as observed. Lets `alchemy drift` detect
+     * out-of-band changes.
+     */
+    tags?: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  SubnetLookup
 > {}
+
+/**
+ * Props for {@link Subnet.lookup}: find a subnet this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type SubnetLookup =
+  | {
+      /** The subnet's id. */
+      subnetId: string;
+    }
+  | {
+      /** The value of its `Name` tag; fails when several match. */
+      name: string;
+    };
 /**
  * A subnet within a VPC — a range of IP addresses bound to a single
  * Availability Zone where you place instances and other resources. Create
@@ -347,6 +372,19 @@ export interface Subnet extends Resource<
  * application and database instances. Both share the same AZ here, but in
  * production you'd replicate the pair across AZs.
  *
+ * ### Looking up an existing subnet
+ * `Subnet.lookup` references a subnet Alchemy doesn't manage (created in the
+ * console or by another stack), found by `subnetId` or its `Name` tag. It is read during plan/deploy
+ * and never created, updated or deleted. A lookup by `name` fails with
+ * `AmbiguousLookupError` when several match.
+ *
+ * **Example:** Place a Lambda in existing subnets
+ * ```typescript
+ * const a = AWS.EC2.Subnet.lookup({ name: "private-a" });
+ * const b = AWS.EC2.Subnet.lookup({ name: "private-b" });
+ * const subnetIds = [a.subnetId, b.subnetId];
+ * ```
+ *
  * @resource
  */
 export const Subnet = Resource<Subnet>("AWS.EC2.Subnet");
@@ -372,6 +410,56 @@ export const SubnetProvider = () =>
           ) {
             return { action: "replace" };
           }
+        }),
+
+        lookup: Effect.fn(function* (props) {
+          const found = yield* ec2
+            .describeSubnets(
+              "subnetId" in props
+                ? { SubnetIds: [props.subnetId] }
+                : { Filters: [nameTagFilter(props.name)] },
+            )
+            .pipe(
+              Effect.catchTag("InvalidSubnetID.NotFound", () => Effect.succeed({ Subnets: [] })),
+            );
+          const match = yield* single(
+            "AWS.EC2.Subnet",
+            "subnetId" in props ? props.subnetId : `Name=${props.name}`,
+            found.Subnets ?? [],
+            (x) => x.SubnetId,
+          );
+          if (!match?.SubnetId) return undefined;
+          return toSubnetAttributes(match);
+        }),
+
+        read: Effect.fn(function* ({ id, olds, output }) {
+          const alchemyTags = yield* createInternalTags(id);
+          let subnet: ec2.Subnet | undefined;
+          if (output?.subnetId) {
+            subnet = (yield* ec2
+              .describeSubnets({ SubnetIds: [output.subnetId] })
+              .pipe(
+                Effect.catchTag("InvalidSubnetID.NotFound", () => Effect.succeed({ Subnets: [] })),
+              )).Subnets?.[0];
+          } else if (olds?.vpcId && olds.cidrBlock) {
+            // No persisted id (interrupted create): find this stack's subnet
+            // at the VPC + CIDR by its ownership tags.
+            subnet = yield* ec2.describeSubnets
+              .items({
+                Filters: [
+                  { Name: "vpc-id", Values: [olds.vpcId] },
+                  { Name: "cidr-block", Values: [olds.cidrBlock] },
+                ],
+              })
+              .pipe(
+                Stream.filter((s) => hasTags(alchemyTags, tagListRecord(s.Tags))),
+                Stream.runHead,
+                Effect.map(Option.getOrUndefined),
+              );
+          }
+          if (!subnet?.SubnetId) return undefined;
+          const attrs = toSubnetAttributes(subnet);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -625,7 +713,6 @@ const toSubnetAttributes = (subnet: ec2.Subnet): Subnet["Attributes"] => ({
   availabilityZone: subnet.AvailabilityZone!,
   availabilityZoneId: subnet.AvailabilityZoneId,
   state: subnet.State!,
-  availableIpAddressCount: subnet.AvailableIpAddressCount ?? 0,
   mapPublicIpOnLaunch: subnet.MapPublicIpOnLaunch ?? false,
   assignIpv6AddressOnCreation: subnet.AssignIpv6AddressOnCreation ?? false,
   defaultForAz: subnet.DefaultForAz ?? false,
@@ -640,6 +727,7 @@ const toSubnetAttributes = (subnet: ec2.Subnet): Subnet["Attributes"] => ({
   })),
   enableDns64: subnet.EnableDns64,
   ipv6Native: subnet.Ipv6Native,
+  tags: tagListRecord(subnet.Tags),
   privateDnsNameOptionsOnLaunch: subnet.PrivateDnsNameOptionsOnLaunch
     ? {
         hostnameType: subnet.PrivateDnsNameOptionsOnLaunch.HostnameType,

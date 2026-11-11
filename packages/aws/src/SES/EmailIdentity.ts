@@ -84,10 +84,34 @@ export interface EmailIdentity extends Resource<
      */
     dkimTokens: string[];
     dkimStatus: sesv2.DkimStatus | undefined;
+    /**
+     * Default configuration set, the declared DKIM, feedback-forwarding and
+     * MAIL FROM settings, and the tags, as observed. Lets `alchemy drift`
+     * detect out-of-band changes.
+     */
+    configuration?: {
+      configurationSetName?: string;
+      dkimSigningEnabled?: boolean;
+      dkimSigningKeyLength?: string;
+      feedbackForwardingEnabled?: boolean;
+      mailFromDomain?: string;
+      mailFromBehaviorOnMxFailure?: string;
+      tags: Record<string, string>;
+    };
   },
   never,
-  Providers
+  Providers,
+  EmailIdentityLookup
 > {}
+
+/**
+ * Props for {@link EmailIdentity.lookup}: find an email identity this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface EmailIdentityLookup {
+  /** The email address or domain of the existing identity. */
+  emailIdentity: string;
+}
 
 /**
  * An Amazon SES v2 email identity — a verified email address or domain that
@@ -179,6 +203,19 @@ export interface EmailIdentity extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing email identity
+ * `EmailIdentity.lookup` references an email identity Alchemy doesn't manage (created in the
+ * console or by another stack), found by `emailIdentity`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Send from an existing verified domain
+ * ```typescript
+ * const domain = AWS.SES.EmailIdentity.lookup({ emailIdentity: "example.com" });
+ *
+ * // init
+ * const sendEmail = yield* AWS.SES.SendEmail(domain);
+ * ```
+ *
  * @resource
  */
 export const EmailIdentity = Resource<EmailIdentity>("AWS.SES.EmailIdentity");
@@ -202,6 +239,38 @@ const toAttributes = (
   verificationStatus: identity.VerificationStatus,
   dkimTokens: [...(identity.DkimAttributes?.Tokens ?? [])],
   dkimStatus: identity.DkimAttributes?.Status,
+});
+
+/**
+ * The settings reconcile converges, as observed. Settings reconcile only
+ * applies when declared are only observed when declared. `read` and
+ * `reconcile` share it so a converged identity reads unchanged.
+ */
+const observeIdentityConfiguration = (
+  identity: sesv2.GetEmailIdentityResponse,
+  props: EmailIdentityProps | undefined,
+  tags: Record<string, string>,
+) => ({
+  configurationSetName: identity.ConfigurationSetName,
+  dkimSigningEnabled:
+    props?.dkimSigningEnabled === undefined
+      ? undefined
+      : (identity.DkimAttributes?.SigningEnabled ?? false),
+  dkimSigningKeyLength:
+    props?.dkimSigningKeyLength === undefined
+      ? undefined
+      : identity.DkimAttributes?.NextSigningKeyLength,
+  feedbackForwardingEnabled:
+    props?.feedbackForwardingEnabled === undefined
+      ? undefined
+      : (identity.FeedbackForwardingStatus ?? true),
+  mailFromDomain:
+    props?.mailFromDomain === undefined ? undefined : identity.MailFromAttributes?.MailFromDomain,
+  mailFromBehaviorOnMxFailure:
+    props?.mailFromDomain === undefined || props.mailFromBehaviorOnMxFailure === undefined
+      ? undefined
+      : identity.MailFromAttributes?.BehaviorOnMxFailure,
+  tags,
 });
 
 export const EmailIdentityProvider = () =>
@@ -242,14 +311,27 @@ export const EmailIdentityProvider = () =>
             return attrs.filter((a) => a !== undefined);
           }),
 
+        lookup: Effect.fn(function* ({ emailIdentity }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const found = yield* getIdentity(emailIdentity);
+          if (!found) return undefined;
+          return {
+            ...toAttributes(emailIdentity, identityArnOf(region, accountId, emailIdentity), found),
+            configuration: observeIdentityConfiguration(found, undefined, toTagRecord(found.Tags)),
+          };
+        }),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const name = output?.emailIdentity ?? olds?.emailIdentity;
           if (name === undefined) return undefined;
           const found = yield* getIdentity(name);
           if (!found) return undefined;
-          const attrs = toAttributes(name, identityArnOf(region, accountId, name), found);
           const tags = toTagRecord(found.Tags);
+          const attrs = {
+            ...toAttributes(name, identityArnOf(region, accountId, name), found),
+            configuration: observeIdentityConfiguration(found, olds, tags),
+          };
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
@@ -378,7 +460,10 @@ export const EmailIdentityProvider = () =>
           // 4. RETURN — re-read so DKIM tokens/status reflect any sync above.
           const final = yield* sesv2.getEmailIdentity({ EmailIdentity: name });
           yield* session.note(identityArn);
-          return toAttributes(name, identityArn, final);
+          return {
+            ...toAttributes(name, identityArn, final),
+            configuration: observeIdentityConfiguration(final, news, desiredTags),
+          };
         }),
 
         delete: Effect.fn(function* ({ output }) {

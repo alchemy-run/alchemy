@@ -36,6 +36,7 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import { ChildProcess } from "effect/process";
 import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
+import * as SemVer from "effect/SemVer";
 import * as Stream from "effect/Stream";
 import { publishablePackages, sharedVersion } from "../package-manifest.ts";
 
@@ -85,18 +86,6 @@ const parse = (text: string): Version | undefined => {
 
 const format = ({ core, pre }: Version) =>
   `${core.join(".")}${pre ? `-${pre.channel}.${pre.n}` : ""}`;
-
-/** Semver precedence: a prerelease sorts before its stable version. */
-const compare = (a: Version, b: Version) => {
-  for (const i of [0, 1, 2] as const) {
-    if (a.core[i] !== b.core[i]) return a.core[i] - b.core[i];
-  }
-  if (!a.pre || !b.pre) return (a.pre ? -1 : 0) - (b.pre ? -1 : 0);
-  return (
-    PRERELEASE_CHANNELS.indexOf(a.pre.channel) - PRERELEASE_CHANNELS.indexOf(b.pre.channel) ||
-    a.pre.n - b.pre.n
-  );
-};
 
 /** The version `spec` selects, bumped from `current`. */
 const nextVersion = Effect.fn(function* (
@@ -155,7 +144,9 @@ const resolveVersion = Effect.fn(function* (currentText: string, spec: string) {
     });
   }
   const next = yield* nextVersion(current, spec);
-  if (compare(next, current) <= 0) {
+  if (
+    SemVer.isLessThanOrEqualTo(SemVer.parseUnsafe(format(next)), SemVer.parseUnsafe(currentText))
+  ) {
     return yield* new VersionNotNewer({
       message: `${format(next)} is not newer than the current ${currentText}`,
       current: currentText,

@@ -1,6 +1,7 @@
 import http from "node:http";
 import * as Clock from "effect/Clock";
-import * as Crypto from "effect/Crypto";
+import * as Digest from "effect/crypto/Digest";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -11,6 +12,7 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Url from "effect/http/Url";
 import * as Match from "effect/Match";
+import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
@@ -70,16 +72,6 @@ export type OAuthRequestError =
   | OAuthNetworkError
   | OAuthServerUnavailable
   | OAuthInvalidResponse;
-
-/** Secure random generation or hashing for state/PKCE failed. */
-export class OAuthCryptoError extends Data.TaggedError("OAuthCryptoError")<{
-  operation: string;
-  cause: unknown;
-}> {
-  override get message(): string {
-    return `${this.operation} failed: ${this.cause instanceof Error ? this.cause.message : String(this.cause)}`;
-  }
-}
 
 /** The client spec lacks the endpoints/URIs a flow needs. */
 export class UnsupportedOAuthFlowError extends Data.TaggedError("UnsupportedOAuthFlowError")<{
@@ -232,6 +224,12 @@ export interface OAuthClientSpec {
    * standard, default) or the query string (PlanetScale's documented form).
    */
   readonly tokenTransport?: "body" | "query";
+  /**
+   * Hosts besides the device authorization endpoint's own that may serve the
+   * device verification page (WorkOS answers on `api.auth.<domain>` but sends
+   * users to `auth.<domain>`). Always https.
+   */
+  readonly verificationHosts?: ReadonlyArray<string>;
 }
 
 export interface OAuthClient {
@@ -245,7 +243,11 @@ export interface OAuthClient {
    */
   readonly authorize: (
     scopes?: ReadonlyArray<string>,
-  ) => Effect.Effect<Authorization, OAuthCryptoError | UnsupportedOAuthFlowError, Crypto.Crypto>;
+  ) => Effect.Effect<
+    Authorization,
+    UnsupportedOAuthFlowError,
+    SecureRandom.SecureRandom | Digest.Digest
+  >;
   /**
    * Exchange an authorization code directly. `authorization` supplies the
    * PKCE verifier; omit for non-PKCE clients (tests, relay-less flows).
@@ -312,32 +314,36 @@ export interface OAuthClient {
 }
 
 const randomText = Effect.fn(function* (length: number) {
-  const crypto = yield* Crypto.Crypto;
-  const bytes = yield* crypto
-    .randomBytes(length)
-    .pipe(
-      Effect.mapError(
-        (cause) => new OAuthCryptoError({ operation: "Secure random generation", cause }),
-      ),
-    );
-  return Base64Url.encode(bytes);
+  const random = yield* SecureRandom.SecureRandom;
+  return Base64Url.encode(yield* random.randomBytes(length));
 });
 
 const generatePKCE = Effect.fn(function* (length = 96) {
-  const crypto = yield* Crypto.Crypto;
+  const digest = yield* Digest.Digest;
   const verifier = yield* randomText(length);
-  const challenge = yield* crypto
-    .digest("SHA-256", new TextEncoder().encode(verifier))
-    .pipe(Effect.mapError((cause) => new OAuthCryptoError({ operation: "PKCE digest", cause })));
+  const challenge = yield* digest.digest(Digest.sha256, new TextEncoder().encode(verifier));
   return { verifier, challenge: Base64Url.encode(challenge) };
 });
 
 const TokenResponse = Schema.Struct({
   access_token: Schema.String,
   refresh_token: Schema.optional(Schema.String),
-  expires_in: Schema.Number,
+  // WorkOS omits it; the access token's JWT `exp` claim is used instead.
+  expires_in: Schema.optional(Schema.Number),
   scope: Schema.optional(Schema.String),
 });
+
+const decodeJwtClaims = Schema.decodeUnknownOption(
+  Schema.fromJsonString(Schema.Struct({ exp: Schema.Number })),
+);
+
+/** The `exp` claim (seconds) of a JWT access token, if it is one. */
+const jwtExpiry = (token: string): number | undefined => {
+  const payload = token.split(".")[1];
+  if (payload === undefined) return undefined;
+  const json = Result.getOrUndefined(Base64Url.decodeString(payload));
+  return json === undefined ? undefined : Option.getOrUndefined(decodeJwtClaims(json))?.exp;
+};
 
 const DeviceAuthorizationResponse = Schema.Struct({
   device_code: Schema.String,
@@ -421,12 +427,26 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
       });
     }
     const now = yield* Clock.currentTimeMillis;
+    const exp = jwtExpiry(json.access_token);
+    const expires =
+      json.expires_in !== undefined
+        ? now + json.expires_in * 1000
+        : exp !== undefined
+          ? exp * 1000
+          : undefined;
+    if (expires === undefined) {
+      return yield* new OAuthInvalidResponse({
+        endpoint,
+        status: 200,
+        reason: "the token response has no expires_in and the access token is not a JWT",
+      });
+    }
     return {
       type: "oauth" as const,
       clientId: spec.clientId,
       access: Redacted.make(json.access_token),
       refresh,
-      expires: now + json.expires_in * 1000,
+      expires,
       scopes: json.scope?.split(" ") ?? previous?.scopes ?? [],
     } satisfies OAuthCredentials;
   });
@@ -489,6 +509,7 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
     // trust https URLs on the authorization server's own host (RFC 8628
     // §5.4, remote phishing).
     const expectedHost = new URL(endpoint).host;
+    const trustedHosts = new Set([expectedHost, ...(spec.verificationHosts ?? [])]);
     const trustedUrl = (value: string) => {
       const untrusted = () => new UntrustedVerificationUriError({ url: value, expectedHost });
       return Url.fromString(value).pipe(
@@ -498,7 +519,7 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
             url.protocol === "https:" &&
             url.username === "" &&
             url.password === "" &&
-            url.host === expectedHost,
+            trustedHosts.has(url.host),
           untrusted,
         ),
         Effect.fromResult,

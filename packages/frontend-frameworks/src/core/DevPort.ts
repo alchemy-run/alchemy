@@ -1,5 +1,7 @@
 import * as NodeNet from "node:net";
 import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
+import * as SemVer from "effect/SemVer";
 import { FrameworkError } from "./Framework.ts";
 
 /**
@@ -14,14 +16,12 @@ import { FrameworkError } from "./Framework.ts";
  * serves that package's own Vite plugin consumers.
  */
 export const viteSupportsPortZero = (version: string | null | undefined): boolean => {
-  if (typeof version !== "string") return false;
-  const match = /^(\d+)\.(\d+)\.(\d+)/.exec(version);
-  if (!match) return false;
-  const major = Number(match[1]);
-  const minor = Number(match[2]);
-  const patch = Number(match[3]);
-  return major > 8 || (major === 8 && (minor > 2 || (minor === 2 && patch >= 1)));
+  const parsed =
+    typeof version === "string" ? Result.getOrUndefined(SemVer.parse(version)) : undefined;
+  return parsed !== undefined && SemVer.isGreaterThanOrEqualTo(parsed, VITE_PORT_ZERO);
 };
+
+const VITE_PORT_ZERO = SemVer.parseUnsafe("8.2.1");
 
 /**
  * Resolve the port a Vite-based framework dev server should bind.

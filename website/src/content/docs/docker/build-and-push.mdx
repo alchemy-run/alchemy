@@ -2,9 +2,22 @@
 title: Build & push images
 description: Build a container image from a Dockerfile, push it to a registry, and hand the resulting image reference to Cloudflare Containers or AWS ECS.
 ---
+import Tree from "../../../components/diagrams/Tree.astro";
 
-This page is the canonical home for producing a **registry image
-reference** — the artifact that cloud container platforms consume.
+A **registry image reference** is the artifact that cloud container
+platforms consume.
+<Tree
+  nodes={[
+    { id: "stack", label: "your Stack", type: "one deploy", areas: ["task repo"], phoneAreas: ["repo", "task"], colGap: 3 },
+    { id: "repo", label: "ghcr.io/acme/app", type: "repository", parent: "stack", areas: ["new old"], phoneAreas: ["new old"] },
+    { id: "new", label: "sha256:9c2e…", type: "image · tag latest", parent: "repo", tone: "accent" },
+    { id: "old", label: "sha256:4f1a…", type: "image · last deploy", parent: "repo", tone: "muted" },
+    { id: "task", label: "ECS task", type: "or Cloudflare Container", parent: "stack" },
+  ]}
+  links={[{ from: "task", to: "new", label: "runs" }]}
+  caption="A tag can move, a digest can't. The platform gets the image by digest, so a new build redeploys exactly the image you pushed."
+/>
+
 `Docker.Image` builds and pushes through your active Docker context;
 what comes out the other end is an `imageRef` (and, after a push, a
 `repoDigest`) that you pass to
@@ -47,7 +60,7 @@ export default Alchemy.Stack(
 The `build` block maps onto `docker build`: `context` (default: the
 current working directory), `dockerfile` (default `"Dockerfile"`),
 `args`, a multi-stage `target`, and a `platform` such as
-`"linux/amd64"`, plus `cacheFrom`/`cacheTo` for build caching. Omit
+`"linux/amd64"`, plus `cache` for BuildKit layer caches. Omit
 `name` and alchemy generates one from the stack, stage, and logical
 ID.
 
@@ -82,6 +95,52 @@ declared. The push never runs `docker login` and never touches your
 global Docker config; credentials stay out of `argv` and your
 keychain. On success the resource's `imageRef` includes the registry
 host and `repoDigest` carries the immutable content digest.
+
+## Cache layers in a registry
+
+```typescript
+const image = yield* Docker.Image("app", {
+  name: "my-app",
+  build: {
+    context: "./app",
+    cache: true,
+  },
+  registry: {
+    server: "ghcr.io",
+    username: "octocat",
+    password: Config.Redacted("GITHUB_TOKEN"),
+  },
+});
+```
+
+Without `cache`, builds reuse the local BuildKit cache of the machine
+they run on and push nothing but the image. A fresh machine, such as a
+CI runner, has no local cache and reruns the whole Dockerfile.
+`cache: true` keeps every stage's layers next to the image, at its
+repository's `:buildcache` tag, and the build authenticates with
+`registry`. Fresh machines then skip the unchanged steps.
+
+For another [cache backend](https://docs.docker.com/build/cache/backends/),
+pass BuildKit's own `--cache-from` / `--cache-to` values, here GitHub
+Actions' cache:
+
+```typescript
+build: {
+  context: "./app",
+  cache: {
+    from: ["type=gha,scope=app"],
+    to: ["type=gha,scope=app,mode=max"],
+  },
+}
+```
+
+Exporting a cache needs a builder that supports it: the `docker` driver
+with the containerd image store, or a `docker-container` builder (what
+`docker/setup-buildx-action` creates in CI). The cache never changes the
+image, so turning it on doesn't rebuild anything. Every resource that
+builds an image takes the same `cache` option: Cloudflare Containers,
+ECS, Cloud Run and Kubernetes workloads under `build`, `AWS.ECR.Image`
+and Lambda container images next to `buildArgs`.
 
 ## Mirror and pin remote images
 

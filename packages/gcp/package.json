@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/gcp",
-  "version": "2.0.0-beta.84",
+  "version": "2.0.0-beta.85",
   "description": "Google Cloud resources, Cloud Run, Cloud Functions and GKE for Alchemy.",
   "keywords": [
     "alchemy",
@@ -174,6 +174,7 @@
     "./SQL": "./src/SQL/index.ts",
     "./StateStore": "./src/StateStore/index.ts",
     "./Storage": "./src/Storage/index.ts",
+    "./StorageInsights": "./src/StorageInsights/index.ts",
     "./StorageTransfer": "./src/StorageTransfer/index.ts",
     "./TPU": "./src/TPU/index.ts",
     "./Transcoder": "./src/Transcoder/index.ts",
@@ -929,6 +930,11 @@
         "bun": "./src/Storage/index.ts",
         "default": "./lib/Storage/index.js"
       },
+      "./StorageInsights": {
+        "types": "./lib/StorageInsights/index.d.ts",
+        "bun": "./src/StorageInsights/index.ts",
+        "default": "./lib/StorageInsights/index.js"
+      },
       "./StorageTransfer": {
         "types": "./lib/StorageTransfer/index.d.ts",
         "bun": "./src/StorageTransfer/index.ts",
@@ -1005,6 +1011,7 @@
         "default": "./lib/Workstations/index.js"
       },
       "./Container/internal/*": null,
+      "./internal/*": null,
       "./*/internal": null,
       "./*": {
         "types": "./lib/*.d.ts",

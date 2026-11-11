@@ -857,7 +857,7 @@ test.provider(
 
 // Each deploy/destroy of a Stack declaring the S3 state store releases its
 // lease when it finishes, so a file can redeploy and destroy that Stack.
-const s3Stack = { providers: AWS.providers(), state: AWS.state() };
+const s3Stack = { providers: AWS.providers(), state: AWS.state({ backend: "s3" }) };
 const s3Harness = Test.make(s3Stack);
 
 const S3StateStack = Alchemy.Stack(
