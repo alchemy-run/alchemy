@@ -6,6 +6,7 @@ import {
   getKubernetesCluster,
   getKubernetesNodePool,
   getMonitoringSink,
+  getTag,
 } from "@distilled.cloud/digitalocean";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -94,6 +95,8 @@ test.provider.skipIf(skipSlow)(
       // The registry integration turned on in place.
       const live = yield* getKubernetesCluster({ cluster_id: created.cluster.clusterId });
       expect(live.kubernetes_cluster.registry_enabled).toBe(true);
+      const ownTags = (live.kubernetes_cluster.tags ?? []).filter((t) => t.startsWith("alchemy:"));
+      expect(ownTags.length).toBeGreaterThan(0);
 
       yield* stack.destroy();
 
@@ -101,6 +104,8 @@ test.provider.skipIf(skipSlow)(
         true,
       );
       expect(yield* isGone(getMonitoringSink({ sink_uuid: created.sinkId }))).toBe(true);
+      // The cluster's ownership and generation tags go with it.
+      for (const tag of ownTags) expect(yield* isGone(getTag({ tag_id: tag }))).toBe(true);
     }).pipe(logLevel),
   // The team's one registry is declared here, so hold the registry lock.
   { tags: LIVE_TAGS, timeout: LIVE_TIMEOUT, exclusive: "digitalocean:registry" },

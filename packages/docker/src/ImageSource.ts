@@ -20,6 +20,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import type * as rolldown from "rolldown";
@@ -546,6 +547,9 @@ export const makeContainerImageSource = Effect.gen(function* () {
   const docker = yield* Docker;
   const { dotAlchemy } = yield* AlchemyContext;
   const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
+  // Pinning `packages` reads the project's lockfile through the package
+  // manager; capture the spawner once so `hash` and `resolve` don't need it.
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 
   /**
    * Lay out an unbundled Node program and compute its content-addressed
@@ -570,7 +574,7 @@ export const makeContainerImageSource = Effect.gen(function* () {
         ? yield* resolvePackageInstallIdentity({
             cwd: yield* findCwdForBundle(realMain),
             requested,
-          })
+          }).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner))
         : undefined;
     const packageJson =
       identity !== undefined && Object.keys(identity.resolved).length > 0

@@ -29,8 +29,11 @@ export interface FunctionProps extends PlatformProps {
   main?: string;
   /** Named export to load from `main`. @default "default" */
   handler?: string;
-  /** The namespace to deploy to. A change replaces the function. */
-  namespace: NamespaceRef;
+  /**
+   * The namespace to deploy to: a `Functions.Namespace`, its attributes, or
+   * the declaration itself. A change replaces the function.
+   */
+  namespace: NamespaceRef | Effect.Effect<NamespaceRef, never, Providers>;
   /**
    * Function name in the namespace. A change replaces the function.
    *
@@ -150,7 +153,7 @@ export const Function: Platform<Function, never, Main<never>, FunctionRuntimeCon
     transformProps: (_id, props) =>
       Effect.gen(function* () {
         if (globalThis.__ALCHEMY_RUNTIME__ || !Effect.isEffect(props.namespace)) return props;
-        const namespace = yield* props.namespace as Effect.Effect<NamespaceRef, never, Providers>;
+        const namespace = yield* props.namespace;
         return { ...props, namespace };
       }),
   },
@@ -159,6 +162,21 @@ export const Function: Platform<Function, never, Main<never>, FunctionRuntimeCon
 export class FunctionBundleFailed extends Data.TaggedError(
   "DigitalOcean.Functions.FunctionBundleFailed",
 )<{ readonly message: string }> {}
+
+/** A namespace prop was still a declaration when the provider ran. */
+export class FunctionNamespaceUnresolved extends Data.TaggedError(
+  "DigitalOcean.Functions.FunctionNamespaceUnresolved",
+)<{}> {
+  override get message() {
+    return "The function's namespace was not resolved before deploy.";
+  }
+}
+
+// `transformProps` yields a declared namespace, so the provider sees attributes.
+const namespaceOf = (namespace: FunctionProps["namespace"]) =>
+  Effect.isEffect(namespace)
+    ? Effect.fail(new FunctionNamespaceUnresolved())
+    : Effect.succeed(namespace);
 
 const physicalName = (id: string) => createPhysicalName({ id, lowercase: true, maxLength: 63 });
 
@@ -240,13 +258,16 @@ export const FunctionProvider = () =>
     nuke: { skip: true },
     read: Effect.fn(function* ({ olds, output }) {
       if (output === undefined) return undefined;
-      const observed = yield* observe(olds.namespace, output.name);
+      const namespace = yield* namespaceOf(olds.namespace);
+      const observed = yield* observe(namespace, output.name);
       return Option.isSome(observed) ? { ...output, version: observed.value.version } : undefined;
     }),
     diff: Effect.fn(function* ({ id, olds, news, output }) {
       if (!isResolved(news) || output === undefined) return undefined;
       const name = news.name ?? output.name ?? (yield* physicalName(id));
-      if (news.namespace.namespaceId !== olds.namespace.namespaceId || name !== output.name) {
+      const newNs = yield* namespaceOf(news.namespace);
+      const oldNs = yield* namespaceOf(olds.namespace);
+      if (newNs.namespaceId !== oldNs.namespaceId || name !== output.name) {
         return { action: "replace" } as const;
       }
       const bundled = yield* bundleFunction(news);
@@ -255,6 +276,7 @@ export const FunctionProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output, bindings }) {
       const name = news.name ?? output?.name ?? (yield* physicalName(id));
       const stack = yield* Stack;
+      const namespace = yield* namespaceOf(news.namespace);
       const bundled = yield* bundleFunction(news);
       const env: Record<string, unknown> = {
         ...activeBindings(bindings as ReadonlyArray<ResourceBinding<FunctionBinding>>).reduce<
@@ -268,7 +290,7 @@ export const FunctionProvider = () =>
       // `putAction` with `overwrite` is an upsert: the observed state only
       // matters for the version it reports.
       const deployed = yield* Fn.putAction({
-        namespace: news.namespace.namespaceId,
+        namespace: namespace.namespaceId,
         action_name: name,
         overwrite: true,
         exec: { kind: news.runtime ?? "nodejs:18", code: bundled.code, main: "main" },
@@ -279,19 +301,20 @@ export const FunctionProvider = () =>
           { key: "final", value: true },
         ],
         limits: { timeout: news.timeoutMs ?? 30_000, memory: news.memoryMb ?? 256 },
-      }).pipe(withNamespace(news.namespace));
+      }).pipe(withNamespace(namespace));
       return {
         name,
-        namespaceId: news.namespace.namespaceId,
-        url: webUrl(news.namespace, name),
+        namespaceId: namespace.namespaceId,
+        url: webUrl(namespace, name),
         version: deployed.version,
         code: { hash: bundled.hash },
       };
     }),
     delete: Effect.fn(function* ({ olds, output }) {
+      const namespace = yield* namespaceOf(olds.namespace);
       yield* Fn.deleteAction({ namespace: output.namespaceId, action_name: output.name }).pipe(
         Effect.catchTag("NotFound", () => Effect.void),
-        withNamespace(olds.namespace),
+        withNamespace(namespace),
       );
     }),
   });

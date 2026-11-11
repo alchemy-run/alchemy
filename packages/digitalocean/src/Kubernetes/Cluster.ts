@@ -18,7 +18,12 @@ import {
   withoutAlchemyTags,
 } from "../internal/ownership.ts";
 import { pollUntil, type PollBudget } from "../internal/poll.ts";
-import { desiredTagsFor, rejectReservedTags } from "../internal/tags.ts";
+import {
+  alchemyTagsFor,
+  deleteTagsIfUnused,
+  desiredTagsFor,
+  rejectReservedTags,
+} from "../internal/tags.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionSlug } from "../Slugs.ts";
 import { doksConnectionOf } from "./KubernetesAdapter.ts";
@@ -435,9 +440,16 @@ export const ClusterProvider = () =>
       const running = yield* waitUntilRunning(cluster.id, (c) => c.name === name);
       return toAttrs(running, [...installed, ...missing]);
     }),
-    delete: Effect.fn(function* ({ olds, output }) {
+    delete: Effect.fn(function* ({ fqn, instanceId, olds, output }) {
       const observed = yield* observeKubernetesCluster(output.clusterId);
-      if (Option.isNone(observed)) return;
+      // The ownership and generation tags go once nothing carries them.
+      const alchemyTags = Option.isSome(observed)
+        ? (observed.value.tags ?? []).filter(isAlchemyTag)
+        : yield* alchemyTagsFor(fqn, instanceId);
+      if (Option.isNone(observed)) {
+        yield* deleteTagsIfUnused(alchemyTags);
+        return;
+      }
       if (olds.destroyAssociatedResources) {
         yield* DO.kubernetesDestroyAssociatedResourcesDangerous({ cluster_id: output.clusterId });
       } else {
@@ -453,5 +465,6 @@ export const ClusterProvider = () =>
             lastState: undefined,
           }),
       });
+      yield* deleteTagsIfUnused(alchemyTags);
     }),
   });

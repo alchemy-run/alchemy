@@ -23,8 +23,11 @@ const Stack = Alchemy.Stack(
   "DigitalOceanExternalHostStack",
   { providers, state: Alchemy.localState() },
   Effect.gen(function* () {
-    // Insights takes a token the caller passes: the testing profile's.
-    const { apiKey } = yield* yield* Credentials;
+    // Insights and Inference take a token the caller passes: the testing profile's.
+    const { apiKey } = yield* Effect.flatten(Credentials).pipe(
+      Effect.provide(DigitalOcean.fromAuthProvider()),
+      Effect.orDie,
+    );
     const ambient = yield* ConfigProvider.ConfigProvider;
     const worker = yield* ExternalHostWorker.pipe(
       Effect.provideService(
