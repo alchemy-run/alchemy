@@ -208,11 +208,21 @@ const runFrameworkSite = Effect.fn("DigitalOcean.Website.FrameworkSite")(functio
 
   // `main` and `extraFiles` are Outputs of the build, resolved by the engine
   // before the App reconciles; the props type has no Output-of-array form.
+  // Pin each installed package to the version the site itself resolved, so
+  // the image installs exactly what the build ran against.
+  const rootDir = path.resolve(initialCwd, props.rootDir ?? ".");
+  const packages = yield* Effect.forEach(config.install ?? [], (name) =>
+    fs.readFileString(path.join(rootDir, "node_modules", name, "package.json")).pipe(
+      Effect.map((text) => [name, (JSON.parse(text) as { version: string }).version] as const),
+      Effect.orElseSucceed(() => [name, "*"] as const),
+    ),
+  );
+
   const app = yield* App(id, {
     ...appProps(props, port),
     main: main as unknown as string,
     extraFiles: extraFiles as unknown as Array<{ source: string; dest: string }>,
-    packages: config.install,
+    packages: packages.length > 0 ? Object.fromEntries(packages) : undefined,
     env: { ...unwrapEnv(props.env), PORT: String(port) },
   });
   return { url: app.url, app } satisfies Website;

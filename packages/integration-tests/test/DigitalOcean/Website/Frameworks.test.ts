@@ -7,6 +7,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
+import { prepareNextjsFixture } from "../../Cloudflare/Website/TypeScriptCompat.ts";
 import { TestRegistry } from "../fixtures/app/shared.ts";
 import { isGone, logLevel, skipSlow, waitForAppHost } from "../support.ts";
 
@@ -40,6 +41,8 @@ const cases: ReadonlyArray<{
   fixture: string;
   path: string;
   marker: string;
+  /** Next.js is installed as a standalone app outside the repo; see prepareNextjsFixture. */
+  standalone?: boolean;
 }> = [
   {
     name: "Astro",
@@ -54,6 +57,7 @@ const cases: ReadonlyArray<{
     fixture: `${fixtures}/nextjs-app`,
     path: "/",
     marker: "NEXTJS_AWS_PAGE_MARKER",
+    standalone: true,
   },
   {
     name: "Nuxt",
@@ -132,9 +136,10 @@ for (const c of cases) {
         const entries = (yield* fs.readDirectory(c.fixture)).filter((name) => !SKIP.has(name));
         const rootDir = yield* cloneFixture(c.fixture, {
           prefix: `alchemy-${c.name.toLowerCase().replaceAll(/[^a-z]/g, "")}-digitalocean-`,
-          tempRoot,
+          tempRoot: c.standalone ? undefined : tempRoot,
           entries,
         });
+        if (c.standalone) yield* prepareNextjsFixture(rootDir);
         const deployed = yield* stack.deploy(
           Effect.gen(function* () {
             const site = yield* c.site("Web", { rootDir, registry: TestRegistry });
