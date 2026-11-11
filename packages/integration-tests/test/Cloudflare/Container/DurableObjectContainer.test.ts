@@ -144,12 +144,24 @@ const uploadedImageKeys = Effect.fn(function* (
   accountId: string,
   scriptName: string,
   className: string,
+  expected: ReadonlyArray<string>,
 ) {
-  const containers = yield* uploadedContainers(accountId, scriptName);
-  const entries = containers?.filter((container) => container.className === className) ?? [];
-  // One class has exactly one merged entry.
-  expect(entries).toHaveLength(1);
-  return Object.keys(entries[0]?.images ?? {}).sort();
+  // The version list can trail a fresh upload, so the newest listed version
+  // may still be the previous deploy's. Wait until it carries the expected
+  // keys; the caller's assertion reports what it last saw.
+  return yield* Effect.gen(function* () {
+    const containers = yield* uploadedContainers(accountId, scriptName);
+    const entries = containers?.filter((container) => container.className === className) ?? [];
+    // One class has exactly one merged entry.
+    expect(entries).toHaveLength(1);
+    return Object.keys(entries[0]?.images ?? {}).sort();
+  }).pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced("2 seconds"),
+      until: (keys) => JSON.stringify(keys) === JSON.stringify([...expected].sort()),
+      times: 15,
+    }),
+  );
 });
 
 /** The `containers` metadata of a Worker's most recently uploaded version. */
@@ -723,6 +735,7 @@ for (const dev of [true, false]) {
                           application.accountId,
                           worker.workerName,
                           className,
+                          images,
                         ),
                       ).toEqual(images);
                     }
@@ -763,6 +776,7 @@ for (const dev of [true, false]) {
                         removed.asyncApplication.accountId,
                         removed.asyncWorker.workerName,
                         "NativeAsyncObject",
+                        ["AsyncShell"],
                       ),
                     ).toEqual(["AsyncShell"]);
                     expect(
@@ -770,6 +784,7 @@ for (const dev of [true, false]) {
                         removed.application.accountId,
                         removed.worker.workerName,
                         "NativeObject",
+                        ["NativeShell"],
                       ),
                     ).toEqual(["NativeShell"]);
                   }
@@ -809,6 +824,7 @@ for (const dev of [true, false]) {
                         added.asyncApplication.accountId,
                         added.asyncWorker.workerName,
                         "NativeAsyncObject",
+                        ASYNC_IMAGES,
                       ),
                     ).toEqual(ASYNC_IMAGES);
                   } else {
@@ -900,6 +916,7 @@ for (const dev of [true, false]) {
                     deployed.application.accountId,
                     deployed.worker.workerName,
                     "Selector",
+                    ["BunBox", "NodeBox"],
                   ),
                 ).toEqual(["BunBox", "NodeBox"]);
               }
