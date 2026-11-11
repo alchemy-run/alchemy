@@ -657,6 +657,9 @@ export const LocalWorkerProvider = () =>
        * serve produced DUPLICATES whose simultaneous restarts storm the
        * instance until the DO's container link breaks.
        */
+      /** Directory names the container-context watcher never looks into. */
+      const WATCH_SKIPPED_NAMES = [".git", "node_modules"];
+
       const containerWatchers = new Map<string, { key: string; fiber: Fiber.Fiber<void> }>();
 
       const stopContainerWatcher = (id: string) =>
@@ -681,9 +684,9 @@ export const LocalWorkerProvider = () =>
        * variant reloads through the config's `containerHashes` instead.
        *
        * Events are debounced and gated on the Docker build hash
-       * (`.dockerignore` applied, `.alchemy` and `.git` skipped), so editor
-       * double-saves, ignored files, git and Alchemy's own state/log writes
-       * don't bounce the instance.
+       * (`.dockerignore` applied; `.alchemy`, `.git` and `node_modules`
+       * skipped), so editor double-saves, ignored files, git, installs and
+       * Alchemy's own state/log writes don't bounce the instance.
        */
       const ensureContainerWatcher = (
         worker: RunnableWorkerConfig,
@@ -725,9 +728,13 @@ export const LocalWorkerProvider = () =>
           // Fingerprint what Docker receives — the same hash the container
           // provider tags the image with — so `.dockerignore`d paths and
           // Alchemy's own `.alchemy` writes (logs, local state) inside a
-          // `context: "."` never restart the instance. `.git` is left out
-          // too: git rewrites its index on every `git status` an editor
-          // runs, and a dev restart for that is never wanted.
+          // `context: "."` never restart the instance. `.git` and
+          // `node_modules` (at any depth) are left out too, as the watcher
+          // always did: git rewrites its index on every `git status` an
+          // editor runs, and re-hashing installed dependencies on every edit
+          // costs far more than it catches — a dependency change also
+          // changes a manifest or lockfile, and the next plan's image hash
+          // (which keeps Docker's semantics) still sees it.
           const fingerprint = Effect.forEach([...watched.entries()], ([context, { dockerfile }]) =>
             hashDockerBuildInputs(
               {
@@ -736,7 +743,7 @@ export const LocalWorkerProvider = () =>
                 platform: "local",
               },
               "effective",
-              { exclude: [".git"] },
+              { excludeNames: WATCH_SKIPPED_NAMES },
             ),
           ).pipe(
             Effect.map((hashes) => hashes.join("\n")),
@@ -752,7 +759,10 @@ export const LocalWorkerProvider = () =>
                 const changed = path.resolve(context, event.path);
                 if (
                   isPathWithin(dotAlchemy, changed, runtimeBase) ||
-                  isPathWithin(path.join(context, ".git"), changed, runtimeBase)
+                  path
+                    .relative(context, changed)
+                    .split(path.sep)
+                    .some((segment) => WATCH_SKIPPED_NAMES.includes(segment))
                 ) {
                   return Effect.succeed(false);
                 }
