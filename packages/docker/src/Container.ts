@@ -9,7 +9,6 @@ import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
-import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
@@ -18,7 +17,7 @@ import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import { Docker, dockerContextName, dockerPhysicalName } from "./Docker.ts";
 import { healthcheckCommand, isHealthcheckDisabled } from "./HealthcheckCommand.ts";
-import { isDockerByteSize } from "./internal/DockerByteSize.ts";
+import { parseDockerByteSizeMagnitude } from "./internal/DockerByteSize.ts";
 import type { Providers } from "./Providers.ts";
 
 const CREATE_CONFIG_HASH_LABEL = "alchemy::container-config";
@@ -407,6 +406,8 @@ export interface ContainerLookup {
  * Docker's implicit default `bridge` is not added. On legacy/adopted containers,
  * Alchemy detaches that implicit bridge while keeping externally added networks.
  * Omitting both options retains Docker's ordinary default networking.
+ * Each attachment must refer to a distinct Docker network, even when the
+ * same network is referenced once by name and again by ID.
  *
  * Network attachment changes reconnect only the managed endpoint without
  * replacing the container. Docker can temporarily interrupt traffic during
@@ -415,6 +416,8 @@ export interface ContainerLookup {
  * it, so the update is not atomic. Alchemy leaves
  * externally attached networks untouched. `hostname`, `dns`, `dnsSearch` and
  * `dnsOptions` are creation-time settings and changes replace the container.
+ * Invalid options fail with `InvalidContainerOptions`, whose `path` identifies
+ * the rejected configuration property before replacement.
  *
  * ### Host Access
  * `extraHosts` writes lines into the container's `/etc/hosts`; it changes name
@@ -663,6 +666,28 @@ export const ContainerProvider = () =>
           context,
         });
 
+      // Names and IDs can refer to the same physical network. Resolve only
+      // multi-network declarations; check before delete-first replacements
+      // and again during reconcile, after new managed networks are created.
+      const validateNetworkIdentities = Effect.fn(function* (props: ContainerProps) {
+        if ((props.networks?.length ?? 0) < 2) return;
+        const seen = new Set<string>();
+        const context = dockerContextName(props.context);
+        for (const [index, network] of (props.networks ?? []).entries()) {
+          const actual = yield* docker.network
+            .inspect(network.name, context)
+            .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
+          if (!actual) continue;
+          if (seen.has(actual.Id)) {
+            return yield* invalidContainerOption(
+              `networks[${index}].name`,
+              "must be unique (another attachment refers to the same Docker network)",
+            );
+          }
+          seen.add(actual.Id);
+        }
+      });
+
       const reconnectNetwork = Effect.fn(function* (
         live: Docker.Container,
         network: Container.NetworkMapping,
@@ -682,13 +707,11 @@ export const ContainerProvider = () =>
         yield* docker.network.disconnect({ network: network.name, container: live.Id, context });
         yield* connectNetwork(network, live.Id, context).pipe(
           Effect.onError(() =>
-            Effect.exit(connectNetwork(restore, live.Id, context)).pipe(
-              Effect.flatMap((exit) =>
-                Exit.isFailure(exit)
-                  ? Effect.logWarning(
-                      `Docker.Container could not restore endpoint on ${network.name} after a rejected update`,
-                    )
-                  : Effect.void,
+            connectNetwork(restore, live.Id, context).pipe(
+              Effect.catchCause(() =>
+                Effect.logWarning(
+                  `Docker.Container could not restore endpoint on ${network.name} after a rejected update`,
+                ),
               ),
             ),
           ),
@@ -784,6 +807,7 @@ export const ContainerProvider = () =>
           // Validate the desired creation settings before any delete-first
           // replacement decision, including Docker context changes.
           const newArgs = yield* makeCreateArgs(id, news, instanceId);
+          yield* validateNetworkIdentities(news);
           const contextChanged =
             dockerContextName(olds.context) !== dockerContextName(news.context);
           const oldArgs =
@@ -837,6 +861,7 @@ export const ContainerProvider = () =>
         reconcile: Effect.fn(function* ({ id, instanceId, news, olds, output }) {
           const context = dockerContextName(news.context);
           const args = yield* makeCreateArgs(id, news, instanceId);
+          yield* validateNetworkIdentities(news);
           const configHash = yield* desiredConfigHash(args, news);
           // Adoption has output but no olds. In that case the observed
           // container already lives in the desired context.
@@ -1241,9 +1266,9 @@ const normalizeSysctls = (values: ContainerProps["sysctls"]): Record<string, str
 
 /** Positive Docker go-units byte sizes, e.g. 256m, 1.5GiB or 512 kb. */
 const isPositiveDockerByteSize = (value: string): boolean => {
-  if (value !== value.trim() || !isDockerByteSize(value)) return false;
-  const match = /^[+-]?(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:[eE][+-]?[0-9]+)?/.exec(value);
-  return match !== null && Number.isFinite(Number(match[0])) && Number(match[0]) > 0;
+  if (value !== value.trim()) return false;
+  const magnitude = parseDockerByteSizeMagnitude(value);
+  return magnitude !== undefined && magnitude > 0;
 };
 
 const normalizeTmpfs = (mounts: Container.TmpfsMount[]): string[] =>
@@ -1257,9 +1282,10 @@ const normalizeTmpfs = (mounts: Container.TmpfsMount[]): string[] =>
       return options.length > 0 ? `${path}:${options.join(",")}` : path;
     });
 
-// Older or adopted containers without a config hash may have image defaults
-// that happen to match the simple legacy check. Recreate when the caller
-// requests options that the legacy comparison cannot establish.
+// Older/adopted containers without a config hash can match image defaults
+// despite missing requested settings. Keep this explicit allowlist complement
+// separate from makeCreateArgs: the legacy comparison proves only selected
+// fields, while default/unset options must not roll existing containers.
 const hasUnverifiedCreationOptions = (props: ContainerProps): boolean =>
   (props.capDrop?.length ?? 0) > 0 ||
   props.memory !== undefined ||
@@ -1307,16 +1333,22 @@ const normalizeDevices = (devices: Container.DeviceMapping[] | undefined): strin
  * publishing ports.
  */
 export class InvalidContainerOptions extends Data.TaggedError("InvalidContainerOptions")<{
+  /** Property path in the declared Docker.Container configuration. */
+  readonly path: string;
   readonly message: string;
 }> {}
 
-const validateContainerOptions = (news: ContainerProps) => {
+const invalidContainerOption = (path: string, detail: string) =>
+  Effect.fail(new InvalidContainerOptions({ path, message: `Docker.Container ${path} ${detail}` }));
+
+const invalidContainerMapEntry = (entries: Record<string, string> | undefined) =>
+  Object.entries(entries ?? {}).find(
+    ([key, value]) => !key.trim() || key.includes("=") || !value.trim(),
+  );
+
+const validateContainerValues = (news: ContainerProps) => {
   if (Object.keys(news.labels ?? {}).some((key) => key.startsWith("alchemy::"))) {
-    return Effect.fail(
-      new InvalidContainerOptions({
-        message: "Docker.Container labels must not use the reserved alchemy:: prefix",
-      }),
-    );
+    return invalidContainerOption("labels", "must not use the reserved alchemy:: prefix");
   }
   // The CLI formatter omits empty strings. Reject them instead of silently
   // dropping user-specified resource and security restrictions.
@@ -1340,22 +1372,16 @@ const validateContainerOptions = (news: ContainerProps) => {
     "hostname",
   ] as const) {
     if (news[option] !== undefined && news[option].trim().length === 0) {
-      return Effect.fail(
-        new InvalidContainerOptions({
-          message: `Docker.Container ${option} cannot be empty`,
-        }),
-      );
+      return invalidContainerOption(option, "cannot be empty");
     }
   }
   // Reject structurally invalid create-time settings during plan/diff, before
   // the engine deletes an existing container to replace it. Docker accepts
   // --shm-size 0 but silently falls back to its default shared-memory size.
   if (news.sharedMemorySize !== undefined && !isPositiveDockerByteSize(news.sharedMemorySize)) {
-    return Effect.fail(
-      new InvalidContainerOptions({
-        message:
-          "Docker.Container sharedMemorySize must be a positive Docker byte size, e.g. 256m or 1.5GiB",
-      }),
+    return invalidContainerOption(
+      "sharedMemorySize",
+      "must be a positive Docker byte size, e.g. 256m or 1.5GiB",
     );
   }
   if (
@@ -1363,21 +1389,16 @@ const validateContainerOptions = (news: ContainerProps) => {
     !news.workingDirectory.startsWith("/") &&
     !/^[A-Za-z]:[\\/]/.test(news.workingDirectory)
   ) {
-    return Effect.fail(
-      new InvalidContainerOptions({
-        message: "Docker.Container workingDirectory must be an absolute path",
-      }),
-    );
+    return invalidContainerOption("workingDirectory", "must be an absolute path");
   }
   if (
     news.pidNamespace !== undefined &&
     news.pidNamespace !== "host" &&
     !/^container:[^\s:]+$/.test(news.pidNamespace)
   ) {
-    return Effect.fail(
-      new InvalidContainerOptions({
-        message: "Docker.Container pidNamespace must be host or container:<id> (omit for private)",
-      }),
+    return invalidContainerOption(
+      "pidNamespace",
+      "must be host or container:<id> (omit for private)",
     );
   }
   if (
@@ -1385,11 +1406,9 @@ const validateContainerOptions = (news: ContainerProps) => {
     !["none", "private", "shareable", "host"].includes(news.ipcNamespace) &&
     !/^container:[^\s:]+$/.test(news.ipcNamespace)
   ) {
-    return Effect.fail(
-      new InvalidContainerOptions({
-        message:
-          "Docker.Container ipcNamespace must be none, private, shareable, host or container:<id>",
-      }),
+    return invalidContainerOption(
+      "ipcNamespace",
+      "must be none, private, shareable, host or container:<id>",
     );
   }
   if (
@@ -1398,19 +1417,11 @@ const validateContainerOptions = (news: ContainerProps) => {
     news.ipcNamespace !== "private" &&
     news.ipcNamespace !== "shareable"
   ) {
-    return Effect.fail(
-      new InvalidContainerOptions({
-        message: "Docker.Container sharedMemorySize requires private or shareable ipcNamespace",
-      }),
-    );
+    return invalidContainerOption("sharedMemorySize", "requires private or shareable ipcNamespace");
   }
   for (const [index, value] of (news.dns ?? []).entries()) {
     if (Result.isFailure(parseIpAddress(value))) {
-      return Effect.fail(
-        new InvalidContainerOptions({
-          message: `Docker.Container dns[${index}] must be an IPv4 or IPv6 address`,
-        }),
-      );
+      return invalidContainerOption(`dns[${index}]`, "must be an IPv4 or IPv6 address");
     }
   }
   for (const [option, values] of [
@@ -1418,81 +1429,55 @@ const validateContainerOptions = (news: ContainerProps) => {
     ["dnsOptions", news.dnsOptions],
   ] as const) {
     if (values?.some((value) => !value.trim())) {
-      return Effect.fail(
-        new InvalidContainerOptions({
-          message: `Docker.Container ${option} cannot contain empty values`,
-        }),
-      );
+      return invalidContainerOption(option, "cannot contain empty values");
     }
   }
+  return Effect.void;
+};
+
+const validateContainerNetworks = (news: ContainerProps) => {
   const connectedNetworks = new Set<string>();
   for (const [index, network] of (news.networks ?? []).entries()) {
     const field = `networks[${index}]`;
     if (!network.name.trim() || connectedNetworks.has(network.name)) {
-      return Effect.fail(
-        new InvalidContainerOptions({
-          message: `Docker.Container ${field}.name must be nonempty and unique`,
-        }),
-      );
+      return invalidContainerOption(`${field}.name`, "must be nonempty and unique");
     }
     connectedNetworks.add(network.name);
     if (network.aliases?.some((alias) => !alias.trim())) {
-      return Effect.fail(
-        new InvalidContainerOptions({
-          message: `Docker.Container ${field}.aliases cannot contain empty aliases`,
-        }),
-      );
+      return invalidContainerOption(`${field}.aliases`, "cannot contain empty aliases");
     }
     if (
       network.ipv4Address !== undefined &&
       Result.isFailure(parseIpv4Address(network.ipv4Address))
     ) {
-      return Effect.fail(
-        new InvalidContainerOptions({
-          message: `Docker.Container ${field}.ipv4Address must be a valid IPv4 address`,
-        }),
-      );
+      return invalidContainerOption(`${field}.ipv4Address`, "must be a valid IPv4 address");
     }
     if (
       network.ipv6Address !== undefined &&
       Result.isFailure(parseIpv6Address(network.ipv6Address))
     ) {
-      return Effect.fail(
-        new InvalidContainerOptions({
-          message: `Docker.Container ${field}.ipv6Address must be a valid IPv6 address`,
-        }),
-      );
+      return invalidContainerOption(`${field}.ipv6Address`, "must be a valid IPv6 address");
     }
     if (network.gatewayPriority !== undefined && !Number.isSafeInteger(network.gatewayPriority)) {
-      return Effect.fail(
-        new InvalidContainerOptions({
-          message: `Docker.Container ${field}.gatewayPriority must be an integer`,
-        }),
+      return invalidContainerOption(`${field}.gatewayPriority`, "must be an integer");
+    }
+    const invalidDriverOption = invalidContainerMapEntry(network.endpointDriverOpts);
+    if (invalidDriverOption) {
+      return invalidContainerOption(
+        `${field}.endpointDriverOpts`,
+        `contains an invalid entry: ${invalidDriverOption[0]}`,
       );
     }
-    for (const [key, value] of Object.entries(network.endpointDriverOpts ?? {})) {
-      if (!key.trim() || key.includes("=") || !value.trim()) {
-        return Effect.fail(
-          new InvalidContainerOptions({
-            message: `Docker.Container ${field}.endpointDriverOpts contains an invalid entry: ${key}`,
-          }),
-        );
-      }
-    }
   }
+  return Effect.void;
+};
+
+const validateContainerRuntime = (news: ContainerProps) => {
   if (news.capDrop?.some((capability) => capability.trim().length === 0)) {
-    return Effect.fail(
-      new InvalidContainerOptions({
-        message: "Docker.Container capDrop cannot contain empty capabilities",
-      }),
-    );
+    return invalidContainerOption("capDrop", "cannot contain empty capabilities");
   }
   if (news.groupAdd?.some((group) => group.trim().length === 0)) {
-    return Effect.fail(
-      new InvalidContainerOptions({
-        message: "Docker.Container groupAdd cannot contain empty groups",
-      }),
-    );
+    return invalidContainerOption("groupAdd", "cannot contain empty groups");
   }
   for (const [name, limit] of Object.entries(news.ulimits ?? {})) {
     if (
@@ -1503,29 +1488,16 @@ const validateContainerOptions = (news: ContainerProps) => {
       limit.hard < -1 ||
       (limit.hard !== -1 && (limit.soft === -1 || limit.soft > limit.hard))
     ) {
-      return Effect.fail(
-        new InvalidContainerOptions({
-          message: `Docker.Container ulimits contains an invalid soft/hard limit for ${name}`,
-        }),
-      );
+      return invalidContainerOption("ulimits", `contains an invalid soft/hard limit for ${name}`);
     }
   }
-  for (const [name, value] of Object.entries(news.logOptions ?? {})) {
-    if (!name.trim() || name.includes("=") || !value.trim()) {
-      return Effect.fail(
-        new InvalidContainerOptions({
-          message: `Docker.Container logOptions contains an invalid option: ${name}`,
-        }),
-      );
-    }
-  }
-  for (const [name, value] of Object.entries(news.sysctls ?? {})) {
-    if (!name.trim() || name.includes("=") || !value.trim()) {
-      return Effect.fail(
-        new InvalidContainerOptions({
-          message: `Docker.Container sysctls contains an invalid setting: ${name}`,
-        }),
-      );
+  for (const [path, options, noun] of [
+    ["logOptions", news.logOptions, "option"],
+    ["sysctls", news.sysctls, "setting"],
+  ] as const) {
+    const invalidEntry = invalidContainerMapEntry(options);
+    if (invalidEntry) {
+      return invalidContainerOption(path, `contains an invalid ${noun}: ${invalidEntry[0]}`);
     }
   }
   if (
@@ -1534,54 +1506,36 @@ const validateContainerOptions = (news: ContainerProps) => {
       news.oomScoreAdjustment < -1000 ||
       news.oomScoreAdjustment > 1000)
   ) {
-    return Effect.fail(
-      new InvalidContainerOptions({
-        message: "Docker.Container oomScoreAdjustment must be an integer from -1000 to 1000",
-      }),
-    );
+    return invalidContainerOption("oomScoreAdjustment", "must be an integer from -1000 to 1000");
   }
   if (news.memorySwap !== undefined && news.memory === undefined) {
-    return Effect.fail(
-      new InvalidContainerOptions({
-        message: "Docker.Container memorySwap requires memory to be set",
-      }),
-    );
+    return invalidContainerOption("memorySwap", "requires memory to be set");
   }
   if (news.cpus !== undefined && (!Number.isFinite(news.cpus) || news.cpus <= 0)) {
-    return Effect.fail(
-      new InvalidContainerOptions({
-        message: "Docker.Container cpus must be a finite, positive number",
-      }),
-    );
+    return invalidContainerOption("cpus", "must be a finite, positive number");
   }
   if (
     news.pidsLimit !== undefined &&
     (!Number.isInteger(news.pidsLimit) || (news.pidsLimit <= 0 && news.pidsLimit !== -1))
   ) {
-    return Effect.fail(
-      new InvalidContainerOptions({
-        message: "Docker.Container pidsLimit must be a positive integer or -1 (unlimited)",
-      }),
-    );
+    return invalidContainerOption("pidsLimit", "must be a positive integer or -1 (unlimited)");
   }
   if (
     isContainerNetworkMode(news.networkMode) &&
     ((news.ports?.length ?? 0) > 0 || (news.networks?.length ?? 0) > 0)
   ) {
-    return Effect.fail(
-      new InvalidContainerOptions({
-        message: "Docker.Container networkMode.container cannot be combined with ports or networks",
-      }),
+    return invalidContainerOption(
+      "networkMode.container",
+      "cannot be combined with ports or networks",
     );
   }
   if (
     (news.networkMode === "host" || news.networkMode === "none") &&
     (news.networks?.length ?? 0) > 0
   ) {
-    return Effect.fail(
-      new InvalidContainerOptions({
-        message: `Docker.Container networkMode ${news.networkMode} cannot be combined with networks`,
-      }),
+    return invalidContainerOption(
+      "networkMode",
+      `${news.networkMode} cannot be combined with networks`,
     );
   }
   // Docker forbids these creation flags when the network namespace belongs
@@ -1594,20 +1548,21 @@ const validateContainerOptions = (news: ContainerProps) => {
       (news.dnsOptions?.length ?? 0) > 0 ||
       (news.extraHosts?.length ?? 0) > 0)
   ) {
-    return Effect.fail(
-      new InvalidContainerOptions({
-        message:
-          "Docker.Container networkMode.container cannot be combined with hostname, dns, dnsSearch, dnsOptions or extraHosts",
-      }),
+    return invalidContainerOption(
+      "networkMode.container",
+      "cannot be combined with hostname, dns, dnsSearch, dnsOptions or extraHosts",
     );
   }
+  return Effect.void;
+};
+
+const validateContainerMounts = (news: ContainerProps) => {
   const targets = new Set<string>();
   for (const device of news.devices ?? []) {
     if (targets.has(device.containerPath)) {
-      return Effect.fail(
-        new InvalidContainerOptions({
-          message: `Docker.Container devices contain conflicting target path ${device.containerPath}`,
-        }),
+      return invalidContainerOption(
+        "devices",
+        `contain conflicting target path ${device.containerPath}`,
       );
     }
     targets.add(device.containerPath);
@@ -1615,40 +1570,32 @@ const validateContainerOptions = (news: ContainerProps) => {
   const tmpfsTargets = new Set<string>();
   for (const mount of news.tmpfs ?? []) {
     if (mount.size !== undefined && mount.size.trim().length === 0) {
-      return Effect.fail(
-        new InvalidContainerOptions({
-          message: `Docker.Container tmpfs size cannot be empty for ${mount.path}`,
-        }),
-      );
+      return invalidContainerOption("tmpfs", `size cannot be empty for ${mount.path}`);
     }
     if (!mount.path.startsWith("/") || mount.path.includes(":") || mount.path.includes(",")) {
-      return Effect.fail(
-        new InvalidContainerOptions({
-          message: `Docker.Container tmpfs target must be an absolute path: ${mount.path}`,
-        }),
-      );
+      return invalidContainerOption("tmpfs", `target must be an absolute path: ${mount.path}`);
     }
     if (tmpfsTargets.has(mount.path)) {
-      return Effect.fail(
-        new InvalidContainerOptions({
-          message: `Docker.Container tmpfs contains duplicate target ${mount.path}`,
-        }),
-      );
+      return invalidContainerOption("tmpfs", `contains duplicate target ${mount.path}`);
     }
     if (
       mount.mode !== undefined &&
       (!Number.isInteger(mount.mode) || mount.mode < 0 || mount.mode > 0o7777)
     ) {
-      return Effect.fail(
-        new InvalidContainerOptions({
-          message: `Docker.Container tmpfs mode is not a valid POSIX mode for ${mount.path}`,
-        }),
-      );
+      return invalidContainerOption("tmpfs", `mode is not a valid POSIX mode for ${mount.path}`);
     }
     tmpfsTargets.add(mount.path);
   }
   return Effect.void;
 };
+
+const validateContainerOptions = (news: ContainerProps) =>
+  Effect.gen(function* () {
+    yield* validateContainerValues(news);
+    yield* validateContainerNetworks(news);
+    yield* validateContainerRuntime(news);
+    yield* validateContainerMounts(news);
+  });
 
 const isContainerNetworkMode = (mode: Container.NetworkMode | undefined): boolean =>
   typeof mode === "string" ? mode.startsWith("container:") : mode !== undefined;

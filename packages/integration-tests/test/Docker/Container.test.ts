@@ -367,6 +367,7 @@ test.provider(
         { options: { sharedMemorySize: "garbage" }, reason: "sharedMemorySize" },
         { options: { sharedMemorySize: "0" }, reason: "sharedMemorySize" },
         { options: { sharedMemorySize: "-1m" }, reason: "sharedMemorySize" },
+        { options: { sharedMemorySize: "1e999m" }, reason: "sharedMemorySize" },
         {
           options: {
             context: "alchemy-test-missing-docker-context",
@@ -1339,6 +1340,48 @@ describe(
         ).toBe("noop");
         yield* stack.destroy();
       }),
+    );
+
+    test.provider(
+      "rejects duplicate network name and ID before replacing an existing container",
+      (stack) =>
+        Effect.gen(function* () {
+          const docker = yield* Docker.Docker;
+          yield* stack.destroy();
+          yield* Effect.addFinalizer(() => stack.destroy().pipe(Effect.ignore));
+          const resource = (duplicate: boolean) =>
+            Effect.gen(function* () {
+              const network = yield* Docker.Network("duplicate-endpoint-identity-network");
+              const container = yield* Docker.Container("duplicate-endpoint-identity-container", {
+                image: "nginx:alpine",
+                hostname: duplicate ? "changed-hostname" : "original-hostname",
+                networks: duplicate
+                  ? [{ name: network.name }, { name: network.id }]
+                  : [{ name: network.name }],
+              });
+              return { network, container };
+            });
+
+          const first = yield* stack.deploy(resource(false));
+          const planned = yield* stack.plan(resource(true)).pipe(
+            Effect.as(undefined),
+            Effect.catchCause((cause) => Effect.succeed(findInvalidContainerOptions(cause))),
+          );
+          expect(planned?._tag).toBe("InvalidContainerOptions");
+          expect(planned?.message).toContain("networks[1].name");
+          expect(planned?.path).toBe("networks[1].name");
+          const deployed = yield* stack.deploy(resource(true)).pipe(
+            Effect.as(undefined),
+            Effect.catchCause((cause) => Effect.succeed(findInvalidContainerOptions(cause))),
+          );
+          expect(deployed?._tag).toBe("InvalidContainerOptions");
+          expect(deployed?.path).toBe("networks[1].name");
+          expect((yield* docker.container.inspect(first.container.name)).Id).toBe(
+            first.container.id,
+          );
+          yield* stack.destroy();
+        }),
+      { tags: ["provider:docker:network"] },
     );
 
     test.provider("replaces the container when published ports change", (stack) =>

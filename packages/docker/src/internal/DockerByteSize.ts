@@ -1,20 +1,16 @@
-/**
- * Docker's go-units `RAMInBytes` grammar, shared by Dockerfile mount-size
- * validation and Docker CLI byte-size options. Zero is syntactically valid;
- * callers may require strictly positive sizes.
- */
-export const isDockerByteSize = (value: string): boolean => {
-  const sep = Math.max(...Array.from("01234567890. ", (c) => value.lastIndexOf(c)));
-  if (sep === -1) return false;
-  const num = value[sep] === " " ? value.slice(0, sep) : value.slice(0, sep + 1);
-  const suffix = value.slice(sep + 1).toLowerCase();
-  if (!/^[+-]?(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$/.test(num)) return false;
-  if (Number(num) < 0) return false;
-  if (suffix === "") return true;
-  if (suffix.length > 3) return false;
-  if (suffix[0] === "b") return suffix.length === 1;
-  if (!"kmgtp".includes(suffix[0]!)) return false;
-  return (
-    suffix.length === 1 || (suffix.length === 2 ? suffix[1] === "b" : suffix.slice(1) === "ib")
-  );
+// Docker's go-units RAMInBytes: a decimal magnitude with an optional
+// one-space-separated b/k/m/g/t/p, kb, or KiB-style suffix.
+const DOCKER_BYTE_SIZE =
+  /^([+-]?(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:[eE][+-]?[0-9]+)?)(?: ?(?:b|[kmgtp](?:b|ib)?)| ?)$/i;
+
+/** Unscaled numeric magnitude, or undefined for invalid/overflowing values. */
+export const parseDockerByteSizeMagnitude = (value: string): number | undefined => {
+  const match = DOCKER_BYTE_SIZE.exec(value);
+  if (!match) return undefined;
+  const magnitude = Number(match[1]);
+  return Number.isFinite(magnitude) && magnitude >= 0 ? magnitude : undefined;
 };
+
+/** Dockerfile size grammar allows zero; container shared memory does not. */
+export const isDockerByteSize = (value: string): boolean =>
+  parseDockerByteSizeMagnitude(value) !== undefined;
