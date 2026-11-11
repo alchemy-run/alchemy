@@ -18,6 +18,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import { ignoreNotFound, noneIfNotFound } from "../internal/notFound.ts";
 import type { Providers } from "../Providers.ts";
 import { clusterCaCertificate, observeCluster, waitUntilOnline } from "./Cluster.ts";
@@ -234,7 +235,14 @@ export const DatabaseProvider = () =>
       const existing = yield* observe(news.clusterId, name);
       if (Option.isNone(existing)) {
         yield* waitUntilOnline(news.clusterId);
-        yield* DO.addDatabase({ database_cluster_uuid: news.clusterId, name });
+        // A MySQL cluster that just came online refuses names for a moment.
+        yield* DO.addDatabase({ database_cluster_uuid: news.clusterId, name }).pipe(
+          Effect.retry({
+            while: (e) => e._tag === "DatabaseNameNotAvailable",
+            schedule: Schedule.spaced("5 seconds"),
+            times: 12,
+          }),
+        );
       }
       const migrationsInput = migrationsInputOf(news);
       const run = migrationsInput
