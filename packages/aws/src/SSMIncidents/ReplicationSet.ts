@@ -16,6 +16,18 @@ import type { Providers } from "../Providers.ts";
  * Raised when the replication set enters a terminal `FAILED` state (or does
  * not become `ACTIVE` within the bounded wait window) while reconciling.
  */
+/**
+ * Deletion was refused because the Incident Manager replication set has deletion protection on, set
+ * through `deletionProtected` or outside the stack. Turn it off and deploy (or turn it
+ * off in the console) before deleting it.
+ */
+export class ReplicationSetDeletionProtected extends Data.TaggedError(
+  "ReplicationSetDeletionProtected",
+)<{
+  readonly arn: string;
+  readonly message: string;
+}> {}
+
 export class ReplicationSetNotActive extends Data.TaggedError("ReplicationSetNotActive")<{
   message: string;
   status: string;
@@ -32,9 +44,8 @@ export interface ReplicationSetProps {
   regions?: Record<string, { sseKmsKeyId?: string }>;
 
   /**
-   * Whether deletion protection is enabled. When `true`, the replication set
-   * cannot be deleted until protection is disabled. Alchemy automatically
-   * disables protection before deleting the resource.
+   * Whether deletion protection is enabled. While it is on, `destroy` and replacement fail until it is turned off and
+   * deployed.
    *
    * @default false
    */
@@ -314,15 +325,29 @@ export const ReplicationSetProvider = () =>
           return buildAttrs(final);
         }),
 
-        delete: Effect.fn(function* ({ output }) {
-          // Deleting the replication set offboards Incident Manager. Deletion
-          // protection must be lifted first; both calls are idempotent.
-          yield* incidents
-            .updateDeletionProtection({
-              arn: output.arn,
-              deletionProtected: false,
-            })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
+        delete: Effect.fn(function* ({ output, force }) {
+          // Deleting the replication set offboards Incident Manager.
+          const observed = yield* incidents.getReplicationSet({ arn: output.arn }).pipe(
+            Effect.map((response) => response.replicationSet),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
+          );
+          if (observed === undefined) return;
+          // Deletion protection, set by this stack or outside it, refuses the
+          // delete. Only an account-wide nuke (`force`) lifts it.
+          if (observed.deletionProtected === true) {
+            if (force !== true) {
+              return yield* new ReplicationSetDeletionProtected({
+                arn: output.arn,
+                message: `Incident Manager replication set '${output.arn}' has deletion protection on. Set \`deletionProtected: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+              });
+            }
+            yield* incidents
+              .updateDeletionProtection({
+                arn: output.arn,
+                deletionProtected: false,
+              })
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
+          }
           yield* incidents.deleteReplicationSet({ arn: output.arn }).pipe(
             Effect.asVoid,
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),

@@ -9,6 +9,7 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import { expectDeleteRefused } from "../../expectDeleteRefused.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -192,9 +193,33 @@ test.provider.skipIf(!process.env.AWS_TEST_INCIDENT_MANAGER)(
       expect(updatedPlan.displayName).toBe("Critical incidents (updated)");
       expect(updatedPlan.incidentTemplate.impact).toBe(2);
 
-      // Destroy — the response plan is deleted first, deletion protection is
-      // lifted automatically, and Incident Manager is offboarded. The
-      // provider's delete waits until the set is fully gone.
+      // Destroy — the response plan is deleted first and Incident Manager is
+      // offboarded. The provider's delete waits until the set is fully gone.
+      // Deletion protection refuses the destroy: the provider never lifts it.
+      // Turn it off and deploy, then destroy.
+      yield* expectDeleteRefused(stack, {
+        logicalId: "Incidents",
+        tag: "ReplicationSetDeletionProtected",
+      });
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const replicationSet = yield* ReplicationSet("Incidents", {
+            deletionProtected: false,
+            tags: { env: "prod" },
+          });
+          const plan = yield* ResponsePlan("Critical", {
+            name: planName,
+            displayName: "Critical incidents (updated)",
+            incidentTemplate: {
+              title: "Critical failure",
+              impact: 2,
+              summary: "Automated test response plan (updated)",
+            },
+            tags: { fixture: "ssm-incidents" },
+          });
+          return { replicationSet, plan };
+        }),
+      );
       yield* stack.destroy();
       const planError = yield* Effect.flip(incidents.getResponsePlan({ arn: plan.arn }));
       expect(planError._tag).toBe("ResourceNotFoundException");

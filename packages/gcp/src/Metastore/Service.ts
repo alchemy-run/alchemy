@@ -4,6 +4,7 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
@@ -202,6 +203,18 @@ export type Service = Resource<
  * manage by its identifiers, in the ambient project unless `project` names
  * another.
  */
+/**
+ * Deletion was refused because the Dataproc Metastore service has deletion protection on, set
+ * through `deletionProtection` or outside the stack. Turn it off and deploy (or turn it
+ * off in the console) before deleting it.
+ */
+export class ServiceDeletionProtected extends Data.TaggedError(
+  "GCP.Metastore.ServiceDeletionProtected",
+)<{
+  readonly name: string;
+  readonly message: string;
+}> {}
+
 export interface ServiceLookup {
   /**
    * Service id (the `{service}` segment of
@@ -565,10 +578,18 @@ export const ServiceProvider = () =>
       return toAttrs(current, env.project, env.region);
     }),
 
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ output, force }) {
       const existing = yield* getByName(output.name);
       if (existing === undefined) return;
+      // Deletion protection, set by this stack or outside it, refuses the
+      // delete. Only an account-wide nuke (`force`) lifts it.
       if (existing.deletionProtection === true) {
+        if (force !== true) {
+          return yield* new ServiceDeletionProtected({
+            name: output.name,
+            message: `Dataproc Metastore service '${output.name}' has deletion protection on. Set \`deletionProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+          });
+        }
         const unlocked = yield* metastore
           .patchProjectsLocationsServices({
             name: output.name,

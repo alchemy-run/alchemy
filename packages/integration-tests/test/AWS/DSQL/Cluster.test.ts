@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import { expectDeleteRefused } from "../../expectDeleteRefused.ts";
 
 const { test } = Test.make({
   providers: Layer.mergeAll(AWS.providers(), Drizzle.providers()),
@@ -125,7 +126,25 @@ test.provider(
       });
       expect(reattached.policy).toContain("ExceptionRole");
 
-      // delete (provider disables deletion protection automatically)
+      // Deletion protection refuses the destroy: the provider never lifts it.
+      // Turn it off and deploy, then destroy.
+      yield* expectDeleteRefused(stack, {
+        logicalId: "AppDb",
+        tag: "DSQLClusterDeletionProtected",
+      });
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const cluster = yield* Cluster("AppDb", {
+            deletionProtectionEnabled: false,
+            tags: { app: "alchemy-test" },
+          });
+          const policy = yield* ClusterPolicy("AppDbPolicy", {
+            clusterId: cluster.clusterId,
+            policy: vpcOnlyPolicy(["arn:aws:iam::123456789012:role/ExceptionRole"]),
+          });
+          return { policyVersion: policy.policyVersion };
+        }),
+      );
       yield* stack.destroy();
       const gone = yield* getCluster(created.clusterId);
       // A deleted DSQL cluster is either gone or reports DELETING/DELETED.

@@ -8,6 +8,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectDeleteRefused } from "../../expectDeleteRefused.ts";
 import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -154,6 +155,30 @@ test.provider(
       });
       expect(refetched.enableDropProtection).toEqual(true);
 
+      // Deletion protection refuses the destroy: the provider never lifts it.
+      // Turn it off and deploy, then destroy.
+      yield* expectDeleteRefused(stack, {
+        logicalId: "AppDb",
+        tag: "GCP.Spanner.DatabaseDropProtected",
+      });
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const instance = yield* GCP.Spanner.Instance("App", {
+            instanceId: created.instance.instanceId,
+            config: "regional-us-central1",
+            processingUnits: 100,
+            displayName: "alchemy-db-spnr",
+            defaultBackupScheduleType: "NONE",
+          });
+          const database = yield* GCP.Spanner.Database("AppDb", {
+            instance: instance.instanceId,
+            databaseId: created.database.databaseId,
+            extraStatements: ["CREATE TABLE Users (UserId INT64 NOT NULL) PRIMARY KEY (UserId)"],
+            enableDropProtection: false,
+          });
+          return { instance, database };
+        }),
+      );
       yield* stack.destroy();
 
       const gone = yield* waitUntilGone(created.database.name);

@@ -20,6 +20,16 @@ import type { Providers } from "../Providers.ts";
 import { runDsqlMigrations } from "./Migrations.ts";
 import { validateDsqlMigrations } from "./MigrationSql.ts";
 
+/**
+ * Deletion was refused because the Aurora DSQL cluster has deletion protection on, set
+ * through `deletionProtectionEnabled` or outside the stack. Turn it off and deploy (or turn it
+ * off in the console) before deleting it.
+ */
+export class DSQLClusterDeletionProtected extends Data.TaggedError("DSQLClusterDeletionProtected")<{
+  readonly clusterId: string;
+  readonly message: string;
+}> {}
+
 export class DSQLClusterNotReady extends Data.TaggedError("DSQLClusterNotReady")<{
   readonly message: string;
   readonly cause?: unknown;
@@ -44,9 +54,8 @@ export interface ClusterProps {
    */
   migrations?: MigrationsInput;
   /**
-   * Enables deletion protection. While enabled the cluster cannot be deleted;
-   * the provider automatically disables it during delete so `stack.destroy()`
-   * always succeeds.
+   * Enables deletion protection. While it is on, `destroy` and replacement fail until it is turned off and
+   * deployed.
    * @default false
    */
   deletionProtectionEnabled?: boolean;
@@ -361,12 +370,19 @@ export const ClusterProvider = () =>
           return { ...attrs, ...migrationsAttrs({ input, run, output }) };
         }),
 
-        delete: Effect.fn(function* ({ output }) {
+        delete: Effect.fn(function* ({ output, force }) {
           const identifier = output.clusterId;
           const existing = yield* readCluster(identifier);
           if (existing === undefined) return;
-          // Deletion protection blocks delete — disable it first.
+          // Deletion protection, set by this stack or outside it, refuses the
+          // delete. Only an account-wide nuke (`force`) lifts it.
           if (existing.deletionProtectionEnabled) {
+            if (force !== true) {
+              return yield* new DSQLClusterDeletionProtected({
+                clusterId: identifier,
+                message: `Aurora DSQL cluster '${identifier}' has deletion protection on. Set \`deletionProtectionEnabled: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+              });
+            }
             yield* dsql
               .updateCluster({
                 identifier,

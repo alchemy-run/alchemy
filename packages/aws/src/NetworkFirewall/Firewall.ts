@@ -38,8 +38,8 @@ export interface FirewallProps {
    */
   subnetMappings: NFW.SubnetMapping[];
   /**
-   * Whether the firewall is protected against deletion. The provider
-   * automatically clears this flag before deleting the firewall.
+   * Whether the firewall is protected against deletion. While it is on, `destroy` and replacement fail until it is turned off and
+   * deployed.
    * @default false
    */
   deleteProtection?: boolean;
@@ -144,6 +144,16 @@ export interface FirewallLookup {
 export const Firewall = Resource<Firewall>("AWS.NetworkFirewall.Firewall");
 
 /** Raised (internally, for bounded retry) while a firewall is provisioning. */
+/**
+ * Deletion was refused because the Network Firewall has deletion protection on, set
+ * through `deleteProtection` or outside the stack. Turn it off and deploy (or turn it
+ * off in the console) before deleting it.
+ */
+export class FirewallDeleteProtected extends Data.TaggedError("FirewallDeleteProtected")<{
+  readonly firewallName: string;
+  readonly message: string;
+}> {}
+
 export class FirewallNotReady extends Data.TaggedError("FirewallNotReady")<{
   message: string;
 }> {}
@@ -400,15 +410,22 @@ export const FirewallProvider = () =>
           return toAttrs(firewall, observed.FirewallStatus);
         }),
 
-        delete: Effect.fn(function* ({ output, session }) {
+        delete: Effect.fn(function* ({ output, session, force }) {
           const name = output.firewallName;
           const observed = yield* nfw
             .describeFirewall({ FirewallName: name })
             .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           if (observed === undefined) return;
 
-          // Clear delete protection first — DeleteFirewall requires it off.
+          // Delete protection, set by this stack or outside it, refuses the
+          // delete. Only an account-wide nuke (`force`) lifts it.
           if (observed.Firewall?.DeleteProtection) {
+            if (force !== true) {
+              return yield* new FirewallDeleteProtected({
+                firewallName: name,
+                message: `Network Firewall '${name}' has deletion protection on. Set \`deleteProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+              });
+            }
             yield* nfw
               .updateFirewallDeleteProtection({
                 UpdateToken: observed.UpdateToken,
