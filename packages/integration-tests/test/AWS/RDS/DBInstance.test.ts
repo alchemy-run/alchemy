@@ -34,6 +34,7 @@ import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { driftOf } from "../drift.ts";
+import { expectDeletionProtected } from "../expectDeletionProtected.ts";
 import { stageIdentifier } from "./names.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -2935,6 +2936,39 @@ lifecycle(5, process.env.AWS_TEST_RDS_DBINSTANCE)(
     tags: ["provider:aws", "provider:aws:ec2", "provider:aws:lambda", "provider:aws:rds", "live"],
     timeout: LONG_INSTANCE_TIMEOUT,
   },
+);
+
+// Deletion protection blocks a destroy. The failure carries a typed tag, and
+// turning protection off lets the next destroy through.
+test.provider.skipIf(!!process.env.FAST)(
+  "delete: deletion protection blocks destroy with DBInstanceDeletionProtected",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const program = (deletionProtection: boolean) =>
+        Effect.gen(function* () {
+          return yield* DBInstance("ProtectedInstance", {
+            engine: "postgres",
+            dbInstanceClass: "db.t3.micro",
+            masterUsername: "alchemy",
+            manageMasterUserPassword: true,
+            backupRetentionPeriod: "0 days",
+            skipFinalSnapshot: true,
+            deletionProtection,
+          });
+        });
+
+      yield* stack.deploy(program(true));
+      yield* expectDeletionProtected(stack, {
+        logicalId: "ProtectedInstance",
+        tag: "DBInstanceDeletionProtected",
+      });
+
+      yield* stack.deploy(program(false));
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:aws", "provider:aws:rds", "live"], timeout: INSTANCE_TIMEOUT },
 );
 
 describe.concurrent("lifecycle lanes", () => {

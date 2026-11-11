@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { interruptDestroy } from "../../interruptDestroy.ts";
 import { getDefaultVpc } from "../DefaultVpc.ts";
+import { expectDeletionProtected } from "../expectDeletionProtected.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -189,4 +190,33 @@ test.provider.skipIf(!!process.env.FAST)(
     }),
   // cluster + instance create (~5-10 min) + instance and cluster delete, one test.
   { tags: ["provider:aws", "provider:aws:docdb", "provider:aws:ec2", "live"], timeout: 1_800_000 },
+);
+
+// Deletion protection blocks a destroy. The failure carries a typed tag, and
+// turning protection off lets the next destroy through.
+test.provider.skipIf(!!process.env.FAST)(
+  "delete: deletion protection blocks destroy with DBClusterDeletionProtected",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const program = (deletionProtection: boolean) =>
+        Effect.gen(function* () {
+          return yield* DBCluster("ProtectedCluster", {
+            masterUsername: "alchemy",
+            manageMasterUserPassword: true,
+            deletionProtection,
+          });
+        });
+
+      yield* stack.deploy(program(true));
+      yield* expectDeletionProtected(stack, {
+        logicalId: "ProtectedCluster",
+        tag: "DBClusterDeletionProtected",
+      });
+
+      yield* stack.deploy(program(false));
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:aws", "provider:aws:docdb", "live"], timeout: 1_800_000 },
 );
