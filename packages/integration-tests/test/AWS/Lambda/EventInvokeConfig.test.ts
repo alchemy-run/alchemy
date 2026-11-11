@@ -39,15 +39,19 @@ test.provider(
             eventInvokeConfig: functionConfig,
           });
 
-          yield* fn.bind("AllowEventInvokeDestination", {
-            policyStatements: [
-              {
-                Effect: "Allow",
-                Action: ["sqs:SendMessage"],
-                Resource: [queue.queueArn],
-              },
-            ],
-          });
+          // The function's own destinations are granted automatically (Lambda
+          // checks the role when the config is put). An alias's are not.
+          if (alias) {
+            yield* fn.bind("AllowEventInvokeDestination", {
+              policyStatements: [
+                {
+                  Effect: "Allow",
+                  Action: ["sqs:SendMessage"],
+                  Resource: [queue.queueArn],
+                },
+              ],
+            });
+          }
 
           const version = yield* AWS.Lambda.Version("AsyncVersion", {
             function: fn,

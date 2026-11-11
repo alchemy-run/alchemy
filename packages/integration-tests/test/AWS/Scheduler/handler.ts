@@ -13,7 +13,7 @@ import path from "pathe";
 
 const main = path.resolve(import.meta.dirname, "handler.ts");
 
-class FirstAttemptFails extends Data.TaggedError("FirstAttemptFails") {}
+class FirstAttemptDies extends Data.TaggedError("FirstAttemptDies") {}
 
 // Shared Lambda fixture for the EventBridge Scheduler runtime surface:
 // - CreateSchedule / UpdateSchedule / GetSchedule / DeleteSchedule /
@@ -23,7 +23,7 @@ class FirstAttemptFails extends Data.TaggedError("FirstAttemptFails") {}
 // - consumeSchedule (the cron-handler DX): a rate(1 minute) schedule invokes
 //   this same Lambda; the handler forwards the typed event into the cron
 //   queue for out-of-band observation.
-// - Alchemy.makeCallback over AWS.Lambda.Callbacks: jobs call this Lambda
+// - Alchemy.makeCallback over AWS.Scheduler.SchedulerCallbacks: jobs call this Lambda
 //   back, and the handlers forward into the cron queue too.
 export class SchedulerTestFunction extends Lambda.Function<Lambda.Function>()(
   "SchedulerTestFunction",
@@ -78,6 +78,10 @@ export default SchedulerTestFunction.make(
     const deleteSchedule = yield* Scheduler.DeleteSchedule();
     const listSchedules = yield* Scheduler.ListSchedules();
     const sendCron = yield* SQS.SendMessage(cronQueue);
+    // Records each `flaky` delivery attempt.
+    const attemptsQueue = yield* SQS.Queue("SchedulerAttemptsQueue");
+    const sendAttempt = yield* SQS.SendMessage(attemptsQueue);
+    const receiveAttempt = yield* SQS.ReceiveMessage(attemptsQueue);
 
     // The cron-handler DX: consume this Lambda's own scheduled invocations
     // and forward the typed event into the cron queue.
@@ -104,22 +108,30 @@ export default SchedulerTestFunction.make(
         }).pipe(Effect.orDie);
       }),
     );
-    const flaky: Alchemy.Callback<{ marker: string }> = yield* Alchemy.makeCallback(
+    // `flaky` dies on its first delivery, leaving a marker in the attempts
+    // queue. Lambda retries the failed invocation, and the retry finds the
+    // marker and forwards: proof the redelivery ran.
+    const flaky = yield* Alchemy.makeCallback(
       "flaky",
       Effect.fn(function* ({ marker }: { marker: string }) {
-        const status = yield* flaky.getStatus(marker).pipe(Effect.orDie);
-        if (status === undefined || status.attempts === 0) {
-          return yield* new FirstAttemptFails();
+        const received = yield* receiveAttempt({
+          MaxNumberOfMessages: 10,
+          WaitTimeSeconds: 2,
+          VisibilityTimeout: 0,
+        }).pipe(Effect.orDie);
+        const retried = (received.Messages ?? []).some((message) => message.Body === marker);
+        if (!retried) {
+          yield* sendAttempt({ MessageBody: marker }).pipe(Effect.orDie);
+          return yield* Effect.die(new FirstAttemptDies());
         }
         yield* sendCron({
           MessageBody: JSON.stringify({
             marker: "alch-schedtest-callback",
-            id: marker,
-            attempts: status.attempts,
+            id: marker.split("#")[0],
+            retried,
           }),
         }).pipe(Effect.orDie);
       }),
-      { retry: { delay: "1 second", maxAttempts: 3 } },
     );
 
     const sinkQueueArn = yield* sinkQueue.queueArn;
@@ -189,9 +201,13 @@ export default SchedulerTestFunction.make(
               ),
             );
           if (request.method === "POST") {
+            // A fresh marker per run, so an attempt left over from an earlier
+            // run can't count as this one's retry.
+            const now = yield* Effect.clockWith((clock) => clock.currentTimeMillis);
+            const marker = callback === flaky ? `${id}#${now}` : id;
             return yield* respond(
               callback
-                .schedule(id, { after, payload: { marker: id } })
+                .schedule(id, { after, payload: { marker } })
                 .pipe(Effect.andThen(callback.getStatus(id))),
             );
           }
@@ -296,7 +312,8 @@ export default SchedulerTestFunction.make(
         Scheduler.DeleteScheduleHttp,
         Scheduler.ListSchedulesHttp,
         Lambda.ScheduleEventSource,
-        Lambda.Callbacks,
+        Scheduler.SchedulerCallbacks,
+        SQS.ReceiveMessageHttp,
         SQS.SendMessageHttp,
       ),
     ),

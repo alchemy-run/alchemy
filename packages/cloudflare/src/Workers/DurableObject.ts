@@ -963,11 +963,11 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  * ```
  *
  * ### Durable Callbacks
- * Register `Alchemy.makeCallback` handlers in the inner, per-instance Effect.
- * Durable Objects supply callback registration on their instance RuntimeContext
- * using SQLite and native alarms. Scheduling participates in the current storage
- * transaction, and each job is acknowledged only after its handler succeeds.
- * No explicit `alarm` handler is needed.
+ * Provide `Cloudflare.DurableObjectCallbacks` to the inner, per-instance
+ * Effect, and register `Alchemy.makeCallback` handlers there. Jobs live in
+ * the object's SQLite and fire from its native alarm. Scheduling joins the
+ * current storage transaction, and each job is acknowledged only after its
+ * handler succeeds. No explicit `alarm` handler is needed.
  *
  * **Example:** Save state and schedule a typed callback atomically
  * ```typescript
@@ -976,7 +976,7 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  *   const onArchive = yield* Alchemy.makeCallback(
  *     "archive",
  *     Effect.fn(function* (payload: { key: string; body: string }) {
- *       yield* archive.put(payload.key, payload.body);
+ *       yield* archive.put(payload.key, payload.body).pipe(Effect.orDie);
  *     }),
  *   );
  *   return {
@@ -992,47 +992,24 @@ export class DurableObjectScope extends Context.Service<DurableObjectScope, Dura
  *       );
  *     }),
  *   };
- * });
+ * }).pipe(Effect.provide(Cloudflare.DurableObjectCallbacks));
  * ```
  *
  * Callbacks receive JSON-serializable payloads and deliver at least once, so
- * external writes must be idempotent. A recovery wake is persisted before each
- * attempt. Failures use exponential backoff with a 30-second initial delay and
- * park after eight attempts without progress, retaining work for hourly recovery.
- * Configure these with the third argument, `{ retry: { delay: "1 second",
- * maxAttempts: 8, parkedDelay: "1 hour" } }`. The retry floor is one second;
- * parked retries are at least one hour apart. Scheduling the same callback name
- * and ID replaces the pending job; `onArchive.cancel(id)` cancels it. Retain
- * handlers for old callback names while their jobs are pending. Each native
- * alarm processes up to 100 due jobs; direct `setAlarm`/`deleteAlarm` calls
- * bypass the scheduler's coordination.
+ * external writes must be idempotent. A handler can't fail: retry or handle
+ * typed errors inside it. A recovery wake is persisted before each attempt,
+ * so a handler that dies or an instance that is evicted is redelivered, from
+ * 2 seconds doubling and then hourly, never dropped. A job a handler
+ * schedules again without a higher `progress` keeps that backoff, so a
+ * handler can't spin by rescheduling itself. Scheduling the same
+ * callback name and ID replaces the pending job; `onArchive.cancel(id)`
+ * cancels it. Retain handlers for old callback names while their jobs are
+ * pending. Each native alarm processes up to 100 due jobs; direct
+ * `setAlarm`/`deleteAlarm` calls bypass the scheduler's coordination.
  * Leave native alarm retries enabled when aborting an instance. Passing
  * `{ retryAlarm: false }` removes the automatic-recovery guarantee: Cloudflare
  * can suppress a replacement wake even after its timestamp is persisted. Jobs
  * remain stored, but may need an explicitly rearmed native alarm.
- *
- * Self-rescheduling inherits the invocation's budget, even when cancelling or
- * changing IDs. Commit application state and an increasing `progress` cursor
- * in the same storage transaction to reset that budget. Replayed external
- * cursors cannot replace newer work; an external schedule without a cursor
- * explicitly starts a fresh budget. Detached fibers cannot mutate callbacks
- * after their invocation ends.
- *
- * **Example:** Inspect and recover a parked job from an incoming request
- * ```typescript
- * const status = yield* onArchive.getStatus("revision-42");
- * if (status?.parked) {
- *   yield* onArchive.schedule("revision-42", {
- *     after: 0,
- *     payload: { key: "42.txt", body: "hello" },
- *   });
- * }
- * ```
- *
- * Status includes the original `scheduledAt`, separate `retryAt`, attempt count,
- * parked flag, and latest progress cursor without decoding the payload. Parking
- * emits a warning without job identifiers or payloads. Status remains durable
- * across instance reconstruction.
  *
  * The scheduler migrates its unversioned and version-one SQLite schemas to
  * version two atomically, preserving existing events and callback deadlines.

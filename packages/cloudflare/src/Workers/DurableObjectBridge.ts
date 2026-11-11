@@ -3,7 +3,6 @@ import { makeDurableObjectBridge as makeWorkerdBridge } from "alchemy/Workers/Wo
 import type { DurableObject as DurableObjectClass } from "cloudflare:workers";
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
-import { makeDurableObjectCallbackFactory } from "./AlarmCallback.ts";
 import {
   DurableObjectState,
   fromDurableObjectState,
@@ -24,7 +23,6 @@ export const makeDurableObjectBridge = (
   },
 ) => {
   const bridge = makeWorkerdBridge(DurableObject, {
-    makeCallback: makeDurableObjectCallbackFactory,
     getExport: (exportName) => getWorkerExport<DurableObjectExport>({ ...options, exportName }),
     // The native state workerd constructed the object with. `unknown` skips
     // comparing its two declarations, which hangs (see `NativeDurableObjectState`).

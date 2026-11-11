@@ -342,7 +342,7 @@ export const makeScheduleWriteHttpBinding = <
       if (!isQueue(target) && host !== undefined && host.LogicalId === target.LogicalId) {
         return yield* Effect.die(
           new ScheduleTargetIsHostError({
-            message: `${options.tag} can't target "${host.LogicalId}", the Function it runs in. Use Alchemy.makeCallback with AWS.Lambda.Callbacks to call this Function back later.`,
+            message: `${options.tag} can't target "${host.LogicalId}", the Function it runs in. Use Alchemy.makeCallback with AWS.Scheduler.SchedulerCallbacks to call this Function back later.`,
           }),
         );
       }

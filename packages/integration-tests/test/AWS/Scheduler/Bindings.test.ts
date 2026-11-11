@@ -427,12 +427,7 @@ describe(
 
     describe("makeCallback", () => {
       type StatusBody = {
-        status: {
-          scheduledAt: number;
-          retryAt?: number;
-          attempts: number;
-          parked: boolean;
-        } | null;
+        status: { scheduledAt: number; progress?: number } | null;
         error?: string;
         message?: string;
       };
@@ -448,14 +443,13 @@ describe(
               HttpClientRequest.post(`${baseUrl}/callbacks/${id}?after=0`),
             );
             expect(scheduled.message).toBeUndefined();
-            expect(scheduled.status?.attempts).toBe(0);
+            expect(scheduled.status?.scheduledAt).toBeGreaterThan(0);
 
             const delivered = yield* receiveMatching(
               cronQueueUrl,
               (body) => body.marker === "alch-schedtest-callback" && body.id === id,
               { times: 30 },
             );
-            expect(delivered.attempts).toBeUndefined();
 
             // A successful delivery deletes its job.
             yield* call(HttpClientRequest.get(`${baseUrl}/callbacks/${id}`)).pipe(
@@ -484,7 +478,6 @@ describe(
           expect(replaced.status!.scheduledAt - first.status!.scheduledAt).toBeGreaterThan(
             3_000_000,
           );
-          expect(replaced.status?.parked).toBe(false);
 
           const cancelled = yield* call(HttpClientRequest.delete(`${baseUrl}/callbacks/${id}`));
           expect(cancelled.message).toBeUndefined();
@@ -498,20 +491,21 @@ describe(
       );
 
       test.provider(
-        "retries a handler that fails",
+        "redelivers a handler that dies",
         (_stack) =>
           Effect.gen(function* () {
             const id = `${SCHEDULE_PREFIX}flaky`;
             const scheduled = yield* call(HttpClientRequest.post(`${baseUrl}/flaky/${id}?after=0`));
             expect(scheduled.message).toBeUndefined();
 
-            // The first attempt fails; the retry sees one attempt and forwards.
+            // The first delivery dies; Lambda retries the invocation about a
+            // minute later, and the retry forwards.
             const delivered = yield* receiveMatching(
               cronQueueUrl,
               (body) => body.marker === "alch-schedtest-callback" && body.id === id,
-              { times: 45 },
+              { times: 90 },
             );
-            expect(delivered.attempts).toBe(1);
+            expect(delivered.retried).toBe(true);
           }),
         { timeout: 180_000 },
       );

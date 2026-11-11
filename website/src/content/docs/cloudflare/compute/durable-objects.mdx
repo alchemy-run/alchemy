@@ -479,9 +479,9 @@ for the model across all runtimes.
 ## Create an object for scheduled work
 
 Use `Alchemy.makeCallback` when work must survive the request and run
-later. Durable Objects persist these jobs in SQLite and deliver them
-through native alarms; a timer or a forked fiber does not provide that
-persistence.
+later. With `Cloudflare.DurableObjectCallbacks`, a Durable Object persists
+these jobs in SQLite and delivers them through its native alarm; a timer or
+a forked fiber does not provide that persistence.
 
 For this example, create a `Document` object that will save its current
 body and schedule a revision snapshot:
@@ -523,18 +523,24 @@ return Effect.gen(function* () {
 +  const onSnapshot = yield* Alchemy.makeCallback(
 +    "snapshot",
 +    Effect.fn(function* (payload: { revision: string; body: string }) {
-+      yield* state.storage.put(`revisions:${payload.revision}`, payload.body);
++      yield* state.storage.put(`revisions:${payload.revision}`, payload.body).pipe(Effect.orDie);
 +    }),
 +  );
   return {};
-});
+-});
++}).pipe(Effect.provide(Cloudflare.DurableObjectCallbacks));
 ```
 
 `onSnapshot` is a typed scheduling handle, not an RPC method. Alchemy
-re-registers its handler whenever the instance is reconstructed. The
-public API is `Alchemy.makeCallback`; Cloudflare Durable Objects are its
-first supported host. Registration in a Worker, in the outer Construction
-Effect, or later inside an RPC method is unsupported.
+re-registers its handler whenever the instance is reconstructed.
+`Alchemy.makeCallback` is the same API on every runtime; the Layer you
+provide picks where jobs live, and `Cloudflare.DurableObjectCallbacks` keeps
+them in this object. Register in the inner Effect: registration in the outer
+Construction Effect, or later inside an RPC method, is rejected.
+
+A handler's error type must be `never`. Retry or handle typed errors inside
+it; `Effect.orDie` turns a storage failure into a defect, which is
+redelivered.
 
 Payloads must be JSON values: objects, arrays, strings, finite numbers,
 booleans, or `null`. Values such as `Date`, `undefined`, and `BigInt` are
@@ -607,21 +613,27 @@ and does not interrupt a running handler. Failures use `Alchemy.CallbackError`.
 
 ## Retry failed callbacks
 
-Delivery is **at least once**, not exactly once. A failed or interrupted
-handler leaves its job pending. The default recovery delay is 30 seconds;
-set a finite, positive delay when registering the handler:
+Delivery is **at least once**, not exactly once. A typed failure is the
+handler's to retry, with `Effect.retry` and any `Schedule`:
 
 ```diff lang="typescript"
++import * as Schedule from "effect/Schedule";
+
 const onSnapshot = yield* Alchemy.makeCallback(
   "snapshot",
   Effect.fn(function* (payload: { revision: string; body: string }) {
-    yield* state.storage.put(`revisions:${payload.revision}`, payload.body);
+-    yield* state.storage.put(`revisions:${payload.revision}`, payload.body).pipe(Effect.orDie);
++    yield* state.storage.put(`revisions:${payload.revision}`, payload.body).pipe(
++      Effect.retry({ schedule: Schedule.exponential("1 second"), times: 3 }),
++      Effect.orDie,
++    );
   }),
-+  { retry: { delay: "10 seconds" } },
 );
 ```
 
-Alchemy persists a recovery wake before invoking the handler and
+A handler that dies, or an instance evicted mid-run, leaves its job
+pending. It is redelivered from 2 seconds doubling, then hourly, and never
+dropped. Alchemy persists a recovery wake before invoking the handler and
 acknowledges the job only after success. A crash between an external write
 and acknowledgement can repeat that write, so use idempotency keys for
 external operations. This example can repeat safely because it writes the

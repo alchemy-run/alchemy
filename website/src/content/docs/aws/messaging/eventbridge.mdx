@@ -152,19 +152,40 @@ A Function that needs to finish something later, like expiring an order in an ho
 const onExpire = yield* Alchemy.makeCallback(
   "expire",
   Effect.fn(function* ({ orderId }: { orderId: string }) {
-    yield* expireOrder(orderId);
+    yield* expireOrder(orderId).pipe(
+      Effect.retry({ schedule: Schedule.exponential("1 second"), times: 3 }),
+      Effect.orDie,
+    );
   }),
 );
 ```
 
-Schedule a job with an ID. Scheduling the same ID again replaces the pending job, and `cancel` removes it:
+A handler can't fail with a typed error, so it retries or handles its own. Schedule a job with an ID. Scheduling the same ID again replaces the pending job, and `cancel` removes it:
 
 ```typescript title="src/orders.ts"
 yield* onExpire.schedule(orderId, { after: "1 hour", payload: { orderId } });
 yield* onExpire.cancel(orderId);
 ```
 
-Provide `AWS.Lambda.Callbacks` to the Function. It keeps each job as a one-time schedule in a schedule group of the Function's own, retries a handler that fails, and deletes the job once its handler succeeds. Delivery is at least once, so handlers must be idempotent. The same `makeCallback` code runs on a Cloudflare Durable Object.
+Provide `AWS.Scheduler.SchedulerCallbacks` to the Function. Each job is a one-time schedule in a schedule group of the Function's own, deleted once its handler succeeds. The same `makeCallback` code runs on a Cloudflare Durable Object with `Cloudflare.DurableObjectCallbacks` instead.
+
+A handler that dies, from a defect, a timeout or running out of memory, fails the invocation. The Function's `eventInvokeConfig` decides what happens next: Lambda retries it twice by default, then sends the event to an `OnFailure` destination, which the Function's role is allowed to write to:
+
+```typescript title="src/orders.ts"
+export default Orders.make(
+  Effect.gen(function* () {
+    const failed = yield* FailedCallbacks;
+    return {
+      main: import.meta.url,
+      eventInvokeConfig: {
+        maximumRetryAttempts: 2,
+        destinationConfig: { OnFailure: { Destination: failed.queueArn } },
+      },
+    };
+  }),
+  impl.pipe(Effect.provide(AWS.Scheduler.SchedulerCallbacks)),
+);
+```
 
 ## Schedule containers
 

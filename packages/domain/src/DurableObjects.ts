@@ -1,8 +1,8 @@
 import {
   type Callback,
   type CallbackFactory,
-  type CallbackOptions,
   type CallbackStatus,
+  Callbacks,
   makeCallback,
 } from "alchemy/Callback";
 /**
@@ -11,8 +11,8 @@ import {
  * policy, projection key and stream key is one object, and this module is
  * everything those objects do. A platform supplies a {@link Host}: how to
  * declare a class of objects and call one by name, and, per instance, an
- * {@link ObjectState} (storage, an exclusive section, background work) and a
- * `RuntimeContext` that can `makeCallback`.
+ * {@link ObjectState} (storage, an exclusive section, background work), its
+ * `RuntimeContext`, and a `Callbacks` implementation.
  *
  * @module
  */
@@ -147,7 +147,7 @@ export interface Namespace {
 }
 
 /** What an instance runs with. */
-export type InstanceServices = ObjectState | RuntimeContext | Scope.Scope;
+export type InstanceServices = ObjectState | RuntimeContext | Callbacks | Scope.Scope;
 
 /**
  * An object's implementation: built once per instance, it returns the
@@ -877,7 +877,8 @@ const aggregateObject = (
             }),
           );
           if (kick) yield* outbox.kick;
-        }),
+          // A failure is a defect here: the job is redelivered.
+        }).pipe(Effect.orDie),
     );
     return {
       send: (id: string, command: Json, meta: Aggregate.SendMeta) =>
@@ -2146,12 +2147,11 @@ const HOUR = 60 * 60 * 1000;
 
 /**
  * Durable callbacks (`alchemy/Callback`) over an instance's storage and its
- * one alarm, for hosts that don't implement `RuntimeContext.makeCallback`
+ * one alarm, for hosts without a callbacks implementation of their own
  * (Rivet, Effect Cluster). Jobs are rows in the instance's storage; the alarm
  * is set for the soonest, and `fire` (the instance's alarm handler) runs the
- * due ones. A job that fails is retried with backoff, from `retry.delay`
- * (30 seconds) doubling, and after `retry.maxAttempts` (8) is retried every
- * `retry.parkedDelay` (an hour). Delivery is at least once.
+ * due ones. A job whose handler dies is redelivered from 2 seconds doubling,
+ * then hourly, and never dropped. Delivery is at least once.
  *
  * Handlers run in Node processes here, not workerd, so `fire` keeps an
  * in-memory flag to run one pass at a time.
@@ -2161,7 +2161,6 @@ export const alarmCallbacks = (storage: ObjectStorage, alarm: Alarm) => {
     string,
     {
       readonly run: (payload: unknown) => Effect.Effect<unknown, unknown>;
-      readonly options: CallbackOptions | undefined;
     }
   >();
   const arm = (due: number) =>
@@ -2174,18 +2173,15 @@ export const alarmCallbacks = (storage: ObjectStorage, alarm: Alarm) => {
     ([now, n]) => `${now.toString(36)}-${(n >>> 0).toString(36)}`,
   );
 
-  const makeCallback: CallbackFactory = (name, handler, options) =>
+  const make: CallbackFactory = (name, handler) =>
     Effect.gen(function* () {
       const context = yield* Effect.context<never>();
       handlers.set(name, {
         // Each invocation gets a fresh Scope.
         run: (payload) =>
-          // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the handler's services are the ones it was registered with
-          Effect.scoped(handler(payload as never)).pipe(Effect.provide(context)) as Effect.Effect<
-            unknown,
-            unknown
-          >,
-        options,
+          Effect.scoped(handler(payload as never)).pipe(
+            Effect.provide(context),
+          ) as unknown as Effect.Effect<unknown, unknown>,
       });
       const callback: Callback<any> = {
         schedule: (id, scheduled) =>
@@ -2218,19 +2214,14 @@ export const alarmCallbacks = (storage: ObjectStorage, alarm: Alarm) => {
           }),
         cancel: (id) => Effect.asVoid(storage.delete(jobKey(name, id))),
         getStatus: (id) =>
-          storage.get<CallbackJob>(jobKey(name, id)).pipe(
-            Effect.map((job): CallbackStatus | undefined => {
-              if (job === undefined) return undefined;
-              const max = options?.retry?.maxAttempts ?? 8;
-              return {
-                scheduledAt: job.scheduledAt,
-                retryAt: job.attempts > 0 ? job.due : undefined,
-                attempts: Math.min(job.attempts, max),
-                parked: job.attempts >= max,
-                progress: job.progress,
-              };
-            }),
-          ),
+          storage
+            .get<CallbackJob>(jobKey(name, id))
+            .pipe(
+              Effect.map(
+                (job): CallbackStatus | undefined =>
+                  job && { scheduledAt: job.scheduledAt, progress: job.progress },
+              ),
+            ),
       };
       return callback;
     });
@@ -2253,21 +2244,8 @@ export const alarmCallbacks = (storage: ObjectStorage, alarm: Alarm) => {
         yield* storage.delete(key);
         continue;
       }
-      const retry = handler.options?.retry;
-      const delay = Math.max(
-        1_000,
-        Duration.toMillis(Duration.fromInputUnsafe(retry?.delay ?? "30 seconds")),
-      );
-      const parked = Math.max(
-        HOUR,
-        delay,
-        Duration.toMillis(Duration.fromInputUnsafe(retry?.parkedDelay ?? 0)),
-      );
       const attempts = job.attempts + 1;
-      const wait =
-        attempts >= (retry?.maxAttempts ?? 8)
-          ? parked
-          : Math.min(parked, delay * 2 ** (attempts - 1));
+      const wait = Math.min(HOUR, 2_000 * 2 ** (attempts - 1));
       yield* Effect.logError(`Callback ${jobName(key)} failed; retrying`, exit.cause);
       yield* storage.put(key, { ...job, attempts, due: (yield* Clock.currentTimeMillis) + wait });
     }
@@ -2296,5 +2274,5 @@ export const alarmCallbacks = (storage: ObjectStorage, alarm: Alarm) => {
       ),
     );
   });
-  return { makeCallback, fire };
+  return { callbacks: Layer.succeed(Callbacks, { make }), fire };
 };

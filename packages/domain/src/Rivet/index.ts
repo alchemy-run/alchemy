@@ -11,6 +11,7 @@ import {
 } from "@alchemy.run/rivet/DurableObjectState";
 import { NodeHost, type PoolHost } from "@alchemy.run/rivet/Host";
 import type { Providers } from "@alchemy.run/rivet/Providers";
+import type { Callbacks } from "alchemy/Callback";
 import { entrypointLayer, entrypointTag } from "alchemy/Runtime/Bootstrap";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { makeDurableObjectEngine } from "alchemy/Workers/DurableObjectEngine";
@@ -49,7 +50,7 @@ import type { Platform } from "../Platform.ts";
 type InstanceBuild = Effect.Effect<
   Record<string, unknown>,
   never,
-  EngineState | ObjectState | RuntimeContext | Scope.Scope
+  EngineState | ObjectState | RuntimeContext | Callbacks | Scope.Scope
 >;
 
 /** Domain's storage over a Rivet Durable Object's. */
@@ -249,11 +250,10 @@ const hostClassPhase = (name: string, classes: ReadonlyMap<string, InstanceBuild
         set: (at) => state.storage.setAlarm(at),
         get: state.storage.getAlarm(),
       });
-      const runtime = yield* RuntimeContext;
       const record = yield* build.pipe(
         Effect.provideService(ObjectState, objectState(state, storage)),
         Effect.provideService(EngineState, engineState(state)),
-        Effect.provideService(RuntimeContext, { ...runtime, makeCallback: callbacks.makeCallback }),
+        Effect.provide(callbacks.callbacks),
       );
       // Rivet 3 holds no WebSockets: live reads poll.
       const {

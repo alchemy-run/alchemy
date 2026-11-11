@@ -72,7 +72,7 @@ export type CreateScheduleClient = ScheduleWriteClient<
  * ```
  *
  * To call the Function the binding runs in back later, use
- * `Alchemy.makeCallback` with `AWS.Lambda.Callbacks` instead: the
+ * `Alchemy.makeCallback` with `AWS.Scheduler.SchedulerCallbacks` instead: the
  * Function routes each job to the handler registered under its name.
  *
  * **Example:** Run On A Cron Expression In A Timezone

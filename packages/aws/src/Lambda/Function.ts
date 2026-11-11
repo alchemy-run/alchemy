@@ -376,8 +376,11 @@ export interface FunctionCommonProps extends PlatformProps {
    * Asynchronous invocation settings (retries, event age, destinations) for
    * the unqualified function. Omit to remove any existing config and fall
    * back to Lambda's defaults (2 retries, 6-hour max event age, no
-   * destinations). Use {@link AliasProps.eventInvokeConfig} to scope the
-   * config to an alias instead.
+   * destinations). The function's role is granted what it needs to send to
+   * each destination (`sqs:SendMessage`, `sns:Publish`,
+   * `lambda:InvokeFunction`, `events:PutEvents`, or `s3:PutObject`). Use
+   * {@link AliasProps.eventInvokeConfig} to scope the config to an alias
+   * instead.
    */
   eventInvokeConfig?: EventInvokeConfig;
   /**
@@ -1561,6 +1564,32 @@ export const Function: Platform<
   },
 });
 
+/**
+ * What the function's role needs to deliver async invocation records to a
+ * destination: Lambda sends them as the role, so without these a configured
+ * `OnFailure` queue silently receives nothing.
+ */
+const destinationStatements = (arn: string): IAM.PolicyStatement[] => {
+  const service = arn.split(":")[2];
+  switch (service) {
+    case "sqs":
+      return [{ Effect: "Allow", Action: ["sqs:SendMessage"], Resource: [arn] }];
+    case "sns":
+      return [{ Effect: "Allow", Action: ["sns:Publish"], Resource: [arn] }];
+    case "lambda":
+      return [{ Effect: "Allow", Action: ["lambda:InvokeFunction"], Resource: [arn] }];
+    case "events":
+      return [{ Effect: "Allow", Action: ["events:PutEvents"], Resource: [arn] }];
+    case "s3":
+      return [
+        { Effect: "Allow", Action: ["s3:ListBucket"], Resource: [arn] },
+        { Effect: "Allow", Action: ["s3:PutObject"], Resource: [`${arn}/*`] },
+      ];
+    default:
+      return [];
+  }
+};
+
 export const FunctionProvider = () =>
   Provider.effect(
     Function,
@@ -1609,12 +1638,15 @@ export const FunctionProvider = () =>
         // functionArn,
         // functionName,
         bindings,
+        destinations,
       }: {
         roleName: string;
         policyName: string;
         functionArn: string;
         functionName: string;
         bindings: ResourceBinding<Function["Binding"]>[];
+        /** Async invocation destinations, which Lambda sends to as the function's role. */
+        destinations: ReadonlyArray<string>;
       }) {
         const activeBindings = bindings.filter(
           (binding: ResourceBinding<Function["Binding"]> & { action?: string }) =>
@@ -1629,6 +1661,11 @@ export const FunctionProvider = () =>
               ...stmt,
               Sid: stmt.Sid?.replace(/[^A-Za-z0-9]+/gi, ""),
             })) ?? [],
+        );
+        policyStatements.push(
+          ...destinations
+            .flatMap(destinationStatements)
+            .map((stmt) => ({ ...stmt, Sid: undefined })),
         );
         // VPC attachments requested through the binding channel (DECISION
         // #5) — set-union across bindings; merged with the `vpc` prop in
@@ -3158,6 +3195,10 @@ export const FunctionProvider = () =>
             functionArn,
             functionName,
             bindings,
+            destinations: [
+              news.eventInvokeConfig?.destinationConfig?.OnSuccess?.Destination,
+              news.eventInvokeConfig?.destinationConfig?.OnFailure?.Destination,
+            ].filter((arn): arn is string => typeof arn === "string"),
           });
 
           // Both VPC paths (the `vpc` prop and binding-channel requests)
