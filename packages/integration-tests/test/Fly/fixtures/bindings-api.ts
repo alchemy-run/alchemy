@@ -61,23 +61,17 @@ export default class BindingsApi extends Fly.Service<BindingsApi>()(
           const resolvedApp = yield* appName;
           const resolvedSecret = yield* secretName;
           // Read through Config, which unpacks Alchemy's bound Redacted form.
-          const token = yield* Config.Redacted("FLY_API_TOKEN").pipe(
-            Effect.map(Redacted.value),
-            Effect.orElseSucceed(() => ""),
-          );
+          const token = Redacted.value(yield* Config.Redacted("FLY_API_TOKEN").pipe(Effect.orDie));
           return yield* HttpServerResponse.json({
             ok: true,
             appName: resolvedApp,
             secretName: resolvedSecret,
             hasFlySecretMarkerEnv: process.env.FLY_SECRET_Marker !== undefined,
-            hasToken: token.length > 0,
-            tokenKind: token.startsWith("{")
-              ? "marker"
-              : token.startsWith("FlyV1")
-                ? "flyv1"
-                : token.length > 0
-                  ? "other"
-                  : "missing",
+            tokenKind: token.startsWith("FlyV1 ")
+              ? "flyv1"
+              : token.startsWith("{")
+                ? "packed"
+                : "other",
           });
         }
 
