@@ -5,6 +5,7 @@ import { makeFetchRpcStub } from "alchemy/Rpc";
 import * as Sandbox from "alchemy/Sandbox";
 import {
   makeSandboxAgentClient,
+  SANDBOX_AGENT_PORT,
   SANDBOX_IDLE_TIMEOUT_ENV,
   SANDBOX_TOKEN_ENV,
   SandboxAgentError,
@@ -60,6 +61,11 @@ class EcsSandboxStarting extends Data.TaggedError("EcsSandboxStarting")<{
 
 /** The capacity provider has no subnets or instances of its own to run sandboxes on. */
 class EcsSandboxCapacityWithoutVpc extends Data.TaggedError("EcsSandboxCapacityWithoutVpc")<{
+  readonly message: string;
+}> {}
+
+/** The Task's `main` is a script, which cannot serve the sandbox agent. */
+class EcsSandboxTaskWithoutAgent extends Data.TaggedError("EcsSandboxTaskWithoutAgent")<{
   readonly message: string;
 }> {}
 
@@ -240,7 +246,21 @@ export const CreateSandboxHttp = Layer.effect(
       // The provider stops its tasks before it deletes that group, so a
       // destroy never waits on a sandbox that is still running.
       const sandboxGroupId = Output.map(capacity.taskSecurityGroupId, (groupId) => groupId ?? "");
+      // A Task with a program serves the sandbox agent on the program's
+      // port. A Task that is only an image gets the agent added to it, on
+      // the agent's own port.
+      const taskProps = task.Props as { main?: string; isExternal?: boolean } | undefined;
+      const imageOnly = taskProps !== undefined && taskProps.main === undefined;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
+        if (taskProps?.main !== undefined && taskProps.isExternal === true) {
+          return yield* Effect.die(
+            new EcsSandboxTaskWithoutAgent({
+              message: `AWS.ECS.CreateSandbox cannot add a sandbox agent to '${task.LogicalId}': its main is a script with no Effect program. Give the Task an Effect program, or build it from an image or a context.`,
+            }),
+          );
+        }
+        // Tells the Task its runs are sandboxes, whatever creates them.
+        yield* task.bind`AWS.ECS.CreateSandbox(${capacity})`({ sandbox: true });
         const host = yield* Binding.Host;
         if (host !== undefined && Group !== undefined && GroupRule !== undefined) {
           const withoutInstances = () =>
@@ -334,7 +354,16 @@ export const CreateSandboxHttp = Layer.effect(
       const CapacityName = yield* capacity.name;
       const TaskDefinitionArn = yield* task.taskDefinitionArn;
       const ContainerName = yield* task.containerName;
-      const Port = yield* task.port;
+      // Bound at deploy, so the running host never has to know what the
+      // Task is made of: an image's agent has its own port, a program
+      // serves the agent on the Task's.
+      const Port = Effect.map(
+        yield* Output.named(
+          output<number | string>(imageOnly ? SANDBOX_AGENT_PORT : task.port),
+          `${key}_PORT`,
+        ),
+        Number,
+      );
       const Subnets = yield* Output.named(subnets, `${key}_SUBNETS`);
       const SandboxGroupId = yield* Output.named(sandboxGroupId, `${key}_GROUP`);
       const SecurityGroups = yield* Output.named(
@@ -384,7 +413,7 @@ export const CreateSandboxHttp = Layer.effect(
               };
             }),
         };
-        // Any other name is a method of the Task's program.
+        // Any other name is a method of the Task's program, when it has one.
         return makeFetchRpcStub<EcsSandbox>({ baseUrl, base: { ...sandbox }, fetch: authorized });
       };
 
@@ -486,7 +515,7 @@ export const CreateSandboxHttp = Layer.effect(
               ),
             );
             const sandbox = handleOf({ cluster, taskArn, privateIp, port, token });
-            // The task is running before its program listens.
+            // The task is running before the agent inside it listens.
             yield* sandbox.ping.pipe(
               Effect.timeoutOrElse({
                 duration: "5 seconds",
@@ -509,7 +538,7 @@ export const CreateSandboxHttp = Layer.effect(
                   new EcsSandboxStartFailed({
                     reason: "timeout",
                     taskArn,
-                    message: `Sandbox ${taskArn} did not answer within ${Duration.format(startTimeout)}. The Task must bundle a program (main) that listens on its port, and the host must be in the sandbox's VPC.`,
+                    message: `Sandbox ${taskArn} did not answer within ${Duration.format(startTimeout)}. The host must be in the sandbox's VPC, and a Task with a program (main) must listen on its port.`,
                   }),
                 ),
             }),

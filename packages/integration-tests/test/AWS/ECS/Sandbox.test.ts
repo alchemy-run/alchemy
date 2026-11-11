@@ -17,7 +17,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make(testOptions);
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-// The deploy creates a NAT gateway, builds and pushes the sandbox image and
+// The deploy creates a NAT gateway, builds and pushes the sandbox images and
 // attaches a Lambda Function to the VPC; destroy waits for the Function's
 // network interfaces and the instances ECS launched to go.
 const HOOK_TIMEOUT = 1_800_000;
@@ -64,10 +64,10 @@ interface Created {
  * an instance, which can outlast one request: a failed start stops its task
  * and leaves the instance, so the next attempt starts on it.
  */
-const create = (baseUrl: string, user: string, idleSeconds?: number) =>
+const create = (baseUrl: string, user: string, idleSeconds?: number, kind = "program") =>
   call<Created>(
     baseUrl,
-    `/create?user=${user}${idleSeconds === undefined ? "" : `&idle=${idleSeconds}`}`,
+    `/create?user=${user}&kind=${kind}${idleSeconds === undefined ? "" : `&idle=${idleSeconds}`}`,
     // Under the 300 seconds at which Bun gives up on a response.
     "295 seconds",
   ).pipe(Effect.retry({ times: 2 }));
@@ -114,7 +114,17 @@ describe.sequential.skipIf(!!process.env.FAST)(
       { timeout: 900_000 },
     );
 
-    // The shared sandbox is still running here. Sandboxes are not resources
+    // One sandbox of the plain image, on the instance the first one started.
+    const sharedImage = beforeAll(
+      Effect.gen(function* () {
+        const { baseUrl } = yield* shared;
+        const sandbox = yield* create(baseUrl, "image", undefined, "image");
+        return { baseUrl, ...sandbox };
+      }).pipe(logLevel),
+      { timeout: 900_000 },
+    );
+
+    // The shared sandboxes are still running here. Sandboxes are not resources
     // in the stack, so the destroy passes only if deleting the capacity
     // provider stops them.
     afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack).pipe(logLevel), {
@@ -249,6 +259,85 @@ describe.sequential.skipIf(!!process.env.FAST)(
         expect(found[0]).toMatchObject({ status: "RUNNING", privateIp, tags: { user: "shared" } });
 
         expect(yield* call<unknown[]>(baseUrl, "/list?user=nobody")).toEqual([]);
+      }).pipe(logLevel),
+      { timeout: TEST_TIMEOUT },
+    );
+
+    test(
+      "a plain image is a sandbox, with no program, server or Bun inside",
+      Effect.gen(function* () {
+        const { cluster } = yield* stack;
+        const { baseUrl, taskArn, privateIp } = yield* sharedImage;
+
+        const task = yield* describeTask(cluster, taskArn);
+        expect(task?.lastStatus).toBe("RUNNING");
+        expect(task?.trustedExecutionSummary?.isolationMode).toBe("ISOLATED_SANDBOX");
+        expect(task?.taskDefinitionArn).not.toBe(
+          (yield* describeTask(cluster, (yield* shared).taskArn))?.taskDefinitionArn,
+        );
+
+        const result = yield* call<{ bun: number; python: string; served: string }>(
+          baseUrl,
+          `/image?${taskArnParam(taskArn)}`,
+        );
+        // The agent brings its own runtime, off the image's PATH.
+        expect(result.bun).not.toBe(0);
+        expect(result.python).toBe("42\n");
+        // A server the host started inside the sandbox, on a port of its own.
+        expect(result.served).toBe("from 8080");
+
+        // Each Task lists its own sandboxes.
+        const found = yield* call<{ taskArn: string; privateIp?: string }[]>(
+          baseUrl,
+          "/list?user=image&kind=image",
+        );
+        expect(found).toMatchObject([{ taskArn, privateIp }]);
+        expect(yield* call<unknown[]>(baseUrl, "/list?user=image")).toEqual([]);
+      }).pipe(logLevel),
+      { timeout: TEST_TIMEOUT },
+    );
+
+    test(
+      "an image's sandbox runs commands, files, processes and terminals",
+      Effect.gen(function* () {
+        const { baseUrl, taskArn } = yield* sharedImage;
+        const target = `${taskArnParam(taskArn)}&kind=image`;
+
+        const exec = yield* call<{
+          run: { exitCode: number; stdout: string; stderr: string };
+          failed: { exitCode: number; stdout: string; stderr: string };
+          env: string;
+          readBack: string;
+          entries: { path: string; type: string; size?: number }[];
+        }>(baseUrl, `/exec?${target}`);
+        expect(exec.run).toEqual({ exitCode: 0, stdout: "hi sam\n", stderr: "" });
+        expect(exec.failed).toEqual({ exitCode: 3, stdout: "", stderr: "oops\n" });
+        expect(exec.env).toBe("from the host/per call\n");
+        expect(exec.readBack).toBe(`import sys; print("hi " + sys.argv[1])`);
+        expect(exec.entries).toEqual([
+          { path: "/work/hello.py", type: "file", size: exec.readBack.length },
+        ]);
+
+        expect(
+          yield* call<{ exitCode: number; stdout: string }>(baseUrl, `/process?${target}`),
+        ).toEqual({ exitCode: 0, stdout: "one\ntwo\n" });
+
+        const pty = yield* call<{ output: string }>(baseUrl, `/pty?${target}`);
+        expect(pty.output).toContain("pty-42");
+        expect(pty.output).toContain("30 100");
+      }).pipe(logLevel),
+      { timeout: TEST_TIMEOUT },
+    );
+
+    test(
+      "an image's sandbox refuses a call without its token",
+      Effect.gen(function* () {
+        const { baseUrl, taskArn } = yield* sharedImage;
+        const result = yield* call<{ exec: number; method: number }>(
+          baseUrl,
+          `/unauthorized?${taskArnParam(taskArn)}&kind=image`,
+        );
+        expect(result).toEqual({ exec: 401, method: 401 });
       }).pipe(logLevel),
       { timeout: TEST_TIMEOUT },
     );

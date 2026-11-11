@@ -21,8 +21,10 @@ import {
   type ServerHost,
 } from "alchemy/Runtime/Process";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
+import { SANDBOX_AGENT_PORT } from "alchemy/SandboxAgentClient";
 import { Stack } from "alchemy/Stack";
 import { createInternalTags, createTagsList, diffTags, hasTags } from "alchemy/Tags";
+import { moduleExtension } from "alchemy/Util/Node";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -82,6 +84,13 @@ export interface TaskBindingContract {
    * has no FUSE.
    */
   mounts?: ReadonlyArray<MountCapability>;
+  /**
+   * The task's runs are sandboxes (`AWS.ECS.CreateSandbox`). A task built
+   * from an `image` or a `context` has no program to serve the sandbox
+   * agent, so the agent is added to its image and becomes the entrypoint.
+   * A task with a `main` serves the agent itself and ignores this.
+   */
+  sandbox?: boolean;
 }
 
 /**
@@ -620,7 +629,33 @@ export const withMountInstall = (
     ? props
     : ({ ...props, install: mountInstallLines(capabilities) } as TaskProps);
 
-export const taskImageInput = (props: TaskProps) => {
+/**
+ * The sandbox agent's process entry, bundled into the image of a task that
+ * has no program of its own.
+ */
+const sandboxAgentMain = new URL(
+  `../Bootstrap/EcsSandbox${moduleExtension(import.meta.url)}`,
+  import.meta.url,
+).href;
+
+/**
+ * Whether a task's image gets the sandbox agent added: its runs are
+ * sandboxes and it has no program (`main`) to serve the agent itself.
+ */
+export const isImageSandbox = (
+  props: TaskProps,
+  bindings: ReadonlyArray<ResourceBinding<TaskBindingContract>> | undefined,
+) =>
+  (props as { main?: string }).main === undefined &&
+  (bindings ?? []).some(
+    (binding: ResourceBinding<TaskBindingContract> & { action?: string }) =>
+      binding.action !== "delete" && binding.data?.sandbox === true,
+  );
+
+export const taskImageInput = (
+  props: TaskProps,
+  bindings?: ReadonlyArray<ResourceBinding<TaskBindingContract>>,
+) => {
   const source = props as ImageSourceLike;
   return {
     source,
@@ -628,6 +663,9 @@ export const taskImageInput = (props: TaskProps) => {
     port: props.port,
     isExternal: props.isExternal,
     bootstrap: makeBunBootstrap(source.handler ?? "default"),
+    agent: isImageSandbox(props, bindings)
+      ? { main: sandboxAgentMain, port: SANDBOX_AGENT_PORT }
+      : undefined,
   };
 };
 
@@ -1303,7 +1341,13 @@ export const TaskProvider = () =>
           // and surface drift as an update; without this a bootstrap or
           // code-only change would silently no-op until `--force`.
           if (output) {
-            const hash = yield* imageSource.hash(taskImageInput(news));
+            // An image with no program carries the sandbox agent when a
+            // binding asks for it, so its hash waits for the bindings.
+            const hash = isResolved(newBindings)
+              ? yield* imageSource.hash(taskImageInput(news, newBindings))
+              : (news as { main?: string }).main !== undefined
+                ? yield* imageSource.hash(taskImageInput(news))
+                : undefined;
             if (hash !== undefined && hash !== output.code.hash) {
               return { action: "update" } as const;
             }
@@ -1410,7 +1454,7 @@ export const TaskProvider = () =>
           // AWS, so registering a new revision is the unit of "update" —
           // the superseded revision is reaped after registration below.
           const resolved = yield* imageSource.resolve({
-            ...taskImageInput(news),
+            ...taskImageInput(news, bindings),
             id,
             repositoryName,
             repositoryUri:

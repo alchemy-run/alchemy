@@ -1,5 +1,6 @@
 import {
   makeContainerImageSource,
+  type ImageAgent,
   type ImageRegistryTarget,
   type ImageSourceLike,
 } from "@alchemy.run/docker/ImageSource";
@@ -27,6 +28,7 @@ export {
   validateImageSource,
   type BundledImageSource,
   type DockerfileImageSource,
+  type ImageAgent,
   type ImageSourceKind,
   type ImageSourceLike,
   type ImageSourceProps,
@@ -84,6 +86,11 @@ export interface ResolveImageOptions {
    * differ per platform), so the caller supplies it.
    */
   bootstrap: (importPath: string) => string;
+  /**
+   * Add a sandbox agent to an image that has no `main`: the agent is copied
+   * in with its own runtime and becomes the image's entrypoint.
+   */
+  agent?: ImageAgent;
   /** Plan-status session used to emit build/push progress notes. */
   session: { note: (message: string) => Effect.Effect<void> };
 }

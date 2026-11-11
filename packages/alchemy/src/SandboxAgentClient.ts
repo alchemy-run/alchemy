@@ -20,6 +20,16 @@ export const SANDBOX_TOKEN_ENV = "ALCHEMY_SANDBOX_TOKEN";
 /** Environment variable that carries a sandbox's idle timeout, in milliseconds. */
 export const SANDBOX_IDLE_TIMEOUT_ENV = "ALCHEMY_SANDBOX_IDLE_TIMEOUT";
 
+/**
+ * The port the agent listens on when it is added to an image that has no
+ * program of its own. A program that serves the agent itself answers on the
+ * program's port instead.
+ */
+export const SANDBOX_AGENT_PORT = 2468;
+
+/** Environment variable that carries the port of an agent added to an image. */
+export const SANDBOX_PORT_ENV = "ALCHEMY_SANDBOX_PORT";
+
 // ---------------------------------------------------------------------------
 // Errors
 // ---------------------------------------------------------------------------

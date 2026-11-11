@@ -34,7 +34,7 @@ export interface CreateSandboxOptions {
    * @default the sandbox runs until it is killed
    */
   readonly idleTimeout?: Duration.Input;
-  /** Extra environment variables for the sandbox's program. */
+  /** Extra environment variables for the sandbox. Commands run in it inherit them. */
   readonly env?: Readonly<Record<string, string>>;
   /**
    * How long to wait for the sandbox to answer. The first sandbox on empty
@@ -142,8 +142,9 @@ export interface EcsSandboxes<Methods = {}> {
  * from the instance and from every other task.
  *
  * The handle runs commands, streams processes, reads and writes files, opens
- * terminals and calls ports inside the sandbox. It also has the methods the
- * Task's program returns, typed from the Task class.
+ * terminals and calls ports inside the sandbox. The Task is either an image
+ * with nothing of Alchemy's in it, or an Effect program, whose methods the
+ * handle also has, typed from the Task class.
  *
  * The host reaches a sandbox at its private address. Sandboxes join the
  * capacity provider's task security group, which admits nothing by default.
@@ -157,9 +158,6 @@ export interface EcsSandboxes<Methods = {}> {
  * Sandboxes created at run time are tagged with the stack, stage and host
  * (`alchemy::stack`, `alchemy::stage`, `alchemy::id`). They are not
  * resources in the stack: deleting the capacity provider stops them.
- *
- * The Task must bundle a program (`main`). A Task built from your own
- * `image` or `context` has no sandbox handle.
  *
  * ### Creating sandboxes
  * **Example:** One sandbox per request, killed when the request ends
@@ -178,6 +176,59 @@ export interface EcsSandboxes<Methods = {}> {
  * const sandbox = existing
  *   ? yield* sandboxes.connect(existing.taskArn)
  *   : yield* sandboxes.create({ tags: { user }, idleTimeout: "15 minutes" });
+ * ```
+ *
+ * ### Sandboxes from an image
+ * A Task with an `image` or a `context` and no `main` is a sandbox of that
+ * image as it is: no Effect program, no server and no Alchemy code of yours
+ * inside. The deploy copies a small agent and its own runtime into the image
+ * under `/opt/alchemy/sandbox` and makes it the entrypoint, so the handle
+ * works on any Linux image, with or without Bun or Node.js installed.
+ *
+ * The agent replaces the image's own `ENTRYPOINT` and `CMD`. To run a process
+ * in every sandbox, set the Task's `command`: the agent starts it and keeps
+ * serving the handle. Commands given as a string, and terminals, need
+ * `/bin/sh` in the image.
+ *
+ * **Example:** A sandbox from a public image
+ * ```typescript
+ * const MyImage = AWS.ECS.Task("MyImage", {
+ *   image: "python:3.12-slim",
+ *   cpu: 1024,
+ *   memory: 2048,
+ *   isolation: "isolated",
+ * });
+ *
+ * const sandboxes = yield* AWS.ECS.CreateSandbox(Capacity, MyImage);
+ *
+ * const sandbox = yield* sandboxes.create();
+ * yield* sandbox.files.write("/work/main.py", `print("hi")`);
+ * const run = yield* sandbox.exec("python3 main.py", { cwd: "/work" });
+ * ```
+ *
+ * **Example:** A sandbox from your own Dockerfile
+ * ```typescript
+ * const MyImage = AWS.ECS.Task("MyImage", {
+ *   context: "./sandbox",
+ *   cpu: 1024,
+ *   memory: 2048,
+ *   isolation: "isolated",
+ * });
+ * ```
+ *
+ * **Example:** A server started in every sandbox
+ * ```typescript
+ * const MyImage = AWS.ECS.Task("MyImage", {
+ *   image: "python:3.12-slim",
+ *   command: ["python3", "-m", "http.server", "8080"],
+ *   cpu: 1024,
+ *   memory: 2048,
+ *   isolation: "isolated",
+ * });
+ *
+ * const sandbox = yield* sandboxes.create();
+ * const port = yield* sandbox.getTcpPort(8080);
+ * const response = yield* port.fetch(HttpClientRequest.get("/"));
  * ```
  *
  * ### Running commands
@@ -200,6 +251,9 @@ export interface EcsSandboxes<Methods = {}> {
  * ```
  *
  * ### Calling the Task's methods
+ * A Task with an Effect program (`main`) serves the handle itself, and the
+ * handle gets the methods the program returns.
+ *
  * **Example:** Typed methods from the Task class
  * ```typescript
  * // MySandbox extends AWS.ECS.Task<MySandbox, { hello: (name: string) => Effect.Effect<string> }>

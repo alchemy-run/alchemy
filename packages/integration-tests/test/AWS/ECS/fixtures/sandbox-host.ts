@@ -9,6 +9,7 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import SandboxAgent from "./sandbox-agent.ts";
+import { SandboxImage } from "./sandbox-image.ts";
 
 /**
  * Infrastructure of the `AWS.ECS.CreateSandbox` suite. Each export declares a
@@ -62,6 +63,9 @@ const decoder = new TextDecoder();
 /**
  * The host of the suite's sandboxes: a Lambda Function with one route per
  * sandbox operation. The binding attaches it to the capacity's subnets.
+ *
+ * It creates sandboxes of two Tasks on one capacity provider: an Effect
+ * program, and a plain image. `?kind=image` picks the image's sandboxes.
  */
 export default class SandboxHost extends AWS.Lambda.Function<SandboxHost>()(
   "EcsSandboxHost",
@@ -75,18 +79,21 @@ export default class SandboxHost extends AWS.Lambda.Function<SandboxHost>()(
   Effect.gen(function* () {
     const capacity = yield* SandboxCapacity;
     const sandboxes = yield* AWS.ECS.CreateSandbox(capacity, SandboxAgent);
+    const images = yield* AWS.ECS.CreateSandbox(capacity, SandboxImage);
 
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://host");
         const param = (name: string) => url.searchParams.get(name) ?? "";
+        const image = param("kind") === "image";
+        const pool = image ? images : sandboxes;
 
         if (url.pathname === "/create") {
           const idle = url.searchParams.get("idle");
           return yield* respond(
             Effect.gen(function* () {
-              const sandbox = yield* sandboxes.create({
+              const sandbox = yield* pool.create({
                 tags: { user: param("user") },
                 env: { SANDBOX_GREETING: "from the host" },
                 startTimeout: "4 minutes",
@@ -98,15 +105,24 @@ export default class SandboxHost extends AWS.Lambda.Function<SandboxHost>()(
         }
 
         if (url.pathname === "/list") {
-          return yield* respond(sandboxes.list({ tags: { user: param("user") } }));
+          return yield* respond(pool.list({ tags: { user: param("user") } }));
         }
 
         if (url.pathname === "/exec") {
           return yield* respond(
             Effect.gen(function* () {
-              const sandbox = yield* sandboxes.connect(param("taskArn"));
-              yield* sandbox.files.write("/work/hello.ts", `console.log("hi " + Bun.argv[2])`);
-              const run = yield* sandbox.exec("bun hello.ts sam", { cwd: "/work" });
+              const sandbox = yield* pool.connect(param("taskArn"));
+              // The image has Python and no Bun.
+              const file = image ? "/work/hello.py" : "/work/hello.ts";
+              yield* sandbox.files.write(
+                file,
+                image
+                  ? `import sys; print("hi " + sys.argv[1])`
+                  : `console.log("hi " + Bun.argv[2])`,
+              );
+              const run = yield* sandbox.exec(image ? "python3 hello.py sam" : "bun hello.ts sam", {
+                cwd: "/work",
+              });
               const failed = yield* sandbox.exec(["sh", "-c", "echo oops >&2; exit 3"]);
               const env = yield* sandbox.exec("echo $SANDBOX_GREETING/$EXTRA", {
                 env: { EXTRA: "per call" },
@@ -115,7 +131,7 @@ export default class SandboxHost extends AWS.Lambda.Function<SandboxHost>()(
                 run,
                 failed,
                 env: env.stdout,
-                readBack: yield* sandbox.files.readText("/work/hello.ts"),
+                readBack: yield* sandbox.files.readText(file),
                 entries: yield* sandbox.files.list("/work"),
               };
             }),
@@ -134,7 +150,7 @@ export default class SandboxHost extends AWS.Lambda.Function<SandboxHost>()(
         if (url.pathname === "/process") {
           return yield* respond(
             Effect.gen(function* () {
-              const sandbox = yield* sandboxes.connect(param("taskArn"));
+              const sandbox = yield* pool.connect(param("taskArn"));
               const process = yield* sandbox.start(["sh", "-c", "echo one; sleep 1; echo two"]);
               const chunks = yield* Stream.runCollect(process.output);
               const exit = yield* process.wait;
@@ -152,7 +168,7 @@ export default class SandboxHost extends AWS.Lambda.Function<SandboxHost>()(
         if (url.pathname === "/pty") {
           return yield* respond(
             Effect.gen(function* () {
-              const sandbox = yield* sandboxes.connect(param("taskArn"));
+              const sandbox = yield* pool.connect(param("taskArn"));
               const pty = yield* sandbox.pty.open({ cols: 80, rows: 24 });
               const output = yield* pty.output.pipe(
                 Stream.map((chunk) => decoder.decode(chunk)),
@@ -199,13 +215,42 @@ export default class SandboxHost extends AWS.Lambda.Function<SandboxHost>()(
           );
         }
 
+        if (url.pathname === "/image") {
+          return yield* respond(
+            Effect.gen(function* () {
+              const sandbox = yield* images.connect(param("taskArn"));
+              // Nothing of the agent's is on the image's PATH.
+              const bun = yield* sandbox.exec("command -v bun");
+              const python = yield* sandbox.exec(["python3", "-c", "print(6 * 7)"]);
+              // The image runs no server, so the host starts one.
+              yield* sandbox.files.write("/srv/index.txt", "from 8080");
+              const server = yield* sandbox.start([
+                "python3",
+                "-m",
+                "http.server",
+                "8080",
+                "--directory",
+                "/srv",
+              ]);
+              const port = yield* sandbox.getTcpPort(8080);
+              const served = yield* port.fetch(HttpClientRequest.get("/index.txt")).pipe(
+                Effect.timeout("3 seconds"),
+                Effect.retry({ schedule: Schedule.spaced("500 millis"), times: 10 }),
+                Effect.flatMap((response) => response.text),
+                Effect.ensuring(Effect.ignore(server.kill("SIGKILL"))),
+              );
+              return { bun: bun.exitCode, python: python.stdout, served };
+            }),
+          );
+        }
+
         if (url.pathname === "/unauthorized") {
           return yield* respond(
             Effect.gen(function* () {
-              const sandbox = yield* sandboxes.connect(param("taskArn"));
+              const sandbox = yield* pool.connect(param("taskArn"));
               // A port fetch carries no token, so the sandbox's methods
-              // refuse it.
-              const port = yield* sandbox.getTcpPort(3000);
+              // refuse it. An image's agent listens on its own port.
+              const port = yield* sandbox.getTcpPort(image ? 2468 : 3000);
               const exec = yield* port.fetch(
                 HttpClientRequest.post("/__rpc__/sandbox.exec").pipe(
                   HttpClientRequest.bodyJsonUnsafe(["id"]),
@@ -224,7 +269,7 @@ export default class SandboxHost extends AWS.Lambda.Function<SandboxHost>()(
         if (url.pathname === "/kill") {
           return yield* respond(
             Effect.gen(function* () {
-              const sandbox = yield* sandboxes.connect(param("taskArn"));
+              const sandbox = yield* pool.connect(param("taskArn"));
               yield* sandbox.kill();
               return { killed: sandbox.taskArn };
             }),
@@ -233,7 +278,7 @@ export default class SandboxHost extends AWS.Lambda.Function<SandboxHost>()(
 
         if (url.pathname === "/connect") {
           return yield* respond(
-            sandboxes.connect(param("taskArn")).pipe(
+            pool.connect(param("taskArn")).pipe(
               Effect.map((sandbox) => ({ found: true, privateIp: sandbox.privateIp })),
               Effect.catchTag("EcsSandboxNotFound", () => Effect.succeed({ found: false })),
             ),

@@ -1,5 +1,6 @@
 import type * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
+import * as Data from "effect/Data";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -15,11 +16,15 @@ import * as Queue from "effect/Queue";
 import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import type { HttpEffect } from "./Http.ts";
+import { HttpServer, type HttpEffect } from "./Http.ts";
 import { rpcMethodOf, serveRpc } from "./Rpc.ts";
 import type * as Sandbox from "./Sandbox.ts";
 import {
   fromBase64,
+  SANDBOX_AGENT_PORT,
+  SANDBOX_IDLE_TIMEOUT_ENV,
+  SANDBOX_PORT_ENV,
+  SANDBOX_TOKEN_ENV,
   SandboxExecTimedOut,
   SandboxFileError,
   SandboxProcessNotFound,
@@ -503,4 +508,78 @@ export const serveSandboxAgent = Effect.fn(function* <Req = never>(
       }),
     );
   }) satisfies HttpEffect<Req>;
+});
+
+// The token arrives as a plain per-task environment override, so it is read
+// from the process, not through Config.
+const sandboxAgentEnv = () => ({
+  token: process.env[SANDBOX_TOKEN_ENV],
+  idleTimeoutMs: Number(process.env[SANDBOX_IDLE_TIMEOUT_ENV]),
+  port: Number(process.env[SANDBOX_PORT_ENV]),
+});
+
+/** The agent was started with no sandbox token and no command to run in its place. */
+export class SandboxAgentNotStarted extends Data.TaggedError("SandboxAgentNotStarted")<{
+  readonly message: string;
+}> {}
+
+/**
+ * Runs the sandbox agent as a container's first process, for an image that
+ * has no program of its own. It serves the `sandbox.*` methods on the port in
+ * `ALCHEMY_SANDBOX_PORT`, and starts `command`, when one is given, as a child
+ * that shares the container's output.
+ *
+ * A container started without a sandbox token is not a sandbox: it runs
+ * `command` and exits with its code, as the image would without the agent.
+ */
+export const runSandboxAgent = Effect.fn(function* (command: ReadonlyArray<string>) {
+  const env = yield* Effect.sync(sandboxAgentEnv);
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const child = Effect.gen(function* () {
+    const handle = yield* spawner.spawn(
+      ChildProcess.make(command[0]!, command.slice(1), {
+        extendEnv: true,
+        stdin: "ignore",
+        stdout: "inherit",
+        stderr: "inherit",
+      }),
+    );
+    return Number(yield* handle.exitCode);
+  }).pipe(Effect.scoped, Effect.mapError(spawnError));
+
+  if (env.token === undefined || env.token === "") {
+    if (command.length === 0) {
+      return yield* new SandboxAgentNotStarted({
+        message: `This image runs a sandbox agent, which starts only for a sandbox (${SANDBOX_TOKEN_ENV} is not set), and the task has no command to run in its place.`,
+      });
+    }
+    const exitCode = yield* child;
+    return yield* Effect.sync(() => process.exit(exitCode));
+  }
+
+  const handler = yield* serveSandboxAgent(
+    {
+      token: env.token,
+      idleTimeoutMs:
+        Number.isFinite(env.idleTimeoutMs) && env.idleTimeoutMs > 0 ? env.idleTimeoutMs : undefined,
+    },
+    {},
+    Effect.succeed(HttpServerResponse.text("Not Found", { status: 404 })),
+  );
+  const http = yield* HttpServer;
+  yield* http.serve(handler, {
+    port: Number.isInteger(env.port) && env.port > 0 ? env.port : SANDBOX_AGENT_PORT,
+  });
+  if (command.length > 0) {
+    // The sandbox outlives its command: the host can still run others in it.
+    yield* child.pipe(
+      Effect.matchEffect({
+        onSuccess: (exitCode) => Effect.logInfo(`${command.join(" ")} exited with ${exitCode}`),
+        onFailure: (error) =>
+          Effect.logError(`${command.join(" ")} did not start: ${error.message}`),
+      }),
+      Effect.forkScoped,
+    );
+  }
+  return yield* Effect.never;
 });

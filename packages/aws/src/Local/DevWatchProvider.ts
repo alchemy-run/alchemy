@@ -87,6 +87,12 @@ export interface DevWatchContext<Props, Attrs> {
   /** The freshest attributes (updated by {@link rerunReconcile}). */
   readonly currentAttrs: Effect.Effect<Attrs>;
   /**
+   * The bindings of the latest engine reconcile. What a resource builds can
+   * depend on them (a Task's image carries the sandbox agent when a binding
+   * asks for it), so a staleness check reads them next to the props.
+   */
+  readonly currentBindings: Effect.Effect<ReadonlyArray<ResourceBinding>>;
+  /**
    * Re-runs the wrapped LIVE reconcile with the latest engine input
    * (props/bindings) and the current attributes as `output`, records and
    * returns the fresh attributes. Serialized with engine reconciles/deletes
@@ -396,6 +402,9 @@ export const makeDevWatchProvider = <
           news: strippedNews as Props,
           attrs: attrs as Attrs,
           currentAttrs: Effect.sync(() => entry.attrs as Attrs),
+          currentBindings: Effect.sync(
+            () => (entry.lastInput.bindings ?? []) as ReadonlyArray<ResourceBinding>,
+          ),
           rerunReconcile: withLock(input.id)(rerun) as Effect.Effect<Attrs, unknown>,
           rerunReconcileIfStale: (isStale) =>
             withLock(input.id)(

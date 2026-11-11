@@ -31,6 +31,8 @@ import { isInlineDockerfile, type InlineDockerfile } from "./Dockerfile.ts";
  *   ENTRYPOINT) and pushed as a derived image. `main` absent → the
  *   environment runs verbatim: `image` is mirrored (docker pull → tag →
  *   push, content-addressed on the ref), a Dockerfile builds as-is.
+ * - `main` absent and an {@link ImageAgent} requested → the environment is
+ *   kept, and the agent is copied in with its own runtime as the entrypoint.
  *
  * Where images land is an {@link ImageRegistryTarget}: ECR supplies one that
  * auto-creates a private repository; a plain registry (a local `registry`
@@ -310,9 +312,48 @@ export interface ResolveContainerImageOptions {
    * generated entry module source.
    */
   bootstrap: (importPath: string) => string;
+  /**
+   * Add an agent to an image that has no `main`. See {@link ImageAgent}.
+   * Ignored for a `main` source, whose program serves the agent itself.
+   */
+  agent?: ImageAgent;
   /** Plan-status session used to emit build/push progress notes. */
   session: { note: (message: string) => Effect.Effect<void> };
 }
+
+/**
+ * A program added to an image that has none of its own (`image` or
+ * `context`), so the platform can drive the container: a sandbox agent that
+ * runs commands and serves files inside it.
+ *
+ * The agent is bundled and copied into the image with its own Bun runtime,
+ * and becomes the image's `ENTRYPOINT`. The image needs nothing installed:
+ * the runtime is a static copy that brings its own loader, so it runs on
+ * glibc and musl images alike. The image's own `ENTRYPOINT` and `CMD` no
+ * longer run; the container's command arrives as the agent's arguments.
+ */
+export interface ImageAgent {
+  /**
+   * Module that exports `bootstrap(): Promise<void>`, which runs the agent.
+   * A path or a `file:` URL.
+   */
+  main: string;
+  /** Port the agent listens on, passed to it as `ALCHEMY_SANDBOX_PORT`. */
+  port: number;
+}
+
+/** Where an {@link ImageAgent} and its runtime live inside the image. */
+const AGENT_DIR = "/opt/alchemy/sandbox";
+
+/**
+ * The image the agent's runtime is copied from. The musl build of Bun runs
+ * on any Linux image once its loader and C++ runtime come with it.
+ */
+const AGENT_RUNTIME_IMAGE = "oven/bun:1-alpine";
+
+/** The generated entry of an {@link ImageAgent}: import the module and run it. */
+const agentEntry = (importPath: string) =>
+  `import { bootstrap } from ${JSON.stringify(importPath)};\nawait bootstrap();\n`;
 
 /**
  * Resolve the Dockerfile path for a `context` source: always relative to the
@@ -567,6 +608,73 @@ export const makeContainerImageSource = Effect.gen(function* () {
   };
 
   /**
+   * Generated Dockerfile for an image that gets an {@link ImageAgent}. The
+   * preamble is the user's environment: `envFrom` (their `context`, built
+   * first as a local tag), inline `dockerfile` content, or the `image` ref.
+   * Everything after it is `COPY`, so it works whatever `USER` and shell the
+   * image has, and the image's `WORKDIR` stays the agent's working directory.
+   */
+  const generateAgentDockerfile = (source: ImageSourceLike, port: number, envFrom?: string) => {
+    const preamble =
+      envFrom !== undefined
+        ? `FROM ${envFrom}`
+        : source.dockerfile !== undefined && isInlineDockerfile(source.dockerfile)
+          ? (source.dockerfile.content as string).trimEnd()
+          : `FROM ${source.image!}`;
+    const lines = [
+      preamble,
+      `COPY --from=${AGENT_RUNTIME_IMAGE} /usr/local/bin/bun ${AGENT_DIR}/bun`,
+      `COPY --from=${AGENT_RUNTIME_IMAGE} /lib/ld-musl-*.so.1 ${AGENT_DIR}/ld-musl.so.1`,
+      `COPY --from=${AGENT_RUNTIME_IMAGE} /usr/lib/libstdc++.so.6 /usr/lib/libgcc_s.so.1 ${AGENT_DIR}/lib/`,
+      `COPY index.mjs ${AGENT_DIR}/index.mjs`,
+      `COPY *.js ${AGENT_DIR}/`,
+      `ENV ALCHEMY_SANDBOX_PORT=${String(port)}`,
+      // Start Bun through the loader that came with it, so the image's own
+      // libc (glibc, another musl, or none) is never consulted.
+      `ENTRYPOINT ${JSON.stringify([
+        `${AGENT_DIR}/ld-musl.so.1`,
+        "--library-path",
+        `${AGENT_DIR}/lib`,
+        `${AGENT_DIR}/bun`,
+        `${AGENT_DIR}/index.mjs`,
+      ])}`,
+    ];
+    return `${lines.join("\n")}\n`;
+  };
+
+  /**
+   * Bundle an {@link ImageAgent} and compute the content-addressed hash of
+   * the image it is added to: the agent's bundle, the generated Dockerfile,
+   * the platform and the environment's own identity. `undefined` when the
+   * environment is inline content that has not resolved yet. `resolve` and
+   * `hash` share this, so the plan-time hash and the pushed tag agree.
+   */
+  const computeAgentCodeHash = Effect.fn(function* (options: {
+    source: ImageSourceLike;
+    agent: ImageAgent;
+    platform: string;
+  }) {
+    const { source, agent, platform } = options;
+    const environment = yield* computeStaticSourceHash(source, platform);
+    if (environment === undefined) return undefined;
+    const bundled = yield* bundleMainProgram({
+      source: { main: agent.main },
+      isExternal: false,
+      bootstrap: agentEntry,
+    });
+    const df = source.dockerfile;
+    const isPathEnv = source.image === undefined && !(df !== undefined && isInlineDockerfile(df));
+    const dockerfile = generateAgentDockerfile(source, agent.port, isPathEnv ? "<env>" : undefined);
+    const codeHash = (yield* sha256Object({
+      bundleHash: bundled.hash,
+      dockerfile,
+      platform,
+      environment,
+    })).slice(0, 16);
+    return { bundled, dockerfile, codeHash, isPathEnv };
+  });
+
+  /**
    * Build (or mirror) and push an image to `target`, pushing with the
    * target's credentials or — when it has none — the build machine's own
    * Docker login.
@@ -721,6 +829,74 @@ export const makeContainerImageSource = Effect.gen(function* () {
       return { imageUri, repositoryUri, codeHash };
     }
 
+    if (options.agent !== undefined) {
+      // The user's environment plus an agent: build the environment (a
+      // `context` builds first, in the user's own context), then layer the
+      // agent and its runtime on top and make it the entrypoint.
+      yield* session.note(`Bundling ${id} sandbox agent...`);
+      const agent = yield* computeAgentCodeHash({ source, agent: options.agent, platform });
+      if (agent === undefined) {
+        return yield* Effect.die(
+          new Error(
+            `'${id}': inline dockerfile content did not resolve to a string — Outputs in Dockerfile.inline must be resolvable at deploy time`,
+          ),
+        );
+      }
+      const { bundled, codeHash } = agent;
+      const imageUri = `${repositoryUri}:${codeHash}`;
+
+      if (yield* target.hasTag(codeHash)) {
+        return { imageUri, repositoryUri, codeHash };
+      }
+
+      let envFrom: string | undefined;
+      if (agent.isPathEnv) {
+        const env = yield* resolveContextPaths({
+          context: source.context,
+          dockerfile: source.dockerfile as string | undefined,
+        });
+        envFrom = `alchemy-env-${id.toLowerCase()}:${codeHash}`;
+        yield* session.note(`Building environment image for ${id}...`);
+        yield* docker.image.build({
+          context: env.context,
+          file: env.dockerfile,
+          tag: envFrom,
+          platform,
+          "build-arg": source.build?.args,
+          secrets: source.build?.secrets,
+          ...imageBuildCacheOptions(
+            source.build,
+            imageUri,
+            source.build?.cache ? yield* target.credentials : undefined,
+          ),
+        });
+      }
+
+      const contextDir = yield* getStableContextDir(dotAlchemy, dotAlchemy, `${id}-image`);
+      yield* docker.materialize({
+        context: contextDir,
+        dockerfile:
+          envFrom === undefined
+            ? agent.dockerfile
+            : generateAgentDockerfile(source, options.agent.port, envFrom),
+        files: bundled.files.map((file, index) => ({
+          path: index === 0 ? "index.mjs" : file.path,
+          content: file.content,
+        })),
+      });
+      yield* session.note(`Building container image ${imageUri}...`);
+      yield* buildAndPush(target, {
+        imageUri,
+        context: contextDir,
+        platform,
+        // Inline content builds here, with its own args and secrets. A
+        // `context` already built above; a registry image has no build.
+        build: envFrom === undefined && kind === "context" ? source.build : undefined,
+      });
+      yield* session.note(`Pushed ${imageUri}`);
+      return { imageUri, repositoryUri, codeHash };
+    }
+
     if (kind === "image") {
       // Mirror: pull → tag → push. Content-addressed on the image ref, so
       // an already-mirrored ref is a no-op.
@@ -821,9 +997,19 @@ export const makeContainerImageSource = Effect.gen(function* () {
     port?: number;
     isExternal?: boolean;
     bootstrap: (importPath: string) => string;
+    agent?: ImageAgent;
   }) {
     const platform = options.platform ?? "linux/amd64";
-    if (imageSourceKind(options.source) === "main") {
+    const kind = imageSourceKind(options.source);
+    if (options.agent !== undefined && kind !== undefined && kind !== "main") {
+      const agent = yield* computeAgentCodeHash({
+        source: options.source,
+        agent: options.agent,
+        platform,
+      });
+      return agent?.codeHash;
+    }
+    if (kind === "main") {
       // Unresolved inline environment content (an Output) can't be hashed
       // at plan time — return undefined so the diff defers to reconcile.
       const df = options.source.dockerfile;
