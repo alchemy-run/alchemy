@@ -86,7 +86,7 @@ const listTags = Effect.fn(function* (
 ) {
   const repositoryPrefix = `${accountId}/cloudchamber-snapshots/`;
   const tags: Array<SnapshotImageTag> = [];
-  let page: string | undefined = "/v2/_catalog?tags=true";
+  let page: string | undefined = "/v2/_catalog?n=1000&tags=true";
   while (page !== undefined) {
     const response: HttpClientResponse.HttpClientResponse | undefined = yield* registry(
       "GET",
@@ -100,7 +100,8 @@ const listTags = Effect.fn(function* (
       if (!repository.startsWith(repositoryPrefix)) continue;
       for (const tag of repositoryTags) tags.push({ repository, tag });
     }
-    const next: string | undefined = /<([^>]+)>;\s*rel="?next"?/.exec(
+    // `Link: <url>; rel="next"`; Cloudflare's registry omits the brackets.
+    const next: string | undefined = /<?([^<>;\s]+)>?\s*;\s*rel="?next"?/.exec(
       response.headers.link ?? "",
     )?.[1];
     const nextUrl: URL | undefined =
