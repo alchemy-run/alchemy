@@ -778,7 +778,7 @@ Archil runs commands, processes and programs against durable disks in Firecracke
 Boat sandboxes: what Boat is, accounts and scoped API keys, sandboxes from any Worker and their lifecycle, programs served from a sandbox, snapshots and forks, environments, ports, and webhooks.
 
 - [Boat](https://alchemy.run/boat) — Run sandboxes on Boat with Alchemy. Declare sandboxes, snapshots, environments and webhooks in TypeScript, and create sandboxes from any Worker or Function.
-- [What is Boat?](https://alchemy.run/boat/what-is-boat) — The concepts behind Boat — accounts and API keys, sandboxes and their lifecycle, snapshots and forks, environments, ports and webhooks — and how @alchemy.run/boat models each of them.
+- [What is Boat?](https://alchemy.run/boat/what-is-boat) — The concepts behind Boat — accounts and API keys, sandboxes and their lifecycle, snapshots and forks, environments, credential profiles and the AI credentials proxy, ports and webhooks — and how @alchemy.run/boat models each of them.
 - [Setup](https://alchemy.run/boat/setup) — Install @alchemy.run/boat, sign in to Boat with a profile, and deploy from CI.
 - [Part 1: Build a Snapshot](https://alchemy.run/boat/tutorial/part-1) — Declare a Boat snapshot that clones a repository and installs tools at deploy time, so every sandbox starts ready.
 - [Part 2: Start Sandboxes from It](https://alchemy.run/boat/tutorial/part-2) — A Cloudflare Worker that starts a fresh Boat sandbox from the Golden snapshot for each request.
