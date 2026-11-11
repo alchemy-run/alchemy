@@ -1,11 +1,12 @@
 import * as binaryauthorization from "@distilled.cloud/gcp/binaryauthorization_v1";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   attestorName,
@@ -84,8 +85,27 @@ export type Attestor = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AttestorLookup
 >;
+
+/**
+ * Props for {@link Attestor.lookup}: find an attestor this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface AttestorLookup {
+  /**
+   * Attestor id (the `{attestor}` segment of
+   * `projects/{project}/attestors/{attestor}`).
+   */
+  attestorId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Binary Authorization attestor that verifies container-image
@@ -130,6 +150,18 @@ export type Attestor = Resource<
  * ```typescript
  * const attestor = yield* GCP.BinaryAuthorization.Attestor("Qa", {
  *   description: "signs staging and production images",
+ * });
+ * ```
+ *
+ * ### Looking up an existing attestor
+ * `Attestor.lookup` references an attestor Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared attestor.
+ *
+ * **Example:** Reference an existing attestor
+ * ```typescript
+ * const attestor = GCP.BinaryAuthorization.Attestor.lookup({
+ *   attestorId: "my-attestor",
  * });
  * ```
  *
@@ -195,7 +227,15 @@ export const AttestorProvider = () =>
       });
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ attestorId }) {
+      const env = yield* GcpEnvironment.current;
+      const name = attestorName(env.project, attestorId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;
       const attestorId = yield* toPhysicalId(id, olds?.attestorId, output?.attestorId, "attestor");
       const name = output?.name ?? attestorName(env.project, attestorId);
@@ -203,7 +243,7 @@ export const AttestorProvider = () =>
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const { labels } = parseDescription(existing.description);
-      return (yield* ownedBy(id, labels)) ? attrs : Unowned(attrs);
+      return (yield* ownedBy(id, labels)) ? attrs : unownedUnlessPrevious(attrs, previous, "name");
     }),
 
     list: () =>

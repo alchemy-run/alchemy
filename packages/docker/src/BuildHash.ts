@@ -7,6 +7,7 @@
  */
 
 import * as crypto from "node:crypto";
+import { dotAlchemyDirectory } from "alchemy/AlchemyContext";
 import {
   type IgnoreRules,
   listFileSystemDirectory,
@@ -14,6 +15,7 @@ import {
   parseIgnoreRules,
   walkIgnoring,
 } from "alchemy/Util/Ignore";
+import { initialCwd } from "alchemy/Util/Node";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -150,6 +152,22 @@ export const selectDockerBuildContext = Effect.fn(function* (
 });
 
 /**
+ * The context-relative path of Alchemy's `.alchemy` directory when it lies
+ * strictly inside `context`, otherwise `undefined`.
+ */
+const containedRuntimeDirectory = Effect.fn(function* (context: string) {
+  const path = yield* Path.Path;
+  const runtime = path.resolve(initialCwd, yield* dotAlchemyDirectory);
+  const relative = normalizeRelativePath(path.relative(context, runtime));
+  return relative === "" ||
+    relative === ".." ||
+    relative.startsWith("../") ||
+    path.isAbsolute(relative)
+    ? undefined
+    : relative;
+});
+
+/**
  * Hash a Docker build context together with the Dockerfile, platform, and
  * build arguments. In `effective` mode, the selected `.dockerignore` is
  * applied exactly once before files are hashed. Absolute paths do not
@@ -197,10 +215,28 @@ export const hashDockerBuildInputs = Effect.fn(function* (
     (entry): entry is string =>
       entry !== undefined && entry !== ".." && !entry.startsWith("../") && !path.isAbsolute(entry),
   );
+  // Alchemy writes run logs and local state to `.alchemy` on every run. When a
+  // context contains it (e.g. `context: "."` at the project root), hashing it
+  // would give the image a new tag on every deploy. A context inside
+  // `.alchemy` (a generated one) is still hashed in full.
+  const runtimeDirectory = yield* containedRuntimeDirectory(context);
+  const listDirectory = yield* listFileSystemDirectory(context);
   // Walk one level at a time so an excluded directory is discarded before
   // its contents are read; entries come back sorted, preserving hash order.
   const entries = yield* walkIgnoring({
-    list: yield* listFileSystemDirectory(context),
+    list:
+      runtimeDirectory === undefined
+        ? listDirectory
+        : (directory: string) =>
+            listDirectory(directory).pipe(
+              Effect.map((children) =>
+                children.filter(
+                  (child) =>
+                    (directory.length === 0 ? child.name : `${directory}/${child.name}`) !==
+                    runtimeDirectory,
+                ),
+              ),
+            ),
     rules: dockerignore?.rules,
     force: forcedPaths,
   });

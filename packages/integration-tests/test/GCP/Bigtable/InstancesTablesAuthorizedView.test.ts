@@ -6,6 +6,7 @@ import * as bigtable from "@distilled.cloud/gcp/bigtableadmin_v2";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -80,6 +81,14 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { instance, table, view };
         }),
+      );
+      yield* expectFound(
+        GCP.Bigtable.InstancesTablesAuthorizedView.lookup({
+          authorizedViewId: created.view.authorizedViewId,
+          instance: created.view.instance,
+          table: created.view.table,
+        }),
+        created.view,
       );
 
       expect(created.view.name).toContain("/authorizedViews/");

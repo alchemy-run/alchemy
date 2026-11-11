@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -74,8 +75,34 @@ export type TraceScope = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  TraceScopeLookup
 >;
+
+/**
+ * Props for {@link TraceScope.lookup}: find a trace scope this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface TraceScopeLookup {
+  /**
+   * Trace scope id (the `{traceScope}` segment of
+   * `projects/{project}/locations/{location}/traceScopes/{traceScope}`).
+   * Limited to 100 characters: letters, digits, underscores, hyphens,
+   * periods; first character must be alphanumeric. The system-managed
+   * `_Default` scope cannot be deleted.
+   */
+  traceScopeId: string;
+  /**
+   * Location. Trace scopes are only available in `global`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Observability trace scope — a named collection of projects
@@ -112,6 +139,19 @@ export type TraceScope = Resource<
  * const scope = yield* GCP.Observability.TraceScope("App", {
  *   resourceNames: ["projects/my-project"],
  *   description: "all application traces",
+ * });
+ * ```
+ *
+ * ### Looking up an existing trace scope
+ * `TraceScope.lookup` references a trace scope Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * trace scope.
+ *
+ * **Example:** Reference an existing trace scope
+ * ```typescript
+ * const traceScope = GCP.Observability.TraceScope.lookup({
+ *   traceScopeId: "my-trace-scope",
  * });
  * ```
  *
@@ -175,6 +215,15 @@ export const TraceScopeProvider = () =>
       if (!idChanged && !locationChanged) return undefined;
       return { action: "replace" as const, deleteFirst: false };
     }),
+
+    lookup: Effect.fn(function* ({ traceScopeId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = lookupLocation ?? DEFAULT_TRACE_LOCATION;
+      const name = scopeResourceName(env.project, location, traceScopeId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, location);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

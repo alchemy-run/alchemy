@@ -3,6 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as datastream from "@distilled.cloud/gcp/datastream_v1";
 import * as Effect from "effect/Effect";
+import { expectFound } from "../lookup.ts";
 import { withNetworkSlot } from "../networkQuota.ts";
 import { LOCATION, logLevel, currentProject, runSlowLifecycle, waitUntilGone } from "./common.ts";
 
@@ -60,6 +61,14 @@ test.provider.skipIf(!runSlowLifecycle)(
           });
           return { network, peering, route };
         }),
+      );
+      yield* expectFound(
+        GCP.Datastream.PrivateConnectionsRoute.lookup({
+          routeId: created.route.routeId,
+          location: created.route.location,
+          privateConnection: created.route.privateConnection,
+        }),
+        created.route,
       );
 
       expect(created.route.routeId).toEqual(expect.any(String));

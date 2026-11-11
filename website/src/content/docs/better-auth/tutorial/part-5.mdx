@@ -4,6 +4,7 @@ description: Register a GitHub OAuth app, bind its credentials through Effect Co
 sidebar:
   order: 5
 ---
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 Continue from [Part 4](/better-auth/tutorial/part-4). GitHub credentials come from a GitHub OAuth application; Alchemy's automatic signing secret is a separate value.
 
@@ -135,10 +136,8 @@ Better Auth handles failed callbacks on its built-in error page. No custom error
 
 Stop the running development command, rebuild the client, and start it again:
 
-```sh
-bun build ./src/ui.ts --target browser --outdir ./public
-bunx alchemy dev --stage tutorial
-```
+<PackageManagers script={`bun build ./src/ui.ts --target browser --outdir ./public
+{run} alchemy dev --stage tutorial`} />
 
 Try GitHub sign-in and call the protected API. Then sign out, retry, and cancel at GitHub to check the error path.
 

@@ -127,15 +127,15 @@ export const serve = (platform: "eu" | "unrestricted") =>
             return yield* HttpServerResponse.json({ platform });
           case "increment":
             yield* counters.send(counter, new Increment({ by: 2 })).pipe(Effect.orDie);
-            return yield* HttpServerResponse.json(yield* counters.state(counter));
+            return yield* HttpServerResponse.json(yield* counters.get(counter));
           case "total": {
-            const total = yield* totals.query(Counter.ref(counter)).pipe(Effect.orDie);
+            const total = yield* totals.get(Counter.ref(counter)).pipe(Effect.orDie);
             return yield* HttpServerResponse.json(Option.getOrElse(total, () => ({ total: 0 })));
           }
           case "echo":
-            return yield* HttpServerResponse.json(yield* echoes.state(counter));
+            return yield* HttpServerResponse.json(yield* echoes.get(counter));
           default:
-            return yield* HttpServerResponse.json(yield* counters.state(counter));
+            return yield* HttpServerResponse.json(yield* counters.get(counter));
         }
       }),
     };

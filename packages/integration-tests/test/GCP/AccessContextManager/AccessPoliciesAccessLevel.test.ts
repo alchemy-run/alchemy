@@ -4,6 +4,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as acm from "@distilled.cloud/gcp/accesscontextmanager_v1";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { logLevel, projectContext, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -63,6 +64,17 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { policy, level };
         }),
+      );
+      yield* expectFound(
+        GCP.AccessContextManager.AccessPoliciesAccessLevel.lookup({
+          accessLevelId: created.level.accessLevelId,
+          policy: created.level.policy,
+        }),
+        created.level,
+      );
+      yield* expectFound(
+        GCP.AccessContextManager.AccessPolicy.lookup({ name: created.policy.name }),
+        created.policy,
       );
 
       expect(created.level.name).toContain("/accessLevels/");

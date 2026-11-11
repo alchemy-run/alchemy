@@ -1,0 +1,93 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "ubuntu:14.04",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "LABEL",
+          "line": 2,
+          "flags": []
+        },
+        {
+          "tag": "RUN",
+          "line": 4,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "apt-get update \u0026\u0026 apt-get install nginx-full -y"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 5,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "rm -rf /etc/nginx"
+          }
+        },
+        {
+          "tag": "ADD",
+          "line": 6,
+          "flags": [],
+          "sources": [
+            "etc"
+          ],
+          "destination": "/etc/nginx"
+        },
+        {
+          "tag": "RUN",
+          "line": 7,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "chown -R root:root /etc/nginx"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 8,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "/usr/sbin/nginx -qt"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 9,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "mkdir /www"
+          }
+        },
+        {
+          "tag": "CMD",
+          "line": 11,
+          "flags": [],
+          "command": {
+            "form": "exec",
+            "argv": [
+              "/usr/sbin/nginx"
+            ]
+          }
+        },
+        {
+          "tag": "VOLUME",
+          "line": 13,
+          "flags": []
+        },
+        {
+          "tag": "EXPOSE",
+          "line": 14,
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

@@ -21,6 +21,7 @@ import {
   labelSelector,
   stripInternalLabels,
   toLabels,
+  isReplacedGeneration,
 } from "./Labels.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -126,8 +127,18 @@ export type Certificate = Resource<
     usedBy: { id: number; type: string }[];
   },
   never,
-  Providers
+  Providers,
+  CertificateLookup
 >;
+
+/**
+ * Props for {@link Certificate.lookup}: find a certificate this stack
+ * doesn't manage by its name.
+ */
+export interface CertificateLookup {
+  /** Certificate name (unique in the project). */
+  name: string;
+}
 
 /**
  * A Hetzner Cloud TLS Certificate. Upload a PEM (`type: "uploaded"`, the
@@ -165,6 +176,16 @@ export type Certificate = Resource<
  *   type: "managed",
  *   domainNames: ["example.com", "www.example.com"],
  * });
+ * ```
+ *
+ * ### Looking up an existing certificate
+ * `Certificate.lookup` references a certificate Alchemy doesn't manage (created in
+ * the Hetzner Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing certificate
+ * ```typescript
+ * const cert = Hetzner.Certificate.lookup({ name: "www" });
  * ```
  *
  * @resource
@@ -398,7 +419,12 @@ export const CertificateProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ name }) {
+      const found = yield* findByName(name);
+      return found === undefined ? undefined : toAttrs(found);
+    }),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const name = yield* toName(id, olds?.name, output?.name);
       const existing = yield* observe({
         id: output?.id,
@@ -406,6 +432,16 @@ export const CertificateProvider = () =>
         logicalId: id,
       });
       if (existing === undefined) return undefined;
+      if (
+        isReplacedGeneration({
+          previousId: previous?.id,
+          foundId: existing.id,
+          claimedName: olds?.name,
+          foundName: existing.name,
+        })
+      ) {
+        return undefined;
+      }
       const attrs = toAttrs(existing);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),

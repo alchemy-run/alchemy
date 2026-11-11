@@ -8,6 +8,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -71,6 +72,17 @@ test.provider(
           });
           return { instance, database };
         }),
+      );
+      yield* expectFound(
+        GCP.Spanner.Database.lookup({
+          databaseId: created.database.databaseId,
+          instance: created.database.instanceId,
+        }),
+        created.database,
+      );
+      yield* expectFound(
+        GCP.Spanner.Instance.lookup({ instanceId: created.instance.instanceId }),
+        created.instance,
       );
 
       expect(created.database.name).toContain("/databases/");

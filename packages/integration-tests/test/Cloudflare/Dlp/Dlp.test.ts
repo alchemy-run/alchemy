@@ -5,6 +5,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { testName } from "../../names.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -69,7 +70,7 @@ test.provider.skipIf(!entitled)(
       const created = yield* stack.deploy(
         Effect.gen(function* () {
           const profile = yield* Cloudflare.Dlp.Profile("EmployeeIds", {
-            name: "alchemy-test-dlp-profile",
+            name: testName("alchemy-test-dlp-profile"),
             description: "v1",
             allowedMatchCount: 0,
             entries: [
@@ -81,7 +82,7 @@ test.provider.skipIf(!entitled)(
             ],
           });
           const entry = yield* Cloudflare.Dlp.Entry("CardNumber", {
-            name: "alchemy-test-dlp-entry",
+            name: testName("alchemy-test-dlp-entry"),
             pattern: { regex: "[0-9]{13,16}", validation: "luhn" },
             profileId: profile.profileId,
           });
@@ -98,7 +99,7 @@ test.provider.skipIf(!entitled)(
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           const profile = yield* Cloudflare.Dlp.Profile("EmployeeIds", {
-            name: "alchemy-test-dlp-profile",
+            name: testName("alchemy-test-dlp-profile"),
             description: "v2",
             allowedMatchCount: 3,
             entries: [
@@ -110,7 +111,7 @@ test.provider.skipIf(!entitled)(
             ],
           });
           const entry = yield* Cloudflare.Dlp.Entry("CardNumber", {
-            name: "alchemy-test-dlp-entry",
+            name: testName("alchemy-test-dlp-entry"),
             pattern: { regex: "[0-9]{13,16}", validation: "luhn" },
             profileId: profile.profileId,
           });

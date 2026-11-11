@@ -2,10 +2,10 @@ import * as eks from "@distilled.cloud/aws/eks";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import type { Input } from "alchemy/Input";
-import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
@@ -112,13 +112,6 @@ export const PodIdentityAssociationProvider = () =>
   Provider.effect(
     PodIdentityAssociation,
     Effect.gen(function* () {
-      const toClientRequestToken = (id: string, action: string) =>
-        createPhysicalName({
-          id: `${id}-${action}`,
-          maxLength: 64,
-          delimiter: "-",
-        });
-
       return {
         stables: ["associationArn", "associationId"],
         // `list()` enumerates every pod identity association across the
@@ -195,6 +188,7 @@ export const PodIdentityAssociationProvider = () =>
           });
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
+          const random = yield* SecureRandom.SecureRandom;
           const clusterName = news.clusterName as string;
           const desiredTags = {
             ...(yield* createInternalTags(id)),
@@ -228,7 +222,7 @@ export const PodIdentityAssociationProvider = () =>
                 targetRoleArn: news.targetRoleArn as string | undefined,
                 policy: news.policy,
                 tags: desiredTags,
-                clientRequestToken: yield* toClientRequestToken(id, "create"),
+                clientRequestToken: yield* random.uuidV4(),
               })
               .pipe(Effect.catchTag("ResourceInUseException", () => Effect.void));
 
@@ -263,7 +257,7 @@ export const PodIdentityAssociationProvider = () =>
               disableSessionTags: news.disableSessionTags,
               targetRoleArn: desiredTargetRoleArn,
               policy: news.policy,
-              clientRequestToken: yield* toClientRequestToken(id, "update"),
+              clientRequestToken: yield* random.uuidV4(),
             });
           }
 

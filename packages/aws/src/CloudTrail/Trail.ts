@@ -197,8 +197,18 @@ export interface Trail extends Resource<
     isLogging: boolean;
   },
   never,
-  Providers
+  Providers,
+  TrailLookup
 > {}
+
+/**
+ * Props for {@link Trail.lookup}: find a trail this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface TrailLookup {
+  /** The trail name of the existing trail. */
+  trailName: string;
+}
 
 /**
  * An AWS CloudTrail trail that records AWS API activity and delivers log
@@ -281,6 +291,16 @@ export interface Trail extends Resource<
  *   ],
  *   insightSelectors: [{ insightType: "ApiCallRateInsight" }],
  * });
+ * ```
+ *
+ * ### Looking up an existing trail
+ * `Trail.lookup` references a trail Alchemy doesn't manage (created in the
+ * console or by another stack), found by `trailName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing trail
+ * ```typescript
+ * const existing = AWS.CloudTrail.Trail.lookup({ trailName: "my-trail" });
  * ```
  *
  * @resource
@@ -409,6 +429,12 @@ export const TrailProvider = () =>
               { concurrency: 5 },
             );
           }),
+        lookup: Effect.fn(function* ({ trailName: name }) {
+          const trail = yield* readTrail(name);
+          if (trail === undefined) return undefined;
+          const attrs = yield* toAttributes(trail);
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.trailName ?? (yield* createTrailName(id, olds ?? {}));
           const trail = yield* readTrail(name);

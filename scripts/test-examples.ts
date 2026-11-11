@@ -2,14 +2,21 @@
  * Runs every example's test suite, then drives each example through the CLI
  * lifecycle (`scripts/test-example-cli.ts`), then checks formatting.
  *
- * Usage: node scripts/test-examples.ts [--profile <name>]
+ * Usage: node scripts/test-examples.ts [examples...] [-t <pattern>] [--skip-cli] [--profile <name>]
+ *
+ * With no examples, runs the default list below and the repo-wide format
+ * check. Each argument selects examples: an example directory name (or path)
+ * runs that example even when it is commented out of the default list;
+ * anything else is a case-insensitive substring over the default list, so
+ * `fly` runs every default Fly example. `-t` is passed to `bun test`.
  */
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { Command, Flag } from "effect/cli";
+import { Argument, Command, Flag } from "effect/cli";
 import * as Console from "effect/Console";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import { ChildProcess } from "effect/process";
@@ -19,6 +26,7 @@ import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import { preferLocalFlociImage } from "./floci-image.ts";
+import { defaultTestStage } from "./test-stage.ts";
 
 /** Ends the run with `code` after the reason has already been printed. */
 class ExitWith extends Data.TaggedError("ExitWith")<{ readonly code: number }> {
@@ -35,6 +43,8 @@ const examples = [
   "./examples/cloudflare-website-tanstack-start",
   "./examples/cloudflare-tanstack-start-solid",
   "./examples/cloudflare-neon-drizzle",
+  "./examples/cloudflare-archil-workspaces",
+  "./examples/archil-sandbox",
   "./examples/cloudflare-vue",
   "./examples/cloudflare-website-solidstart",
   "./examples/cloudflare-foldkit-spa",
@@ -54,6 +64,13 @@ const examples = [
   "./examples/cloudflare-website-vocs",
   "./examples/cloudflare-agents",
   "./examples/cloudflare-flue",
+  "./examples/e2b-agent-sandbox",
+  "./examples/e2b-program",
+  "./examples/e2b-program-async",
+  "./examples/boat-agent-sandbox",
+  "./examples/boat-program",
+  "./examples/cloudflare-modal-sandbox",
+  "./examples/modal-functions",
   "./examples/aws-dev",
   // "./examples/aws-ecs",
   "./examples/aws-lambda",
@@ -69,6 +86,7 @@ const examples = [
   // "./examples/aws-website-vite",
   // "./examples/aws-website-vinext",
   // "./examples/aws-website-waku",
+  "./examples/daytona-sandboxes",
   "./examples/fly-app",
   "./examples/fly-service",
   "./examples/fly-website-vite",
@@ -130,6 +148,32 @@ const examples = [
 // one at a time. Everything else stays concurrent.
 const serialGroup = (example: string): string | undefined =>
   example.startsWith("./examples/aws-") ? "floci" : undefined;
+
+/** Resolves the positional selection against `examples` and `./examples/*`. */
+const selectExamples = Effect.fn(function* (filters: readonly string[]) {
+  if (filters.length === 0) return [...examples];
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const repoRoot = path.resolve(import.meta.dirname, "..");
+  const selected = new Set<string>();
+  for (const filter of filters) {
+    const name = path.basename(filter.replace(/\/+$/, ""));
+    const directory = path.join(repoRoot, "examples", name);
+    if (name !== "" && (yield* fs.exists(path.join(directory, "package.json")))) {
+      selected.add(`./examples/${name}`);
+      continue;
+    }
+    const matches = examples.filter((example) =>
+      example.toLowerCase().includes(filter.toLowerCase()),
+    );
+    if (matches.length === 0) {
+      yield* Console.error(`No example matches "${filter}".`);
+      return yield* new ExitWith({ code: 1 });
+    }
+    for (const example of matches) selected.add(example);
+  }
+  return [...selected];
+});
 
 type CommandResult = {
   label: string;
@@ -373,6 +417,21 @@ const runParallel = Effect.fn(function* (
 const command = Command.make(
   "test-examples",
   {
+    selection: Argument.String("examples").pipe(
+      Argument.withDescription(
+        "Examples to run: a directory name under ./examples (even one not in the default list) or a substring of the default list (e.g. `fly`). Defaults to the whole list.",
+      ),
+      Argument.variadic(),
+    ),
+    testNamePattern: Flag.String("test-name-pattern").pipe(
+      Flag.withAlias("t"),
+      Flag.withDescription("Only run example tests whose name matches this regex (`bun test -t`)"),
+      Flag.optional,
+    ),
+    skipCli: Flag.Boolean("skip-cli").pipe(
+      Flag.withDefault(false),
+      Flag.withDescription("Skip the `alchemy dev`/`deploy`/`destroy` CLI lifecycle"),
+    ),
     profile: Flag.String("profile").pipe(
       Flag.withDescription(
         "Alchemy profile the example suites and CLI runs use (sets ALCHEMY_PROFILE)",
@@ -380,13 +439,16 @@ const command = Command.make(
       Flag.optional,
     ),
   },
-  Effect.fn(function* ({ profile }) {
+  Effect.fn(function* ({ selection, testNamePattern, skipCli, profile }) {
+    const selected = yield* selectExamples(selection);
     // The example suites read the profile from `ALCHEMY_PROFILE`
     // (`Test.make({ profile: process.env.ALCHEMY_PROFILE })`), so translate
-    // the flag into the env every spawned `bun test` inherits.
-    const env: Record<string, string> = Option.isSome(profile)
-      ? { ALCHEMY_PROFILE: profile.value }
-      : {};
+    // the flag into the env every spawned `bun test` inherits. They read
+    // their stage from ALCHEMY_TEST_STAGE, which the CLI lifecycle reuses.
+    const env: Record<string, string> = {
+      ALCHEMY_TEST_STAGE: yield* defaultTestStage(),
+      ...(Option.isSome(profile) ? { ALCHEMY_PROFILE: profile.value } : {}),
+    };
 
     // The AWS examples run against the floci emulator: use the locally built
     // image when there is one so an emulator fix is testable before its
@@ -395,13 +457,17 @@ const command = Command.make(
 
     const testResults = yield* runParallel(
       "Example tests",
-      examples.map((example) => ({
+      selected.map((example) => ({
         label: example,
         // Run `bun test` IN the example directory. Concurrent
         // `bun run --filter <workspace> test` all contend on bun's workspace
         // graph (each sits in `openat` walking the monorepo) and none of them
         // ever spawn the actual test process.
-        command: ["bun", "test"] as const,
+        command: [
+          "bun",
+          "test",
+          ...(Option.isSome(testNamePattern) ? ["-t", testNamePattern.value] : []),
+        ],
         cwd: example,
         serial: serialGroup(example),
       })),
@@ -418,9 +484,11 @@ const command = Command.make(
       return yield* new ExitWith({ code: 1 });
     }
 
+    if (skipCli) return;
+
     const cliResults = yield* runParallel(
       "Example CLI lifecycle",
-      examples.map((example) => ({
+      selected.map((example) => ({
         label: `${example} CLI lifecycle`,
         command: ["node", "scripts/test-example-cli.ts", example],
         serial: serialGroup(example),
@@ -428,7 +496,7 @@ const command = Command.make(
       env,
       // Each `alchemy dev` session is a CLI, an exec child, sidecars, workerd
       // and a bundler watch loop; 30 at once starve each other past the
-      // 4-minute readiness timeout.
+      // readiness timeout.
       { concurrency: 8 },
     );
     const failedCliTests = cliResults.filter((result) => result.exitCode !== 0);
@@ -441,6 +509,9 @@ const command = Command.make(
       }
       return yield* new ExitWith({ code: 1 });
     }
+
+    // A selection is a focused run; the format check covers the whole repo.
+    if (selection.length > 0) return;
 
     const [formatFailure] = yield* runParallel(
       "Format",

@@ -30,7 +30,6 @@ import {
   assertBindingContainersOnAsyncClasses,
   mergeWorkerContainers,
 } from "../Containers/ContainerConfiguration.ts";
-import * as DomainVersion from "../Domain/Version.ts";
 import { localRuntimeServices } from "../LocalRuntime.ts";
 import { CloudflareLogs } from "../Logs.ts";
 import { detachQueueConsumersOfScript } from "../Queues/Consumer.ts";
@@ -114,6 +113,26 @@ export class AmbiguousDurableObjectTransfer extends Data.TaggedError(
     return (
       `Durable Object '${this.logicalId}' (class '${this.className}') is new to Worker '${this.scriptName}' and multiple scripts match its transferredFrom declaration: ${this.sources.join(", ")}. ` +
       `Narrow transferredFrom to the exact physical script name that holds the data.`
+    );
+  }
+}
+
+/**
+ * Two Durable Object classes of one deploy declare `renamedFrom` the same
+ * class, which the Worker still hosts. A class's namespace, and every object
+ * stored in it, can move to one class only, so the deploy fails before any
+ * upload. Keep `renamedFrom` on the class that takes over the objects; the
+ * others start empty.
+ */
+export class DurableObjectRenameConflict extends Data.TaggedError("DurableObjectRenameConflict")<{
+  scriptName: string;
+  renamedFrom: string;
+  classNames: string[];
+}> {
+  override get message() {
+    return (
+      `Durable Object classes ${this.classNames.map((className) => `'${className}'`).join(", ")} on Worker '${this.scriptName}' are all renamed from '${this.renamedFrom}', which the Worker still hosts. ` +
+      `Only one class can take over its objects: keep renamedFrom on that one, and remove it from the others.`
     );
   }
 }
@@ -212,6 +231,24 @@ export const resolvePreviewParentName = (preview: WorkerProps["preview"]): strin
   if (typeof parent === "string") return parent;
   const workerName = (parent as { workerName?: unknown }).workerName;
   return typeof workerName === "string" ? workerName : undefined;
+};
+
+/**
+ * Whether a Preview's observed observability already holds every field the
+ * desired settings set. A desired `false` also matches an absent field, so
+ * a Preview that never had traces is not patched to turn them off.
+ */
+const observabilityCovered = (desired: unknown, observed: unknown): boolean => {
+  if (desired === undefined) return true;
+  if (desired === false) return observed === undefined || observed === null || observed === false;
+  if (Array.isArray(desired)) return JSON.stringify(desired) === JSON.stringify(observed ?? []);
+  if (desired !== null && typeof desired === "object") {
+    const fields = (observed ?? {}) as Record<string, unknown>;
+    return Object.entries(desired).every(([key, value]) =>
+      observabilityCovered(value, fields[key]),
+    );
+  }
+  return desired === observed;
 };
 
 const toPreviewWireKey = (key: string) => key.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
@@ -629,6 +666,8 @@ const urlHostname = (url: string): string => {
 
 /** The `rules` payload shape of a zone phase-entrypoint PUT. */
 type PutZoneRedirectRules = rulesets.PutPhasForZoneRequest["rules"];
+/** A rule as a zone phase entrypoint read returns it. */
+type PhaseRule = NonNullable<rulesets.GetPhasResponse["rules"]>[number];
 
 /**
  * The *custom domain* hostnames recorded in a Worker's persisted legacy
@@ -1617,6 +1656,72 @@ export const LiveWorkerProvider = () =>
       });
 
       /**
+       * Converge the rules a Worker owns (descriptions starting with
+       * `prefix`) in a zone's shared phase entrypoint, one rule at a time:
+       * create each desired rule that's missing and delete each owned rule
+       * nothing desires, by rule id. Every other rule in the entrypoint is
+       * never written. Replacing the whole phase instead loses updates when
+       * two Workers converge the same zone at once: each writes back the
+       * other's rules as it last read them, so a rule one of them just
+       * removed comes back.
+       */
+      const syncOwnedPhaseRules = Effect.fn(function* <
+        Rule extends { readonly description: string; readonly expression: string },
+      >(params: {
+        zoneId: string;
+        phase: "http_request_dynamic_redirect" | "http_request_late_transform";
+        prefix: string;
+        desired: ReadonlyArray<Rule>;
+        /** Whether an owned rule with the same description and expression is `rule`. */
+        matches: (existing: PhaseRule, rule: Rule) => boolean;
+      }) {
+        const { zoneId, phase } = params;
+        const entrypoint = yield* rulesets
+          .getPhasForZone({ zoneId, rulesetPhase: phase })
+          // Only a missing entrypoint means no rules yet. Any other failure
+          // stops here rather than treating the phase as empty.
+          .pipe(Effect.catchTag("RulesetNotFound", () => Effect.undefined));
+        if (entrypoint === undefined) {
+          if (params.desired.length === 0) return;
+          yield* rulesets.putPhasForZone({
+            zoneId,
+            rulesetPhase: phase,
+            rules: [...params.desired] as unknown as PutZoneRedirectRules,
+          });
+          return;
+        }
+        const owned = (entrypoint.rules ?? []).filter((rule) =>
+          (rule.description ?? "").startsWith(params.prefix),
+        );
+        const kept = new Set<string>();
+        const missing: Rule[] = [];
+        for (const rule of params.desired) {
+          const match = owned.find(
+            (existing) =>
+              !kept.has(existing.id ?? "") &&
+              existing.description === rule.description &&
+              existing.expression === rule.expression &&
+              params.matches(existing, rule),
+          );
+          if (match?.id) kept.add(match.id);
+          else missing.push(rule);
+        }
+        for (const rule of missing) {
+          yield* rulesets.createRuleForZone({
+            zoneId,
+            rulesetId: entrypoint.id,
+            body: rule as unknown as rulesets.CreateRuleForZoneRequest["body"],
+          });
+        }
+        for (const existing of owned) {
+          if (existing.id === undefined || existing.id === null || kept.has(existing.id)) continue;
+          yield* rulesets
+            .deleteRuleForZone({ zoneId, rulesetId: entrypoint.id, ruleId: existing.id })
+            .pipe(Effect.catchTag("RulesetRuleNotFound", () => Effect.void));
+        }
+      });
+
+      /**
        * Converge the redirect rules for a Worker's `domain.redirects` in
        * each affected zone's `http_request_dynamic_redirect` phase
        * entrypoint. Rules are identified by a
@@ -1638,24 +1743,24 @@ export const LiveWorkerProvider = () =>
         const desired = params.domain?.redirects ?? [];
         const targetName = params.domain?.name;
         // Zones to touch: every zone hosting a desired redirect, plus every
-        // zone that hosted one before (so removals converge). Hostnames
-        // whose zone we can't resolve (e.g. the domain was already
-        // detached) are skipped — their rules become unreachable dead
-        // config at worst, never a failed destroy.
+        // zone that hosted one before (so removals converge). A hostname
+        // missing from the attached-domain map — the domain list lags a
+        // fresh attach, or the domain is already detached — is looked up by
+        // name, so its rule is still removed. Hostnames whose zone can't be
+        // resolved at all are skipped: dead config at worst, never a failed
+        // destroy.
         const zoneIds = new Set<string>();
+        const zoneCache = new Map<string, string>();
         for (const hostname of [...desired, ...params.previousRedirects]) {
-          const zoneId = params.zoneIdByHostname.get(hostname);
+          const zoneId =
+            params.zoneIdByHostname.get(hostname) ??
+            (yield* inferZoneIdForHostname(hostname, zoneCache, params.domain?.zone).pipe(
+              Effect.orElseSucceed(() => undefined),
+            ));
           if (zoneId) zoneIds.add(zoneId);
         }
         if (zoneIds.size === 0) return;
         for (const zoneId of zoneIds) {
-          const entrypoint = yield* rulesets
-            .getPhasForZone({ zoneId, rulesetPhase: "http_request_dynamic_redirect" })
-            // Only a missing entrypoint means no rules yet. Any other failure must
-            // stop here: the PUT below replaces the whole phase, so reading it as
-            // empty would delete every other rule in the zone.
-            .pipe(Effect.catchTag("RulesetNotFound", () => Effect.undefined));
-          const existingRules = entrypoint?.rules ?? [];
           const ourDesired = desired
             .filter((hostname) => params.zoneIdByHostname.get(hostname) === zoneId)
             .map((hostname) => ({
@@ -1673,48 +1778,37 @@ export const LiveWorkerProvider = () =>
                 },
               },
             }));
-          const isOurs = (rule: { description?: string | null }) =>
-            (rule.description ?? "").startsWith(prefix);
-          const ourExisting = existingRules.filter(isOurs);
           // Compare the redirect target too: a changed canonical `name`
-          // keeps each rule's description and match expression, so those
-          // alone would skip the PUT and leave the old target in place.
-          // Fields are compared one by one because the read fills unset
-          // fields with `null`.
-          const existingFromValue = (rule: (typeof existingRules)[number]) =>
-            rule.action === "redirect" ? rule.actionParameters?.fromValue : undefined;
-          const converged =
-            ourExisting.length === ourDesired.length &&
-            ourDesired.every((rule) =>
-              ourExisting.some((existing) => {
-                const fromValue = existingFromValue(existing);
-                const desiredFromValue = rule.actionParameters.fromValue;
-                return (
-                  existing.description === rule.description &&
-                  existing.expression === rule.expression &&
-                  fromValue?.targetUrl?.expression === desiredFromValue.targetUrl.expression &&
-                  fromValue?.statusCode === desiredFromValue.statusCode &&
-                  fromValue?.preserveQueryString === desiredFromValue.preserveQueryString
-                );
-              }),
-            );
-          if (converged) continue;
-          // Pass foreign rules through untouched (minus the read-only
-          // fields the PUT schema doesn't accept) and replace our own set.
-          const foreign = existingRules
-            .filter((rule) => !isOurs(rule))
-            .map((rule) => {
-              const {
-                lastUpdated: _lastUpdated,
-                version: _version,
-                ...rest
-              } = rule as Record<string, unknown> & { lastUpdated?: string; version?: string };
-              return rest;
-            });
-          yield* rulesets.putPhasForZone({
+          // keeps each rule's description and match expression. Fields are
+          // compared one by one because the read fills unset fields with
+          // `null`.
+          yield* syncOwnedPhaseRules({
             zoneId,
-            rulesetPhase: "http_request_dynamic_redirect",
-            rules: [...foreign, ...ourDesired] as PutZoneRedirectRules,
+            phase: "http_request_dynamic_redirect",
+            prefix,
+            desired: ourDesired,
+            matches: (existing, rule) => {
+              const fromValue =
+                existing.action === "redirect"
+                  ? (
+                      existing as {
+                        actionParameters?: {
+                          fromValue?: {
+                            statusCode?: number | null;
+                            preserveQueryString?: boolean | null;
+                            targetUrl?: { expression?: string | null } | null;
+                          } | null;
+                        } | null;
+                      }
+                    ).actionParameters?.fromValue
+                  : undefined;
+              const want = rule.actionParameters.fromValue;
+              return (
+                fromValue?.targetUrl?.expression === want.targetUrl.expression &&
+                fromValue?.statusCode === want.statusCode &&
+                fromValue?.preserveQueryString === want.preserveQueryString
+              );
+            },
           });
         }
       });
@@ -1755,70 +1849,33 @@ export const LiveWorkerProvider = () =>
             params.desired !== undefined && hosts !== undefined
               ? buildAffinityZoneRules(params.scriptName, params.desired.affinity, hosts)
               : [];
-          const entrypoint = yield* rulesets
-            .getPhasForZone({ zoneId, rulesetPhase: "http_request_late_transform" })
-            // Only a missing entrypoint means no rules yet. Any other failure must
-            // stop here: the PUT below replaces the whole phase, so reading it as
-            // empty would delete every other rule in the zone.
-            .pipe(Effect.catchTag("RulesetNotFound", () => Effect.undefined));
-          const existingRules = entrypoint?.rules ?? [];
-          const isOurs = (rule: { description?: string | null }) =>
-            (rule.description ?? "").startsWith(prefix);
-          // The header-value expression of an existing rewrite rule, for
-          // convergence comparison. `headers` is an untyped wire record:
-          // `{ "<Header-Name>": { operation, expression | value } }`.
-          const existingValue = (rule: (typeof existingRules)[number]) => {
-            const headers =
-              "actionParameters" in rule
-                ? (
-                    rule.actionParameters as
-                      | { headers?: Record<string, unknown> | null }
-                      | null
-                      | undefined
-                  )?.headers
-                : undefined;
-            const header = headers?.[AFFINITY_HEADER] as { expression?: unknown } | undefined;
-            return typeof header?.expression === "string" ? header.expression : undefined;
-          };
-          const ourExisting = existingRules.filter(isOurs);
-          const converged =
-            ourExisting.length === ourDesired.length &&
-            ourDesired.every((rule) =>
-              ourExisting.some(
-                (existing) =>
-                  existing.description === rule.description &&
-                  existing.expression === rule.expression &&
-                  existingValue(existing) === rule.value,
-              ),
-            );
-          if (converged) continue;
-          // Pass foreign rules through untouched (minus the read-only
-          // fields the PUT schema doesn't accept) and replace our own set.
-          const foreign = existingRules
-            .filter((rule) => !isOurs(rule))
-            .map((rule) => {
-              const {
-                lastUpdated: _lastUpdated,
-                version: _version,
-                ...rest
-              } = rule as Record<string, unknown> & { lastUpdated?: string; version?: string };
-              return rest;
-            });
-          yield* rulesets.putPhasForZone({
+          yield* syncOwnedPhaseRules({
             zoneId,
-            rulesetPhase: "http_request_late_transform",
-            rules: [
-              ...foreign,
-              ...ourDesired.map((rule) => ({
-                action: "rewrite" as const,
-                description: rule.description,
-                enabled: true,
-                expression: rule.expression,
-                actionParameters: {
-                  headers: { [AFFINITY_HEADER]: { operation: "set", expression: rule.value } },
-                },
-              })),
-            ] as PutZoneRedirectRules,
+            phase: "http_request_late_transform",
+            prefix,
+            desired: ourDesired.map((rule) => ({
+              action: "rewrite" as const,
+              description: rule.description,
+              enabled: true,
+              expression: rule.expression,
+              actionParameters: {
+                headers: { [AFFINITY_HEADER]: { operation: "set", expression: rule.value } },
+              },
+            })),
+            // The header-value expression of an existing rewrite rule.
+            // `headers` is an untyped wire record:
+            // `{ "<Header-Name>": { operation, expression | value } }`.
+            matches: (existing, rule) => {
+              const headers = (
+                existing as {
+                  actionParameters?: { headers?: Record<string, unknown> | null } | null;
+                }
+              ).actionParameters?.headers;
+              const header = headers?.[AFFINITY_HEADER] as { expression?: unknown } | undefined;
+              return (
+                header?.expression === rule.actionParameters.headers[AFFINITY_HEADER].expression
+              );
+            },
           });
         }
         return [...(params.desired?.hostsByZone.keys() ?? [])].sort();
@@ -3019,7 +3076,29 @@ export const LiveWorkerProvider = () =>
             }),
           );
 
-        const previewResource =
+        // Cloudflare keeps observability per Preview, independent of the
+        // parent, and a new Preview starts with it off. It must be on the
+        // Preview before the deployment is created: a deployment created
+        // first is not recorded, even after a later PATCH. An omitted
+        // section is turned off explicitly, so removing traces or logs from
+        // the props turns them off on an existing Preview.
+        const resolvedObservability = yield* resolveObservability(news, bindings);
+        // The Preview API takes no `null` sampling rate; omit it instead.
+        const sampled = <T extends { headSamplingRate?: number | null }>(settings: T) => ({
+          ...settings,
+          headSamplingRate: settings.headSamplingRate ?? undefined,
+        });
+        const observability = {
+          ...sampled(resolvedObservability),
+          logs: resolvedObservability.logs
+            ? sampled(resolvedObservability.logs)
+            : { enabled: false },
+          traces: resolvedObservability.traces
+            ? sampled(resolvedObservability.traces)
+            : { enabled: false },
+        };
+
+        const createdPreview =
           existingPreview ??
           (yield* workers
             .createPreview({
@@ -3027,6 +3106,7 @@ export const LiveWorkerProvider = () =>
               workerId: parentName,
               name: previewName,
               ignoreBaseConfig: true,
+              observability,
             })
             .pipe(
               Effect.catchTag("PreviewAlreadyExists", () =>
@@ -3048,6 +3128,17 @@ export const LiveWorkerProvider = () =>
                 ),
               ),
             ));
+
+        // Sync against the observed settings: an existing (or raced)
+        // Preview may carry different or no observability.
+        const previewResource = observabilityCovered(observability, createdPreview.observability)
+          ? createdPreview
+          : yield* workers.updatePreview({
+              accountId,
+              workerId: parentName,
+              previewId: createdPreview.id,
+              observability,
+            });
 
         const accountSubdomain = yield* getAccountSubdomain(accountId);
         const parentAttrs =
@@ -3281,10 +3372,10 @@ export const LiveWorkerProvider = () =>
           assets: prebuiltAssets?.hash ?? preparedHash.assets,
           metadata: metadataHash,
         } satisfies Worker["Attributes"]["hash"];
-        // `transferredFrom` is alchemy-only transfer metadata on
-        // durable_object_namespace bindings — it drives the
-        // `transferred_classes` migration below and must be stripped from the
-        // wire-shape binding before upload.
+        // `transferredFrom` and `renamedFrom` are alchemy-only migration
+        // metadata on durable_object_namespace bindings — they drive the
+        // `transferred_classes` and `renamed_classes` migrations below and
+        // must be stripped from the wire-shape binding before upload.
         const metadataBindings = bindings.flatMap((b) =>
           withoutDevOnlyBindings(b.data.bindings ?? []).map((item): WireWorkerBinding => {
             // Lower the `Worker.URL` sentinel into the resolved URL —
@@ -3305,9 +3396,18 @@ export const LiveWorkerProvider = () =>
             }
             if (
               item.type === "durable_object_namespace" &&
-              (item.transferredFrom !== undefined || item.storage !== undefined)
+              (item.transferredFrom !== undefined ||
+                item.renamedFrom !== undefined ||
+                item.storage !== undefined ||
+                "hostNamespace" in item)
             ) {
-              const { transferredFrom: _, storage: __, ...rest } = item;
+              const {
+                transferredFrom: _,
+                renamedFrom: ____,
+                storage: __,
+                hostNamespace: ___,
+                ...rest
+              } = item;
               return rest;
             }
             // `queueId` (mode discrimination) and `shim` (dev-mode remote
@@ -3412,36 +3512,52 @@ export const LiveWorkerProvider = () =>
         const oldDoClassNameByLogicalId = getDurableObjectTagMap(oldTags);
         const currentDoBindings = getDurableObjectBindings(bindings, name);
 
-        // Domain models named their classes differently in earlier Domain
-        // versions. Map each old class to the logical id of its new name, so
-        // the rename below carries its data over instead of deleting it.
-        const domainClasses = bindings.flatMap((b) => b.data.domainClasses ?? []);
-        const deployedDomainVersion = DomainVersion.deployedVersion(oldTags);
-        yield* DomainVersion.refuseDowngrade({ scriptName: name, deployed: deployedDomainVersion });
-        if (domainClasses.length > 0) {
-          const renamed = yield* DomainVersion.migrate({
-            scriptName: name,
-            deployed: deployedDomainVersion,
-            classes: domainClasses,
-            deployedClasses: new Set([
-              ...Object.values(oldDoClassNameByLogicalId),
-              ...oldBindings.flatMap((old) =>
-                old.type === "durable_object_namespace" &&
-                "className" in old &&
-                old.className &&
-                (!("scriptName" in old) || old.scriptName === undefined || old.scriptName === name)
-                  ? [old.className]
-                  : [],
-              ),
-            ]),
-          });
-          for (const { from, to } of renamed) {
-            for (const [logicalId, className] of Object.entries(oldDoClassNameByLogicalId)) {
-              if (className === from) delete oldDoClassNameByLogicalId[logicalId];
-            }
-            // A Domain class's logical id is its class name.
-            oldDoClassNameByLogicalId[to] = from;
+        // `renamedFrom`: a class that takes over a class this script still
+        // hosts under its old name. Map the old class to the new binding's
+        // logical id, so the rename below carries its objects over instead of
+        // deleting them. Inert when the script doesn't host the old class, or
+        // already hosts the new one.
+        const hostedBefore = new Set([
+          ...Object.values(oldDoClassNameByLogicalId),
+          ...oldBindings.flatMap((old) =>
+            old.type === "durable_object_namespace" &&
+            "className" in old &&
+            old.className &&
+            (!("scriptName" in old) || old.scriptName === undefined || old.scriptName === name)
+              ? [old.className]
+              : [],
+          ),
+        ]);
+        const hostedNow = new Set(currentDoBindings.map((binding) => binding.className));
+        const renamesFrom = new Map<string, Array<{ logicalId: string; className: string }>>();
+        for (const binding of currentDoBindings) {
+          const from = binding.renamedFrom;
+          if (
+            from === undefined ||
+            from === binding.className ||
+            !hostedBefore.has(from) ||
+            hostedBefore.has(binding.className) ||
+            hostedNow.has(from)
+          )
+            continue;
+          renamesFrom.set(from, [
+            ...(renamesFrom.get(from) ?? []),
+            { logicalId: binding.logicalId, className: binding.className },
+          ]);
+        }
+        for (const [from, claims] of renamesFrom) {
+          const classNames = [...new Set(claims.map((claim) => claim.className))];
+          if (classNames.length > 1) {
+            return yield* new DurableObjectRenameConflict({
+              scriptName: name,
+              renamedFrom: from,
+              classNames,
+            });
           }
+          for (const [logicalId, className] of Object.entries(oldDoClassNameByLogicalId)) {
+            if (className === from) delete oldDoClassNameByLogicalId[logicalId];
+          }
+          for (const { logicalId } of claims) oldDoClassNameByLogicalId[logicalId] = from;
         }
         const currentDoClassNameByLogicalId = Object.fromEntries(
           currentDoBindings.map((binding) => [binding.logicalId, binding.className]),
@@ -3760,11 +3876,7 @@ export const LiveWorkerProvider = () =>
         // at 7+ bindings (#811).
         const alchemyDoTags = encodeDurableObjectTags(currentDoBindings);
 
-        // The Domain version goes up with every upload that can change the
-        // classes, in the same request, so the tag and the classes never disagree.
-        const domainTags =
-          domainClasses.length > 0 ? [DomainVersion.versionTag(DomainVersion.DOMAIN_VERSION)] : [];
-        const alchemyTags = [...createAlchemyWorkerTags(id), ...alchemyDoTags, ...domainTags];
+        const alchemyTags = [...createAlchemyWorkerTags(id), ...alchemyDoTags];
         const metadataTags = Array.from(new Set([...alchemyTags, ...(news.tags ?? [])]));
         yield* validateWorkerTags(name, metadataTags, alchemyTags.length);
 
@@ -3798,7 +3910,7 @@ export const LiveWorkerProvider = () =>
         const compatibility = getCompatibility(news);
         const tailConsumers = resolveTailConsumers(news.tailConsumers);
         const streamingTailConsumers = resolveTailConsumers(news.streamingTailConsumers);
-        const observability = resolveObservability(news, bindings);
+        const observability = yield* resolveObservability(news, bindings);
         const metadata: workers.PutScriptRequest["metadata"] = {
           annotations: news.version
             ? { workersMessage: news.version.message, workersTag: news.version.tag }
@@ -3952,7 +4064,6 @@ export const LiveWorkerProvider = () =>
                 ...encodeDurableObjectTags(
                   currentDoBindings.filter((binding) => !transferringIn.has(binding.className)),
                 ),
-                ...domainTags,
                 ...(news.tags ?? []),
               ]),
             );
@@ -4730,7 +4841,12 @@ export const LiveWorkerProvider = () =>
             (yield* hasChanged(
               id,
               fqn,
-              news,
+              // `stripEffects` keeps plain data only, so it drops the hook
+              // functions and RegExp filters of `build` plugins. Hashing
+              // builds the bundle, which needs them as written.
+              (desired as WorkerProps).build === undefined
+                ? news
+                : { ...news, build: (desired as WorkerProps).build },
               output,
               Array.isArray(newBindings)
                 ? (newBindings as ResourceBinding<Worker["Binding"]>[])
@@ -4767,6 +4883,12 @@ export const LiveWorkerProvider = () =>
               const { env: _env, codeUpdateStrategy: _codeUpdateStrategy, ...rest } = props;
               return {
                 ...rest,
+                // A namespace is identified by its name (compared above);
+                // its other attributes, like `scriptCount`, change as user
+                // Workers are uploaded into it.
+                ...(props.namespace !== undefined
+                  ? { namespace: resolveNamespaceName(props.namespace) }
+                  : undefined),
                 ...(props.main !== undefined ? { main: "<source>" } : undefined),
                 ...(props.assets
                   ? {
@@ -4993,7 +5115,7 @@ export const LiveWorkerProvider = () =>
                         ]),
                       )
                     : undefined,
-                observability: resolveObservability(news, bindings),
+                observability: yield* resolveObservability(news, bindings),
                 tags,
               },
               files: [
@@ -5309,6 +5431,43 @@ export const LiveWorkerProvider = () =>
                 WorkerHasNoVersions: () => Effect.undefined,
                 DispatchNamespaceScriptNotFound: () => Effect.undefined,
                 DispatchNamespaceNotFound: () => Effect.undefined,
+              }),
+            ),
+        ),
+        lookup: Effect.fn(
+          function* ({ name }) {
+            const { accountId } = yield* yield* CloudflareEnvironment;
+            const [subdomain, settings] = yield* Effect.all(
+              [
+                workers.getScriptSubdomain({ accountId, scriptName: name }),
+                workers.getScriptScriptAndVersionSetting({ accountId, scriptName: name }),
+              ],
+              { concurrency: 1 },
+            );
+            const urls = subdomain.enabled
+              ? [`https://${name}.${yield* getAccountSubdomain(accountId)}.workers.dev`]
+              : [];
+            return {
+              accountId,
+              workerId: yield* findWorkerId(accountId, name),
+              workerName: name,
+              namespace: undefined,
+              logpush: settings.logpush ?? undefined,
+              url: urls[0],
+              urls,
+              domain: undefined,
+              tags: settings.tags ?? undefined,
+              durableObjectNamespaces: getDurableObjects(settings.bindings),
+              routes: [],
+              crons: [],
+              tailConsumers: settings.tailConsumers?.map((c) => ({ service: c.service })),
+            } satisfies Worker["Attributes"] as Worker["Attributes"] | undefined;
+          },
+          (effect) =>
+            effect.pipe(
+              Effect.catchTags({
+                WorkerNotFound: () => Effect.undefined,
+                WorkerHasNoVersions: () => Effect.undefined,
               }),
             ),
         ),
@@ -5990,6 +6149,7 @@ function getDurableObjectBindings(bindings: ReadonlyArray<ResourceBinding>, work
             Array.isArray(item.transferredFrom) && item.transferredFrom.length === 0
               ? undefined
               : item.transferredFrom,
+          renamedFrom: item.renamedFrom,
           storage: item.storage,
         },
       ];

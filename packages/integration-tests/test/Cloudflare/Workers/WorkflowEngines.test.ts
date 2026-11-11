@@ -25,12 +25,20 @@ const fetchText = (url: string, method: "GET" | "POST" = "GET") =>
   });
 
 describe.concurrent.each([
-  { engine: "durable-object", dev: true, stage: "durable-workflow-local" },
-  { engine: "durable-object", dev: false, stage: "durable-workflow-live" },
-  { engine: "durable-object-eu", dev: true, stage: "durable-workflow-eu-local" },
-  { engine: "durable-object-eu", dev: false, stage: "durable-workflow-eu-live" },
-  { engine: "native", dev: true, stage: "native-engine-local" },
-  { engine: "native", dev: false, stage: "native-engine-live" },
+  { engine: "durable-object", dev: true, stage: `${Test.defaultStage()}-durable-workflow-local` },
+  { engine: "durable-object", dev: false, stage: `${Test.defaultStage()}-durable-workflow-live` },
+  {
+    engine: "durable-object-eu",
+    dev: true,
+    stage: `${Test.defaultStage()}-durable-workflow-eu-local`,
+  },
+  {
+    engine: "durable-object-eu",
+    dev: false,
+    stage: `${Test.defaultStage()}-durable-workflow-eu-live`,
+  },
+  { engine: "native", dev: true, stage: `${Test.defaultStage()}-native-engine-local` },
+  { engine: "native", dev: false, stage: `${Test.defaultStage()}-native-engine-live` },
 ] as const)("Workflows on the $engine engine (dev: $dev)", ({ engine, dev, stage }) => {
   const state = dev ? inMemoryState() : Cloudflare.state();
   const Stack = makeStack(state, engine);
@@ -79,6 +87,7 @@ describe.concurrent.each([
     // 10 seconds, then the one-second sleep. Cloudflare Workflows retries a
     // step with its own policy.
     recoveryWithinMillis: engine === "native" ? undefined : 30_000,
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", dev ? "local" : "live"],
     timeout: 90_000,
     unsupported: engine === "native" ? { raceAll: "aren't supported on Cloudflare Workflows" } : {},
   });

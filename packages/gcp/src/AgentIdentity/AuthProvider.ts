@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -120,8 +121,33 @@ export type AuthProvider = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AuthProviderLookup
 >;
+
+/**
+ * Props for {@link AuthProvider.lookup}: find an auth provider this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface AuthProviderLookup {
+  /**
+   * Auth provider id (the `{auth_provider}` segment of
+   * `projects/{project}/l
+   * ocations/{location}/authProviders/{auth_provider}`). Must be 1-63
+   * characters, start with a lowercase letter, and use only `a-z` and `-`.
+   */
+  authProviderId: string;
+  /**
+   * Location of the auth provider.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Agent Identity auth provider — the credential configuration agents
@@ -168,6 +194,19 @@ export type AuthProvider = Resource<
  *   },
  *   description: "Maps API key for agents",
  *   labels: { env: "prod", role: "maps" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing auth provider
+ * `AuthProvider.lookup` references an auth provider Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * auth provider.
+ *
+ * **Example:** Reference an existing auth provider
+ * ```typescript
+ * const authProvider = GCP.AgentIdentity.AuthProvider.lookup({
+ *   authProviderId: "my-auth-provider",
  * });
  * ```
  *
@@ -239,6 +278,17 @@ export const AuthProviderProvider = () =>
         ),
       });
     }),
+
+    lookup: Effect.fn(function* ({ authProviderId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, authProviderId);
+      const existing = yield* getByName(name);
+      if (existing === undefined || existing.deleted === true) {
+        return undefined;
+      }
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

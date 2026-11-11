@@ -53,7 +53,7 @@ const OpenAccountLive = OpenAccount.toLayer(
 class Sales extends Domain.Model("Sales", { aggregates: [Account], sagas: [OpenAccount] }) {}
 class Support extends Domain.Model("Support", { aggregates: [Account], sagas: [OpenAccount] }) {}
 
-describe("Domain model isolation", () => {
+describe("Domain model isolation", { tags: ["unit", "local"] }, () => {
   it.live("two models with the same definitions on one platform keep separate data", () =>
     Effect.gen(function* () {
       const platform = yield* Layer.build(InMemory);
@@ -63,12 +63,12 @@ describe("Domain model isolation", () => {
       const receipt = yield* Context.get(billing, Account).send("a-1", new Open({ owner: "sam" }));
       const atLeast = { stream: receipt.stream, version: receipt.version };
 
-      expect(yield* Context.get(billing, Account).state("a-1")).toEqual({ owner: "sam" });
-      expect(yield* Context.get(billing, Owners).query(Account.ref("a-1"), { atLeast })).toEqual(
+      expect(yield* Context.get(billing, Account).get("a-1")).toEqual({ owner: "sam" });
+      expect(yield* Context.get(billing, Owners).get(Account.ref("a-1"), { atLeast })).toEqual(
         Option.some({ owner: "sam" }),
       );
-      expect(yield* Context.get(audit, Account).state("a-1")).toEqual({ owner: null });
-      expect(yield* Context.get(audit, Owners).query(Account.ref("a-1"))).toEqual(Option.none());
+      expect(yield* Context.get(audit, Account).get("a-1")).toEqual({ owner: null });
+      expect(yield* Context.get(audit, Owners).get(Account.ref("a-1"))).toEqual(Option.none());
     }).pipe(Effect.scoped),
   );
 
@@ -86,8 +86,8 @@ describe("Domain model isolation", () => {
       yield* salesRun.result;
       yield* supportRun.result;
 
-      expect(yield* Context.get(sales, Account).state("s-1")).toEqual({ owner: "sam" });
-      expect(yield* Context.get(support, Account).state("s-1")).toEqual({ owner: "alex" });
+      expect(yield* Context.get(sales, Account).get("s-1")).toEqual({ owner: "sam" });
+      expect(yield* Context.get(support, Account).get("s-1")).toEqual({ owner: "alex" });
     }).pipe(Effect.scoped),
   );
 

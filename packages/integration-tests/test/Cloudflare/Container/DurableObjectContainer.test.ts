@@ -392,7 +392,9 @@ for (const dev of [true, false]) {
             expectSettingsConflict(conflicting);
             yield* stack.destroy();
           }),
-        { timeout: 120_000, retry: 0 },
+        // The deploy fails fast but returns only once its sibling Containers'
+        // images finish building and pushing, which can take minutes.
+        { timeout: 180_000, retry: 0 },
       );
 
       if (!dev) {

@@ -1,0 +1,108 @@
+---
+title: What is PlanetScale?
+description: The concepts behind PlanetScale — organizations, databases, the Postgres and Vitess engines, cluster sizes, branches, credentials, connections, migrations and backups — and how @alchemy.run/planetscale models each of them.
+---
+
+import Tree from "../../../components/diagrams/Tree.astro";
+
+
+PlanetScale runs databases for you: Postgres, or MySQL on Vitess. It runs each one as a **cluster** with replicas across zones, and lets you **branch** a database the way you branch code, so every pull request can have its own copy of the schema to test against.
+
+Take one small app: a Postgres database with a production branch, a branch per preview stage, and a role for the app to connect with. An organization holds the database. The database has a production branch and a branch per preview, and each branch has its own roles, which hand connection details to the app.
+
+<Tree
+  nodes={[
+    { id: "org", label: "acme", type: "organization", icon: "brand:planetscale" },
+    { id: "db", label: "app-db", type: "database · Postgres · us-east", parent: "org", dashed: true, icon: "brand:postgresql" },
+    { id: "main", label: "main", type: "branch · production", parent: "db", dashed: true, icon: "git-branch", areas: ["primary replicas"], colGap: 3.5 },
+    { id: "primary", label: "primary", type: "read · write", parent: "main", tone: "accent", icon: "server", specs: [["role", "prod stage"]] },
+    { id: "replicas", label: "replicas", type: "read-only", parent: "main", icon: "copy" },
+    { id: "pr", label: "pr-42", type: "branch · development", parent: "db", dashed: true, icon: "git-branch" },
+    { id: "dev", label: "primary", type: "development size", parent: "pr", icon: "server", specs: [["role", "pr-42 stage"]] },
+  ]}
+  links={[{ from: "primary", to: "replicas", label: "copies" }]}
+  caption="An organization holds databases, each in one region. A database holds branches, and each branch is its own cluster: production with replicas, development as one small node. Each stage connects through a role on its branch."
+/>
+
+## Organizations
+
+An **organization** holds your databases, your members and your bill. A **service token** belongs to an organization and carries the permissions you give it. Alchemy deploys into the organization in your profile: the one your service token belongs to, or the one you pick when you sign in with OAuth.
+
+Connect it once, in [Setup](/planetscale/setup).
+
+## Databases and engines
+
+A **database** is one cluster, running one of two engines, and Alchemy has a family of resources for each. **Postgres** is managed PostgreSQL. **MySQL** runs on **Vitess**, the system that shards MySQL across many servers, so a database can grow past what one machine holds.
+
+```typescript title="src/database.ts"
+export const Database = Planetscale.PostgresDatabase("app-db", {
+  region: { slug: "us-east" },
+  clusterSize: "PS_10",
+});
+```
+
+A database lives in one **region**. Its **cluster size** sets the CPU and memory of each node. Sizes on network-attached storage are named like `PS_10`. **Metal** sizes use drives attached directly to the machine, for lower latency.
+
+See [Postgres](/planetscale/data/postgres) and [MySQL](/planetscale/data/mysql).
+
+## Branches
+
+A **branch** is a copy of a database. A **production** branch is highly available, with replicas, and serves your app. A **development** branch is a small, cheap copy of the schema, made from another branch in seconds, for trying a change.
+
+```typescript title="alchemy.run.ts"
+const branch = yield* Planetscale.PostgresBranch("preview", { database, isProduction: false });
+```
+
+Give each preview stage its own branch, and each pull request tests against its own schema. Destroying the stage deletes the branch.
+
+See [Preview branches per PR](/planetscale/guides/preview-branches).
+
+## Credentials
+
+An app connects with credentials that belong to one branch. On Postgres, a **role** is a user and password that inherits the permissions of Postgres's own roles, like `pg_read_all_data` for read-only access. On MySQL, a **password** carries a role of its own, like `readwriter`.
+
+```typescript title="alchemy.run.ts"
+const role = yield* Planetscale.PostgresRole("app", { database, branch, inheritedRoles: ["postgres"] });
+```
+
+Give each app the least it needs. A reporting job gets a read-only role, and the API a read-write one.
+
+See [Credentials](/planetscale/data/credentials).
+
+## Connections
+
+A role's `origin` holds everything a driver needs: host, port, database, user and password. Postgres offers two kinds of connection: **direct**, to the database itself, and **pooled**, through PgBouncer, which shares a small set of database connections among many clients.
+
+Code in a Cloudflare Worker connects through **Hyperdrive**, which keeps a pool of connections near the database:
+
+```typescript title="alchemy.run.ts"
+const hyperdrive = yield* Cloudflare.Hyperdrive.Connection("db", { origin: role.origin });
+```
+
+See [Hyperdrive](/cloudflare/data/hyperdrive).
+
+## Migrations
+
+A database's schema changes through **migrations**. Point a database or branch at a folder of `.sql` files, and each deploy applies the new ones in order and records them, so a fresh preview branch gets the whole schema and production gets only what's new.
+
+See [Migrations](/planetscale/data/migrations).
+
+## Backups
+
+PlanetScale backs up production branches on a schedule you set in its dashboard. A **backup** can be **restored** into a new branch, with its schema and data.
+
+```typescript title="alchemy.run.ts"
+const restored = yield* Planetscale.PostgresBranch("restored", { database, backupId: "backup-123", clusterSize: "PS_10" });
+```
+
+Or seed a new branch from its parent's latest backup with `seedData`, for a preview with recent production data.
+
+See [Backups & restores](/planetscale/data/backups).
+
+## How @alchemy.run/planetscale models these concepts
+
+Each of these concepts is something your Stack declares.
+
+Your token picks the organization, and `Planetscale.providers()` deploys into it, next to the cloud where your app runs. Databases, branches and roles are declarations, and a branch can start from a backup. Migrations run on deploy. A role's connection details flow, as typed outputs, into whatever connects: Hyperdrive, a Worker, a Lambda Function.
+
+Next, read the concepts in depth, starting with [Postgres](/planetscale/data/postgres), or set up [Preview branches per PR](/planetscale/guides/preview-branches).

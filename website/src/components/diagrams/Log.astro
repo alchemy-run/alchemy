@@ -1,0 +1,178 @@
+---
+/**
+ * `<Log />` — an append-only log and who has read how far. One lane per shard
+ * or partition, records in order left to right, new ones appended on the right,
+ * and a cursor for each reader pointing at the next record it will read. Use it
+ * for streams: Kinesis shards, a K2 stream with subscriptions, a DynamoDB
+ * stream.
+ *
+ *   <Log
+ *     lanes={[{ id: "s1", label: "shard 1", records: ["order#1", "order#1", "order#3"] }]}
+ *     cursors={[{ lane: "s1", at: 2, label: "Audit" }]}
+ *     writer="PutRecord"
+ *   />
+ *
+ * `records` are the labels of the records in the lane, oldest first. A cursor
+ * `at` an index sits at that record; `at` equal to the lane's length means
+ * caught up. `expired` greys out the oldest records, past retention.
+ */
+import "./diagram.css";
+
+interface Lane {
+  id: string;
+  label: string;
+  type?: string;
+  records: string[];
+  /** Offset of the first record, shown under it. */
+  first?: number;
+}
+interface Props {
+  lanes: Lane[];
+  cursors?: { lane: string; at: number; label: string; below?: boolean }[];
+  /** Records at the start of each lane that have expired. */
+  expired?: number;
+  /** Label on the arrow appending to every lane. */
+  writer?: string;
+  caption?: string;
+}
+
+const { lanes, cursors = [], expired = 0, writer, caption } = Astro.props as Props;
+// Marker ids are per figure: a page can hold several, and a hidden layout's markers don't render.
+const uid = Math.random().toString(36).slice(2, 8);
+
+const LABEL_W = Math.max(...lanes.map((l) => Math.max(l.label.length * 7.4, (l.type ?? "").length * 6.4))) + 20;
+const cellW = Math.max(56, ...lanes.flatMap((l) => l.records.map((r) => r.length * 6.4 + 14)));
+const CELL_H = 30;
+const most = Math.max(...lanes.map((l) => l.records.length));
+const hasAbove = (id: string) => cursors.some((c) => c.lane === id && !c.below);
+const hasBelow = (id: string) => cursors.some((c) => c.lane === id && c.below);
+let y = 8;
+const rows = lanes.map((l) => {
+  const top = y + (hasAbove(l.id) ? 30 : 4);
+  y = top + CELL_H + (hasBelow(l.id) ? 52 : 18) + 8;
+  return { l, top };
+});
+const PLOT_X = LABEL_W;
+const WRITER_W = writer ? writer.length * 6.6 + 40 : 0;
+const W = PLOT_X + (most + 1) * cellW + WRITER_W + 8;
+const H = y;
+const cx = (i: number) => PLOT_X + i * cellW;
+
+// Phones get the log turned on its side: one column per lane, oldest record
+// on top, new records appended at the bottom, readers pointing in from the right.
+const N_NUM = 24;
+const N_CELL = Math.min(cellW, 120);
+const N_CUR = Math.max(0, ...cursors.map((c) => c.label.length * 6.6 + 26));
+const N_COL = N_NUM + N_CELL + N_CUR + 12;
+const N_HEAD = lanes.some((l) => l.type) ? 34 : 22;
+const N_ROW = CELL_H + 6;
+const N_W = lanes.length * N_COL;
+const N_H = N_HEAD + (most + 1) * N_ROW + (writer ? 30 : 6);
+const ny = (i: number) => N_HEAD + i * N_ROW;
+---
+
+<figure class="alc-fig not-content" data-nosnippet>
+  <div class="alc-fig__panel">
+  <svg class="alc-fig__svg alc-fig__svg--wide" viewBox={`0 0 ${W} ${H}`} style={`max-width: ${Math.round(W * 1.15)}px`} role="img" aria-label={caption ?? "Log"}>
+    <defs>
+      <marker id={`alc-log-arrow-${uid}`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--alc-accent)" />
+      </marker>
+    </defs>
+    {
+      rows.map(({ l, top }) => (
+        <g>
+          <text x="4" y={top + CELL_H / 2 + (l.type ? -1 : 4)} class="alc-fig__label">{l.label}</text>
+          {l.type && <text x="4" y={top + CELL_H / 2 + 13} class="alc-fig__type">{l.type}</text>}
+          {l.records.map((r, i) => (
+            <g>
+              <rect
+                x={cx(i) + 2}
+                y={top}
+                width={cellW - 4}
+                height={CELL_H}
+                rx="5"
+                class:list={["alc-fig__box", i < expired && "alc-fig__box--muted"]}
+              />
+              <text x={cx(i) + cellW / 2} y={top + 19} text-anchor="middle" class="alc-fig__small">{r}</text>
+              <text x={cx(i) + cellW / 2} y={top + CELL_H + 13} text-anchor="middle" class="alc-fig__type" opacity="0.7">
+                {(l.first ?? 0) + i}
+              </text>
+            </g>
+          ))}
+          <rect x={cx(l.records.length) + 2} y={top} width={cellW - 4} height={CELL_H} rx="5" class="alc-fig__box alc-fig__box--muted" />
+          {writer && (
+            <line
+              x1={cx(most + 1) + WRITER_W - 6}
+              y1={top + CELL_H / 2}
+              x2={cx(l.records.length + 1) + 2}
+              y2={top + CELL_H / 2}
+              class="alc-fig__line"
+              marker-end={`url(#alc-log-arrow-${uid})`}
+            />
+          )}
+          {cursors
+            .filter((c) => c.lane === l.id)
+            .map((c) => {
+              const px = cx(c.at) + cellW / 2;
+              const below = !!c.below;
+              const tip = below ? top + CELL_H + 18 : top - 4;
+              const tail = below ? tip + 12 : tip - 12;
+              return (
+                <g>
+                  <line x1={px} y1={tail} x2={px} y2={tip} class="alc-fig__line" marker-end={`url(#alc-log-arrow-${uid})`} />
+                  <text x={px} y={below ? tail + 12 : tail - 4} text-anchor="middle" class="alc-fig__strong">{c.label}</text>
+                </g>
+              );
+            })}
+        </g>
+      ))
+    }
+    {writer && <text x={W - 8} y={rows[0]!.top - 8} text-anchor="end" class="alc-fig__strong">{writer}</text>}
+  </svg>
+  <svg class="alc-fig__svg alc-fig__svg--narrow" viewBox={`0 0 ${N_W} ${N_H}`} style={`max-width: ${Math.round(N_W * 1.15)}px`} role="img" aria-label={caption ?? "Log"}>
+    {
+      lanes.map((l, li) => {
+        const x0 = li * N_COL;
+        const cx0 = x0 + N_NUM;
+        return (
+          <g>
+            <text x={cx0} y={12} class="alc-fig__label">{l.label}</text>
+            {l.type && <text x={cx0} y={26} class="alc-fig__type">{l.type}</text>}
+            {l.records.map((r, i) => (
+              <g>
+                <text x={cx0 - 6} y={ny(i) + 19} text-anchor="end" class="alc-fig__type" opacity="0.7">{(l.first ?? 0) + i}</text>
+                <rect x={cx0} y={ny(i)} width={N_CELL} height={CELL_H} rx="5" class:list={["alc-fig__box", i < expired && "alc-fig__box--muted"]} />
+                <text x={cx0 + N_CELL / 2} y={ny(i) + 19} text-anchor="middle" class="alc-fig__small">{r}</text>
+              </g>
+            ))}
+            <rect x={cx0} y={ny(l.records.length)} width={N_CELL} height={CELL_H} rx="5" class="alc-fig__box alc-fig__box--muted" />
+            {writer && (
+              <line x1={cx0 + N_CELL / 2} y1={N_H - 16} x2={cx0 + N_CELL / 2} y2={ny(l.records.length) + CELL_H + 2} class="alc-fig__line" marker-end={`url(#alc-log-arrow-n-${uid})`} />
+            )}
+            {writer && <text x={cx0 + N_CELL / 2 + 8} y={N_H - 6} class="alc-fig__strong">{writer}</text>}
+            {cursors
+              .filter((c) => c.lane === l.id)
+              .map((c) => {
+                const py = ny(c.at) + CELL_H / 2;
+                const tip = cx0 + N_CELL + 4;
+                return (
+                  <g>
+                    <line x1={tip + 16} y1={py} x2={tip} y2={py} class="alc-fig__line" marker-end={`url(#alc-log-arrow-n-${uid})`} />
+                    <text x={tip + 20} y={py + 4} class="alc-fig__strong">{c.label}</text>
+                  </g>
+                );
+              })}
+          </g>
+        );
+      })
+    }
+    <defs>
+      <marker id={`alc-log-arrow-n-${uid}`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--alc-accent)" />
+      </marker>
+    </defs>
+  </svg>
+  </div>
+  {caption && <figcaption class="alc-fig__caption">{caption}</figcaption>}
+</figure>

@@ -1,0 +1,50 @@
+---
+title: Operate services
+description: Read logs, stats and request history, scale, and roll back Modal Functions, Servers and Apps at runtime.
+---
+
+A running program can watch your Modal services and steer them: read a function's backlog and an App's logs, scale ahead of traffic, and roll a deploy back. Each is a binding, so the host gets only the access that one call needs.
+
+## Watch a function's backlog
+
+```typescript
+const embed = yield* Modal.ReadFunction(Embed);
+const { backlog, runningInputs } = yield* embed.stats();
+```
+
+`timeRangeStats`, `metrics`, `calls` and `callCount` cover history.
+
+## Scale ahead of traffic
+
+```typescript
+const generate = yield* Modal.ScaleFunction(Generate);
+yield* generate.update({ minContainers: 4, bufferContainers: 2 });
+```
+
+The override lasts until the next deploy.
+
+## Read a server's requests
+
+```typescript
+const api = yield* Modal.ReadServer(Api);
+const recent = yield* api.requests({ limit: 20 });
+const stats = yield* api.stats({ since: new Date(Date.now() - 600_000) });
+```
+
+## Read an App's logs
+
+```typescript
+const backend = yield* Modal.ReadApp(Backend);
+const errors = yield* backend.logs({ since: new Date(Date.now() - 3_600_000), stream: "stderr" });
+```
+
+Logs cover every function, server and sandbox in the App.
+
+## Roll a deploy back
+
+```typescript
+const backend = yield* Modal.WriteApp(Backend);
+yield* backend.rollback();
+```
+
+`rollover`, `promote` and `stop` are on the same client.

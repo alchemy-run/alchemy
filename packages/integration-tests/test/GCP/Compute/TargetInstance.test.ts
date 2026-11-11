@@ -6,6 +6,7 @@ import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -145,6 +146,14 @@ test.provider.skipIf(!!process.env.FAST)(
             zone,
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.TargetInstance.lookup({
+          targetInstanceName: created.targetInstanceName,
+          zone: created.zone,
+          instance: created.instance,
+        }),
+        created,
       );
 
       expect(created.targetInstanceName).toEqual(expect.any(String));

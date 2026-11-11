@@ -9,12 +9,11 @@ import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
+import { hetznerPrimaryIps } from "../limit.ts";
 
-const { test } = Test.make({ providers: Hetzner.providers() });
+const { test } = Test.make({ limit: hetznerPrimaryIps, providers: Hetzner.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
-
-const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "../../AWS/Website/fixtures/astro-app");
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
@@ -31,7 +30,7 @@ const waitUntilGone = (id: number) =>
     }),
   );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "Astro SSR: GET / and a dynamic API route",
   (stack) =>
     Effect.gen(function* () {

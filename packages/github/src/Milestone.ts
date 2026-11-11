@@ -117,8 +117,27 @@ export interface Milestone extends Resource<
     closedIssues: number;
   },
   never,
-  GitHub.Providers
+  GitHub.Providers,
+  MilestoneLookup
 > {}
+
+/**
+ * Props for {@link Milestone.lookup}: find a milestone this stack
+ * doesn't manage by its repository and number.
+ */
+export interface MilestoneLookup {
+  /** Repository owner (user or organization). */
+  owner: string;
+  /** Repository name. */
+  repository: string;
+  /** Milestone number. */
+  number: number;
+  /**
+   * GitHub Enterprise Server URL.
+   * @default `https://github.com`
+   */
+  baseUrl?: string;
+}
 
 /**
  * A GitHub milestone.
@@ -227,6 +246,16 @@ export interface Milestone extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing milestone
+ * `Milestone.lookup` references a milestone Alchemy doesn't manage (created on
+ * GitHub or by another stack). It is read during plan/deploy, never created,
+ * updated or deleted.
+ *
+ * **Example:** Reference an existing milestone
+ * ```typescript
+ * const v2 = GitHub.Milestone.lookup({ owner: "alchemy-run", repository: "alchemy", number: 3 });
+ * ```
+ *
  * @resource
  * @product Issue
  */
@@ -251,6 +280,20 @@ export const MilestoneProvider = () =>
       }
     }),
 
+    lookup: Effect.fn(
+      function* ({ owner, repository, number }) {
+        return yield* Issues.getMilestone({
+          owner,
+          repo: repository,
+          milestone_number: number,
+        }).pipe(
+          Effect.map(attrsOf),
+          Effect.catchTag("NotFound", () => Effect.undefined),
+        );
+      },
+      (effect, { baseUrl }) => effect.pipe(withBaseUrl(baseUrl)),
+    ),
+
     reconcile: Effect.fn(
       function* ({ news }) {
         const state = news.state ?? "open";
@@ -259,7 +302,10 @@ export const MilestoneProvider = () =>
         const dueOn =
           requestedDueOn === undefined
             ? null
-            : yield* Effect.try(() => new Date(requestedDueOn).toISOString().replace(".000Z", "Z"));
+            : yield* Effect.try(() =>
+                // oxlint-disable-next-line effecttsgo/global-date-in-effect -- `new Date` reads timezone-less date-times as local time; `DateTime.makeUnsafe` would read them as UTC
+                new Date(requestedDueOn).toISOString().replace(".000Z", "Z"),
+              );
 
         // Observe — probe for an existing milestone by title. GitHub's list
         // endpoint supports filtering by state, but we need to check both open
