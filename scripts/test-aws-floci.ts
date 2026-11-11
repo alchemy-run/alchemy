@@ -201,6 +201,7 @@ const flociFixedValues: Record<string, string> = {
   AWS_TEST_GRAFANA: "1",
   AWS_TEST_HEALTHLAKE: "1",
   AWS_TEST_IOTFLEETWISE: "1",
+  AWS_TEST_IOT_MI: "1",
   // Floci stores authorizer URIs without resolving the function.
   ALCHEMY_TEST_AUTHORIZER_URI:
     "arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-1:000000000000:function:alchemy-floci-standing-authorizer/invocations",
