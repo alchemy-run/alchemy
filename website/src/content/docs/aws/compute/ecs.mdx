@@ -218,10 +218,22 @@ yield* AWS.ECS.Service("MyService", {
 });
 ```
 
-A Task that bundles your own program takes `isolation: "isolated"` instead.
+An `AWS.ECS.Task`, built from an image or from your own program, takes `isolation: "isolated"` instead, which sets both:
+
+```typescript title="alchemy.run.ts"
+const job = yield* AWS.ECS.Task("MyJob", {
+  image: "python:3.12-slim",
+  command: ["python3", "-c", "print('hello from a sandbox')"],
+  cpu: 1024,
+  memory: 2048,
+  isolation: "isolated",
+});
+```
+
+To start one on demand with `AWS.ECS.RunTask` rather than keep a Service running, see [Run a task with ECS alone](/aws/compute/ecs-sandboxes#run-a-task-with-ecs-alone).
 
 Each running task reports `trustedExecutionSummary.isolationMode` as `ISOLATED_SANDBOX`. For `CONFIDENTIAL_SANDBOX`, where the instance can't read the task's memory either, add an `attestationPolicy` that names the containers allowed to run. See [Isolated or confidential](/aws/compute/nitro-sandboxes#isolated-or-confidential).
 
 Each task boots its own VM, so it starts slower than a shared one. An instance can hold many sandboxes: their vCPUs can add up to five times its own, and their memory must fit in its memory.
 
-To start a sandbox per user or session while your app runs, and drive it through a typed handle, see [ECS Sandboxes](/aws/compute/ecs-sandboxes).
+This is ECS as AWS provides it: a task in its own VM that you start, stop and describe. `AWS.ECS.CreateSandbox` is Alchemy's construct on top. It starts a sandbox per user or session while your app runs, and hands back a typed handle that runs commands, uses files and calls ports inside. See [ECS Sandboxes](/aws/compute/ecs-sandboxes).

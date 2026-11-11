@@ -141,6 +141,12 @@ export interface EcsSandboxes<Methods = {}> {
  * sandbox runs in its own Nitro Sandbox, a VM the Nitro hypervisor isolates
  * from the instance and from every other task.
  *
+ * ECS itself starts, stops and describes a task. This binding is Alchemy's
+ * construct on top: it adds what answers a handle inside the task. To run an
+ * isolated Task with ECS alone, bind `AWS.ECS.RunTask` or run it as an
+ * `AWS.ECS.Service` instead. A Task this binding does not target has nothing
+ * of Alchemy's in it.
+ *
  * The handle runs commands, streams processes, reads and writes files, opens
  * terminals and calls ports inside the sandbox. The Task is either an image
  * with nothing of Alchemy's in it, or an Effect program, whose methods the
@@ -190,6 +196,16 @@ export interface EcsSandboxes<Methods = {}> {
  * the handle whether that process runs or exits. The Task's `command`
  * replaces the `CMD`, as it does on any ECS task. Commands given as a string,
  * and terminals, need `/bin/sh` in the image.
+ *
+ * The binding adds three things to the Task's task definition: a volume, a
+ * container named `alchemy-sandbox-agent` that copies the agent into the
+ * volume and exits, and the agent as the entry point of your container. Every
+ * run of the Task has them, also one started by a Service or by
+ * `AWS.ECS.RunTask`. Such a run has no token, so the agent does not listen: it
+ * runs the image's `ENTRYPOINT` and `CMD` and exits with their exit code. A
+ * `command` override on that run replaces the `ENTRYPOINT` along with the
+ * `CMD`. To run one image both ways, declare a second Task that no
+ * `CreateSandbox` targets.
  *
  * **Example:** A sandbox from a public image
  * ```typescript

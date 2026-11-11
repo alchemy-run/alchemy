@@ -69,7 +69,7 @@ const task = yield* AWS.ECS.TaskDefinition("MyTask", {
 
 Running it as a Service is in [ECS: Isolate each task in its own VM](/aws/compute/ecs#isolate-each-task-in-its-own-vm).
 
-Your app can also start sandboxes while it runs, one per user or session, and run commands, use files and call ports in each through a handle. See [ECS Sandboxes](/aws/compute/ecs-sandboxes).
+ECS isolates the task and stops there. `AWS.ECS.CreateSandbox` is Alchemy's construct on top: your app starts sandboxes while it runs, one per user or session, and runs commands, uses files and calls ports in each through a handle. See [ECS Sandboxes](/aws/compute/ecs-sandboxes).
 
 ## On EKS
 

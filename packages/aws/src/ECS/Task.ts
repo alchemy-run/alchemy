@@ -530,6 +530,22 @@ export { createContainerRuntimeContext } from "alchemy/Runtime/Process";
  * provider with `nitroEnclavesEnabled`, and does not run on Fargate. A
  * sandbox has 20 GiB of storage.
  *
+ * Isolation alone adds nothing to the task: its task definition holds the
+ * container you declare. Run it as an `AWS.ECS.Service` or start it with
+ * `AWS.ECS.RunTask`. `AWS.ECS.CreateSandbox` is the layer on top that drives
+ * a task through a handle.
+ *
+ * **Example:** An image that runs in a Nitro Sandbox
+ * ```typescript
+ * const job = yield* AWS.ECS.Task("MyJob", {
+ *   image: "python:3.12-slim",
+ *   command: ["python3", "-c", "print('hello from a sandbox')"],
+ *   cpu: 1024,
+ *   memory: 2048,
+ *   isolation: "isolated",
+ * });
+ * ```
+ *
  * **Example:** A Task that runs in a Nitro Sandbox
  * ```typescript
  * const sandbox = yield* AWS.ECS.Task("MySandbox", {
