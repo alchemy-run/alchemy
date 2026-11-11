@@ -140,6 +140,23 @@ DomainCluster.layerEntities({
 
 These are the defaults. `"forever"` keeps a kind of row. Events, state and the views' entries are never deleted.
 
+## Put the table in its own schema
+
+Every instance keeps its rows in one table, `alchemy_domain_objects`, on the connection's search path. Set `schema`, `table` or both to put it elsewhere; the first runner makes the schema when it is missing:
+
+```typescript
+DomainCluster.layerEntities({
+  name: "Bank",
+  main: import.meta.url,
+  handler: "BankLive",
+  pool: Default,
+  schema: "domain",
+  table: "domain_objects", // default "alchemy_domain_objects"
+});
+```
+
+Each name is a plain identifier, with no dot. Effect Cluster's own `cluster_*` tables stay where the runner makes them. A host that changes these options starts on an empty table: copy the rows across first.
+
 ## Read live over HTTP
 
 Effect Cluster entities hold no WebSockets, so serve the Api with `Domain.protocolHttp`. A `watch` or `events` read is a streamed response, fed by polling the entity that owns the key. `Domain.protocolWebSocket` answers `501` here.

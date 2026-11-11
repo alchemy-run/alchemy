@@ -50,9 +50,16 @@ import {
   parseMultiplexedName,
 } from "../DurableObjects.ts";
 import type { Platform } from "../Platform.ts";
-import { migrate, objectStorage, type Retention, sweep } from "./internal.ts";
+import {
+  migrate,
+  objectStorage,
+  type Retention,
+  type Storage,
+  sweep,
+  tableOf,
+} from "./internal.ts";
 
-export type { Retention } from "./internal.ts";
+export { InvalidStorageName, type Retention } from "./internal.ts";
 
 /**
  * Wake an instance at `at`: a persisted message delivered when it is due,
@@ -309,6 +316,17 @@ export interface EntitiesOptions<PoolReq> {
    * @default { receipts: "30 days", deliveries: "7 days", cancelled: "7 days", messages: "7 days", interval: "1 hour" }
    */
   readonly retention?: Retention;
+  /**
+   * The Postgres schema of the host's table. The host makes it when it is
+   * missing. Effect Cluster's own tables stay where the runner puts them.
+   * @default the connection's search path (usually `public`)
+   */
+  readonly schema?: string;
+  /**
+   * The name of the host's table.
+   * @default "alchemy_domain_objects"
+   */
+  readonly table?: string;
 }
 
 /**
@@ -382,6 +400,9 @@ export const layerEntities = <PoolReq>(
   Layer.unwrap(
     Effect.gen(function* () {
       const name = options.name;
+      const tables: Storage = { schema: options.schema, table: options.table };
+      // A bad name fails here, when the Layer builds, not on the first call.
+      yield* Effect.sync(() => tableOf(tables));
       // In this pool's shard group, as the runner registers its entities.
       const shardGroup = () =>
         (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env
@@ -407,7 +428,7 @@ export const layerEntities = <PoolReq>(
             Effect.orDie,
           );
           const client = Context.get(context, SqlClient);
-          yield* migrate(client);
+          yield* migrate(client, tables);
           return client;
         }),
       );
@@ -434,7 +455,7 @@ export const layerEntities = <PoolReq>(
         }
         const client = yield* sql;
         const gate = yield* makeInputGate;
-        const storage = objectStorage(client, `${name}/${id}`, gate);
+        const storage = objectStorage(client, `${name}/${id}`, gate, tables);
         const instanceScope = yield* Scope.Scope;
         const wakes = yield* objects.client;
         const callbacks = alarmCallbacks(storage, {
@@ -526,7 +547,7 @@ export const layerEntities = <PoolReq>(
             yield* Deferred.succeed(engine, clusterEngine);
             // Each runner sweeps on its own; a sweep that fails runs at the next interval.
             yield* Effect.forkScoped(
-              Effect.flatMap(sql, (client) => sweep(client, name, options.retention)).pipe(
+              Effect.flatMap(sql, (client) => sweep(client, name, options.retention, tables)).pipe(
                 Effect.catchCause((cause) =>
                   Effect.logWarning(`Cluster.Entity '${name}': retention sweep failed`, cause),
                 ),

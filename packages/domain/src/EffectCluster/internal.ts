@@ -8,6 +8,7 @@ import type { InputGateShape } from "alchemy/Workers/InputGate";
 import * as Clock from "effect/Clock";
 import * as MachineId from "effect/cluster/MachineId";
 import * as Snowflake from "effect/cluster/Snowflake";
+import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type { SqlClient } from "effect/sql/SqlClient";
@@ -15,6 +16,45 @@ import type { ListOptions, ObjectStorage } from "../DurableObjects.ts";
 
 /** Where every instance keeps its storage: one row per key, in the cluster's database. */
 export const TABLE = "alchemy_domain_objects";
+
+/**
+ * Where the host's table lives. Each name is a plain Postgres identifier
+ * (no dot).
+ */
+export interface Storage {
+  /**
+   * The schema of the table. The host makes it when it is missing.
+   * @default the connection's search path (usually `public`)
+   */
+  readonly schema?: string;
+  /**
+   * The name of the table.
+   * @default "alchemy_domain_objects"
+   */
+  readonly table?: string;
+}
+
+/** A name of {@link Storage} that is not a plain identifier. */
+export class InvalidStorageName extends Data.TaggedError("Cluster.InvalidStorageName")<{
+  readonly message: string;
+}> {}
+
+const checkName = (option: string, name: string) => {
+  // `sql(name)` reads a dot as a schema separator.
+  if (name.length === 0 || name.includes(".")) {
+    throw new InvalidStorageName({
+      message: `Storage ${option} '${name}' must be a non-empty identifier with no dot.`,
+    });
+  }
+  return name;
+};
+
+/** The table's name, and its qualified name for queries (`domain.alchemy_domain_objects`). */
+export const tableOf = (storage: Storage = {}) => {
+  const table = checkName("table", storage.table ?? TABLE);
+  const schema = storage.schema === undefined ? undefined : checkName("schema", storage.schema);
+  return { schema, table, qualified: schema === undefined ? table : `${schema}.${table}` };
+};
 
 /** The prefix of Effect Cluster's own tables, as a runner's bootstrap creates them. */
 export const CLUSTER_TABLE_PREFIX = "cluster";
@@ -31,17 +71,19 @@ export const objectStorage = (
   sql: SqlClient,
   object: string,
   gate: InputGateShape,
+  storage: Storage = {},
 ): ObjectStorage => {
+  const table = tableOf(storage).qualified;
   const run = <A>(effect: Effect.Effect<A, unknown>) => gate.storage(Effect.orDie(effect));
   const putOne = (key: string, value: unknown, at: number) =>
-    sql`INSERT INTO ${sql(TABLE)} (object, key, value, at) VALUES (${object}, ${key}, ${encode(value)}, ${at})
+    sql`INSERT INTO ${sql(table)} (object, key, value, at) VALUES (${object}, ${key}, ${encode(value)}, ${at})
         ON CONFLICT (object, key) DO UPDATE SET value = excluded.value, at = excluded.at`;
   return {
     get: <T>(key: string) =>
       run(
         sql<{
           value: string;
-        }>`SELECT value FROM ${sql(TABLE)} WHERE object = ${object} AND key = ${key}`.pipe(
+        }>`SELECT value FROM ${sql(table)} WHERE object = ${object} AND key = ${key}`.pipe(
           Effect.map((rows) => (rows[0] === undefined ? undefined : decode<T>(rows[0].value))),
         ),
       ),
@@ -64,7 +106,7 @@ export const objectStorage = (
           ? Effect.succeed(0)
           : sql<{
               key: string;
-            }>`DELETE FROM ${sql(TABLE)} WHERE object = ${object} AND ${sql.in("key", keys)} RETURNING key`.pipe(
+            }>`DELETE FROM ${sql(table)} WHERE object = ${object} AND ${sql.in("key", keys)} RETURNING key`.pipe(
               Effect.map((rows) => rows.length),
             );
       return run<number | boolean>(
@@ -73,7 +115,7 @@ export const objectStorage = (
     }) as ObjectStorage["delete"],
     list: <T>({ prefix, start, startAfter, end, limit }: ListOptions = {}) =>
       run(
-        sql<{ key: string; value: string }>`SELECT key, value FROM ${sql(TABLE)}
+        sql<{ key: string; value: string }>`SELECT key, value FROM ${sql(table)}
           WHERE object = ${object}
           ${prefix ? sql`AND starts_with(key, ${prefix})` : sql``}
           ${start !== undefined ? sql`AND key >= ${start}` : sql``}
@@ -91,15 +133,18 @@ export const objectStorage = (
 };
 
 /**
- * Create the storage table, or add what a newer host needs to it. Runners
- * start together, so one at a time: the others wait on the lock.
+ * Create the storage table (and its schema), or add what a newer host
+ * needs to it. Runners start together, so one at a time: the others wait
+ * on the lock.
  */
-export const migrate = (sql: SqlClient) =>
+export const migrate = (sql: SqlClient, storage: Storage = {}) =>
   sql
     .withTransaction(
       Effect.gen(function* () {
-        yield* sql`SELECT pg_advisory_xact_lock(hashtext(${TABLE}))`;
-        yield* sql`CREATE TABLE IF NOT EXISTS ${sql(TABLE)} (
+        const { schema, table, qualified } = tableOf(storage);
+        yield* sql`SELECT pg_advisory_xact_lock(hashtext(${qualified}))`;
+        if (schema !== undefined) yield* sql`CREATE SCHEMA IF NOT EXISTS ${sql(schema)}`;
+        yield* sql`CREATE TABLE IF NOT EXISTS ${sql(qualified)} (
           object TEXT COLLATE "C" NOT NULL,
           key TEXT COLLATE "C" NOT NULL,
           value TEXT NOT NULL,
@@ -108,8 +153,9 @@ export const migrate = (sql: SqlClient) =>
         )`;
         // A table made by an earlier host: its rows have no time yet; the
         // first sweep gives them one.
-        yield* sql`ALTER TABLE ${sql(TABLE)} ADD COLUMN IF NOT EXISTS at BIGINT`;
-        yield* sql`CREATE INDEX IF NOT EXISTS ${sql(`${TABLE}_at`)} ON ${sql(TABLE)} (at)`;
+        yield* sql`ALTER TABLE ${sql(qualified)} ADD COLUMN IF NOT EXISTS at BIGINT`;
+        // An index takes the schema of its table.
+        yield* sql`CREATE INDEX IF NOT EXISTS ${sql(`${table}_at`)} ON ${sql(qualified)} (at)`;
       }),
     )
     .pipe(Effect.orDie);
@@ -175,12 +221,17 @@ const CANCELLED = encode("cancelled");
  * Delete the rows of the host entity `entity` that `retention` no longer
  * keeps. Safe to run on every runner at once.
  */
-export const sweep = (sql: SqlClient, entity: string, retention: Retention = {}) =>
+export const sweep = (
+  sql: SqlClient,
+  entity: string,
+  retention: Retention = {},
+  storage: Storage = {},
+) =>
   Effect.gen(function* () {
     const window = windows(retention);
     const now = yield* Clock.currentTimeMillis;
     const objects = `${entity}/`;
-    const table = sql(TABLE);
+    const table = sql(tableOf(storage).qualified);
     const kinds = [
       { prefix: "receipt:", window: window.receipts, only: sql`` },
       { prefix: "seen:", window: window.deliveries, only: sql`` },
