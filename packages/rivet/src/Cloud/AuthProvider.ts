@@ -7,7 +7,12 @@ import {
   refreshHint,
 } from "alchemy/Auth/AuthProvider";
 import { displayRedacted } from "alchemy/Auth/Credentials";
-import { getEnvRedactedRequired, getEnvRequired, mapPromptCancellation } from "alchemy/Auth/Env";
+import {
+  getEnv,
+  getEnvRedactedRequired,
+  getEnvRequired,
+  mapPromptCancellation,
+} from "alchemy/Auth/Env";
 import { withProfileCredentialsLock } from "alchemy/Auth/Lock";
 import { storedValueText, validateFieldValues } from "alchemy/Auth/StoredAuthProvider";
 import * as Interaction from "alchemy/Interaction";
@@ -19,9 +24,11 @@ import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import {
   awaitDeviceSignIn,
+  type CloudAuth,
   type DeviceSession,
   endDeviceSession,
   listClusters,
+  listOrganizations,
   refreshDeviceSession,
   type RivetCloudApiError,
   startDeviceSignIn,
@@ -37,12 +44,15 @@ export const RIVET_CLOUD_AUTH_PROVIDER_NAME = "RivetCloud";
 /**
  * A Rivet Cloud profile: a browser sign-in (`login`), which refreshes
  * itself, or a cluster token created in the Rivet dashboard (`stored`), for
- * CI. Both name the cluster deploys use.
+ * CI. Both name the cluster deploys use. A sign-in also names the
+ * organization it acts in when the account belongs to several.
  */
 export const RivetCloudAuthConfigSchema = Schema.Union([
   Schema.Struct({
     method: Schema.Literal("login"),
     cluster: Schema.String,
+    /** The organization's slug, for an account in several. */
+    organization: Schema.optional(Schema.String),
     access: Schema.String,
     refresh: Schema.String,
     expires: Schema.Number,
@@ -62,6 +72,8 @@ export interface RivetCloudCredentials {
   readonly token: Redacted.Redacted<string>;
   /** The cluster's name. */
   readonly cluster: string;
+  /** The organization a sign-in session acts in, for an account in several. */
+  readonly organization?: string | undefined;
   /** When {@link token} expires, for a sign-in session. */
   readonly expires?: number;
   readonly source: "login" | "stored" | "env";
@@ -72,20 +84,56 @@ const toAuthError = (cause: RivetCloudApiError | AuthError) =>
     ? cause
     : AuthError.make({ message: `RivetCloud: ${cause.message}`, cause });
 
-const sessionConfig = Effect.fn(function* (cluster: string, session: DeviceSession) {
+const sessionConfig = Effect.fn(function* (
+  cluster: string,
+  organization: string | undefined,
+  session: DeviceSession,
+) {
   const now = yield* Clock.currentTimeMillis;
   return {
     method: "login" as const,
     cluster,
+    ...(organization === undefined ? {} : { organization }),
     access: session.access_token,
     refresh: session.refresh_token,
     expires: now + session.expires_in * 1000,
   } satisfies LoginConfig;
 });
 
+/**
+ * The organization a sign-in session acts in: `RIVET_CLOUD_ORGANIZATION`,
+ * none for an account in one, else the user's pick.
+ */
+const selectOrganization = Effect.fn(function* (
+  token: Redacted.Redacted<string>,
+  current?: string,
+) {
+  const named = (yield* getEnv("RIVET_CLOUD_ORGANIZATION"))?.trim();
+  if (named !== undefined && named.length > 0) {
+    yield* Interaction.info(`RivetCloud: using organization ${named}`);
+    return named;
+  }
+  const organizations = yield* listOrganizations({ token });
+  if (organizations.length < 2) return undefined;
+  if (!(yield* Interaction.Interaction).terminal.input) {
+    return yield* AuthError.make({
+      message: `RivetCloud: this account belongs to several organizations (${organizations.map((org) => org.slug).join(", ")}). Set RIVET_CLOUD_ORGANIZATION to the one to act in.`,
+    });
+  }
+  return yield* Interaction.select({
+    message: "Select a Rivet Cloud organization",
+    options: organizations.map((org) => ({
+      value: org.slug,
+      label: org.name,
+      description: org.slug,
+    })),
+    ...(organizations.some((org) => org.slug === current) ? { initialValue: current } : {}),
+  }).pipe(mapPromptCancellation);
+});
+
 /** Pick the cluster deploys use: the only one, or the user's choice. */
-const selectCluster = Effect.fn(function* (session: Redacted.Redacted<string>) {
-  const clusters = yield* listClusters(session);
+const selectCluster = Effect.fn(function* (auth: CloudAuth) {
+  const clusters = yield* listClusters(auth);
   if (clusters.length === 0) {
     return yield* AuthError.make({
       message:
@@ -109,9 +157,10 @@ const selectCluster = Effect.fn(function* (session: Redacted.Redacted<string>) {
 
 /**
  * Sign in through Rivet Cloud's device flow, the one the Rivet CLI uses:
- * the dashboard asks the user to approve a code.
+ * the dashboard asks the user to approve a code. `organization` is the one a
+ * previous sign-in acted in, offered first.
  */
-const browserSignIn = Effect.fn(function* () {
+const browserSignIn = Effect.fn(function* (organization?: string) {
   const device = yield* startDeviceSignIn;
   const session = yield* Interaction.browserLogin({
     provider: "Rivet Cloud",
@@ -119,9 +168,11 @@ const browserSignIn = Effect.fn(function* () {
     code: device.user_code,
     waitFor: awaitDeviceSignIn(device),
   });
-  const cluster = yield* selectCluster(Redacted.make(session.access_token));
+  const token = Redacted.make(session.access_token);
+  const selected = yield* selectOrganization(token, organization);
+  const cluster = yield* selectCluster({ token, organization: selected });
   yield* Interaction.success("RivetCloud: signed in.");
-  return yield* sessionConfig(cluster, session);
+  return yield* sessionConfig(cluster, selected, session);
 });
 
 const pasteToken = Effect.fn(function* () {
@@ -156,7 +207,8 @@ const clusterTokenFields: ReadonlyArray<ConfigureField> = [
  * - `stored`: a cluster token from the Rivet dashboard, which never expires.
  *
  * In CI, `RIVET_CLOUD_TOKEN` and `RIVET_CLOUD_CLUSTER` take the place of a
- * profile.
+ * profile. A sign-in to an account in several organizations asks which one
+ * to act in, or takes it from `RIVET_CLOUD_ORGANIZATION`.
  */
 export const RivetCloudAuth = AuthProviderLayer<RivetCloudAuthConfig, RivetCloudCredentials>()(
   RIVET_CLOUD_AUTH_PROVIDER_NAME,
@@ -250,7 +302,7 @@ export const RivetCloudAuth = AuthProviderLayer<RivetCloudAuthConfig, RivetCloud
             }),
           ),
         );
-        const next = yield* sessionConfig(config.cluster, session);
+        const next = yield* sessionConfig(config.cluster, config.organization, session);
         yield* updateConfig?.(next) ?? Effect.void;
         return next;
       });
@@ -270,6 +322,7 @@ export const RivetCloudAuth = AuthProviderLayer<RivetCloudAuthConfig, RivetCloud
             Effect.map((session): RivetCloudCredentials => ({
               token: Redacted.make(session.access),
               cluster: session.cluster,
+              organization: session.organization,
               expires: session.expires,
               source: "login",
             })),
@@ -294,7 +347,7 @@ export const RivetCloudAuth = AuthProviderLayer<RivetCloudAuthConfig, RivetCloud
             }),
           ).pipe(
             Effect.catchTag("NeedsReauth", () =>
-              browserSignIn().pipe(
+              browserSignIn(config.organization).pipe(
                 Effect.provide(FetchHttpClient.layer),
                 Effect.mapError((cause) =>
                   cause._tag === "AuthError" || cause._tag === "RivetCloud.ApiError"
@@ -321,6 +374,9 @@ export const RivetCloudAuth = AuthProviderLayer<RivetCloudAuthConfig, RivetCloud
         Effect.map((credentials) => ({
           lines: [
             { key: "cluster", value: credentials.cluster },
+            ...(credentials.organization === undefined
+              ? []
+              : [{ key: "organization", value: credentials.organization }]),
             { key: "token", value: displayRedacted(credentials.token) },
             ...(credentials.expires === undefined
               ? []
@@ -333,7 +389,13 @@ export const RivetCloudAuth = AuthProviderLayer<RivetCloudAuthConfig, RivetCloud
     const readEnvironment = Effect.gen(function* () {
       const token = yield* getEnvRedactedRequired("RIVET_CLOUD_TOKEN");
       const cluster = yield* getEnvRequired("RIVET_CLOUD_CLUSTER");
-      return { token, cluster, source: "env" as const } satisfies RivetCloudCredentials;
+      const organization = (yield* getEnv("RIVET_CLOUD_ORGANIZATION"))?.trim() || undefined;
+      return {
+        token,
+        cluster,
+        ...(organization === undefined ? {} : { organization }),
+        source: "env" as const,
+      } satisfies RivetCloudCredentials;
     });
 
     return {
@@ -357,6 +419,12 @@ export const RivetCloudAuth = AuthProviderLayer<RivetCloudAuthConfig, RivetCloud
           name: "RIVET_CLOUD_CLUSTER",
           required: true,
           description: "The cluster's name.",
+        },
+        {
+          name: "RIVET_CLOUD_ORGANIZATION",
+          required: false,
+          description:
+            "The organization to act in, for an account in several. A cluster token needs none.",
         },
       ],
     };
