@@ -141,7 +141,11 @@ const api = yield* Docker.Container("api", {
 });
 ```
 
-Docker checks address availability. `gatewayPriority` chooses the preferred
+Docker checks address availability. With `networks` and no explicit
+`networkMode`, the container joins only the declared networks, not Docker's
+default `bridge`. An existing container's implicit bridge is detached when
+reconciling the declaration; unrelated external connections are retained.
+`gatewayPriority` chooses the preferred
 default route; `endpointDriverOpts` configures an attachment rather than
 the network driver. All endpoint options are optional. Alchemy reconnects
 changed attachments without recreating the container and attempts to restore

@@ -1,4 +1,4 @@
-import { Unowned } from "alchemy/AdoptPolicy";
+import { OwnedBySomeoneElse, Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -70,7 +70,7 @@ export interface ContainerProps {
   restart?: "no" | "always" | "on-failure" | "unless-stopped";
   /**
    * Container labels. Alchemy's internal ownership labels are added
-   * automatically.
+   * automatically; the `alchemy::` prefix is reserved.
    */
   labels?: Record<string, string>;
   /**
@@ -78,7 +78,11 @@ export interface ContainerProps {
    * it.
    */
   stopTimeout?: Duration.Input;
-  /** Networks to connect after create. */
+  /**
+   * Managed network attachments. When set, Docker creates the container on
+   * the first network rather than implicitly joining the default `bridge`.
+   * Other endpoints are connected before the container starts.
+   */
   networks?: Container.NetworkMapping[];
   /**
    * Network namespace. Use `{ container: id }` to share another container's
@@ -399,6 +403,11 @@ export interface ContainerLookup {
  * });
  * ```
  *
+ * Declaring `networks` without `networkMode` attaches only the listed networks:
+ * Docker's implicit default `bridge` is not added. On legacy/adopted containers,
+ * Alchemy detaches that implicit bridge while keeping externally added networks.
+ * Omitting both options retains Docker's ordinary default networking.
+ *
  * Network attachment changes reconnect only the managed endpoint without
  * replacing the container. Docker can temporarily interrupt traffic during
  * reconnection. If Docker rejects an update, Alchemy attempts to restore the
@@ -706,11 +715,15 @@ export const ContainerProvider = () =>
             yield* connectNetwork(network, live.Id, context);
           }
         }
-        // Only networks alchemy itself attached are alchemy's to detach, and
-        // `olds.networks` is the sole record of which those are — the live
-        // container cannot say who connected a network. Sweeping every live
-        // network instead tore off the default `bridge` and anything a user,
-        // compose file, or another tool had attached out of band (#1386).
+        // Legacy/adopted containers may still have Docker's implicit bridge.
+        // Drop only this known initial attachment, preserving foreign networks.
+        if (hasImplicitDefaultBridge(live, news)) {
+          yield* docker.network.disconnect({ network: "bridge", container: live.Id, context });
+        }
+        // Only detach managed networks recorded in `olds.networks`, except
+        // for the independently identified implicit default bridge above.
+        // Sweeping every live attachment also removes externally connected
+        // networks, including ones added by Compose or another tool (#1386).
         for (const network of olds?.networks ?? []) {
           const stillManaged = (news.networks ?? []).some((desired) =>
             referencesSameNetwork(live, desired.name, network.name),
@@ -755,28 +768,46 @@ export const ContainerProvider = () =>
             info,
             olds.image !== undefined ? normalizeImageRef(olds.image) : info.Config.Image,
           );
-          if (output) return attrs;
+          if (output) {
+            if (info.Id !== output.id) {
+              return yield* containerOwnershipConflict(id, name, output.id, info.Id);
+            }
+            return attrs;
+          }
           // Without prior state, only adopt a container that carries our
           // branding; anything else is foreign and gated behind `--adopt`.
           const owned = yield* hasAlchemyTags(id, info.Config.Labels ?? undefined);
           return owned ? attrs : Unowned(attrs);
         }),
-        diff: Effect.fn(function* ({ id, instanceId, news, olds }) {
+        diff: Effect.fn(function* ({ id, instanceId, news, olds, output }) {
           if (!isResolved(news)) return undefined;
           // Validate the desired creation settings before any delete-first
           // replacement decision, including Docker context changes.
           const newArgs = yield* makeCreateArgs(id, news, instanceId);
+          const contextChanged =
+            dockerContextName(olds.context) !== dockerContextName(news.context);
+          const oldArgs =
+            olds.image !== undefined && !contextChanged
+              ? yield* makeCreateArgs(id, olds, instanceId)
+              : undefined;
+          const mustReplace =
+            olds.image !== undefined && (contextChanged || !Equal.equals(oldArgs, newArgs));
+          // No-op plans still need to verify the physical container identity.
+          // A foreign container can reuse the managed name after deletion.
+          if (output) {
+            const live = yield* inspect(output.name, dockerContextName(olds.context));
+            if (live && live.Id !== output.id) {
+              return yield* containerOwnershipConflict(id, output.name, output.id, live.Id);
+            }
+            if (!live && !mustReplace) return { action: "update" as const };
+          }
           // An Output-valued `image` doesn't survive a `creating`-state
           // round-trip (it deserializes as `undefined`) — without comparable
           // prior create args, let the engine apply its default update logic.
+          if (mustReplace) {
+            return { action: "replace" as const, deleteFirst: true };
+          }
           if (olds.image === undefined) return undefined;
-          if (dockerContextName(olds.context) !== dockerContextName(news.context)) {
-            return { action: "replace" as const, deleteFirst: true };
-          }
-          const oldArgs = yield* makeCreateArgs(id, olds, instanceId);
-          if (!Equal.equals(oldArgs, newArgs)) {
-            return { action: "replace" as const, deleteFirst: true };
-          }
           if (
             !Equal.equals(olds.networks ?? [], news.networks ?? []) ||
             (olds.start ?? false) !== (news.start ?? false)
@@ -787,7 +818,8 @@ export const ContainerProvider = () =>
             const live = yield* inspect(newArgs.name, dockerContextName(news.context));
             if (
               live &&
-              news.networks.some((network) => !matchesNetworkEndpoint(live, network, network))
+              (hasImplicitDefaultBridge(live, news) ||
+                news.networks.some((network) => !matchesNetworkEndpoint(live, network, network)))
             ) {
               return { action: "update" as const };
             }
@@ -814,6 +846,12 @@ export const ContainerProvider = () =>
             output && (output.name !== args.name || oldContext !== context)
               ? yield* inspect(output.name, oldContext)
               : undefined;
+          if (output && desiredLive && desiredLive.Id !== output.id) {
+            return yield* containerOwnershipConflict(id, args.name, output.id, desiredLive.Id);
+          }
+          if (output && previous && previous.Id !== output.id) {
+            return yield* containerOwnershipConflict(id, output.name, output.id, previous.Id);
+          }
           if (previous) {
             yield* remove(previous.Id, oldContext);
           }
@@ -854,6 +892,13 @@ export const ContainerProvider = () =>
             const internalTags = yield* createInternalTags(id);
             const { stdout: containerId } = yield* docker.container.create({
               ...args,
+              // Attach directly to the first declared network. Without this,
+              // Docker silently adds the default bridge, even for internal-only
+              // containers. `none` cannot be used here: Docker forbids
+              // connecting additional networks while in none mode.
+              ...(news.networkMode === undefined && news.networks?.length
+                ? { network: news.networks[0]!.name }
+                : {}),
               context,
               label: {
                 ...args.label,
@@ -862,9 +907,19 @@ export const ContainerProvider = () =>
               },
             });
             return yield* Effect.gen(function* () {
+              const initiallyAttached =
+                news.networkMode !== undefined && news.networks?.length
+                  ? yield* docker.container.inspect(containerId, context)
+                  : undefined;
               yield* Effect.forEach(
                 news.networks ?? [],
-                (network) => connectNetwork(network, containerId, context),
+                (network, index) =>
+                  (news.networkMode === undefined && index === 0) ||
+                  (initiallyAttached && findNetworkEndpoint(initiallyAttached, network.name))
+                    ? docker.network
+                        .disconnect({ network: network.name, container: containerId, context })
+                        .pipe(Effect.andThen(connectNetwork(network, containerId, context)))
+                    : connectNetwork(network, containerId, context),
                 { concurrency: 1 },
               );
               if (news.start) {
@@ -892,9 +947,7 @@ export const ContainerProvider = () =>
             .inspect(current.Id, context)
             .pipe(Effect.map((info) => toContainerAttributes(info, args.image)));
         }),
-        delete: Effect.fn(({ olds, output }) =>
-          remove(output.name, dockerContextName(olds.context)),
-        ),
+        delete: Effect.fn(({ olds, output }) => remove(output.id, dockerContextName(olds.context))),
       });
     }),
   );
@@ -906,6 +959,21 @@ const normalizeImageId = (image: Container.Image | undefined) =>
   typeof image === "string" ? undefined : image?.imageId;
 
 type CreateArgs = Parameters<Docker["Service"]["container"]["create"]>[0];
+
+const containerOwnershipConflict = (
+  logicalId: string,
+  physicalName: string,
+  expectedId: string,
+  actualId: string,
+) =>
+  new OwnedBySomeoneElse({
+    message:
+      `Docker container '${physicalName}' was replaced outside Alchemy: ` +
+      `expected ID ${expectedId}, found ${actualId}. Refusing to modify the replacement.`,
+    resourceType: "Docker.Container",
+    logicalId,
+    physicalName,
+  });
 
 // Containers created before config hashes were introduced are compared using
 // the fields Docker reports without image-default normalization. A subsequent
@@ -1077,6 +1145,13 @@ const referencesSameNetwork = (live: Docker.Container, left: string, right: stri
   );
 };
 
+const hasImplicitDefaultBridge = (live: Docker.Container, news: ContainerProps): boolean =>
+  news.networkMode === undefined &&
+  (news.networks?.length ?? 0) > 0 &&
+  (live.HostConfig.NetworkMode === "default" || live.HostConfig.NetworkMode === "bridge") &&
+  findNetworkEndpoint(live, "bridge") !== undefined &&
+  !(news.networks ?? []).some((network) => referencesSameNetwork(live, network.name, "bridge"));
+
 /** Compare only declared endpoint settings: Docker adds its own aliases and addresses. */
 const matchesNetworkEndpoint = (
   live: Docker.Container,
@@ -1236,6 +1311,13 @@ export class InvalidContainerOptions extends Data.TaggedError("InvalidContainerO
 }> {}
 
 const validateContainerOptions = (news: ContainerProps) => {
+  if (Object.keys(news.labels ?? {}).some((key) => key.startsWith("alchemy::"))) {
+    return Effect.fail(
+      new InvalidContainerOptions({
+        message: "Docker.Container labels must not use the reserved alchemy:: prefix",
+      }),
+    );
+  }
   // The CLI formatter omits empty strings. Reject them instead of silently
   // dropping user-specified resource and security restrictions.
   for (const option of [
@@ -1489,6 +1571,16 @@ const validateContainerOptions = (news: ContainerProps) => {
     return Effect.fail(
       new InvalidContainerOptions({
         message: "Docker.Container networkMode.container cannot be combined with ports or networks",
+      }),
+    );
+  }
+  if (
+    (news.networkMode === "host" || news.networkMode === "none") &&
+    (news.networks?.length ?? 0) > 0
+  ) {
+    return Effect.fail(
+      new InvalidContainerOptions({
+        message: `Docker.Container networkMode ${news.networkMode} cannot be combined with networks`,
       }),
     );
   }

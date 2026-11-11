@@ -3,6 +3,7 @@ import { healthcheckCommand, isHealthcheckDisabled } from "@alchemy.run/docker/H
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import { Action } from "alchemy/Action";
+import { OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
 import { inMemoryState, isResourceState, State, type ResourceState } from "alchemy/State";
 import * as Cause from "effect/Cause";
@@ -325,17 +326,26 @@ test.provider(
   { tags: ["provider:docker", "provider:docker:container", "local"] },
 );
 
-const findInvalidContainerOptions = (cause: Cause.Cause<unknown>) =>
+const findTaggedError = <Tag extends string, A extends { readonly _tag: Tag }>(
+  cause: Cause.Cause<unknown>,
+  tag: Tag,
+): A | undefined =>
   cause.reasons
     .filter(Cause.isFailReason)
     .map((reason) => reason.error)
     .find(
-      (value): value is Docker.InvalidContainerOptions =>
-        typeof value === "object" &&
-        value !== null &&
-        "_tag" in value &&
-        value._tag === "InvalidContainerOptions",
+      (value): value is A =>
+        typeof value === "object" && value !== null && "_tag" in value && value._tag === tag,
     );
+
+const findInvalidContainerOptions = (cause: Cause.Cause<unknown>) =>
+  findTaggedError<"InvalidContainerOptions", Docker.InvalidContainerOptions>(
+    cause,
+    "InvalidContainerOptions",
+  );
+
+const findContainerOwnershipConflict = (cause: Cause.Cause<unknown>) =>
+  findTaggedError<"OwnedBySomeoneElse", OwnedBySomeoneElse>(cause, "OwnedBySomeoneElse");
 
 test.provider(
   "rejects invalid create-time runtime changes without deleting the existing container",
@@ -368,6 +378,9 @@ test.provider(
         { options: { pidNamespace: "private" }, reason: "pidNamespace" },
         { options: { ipcNamespace: "invalid" }, reason: "ipcNamespace" },
         { options: { sharedMemorySize: "128m", ipcNamespace: "host" }, reason: "sharedMemorySize" },
+        { options: { networkMode: "none", networks: [{ name: "bridge" }] }, reason: "networkMode" },
+        { options: { networkMode: "host", networks: [{ name: "bridge" }] }, reason: "networkMode" },
+        { options: { labels: { "alchemy::id": "another-owner" } }, reason: "labels" },
         {
           options: { networkMode: "container:donor", hostname: "sidecar" },
           reason: "networkMode.container",
@@ -834,6 +847,81 @@ describe(
       { tags: ["provider:docker:network"] },
     );
 
+    test.provider("attaches exclusively to its declared internal network", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        yield* stack.destroy();
+        yield* Effect.addFinalizer(() => stack.destroy().pipe(Effect.ignore));
+        const resource = Effect.gen(function* () {
+          const network = yield* Docker.Network("isolated-network", { internal: true });
+          const container = yield* Docker.Container("isolated-container", {
+            image: "alpine:3.22",
+            command: ["sleep", "120"],
+            networks: [{ name: network.name, aliases: ["app"] }],
+            start: true,
+          });
+          return { network, container };
+        });
+        const first = yield* stack.deploy(resource);
+        const inspect = yield* docker.container.inspect(first.container.id);
+        expect(Object.keys(inspect.NetworkSettings.Networks ?? {})).toEqual([first.network.name]);
+        const routes = yield* docker.run([
+          "container",
+          "exec",
+          first.container.id,
+          "cat",
+          "/proc/net/route",
+        ]);
+        expect(routes.stdout).not.toMatch(/^\S+\s+00000000\s/m);
+        expect((yield* stack.plan(resource)).resources["isolated-container"]?.action).toBe("noop");
+        const second = yield* stack.deploy(resource);
+        expect(second.container.id).toBe(first.container.id);
+        yield* stack.destroy();
+        expect(
+          (yield* docker.container.inspect(first.container.id).pipe(Effect.flip)).reason._tag,
+        ).toBe("NotFound");
+      }),
+    );
+
+    test.provider(
+      "removes the implicit default bridge when adopting an internal-only container",
+      (stack) =>
+        Effect.gen(function* () {
+          const docker = yield* Docker.Docker;
+          const name = `alchemy-test-legacy-isolation-${stack.stage}`;
+          yield* stack.destroy();
+          yield* Effect.addFinalizer(() => stack.destroy().pipe(Effect.ignore));
+          const { stdout } = yield* docker.run([
+            "container",
+            "create",
+            "--name",
+            name,
+            "alpine:3.22",
+          ]);
+          const originalId = stdout.trim();
+          yield* Effect.addFinalizer(() =>
+            docker.container.remove(originalId, true).pipe(Effect.ignore),
+          );
+          const resource = Effect.gen(function* () {
+            const network = yield* Docker.Network("adopted-internal-network", { internal: true });
+            const container = yield* Docker.Container("adopted-internal-container", {
+              name,
+              image: "alpine:3.22",
+              networks: [{ name: network.name }],
+            });
+            return { container, network };
+          });
+          const first = yield* stack.deploy(resource);
+          expect(first.container.id).toBe(originalId);
+          const actual = yield* docker.container.inspect(originalId);
+          expect(Object.keys(actual.NetworkSettings.Networks ?? {})).toEqual([first.network.name]);
+          expect(
+            (yield* stack.plan(resource)).resources["adopted-internal-container"]?.action,
+          ).toBe("noop");
+          yield* stack.destroy();
+        }),
+    );
+
     test.provider("attaches a container to a dual-stack Docker.Network with custom DNS", (stack) =>
       Effect.gen(function* () {
         const docker = yield* Docker.Docker;
@@ -879,6 +967,9 @@ describe(
         expect(info.HostConfig.Dns).toEqual(["1.1.1.1"]);
         expect(info.HostConfig.DnsSearch).toEqual(["internal.example"]);
         expect(info.HostConfig.DnsOptions).toEqual(["ndots:1"]);
+        expect(Object.keys(info.NetworkSettings.Networks ?? {}).sort()).toEqual(
+          [first.network.name, first.secondary.name].sort(),
+        );
         expect(endpoint?.IPAddress).toBe("10.57.48.10");
         expect(endpoint?.GlobalIPv6Address).toBe("fd57:48::10");
         expect(endpoint?.IPAMConfig).toMatchObject({
@@ -1185,6 +1276,31 @@ describe(
         yield* stack.destroy();
         const gone = yield* docker.container.inspect(first.container.id).pipe(Effect.flip);
         expect(gone.reason._tag).toBe("NotFound");
+      }),
+    );
+
+    test.provider("configures an endpoint already selected by explicit networkMode", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        yield* stack.destroy();
+        yield* Effect.addFinalizer(() => stack.destroy().pipe(Effect.ignore));
+        const resource = Effect.gen(function* () {
+          const network = yield* Docker.Network("explicit-mode-network");
+          const container = yield* Docker.Container("explicit-mode-container", {
+            image: "nginx:alpine",
+            networkMode: network.name,
+            networks: [{ name: network.name, aliases: ["app"] }],
+          });
+          return { container, network };
+        });
+        const first = yield* stack.deploy(resource);
+        const inspected = yield* docker.container.inspect(first.container.id);
+        expect(Object.keys(inspected.NetworkSettings.Networks ?? {})).toEqual([first.network.name]);
+        expect(inspected.NetworkSettings.Networks?.[first.network.name]?.Aliases).toContain("app");
+        expect((yield* stack.plan(resource)).resources["explicit-mode-container"]?.action).toBe(
+          "noop",
+        );
+        yield* stack.destroy();
       }),
     );
 
@@ -2069,10 +2185,10 @@ describe(
           const attached = Object.keys(info?.NetworkSettings.Networks ?? {});
           // Ours goes…
           expect(attached).not.toContain(first.network.name);
-          // …the foreign one and Docker's own default stay. Before the fix the
-          // reconciler swept every live network and tore off both.
+          // …the foreign one stays. No implicit default bridge was added:
+          // the container was created directly on its declared network.
           expect(attached).toContain(foreign);
-          expect(attached).toContain("bridge");
+          expect(attached).not.toContain("bridge");
         }),
       { tags: ["provider:docker:network"], timeout: 240_000 },
     );
@@ -2180,6 +2296,63 @@ describe(
         // The same resolved image keeps the container.
         const third = yield* deploy("busybox:1.36");
         expect(third.id).toBe(second.id);
+      }),
+    );
+
+    test.provider("recreates a managed container deleted outside Alchemy", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        yield* stack.destroy();
+        yield* Effect.addFinalizer(() => stack.destroy().pipe(Effect.ignore));
+        const resource = Docker.Container("deleted-container", { image: "alpine:3.22" });
+        const first = yield* stack.deploy(resource);
+        yield* docker.container.remove(first.id, true);
+        expect((yield* stack.plan(resource)).resources["deleted-container"]?.action).toBe("update");
+        const second = yield* stack.deploy(resource);
+        expect(second.id).not.toBe(first.id);
+        expect((yield* docker.container.inspect(second.id)).Id).toBe(second.id);
+        yield* stack.destroy();
+      }),
+    );
+
+    test.provider("refuses a foreign replacement of a previously managed container", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const name = `alchemy-test-container-replaced-${stack.stage}`;
+        yield* stack.destroy();
+        yield* Effect.addFinalizer(() => stack.destroy().pipe(Effect.ignore));
+        const resource = Docker.Container("replaced-container", {
+          name,
+          image: "alpine:3.22",
+        });
+        const original = yield* stack.deploy(resource);
+        yield* docker.container.remove(original.id, true);
+        const { stdout } = yield* docker.run([
+          "container",
+          "create",
+          "--name",
+          name,
+          "alpine:3.22",
+        ]);
+        const foreignId = stdout.trim();
+        yield* Effect.addFinalizer(() =>
+          docker.container.remove(foreignId, true).pipe(Effect.ignore),
+        );
+
+        const assertRefused = Effect.fn(function* <A, E>(operation: Effect.Effect<A, E>) {
+          const conflict = yield* operation.pipe(
+            Effect.as(undefined),
+            Effect.catchCause((cause) => Effect.succeed(findContainerOwnershipConflict(cause))),
+          );
+          expect(conflict?._tag).toBe("OwnedBySomeoneElse");
+          expect(conflict?.physicalName).toBe(name);
+          expect((yield* docker.container.inspect(name)).Id).toBe(foreignId);
+        });
+        yield* assertRefused(stack.plan(resource));
+        yield* assertRefused(stack.deploy(resource));
+
+        yield* docker.container.remove(foreignId, true);
+        yield* stack.destroy();
       }),
     );
 
