@@ -13,7 +13,11 @@ import { pollUntil, type PollBudget } from "../internal/poll.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface ModelDeployment {
-  /** Hugging Face model slug, for example `"meta-llama/Llama-3.3-70B-Instruct"`. */
+  /**
+   * Hugging Face model slug, for example
+   * `"mistralai/Mistral-7B-Instruct-v0.3"`. `GET /v2/dedicated-inferences/gpu-model-config`
+   * lists the models and the GPUs each runs on; gated models need access granted on Hugging Face.
+   */
   model: string;
   /** GPUs serving the model. */
   accelerators: { gpu: string; scale?: number; type?: string }[];
@@ -66,16 +70,16 @@ export type DedicatedInferenceAttributes = DedicatedInference["Attributes"];
  * GPUs and the public endpoint update in place.
  *
  * ### Serving a Model
- * **Example:** Llama 3.3 70B on one MI300X
+ * **Example:** Mistral 7B on one MI300X
  * ```typescript
- * const vpc = yield* DigitalOcean.Vpc("ai", { region: "tor1", ipRange: "10.40.0.0/20" });
- * const llama = yield* DigitalOcean.Inference.DedicatedInference("llama", {
- *   region: "tor1",
+ * const vpc = yield* DigitalOcean.Vpc("ai", { region: "atl1", ipRange: "10.40.0.0/20" });
+ * const mistral = yield* DigitalOcean.Inference.DedicatedInference("mistral", {
+ *   region: "atl1",
  *   vpcId: vpc.vpcId,
  *   publicEndpoint: true,
  *   models: [
  *     {
- *       model: "meta-llama/Llama-3.3-70B-Instruct",
+ *       model: "mistralai/Mistral-7B-Instruct-v0.3",
  *       accelerators: [{ gpu: "gpu-mi300x1-192gb" }],
  *     },
  *   ],

@@ -4273,6 +4273,28 @@ importers:
         specifier: 4.1.0
         version: 4.1.0
 
+  examples/digitalocean-app:
+    dependencies:
+      '@alchemy.run/digitalocean':
+        specifier: workspace:*
+        version: link:../../packages/digitalocean
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.1.0(effect@4.1.0)(redis@6.2.1(@opentelemetry/api@1.10.0))
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.1.0
+        version: 4.1.0
+      pg:
+        specifier: 'catalog:'
+        version: 8.23.1
+    devDependencies:
+      '@types/pg':
+        specifier: 'catalog:'
+        version: 8.20.4
+
   examples/docker-postgres:
     dependencies:
       '@alchemy.run/docker':

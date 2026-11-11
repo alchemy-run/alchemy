@@ -1,8 +1,13 @@
 import { layerS3Keys } from "@distilled.cloud/digitalocean/Spaces";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
+import * as Command from "alchemy/Command";
 import { KeyPair, KeyPairProvider } from "alchemy/KeyPair";
 import * as Provider from "alchemy/Provider";
+import {
+  Server as WebsiteServer,
+  ServerProvider as WebsiteServerProvider,
+} from "alchemy/Website/Server";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as ActionGateway from "./ActionGateway/index.ts";
@@ -152,6 +157,7 @@ export const providers = () =>
       ActionGateway.McpServer,
       Monitoring.Destination,
       Inference.DedicatedInference,
+      WebsiteServer,
     ]),
   ).pipe(
     Layer.provide(
@@ -221,10 +227,12 @@ export const providers = () =>
         ActionGateway.McpServerProvider(),
         Monitoring.DestinationProvider(),
         Inference.DedicatedInferenceProvider(),
+        WebsiteServerProvider(),
       ),
     ),
     // Spaces' S3 API signs with Spaces keys, not the token.
     // `Kubernetes.*` workloads on a DigitalOcean cluster resolve this adapter.
+    Layer.provideMerge(Command.providers()),
     Layer.provideMerge(Kubernetes.DoksKubernetesAdapter()),
     Layer.provideMerge(layerS3Keys()),
     Layer.provideMerge(Credentials.fromAuthProvider()),

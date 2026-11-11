@@ -530,6 +530,9 @@
       "path": "./examples/hetzner-app/tsconfig.json"
     },
     {
+      "path": "./examples/digitalocean-app/tsconfig.json"
+    },
+    {
       "path": "./examples/hetzner-website-vite/tsconfig.json"
     },
     {
