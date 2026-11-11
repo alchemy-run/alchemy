@@ -552,14 +552,12 @@ describe(
 
           // Out of band: the pending job carries the dead-letter queue and
           // key, and the Function sends handlers that keep dying there too.
-          const groups = yield* scheduler.listScheduleGroups({});
-          const group = (groups.ScheduleGroups ?? []).find((g) =>
-            g.Name?.includes("SchedulerTestFunctionCallbacks"),
-          );
-          const jobs = yield* scheduler.listSchedules({ GroupName: group!.Name! });
+          // Job names start with the callback name and ID, in any group.
+          const listed = yield* scheduler.listSchedules({ NamePrefix: `remind-${id}` });
+          const summary = listed.Schedules![0]!;
           const job = yield* scheduler.getSchedule({
-            GroupName: group!.Name!,
-            Name: jobs.Schedules!.find((s) => s.Name?.includes("pending"))!.Name!,
+            GroupName: summary.GroupName!,
+            Name: summary.Name!,
           });
           expect(job.KmsKeyArn).toBe(inputKeyArn);
           expect(job.Target?.DeadLetterConfig?.Arn).toBe(deadLetterQueueArn);
