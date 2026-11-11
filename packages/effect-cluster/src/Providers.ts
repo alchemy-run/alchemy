@@ -3,6 +3,7 @@ import { Random, RandomProvider } from "alchemy/Random";
 import * as Layer from "effect/Layer";
 import { CronProvider, CronResource } from "./Cron.ts";
 import { EntityProvider, EntityResource } from "./Entity.ts";
+import { NixOSRunners, NixOSRunnersProvider } from "./NixOS/HostPool.ts";
 import { Pool, PoolProvider } from "./Pool.ts";
 import { ProcessRunners, ProcessRunnersProvider } from "./Process/ProcessPool.ts";
 import { ShardGroups, ShardGroupsProvider } from "./ShardGroups.ts";
@@ -33,6 +34,7 @@ export const providers = () =>
       CronResource,
       Pool,
       ProcessRunners,
+      NixOSRunners,
       ShardGroups,
       Random,
     ]),
@@ -45,6 +47,7 @@ export const providers = () =>
         CronProvider(),
         PoolProvider(),
         ProcessRunnersProvider(),
+        NixOSRunnersProvider(),
         ShardGroupsProvider(),
         RandomProvider(),
       ),

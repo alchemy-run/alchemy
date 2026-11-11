@@ -23,6 +23,7 @@
   },
   "files": [
     "lib",
+    "nix",
     "src"
   ],
   "type": "module",
@@ -36,6 +37,7 @@
     "./GCP": "./src/GCP/index.ts",
     "./Hetzner": "./src/Hetzner/index.ts",
     "./Kubernetes": "./src/Kubernetes/index.ts",
+    "./NixOS": "./src/NixOS/index.ts",
     "./Process": "./src/Process/index.ts",
     "./*": "./src/*.ts",
     "./package.json": "./package.json"
@@ -89,6 +91,12 @@
         "bun": "./src/Kubernetes/index.ts",
         "worker": "./src/Kubernetes/index.ts",
         "default": "./lib/Kubernetes/index.js"
+      },
+      "./NixOS": {
+        "types": "./lib/NixOS/index.d.ts",
+        "bun": "./src/NixOS/index.ts",
+        "worker": "./src/NixOS/index.ts",
+        "default": "./lib/NixOS/index.js"
       },
       "./Process": {
         "types": "./lib/Process/index.d.ts",
