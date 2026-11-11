@@ -17,8 +17,9 @@ import { SecretReference } from "./SecretReference.ts";
 interface OnePasswordAuthOptions {
   /**
    * Desktop account name (as displayed in the app sidebar) or UUID.
-   * Defaults to the selected Alchemy profile. Ignored when OP_SERVICE_ACCOUNT_TOKEN
-   * is set. Desktop authorization is unavailable in CI.
+   * Defaults to the selected Alchemy profile, which may hold a desktop selector
+   * or a service account token. Ignored when OP_SERVICE_ACCOUNT_TOKEN is set.
+   * Desktop authorization is unavailable in CI.
    */
   account?: string;
 }
@@ -112,6 +113,13 @@ export class OnePasswordSecretsProvider extends Data.TaggedClass(
  * configure an account with `alchemy profile edit --add 1Password`. In CI,
  * set OP_SERVICE_ACCOUNT_TOKEN with read access to the Environment.
  * Authentication never falls back after a rejected token.
+ *
+ * ### Storing a service account token
+ * **Example:** Profile without the desktop app
+ * ```sh
+ * alchemy profile edit --add 1Password --method service-account --set token=-
+ * ```
+ * `OP_SERVICE_ACCOUNT_TOKEN` still wins over an explicit `account` and the profile.
  *
  * ### Rate limits <!-- api-prose -->
  * The Environment or reference batch is fetched once per layer initialization, not per config key.

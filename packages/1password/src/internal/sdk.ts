@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import packageJson from "../../package.json" with { type: "json" };
 import type { OnePasswordResolvedCredentials } from "../AuthProvider.ts";
@@ -9,6 +10,16 @@ import {
   type OnePasswordOperation,
 } from "../Errors.ts";
 import type { OnePasswordOptions } from "../SecretsProvider.ts";
+
+/**
+ * The SDK's error classes set no `name` or tag, so they are told apart by
+ * their constructor's name. Never `instanceof`: class identity breaks when
+ * the SDK is bundled or installed more than once.
+ */
+const sdkErrorKind = (cause: unknown) =>
+  Predicate.hasProperty(cause, "constructor") && typeof cause.constructor === "function"
+    ? cause.constructor.name
+    : undefined;
 
 export const loadSecrets = Effect.fn("1password.loadSecrets")(function* (
   options: OnePasswordOptions,
@@ -52,19 +63,21 @@ export const loadSecrets = Effect.fn("1password.loadSecrets")(function* (
   ) =>
     Effect.tryPromise({
       try: run,
-      catch: (cause) =>
-        cause instanceof sdk.RateLimitExceededError
+      catch: (cause) => {
+        const kind = sdkErrorKind(cause);
+        return kind === "RateLimitExceededError"
           ? new OnePasswordRateLimitError({ environmentId, operation })
           : new OnePasswordSecretsError({
               environmentId,
               operation,
               reason:
-                cause instanceof sdk.AuthExpiredError
+                kind === "AuthExpiredError"
                   ? "AuthExpired"
-                  : cause instanceof sdk.DesktopSessionExpiredError
+                  : kind === "DesktopSessionExpiredError"
                     ? "DesktopSessionExpired"
                     : "SdkError",
-            }),
+            });
+      },
     }).pipe(
       Effect.timeoutOrElse({
         duration: timeout,

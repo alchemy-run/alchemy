@@ -143,27 +143,43 @@ describe("1Password offline validation", { tags: ["unit", "local"] }, () => {
     ).pipe(Effect.provideService(SuppressMissingProviderConfig, true)),
   );
 
-  it.effect("configures desktop authentication offline and rejects blank selectors", () =>
-    TestCore.toEffect(
-      Effect.gen(function* () {
-        const auth = yield* getAuthProvider<
-          OnePassword.OnePasswordAuthConfig,
-          OnePassword.OnePasswordResolvedCredentials
-        >("1Password").pipe(Effect.provide(OnePassword.OnePasswordAuth));
-        expect(auth.environment?.map((entry) => entry.name)).toEqual(["OP_SERVICE_ACCOUNT_TOKEN"]);
-        const config = yield* auth.configureWith!("testing", {
-          method: "desktop",
-          values: { account: " My Account " },
-        });
-        expect(config).toEqual({ method: "desktop", account: "My Account" });
-        const invalid = yield* auth.configureWith!("testing", {
-          method: "desktop",
-          values: { account: " " },
-        }).pipe(Effect.result);
-        expect(Result.isFailure(invalid)).toBe(true);
-      }).pipe(Effect.provide(Interaction.layerNonInteractive())),
-      options,
-    ),
+  it.effect(
+    "configures desktop and service-account authentication offline and rejects blank selectors",
+    () =>
+      TestCore.toEffect(
+        Effect.gen(function* () {
+          const auth = yield* getAuthProvider<
+            OnePassword.OnePasswordAuthConfig,
+            OnePassword.OnePasswordResolvedCredentials
+          >("1Password").pipe(Effect.provide(OnePassword.OnePasswordAuth));
+          expect(auth.environment?.map((entry) => entry.name)).toEqual([
+            "OP_SERVICE_ACCOUNT_TOKEN",
+          ]);
+          const config = yield* auth.configureWith!("testing", {
+            method: "desktop",
+            values: { account: " My Account " },
+          });
+          expect(config).toEqual({ method: "desktop", account: "My Account" });
+          const invalid = yield* auth.configureWith!("testing", {
+            method: "desktop",
+            values: { account: " " },
+          }).pipe(Effect.result);
+          expect(Result.isFailure(invalid)).toBe(true);
+          const stored = yield* auth.configureWith!("testing", {
+            method: "service-account",
+            values: { token: " ops_stored " },
+          });
+          expect(stored).toEqual({ method: "service-account", token: "ops_stored" });
+          const credentials = yield* auth.read("testing", Effect.succeed(stored));
+          expect(credentials.method).toBe("service-account");
+          if (credentials.method === "service-account") {
+            expect(Redacted.value(credentials.token) === "ops_stored").toBe(true);
+          }
+          const details = yield* auth.details("testing", Effect.succeed(stored));
+          expect(JSON.stringify(details)).not.toContain("ops_stored");
+        }).pipe(Effect.provide(Interaction.layerNonInteractive())),
+        options,
+      ),
   );
 
   it.effect(
