@@ -1082,21 +1082,29 @@ describe.concurrent("Service", () => {
         const machineOf = (appName: string, machineId: string) =>
           machines.getMachine({ app_name: appName, machine_id: machineId });
 
-        // A bound value lands in the App vault, not in the Machine config.
+        // A bound value lands in the App vault under a name scoped to the
+        // Service; the Machine maps it back to the env var the program reads.
         const first = yield* deploy({ BOUND_SECRETS_MODE: "on", BOUND_SECRET: "value-one" });
         const appName = first.appName;
         expect(Object.keys(first.secrets ?? {}).sort()).toEqual([
           "BOUND_SECRET",
           "BOUND_SECRETS_MODE",
         ]);
+        const scoped = first.secrets!.BOUND_SECRET!.name;
+        expect(scoped).toMatch(/^ALCHEMY_[0-9A-F]{8}_BOUND_SECRET$/);
         expect(first.secretsVersion).toEqual(expect.any(Number));
-        expect(yield* secretsOf(appName)).toEqual(
-          expect.arrayContaining(["BOUND_SECRET", "BOUND_SECRETS_MODE"]),
+        const vault = yield* secretsOf(appName);
+        expect(vault).toEqual(
+          expect.arrayContaining([scoped, first.secrets!.BOUND_SECRETS_MODE!.name]),
         );
+        expect(vault).not.toContain("BOUND_SECRET");
         const created = yield* machineOf(appName, first.machineId);
         expect(created.config?.env?.BOUND_SECRET).toBeUndefined();
         expect(created.config?.env?.BOUND_SECRETS_MODE).toBeUndefined();
         expect(created.config?.env?.PLAIN_VALUE).toEqual("plain");
+        expect(created.config?.processes?.[0]?.secrets).toEqual(
+          expect.arrayContaining([{ env_var: "BOUND_SECRET", name: scoped }]),
+        );
         expect(yield* readSecret(first.url, "value-one")).toEqual("value-one");
 
         // An unchanged value writes nothing and leaves the Machine running.
@@ -1109,10 +1117,11 @@ describe.concurrent("Service", () => {
 
         // A changed value raises the secrets version and rolls the Machine;
         // its unchanged neighbour is matched by digest and not rewritten.
-        const modeUpdatedAt = yield* updatedAtOf(appName, "BOUND_SECRETS_MODE");
+        const modeName = first.secrets!.BOUND_SECRETS_MODE!.name;
+        const modeUpdatedAt = yield* updatedAtOf(appName, modeName);
         const changed = yield* deploy({ BOUND_SECRETS_MODE: "on", BOUND_SECRET: "value-two" });
         expect(changed.secretsVersion).toBeGreaterThan(first.secretsVersion!);
-        expect(yield* updatedAtOf(appName, "BOUND_SECRETS_MODE")).toEqual(modeUpdatedAt);
+        expect(yield* updatedAtOf(appName, modeName)).toEqual(modeUpdatedAt);
         expect(yield* readSecret(changed.url, "value-two")).toEqual("value-two");
 
         // A secret the Service did not write survives; an unbound one is deleted.
@@ -1120,22 +1129,32 @@ describe.concurrent("Service", () => {
         const removed = yield* deploy({ BOUND_SECRETS_MODE: "off" });
         expect(Object.keys(removed.secrets ?? {})).toEqual(["BOUND_SECRETS_MODE"]);
         const remaining = yield* secretsOf(appName);
-        expect(remaining).not.toContain("BOUND_SECRET");
+        expect(remaining).not.toContain(scoped);
         expect(remaining).toContain("FOREIGN_SECRET");
         expect(yield* readSecret(removed.url, "unset")).toEqual("unset");
 
-        // A bound name that already exists is taken over, as after a crash
-        // between the secret write and the state save.
+        // The Machine still sees the App's other secrets under their own names.
+        expect((yield* machineOf(appName, removed.machineId)).config?.processes?.[0]).toEqual(
+          expect.objectContaining({
+            ignore_app_secrets: true,
+            secrets: expect.arrayContaining([
+              expect.objectContaining({ env_var: "FOREIGN_SECRET" }),
+            ]),
+          }),
+        );
+
+        // An App secret with a bound env var's name stays in the App, and
+        // the Machine sees the bound value.
         yield* machines.updateSecrets({
           app_name: appName,
           values: { BOUND_SECRET: "someone-else" },
         });
-        const takenOver = yield* deploy({
+        const shadowed = yield* deploy({
           BOUND_SECRETS_MODE: "on",
           BOUND_SECRET: "value-three",
         });
-        expect(Object.keys(takenOver.secrets ?? {})).toContain("BOUND_SECRET");
-        expect(yield* readSecret(takenOver.url, "value-three")).toEqual("value-three");
+        expect(yield* readSecret(shadowed.url, "value-three")).toEqual("value-three");
+        expect(yield* secretsOf(appName)).toContain("BOUND_SECRET");
 
         yield* stack.destroy();
         expect(yield* appGone(appName)).toBe(true);
