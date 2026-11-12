@@ -4236,21 +4236,6 @@ importers:
         specifier: workspace:*
         version: link:../../packages/alchemy-test
 
-  examples/cluster-rooms:
-    dependencies:
-      '@alchemy.run/docker':
-        specifier: workspace:*
-        version: link:../../packages/docker
-      '@alchemy.run/effect-cluster':
-        specifier: workspace:*
-        version: link:../../packages/effect-cluster
-      alchemy:
-        specifier: workspace:*
-        version: link:../../packages/alchemy
-      effect:
-        specifier: 4.1.4
-        version: 4.1.4
-
   examples/daytona-sandboxes:
     dependencies:
       '@alchemy.run/cloudflare':
@@ -4362,6 +4347,21 @@ importers:
       '@alchemy.run/test':
         specifier: workspace:*
         version: link:../../packages/alchemy-test
+
+  examples/effect-cluster-rooms:
+    dependencies:
+      '@alchemy.run/docker':
+        specifier: workspace:*
+        version: link:../../packages/docker
+      '@alchemy.run/effect-cluster':
+        specifier: workspace:*
+        version: link:../../packages/effect-cluster
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
 
   examples/fly-app:
     dependencies:

@@ -9,7 +9,7 @@ Each room tracks its members, lets only signed-in users join through RPC middlew
 ```sh
 docker swarm init   # once
 bun install
-bun run --filter cluster-rooms-example deploy
+bun run --filter effect-cluster-rooms-example deploy
 ```
 
 ```sh
@@ -19,5 +19,5 @@ curl "localhost:8080/answer?executionId=<id>&accept=true"
 ```
 
 ```sh
-bun run --filter cluster-rooms-example destroy
+bun run --filter effect-cluster-rooms-example destroy
 ```

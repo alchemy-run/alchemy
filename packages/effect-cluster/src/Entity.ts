@@ -62,8 +62,9 @@ export interface EntityProps extends PlatformProps {
    */
   concurrency?: number | "unbounded";
   /**
-   * How many messages an instance may hold, running or waiting to run,
-   * before new ones fail with `MailboxFull`.
+   * How many messages an instance may hold, running or waiting to run.
+   * Past that, a message fails with `MailboxFull`, unless it is persisted:
+   * a persisted message is stored and runs once there is room.
    * @default 4096
    */
   mailboxCapacity?: number | "unbounded";
