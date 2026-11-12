@@ -74,7 +74,6 @@ export const makeFoldkitSource = (
     memo: options.memo,
     outputDirs: ["dist"],
     // A changed custom entry must bust the memo.
-    hashOptions: { main: options.main },
     // A client-only app without `main` deploys assets alone.
     requireServer: false,
     buildConfig: (ctx, rootDir) =>
