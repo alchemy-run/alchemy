@@ -4,6 +4,7 @@ import type { MemoOptions } from "alchemy/Command/Memo";
 import type { Input, InputProps } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import { ProviderModePolicy } from "alchemy/ProviderMode";
+import { normalizeDurationInput } from "alchemy/Util/Duration";
 import { Server, type ServerDevProps } from "alchemy/Website/Server";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
@@ -43,6 +44,15 @@ export interface FrameworkSiteBaseProps {
    * @default 30 seconds
    */
   timeout?: Duration.Duration;
+  /**
+   * CloudFront's idle/inter-packet origin read timeout for SSR responses (not
+   * an overall response deadline). Defaults to the server timeout rounded up
+   * to whole seconds, conservatively capped at 60 seconds by this application.
+   * CloudFront accepts 1–120 seconds; an explicit value is subject to the
+   * account quota. See https://docs.aws.amazon.com/cloudfront/latest/APIReference/API_CustomOriginConfig.html
+   * and https://docs.aws.amazon.com/general/latest/gr/cf_region.html.
+   */
+  originReadTimeout?: Duration.Duration;
   /**
    * Static asset upload configuration.
    */
@@ -271,8 +281,17 @@ export const makeFrameworkSite = Effect.fn("AWS.Website.FrameworkSite")(function
   // them at reconcile time. The plan-time reads in this function
   // (domain-shape branching, dev wiring, the build's rootDir/memo)
   // need concrete values — passing an `Output` for those specific
-  // fields is unsupported, same as on the Cloudflare side.
+  // fields is unsupported, same as on the Cloudflare side. The derived
+  // origin timeout is kept Input-safe because it is consumed by a resource.
   const props = propsIn as FrameworkSiteProps;
+  const timeout = props.timeout ?? Duration.seconds(30);
+  const originReadTimeout =
+    props.originReadTimeout ??
+    Output.map(Output.isOutput(timeout) ? timeout : Output.literal(timeout), (value) =>
+      Duration.seconds(
+        Math.min(60, Math.max(1, Math.ceil(Duration.toSeconds(normalizeDurationInput(value))))),
+      ),
+    );
   yield* checkWebsiteRegions(`AWS.Website.${config.name} "${id}"`, props);
   const ctx = yield* AlchemyContext;
   const remoted = yield* ProviderModePolicy;
@@ -377,7 +396,10 @@ export const makeFrameworkSite = Effect.fn("AWS.Website.FrameworkSite")(function
       server,
       props.server === "function" ? {} : props,
     );
-    const site = yield* makeKvSite(id, siteProps, { serverHost: endpoint.domainName });
+    const site = yield* makeKvSite(id, siteProps, {
+      serverHost: endpoint.domainName,
+      originReadTimeout,
+    });
     return {
       ...site,
       build,
@@ -412,7 +434,7 @@ export const makeFrameworkSite = Effect.fn("AWS.Website.FrameworkSite")(function
     return new URL(url).hostname;
   })(server.functionUrl as any) as Input<string>;
 
-  const site = yield* makeKvSite(id, siteProps, { serverHost });
+  const site = yield* makeKvSite(id, siteProps, { serverHost, originReadTimeout });
 
   return {
     ...site,

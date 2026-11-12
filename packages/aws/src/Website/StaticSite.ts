@@ -9,6 +9,7 @@ import { ProviderModePolicy } from "alchemy/ProviderMode";
 import { isResource } from "alchemy/Resource";
 import { Stack } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import { CachePolicy } from "../CloudFront/CachePolicy.ts";
@@ -319,6 +320,12 @@ export interface KvSiteServerOptions {
    */
   serverHost: Input<string>;
   /**
+   * CloudFront's idle/inter-packet origin read timeout for the dynamic server,
+   * not an overall response deadline. When omitted, the SSR composites use a
+   * timeout derived from the server timeout.
+   */
+  originReadTimeout?: Input<Duration.Input>;
+  /**
    * Optional dedicated image-optimization origin: requests whose path
    * starts with `route` (e.g. `/_next/image`) are forwarded to `host`
    * instead of the server origin (see `metadata.image` in cfcode.ts).
@@ -615,8 +622,14 @@ export const makeKvSite = Effect.fn("AWS.Website.KvSite")(function* (
     ];
 
     const errorPage = "/" + (props.errorPage ?? indexPage).replace(/^\//, "");
-    const customErrorResponses =
-      props.errorPage && !server
+    // Remove CloudFront's default negative-cache floor for SSR errors without
+    // overriding response status, body, or origin cache headers.
+    const customErrorResponses = server
+      ? [400, 403, 404, 405, 414, 416, 500, 501, 502, 503, 504].map((ErrorCode) => ({
+          ErrorCode,
+          ErrorCachingMinTTL: 0,
+        }))
+      : props.errorPage
         ? [
             {
               ErrorCode: 403,
@@ -679,7 +692,7 @@ export const makeKvSite = Effect.fn("AWS.Website.KvSite")(function* (
                 httpPort: 80,
                 httpsPort: 443,
                 originProtocolPolicy: "https-only" as const,
-                originReadTimeout: "20 seconds",
+                originReadTimeout: server.originReadTimeout ?? "30 seconds",
                 originSslProtocols: ["TLSv1.2"],
               },
             }
