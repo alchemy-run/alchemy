@@ -11,6 +11,10 @@ import {
   MemberNotificationSetting,
   MemberNotificationSettingProvider,
 } from "./Notifications/MemberNotificationSetting.ts";
+import {
+  ByocInfrastructure,
+  ByocInfrastructureProvider,
+} from "./Organization/ByocInfrastructure.ts";
 import { Organization, OrganizationProvider } from "./Organization/Organization.ts";
 import { PreviewFeature, PreviewFeatureProvider } from "./Organization/PreviewFeature.ts";
 import { Role, RoleProvider } from "./RoleManagement/Role.ts";
@@ -42,6 +46,7 @@ export const providers = () =>
     Provider.collection([
       ApiKey,
       BackupConfiguration,
+      ByocInfrastructure,
       Invitation,
       Member,
       MemberNotificationSetting,
@@ -55,6 +60,7 @@ export const providers = () =>
       Layer.mergeAll(
         ApiKeyProvider(),
         BackupConfigurationProvider(),
+        ByocInfrastructureProvider(),
         InvitationProvider(),
         MemberProvider(),
         MemberNotificationSettingProvider(),

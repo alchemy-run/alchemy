@@ -123,6 +123,17 @@ export class PreviewNotOffered extends Data.TaggedError("ClickHouseCloud.Preview
   }
 }
 
+/** BYOC validation denied one or more checks for the requested infrastructure. */
+export class ByocValidationFailed extends Data.TaggedError("ClickHouseCloud.ByocValidationFailed")<{
+  readonly checks: ReadonlyArray<{ readonly name: string; readonly reason: string | undefined }>;
+}> {
+  override get message() {
+    return `ClickHouse Cloud BYOC validation failed: ${this.checks
+      .map((c) => `${c.name}${c.reason ? ` (${c.reason})` : ""}`)
+      .join("; ")}`;
+  }
+}
+
 /** A long-running object (UDF build, attachment, ClickPipe, reverse private endpoint) ended in a failed state. */
 export class OperationFailed extends Data.TaggedError("ClickHouseCloud.OperationFailed")<{
   readonly kind: string;
