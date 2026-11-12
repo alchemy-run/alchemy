@@ -184,3 +184,84 @@ test.provider(
     timeout: 120_000,
   },
 );
+
+test.provider(
+  "set, change, and clear a product's display and shipping details",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployProduct = (details: Partial<Stripe.ProductProps>) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            return yield* Stripe.Product("DetailedProduct", {
+              name: "Alchemy Detailed Product",
+              ...details,
+            });
+          }),
+        );
+
+      const created = yield* deployProduct({
+        marketingFeatures: ["Unlimited projects", "Priority support"],
+        unitLabel: "seat",
+        statementDescriptor: "ALCHEMY PRO",
+        url: "https://example.com/pro",
+        shippable: true,
+        packageDimensions: { height: 1, length: 10, weight: 2.5, width: 8 },
+      });
+      expect(created.marketingFeatures).toEqual(["Unlimited projects", "Priority support"]);
+      expect(created.unitLabel).toEqual("seat");
+      expect(created.statementDescriptor).toEqual("ALCHEMY PRO");
+      expect(created.url).toEqual("https://example.com/pro");
+      expect(created.shippable).toEqual(true);
+      expect(created.packageDimensions).toEqual({ height: 1, length: 10, weight: 2.5, width: 8 });
+
+      const fetched = yield* GetProduct({ id: created.id });
+      expect(fetched.marketing_features.map((feature) => feature.name)).toEqual([
+        "Unlimited projects",
+        "Priority support",
+      ]);
+      expect(fetched.unit_label).toEqual("seat");
+      expect(fetched.statement_descriptor).toEqual("ALCHEMY PRO");
+      expect(fetched.package_dimensions?.weight).toEqual(2.5);
+
+      const changed = yield* deployProduct({
+        marketingFeatures: ["Unlimited projects"],
+        unitLabel: "user",
+        statementDescriptor: "ALCHEMY TEAM",
+        url: "https://example.com/team",
+        shippable: false,
+        packageDimensions: { height: 2, length: 10, weight: 3, width: 8 },
+      });
+      expect(changed.id).toEqual(created.id);
+      expect(changed.marketingFeatures).toEqual(["Unlimited projects"]);
+      expect(changed.unitLabel).toEqual("user");
+      expect(changed.statementDescriptor).toEqual("ALCHEMY TEAM");
+      expect(changed.url).toEqual("https://example.com/team");
+      expect(changed.shippable).toEqual(false);
+      expect(changed.packageDimensions).toEqual({ height: 2, length: 10, weight: 3, width: 8 });
+
+      const cleared = yield* deployProduct({});
+      expect(cleared.id).toEqual(created.id);
+      expect(cleared.marketingFeatures).toEqual([]);
+      expect(cleared.unitLabel).toBeUndefined();
+      expect(cleared.statementDescriptor).toEqual("ALCHEMY TEAM");
+      expect(cleared.url).toBeUndefined();
+      expect(cleared.shippable).toEqual(false);
+      expect(cleared.packageDimensions).toBeUndefined();
+
+      const refetched = yield* GetProduct({ id: created.id });
+      expect(refetched.marketing_features).toEqual([]);
+      expect(refetched.unit_label ?? undefined).toBeUndefined();
+      expect(refetched.url || undefined).toBeUndefined();
+      expect(refetched.package_dimensions).toBeNull();
+
+      yield* stack.destroy();
+
+      expect(yield* waitUntilGone(created.id)).toEqual("gone");
+    }).pipe(logLevel),
+  {
+    tags: ["provider:stripe", "provider:stripe:product", "live"],
+    timeout: 120_000,
+  },
+);

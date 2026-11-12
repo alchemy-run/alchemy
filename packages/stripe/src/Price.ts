@@ -4,6 +4,7 @@ import {
   GetPrice,
   CreatePrice,
   UpdatePrice,
+  UpdateProduct,
   type Price as StripePrice,
   type PriceProduct,
 } from "@distilled.cloud/stripe/stripe";
@@ -171,6 +172,14 @@ export interface PriceProps {
    */
   taxBehavior?: PriceTaxBehavior;
   /**
+   * Make this price its product's default price, which Checkout, Payment
+   * Links, and pricing tables show. When the price is replaced, the
+   * replacement takes over as default. Set `false` or omit it to leave the
+   * product's default alone, unless it is this price, which is unset.
+   * @default false
+   */
+  defaultForProduct?: boolean;
+  /**
    * Brief description of the price, hidden from customers.
    */
   nickname?: string;
@@ -200,6 +209,8 @@ export type Price = Resource<
     id: string;
     /** Id of the product this price belongs to. */
     product: string;
+    /** Whether this price is its product's default price. */
+    defaultForProduct: boolean;
     /** Three-letter ISO currency code. */
     currency: string;
     /** Amount in the currency's minor units, or `undefined` when unset. */
@@ -314,6 +325,17 @@ export interface PriceLookup {
  * });
  * ```
  *
+ * **Example:** The product's default price
+ * ```typescript
+ * const price = yield* Stripe.Price("pro-monthly", {
+ *   product,
+ *   currency: "usd",
+ *   unitAmount: 1000,
+ *   recurring: { interval: "month" },
+ *   defaultForProduct: true,
+ * });
+ * ```
+ *
  * ### Charging in several currencies
  * **Example:** One price in USD, EUR, and GBP
  * ```typescript
@@ -377,6 +399,14 @@ const userMetadata = (
 const productIdOf = (product: PriceProduct): string => {
   if (typeof product === "string") return product;
   return product.id;
+};
+
+/** The product's default price id, when the product came back expanded. */
+const productDefaultPriceOf = (product: PriceProduct): string | undefined => {
+  if (typeof product === "string" || !("default_price" in product)) return undefined;
+  const defaultPrice = product.default_price;
+  if (defaultPrice == null) return undefined;
+  return typeof defaultPrice === "string" ? defaultPrice : defaultPrice.id;
 };
 
 const alchemyProductId = (product: string | Product): string => {
@@ -515,11 +545,13 @@ const currencyOptionsEqual = (
   });
 };
 
-const PRICE_EXPAND = ["tiers", "currency_options"];
+// `product` comes back expanded so its `default_price` is read with the price.
+const PRICE_EXPAND = ["tiers", "currency_options", "product"];
 
 const toAttrs = (price: StripePrice) => ({
   id: price.id,
   product: productIdOf(price.product),
+  defaultForProduct: productDefaultPriceOf(price.product) === price.id,
   currency: price.currency,
   unitAmount: price.unit_amount ?? undefined,
   unitAmountDecimal: price.unit_amount_decimal ?? undefined,
@@ -815,6 +847,17 @@ export const PriceProvider = () =>
       const taxBehaviorChanged =
         news.taxBehavior !== undefined && news.taxBehavior !== (current.tax_behavior ?? undefined);
 
+      const syncDefault = Effect.fn(function* (price: StripePrice) {
+        const attrs = toAttrs(price);
+        const desiredDefault = news.defaultForProduct ?? false;
+        if (attrs.defaultForProduct === desiredDefault) return attrs;
+        yield* UpdateProduct({
+          id: attrs.product,
+          default_price: desiredDefault ? price.id : "",
+        });
+        return { ...attrs, defaultForProduct: desiredDefault };
+      });
+
       if (
         !activeChanged &&
         !nicknameChanged &&
@@ -823,7 +866,7 @@ export const PriceProvider = () =>
         !currencyOptionsChanged &&
         !metadataChanged
       ) {
-        return toAttrs(current);
+        return yield* syncDefault(current);
       }
 
       const updated = yield* UpdatePrice({
@@ -845,12 +888,17 @@ export const PriceProvider = () =>
             }
           : {}),
       });
-      return toAttrs(updated);
+      return yield* syncDefault(updated);
     }),
 
     delete: Effect.fn(function* ({ output }) {
       const existing = yield* getById(output.id);
       if (existing === undefined || !existing.active) return;
+      // Stripe won't archive a product's default price. A replacement has
+      // already taken the default over by now, so this only fires on destroy.
+      if (productDefaultPriceOf(existing.product) === existing.id) {
+        yield* UpdateProduct({ id: productIdOf(existing.product), default_price: "" });
+      }
       yield* UpdatePrice({
         price: existing.id,
         active: false,

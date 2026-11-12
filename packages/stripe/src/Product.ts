@@ -30,6 +30,18 @@ const NAME_MAX_LENGTH = 250;
 const LIST_PAGE_SIZE = 100;
 const LIST_MAX_PAGES = 100;
 
+/** Shipping dimensions of a physical product. */
+export interface ProductPackageDimensions {
+  /** Height, in inches. */
+  height: number;
+  /** Length, in inches. */
+  length: number;
+  /** Weight, in ounces. */
+  weight: number;
+  /** Width, in inches. */
+  width: number;
+}
+
 export interface ProductProps {
   /**
    * Display name of the product. If omitted, a unique name is generated
@@ -56,6 +68,36 @@ export interface ProductProps {
    */
   taxCode?: string;
   /**
+   * Up to 15 feature names shown in pricing tables (up to 80 characters
+   * each). If omitted, the product has none.
+   */
+  marketingFeatures?: string[];
+  /**
+   * Label for one unit, shown on receipts, invoices, and Checkout (e.g.
+   * `"seat"`, up to 12 characters). If omitted, the product has none.
+   */
+  unitLabel?: string;
+  /**
+   * Text on the customer's card statement for subscription payments (5–22
+   * characters, at least one letter, none of `<>\'"*`). Stripe can't clear
+   * it, so if omitted the product keeps its current descriptor.
+   */
+  statementDescriptor?: string;
+  /**
+   * Publicly accessible web page for the product. If omitted, the product
+   * has none.
+   */
+  url?: string;
+  /**
+   * Whether the product is shipped (a physical good). Stripe can't unset
+   * it, so if omitted the product keeps its current value.
+   */
+  shippable?: boolean;
+  /**
+   * Package dimensions for shipping. If omitted, the product has none.
+   */
+  packageDimensions?: ProductPackageDimensions;
+  /**
    * User-defined metadata. Alchemy ownership keys (`alchemy_stack` /
    * `alchemy_stage` / `alchemy_id`) are merged in automatically. Keys may
    * not contain `:`.
@@ -79,6 +121,18 @@ export type Product = Resource<
     images: string[];
     /** Tax code (`txcd_…`), if set. */
     taxCode: string | undefined;
+    /** Feature names shown in pricing tables. */
+    marketingFeatures: string[];
+    /** Label for one unit, if set. */
+    unitLabel: string | undefined;
+    /** Card statement text for subscription payments, if set. */
+    statementDescriptor: string | undefined;
+    /** Public web page for the product, if set. */
+    url: string | undefined;
+    /** Whether the product is shipped, if set. */
+    shippable: boolean | undefined;
+    /** Package dimensions for shipping, if set. */
+    packageDimensions: ProductPackageDimensions | undefined;
     /** User-defined metadata (Alchemy ownership keys stripped). */
     metadata: Record<string, string>;
     /** Unix timestamp when the product was created. */
@@ -102,9 +156,8 @@ export interface ProductLookup {
 
 /**
  * A Stripe Product — the catalog item that Prices, invoices, and Checkout
- * attach to. Name, description, active, images, tax code, and metadata
- * are updated in place. Deleting a product is only possible when it has
- * no Prices.
+ * attach to. Every field updates in place. Deleting a product is only
+ * possible when it has no Prices.
  *
  * @see https://docs.stripe.com/api/products
  *
@@ -132,6 +185,26 @@ export interface ProductLookup {
  *   images: ["https://example.com/pro.png"],
  *   taxCode: "txcd_10103001",
  *   metadata: { tier: "pro" },
+ * });
+ * ```
+ *
+ * **Example:** Pricing table features and unit label
+ * ```typescript
+ * const product = yield* Stripe.Product("team-plan", {
+ *   name: "Team Plan",
+ *   marketingFeatures: ["Unlimited projects", "Priority support"],
+ *   unitLabel: "seat",
+ *   statementDescriptor: "ACME TEAM",
+ *   url: "https://example.com/team",
+ * });
+ * ```
+ *
+ * **Example:** A shipped product
+ * ```typescript
+ * const product = yield* Stripe.Product("t-shirt", {
+ *   name: "T-shirt",
+ *   shippable: true,
+ *   packageDimensions: { height: 1, length: 10, weight: 6, width: 8 },
  * });
  * ```
  *
@@ -178,6 +251,22 @@ const taxCodeIdOf = (taxCode: StripeProduct["tax_code"]): string | undefined => 
   return taxCode.id;
 };
 
+const marketingFeatureNames = (product: StripeProduct): string[] =>
+  product.marketing_features.flatMap((feature) =>
+    feature.name !== undefined ? [feature.name] : [],
+  );
+
+const dimensionsEqual = (
+  a: ProductPackageDimensions | undefined,
+  b: ProductPackageDimensions | undefined,
+) =>
+  a === undefined || b === undefined
+    ? a === b
+    : a.height === b.height &&
+      a.length === b.length &&
+      a.weight === b.weight &&
+      a.width === b.width;
+
 const toAttrs = (product: StripeProduct) => ({
   id: product.id,
   name: product.name,
@@ -185,6 +274,21 @@ const toAttrs = (product: StripeProduct) => ({
   active: product.active,
   images: product.images,
   taxCode: taxCodeIdOf(product.tax_code),
+  marketingFeatures: marketingFeatureNames(product),
+  // A cleared field reads back as `""`.
+  unitLabel: product.unit_label || undefined,
+  statementDescriptor: product.statement_descriptor || undefined,
+  url: product.url || undefined,
+  shippable: product.shippable ?? undefined,
+  packageDimensions:
+    product.package_dimensions == null
+      ? undefined
+      : {
+          height: product.package_dimensions.height,
+          length: product.package_dimensions.length,
+          weight: product.package_dimensions.weight,
+          width: product.package_dimensions.width,
+        },
   metadata: userMetadata(product.metadata),
   created: product.created,
   livemode: product.livemode,
@@ -303,6 +407,9 @@ export const ProductProvider = () =>
       const desiredActive = news.active ?? true;
       const desiredDescription = news.description ?? "";
       const desiredImages = news.images ?? [];
+      const desiredFeatures = news.marketingFeatures ?? [];
+      const desiredUnitLabel = news.unitLabel ?? "";
+      const desiredUrl = news.url ?? "";
 
       let current = yield* observe({
         id: output?.id,
@@ -316,6 +423,18 @@ export const ProductProvider = () =>
           ...(desiredDescription.length > 0 ? { description: desiredDescription } : {}),
           ...(desiredImages.length > 0 ? { images: desiredImages } : {}),
           ...(news.taxCode !== undefined ? { tax_code: news.taxCode } : {}),
+          ...(desiredFeatures.length > 0
+            ? { marketing_features: desiredFeatures.map((name) => ({ name })) }
+            : {}),
+          ...(desiredUnitLabel.length > 0 ? { unit_label: desiredUnitLabel } : {}),
+          ...(news.statementDescriptor !== undefined
+            ? { statement_descriptor: news.statementDescriptor }
+            : {}),
+          ...(desiredUrl.length > 0 ? { url: desiredUrl } : {}),
+          ...(news.shippable !== undefined ? { shippable: news.shippable } : {}),
+          ...(news.packageDimensions !== undefined
+            ? { package_dimensions: news.packageDimensions }
+            : {}),
           metadata,
         }).pipe(
           withRequestOptions({
@@ -333,6 +452,18 @@ export const ProductProvider = () =>
       const imagesChanged = !arrayEquals(current.images, desiredImages);
       const taxCodeChanged =
         news.taxCode !== undefined && taxCodeIdOf(current.tax_code) !== news.taxCode;
+      const featuresChanged = !arrayEquals(marketingFeatureNames(current), desiredFeatures);
+      const unitLabelChanged = (current.unit_label ?? "") !== desiredUnitLabel;
+      const statementDescriptorChanged =
+        news.statementDescriptor !== undefined &&
+        (current.statement_descriptor ?? undefined) !== news.statementDescriptor;
+      const urlChanged = (current.url ?? "") !== desiredUrl;
+      const shippableChanged =
+        news.shippable !== undefined && (current.shippable ?? undefined) !== news.shippable;
+      const dimensionsChanged = !dimensionsEqual(
+        current.package_dimensions ?? undefined,
+        news.packageDimensions,
+      );
 
       if (
         !nameChanged &&
@@ -340,6 +471,12 @@ export const ProductProvider = () =>
         !descriptionChanged &&
         !imagesChanged &&
         !taxCodeChanged &&
+        !featuresChanged &&
+        !unitLabelChanged &&
+        !statementDescriptorChanged &&
+        !urlChanged &&
+        !shippableChanged &&
+        !dimensionsChanged &&
         !metadataChanged
       ) {
         return toAttrs(current);
@@ -352,6 +489,17 @@ export const ProductProvider = () =>
         ...(descriptionChanged ? { description: desiredDescription } : {}),
         ...(imagesChanged ? { images: desiredImages.length > 0 ? desiredImages : "" } : {}),
         ...(taxCodeChanged ? { tax_code: news.taxCode } : {}),
+        ...(featuresChanged
+          ? {
+              marketing_features:
+                desiredFeatures.length > 0 ? desiredFeatures.map((name) => ({ name })) : "",
+            }
+          : {}),
+        ...(unitLabelChanged ? { unit_label: desiredUnitLabel } : {}),
+        ...(statementDescriptorChanged ? { statement_descriptor: news.statementDescriptor } : {}),
+        ...(urlChanged ? { url: desiredUrl } : {}),
+        ...(shippableChanged ? { shippable: news.shippable } : {}),
+        ...(dimensionsChanged ? { package_dimensions: news.packageDimensions ?? "" } : {}),
         ...(metadataChanged
           ? {
               metadata: {

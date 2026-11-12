@@ -2,7 +2,7 @@ import * as Stripe from "@alchemy.run/stripe";
 import { isMissingStripeResource } from "@alchemy.run/stripe/missing";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
-import { GetPrice, CreateProduct, UpdateProduct } from "@distilled.cloud/stripe/stripe";
+import { GetPrice, GetProduct, CreateProduct, UpdateProduct } from "@distilled.cloud/stripe/stripe";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -483,6 +483,66 @@ test.provider(
     }).pipe(logLevel),
   {
     tags: ["provider:stripe", "provider:stripe:price", "live"],
+    timeout: 120_000,
+  },
+);
+
+test.provider(
+  "make a price its product's default and hand the default to a replacement",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deploy = (input: { unitAmount: number; defaultForProduct?: boolean }) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const product = yield* Stripe.Product("DefaultPriceProduct", {
+              name: "Alchemy Default Price Product",
+            });
+            const price = yield* Stripe.Price("DefaultPrice", {
+              product,
+              currency: "usd",
+              unitAmount: input.unitAmount,
+              ...(input.defaultForProduct !== undefined
+                ? { defaultForProduct: input.defaultForProduct }
+                : {}),
+            });
+            return { product, price };
+          }),
+        );
+      const defaultPriceOf = (product: string) =>
+        GetProduct({ id: product }).pipe(
+          Effect.map((p) =>
+            p.default_price == null
+              ? undefined
+              : typeof p.default_price === "string"
+                ? p.default_price
+                : p.default_price.id,
+          ),
+        );
+
+      const first = yield* deploy({ unitAmount: 1000, defaultForProduct: true });
+      expect(first.price.defaultForProduct).toEqual(true);
+      expect(yield* defaultPriceOf(first.product.id)).toEqual(first.price.id);
+
+      const replaced = yield* deploy({ unitAmount: 1200, defaultForProduct: true });
+      expect(replaced.price.id).not.toEqual(first.price.id);
+      expect(yield* defaultPriceOf(first.product.id)).toEqual(replaced.price.id);
+      expect((yield* GetPrice({ price: first.price.id })).active).toEqual(false);
+
+      const released = yield* deploy({ unitAmount: 1200 });
+      expect(released.price.id).toEqual(replaced.price.id);
+      expect(released.price.defaultForProduct).toEqual(false);
+      expect(yield* defaultPriceOf(first.product.id)).toBeUndefined();
+
+      yield* deploy({ unitAmount: 1200, defaultForProduct: true });
+      yield* stack.destroy();
+
+      expect(yield* waitUntilDeactivated(replaced.price.id)).toEqual("inactive");
+      expect((yield* GetProduct({ id: first.product.id })).active).toEqual(false);
+    }).pipe(logLevel),
+  {
+    tags: ["provider:stripe", "provider:stripe:price", "provider:stripe:product", "live"],
     timeout: 120_000,
   },
 );
