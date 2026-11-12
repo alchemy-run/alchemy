@@ -182,7 +182,11 @@ export const StageDatabaseProvider = () =>
 
       const ownerOf = (connection: Connection, name: string) =>
         getParameter({ Name: ownerParameterName(connection.host, name) }).pipe(
-          Effect.map((found) => found.Parameter?.Value as string | undefined),
+          // The SDK hands every parameter value back Redacted, plain strings too.
+          Effect.map((found): string | undefined => {
+            const value = found.Parameter?.Value;
+            return Redacted.isRedacted(value) ? Redacted.value(value) : value;
+          }),
           Effect.catchTag("ParameterNotFound", () => Effect.undefined),
         );
 
