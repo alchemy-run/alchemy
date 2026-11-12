@@ -30,9 +30,10 @@ export interface NextjsProps<Bindings extends WorkerBindingProps = {}> extends O
 > {
   /**
    * Controls which files are content-hashed to decide whether the OpenNext
-   * build needs to re-run. By default every project file outside build
-   * outputs (`.next`, `.open-next`, `dist`) and `node_modules` is hashed,
-   * plus the nearest package-manager lockfile. Narrow the scope with
+   * build needs to re-run. By default every non-gitignored project file
+   * outside build outputs (`.next`, `.open-next`, `dist`) and `node_modules`
+   * is hashed, plus root `.env*` files and the nearest package-manager
+   * lockfile. Narrow the scope with
    * `include`/`exclude` globs when the default is too broad.
    * `open-next.config.ts` itself is always hashed. When narrowing `include`,
    * also include any helpers imported by that config.

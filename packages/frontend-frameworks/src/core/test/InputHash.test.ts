@@ -102,15 +102,30 @@ describe("hashInput workspaces", () => {
       expect((await hash(app, [], scoped)).hash).toBe(before.hash);
     });
 
-    it("fails when a pinned workspace is missing", async () => {
+    it("fails when a pinned workspace is missing, with or without globs", async () => {
       const { app, lib } = await makeMonorepo();
       await NodeFsPromises.rm(lib, { recursive: true });
       await expect(hash(app, [], memo)).rejects.toThrow();
+      await expect(
+        hash(app, [], { workspaces: [{ cwd: "../lib", include: ["src/**"] }] }),
+      ).rejects.toThrow();
     });
   });
 });
 
 describe("hashInput tree", () => {
+  it("hashes root .env files even when gitignored", async () => {
+    const { app } = await makeMonorepo();
+    await NodeFsPromises.writeFile(NodePath.join(app, ".gitignore"), ".env*\n");
+    const env = NodePath.join(app, ".env.production");
+    await NodeFsPromises.writeFile(env, "NEXT_PUBLIC_API_URL=https://a.example");
+    for (const memo of [undefined, { include: ["**/*"] }]) {
+      const before = await hash(app, [], memo);
+      await NodeFsPromises.writeFile(env, `NEXT_PUBLIC_API_URL=${Math.random()}`);
+      expect((await hash(app, [], memo)).hash).not.toBe(before.hash);
+    }
+  });
+
   it("follows a symlinked directory, with and without memo globs", async () => {
     const { app, lib, greeting } = await makeMonorepo();
     await NodeFsPromises.symlink(NodePath.join(lib, "src"), NodePath.join(app, "linked"), "dir");

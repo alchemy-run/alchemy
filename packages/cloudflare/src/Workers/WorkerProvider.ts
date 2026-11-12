@@ -2392,7 +2392,12 @@ export const LiveWorkerProvider = () =>
             id,
             fqn,
             workerName,
-            props: { ...props, env: yield* resolveBuildEnv(props.env, opts.selfUrl) },
+            // Literals replace `Worker.URL` and env-bound Effects; bindings
+            // stay, so a source can still read them (Vinext's KV cache).
+            props: {
+              ...props,
+              env: { ...props.env, ...(yield* resolveBuildEnv(props.env, opts.selfUrl)) },
+            },
             compatibility: getCompatibility(props),
             stack: { name: stack.name, stage: stack.stage },
             selfUrl: opts.selfUrl,

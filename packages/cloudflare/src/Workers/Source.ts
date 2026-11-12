@@ -95,9 +95,10 @@ export interface SourceContext {
       };
   readonly stack: { readonly name: string; readonly stage: string };
   /**
-   * `props.env`. For `build` it is already resolved to string literals
-   * (`resolveBuildEnv`: `Worker.URL`, Redacted and env-bound Effects); for
-   * `hash` and `dev` it is the raw props value.
+   * `props.env`. For `build`, entries that resolve to literals
+   * (`resolveBuildEnv`: `Worker.URL`, Redacted and env-bound Effects) are
+   * replaced by them and bindings are kept; for `hash` and `dev` it is the
+   * raw props value.
    */
   readonly env: Record<string, unknown> | undefined;
   /**

@@ -18,7 +18,8 @@ export interface FrameworkWebsiteProps<Bindings extends WorkerBindingProps = {}>
   rootDir?: string;
   /**
    * Which files are hashed to decide whether the build re-runs. By default
-   * every non-gitignored file under {@link rootDir}, the nearest
+   * every non-gitignored file under {@link rootDir}, its `.env*` files
+   * (gitignored or not, since builds inline them), the nearest
    * package-manager lockfile, and the workspace packages the build imports.
    * Narrow it with `include`/`exclude` globs, or pin the workspaces.
    */

@@ -19,7 +19,8 @@ import { glob } from "tinyglobby";
  * Input-hash scoping, mirroring alchemy's `MemoOptions` (`Command/Memo.ts`):
  * by default every non-gitignored file under the root is hashed plus the
  * nearest package-manager lockfile; explicit `include` / `exclude` globs
- * narrow the scope.
+ * narrow the scope. Root `.env*` files are hashed even when gitignored,
+ * because builds inline their values.
  */
 export interface MemoOptions {
   /** Glob patterns of files to hash, relative to the root. @default all files */
@@ -91,7 +92,7 @@ export const findUp = Effect.fn(function* (startDir: string, filenames: Readonly
 
 /**
  * Each `.gitignore` from `rootDir` up to the repository root, anchored to its
- * own directory, as alchemy's `Command/Memo.ts` reads them.
+ * own directory, as alchemy's `Command/Memo.ts` reads them, combined.
  */
 const readGitIgnoreScopes = Effect.fn(function* (rootDir: string) {
   const fs = yield* FileSystem.FileSystem;
@@ -113,7 +114,16 @@ const readGitIgnoreScopes = Effect.fn(function* (rootDir: string) {
     if (parent === dir || (yield* fs.exists(path.join(dir, ".git")))) break;
     dir = parent;
   }
-  return scopes;
+  return keepEnvFiles(combineIgnoreRules("gitignore", scopes));
+});
+
+const ENV_FILE = /^\.env(\.[^/]+)?$/;
+
+/** `rules`, except that root `.env*` files are never ignored. */
+const keepEnvFiles = (rules: IgnoreRules): IgnoreRules => ({
+  ...rules,
+  ignores: (relativePath, isDirectory) =>
+    !(!isDirectory && ENV_FILE.test(relativePath)) && rules.ignores(relativePath, isDirectory),
 });
 
 /**
@@ -184,15 +194,12 @@ const listInputFiles = Effect.fn(function* (
         dot: true,
       }),
     );
-    const gitignore =
-      memo.exclude === undefined
-        ? combineIgnoreRules("gitignore", yield* readGitIgnoreScopes(rootDir))
-        : undefined;
+    const gitignore = memo.exclude === undefined ? yield* readGitIgnoreScopes(rootDir) : undefined;
     return files.filter((file) => !always.ignores(file) && !(gitignore?.ignores(file) ?? false));
   }
   const entries = yield* walkIgnoring({
     list: yield* listFollowingLinks(rootDir),
-    rules: combineIgnoreRules("gitignore", [always, ...(yield* readGitIgnoreScopes(rootDir))]),
+    rules: combineIgnoreRules("gitignore", [always, yield* readGitIgnoreScopes(rootDir)]),
   });
   // Like tinyglobby, keep symlinks that resolve to files.
   const files = yield* Effect.filter(
@@ -286,7 +293,11 @@ export const hashInput = Effect.fn(function* (params: {
     (dir === path.resolve(own) || dir.startsWith(path.resolve(own) + path.sep));
   const workspaces: Array<{ readonly dir: string; readonly memo?: MemoOptions }> =
     pinned !== undefined
-      ? pinned.map(({ cwd, ...memo }) => ({ dir: path.resolve(params.rootDir, cwd), memo }))
+      ? yield* Effect.forEach(pinned, ({ cwd, ...memo }) => {
+          const dir = path.resolve(params.rootDir, cwd);
+          // Fails with NotFound, whether or not the workspace has globs.
+          return Effect.as(fs.stat(dir), { dir, memo });
+        })
       : (yield* Effect.filter(
           new Set(Array.from(params.workspaces, (dir) => path.resolve(params.rootDir, dir))),
           (dir) => (isOwn(dir) ? Effect.succeed(false) : fs.exists(dir)),
