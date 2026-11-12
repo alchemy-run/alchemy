@@ -11,7 +11,11 @@ import {
   type WebsiteNotFoundHandling,
 } from "alchemy/Website/assets";
 import { packSiteExtraFiles } from "alchemy/Website/packExtraFiles";
-import { Server as FrameworkServer, type ServerDevProps } from "alchemy/Website/Server";
+import {
+  Server as FrameworkServer,
+  type ServerDevProps,
+  withSiteRoute,
+} from "alchemy/Website/Server";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -333,7 +337,7 @@ const runFrameworkSite = Effect.fn("Hetzner.Website.FrameworkSite")(function* (
     env: unwrapEnv(props.env),
     options: config.options,
     memo: props.memo,
-    dev: props.dev,
+    dev: withSiteRoute(id, props.dev),
   });
 
   if (isLocal) {

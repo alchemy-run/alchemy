@@ -5,7 +5,7 @@ import type { Input } from "alchemy/Input";
 import * as Namespace from "alchemy/Namespace";
 import * as Output from "alchemy/Output";
 import { ProviderModePolicy } from "alchemy/ProviderMode";
-import { Server, type ServerDevProps } from "alchemy/Website/Server";
+import { Server, type ServerDevProps, withSiteRoute } from "alchemy/Website/Server";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { Table } from "../DynamoDB/Table.ts";
@@ -213,7 +213,7 @@ export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
       root: props.rootDir,
       env: props.env,
       memo: props.memo,
-      dev: props.dev,
+      dev: withSiteRoute(id, props.dev),
     });
 
     if (isLocal) {
@@ -222,7 +222,7 @@ export const Nextjs = Effect.fn("AWS.Website.Nextjs")(
       // for the S3 + Lambda origins.
       const routerDomain = asRouterDomain(normalizeWebsiteDomain(props.domain));
       const kvNamespace = routerDomain
-        ? yield* registerDevRouterRoute(routerDomain, build.url)
+        ? yield* registerDevRouterRoute(routerDomain, build.localUrl)
         : undefined;
       return {
         bucket: undefined,

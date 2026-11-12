@@ -45,6 +45,7 @@ for (const location of ["root", "ancestor", "sibling", "symlink", "dist"] as con
             clientDir: undefined,
             serverEntry: undefined,
             url: undefined,
+            localUrl: undefined,
             hash: { input: undefined, output: undefined },
           },
           bindings: [],
