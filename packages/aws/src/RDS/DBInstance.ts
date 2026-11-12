@@ -53,6 +53,7 @@ export interface DBInstanceProps {
   engine: string;
   /**
    * Optional engine version. Changed in place via `modifyDBInstance`.
+   * A major version such as `16` is met by any `16.x` the instance runs.
    */
   engineVersion?: string;
   /**
@@ -585,6 +586,10 @@ export interface DBInstanceLookup {
   /** The db instance identifier of the existing DB instance. */
   dbInstanceIdentifier: string;
 }
+
+/** Whether the version RDS reports is the one asked for, or a minor of it. */
+export const engineVersionMet = (desired: string, observed: string | undefined) =>
+  observed !== undefined && (observed === desired || observed.startsWith(`${desired}.`));
 
 /**
  * An RDS database instance — either a standalone (non-Aurora) database or a
@@ -2189,7 +2194,15 @@ export const DBInstanceProvider = () =>
               }
             };
             setIf("DBInstanceClass", news.dbInstanceClass, observed.DBInstanceClass); // prettier-ignore
-            setIf("EngineVersion", news.engineVersion, observed.EngineVersion);
+            // RDS reports the full version (`16.13`), so `16` is already met.
+            // Sending it anyway would re-apply the version on every update.
+            if (
+              news.engineVersion !== undefined &&
+              !engineVersionMet(news.engineVersion, observed.EngineVersion)
+            ) {
+              core.EngineVersion = news.engineVersion;
+              coreDirty = true;
+            }
             if (desiredStorage && !storageConverged(observed, desiredStorage)) {
               Object.assign(core, desiredStorage.request);
               core.MaxAllocatedStorage =
