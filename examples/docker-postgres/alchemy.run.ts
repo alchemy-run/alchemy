@@ -39,10 +39,11 @@ export default Alchemy.Stack(
       },
       sharedMemorySize: "256m",
       ports: [{ external: POSTGRES_PORT, internal: 5432 }],
-      volumes: [
+      mounts: [
         {
-          hostPath: data.name,
-          containerPath: "/var/lib/postgresql/data",
+          type: "volume",
+          source: data.name,
+          target: "/var/lib/postgresql",
         },
       ],
       networks: [{ name: network.name, aliases: ["postgres"] }],

@@ -188,8 +188,8 @@ const postgres = yield* Docker.Container("postgres", {
   },
   sharedMemorySize: "256m",
   ports: [{ external: 15432, internal: 5432 }],
-  volumes: [
-    { hostPath: data.name, containerPath: "/var/lib/postgresql/data" },
+  mounts: [
+    { type: "volume", source: data.name, target: "/var/lib/postgresql" },
   ],
   networks: [{ name: network.name, aliases: ["postgres"] }],
   healthcheck: {
@@ -203,12 +203,57 @@ const postgres = yield* Docker.Container("postgres", {
 ```
 
 `image` accepts the `RemoteImage` resource directly — no manual ref
-plumbing. A `hostPath` set to a volume's name mounts the named
-volume rather than a host directory, the `postgres` network alias
+plumbing. The typed `mounts` entry attaches a named volume at PostgreSQL
+18's data root, while the `postgres` network alias
 gives other containers on `app-network` a stable DNS name, the
 healthcheck intervals take Effect `Duration` strings like
 `"5 seconds"`, and `start: true` actually runs the container
 (the default creates it stopped).
+
+### Volume, bind, and tmpfs mounts
+
+`Docker.Container.mounts` uses Docker `--mount` syntax. `noCopy` skips
+copying image files into an initially empty named volume; `subpath` selects
+an existing directory inside it:
+
+```typescript
+const worker = yield* Docker.Container("worker", {
+  image: "alpine:3.22",
+  mounts: [
+    { type: "volume", source: data.name, target: "/data", noCopy: true },
+    { type: "bind", source: "/srv/config", target: "/config", readOnly: true },
+    { type: "tmpfs", target: "/run", size: "64m", mode: 0o1777 },
+  ],
+});
+```
+
+Bind sources are **absolute paths on the Docker daemon host**, including with
+a remote Docker context, and must exist unless `createHostPath: true` is
+declared. Docker can create a named volume implicitly, but declare
+`Docker.Volume` separately to give Alchemy lifecycle ownership. A `subpath`
+must already exist; Docker can reject a missing one when the container starts.
+
+Linux supports `propagation` and `recursive` bind options (propagation does
+not work on Docker Desktop). `volume-subpath` requires Docker Engine 26+;
+the advanced `bind-recursive` option requires Engine 25+, and recursive
+read-only binds require Linux kernel 5.12+.
+Tmpfs contents are ephemeral. Changing a mount **recreates the container**,
+including its writable layer, but preserves separately managed named volumes.
+The mount declaration is checked using Effect Schema, with invalid fields
+reported as `InvalidContainerOptions` and a precise property path.
+Alchemy also checks known restrictions of the selected Docker daemon and
+context before replacing a container.
+
+Stopped containers using Alchemy-generated names without automatic restart
+policies can be replaced **create-first**:
+the old container remains available if creating its replacement fails. Running
+containers and containers with explicitly fixed names still use **delete-first**
+because they cannot safely coexist with their replacement. That operation is
+not atomic: a missing bind path or volume subpath on the daemon can still
+cause downtime after the old container has been removed. No side-effect-free
+Docker API verifies arbitrary daemon-host paths, so check them before applying
+such a replacement. The legacy `volumes` and `tmpfs` properties retain their
+original Docker CLI semantics.
 
 `sharedMemorySize` controls `/dev/shm`, not the RAM limit (`memory`).
 Alchemy validates positive Docker byte sizes before replacement. Host and
