@@ -109,7 +109,7 @@ const postgres = yield* Docker.Container("postgres", {
 
 `image` takes the `RemoteImage` resource itself. A `hostPath` set to the volume's name mounts the volume. The `postgres` alias is the name other containers on `app-network` connect to. The health check marks the container healthy once Postgres accepts connections, and `start: true` runs it, rather than leaving it created and stopped.
 
-`sharedMemorySize` allocates `/dev/shm` independently of the memory limit. See [Limits & security](/docker/limits-and-security) for the supported IPC namespaces.
+`sharedMemorySize` raises `/dev/shm` above Docker's 64 MB default, which Postgres runs out of on parallel queries.
 
 ## Read the bound ports
 

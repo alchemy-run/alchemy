@@ -53,7 +53,7 @@ export default Alchemy.Stack(
 
 ## Customize the process and namespaces
 
-Docker also accepts create-time runtime settings independently of the image:
+These settings override what the image declares, or set up the process's namespaces:
 
 ```typescript
 const job = yield* Docker.Container("job", {
@@ -70,7 +70,9 @@ const job = yield* Docker.Container("job", {
 });
 ```
 
-`entrypoint` selects the executable while `command` supplies its arguments; `workingDirectory` must be absolute. `platform` chooses the image architecture, and `keepStdinOpen` and `allocatePseudoTerminal` opt in to interactive input. `ipcNamespace` and `pidNamespace` select namespaces, and `sysctls` applies compatible kernel settings. Changing these settings recreates the container. See [Limits & security](/docker/limits-and-security) for shared memory, GPU devices and privileges.
+`entrypoint` is the program and `command` its arguments. `platform` picks the image's architecture. `ipcNamespace` and `pidNamespace` share or isolate the container's IPC and process namespaces, and `sysctls` sets kernel parameters scoped to the container. Docker fixes all of these when it creates the container, so changing one replaces it.
+
+`hostname`, `dns`, `dnsSearch` and `dnsOptions` set how the container names itself and resolves others, and are fixed at creation too.
 
 ## Publish ports
 

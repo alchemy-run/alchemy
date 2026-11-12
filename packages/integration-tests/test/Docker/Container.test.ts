@@ -1085,7 +1085,7 @@ describe(
             const network = yield* Docker.Network("endpoint-options-network");
             const container = yield* Docker.Container("endpoint-options-container", {
               image: "nginx:alpine",
-              networks: [{ name: network.name, endpointDriverOpts: options }],
+              networks: [{ name: network.name, driverOpts: options }],
             });
             return { container, network };
           });
@@ -1968,7 +1968,7 @@ describe(
       ],
       [
         "invalid endpoint driver options",
-        { networks: [{ name: "bridge", endpointDriverOpts: { "": "value" } }] },
+        { networks: [{ name: "bridge", driverOpts: { "": "value" } }] },
       ],
       ["empty network alias", { networks: [{ name: "bridge", aliases: [""] }] }],
       ["invalid DNS server", { dns: ["not-an-ip"] }],
@@ -2396,6 +2396,40 @@ describe(
 
         yield* docker.container.remove(foreignId, true);
         yield* stack.destroy();
+      }),
+    );
+
+    test.provider("keeps managing a successor container that carries its own labels", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const name = `alchemy-test-container-successor-${stack.stage}`;
+        yield* stack.destroy();
+        yield* Effect.addFinalizer(() => stack.destroy().pipe(Effect.ignore));
+        const resource = Docker.Container("successor-container", { name, image: "alpine:3.22" });
+        const original = yield* stack.deploy(resource);
+        // A recreate whose state write was lost leaves a container with a new
+        // ID but this resource's labels under the managed name.
+        const labels = (yield* docker.container.inspect(original.id)).Config.Labels ?? {};
+        yield* docker.container.remove(original.id, true);
+        const { stdout } = yield* docker.run([
+          "container",
+          "create",
+          "--name",
+          name,
+          ...Object.entries(labels).flatMap(([key, value]) => ["--label", `${key}=${value}`]),
+          "alpine:3.22",
+        ]);
+        const successorId = stdout.trim();
+        yield* Effect.addFinalizer(() =>
+          docker.container.remove(successorId, true).pipe(Effect.ignore),
+        );
+
+        yield* stack.plan(resource);
+        expect((yield* stack.deploy(resource)).id).toBe(successorId);
+        yield* stack.destroy();
+        expect((yield* docker.container.inspect(name).pipe(Effect.flip)).reason._tag).toBe(
+          "NotFound",
+        );
       }),
     );
 

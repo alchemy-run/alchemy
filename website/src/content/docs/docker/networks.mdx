@@ -108,7 +108,7 @@ const dualStack = yield* Docker.Network("dual-stack", {
 
 ## Configure each container attachment
 
-A container can request fixed addresses on a network with matching subnets. These are settings on the **container's attachment**, not on the network resource:
+How a container joins a network is set on the container. Each entry in `networks` can pin addresses from the network's subnets:
 
 ```typescript
 const api = yield* Docker.Container("api", {
@@ -127,9 +127,11 @@ const api = yield* Docker.Container("api", {
 });
 ```
 
-Docker checks that each address is available. `gatewayPriority` selects a preferred default route, and `endpointDriverOpts` passes options to the attachment driver (unlike the network's `driverOpts`). All of these options are optional.
+Leave the addresses out and Docker assigns them. `gatewayPriority` picks which network carries the default route, highest first. An entry's `driverOpts` configures this one attachment, not the network.
 
-Declaring `networks` without an explicit `networkMode` connects the container **only** to the listed networks, not Docker's default `bridge`, including when the sole network is `internal`. On reconciliation, Alchemy disconnects an implicit bridge connection but retains unrelated external attachments. Changing an attachment reconnects it without recreating the container; if Docker refuses the new connection, Alchemy attempts to restore the old one. Changing `hostname` or container-level DNS settings instead recreates the container.
+A container with `networks` joins only those networks. Docker's default `bridge` is left out, so a container on an `internal` network really has no way out. A container created before this joined `bridge` too; its next deploy disconnects it. Networks attached by other tools stay.
+
+Changing an attachment reconnects it in place, and the container keeps running. If Docker refuses the new settings, Alchemy reconnects the old ones.
 
 ## What a change does
 

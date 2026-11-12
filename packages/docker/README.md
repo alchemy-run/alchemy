@@ -75,7 +75,7 @@ yield* Docker.Container("Api", {
 });
 ```
 
-`ipv4Address`, `ipv6Address`, `gatewayPriority` and `endpointDriverOpts` configure each attachment. Declared networks do not implicitly join Docker's default `bridge`, including when the only declared network is `internal`. Changing an attachment reconnects it; changing container DNS or hostname recreates the container.
+`ipv4Address`, `ipv6Address`, `gatewayPriority` and `driverOpts` configure each attachment. Declared networks do not implicitly join Docker's default `bridge`, including when the only declared network is `internal`. Changing an attachment reconnects it; changing container DNS or hostname recreates the container.
 
 ## Container runtime options
 
