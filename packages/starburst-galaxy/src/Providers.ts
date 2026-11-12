@@ -6,6 +6,7 @@ import * as Layer from "effect/Layer";
 import { StarburstGalaxyAuth } from "./AuthProvider.ts";
 import { PostgresqlCatalog, PostgresqlCatalogProvider } from "./Catalog/PostgresqlCatalog.ts";
 import { S3Catalog, S3CatalogProvider } from "./Catalog/S3Catalog.ts";
+import { Cluster, ClusterProvider } from "./Cluster/Cluster.ts";
 import * as Credentials from "./Credentials.ts";
 
 /**
@@ -17,7 +18,7 @@ export class Providers extends Provider.ProviderCollection<Providers>()("Starbur
 export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 
 /**
- * Starburst Galaxy providers and credentials: PostgreSQL and S3 catalogs.
+ * Starburst Galaxy providers and credentials: catalogs and clusters.
  * Registers the Starburst Galaxy AuthProvider so `alchemy profile edit`
  * can configure it.
  *
@@ -27,8 +28,10 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
  * ```
  */
 export const providers = () =>
-  Layer.effect(Providers, Provider.collection([PostgresqlCatalog, S3Catalog])).pipe(
-    Layer.provide(Layer.mergeAll(PostgresqlCatalogProvider(), S3CatalogProvider())),
+  Layer.effect(Providers, Provider.collection([Cluster, PostgresqlCatalog, S3Catalog])).pipe(
+    Layer.provide(
+      Layer.mergeAll(ClusterProvider(), PostgresqlCatalogProvider(), S3CatalogProvider()),
+    ),
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(FetchHttpClient.layer),
     Layer.provideMerge(StarburstGalaxyAuth),
