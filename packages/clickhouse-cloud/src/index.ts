@@ -13,6 +13,7 @@ export {
 export {
   ApiKeyInUse,
   ByocValidationFailed,
+  FeatureUnavailable,
   MemberNotFound,
   OperationFailed,
   OperationTimedOut,

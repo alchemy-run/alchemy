@@ -157,3 +157,13 @@ export class OperationTimedOut extends Data.TaggedError("ClickHouseCloud.Operati
     return `ClickHouse Cloud ${this.kind} ${this.id} did not become ${this.waitingFor} (last state: ${this.state ?? "unknown"})`;
   }
 }
+
+/** A setting the resource needs is not available for this service or organization. */
+export class FeatureUnavailable extends Data.TaggedError("ClickHouseCloud.FeatureUnavailable")<{
+  readonly feature: string;
+  readonly reason: string;
+}> {
+  override get message() {
+    return `ClickHouse Cloud ${this.feature} is not available: ${this.reason}`;
+  }
+}
