@@ -2068,6 +2068,8 @@ export default defineConfig({
           items: [
             { label: "Overview", link: "/starburst-galaxy" },
             { label: "Setup", link: "/starburst-galaxy/setup" },
+            { label: "Tutorial", link: "/starburst-galaxy/tutorial" },
+            { label: "Credentials & bindings", link: "/starburst-galaxy/credentials" },
             providerResourcesEntry("StarburstGalaxy"),
           ],
         },
