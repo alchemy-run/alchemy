@@ -1,5 +1,6 @@
 export * from "./GetService.ts";
 export * from "./GetServiceHttp.ts";
+export * from "./QueryEndpoint.ts";
 export * from "./ScalingSchedule.ts";
 export * from "./Service.ts";
 export * from "./UpdateServiceState.ts";
