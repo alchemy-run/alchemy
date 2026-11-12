@@ -126,6 +126,7 @@ export * from "./RetrieveTerminalReaderHttp.ts";
 export * from "./RetrieveWebhookEndpoint.ts";
 export * from "./RetrieveWebhookEndpointHttp.ts";
 export * from "./ShippingRate.ts";
+export * from "./TaxId.ts";
 export * from "./TaxRate.ts";
 export * from "./TaxRegistration.ts";
 export * from "./TaxSettings.ts";

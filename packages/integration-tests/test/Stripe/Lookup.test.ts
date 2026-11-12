@@ -93,6 +93,7 @@ describe.concurrent("lookup", () => {
           PromotionCode: Stripe.PromotionCode.lookup({ id: "promo_AlchemyMissing0000" }),
           RadarValueList: Stripe.RadarValueList.lookup({ id: "rsl_AlchemyMissing0000" }),
           ShippingRate: Stripe.ShippingRate.lookup({ id: "shr_AlchemyMissing0000" }),
+          TaxId: Stripe.TaxId.lookup({ id: "txi_AlchemyMissing0000" }),
           TaxRate: Stripe.TaxRate.lookup({ id: "txr_AlchemyMissing0000" }),
           TaxRegistration: Stripe.TaxRegistration.lookup({ id: "taxreg_1UZ1ieF0iMJZ5935cBWQ2ZZZ" }),
           TerminalConfiguration: Stripe.TerminalConfiguration.lookup({

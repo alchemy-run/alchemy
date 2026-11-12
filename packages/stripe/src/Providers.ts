@@ -91,6 +91,7 @@ import { RetrieveTerminalLocationHttp } from "./RetrieveTerminalLocationHttp.ts"
 import { RetrieveTerminalReaderHttp } from "./RetrieveTerminalReaderHttp.ts";
 import { RetrieveWebhookEndpointHttp } from "./RetrieveWebhookEndpointHttp.ts";
 import { ShippingRate, ShippingRateProvider } from "./ShippingRate.ts";
+import { TaxId, TaxIdProvider } from "./TaxId.ts";
 import { TaxRate, TaxRateProvider } from "./TaxRate.ts";
 import { TaxRegistration, TaxRegistrationProvider } from "./TaxRegistration.ts";
 import { TaxSettings, TaxSettingsProvider } from "./TaxSettings.ts";
@@ -171,6 +172,7 @@ export const providers = () =>
       RadarValueListItem,
       RestrictedApiKey,
       ShippingRate,
+      TaxId,
       TaxRate,
       TaxRegistration,
       TaxSettings,
@@ -212,6 +214,7 @@ export const providers = () =>
         RadarValueListItemProvider(),
         RestrictedApiKeyProvider(),
         ShippingRateProvider(),
+        TaxIdProvider(),
         TaxRateProvider(),
         TaxRegistrationProvider(),
         TaxSettingsProvider(),
