@@ -48,7 +48,7 @@ test.provider.skipIf(slow)(
           tags: { team: "data" },
         }),
       );
-      expect(["running", "idle"]).toContain(created.state);
+      expect(created.state).toEqual("running");
       expect(created.httpsUrl).toMatch(/^https:\/\/.+:8443$/);
       expect(Redacted.value(created.password!).length).toBeGreaterThan(0);
       expect(created.tags).toMatchObject({ team: "data", "alchemy.id": "Analytics" });
@@ -103,10 +103,8 @@ test.provider.skipIf(slow)(
 
       // Destroy deletes the stopped service.
       yield* stack.destroy();
-      const gone = yield* getService(created.serviceId);
-      expect(gone === undefined || ["terminated", "softdeleted"].includes(gone.state ?? "")).toBe(
-        true,
-      );
+      // Destroy waits until the service is gone.
+      expect(yield* getService(created.serviceId)).toBeUndefined();
     }).pipe(Effect.scoped),
   { tags: ["provider:clickhouse-cloud", "live"], timeout: 3_600_000 },
 );
@@ -131,10 +129,8 @@ test.provider.skipIf(slow)(
       );
       expect(second.serviceId).not.toEqual(first.serviceId);
       expect(second.region).toEqual("us-east-2");
-      const old = yield* getService(first.serviceId);
-      expect(old === undefined || ["terminated", "softdeleted"].includes(old.state ?? "")).toBe(
-        true,
-      );
+      // The old service is deleted first and waited on.
+      expect(yield* getService(first.serviceId)).toBeUndefined();
       yield* stack.destroy();
     }).pipe(Effect.scoped),
   { tags: ["provider:clickhouse-cloud", "live"], timeout: 3_600_000 },
@@ -180,21 +176,16 @@ test.provider.skipIf(slow)(
       expect(unprotected.serviceId).toEqual(created.serviceId);
       expect(unprotected.deletionProtection).toBe(false);
       yield* stack.destroy();
-      const gone = yield* getService(created.serviceId);
-      expect(gone === undefined || ["terminated", "softdeleted"].includes(gone.state ?? "")).toBe(
-        true,
-      );
+      // Destroy waits until the service is gone.
+      expect(yield* getService(created.serviceId)).toBeUndefined();
     }).pipe(Effect.scoped),
   { tags: ["provider:clickhouse-cloud", "live"], timeout: 3_600_000 },
 );
 
-// Fills the organization's service quota, so it creates as many services as
-// the quota has room for. Set CLICKHOUSE_CLOUD_TEST_SERVICE_LIMIT=1 (with
-// CLICKHOUSE_CLOUD_TEST_SLOW=1) and run it on its own: services other tests
-// create at the same time change the count.
-const serviceLimit = slow || !process.env.CLICKHOUSE_CLOUD_TEST_SERVICE_LIMIT;
-
-test.provider.skipIf(serviceLimit)(
+// Fills the organization's service quota (one service on the trial
+// organization, whose quota is 2), so run service suites one at a time:
+// services another test creates at the same time change the count.
+test.provider.skipIf(slow)(
   "a service beyond the organization's quota fails with ServiceLimitReached",
   (stack) =>
     Effect.gen(function* () {
