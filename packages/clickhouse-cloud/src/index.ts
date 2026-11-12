@@ -2,6 +2,7 @@ export * as ApiKeys from "./ApiKeys/index.ts";
 export * from "./AuthProvider.ts";
 export * as Backup from "./Backup/index.ts";
 export * as ClickPipes from "./ClickPipes/index.ts";
+export * as ClickStack from "./ClickStack/index.ts";
 export {
   Credentials,
   CredentialsFromEnv,

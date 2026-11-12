@@ -14,6 +14,15 @@ import {
   ReversePrivateEndpointProvider,
 } from "./ClickPipes/ReversePrivateEndpoint.ts";
 import { WorkloadIdentity, WorkloadIdentityProvider } from "./ClickPipes/WorkloadIdentity.ts";
+import { Alert, AlertProvider } from "./ClickStack/Alert.ts";
+import { Dashboard, DashboardProvider } from "./ClickStack/Dashboard.ts";
+import {
+  Role as ClickStackRole,
+  RoleProvider as ClickStackRoleProvider,
+} from "./ClickStack/Role.ts";
+import { SavedSearch, SavedSearchProvider } from "./ClickStack/SavedSearch.ts";
+import { Source, SourceProvider } from "./ClickStack/Source.ts";
+import { Webhook, WebhookProvider } from "./ClickStack/Webhook.ts";
 import * as Credentials from "./Credentials.ts";
 import {
   MemberNotificationSetting,
@@ -72,6 +81,7 @@ export const providers = () =>
   Layer.effect(
     Providers,
     Provider.collection([
+      Alert,
       ApiKey,
       Attachment,
       BackupBucket,
@@ -80,6 +90,8 @@ export const providers = () =>
       CdcScaling,
       ClickHouseSetting,
       ClickPipe,
+      ClickStackRole,
+      Dashboard,
       Invitation,
       JwtProvider,
       Member,
@@ -92,16 +104,20 @@ export const providers = () =>
       ReversePrivateEndpoint,
       Role,
       SavedQuery,
+      SavedSearch,
       ScalingSchedule,
       Service,
       SnapshotConfiguration,
+      Source,
       UdfFunction,
       UpgradeWindow,
+      Webhook,
       WorkloadIdentity,
     ]),
   ).pipe(
     Layer.provide(
       Layer.mergeAll(
+        AlertProvider(),
         ApiKeyProvider(),
         AttachmentProvider(),
         BackupBucketProvider(),
@@ -110,6 +126,8 @@ export const providers = () =>
         CdcScalingProvider(),
         ClickHouseSettingProvider(),
         ClickPipeProvider(),
+        ClickStackRoleProvider(),
+        DashboardProvider(),
         InvitationProvider(),
         JwtProviderProvider(),
         MemberProvider(),
@@ -122,11 +140,14 @@ export const providers = () =>
         ReversePrivateEndpointProvider(),
         RoleProvider(),
         SavedQueryProvider(),
+        SavedSearchProvider(),
         ScalingScheduleProvider(),
         ServiceProvider(),
         SnapshotConfigurationProvider(),
+        SourceProvider(),
         UdfFunctionProvider(),
         UpgradeWindowProvider(),
+        WebhookProvider(),
         WorkloadIdentityProvider(),
       ),
     ),
