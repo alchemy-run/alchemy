@@ -1,5 +1,5 @@
 import * as apiKeys from "@distilled.cloud/clickhouse-cloud/api_keys";
-import { Credentials } from "@distilled.cloud/clickhouse-cloud/Credentials";
+import { Credentials, DEFAULT_API_BASE_URL } from "@distilled.cloud/clickhouse-cloud/Credentials";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { deepEqual, isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
@@ -89,6 +89,11 @@ export interface ApiKeyAttributes {
    * used.
    */
   keySecret: Redacted.Redacted<string>;
+  /**
+   * Cloud API origin the key was created against: the profile's
+   * `apiBaseUrl` (or `CLICKHOUSE_CLOUD_API_URL`). Binding hosts call it.
+   */
+  apiBaseUrl: string;
   /** Key name. */
   name: string;
   /** `enabled` or `disabled`. */
@@ -187,15 +192,23 @@ const toAccessList = (entries: apiKeys.IpAccessListEntry[] | undefined): ApiKeyI
         ],
   );
 
+/** The key material state holds: the ID and secret, and the API they authenticate. */
+interface KeyMaterial {
+  keyId: string;
+  keySecret: Redacted.Redacted<string>;
+  apiBaseUrl: string;
+}
+
 const toAttributes = (
   organizationId: string,
   key: apiKeys.ApiKey,
-  secret: { keyId: string; keySecret: Redacted.Redacted<string> },
+  secret: KeyMaterial,
 ): ApiKeyAttributes => ({
   id: key.id ?? "",
   organizationId,
   keyId: secret.keyId,
   keySecret: secret.keySecret,
+  apiBaseUrl: secret.apiBaseUrl,
   name: key.name ?? "",
   state: key.state,
   assignedRoles: (key.assignedRoles ?? []).flatMap((r) =>
@@ -237,21 +250,25 @@ export const ApiKeyProvider = () =>
         apiKeys
           .deleteApiKey({ organizationId, keyId: id })
           .pipe(Effect.catchTag("NotFound", () => Effect.void));
-      /** The key the deploy authenticates with. */
-      const deployerKeyId = Effect.gen(function* () {
+      /** The key the deploy authenticates with, and the API it calls. */
+      const deployer = Effect.gen(function* () {
         const resolve = yield* Credentials;
-        return (yield* resolve).keyId;
+        return yield* resolve;
       });
 
       return {
-        stables: ["id", "organizationId", "keyId", "keySecret", "createdAt"],
+        stables: ["id", "organizationId", "keyId", "keySecret", "apiBaseUrl", "createdAt"],
         list: Effect.fn(function* () {
           const organizationId = yield* currentOrganizationId;
           const all = yield* apiKeys.listApiKeys.items({ organizationId }).pipe(Stream.runCollect);
           return Array.from(all)
             .filter((key) => key.id !== undefined && isGeneratedName(key.name ?? ""))
             .map((key) =>
-              toAttributes(organizationId, key, { keyId: "", keySecret: Redacted.make("") }),
+              toAttributes(organizationId, key, {
+                keyId: "",
+                keySecret: Redacted.make(""),
+                apiBaseUrl: DEFAULT_API_BASE_URL,
+              }),
             );
         }),
         diff: Effect.fn(function* ({ news, olds, output }) {
@@ -264,6 +281,7 @@ export const ApiKeyProvider = () =>
           const secret = {
             keyId: output?.keyId ?? "",
             keySecret: output?.keySecret ?? Redacted.make(""),
+            apiBaseUrl: output?.apiBaseUrl ?? DEFAULT_API_BASE_URL,
           };
           const name = yield* resolveName(id, olds?.name, output?.name);
           const observed = output?.id
@@ -280,6 +298,7 @@ export const ApiKeyProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, olds, output, session }) {
           const organizationId = output?.organizationId ?? (yield* currentOrganizationId);
           const name = yield* resolveName(id, news.name, output?.name);
+          const { apiBaseUrl } = yield* deployer;
 
           // Observe
           let observed = output?.id
@@ -287,7 +306,7 @@ export const ApiKeyProvider = () =>
             : yield* findByName(organizationId, name);
           let secret =
             output !== undefined && observed?.id === output.id
-              ? { keyId: output.keyId, keySecret: output.keySecret }
+              ? { keyId: output.keyId, keySecret: output.keySecret, apiBaseUrl }
               : undefined;
 
           // A key whose secret alchemy doesn't hold (a lost create) can't be
@@ -322,7 +341,7 @@ export const ApiKeyProvider = () =>
                 : Redacted.isRedacted(created.keySecret)
                   ? created.keySecret
                   : Redacted.make(created.keySecret);
-            secret = { keyId: created.keyId ?? "", keySecret };
+            secret = { keyId: created.keyId ?? "", keySecret, apiBaseUrl };
           }
           const keyId = observed.id!;
 
@@ -365,7 +384,7 @@ export const ApiKeyProvider = () =>
           return toAttributes(organizationId, observed, secret!);
         }),
         delete: Effect.fn(function* ({ output }) {
-          if (output.keyId !== "" && output.keyId === (yield* deployerKeyId)) {
+          if (output.keyId !== "" && output.keyId === (yield* deployer).keyId) {
             return yield* new ApiKeyInUse({ keyId: output.keyId });
           }
           yield* deleteKey(output.organizationId, output.id);
