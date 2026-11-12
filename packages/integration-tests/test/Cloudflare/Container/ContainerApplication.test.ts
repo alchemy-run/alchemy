@@ -725,11 +725,11 @@ describe.concurrent(
 
           const credentials = yield* Containers.createContainerRegistryCredentials({
             accountId: first.app.accountId,
-            registryId: "registry.cloudflare.com",
+            domain: "registry.cloudflare.com",
             permissions: ["pull"],
             expirationMinutes: 15,
           });
-          const username = credentials.username ?? credentials.user;
+          const username = credentials.username;
           assert(username);
           const client = yield* HttpClient.HttpClient;
           // A layer cache is opt-in (`build.cache`): nothing but the image is pushed.
@@ -850,11 +850,11 @@ describe.concurrent(
 
           const credentials = yield* Containers.createContainerRegistryCredentials({
             accountId: first.app.accountId,
-            registryId: "registry.cloudflare.com",
+            domain: "registry.cloudflare.com",
             permissions: ["pull"],
             expirationMinutes: 15,
           });
-          const username = credentials.username ?? credentials.user;
+          const username = credentials.username;
           assert(username);
           const client = yield* HttpClient.HttpClient;
           const registryGet = (pathname: string, accept = "*/*") =>
@@ -1209,11 +1209,11 @@ describe.concurrent(
             const { accountId, applicationId } = deployed.app;
             const credentials = yield* Containers.createContainerRegistryCredentials({
               accountId,
-              registryId: "registry.cloudflare.com",
+              domain: "registry.cloudflare.com",
               permissions: ["pull"],
               expirationMinutes: 15,
             });
-            const username = credentials.username ?? credentials.user;
+            const username = credentials.username;
             assert(username);
             const client = yield* HttpClient.HttpClient;
             const repository = tag.slice("registry.cloudflare.com/".length, tag.lastIndexOf(":"));
