@@ -59,6 +59,34 @@ const internalNetwork = yield* Docker.Network("InternalNetwork", {
 
 Without `ipam`, Docker picks the subnet and gateway. Network settings are fixed at creation, so changing one replaces the network. See [local services](https://alchemy.run/docker/local-services) for dual-stack networks and driver options.
 
+## Volume ownership and data safety
+
+`Docker.Volume` creates persistent Docker volumes with a recorded generation identity. Before reconciling or deleting a tracked volume, Alchemy verifies that the Docker volume still matches its recorded identity. An external volume with the same name is not silently adopted or removed. When the previous state is unavailable, even a volume with matching stack labels but a different generation must be explicitly adopted. Pre-generation volumes without that label retain legacy stack-label ownership detection.
+
+To manage an existing volume, explicitly opt into adoption; to reference one without managing its lifecycle, use `Docker.Volume.lookup`:
+
+```typescript
+import { adopt } from "alchemy/AdoptPolicy";
+
+const imported = yield* Docker.Volume("ImportedData", {
+  name: "existing-data",
+}).pipe(adopt(true));
+
+const external = Docker.Volume.lookup({ name: "shared-backup" });
+```
+
+Changing immutable volume configuration can require replacement and deletion of the previous physical volume. Alchemy refuses automatic destructive replacements of volumes adopted from another physical generation, including one labelled for the same stack. For data that must survive stack destruction or replacement, choose an explicit removal policy and maintain backups:
+
+```typescript
+import * as RemovalPolicy from "alchemy/RemovalPolicy";
+
+const critical = yield* Docker.Volume("CriticalData").pipe(
+  RemovalPolicy.protect(),
+);
+```
+
+`protect()` blocks replacement and destruction; `retain()` preserves the physical volume when Alchemy forgets its state. Docker's name-only removal API cannot prevent every concurrent replacement race, so generation checks are not a substitute for backups. See the [Docker.Volume API reference](https://alchemy.run/providers/docker/reference/volume).
+
 ## Learn more
 
 - [Docker on alchemy.run](https://alchemy.run/docker)
