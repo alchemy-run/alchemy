@@ -21,7 +21,13 @@ import {
   ownerTags,
   serviceName,
 } from "../internal/Names.ts";
-import { getLiveService, isGone, isRunning, waitForService } from "../internal/Wait.ts";
+import {
+  getLiveService,
+  isGone,
+  isRunning,
+  waitForService,
+  waitUntilServiceGone,
+} from "../internal/Wait.ts";
 import type { Providers } from "../Providers.ts";
 
 /** A cloud provider a service runs on. */
@@ -216,14 +222,14 @@ export interface ServiceAttributes {
   /** Service name. */
   name: string;
   /** Cloud provider. */
-  provider: string;
+  provider: service.Service["provider"];
   /** Region. */
-  region: string;
+  region: service.Service["region"];
   /**
    * Runtime state: `running`, `idle` (scaled to zero), `stopped`,
    * `provisioning`, `starting`, `stopping`, `awaking`, `degraded`, ….
    */
-  state: string;
+  state: service.ServiceState | undefined;
   /** ClickHouse version. */
   clickhouseVersion: string | undefined;
   /** Every endpoint the service listens on. */
@@ -247,7 +253,7 @@ export interface ServiceAttributes {
   /** Tags on the service, including alchemy's ownership tags. */
   tags: Record<string, string>;
   /** Configured autoscaling mode. */
-  autoscalingMode: string | undefined;
+  autoscalingMode: service.Service["autoscalingMode"];
   /** Minimum memory per replica in GB. */
   minReplicaMemoryGb: number | undefined;
   /** Maximum memory per replica in GB. */
@@ -265,7 +271,7 @@ export interface ServiceAttributes {
   /** Instance profile. */
   profile: string | undefined;
   /** Release channel. */
-  releaseChannel: string | undefined;
+  releaseChannel: service.Service["releaseChannel"];
   /** Whether deletion protection is on. */
   deletionProtection: boolean;
   /** Whether core dumps are collected. */
@@ -511,9 +517,9 @@ const toAttributes = (
     serviceId: observed.id ?? "",
     organizationId,
     name: observed.name ?? "",
-    provider: observed.provider ?? "",
-    region: observed.region ?? "",
-    state: observed.state ?? "",
+    provider: observed.provider,
+    region: observed.region,
+    state: observed.state,
     clickhouseVersion: observed.clickhouseVersion,
     endpoints,
     host: https?.host,
@@ -600,7 +606,7 @@ const settle = Effect.fn(function* (
     organizationId,
     serviceId,
     waitingFor: "running or stopped",
-    done: (s) => s !== undefined && (isRunning(s.state) || s.state === "stopped"),
+    done: (s) => isRunning(s.state) || s.state === "stopped",
     session,
   });
 });
@@ -617,8 +623,7 @@ const setState = Effect.fn(function* (
     organizationId,
     serviceId,
     waitingFor: command === "start" ? "running" : "stopped",
-    done: (s) =>
-      s !== undefined && (command === "start" ? isRunning(s.state) : s.state === "stopped"),
+    done: (s) => (command === "start" ? isRunning(s.state) : s.state === "stopped"),
     session,
   });
 });
@@ -705,13 +710,15 @@ export const ServiceProvider = () =>
 
           // Observe: the ID in state, else a service this logical ID
           // created whose ID never reached state.
-          let observed =
+          const found =
             (output?.serviceId
               ? yield* getLiveService(organizationId, output.serviceId)
               : undefined) ?? (yield* findOwned(id, instanceId, organizationId));
 
-          // Ensure
-          if (observed === undefined) {
+          // Ensure, then wait until the service settles.
+          let current: service.Service;
+          let serviceId: string;
+          if (found?.id === undefined) {
             yield* session.note(`Creating ClickHouse Cloud service "${name}"...`);
             const created = yield* service
               .createService({
@@ -758,21 +765,23 @@ export const ServiceProvider = () =>
                 : Redacted.make(created.password);
             }
             passwordDigest = undefined;
-            const serviceId = created.service?.id;
-            if (serviceId === undefined) {
+            if (created.service?.id === undefined) {
               return yield* new ResultMissing({ operation: "createService (service id)" });
             }
-            observed = yield* settle(organizationId, serviceId, session);
-          } else if (!isRunning(observed.state) && observed.state !== "stopped") {
-            observed = yield* settle(organizationId, observed.id!, session);
+            serviceId = created.service.id;
+            current = yield* settle(organizationId, serviceId, session);
+          } else {
+            serviceId = found.id;
+            current =
+              isRunning(found.state) || found.state === "stopped"
+                ? found
+                : yield* settle(organizationId, serviceId, session);
           }
-          const serviceId = observed!.id!;
 
           // A stopped service that should run starts before the rest syncs.
-          if ((news.state ?? "running") === "running" && observed!.state === "stopped") {
-            observed = yield* setState(organizationId, serviceId, "start", session);
+          if ((news.state ?? "running") === "running" && current.state === "stopped") {
+            current = yield* setState(organizationId, serviceId, "start", session);
           }
-          let current = observed!;
 
           // Sync basic details against observed state, in one PATCH.
           const observedTags = current.tags ?? [];
@@ -854,7 +863,7 @@ export const ServiceProvider = () =>
           if (scalingDrift) {
             yield* session.note("Updating the service's scaling...");
             yield* service.updateServiceReplicaScaling({ organizationId, serviceId, ...declared });
-            current = (yield* settle(organizationId, serviceId, session))!;
+            current = yield* settle(organizationId, serviceId, session);
           }
 
           // Replica-aware routing, only when declared.
@@ -904,7 +913,7 @@ export const ServiceProvider = () =>
           // Desired state last: a service that should be stopped stops after
           // every other change applied.
           if (news.state === "stopped" && current.state !== "stopped") {
-            current = (yield* setState(organizationId, serviceId, "stop", session))!;
+            current = yield* setState(organizationId, serviceId, "stop", session);
           }
 
           const final = (yield* getLiveService(organizationId, serviceId)) ?? current;
@@ -917,7 +926,6 @@ export const ServiceProvider = () =>
           // The API deletes only stopped services.
           if (!isRunning(observed.state) && observed.state !== "stopped") {
             observed = yield* settle(organizationId, serviceId, session);
-            if (observed === undefined) return;
           }
           if (observed.state !== "stopped") {
             yield* setState(organizationId, serviceId, "stop", session);
@@ -936,13 +944,7 @@ export const ServiceProvider = () =>
                 ),
             }),
           );
-          yield* waitForService({
-            organizationId,
-            serviceId,
-            waitingFor: "deleted",
-            done: (s) => s === undefined,
-            session,
-          });
+          yield* waitUntilServiceGone({ organizationId, serviceId, session });
         }),
       };
     }),

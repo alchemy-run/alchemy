@@ -12,6 +12,8 @@ export {
 } from "./Credentials.ts";
 export {
   ApiKeyInUse,
+  OperationFailed,
+  OperationTimedOut,
   ResultMissing,
   ServiceDeletionProtected,
   ServiceFailed,

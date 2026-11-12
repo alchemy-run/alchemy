@@ -97,3 +97,27 @@ export class ApiKeyInUse extends Data.TaggedError("ClickHouseCloud.ApiKeyInUse")
     return `ClickHouse Cloud API key ${this.keyId} authenticates this deploy and cannot delete itself`;
   }
 }
+
+/** A long-running object (UDF build, attachment, ClickPipe, reverse private endpoint) ended in a failed state. */
+export class OperationFailed extends Data.TaggedError("ClickHouseCloud.OperationFailed")<{
+  readonly kind: string;
+  readonly id: string;
+  readonly state: string;
+  readonly detail?: string | undefined;
+}> {
+  override get message() {
+    return `ClickHouse Cloud ${this.kind} ${this.id} is in state "${this.state}"${this.detail ? `: ${this.detail}` : ""}`;
+  }
+}
+
+/** A long-running object did not reach a usable state within its wait budget. */
+export class OperationTimedOut extends Data.TaggedError("ClickHouseCloud.OperationTimedOut")<{
+  readonly kind: string;
+  readonly id: string;
+  readonly waitingFor: string;
+  readonly state: string | undefined;
+}> {
+  override get message() {
+    return `ClickHouse Cloud ${this.kind} ${this.id} did not become ${this.waitingFor} (last state: ${this.state ?? "unknown"})`;
+  }
+}
