@@ -31,6 +31,8 @@
     ".": "./src/index.ts",
     "./Catalog": "./src/Catalog/index.ts",
     "./Cluster": "./src/Cluster/index.ts",
+    "./Role": "./src/Role/index.ts",
+    "./ServiceAccount": "./src/ServiceAccount/index.ts",
     "./*": "./src/*.ts",
     "./package.json": "./package.json"
   },
@@ -53,6 +55,18 @@
         "bun": "./src/Cluster/index.ts",
         "worker": "./src/Cluster/index.ts",
         "default": "./lib/Cluster/index.js"
+      },
+      "./Role": {
+        "types": "./lib/Role/index.d.ts",
+        "bun": "./src/Role/index.ts",
+        "worker": "./src/Role/index.ts",
+        "default": "./lib/Role/index.js"
+      },
+      "./ServiceAccount": {
+        "types": "./lib/ServiceAccount/index.d.ts",
+        "bun": "./src/ServiceAccount/index.ts",
+        "worker": "./src/ServiceAccount/index.ts",
+        "default": "./lib/ServiceAccount/index.js"
       },
       "./internal": null,
       "./*": {
