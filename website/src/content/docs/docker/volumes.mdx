@@ -1,0 +1,111 @@
+---
+title: Volumes
+description: Keep a container's data in a Docker.Volume so it survives the container being recreated, mount host directories, and know when a volume and its data are deleted.
+---
+
+import Timeline from "../../../components/diagrams/Timeline.astro";
+
+A container's own filesystem is removed with the container, and most changes to a container [recreate it](/docker/containers#what-a-change-does). A **volume** is storage the engine keeps outside any container. Mount it at a path, and whatever is written there stays on the volume when the container goes, ready for the next one.
+
+<Timeline
+  end={10}
+  lanes={[
+    { id: "c", label: "postgres", type: "container" },
+    { id: "v", label: "postgres-data", type: "volume" },
+  ]}
+  bars={[
+    { lane: "c", start: 0, end: 4.6, label: "postgres:17", tone: "accent" },
+    { lane: "c", start: 5.2, end: 10, label: "postgres:18 · recreated", tone: "accent" },
+    { lane: "v", start: 0, end: 10, label: "/var/lib/postgresql/data", tone: "muted" },
+  ]}
+  marks={[{ at: 4.6, label: "image changed" }]}
+  caption="Changing the image removes the container and creates a new one. The volume outlives both, so the new container starts on the old data."
+/>
+
+## Mount a volume
+
+```typescript title="alchemy.run.ts"
+import * as Alchemy from "alchemy";
+import * as Docker from "@alchemy.run/docker";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Docker.providers(),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    const data = yield* Docker.Volume("postgres-data");
+
+    yield* Docker.Container("postgres", {
+      image: "postgres:18-alpine",
+      environment: { POSTGRES_PASSWORD: yield* Config.Redacted("POSTGRES_PASSWORD") },
+      volumes: [{ hostPath: data.name, containerPath: "/var/lib/postgresql/data" }],
+      start: true,
+    });
+
+    return { volume: data.name };
+  }),
+);
+```
+
+`hostPath` set to a volume's name mounts that volume. Several containers can mount one volume, and `readOnly: true` mounts it read-only.
+
+## Mount a directory from the host
+
+When `hostPath` is a path, Docker mounts that directory instead, a **bind mount**:
+
+```typescript
+const web = yield* Docker.Container("web", {
+  image: "nginx:alpine",
+  volumes: [{ hostPath: "/srv/site", containerPath: "/usr/share/nginx/html", readOnly: true }],
+  ports: [{ external: 8080, internal: 80 }],
+  start: true,
+});
+```
+
+The path is on the engine's machine, which on a remote [context](/docker/engines-and-contexts) is the server, not your laptop. Docker Desktop shares only the folders listed in its file sharing settings.
+
+## Store it elsewhere
+
+A volume uses the `local` driver by default, a directory on the engine's disk (its `mountpoint` attribute). `driverOpts` passes options to the driver, such as mounting an NFS share:
+
+```typescript
+const shared = yield* Docker.Volume("shared", {
+  driverOpts: { type: "nfs", o: "addr=10.0.0.1,rw", device: ":/exports/shared" },
+});
+```
+
+## When the data is deleted
+
+Destroying a `Docker.Volume` removes it, and its data with it. So does changing its `name`, `context`, `driver`, `driverOpts` or `labels`, which replaces the volume with a new, empty one. Treat a volume's props as fixed once it holds data you care about.
+
+To keep a volume when the Stack is destroyed, retain it. Alchemy then forgets it instead of removing it:
+
+```typescript
+import * as RemovalPolicy from "alchemy/RemovalPolicy";
+
+const data = yield* Docker.Volume("postgres-data").pipe(RemovalPolicy.retain());
+```
+
+See [Removal policy](/infrastructure-as-code/resource-lifecycle#removal-policy). For a volume created outside the Stack, look it up. Alchemy reads it and never removes it:
+
+```typescript
+const data = Docker.Volume.lookup({ name: "pgdata" });
+```
+
+## A volume with the same name
+
+Docker names are the only handle on a volume, so Alchemy labels each volume it creates with a generation ID and checks it before every change. If the volume was removed and another one now has its name, plan, deploy and destroy fail with `OwnedBySomeoneElse` and leave that volume alone.
+
+To manage a volume created outside the Stack, adopt it:
+
+```typescript
+import { adopt } from "alchemy/AdoptPolicy";
+
+const data = yield* Docker.Volume("postgres-data", { name: "pgdata" }).pipe(adopt(true));
+```
+
+Alchemy never deletes an adopted volume to apply a changed `driver`, `driverOpts` or `labels`; the plan fails and you migrate the data yourself. Docker removes volumes by name, so a volume swapped in between the check and the removal can still be deleted. For data you can't lose, use `RemovalPolicy.protect()`, which refuses both replacement and destroy.

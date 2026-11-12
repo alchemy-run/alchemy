@@ -94,6 +94,35 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
   );
 
   test(
+    "a view lists its entries a page at a time, in either order",
+    Effect.gen(function* () {
+      const id = fresh("pages");
+      for (const by of [1, 2, 3, 4, 5]) yield* call(`/increment/${id}?by=${by}`);
+      yield* eventually<{ increments: number }>(`/total/${id}`, (view) => view.increments === 5);
+      type Page = { totals: ReadonlyArray<number>; cursor: number | null };
+      const newest = yield* call<Page>(`/totals/${id}?order=desc&take=2`);
+      expect(newest).toEqual({ totals: [15, 10], cursor: 4 });
+      expect(yield* call<Page>(`/totals/${id}?order=desc&take=2&after=4`)).toEqual({
+        totals: [6, 3],
+        cursor: 2,
+      });
+      expect(yield* call<Page>(`/totals/${id}?order=desc&take=2&after=2`)).toEqual({
+        totals: [1],
+        cursor: null,
+      });
+      expect(yield* call<Page>(`/totals/${id}?take=2&after=2`)).toEqual({
+        totals: [6, 10],
+        cursor: 4,
+      });
+      expect(yield* call<Page>(`/totals/${id}?take=2&after=4`)).toEqual({
+        totals: [15],
+        cursor: null,
+      });
+    }),
+    options,
+  );
+
+  test(
     "commands to one instance run one at a time",
     Effect.gen(function* () {
       const id = fresh("serial");

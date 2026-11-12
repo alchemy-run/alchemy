@@ -1,12 +1,12 @@
 {
-  "name": "cluster-rooms-example",
+  "name": "effect-cluster-rooms-example",
   "version": "0.0.0",
   "private": true,
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/alchemy-run/alchemy.git",
-    "directory": "examples/cluster-rooms"
+    "directory": "examples/effect-cluster-rooms"
   },
   "type": "module",
   "scripts": {

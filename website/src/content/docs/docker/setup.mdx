@@ -1,73 +1,67 @@
 ---
 title: Setup
-description: Point alchemy at a Docker daemon — the active CLI context and the DOCKER_BIN override.
+description: Install @alchemy.run/docker, register its providers, and point Alchemy at a Docker or Podman engine.
 ---
 
 import PackageManagers from "../../../components/PackageManagers.astro";
 
-Install `@alchemy.run/docker`:
-
-<PackageManagers add="@alchemy.run/docker" />
-
-Register the provider in your stack:
-
-```typescript
-// alchemy.run.ts
-import * as Docker from "@alchemy.run/docker";
-
-providers: Docker.providers(),
-state: Alchemy.localState(),
-```
-
-That's the whole registration. When Docker runs alongside a cloud
-provider, merge the layers:
-`providers: Layer.merge(Cloudflare.providers(), Docker.providers())`.
-
 ## Prerequisites
 
-A Docker daemon reachable from the `docker` CLI is the only
-requirement. The provider shells out through the **active Docker CLI
-context**, so whatever `docker ps` talks to — Docker Desktop, a
-remote Docker host, an SSH context, a CI runner's daemon — is what
-alchemy provisions against. There is no login step and no
-stored token: this provider has no credentials of its own.
+- [Node.js](https://nodejs.org) 24.11.1+ or [Bun](https://bun.sh)
+- A Docker engine the `docker` CLI can reach: [Docker Desktop](https://docs.docker.com/desktop/), [Docker Engine](https://docs.docker.com/engine/install/) on Linux, a remote host, or [Podman](https://podman.io)
 
-## Binary override
+Check that the CLI reaches an engine:
+
+```sh
+docker version
+```
+
+## Install
+
+<PackageManagers add="alchemy @alchemy.run/docker effect" />
+
+## Register the providers
+
+```typescript title="alchemy.run.ts"
+import * as Alchemy from "alchemy";
+import * as Docker from "@alchemy.run/docker";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Docker.providers(),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    const web = yield* Docker.Container("web", {
+      image: "nginx:alpine",
+      ports: [{ external: 8080, internal: 80 }],
+      start: true,
+    });
+    return { ports: web.ports };
+  }),
+);
+```
+
+There's nothing to sign in to. Alchemy runs the `docker` CLI, and the CLI's current context decides which engine it talks to. When Docker runs next to a cloud provider, merge the two: `providers: Layer.merge(Cloudflare.providers(), Docker.providers())`.
+
+<PackageManagers run="alchemy deploy" />
+
+## Use Podman or another binary
+
+Pass the CLI to run:
+
+```typescript
+providers: Docker.providers({ bin: "podman" }),
+```
+
+The `DOCKER_BIN` environment variable overrides `bin` on one machine, without changing the code:
 
 <PackageManagers script={`DOCKER_BIN=/opt/homebrew/bin/docker {run} alchemy deploy`} />
 
-The provider resolves the Docker binary from the `DOCKER_BIN`
-environment variable, falling back to `docker` on the `PATH`.
+## In CI
 
-## Registry credentials
+A CI runner needs the `docker` CLI and an engine, and nothing else: no profile, no token. GitHub's hosted Linux runners have both. To deploy to a remote engine from CI, give the job the SSH key for that host and declare a [`Docker.Context`](/docker/engines-and-contexts) for it. Registry passwords come from `Config`, like any other secret. See [Registries & credentials](/docker/registries) and [CI](/environments/ci).
 
-Registry auth is a per-resource prop, not global configuration.
-[`Image`](/providers/docker/image) and
-[`RemoteImage`](/providers/docker/remoteimage) accept a `registry`
-with `{ server, username, password }`, where `password` is a
-`Redacted` value:
-
-```typescript
-const image = yield* Docker.Image("app", {
-  name: "my-app",
-  build: { context: "./app" },
-  registry: {
-    server: "ghcr.io",
-    username: "octocat",
-    password: Config.Redacted("GITHUB_TOKEN"),
-  },
-});
-```
-
-Push deliberately skips `docker login`: the credentials are written
-into an isolated `DOCKER_CONFIG` that only the push command reads, so
-your global docker config, buildx builders, and `docker context`
-setup stay intact.
-
-## Next steps
-
-- [Docker overview](/docker) — resources and compositions.
-- [Run local services](/docker/local-services) — Postgres with a
-  network, volume, and healthcheck.
-- [Build and push an image](/docker/build-and-push) — Dockerfile
-  builds and registry push.
+Next, choose where your containers run in [Engines & contexts](/docker/engines-and-contexts).

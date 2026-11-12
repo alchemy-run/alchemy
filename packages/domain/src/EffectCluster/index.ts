@@ -4,7 +4,12 @@ import {
   type EntityRuntimeContext,
   PlatformDeclaration,
 } from "@alchemy.run/effect-cluster/Entity";
-import { HasNoPool, makeNamespace, RunnerHost } from "@alchemy.run/effect-cluster/Host";
+import {
+  HasNoPool,
+  InstanceStorage,
+  makeNamespace,
+  RunnerHost,
+} from "@alchemy.run/effect-cluster/Host";
 import type { PoolLayer } from "@alchemy.run/effect-cluster/Pool";
 import type { Providers } from "@alchemy.run/effect-cluster/Providers";
 /**
@@ -139,7 +144,7 @@ const objectStorage = (sql: SqlClient, object: string, gate: InputGateShape): Ob
         typeof keyOrKeys === "string" ? Effect.map(deleted, (n) => n > 0) : deleted,
       );
     }) as ObjectStorage["delete"],
-    list: <T>({ prefix, start, startAfter, end, limit }: ListOptions = {}) =>
+    list: <T>({ prefix, start, startAfter, end, limit, reverse }: ListOptions = {}) =>
       run(
         sql<{ key: string; value: string }>`SELECT key, value FROM ${sql(TABLE)}
           WHERE object = ${object}
@@ -147,7 +152,7 @@ const objectStorage = (sql: SqlClient, object: string, gate: InputGateShape): Ob
           ${start !== undefined ? sql`AND key >= ${start}` : sql``}
           ${startAfter !== undefined ? sql`AND key > ${startAfter}` : sql``}
           ${end !== undefined ? sql`AND key < ${end}` : sql``}
-          ORDER BY key
+          ${reverse ? sql`ORDER BY key DESC` : sql`ORDER BY key`}
           ${limit !== undefined ? sql`LIMIT ${Math.max(0, limit | 0)}` : sql``}`.pipe(
           Effect.map((rows) => new Map(rows.map((row) => [row.key, decode<T>(row.value)]))),
         ),
@@ -494,18 +499,30 @@ export const layerEntities = <PoolReq>(
             }),
           );
         }
-        const client = yield* sql;
         const gate = yield* makeInputGate;
-        const storage = objectStorage(client, `${name}/${id}`, gate);
+        // The instance's own object where the pool gives it one; otherwise
+        // its rows in the cluster's Postgres.
+        const native = yield* Effect.serviceOption(InstanceStorage);
+        // A Durable Object's storage has Cloudflare's input gate already, so it
+        // doesn't go through this one: a transaction's callback runs in a
+        // fiber of its own, which this gate would hold behind the transaction.
+        const storage: ObjectStorage = Option.isSome(native)
+          ? native.value
+          : objectStorage(yield* sql, `${name}/${id}`, gate);
         const instanceScope = yield* Scope.Scope;
         const wakes = yield* objects.client;
         const callbacks = alarmCallbacks(storage, {
           set: (at) =>
             Effect.gen(function* () {
               yield* storage.put("~alarm", at);
-              yield* wakes(id)
+              const wake = wakes(id)
                 .Wake(Wake.make({ at, id: String(yield* Random.nextInt) }), { discard: true })
                 .pipe(Effect.orDie);
+              // A Durable Object can't receive its own message while the
+              // transaction that set the alarm holds its input gate, so the
+              // wake goes out once the transaction lets go.
+              if (Option.isSome(native)) yield* Effect.forkIn(wake, instanceScope);
+              else yield* wake;
             }),
           get: storage.get<number>("~alarm").pipe(Effect.map((at) => at ?? null)),
         });

@@ -11,11 +11,13 @@ import LedgerLive from "./ledger-live.ts";
 import NapLive from "./nap-live.ts";
 import ParentLive from "./parent-live.ts";
 import Tick from "./tick.ts";
+import TurnstileLive from "./turnstile-live.ts";
 
 export const Lives = Layer.mergeAll(
   CounterLive,
   GreeterLive,
   LedgerLive,
+  TurnstileLive,
   JournalLive,
   GreetLive,
   NapLive,

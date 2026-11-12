@@ -9,6 +9,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
+import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as Paths from "../../internal/Paths.ts";
@@ -149,6 +150,51 @@ describe.each(watcherModes)(
         // reap the expired file rather than leave ignored garbage on disk.
         expect(yield* fs.exists(entryPath)).toBe(false);
       }).pipe(Effect.provide(services)),
+    );
+
+    // After a host sleep longer than the staleness threshold, whichever
+    // process refreshes first reaps every other process's entry. The owner's
+    // heartbeat must write its entry back instead of dying on ENOENT, or the
+    // worker stays unresolvable (503 through service bindings) until restart.
+    it.live("the heartbeat re-registers an entry another process reaped", () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const home = yield* fs.makeTempDirectoryScoped({
+          prefix: "cloudflare-runtime-test",
+        });
+        const registryServices = Registry.RegistryLive.pipe(
+          Layer.provideMerge(Paths.PathsLive),
+          Layer.provide(
+            ConfigProvider.layer(
+              ConfigProvider.fromUnknown({
+                CLOUDFLARE_RUNTIME_HOME: home,
+                CLOUDFLARE_RUNTIME_FILE_SYSTEM_SUPPORTS_WATCHER: fileSystemSupportsWatcher,
+                CLOUDFLARE_RUNTIME_REGISTRY_HEARTBEAT: "100 millis",
+              }),
+            ),
+          ),
+          Layer.provideMerge(NodeServices.layer),
+        );
+        yield* Effect.gen(function* () {
+          const path = yield* Path.Path;
+          const directory = yield* Paths.state("alchemy", "registry");
+          const entry = registryEntry("reaped-entry");
+          const subscriber = subscriberEntry(entry.scriptName);
+          const entryPath = path.join(directory, `${entry.scriptName}.json`);
+          const registry = yield* Registry.Registry;
+
+          yield* registry.write(entry);
+          // Another process found the entry stale and removed it.
+          yield* fs.remove(entryPath);
+
+          const restored = yield* fs
+            .readFileString(entryPath)
+            .pipe(Effect.retry({ schedule: Schedule.spaced("50 millis"), times: 40 }));
+          expect(JSON.parse(restored)).toEqual(entry);
+          yield* waitForRegistryEntry(subscriber, { toBeDefined: true });
+          expect(yield* registry.read([subscriber])).toEqual(registryServiceMap(entry.scriptName));
+        }).pipe(Effect.provide(registryServices));
+      }).pipe(Effect.provide(NodeServices.layer)),
     );
 
     it.live("resolves entries written before the registry starts", () =>

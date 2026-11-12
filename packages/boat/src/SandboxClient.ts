@@ -19,6 +19,7 @@ export type BoatError =
   | boat.SandboxStartLimitExceeded
   | boat.FileNotFound
   | boat.ForkNeedsSnapshot
+  | boat.SaveInProgress
   | ExecTimedOut
   | SnapshotFailed
   | BoatUnexpectedResponse;

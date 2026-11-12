@@ -320,11 +320,11 @@ export const LiveContainerProvider = () =>
         const registryId = props.registryId ?? "registry.cloudflare.com";
         const credentials = yield* Containers.createContainerRegistryCredentials({
           accountId,
-          registryId,
+          domain: registryId,
           permissions,
           expirationMinutes: 60,
         });
-        const username = credentials.username ?? credentials.user;
+        const username = credentials.username;
         if (!username) {
           return yield* ContainerRegistryError.make({
             reason: "CredentialsMissingUsername",
