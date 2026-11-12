@@ -32,6 +32,24 @@ const LIST_MAX_PAGES = 100;
 export type PriceInterval = "day" | "month" | "week" | "year";
 export type PriceUsageType = "licensed" | "metered";
 export type PriceType = "one_time" | "recurring";
+export type PriceTaxBehavior = "exclusive" | "inclusive" | "unspecified";
+export type PriceTiersMode = "graduated" | "volume";
+
+export interface PriceTier {
+  /**
+   * Inclusive upper bound of the tier in units. The last tier uses
+   * `"inf"`.
+   */
+  upTo: number | "inf";
+  /**
+   * Per-unit amount in the currency's minor units for units in this tier.
+   */
+  unitAmount?: number;
+  /**
+   * Flat amount in the currency's minor units added once for this tier.
+   */
+  flatAmount?: number;
+}
 
 export interface PriceRecurring {
   /**
@@ -89,6 +107,24 @@ export interface PriceProps {
    */
   recurring?: PriceRecurring;
   /**
+   * Pricing tiers, which make the price tiered (`billing_scheme=tiered`)
+   * instead of `unitAmount`. Requires `tiersMode`. Create-only — changing
+   * them replaces the price.
+   */
+  tiers?: PriceTier[];
+  /**
+   * How `tiers` apply: `volume` prices every unit at the tier the total
+   * quantity reaches, `graduated` prices each unit at the tier it falls
+   * in. Create-only — changing it replaces the price.
+   */
+  tiersMode?: PriceTiersMode;
+  /**
+   * Whether the price's amounts include tax (`inclusive`) or Stripe Tax
+   * adds it on top (`exclusive`). Create-only — changing it replaces the
+   * price.
+   */
+  taxBehavior?: PriceTaxBehavior;
+  /**
    * Brief description of the price, hidden from customers.
    */
   nickname?: string;
@@ -134,6 +170,12 @@ export type Price = Resource<
     type: PriceType;
     /** Recurring billing configuration, if this is a recurring price. */
     recurring: PriceRecurring | undefined;
+    /** Pricing tiers, if the price is tiered. */
+    tiers: PriceTier[] | undefined;
+    /** How tiers apply, if the price is tiered. */
+    tiersMode: PriceTiersMode | undefined;
+    /** Whether the amount includes tax, if specified. */
+    taxBehavior: PriceTaxBehavior | undefined;
     /** User-defined metadata (Alchemy ownership keys stripped). */
     metadata: Record<string, string>;
     /** Unix timestamp when the price was created. */
@@ -157,10 +199,10 @@ export interface PriceLookup {
 
 /**
  * A Stripe Price — the unit cost attached to a Product. Currency, amount,
- * product, and recurring interval are immutable (changing them replaces
- * the price). Nickname, metadata, lookup key, and `active` update in
- * place. Prices cannot be deleted; destroy deactivates them
- * (`active=false`).
+ * product, recurring interval, tiers, and tax behavior are immutable
+ * (changing them replaces the price). Nickname, metadata, lookup key, and
+ * `active` update in place. Prices cannot be deleted; destroy deactivates
+ * them (`active=false`).
  *
  * @see https://docs.stripe.com/api/prices
  *
@@ -183,6 +225,21 @@ export interface PriceLookup {
  *   unitAmount: 1500,
  *   recurring: { interval: "month" },
  *   nickname: "Pro monthly",
+ * });
+ * ```
+ *
+ * **Example:** Tiered per-seat price, tax exclusive
+ * ```typescript
+ * const price = yield* Stripe.Price("team-seats", {
+ *   product,
+ *   currency: "usd",
+ *   recurring: { interval: "month" },
+ *   tiersMode: "graduated",
+ *   tiers: [
+ *     { upTo: 5, unitAmount: 1500 },
+ *     { upTo: "inf", unitAmount: 1200 },
+ *   ],
+ *   taxBehavior: "exclusive",
  * });
  * ```
  *
@@ -256,6 +313,24 @@ const toRecurring = (recurring: StripePrice["recurring"]): PriceRecurring | unde
   };
 };
 
+const toTiers = (tiers: StripePrice["tiers"]): PriceTier[] | undefined =>
+  tiers?.map((tier) => ({
+    upTo: tier.up_to ?? "inf",
+    ...(tier.unit_amount != null ? { unitAmount: tier.unit_amount } : {}),
+    ...(tier.flat_amount != null ? { flatAmount: tier.flat_amount } : {}),
+  }));
+
+const tiersEqual = (news: PriceTier[] | undefined, observed: PriceTier[] | undefined): boolean => {
+  if (news === undefined) return true;
+  if (observed === undefined || news.length !== observed.length) return false;
+  return news.every(
+    (tier, index) =>
+      tier.upTo === observed[index]?.upTo &&
+      tier.unitAmount === observed[index]?.unitAmount &&
+      tier.flatAmount === observed[index]?.flatAmount,
+  );
+};
+
 const toAttrs = (price: StripePrice) => ({
   id: price.id,
   product: productIdOf(price.product),
@@ -267,6 +342,9 @@ const toAttrs = (price: StripePrice) => ({
   lookupKey: price.lookup_key ?? undefined,
   type: price.type as PriceType,
   recurring: toRecurring(price.recurring),
+  tiers: toTiers(price.tiers),
+  tiersMode: (price.tiers_mode ?? undefined) as PriceTiersMode | undefined,
+  taxBehavior: (price.tax_behavior ?? undefined) as PriceTaxBehavior | undefined,
   metadata: userMetadata(price.metadata),
   created: price.created,
   livemode: price.livemode,
@@ -275,7 +353,9 @@ const toAttrs = (price: StripePrice) => ({
 const isMissingPrice = isMissingStripeResource;
 
 const getById = (price: string) =>
-  GetPrice({ price }).pipe(Effect.catchIf(isMissingPrice, () => Effect.undefined));
+  GetPrice({ price, expand: ["tiers"] }).pipe(
+    Effect.catchIf(isMissingPrice, () => Effect.undefined),
+  );
 
 const listByActive = Effect.fn(function* (active: boolean) {
   const prices: StripePrice[] = [];
@@ -284,6 +364,7 @@ const listByActive = Effect.fn(function* (active: boolean) {
     const response = yield* GetPrices({
       active,
       limit: LIST_PAGE_SIZE,
+      expand: ["data.tiers"],
       ...(startingAfter !== undefined ? { starting_after: startingAfter } : {}),
     });
     prices.push(...response.data);
@@ -371,6 +452,9 @@ const shouldReplace = (news: PriceProps, output: Price["Attributes"] | undefined
     return true;
   }
   if (!recurringEqual(news.recurring, output.recurring)) return true;
+  if (!tiersEqual(news.tiers, output.tiers)) return true;
+  if (news.tiersMode !== undefined && news.tiersMode !== output.tiersMode) return true;
+  if (news.taxBehavior !== undefined && news.taxBehavior !== output.taxBehavior) return true;
   return false;
 };
 
@@ -437,6 +521,7 @@ export const PriceProvider = () =>
           currency: news.currency,
           active: desiredActive,
           metadata,
+          expand: ["tiers"],
           ...(news.unitAmount !== undefined ? { unit_amount: news.unitAmount } : {}),
           ...(news.unitAmountDecimal !== undefined
             ? { unit_amount_decimal: news.unitAmountDecimal }
@@ -458,6 +543,18 @@ export const PriceProvider = () =>
                 },
               }
             : {}),
+          ...(news.tiers !== undefined
+            ? {
+                billing_scheme: "tiered",
+                tiers: news.tiers.map((tier) => ({
+                  up_to: tier.upTo,
+                  ...(tier.unitAmount !== undefined ? { unit_amount: tier.unitAmount } : {}),
+                  ...(tier.flatAmount !== undefined ? { flat_amount: tier.flatAmount } : {}),
+                })),
+              }
+            : {}),
+          ...(news.tiersMode !== undefined ? { tiers_mode: news.tiersMode } : {}),
+          ...(news.taxBehavior !== undefined ? { tax_behavior: news.taxBehavior } : {}),
           ...(desiredNickname.length > 0 ? { nickname: desiredNickname } : {}),
           ...(desiredLookupKey.length > 0
             ? { lookup_key: desiredLookupKey, transfer_lookup_key: true }
@@ -489,6 +586,7 @@ export const PriceProvider = () =>
 
       const updated = yield* UpdatePrice({
         price: current.id,
+        expand: ["tiers"],
         ...(activeChanged ? { active: desiredActive } : {}),
         ...(nicknameChanged ? { nickname: desiredNickname } : {}),
         ...(lookupKeyChanged ? { lookup_key: desiredLookupKey, transfer_lookup_key: true } : {}),

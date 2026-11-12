@@ -221,3 +221,99 @@ test.provider(
     timeout: 120_000,
   },
 );
+
+test.provider(
+  "create a tiered price with tax behavior and replace it when tiers change",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const product = yield* CreateProduct({
+        name: "Alchemy Tiered Price Product",
+      });
+
+      const created = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Stripe.Price("TieredPrice", {
+            product: product.id,
+            currency: "usd",
+            recurring: { interval: "month" },
+            tiersMode: "graduated",
+            tiers: [
+              { upTo: 5, unitAmount: 1500 },
+              { upTo: "inf", unitAmount: 1200, flatAmount: 500 },
+            ],
+            taxBehavior: "exclusive",
+          });
+        }),
+      );
+
+      expect(created.unitAmount).toBeUndefined();
+      expect(created.tiersMode).toEqual("graduated");
+      expect(created.tiers).toEqual([
+        { upTo: 5, unitAmount: 1500 },
+        { upTo: "inf", unitAmount: 1200, flatAmount: 500 },
+      ]);
+      expect(created.taxBehavior).toEqual("exclusive");
+
+      const fetched = yield* GetPrice({ price: created.id, expand: ["tiers"] });
+      expect(fetched.billing_scheme).toEqual("tiered");
+      expect(fetched.tiers_mode).toEqual("graduated");
+      expect(fetched.tiers?.map((tier) => tier.up_to)).toEqual([5, null]);
+      expect(fetched.tax_behavior).toEqual("exclusive");
+
+      const unchanged = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Stripe.Price("TieredPrice", {
+            product: product.id,
+            currency: "usd",
+            recurring: { interval: "month" },
+            tiersMode: "graduated",
+            tiers: [
+              { upTo: 5, unitAmount: 1500 },
+              { upTo: "inf", unitAmount: 1200, flatAmount: 500 },
+            ],
+            taxBehavior: "exclusive",
+          });
+        }),
+      );
+      expect(unchanged.id).toEqual(created.id);
+
+      const replaced = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Stripe.Price("TieredPrice", {
+            product: product.id,
+            currency: "usd",
+            recurring: { interval: "month" },
+            tiersMode: "volume",
+            tiers: [
+              { upTo: 10, unitAmount: 1400 },
+              { upTo: "inf", unitAmount: 1000 },
+            ],
+            taxBehavior: "exclusive",
+          });
+        }),
+      );
+
+      expect(replaced.id).not.toEqual(created.id);
+      expect(replaced.tiersMode).toEqual("volume");
+      expect(replaced.tiers).toEqual([
+        { upTo: 10, unitAmount: 1400 },
+        { upTo: "inf", unitAmount: 1000 },
+      ]);
+
+      const oldFetched = yield* GetPrice({ price: created.id });
+      expect(oldFetched.active).toEqual(false);
+
+      yield* stack.destroy();
+
+      const deactivated = yield* waitUntilDeactivated(replaced.id);
+      expect(deactivated).toEqual("inactive");
+
+      yield* archiveProduct(product.id);
+    }).pipe(logLevel),
+  {
+    tags: ["provider:stripe", "provider:stripe:price", "live"],
+    timeout: 120_000,
+  },
+);
