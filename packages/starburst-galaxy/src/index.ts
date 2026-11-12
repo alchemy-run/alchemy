@@ -6,6 +6,7 @@ export type { Contact, Link } from "./Contact.ts";
 export {
   Credentials,
   CredentialsFromEnv,
+  DeployClient,
   fromAccessToken,
   fromAuthProvider,
   fromClientCredentials,
@@ -19,6 +20,7 @@ export * from "./LookupOnly.ts";
 export * as Network from "./Network/index.ts";
 export * from "./Providers.ts";
 export * as Role from "./Role/index.ts";
+export * as SchemaDiscovery from "./SchemaDiscovery/index.ts";
 export * as ServiceAccount from "./ServiceAccount/index.ts";
 export * as SqlJob from "./SqlJob/index.ts";
 export * as User from "./User/index.ts";

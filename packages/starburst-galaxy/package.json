@@ -39,6 +39,7 @@
     "./Ingest": "./src/Ingest/index.ts",
     "./Network": "./src/Network/index.ts",
     "./Role": "./src/Role/index.ts",
+    "./SchemaDiscovery": "./src/SchemaDiscovery/index.ts",
     "./ServiceAccount": "./src/ServiceAccount/index.ts",
     "./SqlJob": "./src/SqlJob/index.ts",
     "./User": "./src/User/index.ts",
@@ -112,6 +113,12 @@
         "bun": "./src/Role/index.ts",
         "worker": "./src/Role/index.ts",
         "default": "./lib/Role/index.js"
+      },
+      "./SchemaDiscovery": {
+        "types": "./lib/SchemaDiscovery/index.d.ts",
+        "bun": "./src/SchemaDiscovery/index.ts",
+        "worker": "./src/SchemaDiscovery/index.ts",
+        "default": "./lib/SchemaDiscovery/index.js"
       },
       "./ServiceAccount": {
         "types": "./lib/ServiceAccount/index.d.ts",
