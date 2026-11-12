@@ -103,7 +103,7 @@ export type Organization = Resource<
  *     const listActivities = yield* ClickHouseCloud.Organization.ListActivities(Org);
  *     return {
  *       fetch: Effect.gen(function* () {
- *         const activities = yield* listActivities({ from_date: "2026-11-12T00:00:00Z" });
+ *         const activities = yield* listActivities({ fromDate: "2026-11-12T00:00:00Z" });
  *         return yield* HttpServerResponse.json(activities);
  *       }).pipe(Effect.orDie),
  *     };

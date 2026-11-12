@@ -19,7 +19,7 @@ export const ListActivitiesHttp = Layer.effect(
       return (request?: ListActivitiesRequest) =>
         run((ids) =>
           organization
-            .listActivities({ ...request, ...ids })
+            .listActivities({ ...ids, from_date: request?.fromDate, to_date: request?.toDate })
             .pipe(Effect.flatMap(requireResult("listActivities"))),
         );
     });
