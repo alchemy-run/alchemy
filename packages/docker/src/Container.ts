@@ -15,12 +15,32 @@ import type { PlatformError } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
+import * as SchemaIssue from "effect/SchemaIssue";
 import { Docker, dockerContextName, dockerPhysicalName } from "./Docker.ts";
 import { healthcheckCommand, isHealthcheckDisabled } from "./HealthcheckCommand.ts";
 import { parseDockerByteSizeMagnitude } from "./internal/DockerByteSize.ts";
 import type { Providers } from "./Providers.ts";
 
 const CREATE_CONFIG_HASH_LABEL = "alchemy::container-config";
+
+// Docker Engine reports capabilities for the selected daemon, not the CLI
+// machine. Other Docker-compatible engines may omit these Docker-specific
+// fields; ordinary mounts must not depend on their presence.
+const mountDaemonInfoSchema = Schema.Struct({
+  OSType: Schema.optional(Schema.String),
+  ServerVersion: Schema.optional(Schema.String),
+  KernelVersion: Schema.optional(Schema.String),
+  OperatingSystem: Schema.optional(Schema.String),
+}).pipe(Schema.fromJsonString);
+const decodeMountDaemonInfo = Schema.decodeEffect(mountDaemonInfoSchema);
+
+const parseMajorMinor = (value: string | undefined): readonly [number, number] | undefined => {
+  const match = /^v?(\d+)\.(\d+)/.exec(value ?? "");
+  return match ? [Number(match[1]), Number(match[2])] : undefined;
+};
+
+const beforeVersion = (version: readonly [number, number], major: number, minor = 0): boolean =>
+  version[0] < major || (version[0] === major && version[1] < minor);
 
 export interface ContainerProps {
   /** Image reference or Docker image resource. */
@@ -65,6 +85,21 @@ export interface ContainerProps {
   ports?: Container.PortMapping[];
   /** Volume or bind mounts. */
   volumes?: Container.VolumeMapping[];
+  /**
+   * Typed Docker `--mount` declarations. Unlike `volumes` (`-v`), bind
+   * sources must exist on the Docker daemon host unless `createHostPath` is
+   * explicitly enabled. Invalid declarations fail at plan time with
+   * `InvalidContainerOptions` and a property path. The selected Docker
+   * daemon is checked for known mount restrictions before replacement.
+   *
+   * A changed mount recreates the container, not its managed named volumes.
+   * Stopped containers with generated names and no automatic restart policy
+   * can use create-first replacement;
+   * running or explicitly named containers require delete-first, which is
+   * not atomic if the daemon rejects the new mount after removal.
+   * Existing `volumes` and `tmpfs` keep their semantics.
+   */
+  mounts?: Container.Mount[];
   /** Restart policy. */
   restart?: "no" | "always" | "on-failure" | "unless-stopped";
   /**
@@ -203,6 +238,56 @@ export declare namespace Container {
     /** Mount read-only. @default false */
     readOnly?: boolean;
   }
+  /**
+   * A named volume, a path on the Docker daemon host, or in-memory storage.
+   * Mount options belong to the consuming container, not to Docker.Volume.
+   */
+  type Mount = VolumeMount | BindMount | TmpfsMountSpec;
+  interface VolumeMount {
+    type: "volume";
+    /**
+     * Docker volume name, for example `data.name` from Docker.Volume.
+     * Docker creates missing named volumes, but only Docker.Volume manages
+     * their lifecycle in Alchemy.
+     */
+    source: string;
+    /** Absolute path inside the container. */
+    target: string;
+    /** Mount read-only. @default false */
+    readOnly?: boolean;
+    /** Do not copy image data into an initially empty volume. @default false */
+    noCopy?: boolean;
+    /**
+     * Existing relative directory inside the volume. Docker does not create it.
+     * Ensure it exists before starting the container.
+     */
+    subpath?: string;
+  }
+  interface BindMount {
+    type: "bind";
+    /** Absolute path on the Docker daemon host, not necessarily the Alchemy host. */
+    source: string;
+    /** Absolute path inside the container. */
+    target: string;
+    /** Mount read-only. @default false */
+    readOnly?: boolean;
+    /** Create a missing source directory on the daemon host. @default false */
+    createHostPath?: boolean;
+    /** Linux-only bind propagation; unsupported by Docker Desktop. */
+    propagation?: "private" | "rprivate" | "shared" | "rshared" | "slave" | "rslave";
+    /** Recursive bind behavior; readonly requires Linux kernel >= 5.12. */
+    recursive?: "enabled" | "disabled" | "writable" | "readonly";
+  }
+  /** In-memory mount declaration for Container.mounts (not the legacy tmpfs prop). */
+  interface TmpfsMountSpec {
+    type: "tmpfs";
+    /** Absolute path inside the container. Contents are not persisted. */
+    target: string;
+    /** Positive Docker byte size, e.g. `"64m"`. */
+    size?: string;
+    /** POSIX mode, e.g. `0o1777`, passed as octal to Docker. */
+    mode?: number;
+  }
   interface TmpfsMount {
     /** Absolute mount target in the container, e.g. `"/tmp"`. */
     path: string;
@@ -325,6 +410,25 @@ export interface ContainerLookup {
  * });
  * ```
  *
+ * ### Declarative Mounts
+ * **Example:** Named data volume, read-only bind and temporary memory
+ * ```typescript
+ * const data = yield* Docker.Volume("data");
+ * const app = yield* Docker.Container("app", {
+ *   image: "alpine:3.22",
+ *   mounts: [
+ *     { type: "volume", source: data.name, target: "/data", noCopy: true },
+ *     { type: "bind", source: "/srv/config", target: "/config", readOnly: true },
+ *     { type: "tmpfs", target: "/run", size: "32m", mode: 0o1777 },
+ *   ],
+ * });
+ * ```
+ * A missing bind path or volume subpath on a remote daemon may still cause
+ * container creation/start to fail. Generated, stopped containers without
+ * an automatic restart policy can use create-first replacement when mounts
+ * change; named or running containers retain delete-first replacement,
+ * which is not atomic.
+ *
  * ### Secret Environment
  * **Example:** Redacted env var
  * ```typescript
@@ -367,7 +471,7 @@ export interface ContainerLookup {
  *   name: postgresName,
  *   image: "postgres:18-alpine",
  *   ports: [{ external: 15432, internal: 5432 }],
- *   volumes: [{ hostPath: data.name, containerPath: "/var/lib/postgresql/data" }],
+ *   mounts: [{ type: "volume", source: data.name, target: "/var/lib/postgresql" }],
  *   networks: [{ name: network.name, aliases: ["postgres"] }],
  *   start: true,
  * });
@@ -688,6 +792,91 @@ export const ContainerProvider = () =>
         }
       });
 
+      // Verify the selected daemon before deleteFirst can remove the old
+      // container. Docker cannot inspect arbitrary remote bind paths without
+      // side effects, so these are capability checks, not a rollback promise.
+      const validateMountDaemon = Effect.fn(function* (
+        props: ContainerProps,
+        checkWithoutMounts = false,
+      ) {
+        if (!props.mounts?.length && !checkWithoutMounts) return;
+        const context = dockerContextName(props.context);
+        const { stdout } = yield* docker.run([
+          ...(context ? ["--context", context] : []),
+          "info",
+          "--format",
+          // Only request the fields needed for mount validation. Docker's
+          // complete info object may contain proxy credentials and registry
+          // details, and Docker.run logs command output at debug level.
+          '{"OSType":{{json .OSType}},"ServerVersion":{{json .ServerVersion}},"KernelVersion":{{json .KernelVersion}},"OperatingSystem":{{json .OperatingSystem}}}',
+        ]);
+        const host = yield* decodeMountDaemonInfo(stdout);
+        const os = host.OSType?.toLowerCase();
+        const dockerDesktop = host.OperatingSystem?.toLowerCase().includes("docker desktop");
+        const engine = parseMajorMinor(host.ServerVersion);
+        const kernel = parseMajorMinor(host.KernelVersion);
+        for (const [index, mount] of (props.mounts ?? []).entries()) {
+          const path = `mounts[${index}]`;
+          if (os === "linux" && /^[a-zA-Z]:[\\/]/.test(mount.target)) {
+            return yield* invalidContainerOption(
+              `${path}.target`,
+              "must use a POSIX target on a Linux Docker daemon",
+            );
+          }
+          if (mount.type === "tmpfs") {
+            if (os === "windows") {
+              return yield* invalidContainerOption(path, "requires a Linux Docker daemon");
+            }
+            continue;
+          }
+          if (mount.type === "volume") {
+            // Docker Engine 26 introduced volume-subpath.
+            if (mount.subpath !== undefined && engine && beforeVersion(engine, 26)) {
+              return yield* invalidContainerOption(
+                `${path}.subpath`,
+                "requires Docker Engine 26 or later",
+              );
+            }
+            continue;
+          }
+          if (os === "linux" && !dockerDesktop && /^[a-zA-Z]:[\\/]/.test(mount.source)) {
+            return yield* invalidContainerOption(
+              `${path}.source`,
+              "must refer to an absolute path on the Linux daemon host",
+            );
+          }
+          if (
+            os === "windows" &&
+            (mount.propagation !== undefined || mount.recursive !== undefined)
+          ) {
+            return yield* invalidContainerOption(
+              path,
+              "bind propagation and recursive settings require Linux",
+            );
+          }
+          if (mount.propagation !== undefined && dockerDesktop) {
+            return yield* invalidContainerOption(
+              `${path}.propagation`,
+              "is not supported by Docker Desktop",
+            );
+          }
+          // Docker Engine 25 added bind-recursive; readonly additionally
+          // requires Linux kernel 5.12 for recursively read-only submounts.
+          if (mount.recursive !== undefined && engine && beforeVersion(engine, 25)) {
+            return yield* invalidContainerOption(
+              `${path}.recursive`,
+              "requires Docker Engine 25 or later",
+            );
+          }
+          if (mount.recursive === "readonly" && kernel && beforeVersion(kernel, 5, 12)) {
+            return yield* invalidContainerOption(
+              `${path}.recursive`,
+              "requires Linux kernel 5.12 or later",
+            );
+          }
+        }
+      });
+
       const reconnectNetwork = Effect.fn(function* (
         live: Docker.Container,
         network: Container.NetworkMapping,
@@ -816,10 +1005,16 @@ export const ContainerProvider = () =>
               : undefined;
           const mustReplace =
             olds.image !== undefined && (contextChanged || !Equal.equals(oldArgs, newArgs));
+          if (mustReplace && (news.mounts?.length || olds.mounts?.length)) {
+            // Removing all typed mounts is also destructive; verify the new
+            // context still responds before deleting the old container.
+            yield* validateMountDaemon(news, true);
+          }
           // No-op plans still need to verify the physical container identity.
           // A foreign container can reuse the managed name after deletion.
+          let live: Docker.Container | undefined;
           if (output) {
-            const live = yield* inspect(output.name, dockerContextName(olds.context));
+            live = yield* inspect(output.name, dockerContextName(olds.context));
             if (live && live.Id !== output.id) {
               return yield* containerOwnershipConflict(id, output.name, output.id, live.Id);
             }
@@ -829,7 +1024,23 @@ export const ContainerProvider = () =>
           // round-trip (it deserializes as `undefined`) — without comparable
           // prior create args, let the engine apply its default update logic.
           if (mustReplace) {
-            return { action: "replace" as const, deleteFirst: true };
+            // A stopped, auto-named container can have the new generation
+            // created first: instance IDs give each generation a distinct
+            // name, and neither can concurrently write its mounted volumes.
+            // Alchemy then collects the old generation only after successful
+            // creation. Fixed names and running containers still require
+            // deleteFirst to avoid name/port conflicts and concurrent writes.
+            const createFirst =
+              !contextChanged &&
+              !olds.name &&
+              !news.name &&
+              !olds.start &&
+              !news.start &&
+              (olds.restart ?? "no") === "no" &&
+              (news.restart ?? "no") === "no" &&
+              (live?.State.Status === "created" || live?.State.Status === "exited") &&
+              !Equal.equals(olds.mounts ?? [], news.mounts ?? []);
+            return { action: "replace" as const, deleteFirst: !createFirst };
           }
           if (olds.image === undefined) return undefined;
           if (
@@ -857,11 +1068,23 @@ export const ContainerProvider = () =>
               return { action: "update" as const };
             }
           }
+          // The new optional mounts field must not turn old container
+          // declarations into updates merely because callers pass [].
+          if (
+            !olds.mounts?.length &&
+            !news.mounts?.length &&
+            Equal.equals({ ...olds, mounts: undefined }, { ...news, mounts: undefined })
+          ) {
+            return { action: "noop" as const };
+          }
         }),
         reconcile: Effect.fn(function* ({ id, instanceId, news, olds, output }) {
           const context = dockerContextName(news.context);
           const args = yield* makeCreateArgs(id, news, instanceId);
           yield* validateNetworkIdentities(news);
+          // Recheck during apply: daemon capabilities/context may have changed
+          // since plan, and initial creates or adoptions can skip diff.
+          yield* validateMountDaemon(news);
           const configHash = yield* desiredConfigHash(args, news);
           // Adoption has output but no olds. In that case the observed
           // container already lives in the desired context.
@@ -1033,6 +1256,9 @@ const makeCreateArgs = (id: string, news: ContainerProps, instanceId: string) =>
       volume: news.volumes?.map(
         (v) => `${v.hostPath}:${v.containerPath}${v.readOnly ? ":ro" : ""}`,
       ),
+      // Leave this key absent for old containers so unchanged deployments
+      // retain their historical config hash and avoid needless replacements.
+      ...(news.mounts?.length ? { mount: news.mounts.map(formatMount) } : {}),
       p: news.ports?.map((port) => {
         const target = `${port.internal}/${port.protocol ?? "tcp"}`;
         // `external: 0` means "any free host port". Docker spells that as a
@@ -1282,6 +1508,32 @@ const normalizeTmpfs = (mounts: Container.TmpfsMount[]): string[] =>
       return options.length > 0 ? `${path}:${options.join(",")}` : path;
     });
 
+/** Docker parses each --mount value as CSV; quote *whole* key=value fields. */
+const mountField = (key: string, value?: string): string => {
+  const field = value === undefined ? key : `${key}=${value}`;
+  return /[",\r\n]/.test(field) ? `"${field.replaceAll('"', '""')}"` : field;
+};
+
+const formatMount = (mount: Container.Mount): string => {
+  const fields = [mountField("type", mount.type), mountField("target", mount.target)];
+  if (mount.type === "tmpfs") {
+    if (mount.size !== undefined) fields.push(mountField("tmpfs-size", mount.size));
+    if (mount.mode !== undefined) fields.push(mountField("tmpfs-mode", mount.mode.toString(8)));
+    return fields.join(",");
+  }
+  fields.push(mountField("source", mount.source));
+  if (mount.readOnly) fields.push(mountField("readonly"));
+  if (mount.type === "volume") {
+    if (mount.noCopy) fields.push(mountField("volume-nocopy"));
+    if (mount.subpath !== undefined) fields.push(mountField("volume-subpath", mount.subpath));
+  } else {
+    if (mount.createHostPath) fields.push(mountField("bind-create-src"));
+    if (mount.propagation) fields.push(mountField("bind-propagation", mount.propagation));
+    if (mount.recursive) fields.push(mountField("bind-recursive", mount.recursive));
+  }
+  return fields.join(",");
+};
+
 // Older/adopted containers without a config hash can match image defaults
 // despite missing requested settings. Keep this explicit allowlist complement
 // separate from makeCreateArgs: the legacy comparison proves only selected
@@ -1306,6 +1558,7 @@ const hasUnverifiedCreationOptions = (props: ContainerProps): boolean =>
   props.gpuDevices !== undefined ||
   props.keepStdinOpen === true ||
   props.allocatePseudoTerminal === true ||
+  (props.mounts?.length ?? 0) > 0 ||
   props.seccompProfile !== undefined ||
   props.appArmorProfile !== undefined ||
   props.userNamespace !== undefined ||
@@ -1556,38 +1809,170 @@ const validateContainerRuntime = (news: ContainerProps) => {
   return Effect.void;
 };
 
-const validateContainerMounts = (news: ContainerProps) => {
-  const targets = new Set<string>();
-  for (const device of news.devices ?? []) {
-    if (targets.has(device.containerPath)) {
-      return invalidContainerOption(
-        "devices",
-        `contain conflicting target path ${device.containerPath}`,
-      );
-    }
-    targets.add(device.containerPath);
-  }
-  const tmpfsTargets = new Set<string>();
-  for (const mount of news.tmpfs ?? []) {
-    if (mount.size !== undefined && mount.size.trim().length === 0) {
-      return invalidContainerOption("tmpfs", `size cannot be empty for ${mount.path}`);
-    }
-    if (!mount.path.startsWith("/") || mount.path.includes(":") || mount.path.includes(",")) {
-      return invalidContainerOption("tmpfs", `target must be an absolute path: ${mount.path}`);
-    }
-    if (tmpfsTargets.has(mount.path)) {
-      return invalidContainerOption("tmpfs", `contains duplicate target ${mount.path}`);
+// TypeScript declarations document the public API; Schema validates values
+// recovered from state, JavaScript consumers, and runtime configuration.
+// Decode all mounts together so SchemaIssue gives the exact array/property
+// path without a parallel, hand-maintained unknown-option allowlist.
+const containerMountsSchema = Schema.Array(
+  Schema.Union([
+    Schema.Struct({
+      type: Schema.Literal("volume"),
+      source: Schema.String,
+      target: Schema.String,
+      readOnly: Schema.optional(Schema.Boolean),
+      noCopy: Schema.optional(Schema.Boolean),
+      subpath: Schema.optional(Schema.String),
+    }),
+    Schema.Struct({
+      type: Schema.Literal("bind"),
+      source: Schema.String,
+      target: Schema.String,
+      readOnly: Schema.optional(Schema.Boolean),
+      createHostPath: Schema.optional(Schema.Boolean),
+      propagation: Schema.optional(
+        Schema.Literals(["private", "rprivate", "shared", "rshared", "slave", "rslave"]),
+      ),
+      recursive: Schema.optional(Schema.Literals(["enabled", "disabled", "writable", "readonly"])),
+    }),
+    Schema.Struct({
+      type: Schema.Literal("tmpfs"),
+      target: Schema.String,
+      size: Schema.optional(Schema.String),
+      mode: Schema.optional(Schema.Number),
+    }),
+  ]),
+);
+const decodeContainerMounts = Schema.decodeUnknownResult(containerMountsSchema, {
+  onExcessProperty: "error",
+});
+const formatMountSchemaIssue = SchemaIssue.makeFormatterStandardSchemaV1();
+
+const validateTypedMount = (mount: Container.Mount, path: string) => {
+  if (mount.type === "tmpfs") {
+    if (mount.size !== undefined && !isPositiveDockerByteSize(mount.size)) {
+      return invalidContainerOption(`${path}.size`, "must be a positive Docker byte size");
     }
     if (
       mount.mode !== undefined &&
       (!Number.isInteger(mount.mode) || mount.mode < 0 || mount.mode > 0o7777)
     ) {
-      return invalidContainerOption("tmpfs", `mode is not a valid POSIX mode for ${mount.path}`);
+      return invalidContainerOption(`${path}.mode`, "must be a valid POSIX mode");
     }
-    tmpfsTargets.add(mount.path);
+    return Effect.void;
+  }
+  if (!mount.source.trim() || /[\0\r\n]/.test(mount.source)) {
+    return invalidContainerOption(`${path}.source`, "must be a non-empty source path or name");
+  }
+  if (mount.type === "volume") {
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(mount.source)) {
+      return invalidContainerOption(`${path}.source`, "must be a named Docker volume");
+    }
+    if (
+      mount.subpath !== undefined &&
+      (!mount.subpath.trim() ||
+        mount.subpath.startsWith("/") ||
+        mount.subpath.split("/").includes("..") ||
+        /[\0\r\n]/.test(mount.subpath))
+    ) {
+      return invalidContainerOption(`${path}.subpath`, "must be a relative volume directory");
+    }
+  } else {
+    if (!mount.source.startsWith("/") && !/^[a-zA-Z]:[\\/]/.test(mount.source)) {
+      return invalidContainerOption(`${path}.source`, "must be an absolute daemon-host path");
+    }
   }
   return Effect.void;
 };
+
+const validateContainerMounts = (news: ContainerProps) =>
+  Effect.gen(function* () {
+    // Only omission means no mounts. Explicit null or any other invalid
+    // runtime value must fail closed before a delete-first replacement.
+    const decoded = decodeContainerMounts(news.mounts === undefined ? [] : news.mounts);
+    if (Result.isFailure(decoded)) {
+      const [issue] = formatMountSchemaIssue(decoded.failure.issue).issues;
+      const path = (issue?.path ?? []).reduce<string>((acc, part) => {
+        const key = typeof part === "object" ? part.key : part;
+        if (typeof key === "number") return `${acc}[${key}]`;
+        if (typeof key === "symbol") return `${acc}.${key.description ?? "symbol"}`;
+        return `${acc}.${key}`;
+      }, "mounts");
+      return yield* invalidContainerOption(path, issue?.message ?? "must be an array of mounts");
+    }
+    // Container destinations use Docker's POSIX syntax, even when Alchemy
+    // communicates with a Linux daemon from a Windows host.
+    const containerPaths = yield* Path.Path.pipe(Effect.provide(Path.layer));
+    const targets = new Set<string>();
+    for (const device of news.devices ?? []) {
+      if (targets.has(device.containerPath)) {
+        return yield* invalidContainerOption(
+          "devices",
+          `contain conflicting target path ${device.containerPath}`,
+        );
+      }
+      targets.add(device.containerPath);
+    }
+    // Docker refuses duplicate destinations even when different CLI mount
+    // flags specify them. Check the complete declaration before deleteFirst.
+    const mountTargets = new Map<string, string>();
+    const trackTarget = (target: string, path: string) =>
+      Effect.gen(function* () {
+        if (
+          typeof target !== "string" ||
+          !target.trim() ||
+          /[\0\r\n]/.test(target) ||
+          (!target.startsWith("/") && !/^[a-zA-Z]:[\\/]/.test(target))
+        ) {
+          return yield* invalidContainerOption(path, "target must be an absolute path");
+        }
+        // Docker normalizes container destinations before duplicate checks.
+        // Do the same at plan time so a bad replacement cannot delete the
+        // previous container before Docker reports a duplicate mount point.
+        const normalized = target.startsWith("/")
+          ? containerPaths.normalize(target).replace(/\/+$/, "") || "/"
+          : target.replace(/[\\/]+$/, "");
+        if (normalized === "/") {
+          return yield* invalidContainerOption(path, "cannot mount at the container root");
+        }
+        const previous = mountTargets.get(normalized);
+        if (previous) {
+          return yield* invalidContainerOption(
+            path,
+            `conflicts with ${previous} at target ${normalized}`,
+          );
+        }
+        mountTargets.set(normalized, path);
+      });
+    for (const [index, volume] of (news.volumes ?? []).entries()) {
+      yield* trackTarget(volume.containerPath, `volumes[${index}].containerPath`);
+    }
+    for (const mount of news.tmpfs ?? []) {
+      if (mount.size !== undefined && mount.size.trim().length === 0) {
+        return yield* invalidContainerOption("tmpfs", `size cannot be empty for ${mount.path}`);
+      }
+      if (!mount.path.startsWith("/") || mount.path.includes(":") || mount.path.includes(",")) {
+        return yield* invalidContainerOption(
+          "tmpfs",
+          `target must be an absolute path: ${mount.path}`,
+        );
+      }
+      if (
+        mount.mode !== undefined &&
+        (!Number.isInteger(mount.mode) || mount.mode < 0 || mount.mode > 0o7777)
+      ) {
+        return yield* invalidContainerOption(
+          "tmpfs",
+          `mode is not a valid POSIX mode for ${mount.path}`,
+        );
+      }
+      yield* trackTarget(mount.path, "tmpfs");
+    }
+    for (const [index, mount] of decoded.success.entries()) {
+      const path = `mounts[${index}]`;
+      yield* validateTypedMount(mount, path);
+      yield* trackTarget(mount.target, `${path}.target`);
+    }
+  });
 
 const validateContainerOptions = (news: ContainerProps) =>
   Effect.gen(function* () {
