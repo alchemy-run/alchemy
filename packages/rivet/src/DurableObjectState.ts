@@ -10,10 +10,68 @@ import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import { notAwaited, openSection, within, type Activation } from "./internal/Calls.ts";
 
+/** A one-shot schedule RivetKit has stored on the actor. */
+export interface ScheduledEventInfo {
+  readonly id: string;
+  readonly action: string;
+  readonly args: ReadonlyArray<unknown>;
+  readonly runAt: number;
+}
+
+/** Options for {@link ActorCron.set}. */
+export interface ActorCronSetOptions {
+  readonly name: string;
+  readonly expression: string;
+  readonly action: string;
+  readonly args?: ReadonlyArray<unknown>;
+  readonly timezone?: string;
+  /** Defaults to 100. Set to 0 to disable and clear history. Maximum 1,000. */
+  readonly maxHistory?: number;
+}
+
+/** Options for {@link ActorCron.every}. */
+export interface ActorCronEveryOptions {
+  readonly name: string;
+  /** Fixed interval in milliseconds. Minimum 5,000. */
+  readonly interval: number;
+  readonly action: string;
+  readonly args?: ReadonlyArray<unknown>;
+  /** Defaults to 100. Set to 0 to disable and clear history. Maximum 1,000. */
+  readonly maxHistory?: number;
+}
+
+/** A recurring job RivetKit has stored on the actor. */
+export type CronJobInfo = {
+  readonly name: string;
+  readonly action: string;
+  readonly args: ReadonlyArray<unknown>;
+  readonly nextRunAt: number;
+  readonly lastRunAt?: number;
+  readonly maxHistory: number;
+} & (
+  | { readonly kind: "cron"; readonly expression: string; readonly timezone: string }
+  | { readonly kind: "every"; readonly interval: number }
+);
+
+/** One firing of a recurring job. */
+export interface CronFire {
+  readonly action: string;
+  readonly scheduledAt: number;
+  readonly firedAt: number;
+  readonly finishedAt?: number;
+  readonly result: "running" | "ok" | "error" | "skipped";
+  readonly error?: {
+    readonly group: string;
+    readonly code: string;
+    readonly message: string;
+    readonly metadata?: unknown;
+  };
+}
+
 /**
  * The least of a RivetKit actor context the state needs: its raw SQLite
- * database, its scheduler, its key and `waitUntil`. Declared structurally so
- * this module never imports RivetKit at plan time.
+ * database, its scheduler, its cron jobs, its key and `waitUntil`. Declared
+ * structurally so this module never imports RivetKit at plan time.
  *
  * @internal
  */
@@ -21,8 +79,19 @@ export interface ActorContextLike {
   readonly key: ReadonlyArray<string>;
   readonly db: ActorDatabase;
   readonly schedule: {
+    after(duration: number, action: string, ...args: unknown[]): Promise<string>;
     at(timestamp: number, action: string, ...args: unknown[]): Promise<string>;
     cancel(id: string): Promise<boolean>;
+    get(id: string): Promise<ScheduledEventInfo | undefined>;
+    list(): Promise<ScheduledEventInfo[]>;
+  };
+  readonly cron: {
+    set(options: ActorCronSetOptions): Promise<void>;
+    every(options: ActorCronEveryOptions): Promise<void>;
+    get(name: string): Promise<CronJobInfo | undefined>;
+    list(): Promise<CronJobInfo[]>;
+    delete(name: string): Promise<boolean>;
+    history(name: string, options?: { readonly limit?: number }): Promise<CronFire[]>;
   };
   waitUntil(promise: Promise<unknown>): void;
   /** Keep the actor awake until `promise` settles. */
@@ -89,6 +158,47 @@ export interface ListOptions {
 }
 
 /**
+ * One-shot schedules on a Durable Object: RivetKit's `c.schedule`, calling
+ * an RPC method of this instance when due.
+ */
+export interface DurableObjectSchedule {
+  /**
+   * Run `action` after `duration` (a number of milliseconds, or a
+   * {@link Duration.Input}). Returns the schedule id.
+   */
+  after(
+    duration: number | Duration.Input,
+    action: string,
+    ...args: unknown[]
+  ): Effect.Effect<string>;
+  /** Run `action` at `timestamp` (ms since epoch, or a `Date`). */
+  at(timestamp: number | Date, action: string, ...args: unknown[]): Effect.Effect<string>;
+  /** Cancel a schedule by id. Whether it was still pending. */
+  cancel(id: string): Effect.Effect<boolean>;
+  get(id: string): Effect.Effect<ScheduledEventInfo | undefined>;
+  list(): Effect.Effect<ReadonlyArray<ScheduledEventInfo>>;
+}
+
+/**
+ * Recurring jobs on a Durable Object: RivetKit's `c.cron`, calling an RPC
+ * method of this instance on each tick.
+ */
+export interface DurableObjectCron {
+  /** Store a named cron expression. The same name updates the job. */
+  set(options: ActorCronSetOptions): Effect.Effect<void>;
+  /** Store a named fixed-interval job. Interval is at least 5,000 ms. */
+  every(options: ActorCronEveryOptions): Effect.Effect<void>;
+  get(name: string): Effect.Effect<CronJobInfo | undefined>;
+  list(): Effect.Effect<ReadonlyArray<CronJobInfo>>;
+  /** Whether a job of that name existed. */
+  delete(name: string): Effect.Effect<boolean>;
+  history(
+    name: string,
+    options?: { readonly limit?: number },
+  ): Effect.Effect<ReadonlyArray<CronFire>>;
+}
+
+/**
  * A Durable Object's own storage, backed by the actor's SQLite database on
  * the Rivet control plane: a key-value store, raw SQL, and one alarm.
  */
@@ -129,6 +239,18 @@ export interface DurableObjectStateShape {
   /** The name the instance was addressed by (`getByName(name)`). */
   readonly id: { readonly name: string; toString(): string };
   readonly storage: DurableObjectStorage;
+  /**
+   * One-shot schedules that call an RPC method of this instance. Unlike
+   * {@link DurableObjectStorage.setAlarm}, many can be pending at once, and
+   * each names the method to run.
+   */
+  readonly schedule: DurableObjectSchedule;
+  /**
+   * Recurring jobs that call an RPC method of this instance. Set them from
+   * the instance constructor so existing actors pick up expression changes
+   * on every wake, as RivetKit's `onWake` does.
+   */
+  readonly cron: DurableObjectCron;
   /** Keep the instance awake until `effect` completes. */
   waitUntil<A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<void, never, R>;
 }
@@ -141,6 +263,16 @@ export class DurableObjectState extends Context.Service<
 
 /** The action RivetKit calls when an object's alarm comes due. @internal */
 export const ALARM_ACTION = "__alchemy_alarm";
+
+/**
+ * The RivetKit action that dispatches a scheduled or cron tick to an RPC
+ * method of the Durable Object instance. Schedule and cron APIs rewrite
+ * method names through this action so RivetKit only needs one registered
+ * action for every user method.
+ *
+ * @internal
+ */
+export const DISPATCH_ACTION = "__alchemy_dispatch";
 
 const KV_TABLE = "_alchemy_kv";
 const META_TABLE = "_alchemy_meta";
@@ -328,6 +460,32 @@ const setAlarm = (c: ActorContextLike, at: number, retries?: number) =>
     );
   });
 
+/**
+ * Rewrite a user method name into {@link DISPATCH_ACTION} so RivetKit can
+ * fire it without registering every RPC method as an action.
+ */
+const wrapDispatch = (action: string, args: ReadonlyArray<unknown>) => {
+  if (action === ALARM_ACTION || action === DISPATCH_ACTION) {
+    return { action, args: [...args] };
+  }
+  return { action: DISPATCH_ACTION, args: [action, ...args] };
+};
+
+/** Present a stored schedule/cron entry with the user method name restored. */
+const unwrapDispatch = <
+  T extends { readonly action: string; readonly args: ReadonlyArray<unknown> },
+>(
+  info: T,
+): T => {
+  if (info.action === DISPATCH_ACTION && typeof info.args[0] === "string") {
+    return { ...info, action: info.args[0], args: info.args.slice(1) };
+  }
+  return info;
+};
+
+const durationMillis = (duration: number | Duration.Input) =>
+  typeof duration === "number" ? duration : Duration.toMillis(Duration.fromInputUnsafe(duration));
+
 /** Build the state for one actor activation. @internal */
 export const makeDurableObjectState = (
   c: ActorContextLike,
@@ -487,9 +645,66 @@ export const makeDurableObjectState = (
       ),
   };
 
+  const schedule: DurableObjectSchedule = {
+    after: (duration, action, ...args) =>
+      Effect.promise(() => {
+        const wrapped = wrapDispatch(action, args);
+        return c.schedule.after(durationMillis(duration), wrapped.action, ...wrapped.args);
+      }),
+    at: (timestamp, action, ...args) =>
+      Effect.promise(() => {
+        const at = typeof timestamp === "number" ? timestamp : timestamp.getTime();
+        const wrapped = wrapDispatch(action, args);
+        return c.schedule.at(at, wrapped.action, ...wrapped.args);
+      }),
+    cancel: (id) => Effect.promise(() => c.schedule.cancel(id)),
+    get: (id) =>
+      Effect.promise(() => c.schedule.get(id)).pipe(
+        Effect.map((info) => (info === undefined ? undefined : unwrapDispatch(info))),
+      ),
+    list: () =>
+      Effect.promise(() => c.schedule.list()).pipe(
+        Effect.map((infos) => infos.map(unwrapDispatch)),
+      ),
+  };
+
+  const cron: DurableObjectCron = {
+    set: (options) =>
+      Effect.promise(() => {
+        const wrapped = wrapDispatch(options.action, options.args ?? []);
+        return c.cron.set({ ...options, action: wrapped.action, args: wrapped.args });
+      }),
+    every: (options) =>
+      Effect.promise(() => {
+        const wrapped = wrapDispatch(options.action, options.args ?? []);
+        return c.cron.every({ ...options, action: wrapped.action, args: wrapped.args });
+      }),
+    get: (name) =>
+      Effect.promise(() => c.cron.get(name)).pipe(
+        Effect.map((info) => (info === undefined ? undefined : unwrapDispatch(info))),
+      ),
+    list: () =>
+      Effect.promise(() => c.cron.list()).pipe(Effect.map((infos) => infos.map(unwrapDispatch))),
+    delete: (name) => Effect.promise(() => c.cron.delete(name)),
+    history: (name, options) =>
+      Effect.gen(function* () {
+        const fires = yield* Effect.promise(() => c.cron.history(name, options));
+        const job = yield* Effect.promise(() => c.cron.get(name));
+        const action =
+          job !== undefined && job.action === DISPATCH_ACTION && typeof job.args[0] === "string"
+            ? job.args[0]
+            : undefined;
+        return fires.map((fire) =>
+          fire.action === DISPATCH_ACTION && action !== undefined ? { ...fire, action } : fire,
+        );
+      }),
+  };
+
   return {
     id: { name, toString: () => name },
     storage,
+    schedule,
+    cron,
     // As on Cloudflare: the work runs with the caller's context and a scope
     // of its own, and the call's scope stays open until it settles.
     waitUntil: (effect) =>

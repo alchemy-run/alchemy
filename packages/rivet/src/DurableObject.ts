@@ -295,8 +295,9 @@ const createRuntimeContext = (id: string): DurableObjectRuntimeContext => {
 
 /**
  * A **Durable Object** on Rivet: a single-threaded, stateful instance per
- * name, with its own SQLite database, key-value storage and alarm on the
- * Rivet control plane. Each instance runs as a Rivet actor.
+ * name, with its own SQLite database, key-value storage, alarm, one-shot
+ * schedules and recurring cron jobs on the Rivet control plane. Each
+ * instance runs as a Rivet actor.
  *
  * The implementation has the same two phases as `Cloudflare.DurableObject`:
  * the outer Effect runs once per node and resolves bindings, and the inner
@@ -318,11 +319,17 @@ const createRuntimeContext = (id: string): DurableObjectRuntimeContext => {
  * `@rivetkit/effect`, that its pool bundles and runs as it is. Given a
  * `crate`, it is a Rust program that its pool compiles into the node image.
  * Either needs a pool of its own, and has no bindings or `yield*` calls.
- *
  * An instance's calls run in parallel, storage included: unlike Cloudflare,
  * there is no input gate. Make a read-then-write atomic with
  * `state.storage.transaction(...)`, or provide `Workers.InputGate` (from
  * `alchemy/Workers`) to run code written for Cloudflare's gate unchanged.
+ *
+ * Schedules and crons call RPC methods of this instance:
+ * `state.schedule.after` / `state.schedule.at` for one-shots, and
+ * `state.cron.set` / `state.cron.every` for recurring jobs. Set recurring
+ * jobs from the instance constructor so existing actors pick up expression
+ * changes on every wake. For a Durable Object whose only work is a cron,
+ * see `Rivet.Cron`.
  *
  * ### Declaring a Durable Object
  * **Example:** A counter on a local pool
@@ -387,6 +394,20 @@ const createRuntimeContext = (id: string): DurableObjectRuntimeContext => {
  *     });
  *   }).pipe(Effect.provide(Default)),
  * );
+ * ```
+ *
+ * ### Schedules and crons
+ * **Example:** A reminder and a daily job on the same instance
+ * ```typescript
+ * return {
+ *   remindIn: (ms: number) =>
+ *     state.schedule.after(ms, "sendReminder", { text: "hello" }),
+ *   sendReminder: (payload: { text: string }) =>
+ *     Effect.sync(() => console.log(payload.text)),
+ *   // Set from the instance constructor (runs on every wake):
+ *   // yield* state.cron.set({ name: "daily", expression: "0 9 * * *", action: "report" });
+ *   report: () => Effect.log("daily"),
+ * };
  * ```
  *
  * ### Deploying RivetKit Actors

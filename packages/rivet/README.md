@@ -110,4 +110,52 @@ export default Alchemy.Stack(
 
 Swap `RivetDocker` for `RivetAWS`, `RivetHetzner` or another cloud, and the room doesn't change.
 
+## Schedules and crons
+
+Each Durable Object instance can schedule one-shot work and recurring jobs that call its own RPC methods, using RivetKit's scheduler:
+
+```typescript
+const state = yield* Rivet.DurableObjectState;
+
+// One-shot: run `sendReminder` in 5 seconds
+yield* state.schedule.after(5_000, "sendReminder", { text: "hello" });
+
+// Recurring: refresh on every wake so existing actors pick up changes
+yield* state.cron.set({
+  name: "daily",
+  expression: "0 9 * * *",
+  action: "report",
+});
+```
+
+`Rivet.Cron` is a Durable Object dedicated to one job. After deploy, call `getByName(...).arm()` once so the actor exists for RivetKit to schedule.
+
+## Effect Workflows
+
+`Rivet.Workflows.layerDurableObjectEngine` runs Effect's `WorkflowEngine` on Rivet Durable Objects (same engine as Cloudflare's Durable Object Workflows). Provide a pool and the module that exports the workflows Layer:
+
+```typescript
+export const WorkflowsLive = SendWelcomeLive.pipe(
+  Layer.provideMerge(
+    Rivet.Workflows.layerDurableObjectEngine({
+      main: import.meta.url,
+      handler: "WorkflowsLive",
+      pool: Default,
+    }),
+  ),
+);
+```
+
+Each workflow execution is one actor instance, with its journal in SQLite and wake-ups on the actor's alarm.
+
+## agentOS (Sandbox)
+
+A services pool hosts Rivet's agentOS actor. `Rivet.AgentOs` returns Alchemy Sandbox handles (`exec`, `files`, `start`, `pty`, `getTcpPort`) against that pool:
+
+```typescript
+const agentOs = yield* Rivet.AgentOs;
+const sandbox = yield* agentOs.getOrCreate("session-1");
+const result = yield* sandbox.exec("uname -a");
+```
+
 Docs: [alchemy.run/rivet](https://alchemy.run/rivet) · [Setup](https://alchemy.run/rivet/setup) · [Tutorial](https://alchemy.run/rivet/tutorial/part-1). Reference: [alchemy.run/providers](https://alchemy.run/providers).
