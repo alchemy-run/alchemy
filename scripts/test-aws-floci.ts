@@ -210,6 +210,7 @@ const flociFixedValues: Record<string, string> = {
   AWS_TEST_OMICS: "1",
   AWS_TEST_PINPOINT_SMS: "1",
   AWS_TEST_QBUSINESS: "1",
+  AWS_TEST_INCIDENT_MANAGER: "1",
   AWS_TEST_REPOSTSPACE: "1",
   // Floci checks the instance ARN's form; its bootstrap Identity Center instance.
   QBUSINESS_IDC_INSTANCE_ARN: "arn:aws:sso:::instance/ssoins-7223b02a5d9f7c8e",

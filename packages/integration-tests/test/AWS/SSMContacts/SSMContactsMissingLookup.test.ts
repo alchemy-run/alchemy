@@ -1,13 +1,48 @@
 import * as AWS from "@alchemy.run/aws";
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
+import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import * as incidents from "@distilled.cloud/aws/ssm-incidents";
 import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
 import { missingName } from "../../lookup.ts";
 import { expectAllMissing } from "../lookup.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 const tags = ["provider:aws", "provider:aws:ssmcontacts", "live"];
+
+// A missing contact is only `ResourceNotFoundException` once the account is
+// onboarded to Incident Manager; before that every call fails with
+// `IncidentManagerNotOnboarded`. Ensure the account-wide replication set
+// exists and is ACTIVE, and leave it in place like the contacts lifecycle
+// test does. Returns false when the account can't be onboarded (AWS
+// deprecated CreateReplicationSet on Nov 7, 2025).
+const ensureOnboarded = Effect.gen(function* () {
+  const listed = yield* incidents.listReplicationSets({});
+  let arn = listed.replicationSetArns[0];
+  if (arn === undefined) {
+    const { region } = yield* AWSEnvironment.current;
+    const created = yield* Effect.result(
+      incidents.createReplicationSet({ regions: { [region]: {} } }),
+    );
+    if (Result.isFailure(created)) {
+      expect(created.failure._tag).toBe("UnsupportedOperationException");
+      return false;
+    }
+    arn = created.success.arn;
+  }
+  const status = yield* incidents.getReplicationSet({ arn }).pipe(
+    Effect.map((r) => r.replicationSet.status),
+    Effect.repeat({
+      schedule: Schedule.max([Schedule.fixed("5 seconds"), Schedule.recurs(60)]),
+      until: (status) => status !== "CREATING" && status !== "UPDATING",
+    }),
+  );
+  expect(status).toBe("ACTIVE");
+  return true;
+});
 
 // A lookup of a resource that doesn't exist fails the deploy with
 // LookupNotFoundError (contact, contact channel, rotation).
@@ -16,6 +51,12 @@ test.provider.skipIf(!process.env.AWS_TEST_INCIDENT_MANAGER)(
   "a lookup of a missing resource fails the deploy",
   (stack) =>
     Effect.gen(function* () {
+      if (!(yield* ensureOnboarded)) {
+        yield* Effect.logInfo(
+          "CreateReplicationSet is deprecated (Nov 7, 2025) and this account is not onboarded to Incident Manager — skipping",
+        );
+        return;
+      }
       yield* stack.destroy();
       const name = missingName(stack.stage);
       const { accountId, region } = yield* AWSEnvironment.current;
