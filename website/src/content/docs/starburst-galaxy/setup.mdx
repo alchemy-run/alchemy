@@ -1,0 +1,39 @@
+---
+title: Setup
+description: Connect Alchemy to your Starburst Galaxy account with an API client's credentials.
+---
+
+import PackageManagers from "../../../components/PackageManagers.astro";
+
+Sign up at [galaxy.starburst.io](https://galaxy.starburst.io). Your account domain is the host you sign in at, such as `yourco.galaxy.starburst.io`.
+
+## Create an API client
+
+In Galaxy, open **Settings → API access** and create an API client for a service account whose role may manage what your Stack declares (`accountadmin` manages everything). Copy the client ID and secret; Galaxy shows the secret once.
+
+## Install the provider
+
+<PackageManagers add="@alchemy.run/starburst-galaxy" />
+
+Register the provider next to your cloud's:
+
+```typescript
+// alchemy.run.ts
+import * as StarburstGalaxy from "@alchemy.run/starburst-galaxy";
+
+providers: Layer.mergeAll(Cloudflare.providers(), StarburstGalaxy.providers()),
+```
+
+## Save the credentials in a profile
+
+Run `alchemy profile edit --add StarburstGalaxy` and enter the account domain, client ID and client secret. They are checked with Galaxy before they are saved under `~/.alchemy/credentials/<profile>/`. Alchemy exchanges them for a ten-minute access token and refreshes it as needed.
+
+## CI
+
+In CI (`CI=true`), profiles are bypassed. Set `STARBURST_GALAXY_DOMAIN`, `STARBURST_GALAXY_CLIENT_ID` and `STARBURST_GALAXY_CLIENT_SECRET`.
+
+See [Profiles](/environments/profiles) for how credentials are stored and switched.
+
+## Next steps
+
+- [Starburst Galaxy overview](/starburst-galaxy): what the provider covers.
