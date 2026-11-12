@@ -51,12 +51,17 @@ import {
   findServiceDomainById,
   type ServiceDomainRecord,
 } from "./ServiceDomain.ts";
-import { readServiceRegion, syncServiceRegion } from "./ServiceRegion.ts";
+import { readServicePlacement, syncServicePlacement } from "./ServiceRegion.ts";
 import { withEnvironmentConfigLock } from "./transient.ts";
 import { uploadDeployTarball } from "./Up.ts";
 import { attachVolumeToService, listServiceVolumes } from "./Volume.ts";
 
-export { ServiceRegionNotApplied } from "./ServiceRegion.ts";
+export {
+  ServiceRegionNotApplied,
+  ServiceReplicasInvalid,
+  ServiceReplicasNotApplied,
+  ServiceReplicasRegionUnknown,
+} from "./ServiceRegion.ts";
 
 const serviceFields = <E>(service: Query<RailwayService, E>) => ({
   id: service.id,
@@ -831,6 +836,8 @@ const toAttrs = (input: {
   codeHash: string;
   rpcToken: string;
   region: string | undefined;
+  /** Count from `deploy.multiRegionConfig`; wins over `ServiceInstance.numReplicas`. */
+  replicas?: number | undefined;
 }): Service["Attributes"] => ({
   serviceId: input.service.id,
   name: input.service.name,
@@ -840,7 +847,7 @@ const toAttrs = (input: {
   repo: input.instance?.source?.repo ?? undefined,
   healthcheckPath: input.instance?.healthcheckPath ?? undefined,
   healthcheckTimeout: input.instance?.healthcheckTimeout ?? undefined,
-  replicas: input.instance?.numReplicas ?? undefined,
+  replicas: input.replicas ?? input.instance?.numReplicas ?? undefined,
   buildCommand: input.instance?.buildCommand ?? undefined,
   startCommand: input.instance?.startCommand ?? undefined,
   cronSchedule: input.instance?.cronSchedule ?? undefined,
@@ -947,9 +954,9 @@ export const ServiceProvider = () =>
                   domainId: output.domainId,
                 })
               : undefined;
-          const region =
+          const placement =
             resolvedEnvId.length > 0
-              ? yield* readServiceRegion({
+              ? yield* readServicePlacement({
                   environmentId: resolvedEnvId,
                   projectId: resolvedProjectId,
                   serviceId: found.id,
@@ -965,7 +972,10 @@ export const ServiceProvider = () =>
             port: output?.port ?? olds?.port,
             codeHash: output?.code.hash ?? "",
             rpcToken: output?.rpcToken ?? "",
-            region,
+            region: placement?.region,
+            // Only a declared count reads from the placement map; otherwise
+            // the output keeps reporting the instance's count as before.
+            replicas: olds?.replicas === undefined ? undefined : placement?.replicas,
           });
           if (output !== undefined) {
             // Keep the recorded ownership id even if the live list lags.
@@ -1254,16 +1264,20 @@ export const ServiceProvider = () =>
           // Pin `deploy.multiRegionConfig` before the build, then again after,
           // in case the deploy wrote the workspace default back.
           const serviceId = current.id;
-          const placeRegion = () =>
-            syncServiceRegion({
+          const placeRegion = (deferIfUnknown: boolean) =>
+            syncServicePlacement({
               environmentId,
               projectId,
               serviceId,
               region: props.region,
+              replicas: props.replicas,
               legacy: instance?.region,
               fallbackReplicas: instance?.numReplicas,
+              deferIfUnknown,
             });
-          let region = yield* placeRegion();
+          // A fresh service has no region until its first deploy, so the
+          // first call defers `replicas` and the one after the deploy applies it.
+          let placement = yield* placeRegion(true);
 
           if (sourceRepo !== undefined) {
             const branchChanged = yield* syncBranch({
@@ -1381,7 +1395,7 @@ export const ServiceProvider = () =>
             instance = (yield* waitForDeployment(environmentId, current.id)) ?? instance;
           }
 
-          region = yield* placeRegion();
+          placement = yield* placeRegion(false);
 
           return toAttrs({
             service: current,
@@ -1392,7 +1406,8 @@ export const ServiceProvider = () =>
             port,
             codeHash,
             rpcToken,
-            region,
+            region: placement.region,
+            replicas: props.replicas === undefined ? undefined : placement.replicas,
           });
         }),
 
