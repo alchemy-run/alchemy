@@ -35,6 +35,7 @@
     "./ClickStack": "./src/ClickStack/index.ts",
     "./Notifications": "./src/Notifications/index.ts",
     "./Organization": "./src/Organization/index.ts",
+    "./Postgres": "./src/Postgres/index.ts",
     "./Prometheus": "./src/Prometheus/index.ts",
     "./QueryApiEndpoints": "./src/QueryApiEndpoints/index.ts",
     "./RoleManagement": "./src/RoleManagement/index.ts",
@@ -89,6 +90,12 @@
         "bun": "./src/Organization/index.ts",
         "worker": "./src/Organization/index.ts",
         "default": "./lib/Organization/index.js"
+      },
+      "./Postgres": {
+        "types": "./lib/Postgres/index.d.ts",
+        "bun": "./src/Postgres/index.ts",
+        "worker": "./src/Postgres/index.ts",
+        "default": "./lib/Postgres/index.js"
       },
       "./Prometheus": {
         "types": "./lib/Prometheus/index.d.ts",
@@ -155,18 +162,27 @@
     "build:package": "node scripts/build.ts"
   },
   "dependencies": {
+    "@alchemy.run/sql": "workspace:*",
     "@distilled.cloud/clickhouse-cloud": "workspace:*",
     "@distilled.cloud/core": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "catalog:",
+    "@types/pg": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",
+    "pg": "catalog:",
     "typescript": "catalog:"
   },
   "peerDependencies": {
     "alchemy": "workspace:*",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "pg": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "pg": {
+      "optional": true
+    }
   },
   "alchemy": {
     "contributes": [

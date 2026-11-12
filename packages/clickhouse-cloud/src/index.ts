@@ -19,6 +19,7 @@ export {
   MemberNotFound,
   OperationFailed,
   OperationTimedOut,
+  PostgresDeletionProtected,
   PreviewNotOffered,
   QueryApiEndpointUserOwned,
   ResultMissing,
@@ -30,6 +31,7 @@ export {
 } from "./Errors.ts";
 export * as Notifications from "./Notifications/index.ts";
 export * as Organization from "./Organization/index.ts";
+export * as Postgres from "./Postgres/index.ts";
 export * as Prometheus from "./Prometheus/index.ts";
 export * from "./Providers.ts";
 export * as QueryApiEndpoints from "./QueryApiEndpoints/index.ts";
