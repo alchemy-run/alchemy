@@ -17,7 +17,7 @@
  * (Cloudflare Workers, Lambda, containers). The deployer's own key never
  * leaves the deploying machine.
  */
-import { Credentials, DEFAULT_API_BASE_URL } from "@distilled.cloud/clickhouse-cloud/Credentials";
+import { Credentials } from "@distilled.cloud/clickhouse-cloud/Credentials";
 import * as Binding from "alchemy/Binding";
 import * as Output from "alchemy/Output";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
@@ -35,14 +35,22 @@ export type Run<Ids> = <A, E>(
   call: (ids: Ids) => Effect.Effect<A, E, Credentials | HttpClient.HttpClient>,
 ) => Effect.Effect<A, E, RuntimeContext>;
 
+/** What a binding gets from {@link Bind}: a way to run SDK calls as the host's key. */
+export interface ClickHouseCloudAccess {
+  readonly authorize: <A, E, R>(
+    effect: Effect.Effect<A, E, R>,
+  ) => Effect.Effect<A, E, Exclude<R, Credentials | HttpClient.HttpClient> | RuntimeContext>;
+}
+
 /**
  * Resolve once, when a binding's layer is built: returns a function that
  * creates (at deploy) a role allowing `permissions` on `scope` and a key
  * holding only that role, both named after the host, `binding` and the
- * bound resource, reads the key back at runtime, and returns a runner that
- * calls the API with it.
+ * bound resource. It returns the key resource (whose `id` other resources
+ * can allow, as a Query API endpoint does) and accessors that read the key
+ * back at runtime.
  */
-export const Bind = Effect.gen(function* () {
+export const BindKey = Effect.gen(function* () {
   const Key = yield* ApiKey;
   const Grant = yield* Role;
   return Effect.fn(function* (
@@ -58,24 +66,50 @@ export const Bind = Effect.gen(function* () {
       policies: [{ allowDeny: "ALLOW", permissions: [...permissions], resources: [scope] }],
     });
     const key = yield* Key(`${prefix}Key`, { assignedRoleIds: [role.roleId] });
-    const keyId = yield* key.keyId;
-    const keySecret = yield* key.keySecret;
-    return <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-      Effect.gen(function* () {
-        const config = {
-          keyId: yield* keyId,
-          keySecret: yield* keySecret,
-          apiBaseUrl: DEFAULT_API_BASE_URL,
-        };
-        return yield* effect.pipe(
-          Effect.provide(
-            Layer.mergeAll(
-              Layer.succeed(Credentials, Effect.succeed(config)),
-              FetchHttpClient.layer,
+    return {
+      key,
+      keyId: yield* key.keyId,
+      keySecret: yield* key.keySecret,
+      apiBaseUrl: yield* key.apiBaseUrl,
+    };
+  });
+});
+
+/**
+ * Resolve once, when a binding's layer is built: returns a function that
+ * creates the binding's role and key ({@link BindKey}) and returns the
+ * {@link ClickHouseCloudAccess} that calls the API with that key, at the
+ * API origin the key was created against.
+ */
+export const Bind = Effect.gen(function* () {
+  const bindKey = yield* BindKey;
+  return Effect.fn(function* (
+    binding: string,
+    target: { readonly LogicalId: string },
+    scope: Output.Output<string>,
+    permissions: readonly string[],
+  ) {
+    const { keyId, keySecret, apiBaseUrl } = yield* bindKey(binding, target, scope, permissions);
+    const credentials = Effect.gen(function* () {
+      return {
+        keyId: yield* keyId,
+        keySecret: yield* keySecret,
+        apiBaseUrl: yield* apiBaseUrl,
+      };
+    });
+    return {
+      authorize: (effect) =>
+        Effect.flatMap(credentials, (config) =>
+          effect.pipe(
+            Effect.provide(
+              Layer.mergeAll(
+                Layer.succeed(Credentials, Effect.succeed(config)),
+                FetchHttpClient.layer,
+              ),
             ),
           ),
-        );
-      }) as Effect.Effect<A, E, Exclude<R, Credentials | HttpClient.HttpClient> | RuntimeContext>;
+        ),
+    } satisfies ClickHouseCloudAccess;
   });
 });
 
@@ -86,7 +120,7 @@ export const Bind = Effect.gen(function* () {
 export const BindService = Effect.gen(function* () {
   const bind = yield* Bind;
   return Effect.fn(function* (binding: string, target: Service, permissions: readonly string[]) {
-    const authorize = yield* bind(
+    const { authorize } = yield* bind(
       binding,
       target,
       Output.interpolate`instance/${target.serviceId}`,
@@ -115,7 +149,7 @@ export const BindOrganization = Effect.gen(function* () {
     target: Organization,
     permissions: readonly string[],
   ) {
-    const authorize = yield* bind(
+    const { authorize } = yield* bind(
       binding,
       target,
       Output.interpolate`organization/${target.organizationId}`,
