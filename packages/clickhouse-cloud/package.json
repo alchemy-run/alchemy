@@ -31,6 +31,7 @@
     ".": "./src/index.ts",
     "./ApiKeys": "./src/ApiKeys/index.ts",
     "./Backup": "./src/Backup/index.ts",
+    "./Notifications": "./src/Notifications/index.ts",
     "./Organization": "./src/Organization/index.ts",
     "./Prometheus": "./src/Prometheus/index.ts",
     "./RoleManagement": "./src/RoleManagement/index.ts",
@@ -58,6 +59,12 @@
         "bun": "./src/Backup/index.ts",
         "worker": "./src/Backup/index.ts",
         "default": "./lib/Backup/index.js"
+      },
+      "./Notifications": {
+        "types": "./lib/Notifications/index.d.ts",
+        "bun": "./src/Notifications/index.ts",
+        "worker": "./src/Notifications/index.ts",
+        "default": "./lib/Notifications/index.js"
       },
       "./Organization": {
         "types": "./lib/Organization/index.d.ts",

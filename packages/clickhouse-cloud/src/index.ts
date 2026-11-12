@@ -23,6 +23,7 @@ export {
   ServiceNotReady,
   SystemRoleImmutable,
 } from "./Errors.ts";
+export * as Notifications from "./Notifications/index.ts";
 export * as Organization from "./Organization/index.ts";
 export * as Prometheus from "./Prometheus/index.ts";
 export * from "./Providers.ts";
