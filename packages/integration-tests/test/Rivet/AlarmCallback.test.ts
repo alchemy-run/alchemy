@@ -29,66 +29,62 @@ const memoryStorage = () => {
   };
 };
 
-describe("Rivet.alarmCallbacks", () => {
-  it("schedules a job, fires it, and clears the row", async () => {
-    const storage = memoryStorage();
-    let alarm: number | null = null;
-    const seen: Array<{ n: number }> = [];
-    const callbacks = alarmCallbacks(storage, {
-      set: (at) =>
-        Effect.sync(() => {
-          alarm = at;
-        }),
-      get: Effect.sync(() => alarm),
-    });
-
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const job = yield* callbacks.makeCallback("tick", (payload: { n: number }) =>
+describe("Rivet.alarmCallbacks", { tags: ["provider:rivet", "unit", "local"] }, () => {
+  it.effect("schedules a job, fires it, and clears the row", () =>
+    Effect.gen(function* () {
+      const storage = memoryStorage();
+      let alarm: number | null = null;
+      const seen: Array<{ n: number }> = [];
+      const callbacks = alarmCallbacks(storage, {
+        set: (at) =>
           Effect.sync(() => {
-            seen.push(payload);
+            alarm = at;
           }),
-        );
-        yield* job.schedule("one", { after: 0, payload: { n: 7 } });
-        expect(alarm).not.toBeNull();
-        expect(storage.rows.size).toBe(1);
-        yield* callbacks.fire;
-        expect(seen).toEqual([{ n: 7 }]);
-        expect(storage.rows.size).toBe(0);
-      }),
-    );
-  });
+        get: Effect.sync(() => alarm),
+      });
 
-  it("retries a failing job and keeps the row", async () => {
-    const storage = memoryStorage();
-    let alarm: number | null = null;
-    let attempts = 0;
-    const callbacks = alarmCallbacks(storage, {
-      set: (at) =>
+      const job = yield* callbacks.makeCallback("tick", (payload: { n: number }) =>
         Effect.sync(() => {
-          alarm = at;
+          seen.push(payload);
         }),
-      get: Effect.sync(() => alarm),
-    });
+      );
+      yield* job.schedule("one", { after: 0, payload: { n: 7 } });
+      expect(alarm).not.toBeNull();
+      expect(storage.rows.size).toBe(1);
+      yield* callbacks.fire;
+      expect(seen).toEqual([{ n: 7 }]);
+      expect(storage.rows.size).toBe(0);
+    }),
+  );
 
-    await Effect.runPromise(
-      Effect.gen(function* () {
-        const job = yield* callbacks.makeCallback(
-          "fail",
-          () =>
-            Effect.sync(() => {
-              attempts += 1;
-            }).pipe(Effect.andThen(Effect.fail("boom"))),
-          { retry: { delay: "1 second", maxAttempts: 3 } },
-        );
-        yield* job.schedule("x", { after: 0, payload: {} });
-        yield* callbacks.fire;
-        expect(attempts).toBe(1);
-        expect(storage.rows.size).toBe(1);
-        const status = yield* job.getStatus("x");
-        expect(status?.attempts).toBe(1);
-        expect(status?.parked).toBe(false);
-      }),
-    );
-  });
+  it.effect("retries a failing job and keeps the row", () =>
+    Effect.gen(function* () {
+      const storage = memoryStorage();
+      let alarm: number | null = null;
+      let attempts = 0;
+      const callbacks = alarmCallbacks(storage, {
+        set: (at) =>
+          Effect.sync(() => {
+            alarm = at;
+          }),
+        get: Effect.sync(() => alarm),
+      });
+
+      const job = yield* callbacks.makeCallback(
+        "fail",
+        () =>
+          Effect.sync(() => {
+            attempts += 1;
+          }).pipe(Effect.andThen(Effect.fail("boom"))),
+        { retry: { delay: "1 second", maxAttempts: 3 } },
+      );
+      yield* job.schedule("x", { after: 0, payload: {} });
+      yield* callbacks.fire;
+      expect(attempts).toBe(1);
+      expect(storage.rows.size).toBe(1);
+      const status = yield* job.getStatus("x");
+      expect(status?.attempts).toBe(1);
+      expect(status?.parked).toBe(false);
+    }),
+  );
 });
