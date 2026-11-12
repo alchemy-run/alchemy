@@ -105,8 +105,9 @@ export const databaseSuite = (engine: "postgres" | "mysql") => {
         const rootDir = yield* selfHostedApp(`backend-${engine}`);
         yield* run(stack, rootDir).pipe(
           // A protected database refuses to go, so a run that stopped early
-          // has to lift protection before it can clean up.
-          Effect.ensuring(
+          // has to lift protection before it can clean up. A run that got
+          // through has already destroyed everything itself.
+          Effect.onError(() =>
             stack
               .deploy(app(stack.stage, rootDir, false))
               .pipe(Effect.ignore, Effect.andThen(stack.destroy()), Effect.ignore),
