@@ -6,8 +6,19 @@ import type { ProviderError } from "alchemy/Provider";
 import type { ScopedPlanStatusSession } from "alchemy/Report";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import type * as Stream from "effect/Stream";
 import { CATALOG_NAME, collectAll, findFirst, ownership, physicalName } from "../internal.ts";
+
+/**
+ * The plain value of an optional secret prop, for comparing the deployed
+ * value with a new one. Never logged or stored.
+ */
+export const secretValue = (secret: Redacted.Redacted<string> | undefined) =>
+  secret === undefined ? undefined : Redacted.value(secret);
+
+/** The cloud a database runs in, for Galaxy's network routing. */
+export type CloudKind = "AWS" | "AZURE" | "GCP";
 
 /** Props every Galaxy catalog kind accepts. */
 export interface CatalogBaseProps {

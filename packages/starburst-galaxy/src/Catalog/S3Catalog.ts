@@ -7,13 +7,14 @@ import type {
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
+import type * as Redacted from "effect/Redacted";
 import { changedFields, hasChanges } from "../internal.ts";
 import type { Providers } from "../Providers.ts";
 import {
   type CatalogBaseAttributes,
   type CatalogBaseProps,
   catalogLifecycle,
+  secretValue,
 } from "./CatalogKind.ts";
 import type { CatalogLookup } from "./PostgresqlCatalog.ts";
 
@@ -268,9 +269,6 @@ const secretsOf = (props: S3CatalogProps) => ({
   glueSecretKey: props.metastore.type === "glue" ? props.metastore.glueSecretKey : undefined,
 });
 
-const valueOf = (secret: Redacted.Redacted<string> | undefined) =>
-  secret === undefined ? undefined : Redacted.value(secret);
-
 export const S3CatalogProvider = () =>
   Provider.succeed(
     S3Catalog,
@@ -316,8 +314,8 @@ export const S3CatalogProvider = () =>
       },
       toAttributes,
       secretsChanged: (olds, news) =>
-        valueOf(olds.secretKey) !== valueOf(news.secretKey) ||
-        valueOf(secretsOf(olds).glueSecretKey) !== valueOf(secretsOf(news).glueSecretKey),
+        secretValue(olds.secretKey) !== secretValue(news.secretKey) ||
+        secretValue(secretsOf(olds).glueSecretKey) !== secretValue(secretsOf(news).glueSecretKey),
       replaces: (olds, news) => olds.metastore.type !== news.metastore.type,
     }),
   );

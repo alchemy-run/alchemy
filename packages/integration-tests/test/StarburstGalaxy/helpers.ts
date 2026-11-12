@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, generateKeyPairSync } from "node:crypto";
 import { expect } from "@alchemy.run/test";
 import { Stage } from "alchemy/Stage";
 import * as Effect from "effect/Effect";
@@ -43,3 +43,28 @@ export const expectGone = <E, R>(exists: Effect.Effect<boolean, E, R>) =>
 
 /** A deterministic test secret; Galaxy only stores it. */
 export const secret = (value: string) => Redacted.make(`alchemy-test-${value}`);
+
+/**
+ * A throwaway RSA private key (PKCS#8 PEM), made once per test process:
+ * Galaxy parses keys it is given, so a test key must be a real one.
+ */
+export const testPrivateKey = generateKeyPairSync("rsa", { modulusLength: 2048 })
+  .privateKey.export({ type: "pkcs8", format: "pem" })
+  .toString();
+
+/**
+ * A well-formed Google service account key for an account that does not
+ * exist. `version` changes the key ID, so a rotation is a new value.
+ */
+export const serviceAccountKey = (version: string) =>
+  Redacted.make(
+    JSON.stringify({
+      type: "service_account",
+      project_id: "alchemy-test",
+      private_key_id: createHash("sha256").update(version).digest("hex").slice(0, 40),
+      private_key: testPrivateKey,
+      client_email: "galaxy@alchemy-test.iam.gserviceaccount.com",
+      client_id: "100000000000000000001",
+      token_uri: "https://oauth2.googleapis.com/token",
+    }),
+  );
