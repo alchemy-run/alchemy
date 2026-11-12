@@ -1,0 +1,85 @@
+---
+title: ClickHouse Cloud
+description: Create ClickHouse Cloud services, their backups, API keys and roles, and read them from your Workers.
+---
+
+import HubMap from "../../../components/HubMap.astro";
+
+ClickHouse Cloud runs ClickHouse, the column-oriented analytics database, as a managed service. Each service is compute and storage in one region of AWS, GCP or Azure. It scales to zero when idle and bills by the minute while it runs.
+
+## A quick example
+
+A service that idles after five minutes without queries:
+
+```typescript
+// alchemy.run.ts
+import * as ClickHouseCloud from "@alchemy.run/clickhouse-cloud";
+
+export const Analytics = ClickHouseCloud.Service.Service("Analytics", {
+  provider: "aws",
+  region: "us-east-1",
+  ipAccessList: [{ source: "0.0.0.0/0", description: "anywhere" }],
+  idleScaling: true,
+  idleTimeoutMinutes: 5,
+});
+```
+
+Deploy returns once the service is running. `Analytics.httpsUrl` is its HTTPS interface, and `Analytics.password` is the password ClickHouse generated for the `default` user.
+
+Back it up twice a day and keep a week of backups:
+
+```typescript
+// alchemy.run.ts
+export const Backups = Effect.gen(function* () {
+  const analytics = yield* Analytics;
+  return yield* ClickHouseCloud.Backup.BackupConfiguration("AnalyticsBackups", {
+    serviceId: analytics.serviceId,
+    backupPeriodInHours: 12,
+    backupRetentionPeriodInHours: 168,
+  });
+});
+```
+
+Read the service's state from a Worker:
+
+```typescript
+const getService = yield* ClickHouseCloud.Service.GetService(Analytics);
+const svc = yield* getService();
+```
+
+The Worker gets its own API key, holding a role that allows `control-plane:service:view` on that one service.
+
+## What you can create
+
+- `ClickHouseCloud.Service.Service`: a service, with its IP access list, scaling, idle scaling, tags, password, desired state (`running` or `stopped`) and deletion protection.
+- `ClickHouseCloud.Backup.BackupConfiguration`: a service's backup schedule and retention.
+- `ClickHouseCloud.Organization.Organization`: your organization's name and core-dump setting. Destroy puts back the values it found.
+- `ClickHouseCloud.ApiKeys.ApiKey`: an organization API key, created with at least one role. Its secret is kept in state.
+- `ClickHouseCloud.RoleManagement.Role`: a custom role whose policies allow or deny permissions on services or the organization.
+
+## Bindings
+
+Bindings call the Cloud API from any runtime with the host's own key:
+
+- `Service.GetService`, `Service.UpdateServiceState` (`start`, `stop`, `awake`)
+- `Backup.ListBackups`, `Backup.GetBackup`
+- `Organization.ListActivities`, `Organization.GetActivity` (the audit log)
+- `Organization.ListOrganizationQuotas`, `Organization.GetOrganizationQuota`
+- `Prometheus.GetServicePrometheusMetrics`, `Prometheus.GetOrganizationPrometheusDiscovery`
+
+ClickHouse Cloud trusts no OIDC issuer, so each binding gives its host a role scoped to the bound service or organization, and an API key that holds only that role. Each key counts toward the organization's API key quota.
+
+## Out of scope
+
+- Deprecated create fields: `tier`, `minTotalMemoryGb`, `maxTotalMemoryGb` and create-time `privateEndpointIds` on a service, an API key's legacy `roles`, and the organization's `privateEndpoints` patch. Use the replica memory and replica count props, `assignedRoleIds`, and private endpoints on the service.
+- Catalogue lookups with no state to manage: the instance profile list (`listServiceProfiles`) and the ClickHouse settings schema (`getServiceClickHouseSettingsSchema`).
+- BYOC provisioning progress (`getByocInfrastructureProgress`): it only reports progress. A BYOC infrastructure is ready when its state says so.
+- `listOrganizations`: an API key belongs to one organization, so it is only used to find the organization ID when you don't set one.
+
+## Where to start
+
+Start with [Setup](/clickhouse-cloud/setup) to give Alchemy an API key. Every resource and binding is in the generated [API reference](/providers).
+
+## The docs
+
+<HubMap />
