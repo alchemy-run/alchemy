@@ -1,6 +1,7 @@
 export * as Auth from "./AuthProvider.ts";
 export * from "./Catalog/index.ts";
 export * from "./CloudAccess/index.ts";
+export type { Contact, Link } from "./Contact.ts";
 export * from "./Cluster/index.ts";
 export {
   Credentials,
@@ -10,6 +11,7 @@ export {
   fromClientCredentials,
 } from "./Credentials.ts";
 export * from "./DataProduct/index.ts";
+export * from "./Discovery/index.ts";
 export * from "./Governance/index.ts";
 export * from "./LookupOnly.ts";
 export * from "./Network/index.ts";

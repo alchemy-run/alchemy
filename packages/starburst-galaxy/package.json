@@ -33,6 +33,7 @@
     "./CloudAccess": "./src/CloudAccess/index.ts",
     "./Cluster": "./src/Cluster/index.ts",
     "./DataProduct": "./src/DataProduct/index.ts",
+    "./Discovery": "./src/Discovery/index.ts",
     "./Governance": "./src/Governance/index.ts",
     "./Network": "./src/Network/index.ts",
     "./Role": "./src/Role/index.ts",
@@ -73,6 +74,12 @@
         "bun": "./src/DataProduct/index.ts",
         "worker": "./src/DataProduct/index.ts",
         "default": "./lib/DataProduct/index.js"
+      },
+      "./Discovery": {
+        "types": "./lib/Discovery/index.d.ts",
+        "bun": "./src/Discovery/index.ts",
+        "worker": "./src/Discovery/index.ts",
+        "default": "./lib/Discovery/index.js"
       },
       "./Governance": {
         "types": "./lib/Governance/index.d.ts",
