@@ -8,7 +8,7 @@ Host your model on [Rivet](/rivet), and every aggregate instance, view key and p
 
 ## Host the model
 
-Provide `DomainRivet.layerDurableObjects` to the model's Layer, as you would `DomainCloudflare.layerDurableObjects()` or `Domain.InMemory`. Name the class that holds the model, point `main` and `handler` at the export the nodes load, and give it a pool.
+Provide `DomainRivet.layerDurableObjects` to the model's Layer, as you would `DomainCloudflare.layerDurableObjects()` or `Domain.InMemory`. Name the class that holds the model, point `main` at the file whose default export the nodes load, and give it a pool.
 
 ```typescript
 // packages/server/src/BankLive.ts
@@ -21,13 +21,12 @@ import { SiftFraudCheck } from "./Fraud/SiftFraudCheck.ts";
 const ControlPlane = RivetDocker.SwarmControlPlane("Rivet");
 const Default = RivetDocker.SwarmPool("Default").pipe(Layer.provide(ControlPlane));
 
-export const BankLive = Bank.layer(BankHandlers).pipe(
+export default Bank.layer(BankHandlers).pipe(
   Layer.provide(
     Layer.mergeAll(
       DomainRivet.layerDurableObjects({
         name: "Bank",
         main: import.meta.url,
-        handler: "BankLive",
         pool: Default,
       }),
       SiftFraudCheck,
@@ -47,7 +46,7 @@ Provide `BankLive` wherever you serve the Api: a Cloudflare Worker, a Lambda, a 
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CustomerApi } from "@bank/domain/CustomerApi.api";
 import * as Effect from "effect/Effect";
-import { BankLive } from "./BankLive.ts";
+import BankLive from "./BankLive.ts";
 
 export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
   "BankWorker",

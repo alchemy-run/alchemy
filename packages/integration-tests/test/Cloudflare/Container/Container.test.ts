@@ -650,7 +650,7 @@ describe.sequential(
     );
 
     test(
-      "recovers a missing application attached to the namespace its Worker reports",
+      "recovers a missing application attached to the namespace its Worker publishes",
       Effect.gen(function* () {
         const first = yield* stack;
         const namespaceId = first.app.durableObjects?.namespaceId;
@@ -715,7 +715,7 @@ describe.sequential(
           expect(deleted).toBeUndefined();
         });
         yield* Effect.gen(function* () {
-          // The Worker's projection is stale, so it updates first and reports
+          // The Worker's projection is stale, so it updates first and publishes
           // its namespace; the Container waits for it and attaches the new
           // application to that observed namespace, whatever its own record
           // says. It never creates the application unattached.

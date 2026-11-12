@@ -343,7 +343,8 @@ export default SFNTestFunction.make(
             workerName: "sfn-bindings-test",
           });
           return yield* HttpServerResponse.json({
-            taskToken: task.taskToken ?? null,
+            // The SDK returns the token as Redacted; JSON would print a placeholder.
+            taskToken: plain(task.taskToken) ?? null,
             input: plain(task.input) ?? null,
           });
         }

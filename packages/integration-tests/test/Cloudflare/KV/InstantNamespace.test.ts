@@ -220,7 +220,16 @@ test.provider(
               const namespaceId = yield* namespace.namespaceId;
 
               return Effect.fn(function* () {
-                yield* kv.put("greeting", "hello world");
+                // A fresh namespace can 404 on the data plane for a few seconds.
+                yield* kv.put("greeting", "hello world").pipe(
+                  Effect.retry({
+                    schedule: Schedule.spaced("1 second"),
+                    while: (error) =>
+                      error._tag === "NamespaceError" &&
+                      error.message.includes("namespace not found"),
+                    times: 10,
+                  }),
+                );
 
                 // Retry only propagation mismatches; surface API errors immediately.
                 const value = yield* kv.get("greeting").pipe(

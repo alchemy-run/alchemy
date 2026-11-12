@@ -24,11 +24,14 @@ export {
  */
 export const bindFlyApiToken = (): Effect.Effect<void, never, Credentials> =>
   Effect.gen(function* () {
+    // Bound as Redacted so a Service that owns its App stores the token
+    // as an App secret, not plain Machine env. The runtime reads it back
+    // with `CredentialsFromEnv`.
     const token = globalThis.__ALCHEMY_RUNTIME__
-      ? ""
+      ? Redacted.make("")
       : yield* Credentials.pipe(
           Effect.flatMap((resolve) => resolve),
-          Effect.map((cfg) => Redacted.value(cfg.apiKey)),
+          Effect.map((cfg) => cfg.apiKey),
           // Binding initialization cannot fail; the engine reports this
           // defect as `CredentialsRequired`.
           orDieCredentialsUnavailable("Fly"),
@@ -44,9 +47,10 @@ export const bindFlyApiToken = (): Effect.Effect<void, never, Credentials> =>
  * `Credentials`, and the binding must use them — a laptop deploy has no
  * `FLY_API_TOKEN` in its env once the token lives in the Alchemy profile.
  * Inside a deployed Machine there is no profile; `bindFlyApiToken`
- * has already `RuntimeContext.set` the org token, which Platform copies
- * into Machine env as `FLY_API_TOKEN`. So: reuse the ambient
- * `Credentials` when present, otherwise read the env.
+ * has already `RuntimeContext.set` the org token, which reaches the
+ * Machine as `FLY_API_TOKEN` (an App secret, or Machine env in a shared
+ * App). So: reuse the ambient `Credentials` when present, otherwise read
+ * it with {@link CredentialsFromEnv}.
  */
 export const CredentialsFromAmbientOrEnv: Layer.Layer<Credentials> = Layer.effect(
   Credentials,
