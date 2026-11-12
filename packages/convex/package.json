@@ -62,7 +62,8 @@
   },
   "dependencies": {
     "@distilled.cloud/convex": "workspace:*",
-    "@distilled.cloud/core": "workspace:*"
+    "@distilled.cloud/core": "workspace:*",
+    "@noble/ciphers": "^2.3.0"
   },
   "devDependencies": {
     "@alchemy.run/aws": "workspace:*",

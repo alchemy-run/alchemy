@@ -210,8 +210,9 @@ const hostOn = (
  * @see https://github.com/convex/convex-backend/tree/main/self-hosted
  *
  * ### Requirements
- * Deploying needs Docker, which mints the admin key and mirrors the image into
- * ECR. The domain's hosted zone must be in the same account.
+ * Deploying needs no Docker: the admin key is computed on the deploying
+ * machine, and the task pulls the image from its registry through the
+ * platform's NAT gateway. The domain's hosted zone must be in the same account.
  *
  * ### Running on its own
  * **Example:** Postgres and buckets, created by the resource
@@ -385,7 +386,6 @@ export const Backend = (id: string, props: BackendProps) =>
       });
       // The service reads the name from here, so a rename fails before it changes.
       const adminKey = yield* AdminKey("AdminKey", {
-        image: props.image,
         instanceName,
         instanceSecret: secret.text,
       });
@@ -566,6 +566,8 @@ export const Backend = (id: string, props: BackendProps) =>
       const service = yield* ECS.Service("Service", {
         cluster: { clusterArn: platform.clusterArn as never },
         image: props.image,
+        // Pulled from its registry by the task, never copied through this machine.
+        mirror: false,
         cpu,
         memory,
         port: CLOUD_PORT,

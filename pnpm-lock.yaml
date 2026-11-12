@@ -9551,6 +9551,9 @@ importers:
       '@distilled.cloud/core':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/core
+      '@noble/ciphers':
+        specifier: ^2.3.0
+        version: 2.3.0
     devDependencies:
       '@alchemy.run/aws':
         specifier: workspace:*

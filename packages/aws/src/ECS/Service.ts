@@ -39,8 +39,8 @@ import {
   makeImageSource,
   type BundledImageSource,
   type DockerfileImageSource,
+  type EcrRegistryImageSource,
   type ImageSourceLike,
-  type RegistryImageSource,
 } from "../ECR/ImageSource.ts";
 import type { ListenerAction, ListenerRuleCondition } from "../ELBv2/common.ts";
 import { Listener } from "../ELBv2/Listener.ts";
@@ -828,8 +828,8 @@ export interface BundledServiceProps extends ImageOwningServicePropsBase, Bundle
 /** Build the user's own Dockerfile into the service's image. */
 export interface DockerfileServiceProps
   extends ImageOwningServicePropsBase, DockerfileImageSource {}
-/** Run a pre-built registry image, mirrored into ECR. */
-export interface ImageServiceProps extends ImageOwningServicePropsBase, RegistryImageSource {}
+/** Run a pre-built registry image, mirrored into ECR unless `mirror: false`. */
+export interface ImageServiceProps extends ImageOwningServicePropsBase, EcrRegistryImageSource {}
 
 /**
  * Service props — either reference an existing task definition (`task:`) or
@@ -980,7 +980,8 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  *
  * The service's image comes from one of four sources:
  *
- * - `image` — run a pre-built registry image, mirrored into ECR.
+ * - `image` — run a pre-built registry image, mirrored into ECR unless
+ *   `mirror: false`.
  * - `context` — build your own Dockerfile.
  * - `main` — bundle an inline Effect program (servers return `{ fetch }`).
  * - `task:` — deploy an existing `AWS.ECS.Task`'s definition; the Service

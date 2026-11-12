@@ -11,7 +11,7 @@ Stages other than `prod` are previews on the development account's platform, and
 
 ## Deploy
 
-You need Docker running, and a Route 53 hosted zone for your domain in the account.
+You need a Route 53 hosted zone for your domain in the account. Docker isn't needed.
 
 ```bash
 pnpm install

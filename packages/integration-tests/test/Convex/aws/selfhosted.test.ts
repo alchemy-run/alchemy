@@ -1,5 +1,4 @@
 import { refuseProtected } from "@alchemy.run/convex/aws/StageDatabase";
-import { parseAdminKey } from "@alchemy.run/convex/internal/adminKey";
 import {
   assertInstanceNameUnchanged,
   assertNoReservedEnv,
@@ -180,35 +179,6 @@ test(
     );
     expect(error._tag).toBe("InvalidDatabaseUrl");
     expect(error.message).not.toContain("p4ssw0rd");
-  },
-  { tags: ["unit", "provider:convex", "local"] },
-);
-
-test(
-  "parseAdminKey takes the last key and ignores Docker pull noise",
-  async () => {
-    const stdout = [
-      "latest: Pulling from convex/convex-backend",
-      "Digest: sha256:abc",
-      "Status: Downloaded newer image",
-      "my-app|0123abcdef",
-      "",
-    ].join("\n");
-    const key = await Effect.runPromise(parseAdminKey(stdout));
-    expect(Redacted.value(key)).toBe("my-app|0123abcdef");
-  },
-  { tags: ["unit", "provider:convex", "local"] },
-);
-
-test(
-  "parseAdminKey with no key fails without repeating its input",
-  async () => {
-    const error = await parseAdminKey("something secret happened").pipe(
-      Effect.flip,
-      Effect.runPromise,
-    );
-    expect(error._tag).toBe("AdminKeyNotFound");
-    expect(error.message).not.toContain("secret happened");
   },
   { tags: ["unit", "provider:convex", "local"] },
 );

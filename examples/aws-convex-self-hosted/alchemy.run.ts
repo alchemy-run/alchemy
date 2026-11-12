@@ -12,6 +12,7 @@ export default Alchemy.Stack(
   Effect.gen(function* () {
     const stage = yield* Stage;
     const isProd = stage === "prod";
+    const domain = yield* Config.String("CONVEX_DOMAIN");
 
     // Every stage but prod shares the development account's platform.
     // CONVEX_PLATFORM_STAGE points a stage at another platform deployment.
@@ -35,6 +36,8 @@ export default Alchemy.Stack(
     yield* Convex.Functions("Functions", { backend, rootDir: "." });
 
     const website = yield* AWS.Website.TanStackStart("Website", {
+      // `<stage>.<domain>` for a preview, the bare domain for prod.
+      domain: { name: Convex.stageHosts(domain, stage, isProd).web },
       // The address, not the running backend, so the site builds in parallel.
       env: { CONVEX_URL: backend.endpoints.url },
       forceDestroy: !isProd,

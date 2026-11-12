@@ -2,15 +2,12 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 import * as Redacted from "effect/Redacted";
 import { mintAdminKey } from "../internal/adminKey.ts";
 import { assertInstanceNameUnchanged } from "../internal/selfhosted.ts";
 import type { Providers } from "./Providers.ts";
 
 export interface AdminKeyProps {
-  /** The backend image, which holds `generate_key`. Changing it keeps the key. */
-  image: string;
   /** The backend's `INSTANCE_NAME`. Changing it fails, because the data lives under it. */
   instanceName: string;
   /** The backend's `INSTANCE_SECRET`. Changing it replaces the key. */
@@ -36,10 +33,10 @@ export type AdminKey = Resource<
  * An admin key for a self-hosted Convex backend. `Convex.Backend` creates one,
  * so most stacks never use this directly.
  *
- * ### Requirements
- * `generate_key` only exists in the backend image, so this runs it with Docker
- * on the deploying machine. The key is computed from the name and secret, so it
- * needs no running backend.
+ * ### How the key is made
+ * The key is computed from the name and secret the way the backend's own
+ * `generate_key` computes it, on the deploying machine. It needs no Docker and
+ * no running backend.
  *
  * ### Safety
  * This is also what guards the data: a changed `instanceName` fails the plan
@@ -54,7 +51,7 @@ export const AdminKey = Resource<AdminKey>("Convex.AdminKey");
 export const AdminKeyProvider = () =>
   Provider.effect(
     AdminKey,
-    Effect.map(ChildProcessSpawner, (spawner) => ({
+    Effect.succeed({
       diff: Effect.fn(function* ({ news, olds }) {
         if (!isResolved(news)) return undefined;
         yield* assertInstanceNameUnchanged(olds?.instanceName, news.instanceName);
@@ -64,7 +61,6 @@ export const AdminKeyProvider = () =>
         ) {
           return { action: "replace" } as const;
         }
-        // Keys from the same secret stay valid across images.
         return { action: "noop" } as const;
       }),
       read: Effect.fn(function* ({ output }) {
@@ -73,11 +69,11 @@ export const AdminKeyProvider = () =>
       reconcile: Effect.fn(function* ({ news, output, session }) {
         if (output !== undefined) return output;
         yield* session.note(`Minting admin key for ${news.instanceName}...`);
-        const value = yield* mintAdminKey(spawner, news);
+        const value = yield* mintAdminKey(news);
         return { instanceName: news.instanceName, value };
       }),
       delete: () => Effect.void,
       // Keys aren't listed anywhere, and they stop working with their secret.
       list: () => Effect.succeed([]),
-    })),
+    }),
   );

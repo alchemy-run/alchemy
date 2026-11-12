@@ -5,7 +5,7 @@ description: Run one self-hosted Convex backend on AWS, with its own network, bu
 
 `Convex.Backend` runs the open-source Convex backend as one Fargate task behind a load balancer. Import it from `@alchemy.run/convex/aws`, whose `providers()` already include AWS.
 
-You need Docker on the machine that deploys, because Docker mints the admin key and copies the image to ECR. You also need a Route 53 hosted zone for the domain in the same account.
+You need a Route 53 hosted zone for the domain in the same account. Deploying needs no Docker: Alchemy computes the admin key itself, and the task pulls the image from its registry.
 
 ## Deploy a backend
 
