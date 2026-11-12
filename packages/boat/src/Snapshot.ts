@@ -5,10 +5,10 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { sha256Object } from "alchemy/Util/sha256";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
-import { SnapshotFailed, SnapshotSetupFailed } from "./Errors.ts";
+import { SnapshotSetupFailed } from "./Errors.ts";
 import { declarable } from "./internal/Declared.ts";
 import { boatName, isGeneratedName, ownershipLabels } from "./internal/Ownership.ts";
+import { awaitSaved, whileSaving } from "./internal/SavedSnapshot.ts";
 import type { Providers } from "./Providers.ts";
 import type { SandboxType } from "./Sandbox.ts";
 
@@ -159,28 +159,6 @@ const toAttributes = (snapshot: boat.SavedSnapshot, setupHash: string): Snapshot
 /** POSIX single quotes: the value verbatim. */
 const quote = (value: string) => `'${value.replaceAll("'", `'"'"'`)}'`;
 
-/** Saving takes seconds; poll until Boat reports `ready` or `failed` (about 90s at most). */
-const awaitSaved = (name: string) =>
-  boat.getSavedSnapshot({ name }).pipe(
-    Effect.map((got) => got.snapshot),
-    Effect.repeat({
-      schedule: Schedule.spaced("3 seconds"),
-      until: (snapshot) => snapshot.status !== "saving",
-      times: 30,
-    }),
-    Effect.flatMap((snapshot) =>
-      snapshot.status === "ready"
-        ? Effect.succeed(snapshot)
-        : new SnapshotFailed({
-            snapshot: name,
-            message:
-              snapshot.status === "failed"
-                ? `Boat could not save snapshot ${name}: ${snapshot.error ?? "unknown error"}`
-                : `Boat snapshot ${name} was still saving after 90 seconds`,
-          }),
-    ),
-  );
-
 /**
  * Starts a setup sandbox (from `from`, with none of the account's secrets),
  * runs the commands, saves it as `name`, and always deletes the sandbox.
@@ -220,7 +198,8 @@ const takeSnapshot = Effect.fn(function* (id: string, name: string, props: Snaps
             });
           }
         }
-        yield* boat.saveSavedSnapshot({ sandboxId: sandbox.id, name });
+        // An earlier save under this name may still be running.
+        yield* whileSaving(boat.saveSavedSnapshot({ sandboxId: sandbox.id, name }));
         return yield* awaitSaved(name);
       }),
     ({ sandbox }) =>
@@ -269,9 +248,10 @@ export const SnapshotProvider = () =>
           return toAttributes(yield* takeSnapshot(id, name, news), setupHash);
         }),
         delete: Effect.fn(function* ({ output }) {
-          yield* boat
-            .deleteSavedSnapshot({ name: output.name })
-            .pipe(Effect.catchTag("NotFound", () => Effect.void));
+          // A save under this name (an interrupted deploy's) must settle first.
+          yield* whileSaving(boat.deleteSavedSnapshot({ name: output.name })).pipe(
+            Effect.catchTag("NotFound", () => Effect.void),
+          );
         }),
         list: Effect.fn(function* () {
           const listed = yield* boat.listSavedSnapshots({});

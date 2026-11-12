@@ -15,7 +15,7 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { BoatAuth } from "../BoatBindings.ts";
-import { BoatUnexpectedResponse, ExecTimedOut, SnapshotFailed } from "../Errors.ts";
+import { BoatUnexpectedResponse, ExecTimedOut } from "../Errors.ts";
 import type {
   BoatSandbox,
   Command,
@@ -29,6 +29,7 @@ import type {
   SandboxOperations,
   StartOptions,
 } from "../SandboxClient.ts";
+import { awaitSaved, whileSaving } from "./SavedSnapshot.ts";
 
 const encoder = new TextEncoder();
 
@@ -95,27 +96,6 @@ const entryOf = (entry: {
   mode: entry.mode,
   modifiedAt: entry.modifiedAt,
 });
-
-const awaitSnapshot = (name: string) =>
-  boat.getSavedSnapshot({ name }).pipe(
-    Effect.map((got) => got.snapshot),
-    Effect.repeat({
-      schedule: Schedule.spaced("2 seconds"),
-      until: (snapshot) => snapshot.status !== "saving",
-      times: 45,
-    }),
-    Effect.flatMap((snapshot) =>
-      snapshot.status === "ready"
-        ? Effect.succeed(snapshot)
-        : new SnapshotFailed({
-            snapshot: name,
-            message:
-              snapshot.status === "failed"
-                ? `Boat could not save snapshot ${name}: ${snapshot.error ?? "unknown error"}`
-                : `Boat snapshot ${name} was still saving after 90 seconds`,
-          }),
-    ),
-  );
 
 /**
  * The operations every handle shares. `sandboxIdOf` resolves the id (read
@@ -374,7 +354,9 @@ const makeOperations = (
       ),
     snapshot: (name) =>
       onSandbox((sandboxId) =>
-        boat.saveSavedSnapshot({ sandboxId, name }).pipe(Effect.andThen(awaitSnapshot(name))),
+        whileSaving(boat.saveSavedSnapshot({ sandboxId, name })).pipe(
+          Effect.andThen(awaitSaved(name)),
+        ),
       ),
   };
 };
