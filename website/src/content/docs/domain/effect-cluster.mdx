@@ -117,6 +117,28 @@ Commands to one aggregate instance run one at a time. Its events, new state and 
 
 Every event reaches the views, projections and policies that consume it, at least once and in order for each source, even if a runner restarts in between. Scheduled commands are persisted messages, delivered when they're due on whichever runner then owns the instance.
 
+## Keep dedupe rows for a while
+
+Some rows exist only to drop repeats: the receipt of each accepted command, the mark that a policy ran a delivery, a cancelled scheduled command, and Effect Cluster's processed messages to the model's entity. Every runner deletes them once they are older than `retention`, each hour:
+
+```typescript
+DomainCluster.layerEntities({
+  name: "Bank",
+  main: import.meta.url,
+  handler: "BankLive",
+  pool: Default,
+  retention: {
+    receipts: "30 days", // a command sent again after this is decided again
+    deliveries: "7 days", // a delivery that arrives again after this runs again
+    cancelled: "7 days", // after this, `unschedule` answers `NotScheduled`
+    messages: "7 days",
+    interval: "1 hour",
+  },
+});
+```
+
+These are the defaults. `"forever"` keeps a kind of row. Events, state and the views' entries are never deleted.
+
 ## Read live over HTTP
 
 Effect Cluster entities hold no WebSockets, so serve the Api with `Domain.protocolHttp`. A `watch` or `events` read is a streamed response, fed by polling the entity that owns the key. `Domain.protocolWebSocket` answers `501` here.
