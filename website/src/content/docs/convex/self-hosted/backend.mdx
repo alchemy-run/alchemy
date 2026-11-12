@@ -54,7 +54,7 @@ db: { engine: "sqlite" }
 
 A created database sits in the task's availability zone and admits only the backend's security group. With `url`, the backend connects to a database named after the instance, with hyphens swapped for underscores, so create it first.
 
-SQLite is refused on the `prod` stage.
+SQLite is refused for a production backend: the `prod` stage, or any backend with `production: true`.
 
 ## Size the task
 

@@ -5,6 +5,7 @@ import {
   assertNoReservedEnv,
   assertPinnedImage,
   assertStageHosts,
+  hostLabelOf,
   backendEnv,
   backendTuning,
   type BackendEnv,
@@ -303,6 +304,17 @@ test(
   () => {
     expect(stageHosts("example.com", "pr-42", false).cloud).toContain("pr-42");
     expect(stageHosts("example.com", "prod", true).cloud).toContain("example.com");
+  },
+  { tags: ["unit", "provider:convex", "local"] },
+);
+
+test(
+  "hostLabelOf turns any stage name into a hostname label",
+  async () => {
+    expect(hostLabelOf("dev_Sam")).toBe("dev-sam");
+    expect(hostLabelOf("pr-42")).toBe("pr-42");
+    expect(hostLabelOf("_x_")).toBe("x");
+    await Effect.runPromise(assertStageHosts(hostLabelOf("dev_sam")));
   },
   { tags: ["unit", "provider:convex", "local"] },
 );

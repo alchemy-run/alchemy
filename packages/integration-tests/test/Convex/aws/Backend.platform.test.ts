@@ -1,13 +1,17 @@
-import * as NodeChildProcess from "node:child_process";
 import * as NodePath from "node:path";
 import * as Convex from "@alchemy.run/convex/aws";
+import { hostLabelOf, instanceNameOf } from "@alchemy.run/convex/internal/selfhosted";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as ecs from "@distilled.cloud/aws/ecs";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as s3 from "@distilled.cloud/aws/s3";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
+import { ChildProcess } from "effect/process";
+import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
+import * as Stream from "effect/Stream";
 import { assertDevAccount } from "./guard.ts";
 import { assertRuntime, listMessages, skipPaid, TEST_DOMAIN } from "./support.ts";
 
@@ -19,148 +23,161 @@ const EXAMPLE = NodePath.join(
 );
 
 /** Drives the example the way a person does, through the real CLI and state store. */
-const alchemy = (...args: string[]) =>
-  Effect.gen(function* () {
-    const result = yield* Effect.promise(
-      () =>
-        new Promise<{ code: number | null; output: string }>((resolve) => {
-          const child = NodeChildProcess.spawn(
-            "pnpm",
-            [
-              "exec",
-              "alchemy",
-              ...args,
-              "--profile",
-              process.env.ALCHEMY_PROFILE ?? "testing",
-              "--yes",
-            ],
-            {
-              cwd: EXAMPLE,
-              env: { ...process.env, CONVEX_DOMAIN: TEST_DOMAIN },
-              stdio: ["ignore", "pipe", "pipe"],
-            },
-          );
-          let output = "";
-          child.stdout.on("data", (chunk) => (output += chunk));
-          child.stderr.on("data", (chunk) => (output += chunk));
-          child.on("close", (code) => resolve({ code, output }));
+const alchemy = (platformStage: string, ...args: string[]) =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const spawner = yield* ChildProcessSpawner;
+      const profile = yield* Config.String("ALCHEMY_PROFILE").pipe(Config.withDefault("testing"));
+      const child = yield* spawner.spawn(
+        ChildProcess.make("pnpm", ["exec", "alchemy", ...args, "--profile", profile, "--yes"], {
+          cwd: EXAMPLE,
+          env: { CONVEX_DOMAIN: TEST_DOMAIN, CONVEX_PLATFORM_STAGE: platformStage },
+          extendEnv: true,
+          stdin: "ignore",
         }),
-    );
-    if (result.code !== 0) {
-      const lines = result.output.split("\n").filter((line) => !/^\s+at /.test(line));
-      return yield* Effect.die(`alchemy ${args.join(" ")} failed:\n${lines.slice(-30).join("\n")}`);
-    }
-    return result.output;
-  });
+      );
+      const [output, code] = yield* Effect.all(
+        [child.all.pipe(Stream.decodeText(), Stream.mkString), child.exitCode],
+        { concurrency: 2 },
+      );
+      if (code !== 0) {
+        const lines = output.split("\n").filter((line) => !/^\s+at /.test(line));
+        return yield* Effect.die(
+          `alchemy ${args.join(" ")} failed:\n${lines.slice(-30).join("\n")}`,
+        );
+      }
+      return output;
+    }),
+  );
 
-const taskDefinitionOf = (stage: string) =>
+/** The task definition of the stage whose backend runs as `instance`. */
+const taskDefinitionOf = (instance: string) =>
   Effect.gen(function* () {
     const { clusterArns } = yield* ecs.listClusters({});
     for (const cluster of clusterArns ?? []) {
       const { serviceArns } = yield* ecs.listServices({ cluster });
-      // `-alice-` also starts `-alice-2-`, so a stage's name must not run on into a number.
-      const named = new RegExp(`-${stage}-(?!\\d+-)`);
-      const service = (serviceArns ?? []).find((arn) => named.test(arn.toLowerCase()));
-      if (service === undefined) continue;
-      const { services } = yield* ecs.describeServices({ cluster, services: [service] });
-      const { taskDefinition } = yield* ecs.describeTaskDefinition({
-        taskDefinition: services![0]!.taskDefinition!,
-      });
-      return taskDefinition!;
+      if ((serviceArns ?? []).length === 0) continue;
+      const { services } = yield* ecs.describeServices({ cluster, services: serviceArns! });
+      for (const service of services ?? []) {
+        const { taskDefinition } = yield* ecs.describeTaskDefinition({
+          taskDefinition: service.taskDefinition!,
+        });
+        const env = taskDefinition!.containerDefinitions?.[0]?.environment ?? [];
+        if (env.some((entry) => entry.name === "INSTANCE_NAME" && entry.value === instance)) {
+          return taskDefinition!;
+        }
+      }
     }
-    return yield* Effect.die(`no service for ${stage}`);
+    return yield* Effect.die(`no service runs ${instance}`);
   });
 
 const UUID = "3f2b9c1e-0000-4000-8000-000000000000";
 
 test.provider.skipIf(skipPaid)(
   "two stages share one platform and stay apart",
-  () =>
+  (stack) =>
     Effect.gen(function* () {
-      yield* assertDevAccount;
-      yield* alchemy("deploy", "stacks/platform.ts", "--stage", "dev");
-      const alice = yield* alchemy("deploy", "--stage", "alice");
-      yield* alchemy("deploy", "--stage", "alice-2");
+      // Stages and the platform are this run's own, never the example's `dev`.
+      const base = hostLabelOf(stack.stage);
+      const platform = `${base}-platform`;
+      const one = base;
+      const two = `${base}-2`;
+      const cli = (...args: string[]) => alchemy(platform, ...args);
+      const oneInstance = instanceNameOf("ConvexApp", one);
+      const twoInstance = instanceNameOf("ConvexApp", two);
 
-      const aliceUrl = `https://alice-cloud.${TEST_DOMAIN}`;
-      const otherUrl = `https://alice-2-cloud.${TEST_DOMAIN}`;
+      return yield* Effect.gen(function* () {
+        yield* assertDevAccount;
+        yield* cli("deploy", "stacks/platform.ts", "--stage", platform);
+        const first = yield* cli("deploy", "--stage", one);
+        yield* cli("deploy", "--stage", two);
 
-      // The TanStack Start site serves, on the real Website component.
-      const websiteUrl = /websiteUrl: '([^']+)'/.exec(alice)?.[1];
-      expect(websiteUrl).toBeDefined();
-      const http = yield* HttpClient.HttpClient;
-      const page = yield* http.get(websiteUrl!);
-      expect(page.status).toBe(200);
-      expect(yield* page.text).toContain("Convex on AWS");
+        const oneUrl = `https://${one}-cloud.${TEST_DOMAIN}`;
+        const twoUrl = `https://${two}-cloud.${TEST_DOMAIN}`;
 
-      // Both stages work, and a row in one is absent from the other.
-      yield* assertRuntime({ url: aliceUrl, text: "only in alice" });
-      yield* assertRuntime({ url: otherUrl, text: "only in the other stage" });
-      expect(yield* listMessages(otherUrl)).not.toContain("only in alice");
-      expect(yield* listMessages(aliceUrl)).not.toContain("only in the other stage");
+        // The TanStack Start site serves, on the real Website component.
+        const websiteUrl = /websiteUrl: '([^']+)'/.exec(first)?.[1];
+        expect(websiteUrl).toBeDefined();
+        const http = yield* HttpClient.HttpClient;
+        const page = yield* http.get(websiteUrl!);
+        expect(page.status).toBe(200);
+        expect(yield* page.text).toContain("Convex on AWS");
 
-      // Stage `convexapp-alice` can't reach `convexapp-alice-2`, whose name starts the same.
-      const task = yield* taskDefinitionOf("alice");
-      const bucket = task.containerDefinitions![0]!.environment!.find(
-        (entry) => entry.name === "S3_STORAGE_FILES_BUCKET",
-      )!.value!;
-      const own = `convexapp-alice-${UUID}/object`;
-      const neighbour = `convexapp-alice-2-${UUID}/object`;
-      const canRead = (key: string) =>
-        iam
-          .simulatePrincipalPolicy({
-            PolicySourceArn: task.taskRoleArn!,
-            ActionNames: ["s3:GetObject"],
-            ResourceArns: [`arn:aws:s3:::${bucket}/${key}`],
-          })
-          .pipe(Effect.map((result) => result.EvaluationResults?.[0]?.EvalDecision));
-      expect(yield* canRead(own)).toBe("allowed");
-      expect(yield* canRead(neighbour)).toBe("implicitDeny");
+        // Both stages work, and a row in one is absent from the other.
+        yield* assertRuntime({ url: oneUrl, text: "only in the first stage" });
+        yield* assertRuntime({ url: twoUrl, text: "only in the other stage" });
+        expect(yield* listMessages(twoUrl)).not.toContain("only in the first stage");
+        expect(yield* listMessages(oneUrl)).not.toContain("only in the other stage");
 
-      // Listing is limited the same way, and a list with no prefix is refused.
-      const canList = (prefix: string | undefined) =>
-        iam
-          .simulatePrincipalPolicy({
-            PolicySourceArn: task.taskRoleArn!,
-            ActionNames: ["s3:ListBucket"],
-            ResourceArns: [`arn:aws:s3:::${bucket}`],
-            ContextEntries:
-              prefix === undefined
-                ? []
-                : [
-                    {
-                      ContextKeyName: "s3:prefix",
-                      ContextKeyType: "string",
-                      ContextKeyValues: [prefix],
-                    },
-                  ],
-          })
-          .pipe(Effect.map((result) => result.EvaluationResults?.[0]?.EvalDecision));
-      expect(yield* canList(`convexapp-alice-${UUID}/`)).toBe("allowed");
-      expect(yield* canList(`convexapp-alice-2-${UUID}/`)).toBe("implicitDeny");
-      expect(yield* canList(undefined)).toBe("implicitDeny");
+        // The first stage can't reach the second, whose instance name starts the same.
+        const task = yield* taskDefinitionOf(oneInstance);
+        const bucket = task.containerDefinitions![0]!.environment!.find(
+          (entry) => entry.name === "S3_STORAGE_FILES_BUCKET",
+        )!.value!;
+        const own = `${oneInstance}-${UUID}/object`;
+        const neighbour = `${twoInstance}-${UUID}/object`;
+        const canRead = (key: string) =>
+          iam
+            .simulatePrincipalPolicy({
+              PolicySourceArn: task.taskRoleArn!,
+              ActionNames: ["s3:GetObject"],
+              ResourceArns: [`arn:aws:s3:::${bucket}/${key}`],
+            })
+            .pipe(Effect.map((result) => result.EvaluationResults?.[0]?.EvalDecision));
+        expect(yield* canRead(own)).toBe("allowed");
+        expect(yield* canRead(neighbour)).toBe("implicitDeny");
 
-      // Destroying a stage deletes its prefix and leaves the other stage's alone.
-      yield* s3.putObject({ Bucket: bucket, Key: own, Body: "mine" });
-      yield* s3.putObject({ Bucket: bucket, Key: neighbour, Body: "theirs" });
-      yield* alchemy("destroy", "--stage", "alice");
-      const listed = yield* s3.listObjectsV2({ Bucket: bucket, Prefix: "convexapp-alice-" });
-      const keys = (listed.Contents ?? []).map((object) => object.Key);
-      expect(keys).not.toContain(own);
-      expect(keys).toContain(neighbour);
+        // Listing is limited the same way, and a list with no prefix is refused.
+        const canList = (prefix: string | undefined) =>
+          iam
+            .simulatePrincipalPolicy({
+              PolicySourceArn: task.taskRoleArn!,
+              ActionNames: ["s3:ListBucket"],
+              ResourceArns: [`arn:aws:s3:::${bucket}`],
+              ContextEntries:
+                prefix === undefined
+                  ? []
+                  : [
+                      {
+                        ContextKeyName: "s3:prefix",
+                        ContextKeyType: "string",
+                        ContextKeyValues: [prefix],
+                      },
+                    ],
+            })
+            .pipe(Effect.map((result) => result.EvaluationResults?.[0]?.EvalDecision));
+        expect(yield* canList(`${oneInstance}-${UUID}/`)).toBe("allowed");
+        expect(yield* canList(`${twoInstance}-${UUID}/`)).toBe("implicitDeny");
+        expect(yield* canList(undefined)).toBe("implicitDeny");
 
-      // The other stage keeps running on the shared platform.
-      expect(yield* listMessages(otherUrl)).toContain("only in the other stage");
-      yield* s3.deleteObject({ Bucket: bucket, Key: neighbour });
-    }).pipe(
-      Effect.ensuring(
-        Effect.gen(function* () {
-          yield* Effect.exit(alchemy("destroy", "--stage", "alice"));
-          yield* Effect.exit(alchemy("destroy", "--stage", "alice-2"));
-          yield* Effect.exit(alchemy("destroy", "stacks/platform.ts", "--stage", "dev"));
-        }),
-      ),
-    ),
+        // Destroying a stage deletes its prefix and leaves the other stage's alone.
+        yield* s3.putObject({ Bucket: bucket, Key: own, Body: "mine" });
+        yield* s3.putObject({ Bucket: bucket, Key: neighbour, Body: "theirs" });
+        yield* cli("destroy", "--stage", one);
+        const listed = yield* s3.listObjectsV2({ Bucket: bucket, Prefix: `${oneInstance}-` });
+        const keys = (listed.Contents ?? []).map((object) => object.Key);
+        expect(keys).not.toContain(own);
+        expect(keys).toContain(neighbour);
+
+        // The other stage keeps running on the shared platform.
+        expect(yield* listMessages(twoUrl)).toContain("only in the other stage");
+        yield* s3.deleteObject({ Bucket: bucket, Key: neighbour });
+
+        // The platform goes last, and leaves nothing behind.
+        yield* cli("destroy", "--stage", two);
+        yield* cli("destroy", "stacks/platform.ts", "--stage", platform);
+        const { Buckets } = yield* s3.listBuckets({});
+        expect((Buckets ?? []).map((item) => item.Name)).not.toContain(bucket);
+      }).pipe(
+        Effect.ensuring(
+          Effect.gen(function* () {
+            yield* Effect.exit(cli("destroy", "--stage", one));
+            yield* Effect.exit(cli("destroy", "--stage", two));
+            yield* Effect.exit(cli("destroy", "stacks/platform.ts", "--stage", platform));
+          }),
+        ),
+      );
+    }),
   {
     tags: ["provider:convex", "provider:convex:backend", "provider:aws", "live"],
     timeout: 4_500_000,

@@ -1,4 +1,5 @@
 import * as Convex from "@alchemy.run/convex/aws";
+import { hostLabelOf } from "@alchemy.run/convex/internal/selfhosted";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as ec2 from "@distilled.cloud/aws/ec2";
@@ -7,19 +8,29 @@ import * as rds from "@distilled.cloud/aws/rds";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { assertDevAccount } from "./guard.ts";
-import { assertRuntime, BACKEND_IMAGE, selfHostedApp, skipPaid, TEST_DOMAIN } from "./support.ts";
+import {
+  assertRuntime,
+  BACKEND_IMAGE,
+  databaseServerGone,
+  selfHostedApp,
+  serviceGone,
+  skipPaid,
+  TEST_DOMAIN,
+} from "./support.ts";
 
 /** One backend on a database this stack creates, from deploy to destroy. */
 export const databaseSuite = (engine: "postgres" | "mysql") => {
   const { test } = Test.make({ providers: Convex.providers() });
 
-  const domain = {
-    cloud: `convex-${engine}-cloud.${TEST_DOMAIN}`,
-    site: `convex-${engine}-site.${TEST_DOMAIN}`,
-  };
+  // Per stage, so two people's runs never claim the same hosts.
+  const domainOf = (stage: string) => ({
+    cloud: `convex-${engine}-${hostLabelOf(stage)}-cloud.${TEST_DOMAIN}`,
+    site: `convex-${engine}-${hostLabelOf(stage)}-site.${TEST_DOMAIN}`,
+  });
 
-  const app = (rootDir: string, deletionProtection: boolean | undefined) =>
+  const app = (stage: string, rootDir: string, deletionProtection: boolean | undefined) =>
     Effect.gen(function* () {
+      const domain = domainOf(stage);
       const backend = yield* Convex.Backend("Backend", {
         image: BACKEND_IMAGE,
         domain,
@@ -37,7 +48,7 @@ export const databaseSuite = (engine: "postgres" | "mysql") => {
       yield* stack.destroy();
 
       // deletionProtection defaults on.
-      const backend = yield* stack.deploy(app(rootDir, undefined));
+      const backend = yield* stack.deploy(app(stack.stage, rootDir, undefined));
       yield* assertRuntime({
         url: backend.url,
         siteUrl: backend.siteUrl,
@@ -78,6 +89,12 @@ export const databaseSuite = (engine: "postgres" | "mysql") => {
         DBInstanceIdentifier: instance.DBInstanceIdentifier,
       });
       expect(still.DBInstances?.length).toBe(1);
+
+      // Lifting protection lets it go, and nothing is left behind.
+      yield* stack.deploy(app(stack.stage, rootDir, false));
+      yield* stack.destroy();
+      expect(yield* databaseServerGone(instance.Endpoint!.Address!)).toBe(true);
+      expect(yield* serviceGone(backend.service.clusterArn, backend.service.serviceArn)).toBe(true);
     });
 
   test.provider.skipIf(skipPaid)(
@@ -91,7 +108,7 @@ export const databaseSuite = (engine: "postgres" | "mysql") => {
           // has to lift protection before it can clean up.
           Effect.ensuring(
             stack
-              .deploy(app(rootDir, false))
+              .deploy(app(stack.stage, rootDir, false))
               .pipe(Effect.ignore, Effect.andThen(stack.destroy()), Effect.ignore),
           ),
         );

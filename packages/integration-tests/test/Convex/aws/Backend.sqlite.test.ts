@@ -1,5 +1,5 @@
 import * as Convex from "@alchemy.run/convex/aws";
-import { InstanceNameChanged } from "@alchemy.run/convex/internal/selfhosted";
+import { hostLabelOf, InstanceNameChanged } from "@alchemy.run/convex/internal/selfhosted";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as ecs from "@distilled.cloud/aws/ecs";
@@ -15,18 +15,21 @@ import {
   BACKEND_IMAGE,
   listMessages,
   selfHostedApp,
+  serviceGone,
   skipPaid,
   TEST_DOMAIN,
 } from "./support.ts";
 
 const { test } = Test.make({ providers: Convex.providers() });
 
-const domain = {
-  cloud: `convex-sqlite-cloud.${TEST_DOMAIN}`,
-  site: `convex-sqlite-site.${TEST_DOMAIN}`,
-};
+// Per stage, so two people's runs never claim the same hosts.
+const domainOf = (stage: string) => ({
+  cloud: `convex-sqlite-${hostLabelOf(stage)}-cloud.${TEST_DOMAIN}`,
+  site: `convex-sqlite-${hostLabelOf(stage)}-site.${TEST_DOMAIN}`,
+});
 
 const app = (
+  stage: string,
   rootDir: string | undefined,
   env: NonNullable<Convex.BackendProps["env"]>,
   instanceName?: string,
@@ -34,7 +37,7 @@ const app = (
   Effect.gen(function* () {
     const backend = yield* Convex.Backend("Backend", {
       image: BACKEND_IMAGE,
-      domain,
+      domain: domainOf(stage),
       db: { engine: "sqlite" },
       deletionProtection: false,
       cpu: 512,
@@ -56,7 +59,7 @@ test.provider.skipIf(skipPaid)(
       const rootDir = yield* selfHostedApp("backend-sqlite");
 
       // Site port is healthy with no HTTP routes, before any push.
-      const backend = yield* stack.deploy(app(undefined, { RUST_LOG: "info" }));
+      const backend = yield* stack.deploy(app(stack.stage, undefined, { RUST_LOG: "info" }));
       const cluster = backend.service.clusterArn;
       const { services } = yield* ecs.describeServices({
         cluster,
@@ -72,7 +75,7 @@ test.provider.skipIf(skipPaid)(
 
       // A query, a subscription and an HTTP action, through the public hosts,
       // with a socket held past the default 60 second load balancer timeout.
-      const pushed = yield* stack.deploy(app(rootDir, { RUST_LOG: "info" }));
+      const pushed = yield* stack.deploy(app(stack.stage, rootDir, { RUST_LOG: "info" }));
       yield* assertRuntime({
         url: pushed.url,
         siteUrl: pushed.siteUrl,
@@ -110,14 +113,14 @@ test.provider.skipIf(skipPaid)(
       // Port 80 redirects.
       const http = yield* HttpClient.HttpClient;
       const redirect = yield* http
-        .get(`http://${domain.cloud}/version`)
+        .get(`http://${domainOf(stack.stage).cloud}/version`)
         .pipe(Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }));
       expect(redirect.status).toBe(301);
       expect(redirect.headers.location).toMatch(/^https:\/\//);
 
       // Data survives a redeploy that restarts the task, because SQLite is on EFS.
       const before = yield* ecs.listTasks({ cluster, serviceName: service.serviceName });
-      const redeployed = yield* stack.deploy(app(rootDir, { RUST_LOG: "warn" }));
+      const redeployed = yield* stack.deploy(app(stack.stage, rootDir, { RUST_LOG: "warn" }));
       const after = yield* ecs.listTasks({ cluster, serviceName: service.serviceName });
       expect(after.taskArns).not.toEqual(before.taskArns);
       expect(yield* listMessages(redeployed.url)).toContain("written through the load balancer");
@@ -129,7 +132,7 @@ test.provider.skipIf(skipPaid)(
       });
       const currentTask = current.services![0]!.taskDefinition;
       const renamed = yield* stack
-        .deploy(app(rootDir, { RUST_LOG: "warn" }, "other"))
+        .deploy(app(stack.stage, rootDir, { RUST_LOG: "warn" }, "other"))
         .pipe(Effect.result);
       expect(Result.isFailure(renamed)).toBe(true);
       if (Result.isFailure(renamed)) expect(renamed.failure).toBeInstanceOf(InstanceNameChanged);
@@ -138,6 +141,9 @@ test.provider.skipIf(skipPaid)(
         services: [backend.service.serviceArn],
       });
       expect(unchanged.services![0]!.taskDefinition).toBe(currentTask);
+
+      yield* stack.destroy();
+      expect(yield* serviceGone(cluster, backend.service.serviceArn)).toBe(true);
     }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore))),
   {
     tags: ["provider:convex", "provider:convex:backend", "provider:aws", "live"],

@@ -2,6 +2,7 @@ import * as AWS from "@alchemy.run/aws";
 import * as Convex from "@alchemy.run/convex/aws";
 import * as Alchemy from "alchemy";
 import { Stage } from "alchemy/Stage";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import { Platform } from "./stacks/platform.ts";
 
@@ -13,7 +14,11 @@ export default Alchemy.Stack(
     const isProd = stage === "prod";
 
     // Every stage but prod shares the development account's platform.
-    const { convex } = yield* Platform.stage[isProd ? "prod" : "dev"]!;
+    // CONVEX_PLATFORM_STAGE points a stage at another platform deployment.
+    const platformStage = yield* Config.String("CONVEX_PLATFORM_STAGE").pipe(
+      Config.withDefault(isProd ? "prod" : "dev"),
+    );
+    const { convex } = yield* Platform.stage[platformStage]!;
 
     const backend = yield* Convex.Backend("Backend", {
       platform: convex,

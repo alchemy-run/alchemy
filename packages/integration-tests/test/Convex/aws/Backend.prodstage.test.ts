@@ -10,6 +10,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as lambda from "@distilled.cloud/aws/lambda";
 import * as ssm from "@distilled.cloud/aws/ssm";
+import { OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import { Random } from "alchemy/Random";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -18,12 +19,12 @@ import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import { assertDevAccount } from "./guard.ts";
-import { BACKEND_IMAGE } from "./support.ts";
+import { BACKEND_IMAGE, databaseServerGone } from "./support.ts";
 
-// The `prod` stage's behaviour, on real AWS. A platform is built by hand with an
-// HTTP listener, so this needs no public domain or certificate, and hosts are
-// proved through the Host header.
-const { test } = Test.make({ providers: Convex.providers(), stage: "prod" });
+// A production backend's behaviour, on real AWS. A platform is built by hand
+// with an HTTP listener, so this needs no public domain or certificate, and
+// hosts are proved through the Host header.
+const { test } = Test.make({ providers: Convex.providers() });
 
 const DOMAIN = "convex-prod-path.alchemy";
 const USERNAME = "convex_admin";
@@ -142,16 +143,17 @@ const platform = Effect.gen(function* () {
   };
 });
 
-const app = (backend: { deletionProtection?: boolean } | undefined) =>
+const app = (backend: { id?: string; deletionProtection?: boolean } | undefined) =>
   Effect.gen(function* () {
     const { handle, balancerDns } = yield* platform;
     const deployed =
       backend === undefined
         ? undefined
-        : yield* Convex.Backend("Backend", {
+        : yield* Convex.Backend(backend.id ?? "Backend", {
             platform: handle as never,
             image: BACKEND_IMAGE,
             instanceName: "prod-path",
+            production: true,
             cpu: 512,
             memory: 1024,
             deletionProtection: backend.deletionProtection,
@@ -208,18 +210,25 @@ const databaseExists = Effect.fn(function* (handle: {
 });
 
 test.provider.skipIf(process.env.CONVEX_TEST_AWS !== "1")(
-  "the prod stage uses bare hosts and refuses to drop its database",
+  "a production backend uses bare hosts and refuses to drop its database",
   (stack) =>
     Effect.gen(function* () {
       yield* assertDevAccount;
       yield* stack.destroy();
 
-      // A backend on the prod stage gets cloud.<domain>, and is protected by default.
+      // A production backend gets cloud.<domain>, and is protected by default.
       const first = yield* stack.deploy(app({}));
       expect(first.url).toBe(`https://cloud.${DOMAIN}`);
       expect(yield* through(first.balancerDns, `cloud.${DOMAIN}`, "/version")).toBe(200);
-      expect(yield* through(first.balancerDns, `prod-cloud.${DOMAIN}`, "/version")).toBe(404);
       expect(yield* databaseExists(first.handle as never)).toBe(true);
+
+      // A renamed backend reaches the same database. It's refused rather than
+      // taken over, so the old one's destroy can't drop data the new one uses.
+      const renamed = yield* stack.deploy(app({ id: "Api" })).pipe(Effect.result);
+      expect(Result.isFailure(renamed)).toBe(true);
+      if (Result.isFailure(renamed)) expect(renamed.failure).toBeInstanceOf(OwnedBySomeoneElse);
+      expect(yield* databaseExists(first.handle as never)).toBe(true);
+      yield* stack.deploy(app({}));
 
       // Removing the backend from the stack is what would drop the data.
       const refused = yield* stack.deploy(app(undefined)).pipe(Effect.result);
@@ -233,6 +242,9 @@ test.provider.skipIf(process.env.CONVEX_TEST_AWS !== "1")(
       yield* stack.deploy(app({ deletionProtection: false }));
       yield* stack.deploy(app(undefined));
       expect(yield* databaseExists(first.handle as never)).toBe(false);
+
+      yield* stack.destroy();
+      expect(yield* databaseServerGone(first.handle.database!.host as string)).toBe(true);
     }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore))),
   {
     tags: ["provider:convex", "provider:convex:backend", "provider:aws", "live"],

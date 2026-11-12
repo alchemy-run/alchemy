@@ -19,6 +19,7 @@ import {
   assertNoReservedEnv,
   assertPinnedImage,
   assertStageHosts,
+  hostLabelOf,
   backendEnv,
   type BackendEnv,
   databaseName,
@@ -50,7 +51,7 @@ const SITE_PORT = 3211;
 
 export type BackendDb =
   | {
-      /** SQLite on EFS, for development only. Refused on the `prod` stage. */
+      /** SQLite on EFS, for development only. Refused when `production` is true. */
       engine: "sqlite";
     }
   | CreatedDatabase
@@ -96,6 +97,13 @@ interface BackendCommonProps {
    * @default derived from the stack and stage
    */
   instanceName?: string;
+  /**
+   * Whether this is the production backend. It refuses SQLite and, on a
+   * platform, protects its database and takes the platform's bare hosts
+   * (`cloud.<domain>`).
+   * @default true on the `prod` stage, otherwise false
+   */
+  production?: boolean;
   /** How long to keep logs. */
   logRetention?: Duration.Input;
   /** Tags for the resources that take them. */
@@ -142,9 +150,16 @@ export interface PlatformBackendProps extends BackendCommonProps {
   /**
    * Refuse to destroy this stage's database and bucket prefix. Turn it off and
    * deploy before destroying.
-   * @default true on the `prod` stage, otherwise false
+   * @default `production`
    */
   deletionProtection?: boolean;
+  /**
+   * The first of the two listener rule priorities this stage takes on the
+   * platform's listener (it uses this and the next). Derived from the instance
+   * name; set it only if a deploy fails with `ListenerRulePriorityInUse`.
+   * @default derived from the instance name
+   */
+  listenerPriority?: number;
 }
 
 export type BackendProps = OwnedBackendProps | PlatformBackendProps;
@@ -166,10 +181,15 @@ const asUrl = (
   );
 
 /** A platform's values are Outputs from another stack, and plain in the same one. */
-const hostOn = (domain: Input<string>, stage: string, host: "cloud" | "site") =>
+const hostOn = (
+  domain: Input<string>,
+  label: string,
+  production: boolean,
+  host: "cloud" | "site",
+) =>
   Output.map(
     Output.asOutput(domain as string) as Output.Output<string, never>,
-    (name: string) => stageHosts(name, stage, stage === "prod")[host],
+    (name: string) => stageHosts(name, label, production)[host],
   );
 
 /**
@@ -234,6 +254,20 @@ const hostOn = (domain: Input<string>, stage: string, host: "cloud" | "site") =>
  * const backend = yield* Convex.Backend("Backend", { platform: convex, image });
  * ```
  *
+ * A stage named `alice` gets `alice-cloud.<domain>` and `alice-site.<domain>`.
+ * The production backend gets `cloud.<domain>` and `site.<domain>`, a protected
+ * database, and no SQLite. That's the `prod` stage unless you say otherwise.
+ *
+ * **Example:** A production stage with another name
+ * ```typescript
+ * const { stage } = yield* Stack;
+ * const backend = yield* Convex.Backend("Backend", {
+ *   platform: convex,
+ *   image,
+ *   production: stage === "production",
+ * });
+ * ```
+ *
  * ### Removing a Backend
  * :::caution
  * `deletionProtection` keeps a created database and buckets with objects, not
@@ -269,10 +303,12 @@ export const Backend = (id: string, props: BackendProps) =>
       const env = props.env ?? {};
       yield* assertPinnedImage(props.image).pipe(Effect.orDie);
       yield* assertNoReservedEnv(env).pipe(Effect.orDie);
-      if (props.db?.engine === "sqlite" && stage === "prod") {
+      const production = props.production ?? stage === "prod";
+      if (props.db?.engine === "sqlite" && production) {
         return yield* Effect.die(
           new SqliteInProduction({
-            message: "SQLite is for development only. Use postgres or mysql on the prod stage.",
+            message:
+              "SQLite is for development only. Use postgres or mysql for a production backend.",
           }),
         );
       }
@@ -303,13 +339,16 @@ export const Backend = (id: string, props: BackendProps) =>
           : undefined;
       const platform = (props.platform ?? created!.handle) as PlatformInputs;
 
-      if (props.platform !== undefined) yield* assertStageHosts(stage).pipe(Effect.orDie);
+      const label = hostLabelOf(stage);
+      if (props.platform !== undefined && !production) {
+        yield* assertStageHosts(label).pipe(Effect.orDie);
+      }
       const hosts =
         props.platform === undefined
           ? { cloud: props.domain.cloud, site: props.domain.site }
           : {
-              cloud: hostOn(props.platform.domain, stage, "cloud"),
-              site: hostOn(props.platform.domain, stage, "site"),
+              cloud: hostOn(props.platform.domain, label, production, "cloud"),
+              site: hostOn(props.platform.domain, label, production, "site"),
             };
       const cloudUrl = Output.interpolate`https://${hosts.cloud}`;
       const siteUrl = Output.interpolate`https://${hosts.site}`;
@@ -349,7 +388,7 @@ export const Backend = (id: string, props: BackendProps) =>
           platform: props.platform as never,
           instanceName,
           password: password.text,
-          deletionProtection: props.deletionProtection ?? stage === "prod",
+          deletionProtection: props.deletionProtection ?? production,
         });
         const parameter = yield* SSM.Parameter("DatabaseUrlParameter", {
           type: "SecureString",
@@ -434,7 +473,9 @@ export const Backend = (id: string, props: BackendProps) =>
         attributes: { "deregistration_delay.timeout_seconds": "10" },
         tags,
       });
-      const priority = listenerPriority(instanceName);
+      const priority =
+        (props.platform !== undefined ? props.listenerPriority : undefined) ??
+        listenerPriority(instanceName);
       yield* ELBv2.ListenerRule("CloudRule", {
         listenerArn: platform.listenerArn as never,
         priority,

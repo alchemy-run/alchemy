@@ -333,6 +333,13 @@ export const Infrastructure = Effect.fn(function* (props: InfrastructureProps) {
  * Deploy it once per account, from its own stack, and pass it to each
  * `Convex.Backend`.
  *
+ * :::caution
+ * A platform serves the stages of one app. Hosts come from the stage name
+ * alone, so a second app's `alice` stage would claim `alice-cloud.<domain>` too:
+ * traffic would reach only one of them, and destroying either would delete the
+ * other's DNS records. Give each app its own platform.
+ * :::
+ *
  * ### Two accounts
  * **Example:** One platform per account
  * ```typescript

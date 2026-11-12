@@ -79,9 +79,26 @@ alchemy deploy --stage alice
 | Stage | Convex API | HTTP actions |
 | --- | --- | --- |
 | `alice` | `alice-cloud.dev.example.com` | `alice-site.dev.example.com` |
+| `dev_sam` | `dev-sam-cloud.dev.example.com` | `dev-sam-site.dev.example.com` |
 | `prod` | `cloud.example.com` | `site.example.com` |
 
-Hosts stay flat under the domain so one wildcard certificate covers them. That's why a stage name can't end in `-cloud` or `-site`.
+Hosts stay flat under the domain so one wildcard certificate covers them. That's why a stage name can't end in `-cloud` or `-site`. Characters a hostname can't hold become hyphens.
+
+## Mark the production backend
+
+The production backend takes the bare hosts, protects its database, and refuses SQLite. That's the `prod` stage unless you say otherwise:
+
+```typescript
+const backend = yield* Convex.Backend("Backend", {
+  platform: convex,
+  image,
+  production: stage === "production",
+});
+```
+
+## Give each app its own platform
+
+Hosts come from the stage name alone, so a platform serves one app. A second app's `alice` stage would claim `alice-cloud.dev.example.com` too: traffic would reach only one of them, and destroying either would delete the other's DNS records.
 
 ## Use another DNS host
 

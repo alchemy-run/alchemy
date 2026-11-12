@@ -207,6 +207,16 @@ export const stageHosts = (domain: string, stage: string, isProd: boolean) =>
         site: `${stage}-site.${domain}`,
       };
 
+/**
+ * A stage's name as a hostname label: lowercase, with anything else turned into
+ * hyphens, the same way the instance name is made. `dev_sam` becomes `dev-sam`.
+ */
+export const hostLabelOf = (stage: string) =>
+  stage
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
 export const assertStageHosts = Effect.fn(function* (stage: string) {
   if (stage.length > MAX_STAGE_LENGTH || !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(stage)) {
     return yield* new InvalidStageName({
