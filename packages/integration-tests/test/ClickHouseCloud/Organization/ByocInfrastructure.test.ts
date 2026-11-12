@@ -21,12 +21,12 @@ const declare = (accountId: string, displayName: string) =>
   });
 
 test.provider.skipIf(byocAccountId !== undefined)(
-  "outside a BYOC organization the deploy fails with the API's Forbidden",
+  "outside a BYOC organization the deploy fails with FeatureUnavailable",
   (stack) =>
     Effect.gen(function* () {
       yield* cleanSlate(stack);
       const error = yield* stack.deploy(declare("000000000000", "alchemy test")).pipe(Effect.flip);
-      expect(error._tag).toEqual("Forbidden");
+      expect(error._tag).toEqual("FeatureUnavailable");
       expect(messageOf(error)).toEqual("FORBIDDEN: Not a byoc organization");
     }).pipe(Effect.scoped),
   { tags: ["provider:clickhouse-cloud", "live"], timeout: 120_000 },

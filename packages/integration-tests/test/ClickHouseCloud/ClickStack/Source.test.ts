@@ -33,12 +33,12 @@ const declare = (name: string, conn: string) =>
   });
 
 test.provider.skipIf(needsService || connection !== undefined)(
-  "a service without ClickStack set up fails with the API's Forbidden",
+  "a service without ClickStack set up fails with FeatureUnavailable",
   (scratch) =>
     Effect.gen(function* () {
       yield* cleanSlate(scratch);
       const error = yield* scratch.deploy(declare("logs", "unknown")).pipe(Effect.flip);
-      expect(error._tag).toEqual("Forbidden");
+      expect(error._tag).toEqual("FeatureUnavailable");
       expect(error.message).toEqual("FORBIDDEN: ClickStack has not been setup for this service");
       yield* scratch.destroy();
     }).pipe(Effect.scoped),

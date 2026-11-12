@@ -23,12 +23,12 @@ const declare = (gap: 30 | 60) =>
   });
 
 test.provider.skipIf(needsService || snapshots)(
-  "without snapshot access the deploy fails with the API's Forbidden",
+  "without snapshot access the deploy fails with FeatureUnavailable",
   (stack) =>
     Effect.gen(function* () {
       yield* cleanSlate(stack);
       const error = yield* stack.deploy(declare(60)).pipe(Effect.flip);
-      expect(error._tag).toEqual("Forbidden");
+      expect(error._tag).toEqual("FeatureUnavailable");
       expect(error.message).toEqual("FORBIDDEN: early access API endpoint");
       yield* stack.destroy();
     }).pipe(Effect.scoped),

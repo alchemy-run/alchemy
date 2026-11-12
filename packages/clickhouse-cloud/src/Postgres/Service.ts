@@ -19,12 +19,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { organizationId as currentOrganizationId } from "../Credentials.ts";
-import {
-  FeatureUnavailable,
-  PostgresDeletionProtected,
-  ResultMissing,
-  requireResult,
-} from "../Errors.ts";
+import { FeatureUnavailable, ResultMissing, requireResult } from "../Errors.ts";
 import {
   hasOwnerTags,
   INSTANCE_TAG,
@@ -85,8 +80,7 @@ export interface ServiceProps {
   /**
    * When true, the service cannot be deleted: destroy fails until it is
    * turned off. ClickHouse enables it per organization; elsewhere `true`
-   * fails with `BadRequest` ("Deletion protection is not enabled for this
-   * organization.").
+   * fails with `DeletionProtectionNotEnabled`.
    * @default false
    */
   deletionProtection?: boolean;
@@ -196,8 +190,9 @@ export type Service = Resource<
  * connection string, as `Redacted` attributes. `migrations` run as that
  * superuser over verified TLS after every deploy. Renaming changes the host
  * name and certificates. A replica whose `replicaOf` is removed is
- * promoted in place. Deletion protection makes destroy fail with
- * `PostgresDeletionProtected` until it is turned off.
+ * promoted in place. Deletion protection is a per-organization feature:
+ * where ClickHouse hasn't enabled it, `deletionProtection: true` fails
+ * with `DeletionProtectionNotEnabled`.
  * @see https://clickhouse.com/docs/cloud/managed-postgres
  *
  * ### Creating a Database
@@ -763,13 +758,9 @@ export const ServiceProvider = () =>
           const { organizationId, postgresId } = output;
           if ((yield* getLive(organizationId, postgresId)) === undefined) return;
           yield* session.note("Deleting the Postgres service...");
-          yield* postgres.deletePostgresService({ organizationId, postgresId }).pipe(
-            Effect.catchTags({
-              NotFound: () => Effect.void,
-              Conflict: (cause) =>
-                Effect.fail(new PostgresDeletionProtected({ postgresId, cause })),
-            }),
-          );
+          yield* postgres
+            .deletePostgresService({ organizationId, postgresId })
+            .pipe(Effect.catchTag("NotFound", () => Effect.void));
           yield* pollUntil({
             kind: "Postgres service",
             id: postgresId,

@@ -125,7 +125,7 @@ test.provider.skipIf(slow)(
           }),
         )
         .pipe(Effect.flip);
-      expect(refused._tag).toEqual("BadRequest");
+      expect(refused._tag).toEqual("DeletionProtectionNotEnabled");
       expect(messageOf(refused)).toEqual(
         "BAD_REQUEST: Deletion protection is not enabled for this organization.",
       );

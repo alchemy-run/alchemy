@@ -931,7 +931,7 @@ export const ServiceProvider = () =>
             yield* setState(organizationId, serviceId, "stop", session);
           }
           yield* session.note("Deleting the service...");
-          yield* service.deleteService({ organizationId, serviceId }).pipe(
+          const deleteService = service.deleteService({ organizationId, serviceId }).pipe(
             Effect.catchTags({
               NotFound: () => Effect.void,
               DeletionProtectionEnabled: (cause) =>
@@ -943,6 +943,16 @@ export const ServiceProvider = () =>
                   }),
                 ),
             }),
+          );
+          // A query can wake the service between the stop and the delete;
+          // the API then refuses to terminate it (ServiceNotTerminable), so
+          // it is stopped again and deleted once more.
+          yield* deleteService.pipe(
+            Effect.catchTag("ServiceNotTerminable", () =>
+              setState(organizationId, serviceId, "stop", session).pipe(
+                Effect.andThen(deleteService),
+              ),
+            ),
           );
           yield* waitUntilServiceGone({ organizationId, serviceId, session });
         }),

@@ -23,12 +23,12 @@ const declare = (value: number) =>
   });
 
 test.provider.skipIf(needsService || settingsApi)(
-  "without the settings API the deploy fails with the API's Forbidden",
+  "without the settings API the deploy fails with FeatureUnavailable",
   (stack) =>
     Effect.gen(function* () {
       yield* cleanSlate(stack);
       const error = yield* stack.deploy(declare(4)).pipe(Effect.flip);
-      expect(error._tag).toEqual("Forbidden");
+      expect(error._tag).toEqual("FeatureUnavailable");
       expect(error.message).toEqual(
         "FORBIDDEN: ClickHouse settings API is not enabled for this organization. Please contact support to enable this feature",
       );

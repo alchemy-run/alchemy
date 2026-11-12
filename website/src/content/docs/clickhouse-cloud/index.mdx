@@ -75,7 +75,7 @@ The Worker gets its own API key, holding a role that allows `control-plane:servi
 - `ApiKeys.ApiKey` and `RoleManagement.Role`.
 - `UserManagement.Invitation`, `UserManagement.Member` (a member's roles) and `Notifications.MemberNotificationSetting`.
 
-Some of these need a plan or feature ClickHouse enables per organization: `JwtProvider` and `UpgradeWindow` need the Enterprise tier, `ClickHouseSetting` and `SnapshotConfiguration` need ClickHouse to enable those APIs, `ClickStack.*` needs ClickStack set up on the service, `ByocInfrastructure` needs a BYOC organization, and `CdcScaling` needs a database ClickPipe. Without it, the deploy fails with the API's `Forbidden` or `NotFound` and its message.
+Some of these need a plan or feature ClickHouse enables per organization: `JwtProvider` and `UpgradeWindow` need the Enterprise tier, `ClickHouseSetting` and `SnapshotConfiguration` need ClickHouse to enable those APIs, `ClickStack.*` needs ClickStack set up on the service, `ByocInfrastructure` needs a BYOC organization, and `CdcScaling` needs a database ClickPipe. Without it, the deploy fails with `FeatureUnavailable` and the API's message (`CdcScaling`: the provider's `ClickHouseCloud.FeatureUnavailable`).
 
 ## Bindings
 
