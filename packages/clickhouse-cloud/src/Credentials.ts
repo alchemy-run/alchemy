@@ -3,7 +3,9 @@ import * as organization from "@distilled.cloud/clickhouse-cloud/organization";
 import { ConfigError } from "@distilled.cloud/core/errors";
 import { lazyCredentials } from "alchemy/Auth/Resolve";
 import * as Context from "effect/Context";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -21,11 +23,12 @@ export {
 /**
  * The ClickHouse Cloud organization the current credentials act in. Every
  * API path carries it. Holds an effect so it resolves on first use, never
- * at layer build.
+ * at layer build; a success is cached, a failure is not.
  */
-export class OrganizationId extends Context.Service<OrganizationId, Effect.Effect<string>>()(
-  "ClickHouseCloud.OrganizationId",
-) {}
+export class OrganizationId extends Context.Service<
+  OrganizationId,
+  Effect.Effect<string, ConfigError | organization.ListOrganizationsError>
+>()("ClickHouseCloud.OrganizationId") {}
 
 /** The organization ID of the current credentials. */
 export const organizationId = Effect.flatten(OrganizationId);
@@ -40,9 +43,7 @@ const make = (
       apiBaseUrl: creds.apiBaseUrl.replace(/\/+$/, ""),
     }));
     // An API key belongs to exactly one organization, so a profile without
-    // an organization ID asks the API which one. `OrganizationId` is typed
-    // as never failing, so a failure dies here; the engine still reports a
-    // credentials failure as `CredentialsRequired`.
+    // an organization ID asks the API which one.
     const lookup = Effect.gen(function* () {
       const creds = yield* resolve;
       if (creds.organizationId !== undefined) return creds.organizationId;
@@ -61,7 +62,11 @@ const make = (
       }
       return id;
     });
-    const cachedOrganization = yield* lookup.pipe(Effect.orDie, Effect.cached);
+    // Only a success is kept: a missing profile or a transient failure is
+    // asked again on the next use (`Effect.cached` would keep the failure).
+    const cachedOrganization = yield* Effect.cachedWithTTL(lookup, (exit) =>
+      Exit.isSuccess(exit) ? Duration.infinity : Duration.zero,
+    );
     return Context.make(Credentials, credentials).pipe(
       Context.add(OrganizationId, cachedOrganization),
     );
