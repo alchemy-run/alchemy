@@ -1,6 +1,7 @@
 /**
- * One entity instance on its Durable Object, run the way Effect Cluster's
- * runners run one (`effect/cluster`'s entity manager):
+ * One entity instance on its durable object (a Cloudflare Durable Object, a
+ * Rivet actor), run the way Effect Cluster's runners run one
+ * (`effect/cluster`'s entity manager):
  *
  * - The instance's handlers run behind Effect's own `RpcServer`, which
  *   applies the RPCs' middleware, the entity's `concurrency`, `Rpc.fork`
@@ -16,9 +17,12 @@
  *   unless `Entity.keepAlive` holds it; a held instance is started again
  *   after its object restarts.
  *
- * Cloudflare evicts an object idle for about ten seconds, and the instance's
- * memory with it, so the object's alarm keeps it awake while its instance
- * runs.
+ * A host evicts an idle object, and the instance's memory with it, so the
+ * object's alarm keeps it awake while its instance runs.
+ *
+ * The host supplies the object's SQLite and alarm as an `EntityStorage`.
+ * Its statements may be asynchronous, so every decision about the mailbox
+ * runs under one lock: no two events see it half-updated.
  *
  * @internal
  */
@@ -46,8 +50,9 @@ import { type Rpc, RpcMessage, RpcServer } from "effect/rpc";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
+import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
-import type { HostedEntity } from "../../Entity.ts";
+import type { HostedEntity } from "../Entity.ts";
 import {
   type Call,
   chunkCodec,
@@ -71,14 +76,20 @@ const KEEP_REPLIES = 60 * 60_000;
 /** Effect Cluster's back-off between attempts to build an instance. */
 const restartPolicy = Schedule.min([Schedule.exponential(500, 1.5), Schedule.spaced("10 seconds")]);
 
-/** The parts of workerd's `DurableObjectStorage` the runtime uses, synchronously. */
-export interface NativeStorage {
-  readonly sql: {
-    exec(query: string, ...bindings: ReadonlyArray<unknown>): { toArray(): Array<unknown> };
-  };
-  transactionSync<T>(fn: () => T): T;
-  getAlarm(): Promise<number | null>;
-  setAlarm(scheduledTime: number): Promise<void>;
+/** How often the alarm prunes replies older than `KEEP_REPLIES`. */
+const PRUNE_EVERY = 10 * 60_000;
+
+/** The object's SQLite and alarm, as its host exposes them. */
+export interface EntityStorage {
+  /** Run one SQL statement and return its rows. A statement that fails is a defect. */
+  readonly exec: <T = never>(
+    query: string,
+    ...bindings: ReadonlyArray<unknown>
+  ) => Effect.Effect<Array<T>>;
+  /** Run `effect`'s statements as one transaction. */
+  readonly transaction: <A>(effect: Effect.Effect<A>) => Effect.Effect<A>;
+  readonly getAlarm: Effect.Effect<number | null>;
+  readonly setAlarm: (at: number) => Effect.Effect<void>;
 }
 
 export interface EntityRuntimeOptions {
@@ -87,7 +98,13 @@ export interface EntityRuntimeOptions {
   readonly runnerAddress: RunnerAddress;
   /** What the instance runs with: its Construction phase's services and the cluster's. */
   readonly context: Context.Context<never>;
-  readonly storage: NativeStorage;
+  readonly storage: EntityStorage;
+  /**
+   * The most bytes one stored value may take (Cloudflare's SQLite: 2 MB). A
+   * persisted call over it is rejected, and a persisted reply or chunk over
+   * it fails its message.
+   */
+  readonly maxEncodedBytes?: number;
   /** Run `effect` in the background, keeping the object alive until it settles. */
   readonly waitUntil: (effect: Effect.Effect<unknown>) => Effect.Effect<void>;
 }
@@ -105,8 +122,8 @@ interface Active {
   readonly callers: Set<string>;
   /** Its encoded exit, once it has one. */
   readonly reply: Deferred.Deferred<string>;
-  /** Where its stream's chunks go, encoded. */
-  onChunk: ((chunk: ReadonlyArray<unknown>) => Effect.Effect<void>) | undefined;
+  /** Where its stream's chunks go: each caller reading it, given a chunk's encoded values as JSON. */
+  readonly listeners: Set<(chunk: string) => Effect.Effect<void>>;
   sequence: number;
   delivered: boolean;
   /** A caller interrupted it: its interrupt is its reply. */
@@ -121,8 +138,14 @@ interface Instance {
 /** What admitting a call decided. */
 type Admission =
   | { readonly _tag: "Run"; readonly active: Active }
-  | { readonly _tag: "Wait"; readonly reply: Deferred.Deferred<string> }
+  | { readonly _tag: "Wait"; readonly key: string; readonly reply: Deferred.Deferred<string> }
   | { readonly _tag: "Replied"; readonly reply: string; readonly chunks: ReadonlyArray<string> }
+  | {
+      /** A stream another caller started: the chunks it has sent, then the rest as they come. */
+      readonly _tag: "Join";
+      readonly active: Active;
+      readonly chunks: ReadonlyArray<string>;
+    }
   | { readonly _tag: "Accepted" }
   | { readonly _tag: "Rejected"; readonly rejection: Rejection };
 
@@ -138,48 +161,86 @@ const rejected = (_tag: Rejection["_tag"], message: string): Admission => ({
   rejection: { _tag, message },
 });
 
+const accepted: Admission = { _tag: "Accepted" };
+const run = (active: Active): Admission => ({ _tag: "Run", active });
+const waitOn = (key: string, reply: Deferred.Deferred<string>): Admission => ({
+  _tag: "Wait",
+  key,
+  reply,
+});
+const replied = (reply: string, chunks: ReadonlyArray<string>): Admission => ({
+  _tag: "Replied",
+  reply,
+  chunks,
+});
+
 const replyText = (reply: string) => `{"exit":${reply}}`;
 
 export const makeEntityRuntime = Effect.fn(function* (options: EntityRuntimeOptions) {
   const { hosted, address, storage } = options;
   const entity = hosted.entity;
-  const exec = <T>(query: string, ...bindings: ReadonlyArray<unknown>) =>
-    storage.sql.exec(query, ...bindings).toArray() as Array<T>;
+  const exec = storage.exec;
+  const mailbox = yield* Semaphore.make(1);
+  /** Run `effect` alone on the mailbox, to its end even if its caller stops waiting. */
+  const locked = <A>(effect: Effect.Effect<A>) =>
+    Effect.uninterruptible(mailbox.withPermits(1)(effect));
 
-  const migratedAt = yield* Clock.currentTimeMillis;
-  yield* Effect.sync(() =>
-    storage.transactionSync(() => {
-      exec(
-        `CREATE TABLE IF NOT EXISTS cluster_mailbox (
-          request_id TEXT PRIMARY KEY,
-          call TEXT NOT NULL,
-          keyed INTEGER NOT NULL,
-          deliver_at INTEGER,
-          exit TEXT,
-          created_at INTEGER NOT NULL,
-          completed_at INTEGER
-        )`,
-      );
-      exec(
-        "CREATE TABLE IF NOT EXISTS cluster_chunks (request_id TEXT NOT NULL, seq INTEGER NOT NULL, chunk TEXT NOT NULL, PRIMARY KEY (request_id, seq))",
-      );
-      exec(
-        "CREATE TABLE IF NOT EXISTS cluster_entity (key TEXT PRIMARY KEY, value INTEGER NOT NULL)",
-      );
-      // The mailbox's first layout: its rows move over, keeping their replies.
-      exec(
-        "CREATE TABLE IF NOT EXISTS cluster_messages (request_id TEXT PRIMARY KEY, call TEXT NOT NULL, exit TEXT)",
-      );
-      exec(
-        `INSERT OR IGNORE INTO cluster_mailbox (request_id, call, keyed, exit, created_at, completed_at)
-         SELECT request_id, call, instr(request_id, '/') > 0, exit, ?, CASE WHEN exit IS NULL THEN NULL ELSE ? END
-         FROM cluster_messages`,
-        migratedAt,
-        migratedAt,
-      );
-      exec("DROP TABLE cluster_messages");
-    }),
+  const limit = options.maxEncodedBytes;
+  const encoder = new TextEncoder();
+  const tooLarge = (text: string) =>
+    limit !== undefined && text.length * 3 > limit && encoder.encode(text).byteLength > limit;
+
+  // One read tells an object that is already laid out; only a new or older
+  // one writes its schema.
+  const laidOut = new Set(
+    (yield* exec<{ name: string }>(
+      "SELECT name FROM sqlite_master WHERE name IN ('cluster_mailbox_pending', 'cluster_messages')",
+    )).map((row) => row.name),
   );
+  if (!laidOut.has("cluster_mailbox_pending") || laidOut.has("cluster_messages")) {
+    const migratedAt = yield* Clock.currentTimeMillis;
+    yield* storage.transaction(
+      Effect.gen(function* () {
+        yield* exec(
+          `CREATE TABLE IF NOT EXISTS cluster_mailbox (
+            request_id TEXT PRIMARY KEY,
+            call TEXT NOT NULL,
+            keyed INTEGER NOT NULL,
+            deliver_at INTEGER,
+            exit TEXT,
+            created_at INTEGER NOT NULL,
+            completed_at INTEGER
+          )`,
+        );
+        yield* exec(
+          "CREATE TABLE IF NOT EXISTS cluster_chunks (request_id TEXT NOT NULL, seq INTEGER NOT NULL, chunk TEXT NOT NULL, PRIMARY KEY (request_id, seq))",
+        );
+        yield* exec(
+          "CREATE TABLE IF NOT EXISTS cluster_entity (key TEXT PRIMARY KEY, value INTEGER NOT NULL)",
+        );
+        if (laidOut.has("cluster_messages")) {
+          // The mailbox's first layout: its rows move over, keeping their replies.
+          yield* exec(
+            `INSERT OR IGNORE INTO cluster_mailbox (request_id, call, keyed, exit, created_at, completed_at)
+             SELECT request_id, call, instr(request_id, '/') > 0, exit, ?, CASE WHEN exit IS NULL THEN NULL ELSE ? END
+             FROM cluster_messages`,
+            migratedAt,
+            migratedAt,
+          );
+          yield* exec("DROP TABLE cluster_messages");
+        }
+        // Replies with a primary key are kept for good, so what the alarm
+        // looks for (messages not yet done, replies to prune) is indexed
+        // apart from them.
+        yield* exec(
+          "CREATE INDEX IF NOT EXISTS cluster_mailbox_completed ON cluster_mailbox (completed_at) WHERE keyed = 0",
+        );
+        yield* exec(
+          "CREATE INDEX IF NOT EXISTS cluster_mailbox_pending ON cluster_mailbox (deliver_at) WHERE exit IS NULL",
+        );
+      }),
+    );
+  }
 
   const clock = yield* Clock.Clock;
   const now = () => clock.currentTimeMillisUnsafe();
@@ -201,10 +262,17 @@ export const makeEntityRuntime = Effect.fn(function* (options: EntityRuntimeOpti
   let restarts = 0;
   let replayed = false;
   let lastActive = now();
+  let prunedAt = 0;
+  /** Non-persisted messages running. */
+  let volatile = 0;
+  /** Stored messages without a reply: running, cut short, or waiting for their time. */
+  let pending =
+    (yield* exec<{ n: number }>("SELECT COUNT(*) AS n FROM cluster_mailbox WHERE exit IS NULL"))[0]
+      ?.n ?? 0;
   let keepAlive =
-    exec<{ value: number }>("SELECT value FROM cluster_entity WHERE key = 'keep_alive'")[0]
+    (yield* exec<{ value: number }>("SELECT value FROM cluster_entity WHERE key = 'keep_alive'"))[0]
       ?.value === 1;
-  let armedAt: number | undefined = (yield* Effect.promise(() => storage.getAlarm())) ?? undefined;
+  let armedAt: number | undefined = (yield* storage.getAlarm) ?? undefined;
 
   // ------------------------------------------------------------ alarm
 
@@ -213,34 +281,37 @@ export const makeEntityRuntime = Effect.fn(function* (options: EntityRuntimeOpti
     Effect.suspend(() => {
       if (armedAt !== undefined && armedAt > now() && armedAt <= at) return Effect.void;
       armedAt = at;
-      return Effect.promise(() => storage.setAlarm(at));
+      return storage.setAlarm(at);
     });
 
   /** The next time the object must wake: for its instance, a replay, or a scheduled message. */
-  const rearm = Effect.suspend(() => {
+  const rearm = Effect.gen(function* () {
     const at = now();
     let next = Number.POSITIVE_INFINITY;
     if (instance !== undefined || keepAlive) next = at + KEEP_AWAKE;
-    // A stored message that is due but not done: its run may have been cut short.
-    const [due] = exec<{ n: number }>(
-      "SELECT COUNT(*) AS n FROM cluster_mailbox WHERE exit IS NULL AND (deliver_at IS NULL OR deliver_at <= ?)",
-      at,
-    );
-    if ((due?.n ?? 0) > 0) next = Math.min(next, at + REPLAY_AFTER);
-    const [scheduled] = exec<{ at: number | null }>(
-      "SELECT MIN(deliver_at) AS at FROM cluster_mailbox WHERE exit IS NULL AND deliver_at > ?",
-      at,
-    );
-    if (scheduled?.at != null) next = Math.min(next, scheduled.at);
-    if (!Number.isFinite(next)) return Effect.void;
+    if (pending > 0) {
+      // A stored message that is due but not done: its run may have been cut short.
+      const [due] = yield* exec<{ n: number }>(
+        "SELECT EXISTS (SELECT 1 FROM cluster_mailbox WHERE exit IS NULL AND (deliver_at IS NULL OR deliver_at <= ?)) AS n",
+        at,
+      );
+      if ((due?.n ?? 0) > 0) next = Math.min(next, at + REPLAY_AFTER);
+      const [scheduled] = yield* exec<{ at: number | null }>(
+        "SELECT MIN(deliver_at) AS at FROM cluster_mailbox WHERE exit IS NULL AND deliver_at > ?",
+        at,
+      );
+      if (scheduled?.at != null) next = Math.min(next, scheduled.at);
+    }
+    if (!Number.isFinite(next)) return;
     armedAt = next;
-    return Effect.promise(() => storage.setAlarm(next));
+    yield* storage.setAlarm(next);
   });
 
   // ------------------------------------------------------------ instance
 
   const forget = (active: Active) => {
     actives.delete(active.id);
+    if (!active.persisted) volatile--;
     if (byKey.get(active.key) === active) byKey.delete(active.key);
     for (const caller of active.callers) {
       if (byCaller.get(caller) === active) byCaller.delete(caller);
@@ -249,43 +320,91 @@ export const makeEntityRuntime = Effect.fn(function* (options: EntityRuntimeOpti
   };
 
   /** A message finished: store its reply, if persisted, and hand it to its callers. */
-  const complete = (active: Active, exit: Exit.Exit<unknown, unknown>) =>
+  const complete = (active: Active, exit: Exit.Exit<unknown, unknown>): Effect.Effect<void> =>
     Effect.flatMap(encodeExit(active.rpc, exit), (encoded) =>
-      Effect.sync(() => {
-        if (actives.get(active.id) !== active) return;
-        const reply = JSON.stringify(encoded);
-        forget(active);
-        if (active.persisted) {
-          exec(
-            "UPDATE cluster_mailbox SET exit = ?, completed_at = ? WHERE request_id = ?",
-            reply,
-            now(),
-            active.key,
-          );
-        }
-        if (Exit.isSuccess(exit)) restarts = 0;
-        Deferred.doneUnsafe(active.reply, Exit.succeed(reply));
-        const waiting = waiters.get(active.key);
-        waiters.delete(active.key);
-        for (const waiter of waiting ?? []) Deferred.doneUnsafe(waiter, Exit.succeed(reply));
-      }),
+      locked(
+        Effect.gen(function* () {
+          if (actives.get(active.id) !== active) return;
+          let reply = JSON.stringify(encoded);
+          if (active.persisted) {
+            if (tooLarge(reply)) {
+              reply = JSON.stringify(
+                yield* encodeExit(
+                  active.rpc,
+                  Exit.die(`The reply to ${active.key} is over ${limit} bytes and can't be stored`),
+                ),
+              );
+            }
+            // Stored before the message is forgotten: a duplicate arriving
+            // now finds the run or its reply, never neither.
+            const stored = yield* Effect.exit(
+              exec(
+                "UPDATE cluster_mailbox SET exit = ?, completed_at = ? WHERE request_id = ?",
+                reply,
+                now(),
+                active.key,
+              ),
+            );
+            if (Exit.isSuccess(stored)) pending--;
+            // Its callers still get their reply; the alarm runs the message
+            // again, as it does for one cut short.
+            else yield* Effect.logError(`Could not store the reply to ${active.key}`, stored.cause);
+          }
+          forget(active);
+          if (Exit.isSuccess(exit)) restarts = 0;
+          Deferred.doneUnsafe(active.reply, Exit.succeed(reply));
+          const waiting = waiters.get(active.key);
+          waiters.delete(active.key);
+          for (const waiter of waiting ?? []) Deferred.doneUnsafe(waiter, Exit.succeed(reply));
+        }),
+      ),
+    );
+
+  /** Stop `active`'s handler, from apart: its own fiber may be the one asking. */
+  const stop = (active: Active) =>
+    Effect.suspend(() =>
+      instance === undefined || !active.delivered
+        ? Effect.void
+        : Effect.forkDetach(
+            instance.server.write(0, {
+              _tag: "Interrupt",
+              requestId: RpcMessage.RequestId(active.id),
+              interruptors: [],
+            }),
+          ),
     );
 
   const chunk = (active: Active, values: ReadonlyArray<unknown>) =>
     Effect.gen(function* () {
-      const encoded = yield* Effect.forEach(values, (value) =>
-        encode(chunkCodec(active.rpc), value),
+      const text = JSON.stringify(
+        yield* Effect.forEach(values, (value) => encode(chunkCodec(active.rpc), value)),
       );
-      if (active.persisted) {
-        exec(
-          "INSERT OR REPLACE INTO cluster_chunks (request_id, seq, chunk) VALUES (?, ?, ?)",
-          active.key,
-          active.sequence,
-          JSON.stringify(encoded),
-        );
+      if (!active.persisted) {
+        for (const listener of active.listeners) yield* listener(text);
+        return;
       }
-      active.sequence++;
-      if (active.onChunk !== undefined) yield* active.onChunk(encoded);
+      // Stored under the lock, so a caller joining the stream reads this
+      // chunk from storage or hears it here, never both and never neither.
+      const stored = tooLarge(text)
+        ? Exit.die(`A chunk of ${active.key} is over ${limit} bytes and can't be stored`)
+        : yield* locked(
+            Effect.exit(
+              Effect.suspend(() =>
+                exec(
+                  "INSERT OR REPLACE INTO cluster_chunks (request_id, seq, chunk) VALUES (?, ?, ?)",
+                  active.key,
+                  active.sequence++,
+                  text,
+                ),
+              ).pipe(Effect.map(() => [...active.listeners])),
+            ),
+          );
+      if (Exit.isFailure(stored)) {
+        // A stream that can't be replayed in full fails where it stands.
+        yield* complete(active, Exit.die(Cause.pretty(stored.cause)));
+        return yield* stop(active);
+      }
+      for (const listener of stored.value) yield* listener(text);
     });
 
   const onFromServer = (response: RpcMessage.FromServer<Rpc.Any>): Effect.Effect<void> => {
@@ -312,14 +431,14 @@ export const makeEntityRuntime = Effect.fn(function* (options: EntityRuntimeOpti
   };
 
   const setKeepAlive = (enabled: boolean) =>
-    Effect.suspend(() => {
+    Effect.gen(function* () {
       keepAlive = enabled;
-      exec(
+      yield* exec(
         "INSERT OR REPLACE INTO cluster_entity (key, value) VALUES ('keep_alive', ?)",
         enabled ? 1 : 0,
       );
       lastActive = now();
-      return enabled ? arm(now() + KEEP_AWAKE) : Effect.void;
+      if (enabled) yield* arm(now() + KEEP_AWAKE);
     });
 
   /** Build the instance's handlers and the server they run behind, once. */
@@ -472,13 +591,14 @@ export const makeEntityRuntime = Effect.fn(function* (options: EntityRuntimeOpti
       persisted,
       callers: new Set(),
       reply: Deferred.makeUnsafe<string>(),
-      onChunk: undefined,
+      listeners: new Set(),
       sequence: 0,
       delivered: false,
       interrupted: false,
     };
     actives.set(active.id, active);
     byKey.set(key, active);
+    if (!persisted) volatile++;
     return active;
   };
 
@@ -491,144 +611,172 @@ export const makeEntityRuntime = Effect.fn(function* (options: EntityRuntimeOpti
   const waitFor = (key: string): Admission => {
     const reply = Deferred.makeUnsafe<string>();
     waiters.set(key, [...(waiters.get(key) ?? []), reply]);
-    return { _tag: "Wait", reply };
+    return waitOn(key, reply);
   };
 
-  const full = () => capacity !== "unbounded" && actives.size >= capacity;
+  /** Whether the mailbox holds its capacity of messages without a reply. */
+  const full = () => capacity !== "unbounded" && volatile + pending >= capacity;
 
   const storedChunks = (key: string) =>
-    exec<{ chunk: string }>(
-      "SELECT chunk FROM cluster_chunks WHERE request_id = ? ORDER BY seq",
-      key,
-    ).map((row) => row.chunk);
+    Effect.map(
+      exec<{ chunk: string }>(
+        "SELECT chunk FROM cluster_chunks WHERE request_id = ? ORDER BY seq",
+        key,
+      ),
+      (rows) => rows.map((row) => row.chunk),
+    );
 
   /**
    * Admit a call: run it, join the run already answering it, answer it
-   * from storage, or reject it. Everything after decoding runs without
-   * yielding, so no other event sees the mailbox half-updated.
+   * from storage, or reject it. Everything after decoding runs under the
+   * mailbox's lock, so no other event sees the mailbox half-updated.
    */
-  const admit = (call: Call, mode: "ask" | "tell" | "stream") =>
+  const admit = (
+    call: Call,
+    mode: "ask" | "tell" | "stream",
+    /** Where a stream's chunks go, if it joins one already running. */
+    listen: (chunk: string) => Effect.Effect<void> = () => Effect.void,
+  ) =>
     Effect.gen(function* () {
       const rpc = entity.protocol.requests.get(call.tag) as Rpc.AnyWithProps | undefined;
       if (rpc === undefined) {
         return yield* Effect.die(new Error(`Entity '${entity.type}' has no RPC '${call.tag}'.`));
       }
       const payload = yield* decode(payloadCodec(rpc), call.payload);
-      return yield* Effect.sync((): Admission => {
-        if (!Context.get(rpc.annotations, ClusterSchema.Persisted)) {
-          if (full()) return rejected("MailboxFull", `${entity.type} mailbox is full`);
-          const active = makeActive(call.requestId, rpc, payload, call, false);
-          join(active, call.requestId);
-          return { _tag: "Run", active };
-        }
-        const keyed = PrimaryKey.isPrimaryKey(payload);
-        const key = keyed ? `${rpc._tag}/${PrimaryKey.value(payload)}` : call.requestId;
-        const running = byKey.get(key);
-        if (running !== undefined) {
-          if (mode === "tell") return { _tag: "Accepted" };
-          // A stream's chunks went to the caller that started it.
-          if (mode === "stream") {
-            return rejected("AlreadyProcessingMessage", `${key} is already running`);
-          }
-          // A duplicate waits for the first run's reply; giving up doesn't
-          // interrupt it.
-          return { _tag: "Wait", reply: running.reply };
-        }
-        const at = now();
-        const [row] = exec<MailboxRow>(
-          "SELECT request_id, call, exit, deliver_at FROM cluster_mailbox WHERE request_id = ?",
-          key,
-        );
-        if (row?.exit != null) {
-          return mode === "tell"
-            ? { _tag: "Accepted" }
-            : {
-                _tag: "Replied",
-                reply: row.exit,
-                chunks: mode === "stream" ? storedChunks(key) : [],
-              };
-        }
-        if (row !== undefined) {
-          if (row.deliver_at != null && row.deliver_at > at) {
-            return mode === "tell" ? { _tag: "Accepted" } : waitFor(key);
-          }
-          // Stored, but cut short by a restart: run it now, as it was sent.
-          const stored = JSON.parse(row.call) as Call;
-          const decoded = Schema.decodeUnknownExit(payloadCodec(rpc))(stored.payload);
-          // Stored under an older schema: run the call as sent now.
-          const active = makeActive(
-            key,
-            rpc,
-            Exit.isSuccess(decoded) ? decoded.value : payload,
-            Exit.isSuccess(decoded) ? stored : call,
-            true,
-          );
-          join(active, call.requestId);
-          return { _tag: "Run", active };
-        }
+      const persisted = Context.get(rpc.annotations, ClusterSchema.Persisted);
+      const keyed = PrimaryKey.isPrimaryKey(payload);
+      const deliverAt = DeliverAt.toMillis(payload);
+      if (!persisted) {
         if (full()) return rejected("MailboxFull", `${entity.type} mailbox is full`);
-        const deliverAt = DeliverAt.toMillis(payload);
-        try {
-          exec(
-            "INSERT INTO cluster_mailbox (request_id, call, keyed, deliver_at, created_at) VALUES (?, ?, ?, ?, ?)",
-            key,
-            JSON.stringify(call),
-            keyed ? 1 : 0,
-            deliverAt,
-            at,
-          );
-        } catch (cause) {
-          return rejected("PersistenceError", String(cause));
-        }
-        if (deliverAt !== null && deliverAt > at) {
-          return mode === "tell" ? { _tag: "Accepted" } : waitFor(key);
-        }
-        const active = makeActive(key, rpc, payload, call, true);
+        const active = makeActive(call.requestId, rpc, payload, call, false);
         join(active, call.requestId);
-        return { _tag: "Run", active };
-      });
+        return run(active);
+      }
+      const key = keyed ? `${rpc._tag}/${PrimaryKey.value(payload)}` : call.requestId;
+      return yield* locked(
+        Effect.gen(function* () {
+          const running = byKey.get(key);
+          if (running !== undefined) {
+            // A duplicate waits for the first run's reply; giving up doesn't
+            // interrupt the run.
+            if (mode !== "stream") return mode === "tell" ? accepted : waitOn(key, running.reply);
+            running.listeners.add(listen);
+            return {
+              _tag: "Join",
+              active: running,
+              chunks: yield* storedChunks(key),
+            } satisfies Admission as Admission;
+          }
+          const at = now();
+          const [row] = yield* exec<MailboxRow>(
+            "SELECT request_id, call, exit, deliver_at FROM cluster_mailbox WHERE request_id = ?",
+            key,
+          );
+          if (row?.exit != null) {
+            return mode === "tell"
+              ? accepted
+              : replied(row.exit, mode === "stream" ? yield* storedChunks(key) : []);
+          }
+          if (row !== undefined) {
+            if (row.deliver_at != null && row.deliver_at > at) {
+              return mode === "tell" ? accepted : waitFor(key);
+            }
+            // Stored, but cut short by a restart: run it now, as it was sent.
+            const stored = JSON.parse(row.call) as Call;
+            const decoded = Schema.decodeUnknownExit(payloadCodec(rpc))(stored.payload);
+            // Stored under an older schema: run the call as sent now.
+            const active = makeActive(
+              key,
+              rpc,
+              Exit.isSuccess(decoded) ? decoded.value : payload,
+              Exit.isSuccess(decoded) ? stored : call,
+              true,
+            );
+            join(active, call.requestId);
+            return run(active);
+          }
+          if (full()) return rejected("MailboxFull", `${entity.type} mailbox is full`);
+          const text = JSON.stringify(call);
+          if (tooLarge(text)) {
+            return rejected("PersistenceError", `The call ${key} is over ${limit} bytes`);
+          }
+          const stored = yield* Effect.exit(
+            exec(
+              "INSERT INTO cluster_mailbox (request_id, call, keyed, deliver_at, created_at) VALUES (?, ?, ?, ?, ?)",
+              key,
+              text,
+              keyed ? 1 : 0,
+              deliverAt,
+              at,
+            ),
+          );
+          if (Exit.isFailure(stored))
+            return rejected("PersistenceError", Cause.pretty(stored.cause));
+          pending++;
+          if (deliverAt !== null && deliverAt > at) {
+            // Its time is the alarm's to keep.
+            yield* arm(deliverAt);
+            return mode === "tell" ? accepted : waitFor(key);
+          }
+          const active = makeActive(key, rpc, payload, call, true);
+          join(active, call.requestId);
+          return run(active);
+        }),
+      );
     });
 
   /** Run every stored message whose time has come and that isn't running. */
   const replayStored: Effect.Effect<void> = Effect.suspend(() => {
     replayed = true;
-    const rows = exec<MailboxRow>(
-      "SELECT request_id, call FROM cluster_mailbox WHERE exit IS NULL AND (deliver_at IS NULL OR deliver_at <= ?) ORDER BY created_at",
-      now(),
-    );
-    const started: Array<Active> = [];
-    const dropped: Array<string> = [];
-    for (const row of rows) {
-      if (byKey.has(row.request_id)) continue;
-      const call = JSON.parse(row.call) as Call;
-      const rpc = entity.protocol.requests.get(call.tag) as Rpc.AnyWithProps | undefined;
-      const payload =
-        rpc === undefined ? undefined : Schema.decodeUnknownExit(payloadCodec(rpc))(call.payload);
-      if (rpc === undefined || payload === undefined || Exit.isFailure(payload)) {
-        // The entity no longer accepts it: its RPCs changed since it was stored.
-        exec("DELETE FROM cluster_mailbox WHERE request_id = ?", row.request_id);
-        dropped.push(row.request_id);
-        continue;
-      }
-      started.push(makeActive(row.request_id, rpc, payload.value, call, true));
-    }
-    const logDropped =
-      dropped.length === 0
-        ? Effect.void
-        : Effect.logError(
-            `Dropped stored ${entity.type} messages its RPCs no longer accept`,
-            dropped,
-          );
-    if (started.length === 0) return logDropped;
-    return Effect.flatMap(getInstance, (built) =>
-      Effect.forEach(started, (active) => deliver(built, active), { discard: true }),
+    if (pending === 0) return Effect.void;
+    return locked(
+      Effect.gen(function* () {
+        const rows = yield* exec<MailboxRow>(
+          "SELECT request_id, call FROM cluster_mailbox WHERE exit IS NULL AND (deliver_at IS NULL OR deliver_at <= ?) ORDER BY created_at",
+          now(),
+        );
+        const started: Array<Active> = [];
+        const dropped: Array<string> = [];
+        for (const row of rows) {
+          if (byKey.has(row.request_id)) continue;
+          const call = JSON.parse(row.call) as Call;
+          const rpc = entity.protocol.requests.get(call.tag) as Rpc.AnyWithProps | undefined;
+          const payload =
+            rpc === undefined
+              ? undefined
+              : Schema.decodeUnknownExit(payloadCodec(rpc))(call.payload);
+          if (rpc === undefined || payload === undefined || Exit.isFailure(payload)) {
+            // The entity no longer accepts it: its RPCs changed since it was stored.
+            yield* exec("DELETE FROM cluster_mailbox WHERE request_id = ?", row.request_id);
+            pending--;
+            dropped.push(row.request_id);
+            continue;
+          }
+          started.push(makeActive(row.request_id, rpc, payload.value, call, true));
+        }
+        return { started, dropped };
+      }),
     ).pipe(
-      Effect.andThen(
-        options.waitUntil(
-          Effect.forEach(started, (active) => Deferred.await(active.reply), { discard: true }),
-        ),
-      ),
-      Effect.andThen(logDropped),
+      Effect.flatMap(({ started, dropped }) => {
+        const logDropped =
+          dropped.length === 0
+            ? Effect.void
+            : Effect.logError(
+                `Dropped stored ${entity.type} messages its RPCs no longer accept`,
+                dropped,
+              );
+        if (started.length === 0) return logDropped;
+        return Effect.flatMap(getInstance, (built) =>
+          Effect.forEach(started, (active) => deliver(built, active), { discard: true }),
+        ).pipe(
+          Effect.andThen(
+            options.waitUntil(
+              Effect.forEach(started, (active) => Deferred.await(active.reply), { discard: true }),
+            ),
+          ),
+          Effect.andThen(logDropped),
+        );
+      }),
     );
   });
 
@@ -656,6 +804,7 @@ export const makeEntityRuntime = Effect.fn(function* (options: EntityRuntimeOpti
         case "Replied":
           return replyText(admission.reply);
         case "Accepted":
+        case "Join":
           return yield* Effect.die(new Error("An ask was accepted without a reply"));
         case "Wait":
           return replyText(yield* Deferred.await(admission.reply));
@@ -680,8 +829,15 @@ export const makeEntityRuntime = Effect.fn(function* (options: EntityRuntimeOpti
   const stream = (call: Call) =>
     Stream.callback<string>((queue) => {
       const offer = (frame: string) => Queue.offer(queue, frame);
+      const emit = (chunk: string) => Effect.asVoid(offer(`{"chunk":${chunk}}`));
+      // Chunks sent while this caller is still reading the stored ones wait
+      // behind them.
+      const caughtUp = Deferred.makeUnsafe<void>();
+      const listen = (chunk: string) => Effect.andThen(Deferred.await(caughtUp), emit(chunk));
+      // The run this caller is listening to, which it stops hearing when it leaves.
+      let heard: Active | undefined;
       return Effect.gen(function* () {
-        const admission = yield* admit(call, "stream");
+        const admission = yield* admit(call, "stream", listen);
         switch (admission._tag) {
           case "Rejected":
             yield* offer(JSON.stringify({ rejected: admission.rejection }));
@@ -691,11 +847,28 @@ export const makeEntityRuntime = Effect.fn(function* (options: EntityRuntimeOpti
             yield* offer(replyText(admission.reply));
             break;
           case "Accepted":
-          case "Wait":
-            return yield* Effect.die(new Error("A stream was admitted without running"));
+            return yield* Effect.die(new Error("A stream was accepted without a reply"));
+          case "Join": {
+            heard = admission.active;
+            for (const chunk of admission.chunks) yield* emit(chunk);
+            Deferred.doneUnsafe(caughtUp, Exit.void);
+            yield* offer(replyText(yield* Deferred.await(admission.active.reply)));
+            break;
+          }
+          case "Wait": {
+            // A stored message's reply: its chunks are read from storage once it ends.
+            const reply = yield* Deferred.await(admission.reply);
+            for (const chunk of yield* storedChunks(admission.key)) {
+              yield* offer(`{"chunk":${chunk}}`);
+            }
+            yield* offer(replyText(reply));
+            break;
+          }
           case "Run": {
             const active = admission.active;
-            active.onChunk = (encoded) => Effect.asVoid(offer(JSON.stringify({ chunk: encoded })));
+            heard = active;
+            Deferred.doneUnsafe(caughtUp, Exit.void);
+            active.listeners.add(listen);
             const reply = yield* Effect.andThen(start(active), Deferred.await(active.reply)).pipe(
               // The caller stopped reading.
               Effect.onInterrupt(() => interrupt(call.requestId)),
@@ -706,6 +879,13 @@ export const makeEntityRuntime = Effect.fn(function* (options: EntityRuntimeOpti
         }
         yield* Queue.end(queue);
       }).pipe(
+        // A caller that leaves mustn't hold up the stream's other readers.
+        Effect.ensuring(
+          Effect.sync(() => {
+            Deferred.doneUnsafe(caughtUp, Exit.void);
+            heard?.listeners.delete(listen);
+          }),
+        ),
         Effect.catchCauseIf(
           (cause) => !Cause.hasInterruptsOnly(cause),
           (cause) =>
@@ -727,12 +907,14 @@ export const makeEntityRuntime = Effect.fn(function* (options: EntityRuntimeOpti
     if (keepAlive && instance === undefined) yield* getInstance;
     yield* replayStored;
     yield* reapIfIdle;
+    if (now() - prunedAt < PRUNE_EVERY) return;
+    prunedAt = now();
     const cutoff = now() - KEEP_REPLIES;
-    exec(
+    yield* exec(
       "DELETE FROM cluster_chunks WHERE request_id IN (SELECT request_id FROM cluster_mailbox WHERE keyed = 0 AND completed_at < ?)",
       cutoff,
     );
-    exec("DELETE FROM cluster_mailbox WHERE keyed = 0 AND completed_at < ?", cutoff);
+    yield* exec("DELETE FROM cluster_mailbox WHERE keyed = 0 AND completed_at < ?", cutoff);
   }).pipe(
     Effect.tapCause((cause) => Effect.logError("Entity alarm failed", cause)),
     Effect.ensuring(Effect.ignore(rearm)),
