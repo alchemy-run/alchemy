@@ -1,0 +1,80 @@
+---
+title: Starburst Galaxy
+description: Declare Starburst Galaxy clusters, catalogs, roles, privileges, service accounts and governance objects as resources in your Stack.
+---
+
+import HubMap from "../../../components/HubMap.astro";
+
+Starburst Galaxy is managed Trino. A catalog connects Galaxy to a data source: a PostgreSQL database, an S3 lakehouse, a warehouse. A cluster is the Trino compute that queries the catalogs attached to it, and suspends itself when idle.
+
+Access is role-based: privileges are granted to roles, and roles to users and service accounts. Column masks, row filters and tags govern what each role sees.
+
+## A quick example
+
+A catalog connects a PostgreSQL database; Galaxy checks the connection on every deploy:
+
+```typescript
+const project = yield* Neon.Project("app");
+const pg = yield* StarburstGalaxy.PostgresqlCatalog("App", {
+  endpoint: project.origin.host,
+  databaseName: project.origin.database,
+  username: project.origin.user,
+  password: project.origin.password,
+});
+```
+
+A cluster queries it. It starts enabled, suspends after five idle minutes, and the next query resumes it:
+
+```typescript
+const cluster = yield* StarburstGalaxy.Cluster("Analytics", {
+  cloudRegionId: "aws-us-east1",
+  catalogs: [pg.catalogId],
+});
+```
+
+A role gets exactly the privileges you grant, and a service account logs in to `cluster.trinoUri` with it:
+
+```typescript
+const reporting = yield* StarburstGalaxy.Role("Reporting", {});
+yield* StarburstGalaxy.RolePrivilege("ReportingUseCluster", {
+  role: reporting.roleId,
+  privilege: "UseCluster",
+  entity: { kind: "Cluster", clusterId: cluster.clusterId },
+});
+yield* StarburstGalaxy.RolePrivilege("ReportingSelect", {
+  role: reporting.roleId,
+  privilege: "Select",
+  entity: { kind: "Table", catalogId: pg.catalogId, schemaName: "public", tableName: "*" },
+});
+const account = yield* StarburstGalaxy.ServiceAccount("Reporter", { role: reporting.roleId });
+const password = yield* StarburstGalaxy.ServiceAccountPassword("ReporterPassword", {
+  serviceAccount: account.serviceAccountId,
+});
+```
+
+Log in as `account.userName` (the name qualified with your account domain) with `password.trinoPassword` from JDBC, the Trino CLI, or any Trino client.
+
+## Where to start
+
+**Want to build?** Connect your Galaxy account in [Setup](/starburst-galaxy/setup), then look up each resource in the generated [API reference](/providers).
+
+## What the provider covers
+
+- **Catalogs:** `PostgresqlCatalog` and `S3Catalog` (Galaxy, Glue or Hive metastore), on one shared lifecycle. The other catalog kinds follow.
+- **Clusters:** `Cluster`, with `enabled` and `autoSuspend`. A deploy waits for an enable or disable to register, never for a cold start.
+- **Access control:** `Role`, `RolePrivilege`, `ServiceAccount`, `ServiceAccountPassword`.
+- **Data governance:** `ColumnMask`, `RowFilter`, `Tag`, `TagAssignment`.
+- **Data products and jobs:** `DataDomain`, `SqlJob`.
+
+Galaxy objects have no labels or tags, so Alchemy recognizes the objects it created by their generated names. An object found under an explicit `name` with no Alchemy state is adopted only with `--adopt`.
+
+## Out of scope
+
+- **Inviting users.** Galaxy's API can invite a person by email but has no way to remove one, so a managed user would outlive every `destroy`. Users and groups come from Galaxy's console or SCIM; reference them by ID.
+- **API clients.** Galaxy's API has no operations for OAuth API clients. Create the client Alchemy deploys with in the console ([Setup](/starburst-galaxy/setup)); give hosts a `ServiceAccountPassword` instead.
+- **Warp resiliency.** The cluster setting is deprecated: Galaxy ignores it.
+- **Billing and usage.** Not part of Galaxy's public API.
+
+## The docs
+
+<HubMap />
