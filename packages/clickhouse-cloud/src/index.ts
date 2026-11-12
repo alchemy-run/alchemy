@@ -35,4 +35,5 @@ export * as RoleManagement from "./RoleManagement/index.ts";
 export * as SavedQueries from "./SavedQueries/index.ts";
 export * as Service from "./Service/index.ts";
 export * as Snapshot from "./Snapshot/index.ts";
+export * as Udf from "./Udf/index.ts";
 export * as UserManagement from "./UserManagement/index.ts";
