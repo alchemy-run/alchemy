@@ -118,7 +118,7 @@ export default KafkaTestFunction.make(
                 failed: true,
                 error: e._tag,
                 message: String(e),
-                detail: e._tag === "UnknownAwsError" ? e.errorTag : undefined,
+                detail: e._tag === "UnknownAwsError" ? e.code : undefined,
               }),
             ),
           );
