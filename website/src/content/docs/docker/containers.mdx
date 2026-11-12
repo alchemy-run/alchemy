@@ -51,6 +51,29 @@ export default Alchemy.Stack(
 
 `start: true` runs it. Without it, the container is created and left stopped. `image` takes a reference like `nginx:alpine`, or a [`Docker.Image`](/docker/build-images) or [`Docker.RemoteImage`](/docker/remote-images) resource. `command` replaces the image's default command.
 
+## Customize the process and namespaces
+
+These settings override what the image declares, or set up the process's namespaces:
+
+```typescript
+const job = yield* Docker.Container("job", {
+  image: "alpine:3.22",
+  platform: "linux/amd64",
+  entrypoint: "/bin/sh",
+  command: ["-c", "pwd && echo ready"],
+  workingDirectory: "/workspace",
+  ipcNamespace: "private",
+  sysctls: { "net.ipv4.ip_unprivileged_port_start": "1024" },
+  keepStdinOpen: true,
+  allocatePseudoTerminal: true,
+  start: true,
+});
+```
+
+`entrypoint` is the program and `command` its arguments. `platform` picks the image's architecture. `ipcNamespace` and `pidNamespace` share or isolate the container's IPC and process namespaces, and `sysctls` sets kernel parameters scoped to the container. Docker fixes all of these when it creates the container, so changing one replaces it.
+
+`hostname`, `dns`, `dnsSearch` and `dnsOptions` set how the container names itself and resolves others, and are fixed at creation too.
+
 ## Publish ports
 
 Each mapping publishes one container port on the host:

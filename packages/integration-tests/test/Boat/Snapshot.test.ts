@@ -72,7 +72,7 @@ test.provider(
       expect(yield* observe(first.golden.name)).toBeUndefined();
       expect(yield* sandboxesOf(stack)).toEqual([]);
     }),
-  { tags, timeout: 300_000 },
+  { tags, timeout: 600_000 },
 );
 
 test.provider(

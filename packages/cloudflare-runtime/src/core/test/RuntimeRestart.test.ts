@@ -1,3 +1,6 @@
+import * as NodeFs from "node:fs";
+import * as NodeOs from "node:os";
+import * as NodePath from "node:path";
 import { assert, expect, layer } from "@effect/vitest";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -15,7 +18,7 @@ import * as Runtime from "../Runtime.ts";
 import { SystemError } from "../RuntimeError.shared.ts";
 import { WorkerdEvent } from "../RuntimeWorker.ts";
 import * as Workerd from "../workerd/Workerd.ts";
-import { localRuntimeLayer, makeLocalRuntimeLayer } from "./helpers/runtime.ts";
+import { fetchOverSocket, localRuntimeLayer, makeLocalRuntimeLayer } from "./helpers/runtime.ts";
 
 /** A {@link WorkerdEvent} with an exit reduced to the fields a test can predict. */
 type ObservedEvent =
@@ -254,6 +257,34 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Runtime restart", (it) 
           _tag: "Failure",
         });
       }),
+    { timeout: 60_000 },
+  );
+
+  it.effect.skipIf(process.platform === "win32")(
+    "a replacement process serves on the same Unix socket",
+    () => {
+      const socketPath = NodePath.join(NodeOs.tmpdir(), `alchemy-restart-test-${process.pid}.sock`);
+      return Effect.gen(function* () {
+        vi.stubEnv(Workerd.V8_FLAGS_ENV, "--max-old-space-size=32");
+        const runtime = yield* Runtime.Runtime;
+        const recorder = yield* recordEvents;
+        const url = yield* runtime.start({
+          name: "restarting-unix-socket",
+          compatibilityDate: "2026-03-10",
+          compatibilityFlags: [],
+          bindings: [],
+          modules: [{ name: "main.js", type: "ESModule", content: CRASHING_SCRIPT }],
+          onEvent: recorder.onEvent,
+          entrySocketPath: socketPath,
+        });
+        expect(yield* fetchOverSocket(socketPath, "/hello")).toBe("hello");
+        yield* fetchText(new URL("/crash", url)).pipe(Effect.ignore);
+        expect(yield* recorder.restarted).toBe(1);
+        // workerd leaves the crashed process's socket file behind; the
+        // replacement binds the same path once it is removed.
+        expect(yield* fetchOverSocket(socketPath, "/hello")).toBe("hello");
+      }).pipe(Effect.ensuring(Effect.sync(() => NodeFs.rmSync(socketPath, { force: true }))));
+    },
     { timeout: 60_000 },
   );
 

@@ -13,6 +13,7 @@ import * as Runtime from "../core/Runtime.ts";
 import * as RuntimeServices from "../core/RuntimeServices.ts";
 import { PlatformServices } from "../Platform.ts";
 import type { CloudflareVitePluginOptions } from "./plugin.ts";
+import { workerSocketPath } from "./worker-request.ts";
 
 /**
  * The freshly built worker a preview server hosts: which directory holds the
@@ -36,6 +37,8 @@ export interface PreviewWorkerBuild {
 
 export interface PreviewServerHandle {
   readonly address: URL;
+  /** The runtime's Unix socket, when it serves on one; see `workerSocketPath`. */
+  readonly socketPath: string | undefined;
   readonly proxySharedSecret: string;
   readonly close: () => Promise<void>;
 }
@@ -68,7 +71,8 @@ export const startPreviewServer = async <B extends BindingHooks = BindingHooks>(
     const context =
       options.context ??
       (await makePreviewContext().pipe(Layer.buildWithScope(scope), Effect.runPromise));
-    const address = await serve(options, build, proxySharedSecret).pipe(
+    const socketPath = workerSocketPath();
+    const address = await serve(options, build, proxySharedSecret, socketPath).pipe(
       Effect.provide(context),
       Effect.provide(SecureRandom.layerWebCrypto),
       Scope.provide(scope),
@@ -76,6 +80,7 @@ export const startPreviewServer = async <B extends BindingHooks = BindingHooks>(
     );
     return {
       address,
+      socketPath,
       proxySharedSecret,
       close: async () => {
         await closeScope(scope);
@@ -148,6 +153,7 @@ const serve = Effect.fn(function* (
   options: CloudflareVitePluginOptions,
   build: PreviewWorkerBuild,
   proxySharedSecret: string,
+  entrySocketPath: string | undefined,
 ) {
   const runtime = yield* Runtime.Runtime;
   const random = yield* SecureRandom.SecureRandom;
@@ -160,6 +166,7 @@ const serve = Effect.fn(function* (
     name: options.worker?.name ?? `vite-preview-${yield* random.uuidV4()}`,
     modules,
     proxySharedSecret,
+    entrySocketPath,
     compatibilityDate: options.compatibilityDate ?? DEFAULT_COMPATIBILITY_DATE,
     compatibilityFlags: options.compatibilityFlags ?? [],
     bindings: options.worker?.bindings ?? [],

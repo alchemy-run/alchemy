@@ -1,4 +1,5 @@
 export const SOCKET_USER_ENTRY = "user-entry";
+export const SOCKET_USER_ENTRY_UNIX = "user-entry-unix";
 export const SERVICE_USER_WORKER = "user-worker";
 
 /**
