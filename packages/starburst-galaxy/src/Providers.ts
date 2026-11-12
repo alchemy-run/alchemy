@@ -1,3 +1,5 @@
+import { isTransientError } from "@distilled.cloud/core/category";
+import { Retry } from "@distilled.cloud/starburst-galaxy/Retry";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
 import * as Provider from "alchemy/Provider";
@@ -29,6 +31,25 @@ import { SqlJob, SqlJobProvider } from "./SqlJob/SqlJob.ts";
 export class Providers extends Provider.ProviderCollection<Providers>()("StarburstGalaxy") {}
 
 export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
+
+/**
+ * Galaxy rate-limits an account to about twenty API calls per ten
+ * seconds and states the wait in its 429 (read by the SDK). Every caller
+ * that was refused waits that long, plus up to five seconds of jitter so
+ * they do not all return in the same window; twelve tries bound the wait
+ * at about three minutes.
+ */
+export const RetryPolicy = Layer.succeed(Retry, {
+  while: isTransientError,
+  backoff: {
+    baseMs: 1_000,
+    factor: 2,
+    capMs: 15_000,
+    maxRetries: 12,
+    jitterMs: 5_000,
+    serverHint: true,
+  },
+});
 
 /**
  * Starburst Galaxy providers and credentials: catalogs, clusters, roles and
@@ -78,6 +99,7 @@ export const providers = () =>
       ),
     ),
     Layer.provideMerge(Credentials.fromAuthProvider()),
+    Layer.provideMerge(RetryPolicy),
     Layer.provideMerge(FetchHttpClient.layer),
     Layer.provideMerge(StarburstGalaxyAuth),
     Layer.provideMerge(ProfileStoreLive),
