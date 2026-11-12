@@ -33,6 +33,10 @@ export interface HttpStateStoreProps extends HttpStateStoreCredentials {
    * shape shows up distinctly on the adoption dashboard.
    */
   id: string;
+  /** Runs after the store's authorization mapper; supports asynchronous proof signing. */
+  transformClientEffect?: (
+    request: HttpClientRequest.HttpClientRequest,
+  ) => Effect.Effect<HttpClientRequest.HttpClientRequest, HttpClientError.HttpClientError>;
   transformClient?: (
     client: HttpClientRequest.HttpClientRequest,
   ) => HttpClientRequest.HttpClientRequest;
@@ -67,13 +71,23 @@ export const checkHttpStateStoreAuth = ({ url, authToken }: { url: string; authT
     );
   });
 
-export const makeHttpStateStore = ({ url, authToken, transformClient, id }: HttpStateStoreProps) =>
+export const makeHttpStateStore = ({
+  url,
+  authToken,
+  transformClient,
+  transformClientEffect,
+  id,
+}: HttpStateStoreProps) =>
   Effect.gen(function* () {
     const apiClient = yield* HttpApiClient.make(StateApi, {
-      baseUrl: url,
-      transformClient: HttpClient.mapRequest((req) =>
-        req.pipe(HttpClientRequest.bearerToken(authToken), transformClient ?? identity),
-      ),
+      transformClient: (client) =>
+        client.pipe(
+          HttpClient.mapRequest((req) =>
+            req.pipe(HttpClientRequest.bearerToken(authToken), transformClient ?? identity),
+          ),
+          HttpClient.mapRequest(HttpClientRequest.prependUrl(url)),
+          HttpClient.mapRequestEffect(transformClientEffect ?? Effect.succeed),
+        ),
     });
     const state = apiClient.state;
 
