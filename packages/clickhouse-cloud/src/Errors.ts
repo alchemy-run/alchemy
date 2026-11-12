@@ -98,6 +98,19 @@ export class ApiKeyInUse extends Data.TaggedError("ClickHouseCloud.ApiKeyInUse")
   }
 }
 
+/** The preview a `PreviewFeature` names is not offered to the organization, or cannot be toggled. */
+export class PreviewNotOffered extends Data.TaggedError("ClickHouseCloud.PreviewNotOffered")<{
+  readonly previewId: string;
+  readonly offered: readonly string[];
+  readonly reason: "not-offered" | "not-toggleable";
+}> {
+  override get message() {
+    return this.reason === "not-offered"
+      ? `ClickHouse Cloud preview "${this.previewId}" is not offered to this organization (offered: ${this.offered.join(", ") || "none"})`
+      : `ClickHouse Cloud preview "${this.previewId}" cannot be switched by the organization (canToggle is false)`;
+  }
+}
+
 /** A long-running object (UDF build, attachment, ClickPipe, reverse private endpoint) ended in a failed state. */
 export class OperationFailed extends Data.TaggedError("ClickHouseCloud.OperationFailed")<{
   readonly kind: string;

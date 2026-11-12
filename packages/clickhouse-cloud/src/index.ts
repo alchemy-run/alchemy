@@ -14,6 +14,7 @@ export {
   ApiKeyInUse,
   OperationFailed,
   OperationTimedOut,
+  PreviewNotOffered,
   ResultMissing,
   ServiceDeletionProtected,
   ServiceFailed,
