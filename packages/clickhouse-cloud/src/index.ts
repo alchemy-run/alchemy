@@ -19,6 +19,7 @@ export {
   ServiceNotReady,
   SystemRoleImmutable,
 } from "./internal/Errors.ts";
+export * as Organization from "./Organization/index.ts";
 export * from "./Providers.ts";
 export * as RoleManagement from "./RoleManagement/index.ts";
 export * as Service from "./Service/index.ts";
