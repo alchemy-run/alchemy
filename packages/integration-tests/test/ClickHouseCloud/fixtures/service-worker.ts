@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
-import { Analytics } from "./resources.ts";
+import { Analytics, StationsPipe, stationsSource } from "./resources.ts";
 
 export default class ClickHouseServiceWorker extends Cloudflare.Worker<ClickHouseServiceWorker>()(
   "ClickHouseServiceWorker",
@@ -16,6 +16,9 @@ export default class ClickHouseServiceWorker extends Cloudflare.Worker<ClickHous
     const listBackups = yield* ClickHouseCloud.Backup.ListBackups(Analytics);
     const getBackup = yield* ClickHouseCloud.Backup.GetBackup(Analytics);
     const scrape = yield* ClickHouseCloud.Prometheus.GetServicePrometheusMetrics(Analytics);
+    const discover = yield* ClickHouseCloud.ClickPipes.DiscoverClickPipeSchema(Analytics);
+    const getPipe = yield* ClickHouseCloud.ClickPipes.GetClickPipe(StationsPipe);
+    const updatePipeState = yield* ClickHouseCloud.ClickPipes.UpdateClickPipeState(StationsPipe);
 
     return {
       fetch: Effect.gen(function* () {
@@ -49,6 +52,28 @@ export default class ClickHouseServiceWorker extends Cloudflare.Worker<ClickHous
           return yield* HttpServerResponse.json({ text: yield* scrape({ filteredMetrics: true }) });
         }
 
+        if (url.pathname === "/discover") {
+          const schema = yield* discover({ objectStorage: stationsSource });
+          return yield* HttpServerResponse.json({
+            fields: (schema.fields ?? []).map((f) => ({
+              name: f.name,
+              type: f.type,
+              isVirtual: f.isVirtual === true,
+            })),
+          });
+        }
+
+        if (url.pathname === "/pipe") {
+          const pipe = yield* getPipe();
+          return yield* HttpServerResponse.json({ id: pipe.id, state: pipe.state });
+        }
+
+        if (url.pathname === "/pipe/state") {
+          const command = url.searchParams.get("command") as "start" | "stop" | "resync";
+          const pipe = yield* updatePipeState(command);
+          return yield* HttpServerResponse.json({ id: pipe.id, state: pipe.state });
+        }
+
         // Not 404: a fresh workers.dev URL answers 404 until it propagates.
         return HttpServerResponse.text("no such route", { status: 400 });
       }).pipe(
@@ -66,6 +91,9 @@ export default class ClickHouseServiceWorker extends Cloudflare.Worker<ClickHous
         ClickHouseCloud.Backup.ListBackupsHttp,
         ClickHouseCloud.Backup.GetBackupHttp,
         ClickHouseCloud.Prometheus.GetServicePrometheusMetricsHttp,
+        ClickHouseCloud.ClickPipes.DiscoverClickPipeSchemaHttp,
+        ClickHouseCloud.ClickPipes.GetClickPipeHttp,
+        ClickHouseCloud.ClickPipes.UpdateClickPipeStateHttp,
       ),
     ),
   ),

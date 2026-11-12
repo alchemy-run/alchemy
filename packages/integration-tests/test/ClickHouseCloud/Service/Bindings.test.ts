@@ -9,7 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import { bindingTags as tags, getJson, noCloudflare } from "../fixtures/bindings.ts";
-import { Analytics } from "../fixtures/resources.ts";
+import { Analytics, StationsPipe } from "../fixtures/resources.ts";
 import ClickHouseServiceWorker from "../fixtures/service-worker.ts";
 
 // Deploys its own service (minutes to create, billed compute), so it also
@@ -29,11 +29,13 @@ const Stack = Alchemy.Stack(
   { providers, state: Alchemy.localState() },
   Effect.gen(function* () {
     const analytics = yield* Analytics;
+    const pipe = yield* StationsPipe;
     const worker = yield* ClickHouseServiceWorker;
     return {
       url: worker.url.as<string>(),
       serviceId: analytics.serviceId,
       organizationId: analytics.organizationId,
+      clickPipeId: pipe.clickPipeId,
     };
   }),
 );
@@ -44,6 +46,7 @@ const stack = beforeAll(
         url: "",
         serviceId: "",
         organizationId: "",
+        clickPipeId: "",
       })
     : deploy(Stack),
   { timeout: 3_600_000 },
@@ -95,7 +98,55 @@ describe.skipIf(skipped).sequential("ClickHouseCloud service bindings", () => {
   );
 
   test(
-    "each binding's role is scoped to the one service; only the state binding may manage",
+    "DiscoverClickPipeSchema infers the public CSV's columns",
+    Effect.gen(function* () {
+      const { fields } = yield* get<{
+        fields: { name: string; type: string; isVirtual: boolean }[];
+      }>("/discover");
+      // The CSV's columns, then the metadata ClickPipes adds for object storage.
+      expect(fields.filter((f) => !f.isVirtual).map((f) => f.name)).toEqual(["station", "avg"]);
+      expect(fields.filter((f) => f.isVirtual).map((f) => f.name)).toEqual([
+        "_path",
+        "_file",
+        "_size",
+        "_time",
+      ]);
+    }),
+    { tags, timeout: 120_000 },
+  );
+
+  test(
+    "GetClickPipe reads the bound one-shot pipe, completed",
+    Effect.gen(function* () {
+      const { clickPipeId } = yield* stack;
+      expect(yield* get<{ id: string; state: string }>("/pipe")).toEqual({
+        id: clickPipeId,
+        state: "Completed",
+      });
+    }),
+    { tags, timeout: 120_000 },
+  );
+
+  test(
+    "UpdateClickPipeState sends stop and start; a finished one-shot pipe stays completed",
+    Effect.gen(function* () {
+      const { clickPipeId } = yield* stack;
+      // Live: ClickHouse accepts both commands on a one-shot pipe that has
+      // finished and leaves it `Completed` (`resync` is for database pipes).
+      expect(yield* get<{ id: string; state: string }>("/pipe/state?command=stop")).toEqual({
+        id: clickPipeId,
+        state: "Completed",
+      });
+      expect(yield* get<{ id: string; state: string }>("/pipe/state?command=start")).toEqual({
+        id: clickPipeId,
+        state: "Completed",
+      });
+    }),
+    { tags, timeout: 120_000 },
+  );
+
+  test(
+    "each binding's role is scoped to the one service; only the state and ClickPipes bindings may manage",
     Effect.gen(function* () {
       const { organizationId, serviceId } = yield* stack;
       const { result } = yield* roles.listOrganizationRoles({ organizationId });
@@ -121,7 +172,13 @@ describe.skipIf(skipped).sequential("ClickHouseCloud service bindings", () => {
         })
         .sort();
       // ClickHouse adds implied permissions; classified by what each may change.
-      expect(kinds).toEqual(["manage", ...Array.from({ length: 4 }, () => "view")]);
+      expect(kinds).toEqual([
+        "manage",
+        "manage-clickpipes",
+        "manage-clickpipes",
+        "manage-clickpipes",
+        ...Array.from({ length: 4 }, () => "view"),
+      ]);
     }).pipe(outOfBand),
     { tags, timeout: 120_000 },
   );
