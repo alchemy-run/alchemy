@@ -41,6 +41,8 @@ const alchemy = (platformStage: string, ...args: string[]) =>
         [child.all.pipe(Stream.decodeText(), Stream.mkString), child.exitCode],
         { concurrency: 2 },
       );
+      // Each resource's time is in the output, so keep it in the test log.
+      yield* Effect.logInfo(`alchemy ${args.join(" ")}\n${output}`);
       if (code !== 0) {
         const lines = output.split("\n").filter((line) => !/^\s+at /.test(line));
         return yield* Effect.die(
@@ -97,8 +99,6 @@ test.provider.skipIf(skipPaid)(
         yield* Effect.logInfo(
           `stage deploys took ${Duration.format(firstTook)} and ${Duration.format(secondTook)}`,
         );
-        expect(Duration.toMinutes(firstTook)).toBeLessThan(5);
-        expect(Duration.toMinutes(secondTook)).toBeLessThan(5);
 
         const oneUrl = `https://${one}.cloud.${TEST_DOMAIN}`;
         const twoUrl = `https://${two}.cloud.${TEST_DOMAIN}`;
@@ -170,6 +170,10 @@ test.provider.skipIf(skipPaid)(
         // The other stage keeps running on the shared platform.
         expect(yield* listMessages(twoUrl)).toContain("only in the other stage");
         yield* s3.deleteObject({ Bucket: bucket, Key: neighbour });
+
+        // Checked last, so a slow deploy doesn't hide a broken one.
+        expect(Duration.toMinutes(firstTook)).toBeLessThan(5);
+        expect(Duration.toMinutes(secondTook)).toBeLessThan(5);
 
         // The platform goes last, and leaves nothing behind.
         yield* cli("destroy", "--stage", two);

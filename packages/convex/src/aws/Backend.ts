@@ -293,6 +293,19 @@ const hostOn = (
  * });
  * ```
  *
+ * ### Building a site in parallel
+ * `backend.url` resolves once the backend is running, so whatever reads it
+ * waits for the service. A site only needs the address, which
+ * `backend.endpoints` has from the start, so it builds while the backend
+ * comes up.
+ *
+ * **Example:** A website that doesn't wait for the backend
+ * ```typescript
+ * const website = yield* AWS.Website.TanStackStart("Website", {
+ *   env: { CONVEX_URL: backend.endpoints.url },
+ * });
+ * ```
+ *
  * ### Safety
  * The backend holds an exclusive lease on its database, so there is one task
  * and a rollout stops the old one first. Expect a short outage on each deploy.
@@ -647,6 +660,8 @@ export const Backend = (id: string, props: BackendProps) =>
       return {
         url: running(cloudUrl),
         siteUrl: running(siteUrl),
+        // Known before the backend runs, so a site build can start right away.
+        endpoints: { url: cloudUrl, siteUrl },
         adminKey: adminKey.value,
         instanceName,
         databaseName: database,

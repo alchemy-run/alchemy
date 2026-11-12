@@ -34,7 +34,8 @@ export default Alchemy.Stack(
     yield* Convex.Functions("Functions", { backend, rootDir: "." });
 
     const website = yield* AWS.Website.TanStackStart("Website", {
-      env: { CONVEX_URL: backend.url },
+      // The address, not the running backend, so the site builds in parallel.
+      env: { CONVEX_URL: backend.endpoints.url },
       forceDestroy: !isProd,
     });
 
