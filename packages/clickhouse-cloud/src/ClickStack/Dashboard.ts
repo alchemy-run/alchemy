@@ -68,6 +68,8 @@ export type Dashboard = Resource<
  * Changing `serviceId` replaces the object.
  * :::
  *
+ * Uses ClickHouse Cloud API endpoints marked Beta: `createClickStackDashboard`, `deleteClickStackDashboard`, `getClickStackDashboard`, `updateClickStackDashboard`, `validateClickStackDashboard`.
+ *
  * @resource
  * @product ClickStack
  */

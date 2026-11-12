@@ -58,6 +58,8 @@ export type Role = Resource<
  * Changing `serviceId` replaces the object.
  * :::
  *
+ * Uses ClickHouse Cloud API endpoints marked Beta: `createClickStackRole`, `deleteClickStackRole`, `getClickStackRole`, `updateClickStackRole`.
+ *
  * @resource
  * @product ClickStack
  */

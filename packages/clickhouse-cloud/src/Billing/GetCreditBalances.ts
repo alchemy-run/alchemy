@@ -37,6 +37,8 @@ import type { Organization } from "../Organization/Organization.ts";
  * ) {}
  * ```
  *
+ * Uses ClickHouse Cloud API endpoints marked Beta: `getCreditBalances`.
+ *
  * @binding
  * @product Billing
  */

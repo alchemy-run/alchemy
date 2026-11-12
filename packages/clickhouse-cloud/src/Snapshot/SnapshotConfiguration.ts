@@ -77,6 +77,8 @@ export type SnapshotConfiguration = Resource<
  * are switched off.
  * :::
  *
+ * Uses ClickHouse Cloud API endpoints marked Beta: `getSnapshotConfiguration`, `updateSnapshotConfiguration`.
+ *
  * @resource
  * @product Snapshot
  */

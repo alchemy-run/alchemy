@@ -39,6 +39,8 @@ export type QuotaCode = organization.OrganizationQuotaQuotaCode | (string & {});
  * ) {}
  * ```
  *
+ * Uses ClickHouse Cloud API endpoints marked Beta: `getOrganizationQuota`.
+ *
  * @binding
  * @product Organization
  */

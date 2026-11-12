@@ -163,6 +163,8 @@ export type ByocInfrastructure = Resource<
  * and every service on it must be deleted first.
  * :::
  *
+ * Uses ClickHouse Cloud API endpoints marked Beta: `getByocInfrastructure`, `getByocInfrastructureCustomerAuthorizedAccess`, `getByocInfrastructurePrivateEndpointConfig`, `getByocInfrastructureTags`, `updateByocInfrastructureCustomerAuthorizedAccess`, `validateByocInfrastructure`.
+ *
  * @resource
  * @product BYOC
  */

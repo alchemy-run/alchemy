@@ -72,6 +72,8 @@ export type ClickHouseSetting = Resource<
  * reset to its default. Server settings restart the service.
  * :::
  *
+ * Uses ClickHouse Cloud API endpoints marked Beta: `deleteServiceClickHouseSetting`, `listServiceClickHouseSettings`, `updateServiceClickHouseSettings`.
+ *
  * @resource
  * @product Service
  */

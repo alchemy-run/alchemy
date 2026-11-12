@@ -40,6 +40,8 @@ import type { Service } from "../Service/Service.ts";
  * ) {}
  * ```
  *
+ * Uses ClickHouse Cloud API endpoints marked Beta: `listSnapshots`.
+ *
  * @binding
  * @product Snapshot
  */

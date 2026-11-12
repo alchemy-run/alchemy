@@ -55,6 +55,8 @@ export interface ListNotificationsRequest {
  * ) {}
  * ```
  *
+ * Uses ClickHouse Cloud API endpoints marked Beta: `listNotifications`.
+ *
  * @binding
  * @product Notifications
  */

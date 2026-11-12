@@ -38,6 +38,8 @@ import type { Organization } from "../Organization/Organization.ts";
  * ) {}
  * ```
  *
+ * Uses ClickHouse Cloud API endpoints marked Beta: `listNotificationTypes`.
+ *
  * @binding
  * @product Notifications
  */

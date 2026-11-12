@@ -73,6 +73,8 @@ export type Webhook = Resource<
  * Changing `serviceId` replaces the object.
  * :::
  *
+ * Uses ClickHouse Cloud API endpoints marked Beta: `createClickStackWebhook`, `deleteClickStackWebhook`, `listClickStackWebhooks`, `updateClickStackWebhook`, `validateClickStackWebhook`.
+ *
  * @resource
  * @product ClickStack
  */

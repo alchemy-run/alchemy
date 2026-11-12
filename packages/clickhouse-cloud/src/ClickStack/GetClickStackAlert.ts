@@ -36,6 +36,8 @@ import type { Alert } from "./Alert.ts";
  * ) {}
  * ```
  *
+ * Uses ClickHouse Cloud API endpoints marked Beta: `getClickStackAlert`.
+ *
  * @binding
  * @product ClickStack
  */

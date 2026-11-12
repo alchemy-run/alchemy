@@ -52,6 +52,8 @@ export type WorkloadIdentity = Resource<
  * // grant `serviceAccount:${identity.principal}` roles/storage.objectViewer on the bucket
  * ```
  *
+ * Uses ClickHouse Cloud API endpoints marked Beta: `getClickPipesServiceContext`.
+ *
  * @resource
  * @product ClickPipes
  */

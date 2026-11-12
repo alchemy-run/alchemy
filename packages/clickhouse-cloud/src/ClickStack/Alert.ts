@@ -73,6 +73,8 @@ export type Alert = Resource<
  * Changing `serviceId` replaces the object.
  * :::
  *
+ * Uses ClickHouse Cloud API endpoints marked Beta: `createClickStackAlert`, `deleteClickStackAlert`, `getClickStackAlert`, `updateClickStackAlert`.
+ *
  * @resource
  * @product ClickStack
  */

@@ -41,6 +41,8 @@ export type ListClickStackAlertsRequest = Omit<
  * ) {}
  * ```
  *
+ * Uses ClickHouse Cloud API endpoints marked Beta: `listClickStackAlerts`.
+ *
  * @binding
  * @product ClickStack
  */

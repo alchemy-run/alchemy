@@ -83,6 +83,8 @@ export type JwtProvider = Resource<
  * for the old one stop signing in.
  * :::
  *
+ * Uses ClickHouse Cloud API endpoints marked Beta: `createJwtProvider`, `deleteJwtProvider`, `getJwtProvider`, `updateJwtProvider`.
+ *
  * @resource
  * @product Service
  */

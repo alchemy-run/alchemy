@@ -37,6 +37,8 @@ import type { Organization } from "./Organization.ts";
  * ) {}
  * ```
  *
+ * Uses ClickHouse Cloud API endpoints marked Beta: `listOrganizationQuotas`.
+ *
  * @binding
  * @product Organization
  */

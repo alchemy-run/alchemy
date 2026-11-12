@@ -61,6 +61,8 @@ export interface ListPostgresLogsRequest {
  * ) {}
  * ```
  *
+ * Uses ClickHouse Cloud API endpoints marked Beta: `listPostgresLogs`.
+ *
  * @binding
  * @product Postgres
  */

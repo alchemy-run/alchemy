@@ -67,6 +67,8 @@ export interface ListPostgresSlowQueryPatternsRequest {
  * ) {}
  * ```
  *
+ * Uses ClickHouse Cloud API endpoints marked Beta: `listPostgresSlowQueryPatterns`.
+ *
  * @binding
  * @product Postgres
  */

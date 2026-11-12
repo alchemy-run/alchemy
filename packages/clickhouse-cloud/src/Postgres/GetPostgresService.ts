@@ -38,6 +38,8 @@ import type { Service } from "./Service.ts";
  * ) {}
  * ```
  *
+ * Uses ClickHouse Cloud API endpoints marked Beta: `getPostgresService`.
+ *
  * @binding
  * @product Postgres
  */
