@@ -1,4 +1,5 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -19,7 +20,12 @@ export const BuildSecretsWorker = Cloudflare.Worker(
           );
         }
         return HttpServerResponse.text("ready");
-      }),
+      }).pipe(
+        // Report failures in the body, so a failed step says why.
+        Effect.catchCause((cause) =>
+          Effect.succeed(HttpServerResponse.text(Cause.pretty(cause), { status: 500 })),
+        ),
+      ),
     };
   }),
 );
