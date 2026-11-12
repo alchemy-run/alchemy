@@ -46,14 +46,15 @@ export default class ClickHouseServiceWorker extends Cloudflare.Worker<ClickHous
         }
 
         if (url.pathname === "/metrics") {
-          return HttpServerResponse.text(yield* scrape({ filteredMetrics: true }));
+          return yield* HttpServerResponse.json({ text: yield* scrape({ filteredMetrics: true }) });
         }
 
-        return HttpServerResponse.text("not found", { status: 404 });
+        // Not 404: a fresh workers.dev URL answers 404 until it propagates.
+        return HttpServerResponse.text("no such route", { status: 400 });
       }).pipe(
         // Answer failures and defects with the cause so a failing test shows it.
         Effect.catchCause((cause) =>
-          Effect.succeed(HttpServerResponse.text(Cause.pretty(cause), { status: 500 })),
+          HttpServerResponse.json({ error: Cause.pretty(cause) }, { status: 500 }),
         ),
       ),
     };
