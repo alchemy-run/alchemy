@@ -381,6 +381,22 @@ describe(
       );
 
       test.provider(
+        "consume loop matches a pattern against an array field",
+        (_stack) =>
+          Effect.gen(function* () {
+            const event = yield* publishUntilReceived(
+              "/publish-tagged",
+              customQueueUrl,
+              "consume-loop-tagged",
+            );
+
+            expect(event.source).toBe("alchemy.test.tagged");
+            expect(event.detail.marker).toBe("consume-loop-tagged");
+          }),
+        { timeout: 120_000 },
+      );
+
+      test.provider(
         "consume loop receives default-bus events",
         (_stack) =>
           Effect.gen(function* () {
