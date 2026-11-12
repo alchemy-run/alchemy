@@ -3,7 +3,11 @@ import {
   assertInstanceNameUnchanged,
   assertNoReservedEnv,
   assertPinnedImage,
+  assertHostTemplate,
   assertStageHosts,
+  backendHosts,
+  backendHostsProblem,
+  certificateCovers,
   certificateNames,
   hostLabelOf,
   backendEnv,
@@ -301,6 +305,158 @@ test(
     expect(hostLabelOf("pr-42")).toBe("pr-42");
     expect(hostLabelOf("_x_")).toBe("x");
     await Effect.runPromise(assertStageHosts(hostLabelOf("dev_sam")));
+  },
+  { tags: ["unit", "provider:convex", "local"] },
+);
+
+const covered = (domain: string, template?: Parameters<typeof certificateNames>[1]) => {
+  const names = certificateNames(domain, template);
+  return [names.domainName, ...names.subjectAlternativeNames];
+};
+
+test(
+  "the default host template keeps the platform certificate's names",
+  () => {
+    expect(certificateNames("previews.example.com")).toEqual({
+      domainName: "previews.example.com",
+      subjectAlternativeNames: [
+        "*.previews.example.com",
+        "*.cloud.previews.example.com",
+        "*.site.previews.example.com",
+      ],
+    });
+    expect(
+      certificateNames("previews.example.com", {
+        web: "{stage}.{domain}",
+        cloud: "{stage}.cloud.{domain}",
+        site: "{stage}.site.{domain}",
+      }),
+    ).toEqual(certificateNames("previews.example.com"));
+  },
+  { tags: ["unit", "provider:convex", "local"] },
+);
+
+test(
+  "a flat host template with {app} needs one wildcard",
+  () => {
+    const template = { cloud: "{stage}-{app}-api.{domain}", site: "{stage}-{app}-site.{domain}" };
+    expect(certificateNames("preview.example.com", template).subjectAlternativeNames).toEqual([
+      "*.preview.example.com",
+    ]);
+    expect(
+      stageHosts("preview.example.com", "pippo", false, { hosts: template, app: "shop" }),
+    ).toEqual({
+      web: "pippo.preview.example.com",
+      cloud: "pippo-shop-api.preview.example.com",
+      site: "pippo-shop-site.preview.example.com",
+    });
+  },
+  { tags: ["unit", "provider:convex", "local"] },
+);
+
+test(
+  "a wildcard certificate name covers exactly one label",
+  () => {
+    expect(certificateCovers("*.example.com", "a.example.com")).toBe(true);
+    expect(certificateCovers("*.example.com", "a.b.example.com")).toBe(false);
+    expect(certificateCovers("*.example.com", "example.com")).toBe(false);
+    expect(certificateCovers("example.com", "example.com")).toBe(true);
+  },
+  { tags: ["unit", "provider:convex", "local"] },
+);
+
+test(
+  "assertHostTemplate refuses templates a wildcard certificate can't cover",
+  async () => {
+    const refused = [
+      { cloud: "cloud.{stage}.{domain}" },
+      { cloud: "api.{domain}" },
+      { cloud: "{stage}.{app}.{domain}" },
+      { cloud: "{stage}.cloud.example.com" },
+      { cloud: "{stage}.{domain}.cloud" },
+      { cloud: "{stage}-{region}.{domain}" },
+      { cloud: "{stage}_api.{domain}" },
+      { cloud: "{stage}.site.{domain}" },
+    ];
+    for (const template of refused) {
+      const error = await assertHostTemplate(template).pipe(Effect.flip, Effect.runPromise);
+      expect(error._tag).toBe("InvalidHostTemplate");
+    }
+    await Effect.runPromise(assertHostTemplate(undefined));
+    await Effect.runPromise(
+      assertHostTemplate({
+        cloud: "{stage}-{app}-api.{domain}",
+        site: "{stage}-{app}-site.{domain}",
+      }),
+    );
+  },
+  { tags: ["unit", "provider:convex", "local"] },
+);
+
+test(
+  "a backend's hosts come from the template, or from hosts it picks",
+  () => {
+    const domain = "preview.example.com";
+    expect(backendHosts(domain, undefined, { stage: "pippo", production: false })).toEqual({
+      cloud: "pippo.cloud.preview.example.com",
+      site: "pippo.site.preview.example.com",
+    });
+    expect(backendHosts(domain, undefined, { stage: "prod", production: true })).toEqual({
+      cloud: "cloud.preview.example.com",
+      site: "site.preview.example.com",
+    });
+    const hosts = { cloud: "demo-api.preview.example.com", site: "demo-site.preview.example.com" };
+    expect(
+      backendHosts(domain, undefined, { stage: "Not A Label", production: false, hosts }),
+    ).toEqual(hosts);
+    for (const host of Object.values(hosts)) {
+      expect(covered(domain).some((name) => certificateCovers(name, host))).toBe(true);
+    }
+  },
+  { tags: ["unit", "provider:convex", "local"] },
+);
+
+test(
+  "a backend can't take hosts the platform can't serve",
+  () => {
+    const domain = "preview.example.com";
+    const appTemplate = {
+      cloud: "{stage}-{app}-api.{domain}",
+      site: "{stage}-{app}-site.{domain}",
+    };
+    const problems = [
+      // {app} in the template, but no app
+      backendHostsProblem(domain, appTemplate, { stage: "pippo", production: false }),
+      // app with a template that ignores it
+      backendHostsProblem(domain, undefined, { stage: "pippo", production: false, app: "shop" }),
+      // an app that isn't a label
+      backendHostsProblem(domain, appTemplate, { stage: "pippo", production: false, app: "Shop!" }),
+      // past the certificate's one wildcard label
+      backendHostsProblem(domain, undefined, {
+        stage: "pippo",
+        production: false,
+        hosts: { cloud: "a.b.preview.example.com", site: "b.preview.example.com" },
+      }),
+      // a stage claiming production's hosts
+      backendHostsProblem(domain, undefined, {
+        stage: "pippo",
+        production: false,
+        hosts: { cloud: "cloud.preview.example.com", site: "x.preview.example.com" },
+      }),
+      // a first label over 63 characters
+      backendHostsProblem(domain, appTemplate, {
+        stage: "a".repeat(60),
+        production: false,
+        app: "shop",
+      }),
+    ];
+    for (const problem of problems) expect(problem).toBeDefined();
+    expect(() => backendHosts(domain, appTemplate, { stage: "pippo", production: false })).toThrow(
+      /set app/,
+    );
+    expect(
+      backendHostsProblem(domain, appTemplate, { stage: "pippo", production: false, app: "shop" }),
+    ).toBeUndefined();
   },
   { tags: ["unit", "provider:convex", "local"] },
 );

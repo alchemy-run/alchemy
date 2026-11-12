@@ -61,6 +61,14 @@ export class InvalidStageName extends Data.TaggedError("InvalidStageName")<{
   readonly message: string;
 }> {}
 
+export class InvalidHostTemplate extends Data.TaggedError("InvalidHostTemplate")<{
+  readonly message: string;
+}> {}
+
+export class InvalidHosts extends Data.TaggedError("InvalidHosts")<{
+  readonly message: string;
+}> {}
+
 const MAX_INSTANCE_NAME = 48;
 /** A stage is one hostname label, which holds at most 63 characters. */
 const MAX_STAGE_LENGTH = 63;
@@ -197,26 +205,220 @@ export const databaseUrl = Effect.fn(function* (
 });
 
 /**
- * Hostnames for a stage: `[<stage>.]cloud.<domain>` for the Convex API and
- * `[<stage>.]site.<domain>` for HTTP actions. The production backend leaves the
- * stage out. The stage is always the one leftmost label, so the platform's
- * certificate (`*.<domain>`, `*.cloud.<domain>`, `*.site.<domain>`) covers every
- * stage and a new stage never waits for one.
+ * How a platform names a stage's hosts. `{stage}`, `{app}` and `{domain}` are
+ * filled in. `{stage}` and `{app}` go in the first label, the only one a
+ * wildcard certificate can cover, and the template ends in `.{domain}`.
  */
-export const stageHosts = (domain: string, stage: string, isProd: boolean) =>
-  isProd
-    ? { web: domain, cloud: `cloud.${domain}`, site: `site.${domain}` }
-    : {
-        web: `${stage}.${domain}`,
-        cloud: `${stage}.cloud.${domain}`,
-        site: `${stage}.site.${domain}`,
-      };
+export interface HostTemplate {
+  /**
+   * The stage's website. Nothing on the platform serves it; read it with
+   * `stageHosts` to name the site.
+   * @default "{stage}.{domain}"
+   */
+  web?: string;
+  /**
+   * The Convex API.
+   * @default "{stage}.cloud.{domain}"
+   */
+  cloud?: string;
+  /**
+   * HTTP actions.
+   * @default "{stage}.site.{domain}"
+   */
+  site?: string;
+}
 
-/** The names the platform's certificate covers. */
-export const certificateNames = (domain: string) => ({
-  domainName: domain,
-  subjectAlternativeNames: [`*.${domain}`, `*.cloud.${domain}`, `*.site.${domain}`],
+/** A template with every host spelled out, as a platform hands it to its stages. */
+export type ResolvedHostTemplate = Required<HostTemplate>;
+
+export const DEFAULT_HOSTS: ResolvedHostTemplate = {
+  web: "{stage}.{domain}",
+  cloud: "{stage}.cloud.{domain}",
+  site: "{stage}.site.{domain}",
+};
+
+export const resolveHostTemplate = (template?: HostTemplate): ResolvedHostTemplate => ({
+  web: template?.web ?? DEFAULT_HOSTS.web,
+  cloud: template?.cloud ?? DEFAULT_HOSTS.cloud,
+  site: template?.site ?? DEFAULT_HOSTS.site,
 });
+
+const PLACEHOLDERS = ["{stage}", "{app}", "{domain}"];
+const LABEL = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
+
+const fill = (template: string, values: { stage: string; app: string; domain: string }) =>
+  template
+    .replaceAll("{stage}", values.stage)
+    .replaceAll("{app}", values.app)
+    .replaceAll("{domain}", values.domain);
+
+/** What's wrong with a template, or `undefined` when it can name every stage. */
+export const hostTemplateProblem = (template?: HostTemplate): string | undefined => {
+  const resolved = resolveHostTemplate(template);
+  for (const [name, value] of Object.entries(resolved)) {
+    const unknown = (value.match(/\{[^}]*\}/g) ?? []).filter((p) => !PLACEHOLDERS.includes(p));
+    if (unknown.length > 0) {
+      return `The ${name} host template ${value} uses ${unknown.join(", ")}. Use {stage}, {app} and {domain}.`;
+    }
+    if (!value.endsWith(".{domain}") || value.indexOf("{domain}") !== value.length - 8) {
+      return `The ${name} host template ${value} must end in .{domain}, and only there.`;
+    }
+    const [first = "", ...middle] = value.slice(0, -".{domain}".length).split(".");
+    if (!first.includes("{stage}")) {
+      return `The ${name} host template ${value} must put {stage} in its first label, so stages get different hosts under one wildcard certificate.`;
+    }
+    if (middle.some((label) => label.includes("{"))) {
+      return `The ${name} host template ${value} can only use {stage} and {app} in its first label, the one a wildcard certificate covers.`;
+    }
+    if (!/^[a-z0-9-]*$/.test(first.replace(/\{stage\}|\{app\}/g, ""))) {
+      return `The ${name} host template ${value} has a first label that can't be part of a hostname.`;
+    }
+    if (middle.some((label) => !LABEL.test(label))) {
+      return `The ${name} host template ${value} has a label that can't be part of a hostname.`;
+    }
+  }
+  if (new Set([resolved.web, resolved.cloud, resolved.site]).size < 3) {
+    return `The web, cloud and site host templates must all differ.`;
+  }
+  return undefined;
+};
+
+export const assertHostTemplate = Effect.fn(function* (template?: HostTemplate) {
+  const problem = hostTemplateProblem(template);
+  if (problem !== undefined) return yield* new InvalidHostTemplate({ message: problem });
+});
+
+/**
+ * Hostnames for a stage, from the platform's host template: by default
+ * `<stage>.cloud.<domain>` for the Convex API and `<stage>.site.<domain>` for
+ * HTTP actions. The production backend takes the bare `cloud.<domain>` and
+ * `site.<domain>`. The stage sits in the leftmost label, so the platform's
+ * certificate covers every stage and a new stage never waits for one.
+ */
+export const stageHosts = (
+  domain: string,
+  stage: string,
+  isProd: boolean,
+  options: { hosts?: HostTemplate; app?: string } = {},
+) => {
+  if (isProd) return { web: domain, cloud: `cloud.${domain}`, site: `site.${domain}` };
+  const template = resolveHostTemplate(options.hosts);
+  const values = { stage, app: options.app ?? "", domain };
+  return {
+    web: fill(template.web, values),
+    cloud: fill(template.cloud, values),
+    site: fill(template.site, values),
+  };
+};
+
+/** `*.` in place of a template's first label. */
+const wildcardOf = (template: string, domain: string) =>
+  ["*", ...template.slice(0, -".{domain}".length).split(".").slice(1), domain].join(".");
+
+/**
+ * The names the platform's certificate covers: the domain, `*.<domain>` for the
+ * production hosts, and a wildcard for each stage host template.
+ */
+export const certificateNames = (domain: string, template?: HostTemplate) => {
+  const resolved = resolveHostTemplate(template);
+  return {
+    domainName: domain,
+    subjectAlternativeNames: [
+      ...new Set([
+        `*.${domain}`,
+        wildcardOf(resolved.cloud, domain),
+        wildcardOf(resolved.site, domain),
+      ]),
+    ],
+  };
+};
+
+/** Whether a certificate name covers a host. A wildcard covers exactly one label. */
+export const certificateCovers = (name: string, host: string) => {
+  if (!name.startsWith("*.")) return name === host;
+  const dot = host.indexOf(".");
+  return dot > 0 && host.slice(dot + 1) === name.slice(2);
+};
+
+export interface BackendHostOptions {
+  /** The stage as a hostname label. */
+  stage: string;
+  production: boolean;
+  /** Fills `{app}`. */
+  app?: string;
+  /** Hosts the stage picked itself, instead of the template's. */
+  hosts?: { cloud: string; site: string };
+}
+
+/**
+ * What's wrong with the hosts a backend on a platform would take, or
+ * `undefined` when the platform's certificate and listener can serve them.
+ */
+export const backendHostsProblem = (
+  domain: string,
+  template: HostTemplate | undefined,
+  options: BackendHostOptions,
+): string | undefined => {
+  const resolved = resolveHostTemplate(template);
+  const usesApp = resolved.cloud.includes("{app}") || resolved.site.includes("{app}");
+  if (options.hosts === undefined && !options.production) {
+    if (usesApp && options.app === undefined) {
+      return `The platform's host template uses {app}, so set app on the backend.`;
+    }
+    if (!usesApp && options.app !== undefined) {
+      return `app only names hosts when the platform's host template uses {app}. Add {app} to the platform's hosts, or remove app.`;
+    }
+    if (options.app !== undefined && !LABEL.test(options.app)) {
+      return `app ${options.app} must fit in a hostname: lowercase letters, digits and hyphens.`;
+    }
+  }
+  const hosts = backendHostsOf(domain, template, options);
+  for (const host of [hosts.cloud, hosts.site]) {
+    if (host.split(".").some((label) => !LABEL.test(label) || label.length > 63)) {
+      return `${host} isn't a valid hostname: each label holds lowercase letters, digits and hyphens, at most 63 characters.`;
+    }
+  }
+  if (hosts.cloud === hosts.site) return `The cloud and site hosts must differ.`;
+  const names = certificateNames(domain, template);
+  const covered = [names.domainName, ...names.subjectAlternativeNames];
+  for (const host of [hosts.cloud, hosts.site]) {
+    if (!covered.some((name) => certificateCovers(name, host))) {
+      return `The platform's certificate doesn't cover ${host}. It covers ${covered.join(", ")}.`;
+    }
+  }
+  if (!options.production) {
+    const production = stageHosts(domain, options.stage, true);
+    for (const host of [hosts.cloud, hosts.site]) {
+      if (host === production.cloud || host === production.site) {
+        return `${host} is the production backend's host, so a stage can't take it.`;
+      }
+    }
+  }
+  return undefined;
+};
+
+const backendHostsOf = (
+  domain: string,
+  template: HostTemplate | undefined,
+  options: BackendHostOptions,
+) =>
+  options.hosts ??
+  stageHosts(domain, options.stage, options.production, { hosts: template, app: options.app });
+
+/**
+ * The two hosts a backend on a platform takes. Runs inside an Output, so a
+ * problem throws the typed error rather than failing an Effect.
+ */
+export const backendHosts = (
+  domain: string,
+  template: HostTemplate | undefined,
+  options: BackendHostOptions,
+) => {
+  const problem = backendHostsProblem(domain, template, options);
+  if (problem !== undefined) throw new InvalidHosts({ message: problem });
+  const { cloud, site } = backendHostsOf(domain, template, options);
+  return { cloud, site };
+};
 
 /**
  * A stage's name as a hostname label: lowercase, with anything else turned into

@@ -19,13 +19,14 @@ import {
   assertStageHosts,
   hostLabelOf,
   backendEnv,
+  backendHosts,
+  type HostTemplate,
   type BackendEnv,
   databaseName,
   databaseUrl,
   instanceNameOf,
   listenerPriority,
   SqliteInProduction,
-  stageHosts,
   STORAGE_ENV,
   STORAGE_KEYS,
   storagePrefixPattern,
@@ -159,6 +160,25 @@ export interface PlatformBackendProps extends BackendCommonProps {
   dns?: DnsConfig;
   domain?: never;
   /**
+   * The app's name in its hosts, which fills `{app}` in the platform's host
+   * template. Required when the template uses `{app}`, refused when it doesn't.
+   * Lowercase letters, digits and hyphens.
+   */
+  app?: string;
+  /**
+   * The two hosts this backend takes, in place of the ones the platform's host
+   * template names. The platform's certificate must cover them, and a stage
+   * can't take the production backend's. Use it for a second app's production
+   * backend, which would otherwise claim the same bare hosts.
+   * @default named by the platform's host template
+   */
+  hosts?: {
+    /** Serves the Convex API on port 3210. */
+    cloud: string;
+    /** Serves HTTP actions on port 3211. */
+    site: string;
+  };
+  /**
    * `{ engine: "sqlite" }` keeps this stage's data in a file on the task's own
    * disk instead of the platform's database server. It needs no RDS and no
    * volume, so a preview comes up fastest; the data starts empty whenever a new
@@ -199,17 +219,33 @@ const asUrl = (
       Redacted.make(`${engine}://${username}:${Redacted.value(secret)}@${address}:${number}`),
   );
 
-/** A platform's values are Outputs from another stack, and plain in the same one. */
-const hostOn = (
-  domain: Input<string>,
-  label: string,
-  production: boolean,
-  host: "cloud" | "site",
-) =>
-  Output.map(
-    Output.asOutput(domain as string) as Output.Output<string, never>,
-    (name: string) => stageHosts(name, label, production)[host],
-  );
+/**
+ * A backend's hosts on a platform. The platform's values are Outputs from
+ * another stack and plain in the same one; one deployed before host templates
+ * has none and names hosts the default way.
+ */
+const hostsOn = (
+  platform: PlatformBackendProps["platform"],
+  options: {
+    stage: string;
+    production: boolean;
+    app?: string;
+    hosts?: { cloud: string; site: string };
+  },
+) => {
+  const resolved = Output.map(
+    Output.all(
+      Output.asOutput(platform.domain as string) as never,
+      Output.asOutput(platform.hosts as HostTemplate | undefined) as never,
+    ),
+    ([domain, template]: [string, HostTemplate | undefined]) =>
+      backendHosts(domain, template, options),
+  ) as Output.Output<{ cloud: string; site: string }, never>;
+  return {
+    cloud: Output.map(resolved, (hosts) => hosts.cloud),
+    site: Output.map(resolved, (hosts) => hosts.site),
+  };
+};
 
 /**
  * Self-hosted Convex on AWS: one Fargate task behind a load balancer, with
@@ -275,7 +311,8 @@ const hostOn = (
  * const backend = yield* Convex.Backend("Backend", { platform: convex, image });
  * ```
  *
- * A stage named `alice` gets `alice.cloud.<domain>` and `alice.site.<domain>`.
+ * A stage named `alice` gets `alice.cloud.<domain>` and `alice.site.<domain>`,
+ * or whatever the platform's `hosts` template names.
  * The production backend gets `cloud.<domain>` and `site.<domain>`, a protected
  * database, and no SQLite. That's the `prod` stage unless you say otherwise.
  *
@@ -286,6 +323,16 @@ const hostOn = (
  *   platform: convex,
  *   image,
  *   production: stage === "production",
+ * });
+ * ```
+ *
+ * **Example:** Hosts the stage picks itself
+ * ```typescript
+ * // The platform's certificate must cover them.
+ * const backend = yield* Convex.Backend("Backend", {
+ *   platform: convex,
+ *   image,
+ *   hosts: { cloud: "demo-api.preview.example.com", site: "demo-site.preview.example.com" },
  * });
  * ```
  *
@@ -374,16 +421,19 @@ export const Backend = (id: string, props: BackendProps) =>
       const platform = (props.platform ?? created!.handle) as PlatformInputs;
 
       const label = hostLabelOf(stage);
-      if (props.platform !== undefined && !production) {
+      // A stage that picks its own hosts doesn't need a name that fits in one.
+      if (props.platform !== undefined && !production && props.hosts === undefined) {
         yield* assertStageHosts(label).pipe(Effect.orDie);
       }
       const hosts =
         props.platform === undefined
           ? { cloud: props.domain.cloud, site: props.domain.site }
-          : {
-              cloud: hostOn(props.platform.domain, label, production, "cloud"),
-              site: hostOn(props.platform.domain, label, production, "site"),
-            };
+          : hostsOn(props.platform, {
+              stage: label,
+              production,
+              app: props.app,
+              hosts: props.hosts,
+            });
       const cloudUrl = Output.interpolate`https://${hosts.cloud}`;
       const siteUrl = Output.interpolate`https://${hosts.site}`;
 
