@@ -157,6 +157,7 @@ export interface ExternalDurableObjectProps {
    */
   main: string;
   crate?: never;
+  image?: never;
 }
 
 /** Props of a Rust Durable Object: Actors written with RivetKit's Rust crate, run as they are. */
@@ -172,6 +173,21 @@ export interface RustDurableObjectProps {
   /** How the crate is compiled. */
   build?: CargoBuild;
   main?: never;
+  image?: never;
+}
+
+/** Props of an image Durable Object: Actors in a prebuilt image, run as it is. */
+export interface ImageDurableObjectProps {
+  /**
+   * The image every node runs, as a reference the deploy's Docker can pull,
+   * such as `us-docker.pkg.dev/acme/app/actors@sha256:…`. Its `CMD` starts a
+   * RivetKit registry with `RIVET_ENDPOINT`, `RIVET_TOKEN`,
+   * `RIVET_NAMESPACE` and `RIVET_POOL` set. The image brings its own
+   * runtime and RivetKit, so a node installs nothing when it starts.
+   */
+  image: string;
+  main?: never;
+  crate?: never;
 }
 
 /** The class surface of {@link DurableObject}. */
@@ -191,6 +207,14 @@ export interface DurableObjectClass {
   <const Id extends string>(
     id: Id,
     props: RustDurableObjectProps,
+  ): Effect.Effect<DurableObject, never, PoolHost | Providers>;
+  /**
+   * An image Durable Object: Actors in a prebuilt image, run as it is on
+   * the pool's nodes. Provide a pool Layer to it.
+   */
+  <const Id extends string>(
+    id: Id,
+    props: ImageDurableObjectProps,
   ): Effect.Effect<DurableObject, never, PoolHost | Providers>;
   <Self, Shape = {}>(): {
     /** The class form with an inline implementation. */
@@ -335,7 +359,8 @@ const createRuntimeContext = (id: string): DurableObjectRuntimeContext => {
  * Given only `main`, it is external: a RivetKit program, async or
  * `@rivetkit/effect`, that its pool bundles and runs as it is. Given a
  * `crate`, it is a Rust program that its pool compiles into the node image.
- * Either needs a pool of its own, and has no bindings or `yield*` calls.
+ * Given an `image`, it is a prebuilt image its pool's nodes run as it is.
+ * Each needs a pool of its own, and has no bindings or `yield*` calls.
  *
  * An instance's calls run in parallel, storage included: unlike Cloudflare,
  * there is no input gate. Make a read-then-write atomic with
@@ -442,14 +467,18 @@ const createRuntimeContext = (id: string): DurableObjectRuntimeContext => {
  * @resource
  */
 export const DurableObject: DurableObjectClass = ((
-  ...args: [string, ExternalDurableObjectProps | RustDurableObjectProps] | []
+  ...args:
+    | [string, ExternalDurableObjectProps | RustDurableObjectProps | ImageDurableObjectProps]
+    | []
 ) =>
   args.length === 0
     ? (id: string, props?: unknown, impl?: unknown) =>
         declare(id, (platform as any)()(id, props, impl))
     : args[1].crate !== undefined
       ? rust(args[0], args[1] as RustDurableObjectProps)
-      : external(args[0], args[1] as ExternalDurableObjectProps)) as unknown as DurableObjectClass;
+      : args[1].image !== undefined
+        ? image(args[0], args[1] as ImageDurableObjectProps)
+        : external(args[0], args[1] as ExternalDurableObjectProps)) as unknown as DurableObjectClass;
 
 /**
  * An external Durable Object: declare its resource, then have the pool it
@@ -477,6 +506,20 @@ const rust = (id: string, props: RustDurableObjectProps) =>
     if (globalThis.__ALCHEMY_RUNTIME__) return resource;
     const host = yield* PoolHost;
     yield* host.deployCrate({ id, crate, build: props.build, resource });
+    return resource;
+  });
+
+/**
+ * An image Durable Object: declare its resource, then have the pool it was
+ * given run the image on its nodes. The pool Layer is what provides
+ * `PoolHost`.
+ */
+const image = (id: string, props: ImageDurableObjectProps) =>
+  Effect.gen(function* () {
+    const resource: DurableObject = yield* (platform as any)(id, { main: props.image });
+    if (globalThis.__ALCHEMY_RUNTIME__) return resource;
+    const host = yield* PoolHost;
+    yield* host.deployImage({ id, image: props.image, resource });
     return resource;
   });
 
