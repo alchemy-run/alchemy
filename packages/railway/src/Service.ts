@@ -77,6 +77,15 @@ export interface ServiceProps extends PlatformProps {
    */
   region?: string;
   /**
+   * Number of replicas Railway runs, all in one region. Written to
+   * `deploy.multiRegionConfig` with `region`, or in the region the
+   * service is already in when `region` is omitted. Omit this and the
+   * current count is left alone. Must be a whole number of at least 1.
+   * When `region` is omitted and replicas span several regions (or
+   * Railway reports none), set `region` too. Updating it scales in place.
+   */
+  replicas?: number;
+  /**
    * Port the process listens on. Written to `PORT` and used as the
    * generated `*.up.railway.app` `targetPort`. Default is `3000` for
    * Effect-native (`main`) Services. Pass `5678` for
@@ -247,8 +256,8 @@ export type Service = Resource<
     /** Observed healthcheck timeout in seconds. */
     healthcheckTimeout: number | undefined;
     /**
-     * Observed replica count. Alchemy does not set this — Railway
-     * load-balances whatever is running (default 1).
+     * Replica count. The `replicas` prop once set; otherwise the
+     * count Railway reports (default 1).
      */
     replicas: number | undefined;
     /** Observed build command. */
@@ -431,10 +440,25 @@ const createServiceRuntimeContext = (id: string): ServiceRuntimeContext => {
  * });
  * ```
  *
+ * ### Replicas
+ * Omit `replicas` to leave the count alone. Set it to run that many
+ * replicas in the service's region; changing it scales in place.
+ *
+ * **Example:** Replicas in a region
+ * ```typescript
+ * const api = yield* Railway.Service("Api", {
+ *   project: site,
+ *   image: "hashicorp/http-echo",
+ *   port: 5678,
+ *   region: "europe-west4-drams3a",
+ *   replicas: 2,
+ * });
+ * ```
+ *
  * ### Healthcheck
  * `healthcheckPath` (or `healthcheck`, matching Railway IaC) is the
  * HTTP path Railway probes. Railway load-balances public traffic
- * across whatever replicas are running. Alchemy does not pin a count.
+ * across whatever replicas are running.
  *
  * **Example:** Healthcheck
  * ```typescript
