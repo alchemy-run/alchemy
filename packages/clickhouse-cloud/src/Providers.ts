@@ -7,6 +7,7 @@ import { ApiKey, ApiKeyProvider } from "./ApiKeys/ApiKey.ts";
 import { ClickHouseCloudAuth } from "./AuthProvider.ts";
 import { BackupConfiguration, BackupConfigurationProvider } from "./Backup/BackupConfiguration.ts";
 import * as Credentials from "./Credentials.ts";
+import { Organization, OrganizationProvider } from "./Organization/Organization.ts";
 import { Role, RoleProvider } from "./RoleManagement/Role.ts";
 import { Service, ServiceProvider } from "./Service/Service.ts";
 
@@ -29,11 +30,15 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
  * ```
  */
 export const providers = () =>
-  Layer.effect(Providers, Provider.collection([ApiKey, BackupConfiguration, Role, Service])).pipe(
+  Layer.effect(
+    Providers,
+    Provider.collection([ApiKey, BackupConfiguration, Organization, Role, Service]),
+  ).pipe(
     Layer.provide(
       Layer.mergeAll(
         ApiKeyProvider(),
         BackupConfigurationProvider(),
+        OrganizationProvider(),
         RoleProvider(),
         ServiceProvider(),
       ),
