@@ -1,3 +1,4 @@
+export * from "./ClickHouseSetting.ts";
 export * from "./GetService.ts";
 export * from "./GetServiceHttp.ts";
 export * from "./PrivateEndpoint.ts";
