@@ -28,6 +28,14 @@ import {
 import { Cluster, ClusterProvider } from "./Cluster/Cluster.ts";
 import * as Credentials from "./Credentials.ts";
 import { DataDomain, DataDomainProvider } from "./DataProduct/DataDomain.ts";
+import { DataProduct, DataProductProvider } from "./DataProduct/DataProduct.ts";
+import {
+  DataProductUsageExample,
+  DataProductUsageExampleProvider,
+} from "./DataProduct/DataProductUsageExample.ts";
+import { CatalogMetadata, CatalogMetadataProvider } from "./Discovery/CatalogMetadata.ts";
+import { SchemaMetadata, SchemaMetadataProvider } from "./Discovery/SchemaMetadata.ts";
+import { TableMetadata, TableMetadataProvider } from "./Discovery/TableMetadata.ts";
 import { ColumnMask, ColumnMaskProvider } from "./Governance/ColumnMask.ts";
 import { Policy, PolicyProvider } from "./Governance/Policy.ts";
 import { RowFilter, RowFilterProvider } from "./Governance/RowFilter.ts";
@@ -119,6 +127,11 @@ export const providers = () =>
       RoleGrant,
       User,
       UserDefaultRole,
+      CatalogMetadata,
+      DataProduct,
+      DataProductUsageExample,
+      SchemaMetadata,
+      TableMetadata,
     ]),
   ).pipe(
     Layer.provide(
@@ -153,6 +166,11 @@ export const providers = () =>
         RoleGrantProvider(),
         UserProvider(),
         UserDefaultRoleProvider(),
+        CatalogMetadataProvider(),
+        DataProductProvider(),
+        DataProductUsageExampleProvider(),
+        SchemaMetadataProvider(),
+        TableMetadataProvider(),
       ),
     ),
     Layer.provideMerge(Credentials.fromAuthProvider()),
