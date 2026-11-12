@@ -58,6 +58,8 @@ export const TAB_ICONS: Record<string, string | undefined> = {
   Modal: b("modal"),
   Archil: b("archil"),
   Boat: b("boat"),
+  // The Sandboxes dropdown's link to the AWS hub's Nitro Sandboxes page.
+  "AWS Nitro": b("aws"),
   Prisma: b("prisma"),
   // Brand-colored prism for marketing surfaces.
   PrismaColor: b("prisma-color"),
@@ -108,6 +110,9 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   AI: l("sparkles"),
   "Security & secrets": l("lock"),
   "Accounts & access": l("key-round"),
+  "Engines & access": l("key-round"),
+  Images: l("package"),
+  Swarm: l("network"),
   "Access & security": l("key-round"),
   "Storage & databases": l("database"),
   "Networking & edge": l("globe"),

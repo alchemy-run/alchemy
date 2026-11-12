@@ -9,11 +9,11 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import type * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import {
+  type CloudAuth,
   completeBuild,
   createBuild,
   deleteBuild,
@@ -268,16 +268,16 @@ export const RunnerPoolProvider = () =>
         digest: string,
         note: (message: string) => Effect.Effect<void>,
       ) {
-        const { token } = yield* credentials;
+        const auth = yield* credentials;
         const image = `${imageRepository(props.cluster, nameOf(props))}:${digest.slice(0, 12)}`;
         // A deploy that failed after uploading left this image's build behind.
-        const existing = (yield* listBuilds(token, props.cluster)).find(
+        const existing = (yield* listBuilds(auth, props.cluster)).find(
           (build) =>
             build.image === image && ["completing", "preparing", "ready"].includes(build.status),
         );
         const buildId = existing?.build_id ?? (yield* upload(props.cluster, image, files, note));
         yield* note(`Preparing build ${buildId}, which usually takes about 3 minutes...`);
-        yield* waitForBuild(token, props.cluster, buildId);
+        yield* waitForBuild(auth, props.cluster, buildId);
         return buildId;
       });
 
@@ -288,7 +288,7 @@ export const RunnerPoolProvider = () =>
         files: Record<string, string | Uint8Array>,
         note: (message: string) => Effect.Effect<void>,
       ) {
-        const { token } = yield* credentials;
+        const auth = yield* credentials;
         const dir = yield* fs.makeTempDirectoryScoped({ prefix: "rivet-cloud-build-" });
         for (const [name, content] of Object.entries(files)) {
           const file = path.join(dir, name);
@@ -302,7 +302,7 @@ export const RunnerPoolProvider = () =>
         yield* docker(["image", "save", image, "-o", tarPath]);
         const tarball = yield* fs.readFile(tarPath);
         const md5 = yield* Effect.sync(() => createHash("md5").update(tarball).digest("base64"));
-        const build = yield* createBuild(token, cluster, {
+        const build = yield* createBuild(auth, cluster, {
           image,
           content_length: tarball.byteLength,
           content_md5: md5,
@@ -311,13 +311,13 @@ export const RunnerPoolProvider = () =>
           `Uploading build ${build.build_id} (${Math.round(tarball.byteLength / 1e6)} MB)...`,
         );
         yield* uploadBuild(build.upload_url, tarball, md5);
-        yield* completeBuild(token, cluster, build.build_id);
+        yield* completeBuild(auth, cluster, build.build_id);
         return build.build_id;
       }, Effect.scoped);
 
       /** Wait until Rivet has verified and prepared a build. */
-      const waitForBuild = (token: Redacted.Redacted<string>, cluster: string, buildId: string) =>
-        getBuild(token, cluster, buildId).pipe(
+      const waitForBuild = (auth: CloudAuth, cluster: string, buildId: string) =>
+        getBuild(auth, cluster, buildId).pipe(
           Effect.flatMap((info): Effect.Effect<void, Pending | RunnerBuildFailed> => {
             if (info.status === "ready") return Effect.void;
             if (["failed", "expired", "deleting"].includes(info.status)) {
@@ -375,8 +375,8 @@ export const RunnerPoolProvider = () =>
       };
 
       const observe = Effect.fn(function* (cluster: string, region: string, name: string) {
-        const { token } = yield* credentials;
-        return yield* getRunnerPool(token, cluster, region, name).pipe(
+        const auth = yield* credentials;
+        return yield* getRunnerPool(auth, cluster, region, name).pipe(
           Effect.catchTag("RivetCloud.NotFound", () => Effect.undefined),
         );
       });
@@ -384,8 +384,8 @@ export const RunnerPoolProvider = () =>
       const regionOf = Effect.fn(function* (props: RunnerPoolProps, current?: string) {
         if (props.region !== undefined) return props.region;
         if (current !== undefined) return current;
-        const { token } = yield* credentials;
-        const [first] = yield* listRegions(token, props.cluster);
+        const auth = yield* credentials;
+        const [first] = yield* listRegions(auth, props.cluster);
         if (first === undefined) {
           return yield* new NoClusterRegion({
             message: `Rivet Cloud cluster '${props.cluster}' has no region to run a runner pool in.`,
@@ -447,7 +447,7 @@ export const RunnerPoolProvider = () =>
             ? pool.build_id!
             : yield* uploadImage(news, files, digest, note);
           // Sync the pool to the build, machine type and node count.
-          const { token } = yield* credentials;
+          const auth = yield* credentials;
           if (
             pool === undefined ||
             pool.build_id !== buildId ||
@@ -455,7 +455,7 @@ export const RunnerPoolProvider = () =>
             pool.node_count !== nodeCountOf(news)
           ) {
             yield* note(`Rolling out runner pool ${name} to build ${buildId}...`);
-            yield* putRunnerPool(token, news.cluster, region, name, {
+            yield* putRunnerPool(auth, news.cluster, region, name, {
               build_id: buildId,
               // The upsert replaces the allowlist, so an existing pool's is sent back.
               cidr_allowlist: pool?.cidr_allowlist ?? [],
@@ -463,7 +463,7 @@ export const RunnerPoolProvider = () =>
               node_count: nodeCountOf(news),
             });
           }
-          yield* getRunnerPool(token, news.cluster, region, name).pipe(
+          yield* getRunnerPool(auth, news.cluster, region, name).pipe(
             Effect.flatMap((current) => rolledOut(current, buildId)),
             Effect.retry({
               while: (e) => e._tag === "RivetCloud.Pending" || e._tag === "RivetCloud.NotFound",
@@ -474,13 +474,13 @@ export const RunnerPoolProvider = () =>
           // The build the pool ran before is no longer needed.
           const previous = pool?.build_id;
           if (previous && previous !== buildId) {
-            yield* deleteBuild(token, news.cluster, previous).pipe(Effect.ignore);
+            yield* deleteBuild(auth, news.cluster, previous).pipe(Effect.ignore);
           }
           return { name, cluster: news.cluster, region, buildId, digest };
         }),
         delete: Effect.fn(function* ({ output }) {
-          const { token } = yield* credentials;
-          yield* deleteRunnerPool(token, output.cluster, output.region, output.name).pipe(
+          const auth = yield* credentials;
+          yield* deleteRunnerPool(auth, output.cluster, output.region, output.name).pipe(
             Effect.catchTag("RivetCloud.NotFound", () => Effect.void),
           );
           // A build is refused deletion while its pool still runs it.
@@ -499,13 +499,13 @@ export const RunnerPoolProvider = () =>
           // Rivet keeps a pool's recent builds for rollbacks, and refuses to
           // delete one until a couple of minutes after its pool is gone.
           const repository = `${imageRepository(output.cluster, output.name)}:`;
-          const builds = (yield* listBuilds(token, output.cluster)).filter(
+          const builds = (yield* listBuilds(auth, output.cluster)).filter(
             (build) => build.image.startsWith(repository) && build.status !== "deleting",
           );
           yield* Effect.forEach(
             builds,
             (build) =>
-              deleteBuild(token, output.cluster, build.build_id).pipe(
+              deleteBuild(auth, output.cluster, build.build_id).pipe(
                 Effect.retry({
                   while: (e) => e._tag === "RivetCloud.Conflict",
                   schedule: Schedule.spaced("10 seconds"),

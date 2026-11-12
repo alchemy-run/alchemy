@@ -11,8 +11,10 @@ import {
 import { findCwdForBundle, getStableContextDir, resolveMainPath } from "alchemy/Bundle/TempRoot";
 import { hashDirectory } from "alchemy/Command/Memo";
 import { safeHttpEffect } from "alchemy/Http";
+import * as Output from "alchemy/Output";
 import type { ResourceBinding } from "alchemy/Resource";
 import { createContainerRuntimeContext, type HostRuntimeContext } from "alchemy/Runtime/Process";
+import { packEnvValueKeepRedacted } from "alchemy/RuntimeContext";
 import {
   copyExtraFiles,
   contextRootOf,
@@ -61,11 +63,19 @@ export const createFlyHostRuntimeContext =
         boots ? { shape: { ...shape, fetch: shape?.fetch ?? wrapped } } : options,
       ) as Effect.Effect<void, never, any>;
     };
+    // Keep the `Redacted` wrapper outside the packed string so the Service
+    // reconcile can store those values as App secrets instead of Machine env.
+    const set: HostRuntimeContext["set"] = (bindingId, output) =>
+      Effect.sync(() => {
+        const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
+        base.env[key] = output.pipe(Output.map(packEnvValueKeepRedacted));
+        return key;
+      });
     // A Service runs on Fly Machines, which mint OIDC tokens for their
     // bindings to exchange with AWS and GCP (see `internal/Oidc.ts`).
     return Object.assign(
       base,
-      type === "Fly.Service" ? { serve, oidcToken: flyOidcToken } : { serve },
+      type === "Fly.Service" ? { serve, set, oidcToken: flyOidcToken } : { serve, set },
     );
   };
 
@@ -196,10 +206,14 @@ export const collectBindingState = (bindings: readonly ResourceBinding<ServiceBi
   const active = bindings.filter(
     (binding: ResourceBinding<ServiceBinding> & { action?: string }) => binding.action !== "delete",
   );
-  const env = toEnvRecord(
-    active
-      .map((binding) => binding?.data?.env)
-      .reduce<Record<string, any>>((acc, value) => ({ ...acc, ...value }), {}),
+  const merged = active
+    .map((binding) => binding?.data?.env)
+    .reduce<Record<string, any>>((acc, value) => ({ ...acc, ...value }), {});
+  const env = toEnvRecord(merged);
+  // Names of bound `Config` values and Redacted outputs. Only the names:
+  // the values stay in `env` until the Service moves them into App secrets.
+  const secretNames = Object.keys(toEnvRecord(merged)).filter((key) =>
+    Redacted.isRedacted(merged[key]),
   );
   const mounts: DiskSpec[] = [];
   const seen = new Set<string>();
@@ -266,7 +280,16 @@ export const collectBindingState = (bindings: readonly ResourceBinding<ServiceBi
       });
     }
   }
-  return { env, mounts, redis, buckets, postgres, targets, callers: [...callers].sort() };
+  return {
+    env,
+    secretNames,
+    mounts,
+    redis,
+    buckets,
+    postgres,
+    targets,
+    callers: [...callers].sort(),
+  };
 };
 
 /**

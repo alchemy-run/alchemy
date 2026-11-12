@@ -29,11 +29,11 @@ const makeRegistry = Effect.fn(function* (accountId: string) {
   const http = yield* HttpClient.HttpClient;
   const credentials = yield* Containers.createContainerRegistryCredentials({
     accountId,
-    registryId: registryHost,
+    domain: registryHost,
     permissions: ["pull", "push"],
     expirationMinutes: 15,
   });
-  const username = credentials.username ?? credentials.user ?? "";
+  const { username } = credentials;
   const fail = (message: string, cause?: unknown) =>
     ContainerSnapshotCleanupError.make({ message, cause });
 

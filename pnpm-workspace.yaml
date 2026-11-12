@@ -38,6 +38,7 @@ packages:
   - packages/*
   - examples/*
   - examples/cloudflare-domain/packages/*
+  - examples/cluster-domain/packages/*
   - examples/cloudflare-website-service-bindings/apps/*
   - examples/monorepo-single-stack/*
   - examples/monorepo-multi-stack/*
@@ -64,16 +65,16 @@ catalog:
   "@cloudflare/unenv-preset": "^2.16.2"
   "@cloudflare/vitest-plugin": "^1.4.0"
   "@cloudflare/workers-types": "5.20261026.1"
-  "@effect/atom-react": "^4.1.0"
-  "@effect/platform-bun": "^4.1.0"
-  "@effect/platform-node": "^4.1.0"
-  "@effect/sql-d1": "^4.1.0"
-  "@effect/sql-libsql": "^4.1.0"
-  "@effect/sql-mysql2": "^4.1.0"
-  "@effect/sql-pg": "^4.1.0"
-  "@effect/sql-sqlite-do": "^4.1.0"
+  "@effect/atom-react": "^4.1.4"
+  "@effect/platform-bun": "^4.1.4"
+  "@effect/platform-node": "^4.1.4"
+  "@effect/sql-d1": "^4.1.4"
+  "@effect/sql-libsql": "^4.1.4"
+  "@effect/sql-mysql2": "^4.1.4"
+  "@effect/sql-pg": "^4.1.4"
+  "@effect/sql-sqlite-do": "^4.1.4"
   "@effect/tsgo": "^0.67.3"
-  "@effect/vitest": "^4.1.0"
+  "@effect/vitest": "^4.1.4"
   "@foldkit/ui": "^0.170.0"
   "@foldkit/vite-plugin": "^0.29.0"
   "@fontsource-variable/caveat": "^5.3.0"
@@ -178,7 +179,7 @@ catalog:
   dotenv: "^17.4.2"
   drizzle-kit: "1.0.0-rc.5"
   drizzle-orm: "1.0.0-rc.5"
-  effect: "^4.1.0"
+  effect: "^4.1.4"
   esbuild: "^0.28.1"
   fflate: "^0.8.3"
   fast-xml-parser: "^5.11.2"
@@ -288,10 +289,10 @@ catalogs:
 overrides:
   "@cloudflare/workers-types": 5.20261026.1
   workerd: 1.20261026.1
-  effect: 4.1.0
-  "@effect/platform-browser": 4.1.0
-  "@effect/sql-d1": 4.1.0
-  "@effect/sql-sqlite-do": 4.1.0
+  effect: 4.1.4
+  "@effect/platform-browser": 4.1.4
+  "@effect/sql-d1": 4.1.4
+  "@effect/sql-sqlite-do": 4.1.4
   drizzle-kit: 1.0.0-rc.5
   drizzle-orm: 1.0.0-rc.5
   # Keep drizzle-orm's optional peer graph identical across workspace
@@ -348,18 +349,18 @@ minimumReleaseAgeExclude:
   - drizzle-orm@1.0.0-rc.5
   - svelte@5.57.3
   - vocs@2.11.1
-  - "@effect/atom-react@4.1.0"
-  - "@effect/platform-browser@4.1.0"
-  - "@effect/platform-bun@4.1.0"
-  - "@effect/platform-node-shared@4.1.0"
-  - "@effect/platform-node@4.1.0"
-  - "@effect/sql-d1@4.1.0"
-  - "@effect/sql-libsql@4.1.0"
-  - "@effect/sql-mysql2@4.1.0"
-  - "@effect/sql-pg@4.1.0"
-  - "@effect/sql-sqlite-do@4.1.0"
-  - "@effect/vitest@4.1.0"
-  - effect@4.1.0
+  - "@effect/atom-react@4.1.4"
+  - "@effect/platform-browser@4.1.4"
+  - "@effect/platform-bun@4.1.4"
+  - "@effect/platform-node-shared@4.1.4"
+  - "@effect/platform-node@4.1.4"
+  - "@effect/sql-d1@4.1.4"
+  - "@effect/sql-libsql@4.1.4"
+  - "@effect/sql-mysql2@4.1.4"
+  - "@effect/sql-pg@4.1.4"
+  - "@effect/sql-sqlite-do@4.1.4"
+  - "@effect/vitest@4.1.4"
+  - effect@4.1.4
   - "@effect/tsgo-darwin-arm64@0.67.3"
   - "@effect/tsgo-darwin-x64@0.67.3"
   - "@effect/tsgo-linux-arm64@0.67.3"

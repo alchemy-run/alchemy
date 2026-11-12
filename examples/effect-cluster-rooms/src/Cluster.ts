@@ -3,6 +3,6 @@ import * as Layer from "effect/Layer";
 
 export const Database = ClusterDocker.Database("Cluster");
 
-export const Default = ClusterDocker.Runners("Default", { replicas: 2 }).pipe(
+export const Default = ClusterDocker.SwarmPool("Default", { replicas: 2 }).pipe(
   Layer.provide(Database),
 );

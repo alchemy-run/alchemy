@@ -14,11 +14,12 @@ import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import MongoApi, { Db, Site } from "./fixtures/mongo-api.ts";
+import { railwayApi } from "./limit.ts";
 import { expectFound } from "./lookup.ts";
 import { suitePartition } from "./suiteProject.ts";
 import { waitUntilVolumeGone } from "./waitUntilVolumeGone.ts";
 
-const { test } = Test.make({ providers: Railway.providers() });
+const { test } = Test.make({ limit: railwayApi, providers: Railway.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
@@ -293,6 +294,7 @@ describe(
   },
   () => {
     const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+      limit: railwayApi,
       providers: Railway.providers(),
     });
 

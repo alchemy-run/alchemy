@@ -10,12 +10,14 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import { conformanceTests, waitForReady } from "../Cloudflare/Workers/conformance/spec.ts";
+import { railwayApi } from "../Railway/limit.ts";
 import { Cluster } from "./fixtures/railway/cluster.ts";
 import { CounterLive } from "./fixtures/railway/counter-live.ts";
 import Front from "./fixtures/railway/front.ts";
 import { expectRustCounter, RustActors, rustTarget, type RustTarget } from "./fixtures/rust.ts";
 
 const testOptions = {
+  limit: railwayApi,
   providers: Layer.mergeAll(Hetzner.providers(), Railway.providers(), Rivet.providers()),
 };
 const { test, beforeAll, afterAll } = Test.make(testOptions);

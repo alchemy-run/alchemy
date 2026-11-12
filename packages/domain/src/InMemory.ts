@@ -17,6 +17,7 @@ import {
   emptySnapshot,
   emptyStreamMeta,
   hostedModels,
+  inRange,
   Platform,
   type Json,
   type ModelHost,
@@ -970,10 +971,11 @@ export const make = (
                   Effect.map((current) => SubscriptionRef.changes(current.snapshot)),
                 ),
               ),
-            list: (key) =>
+            list: (key, range) =>
               ready(key).pipe(
                 Effect.andThen(get(key)),
                 Effect.flatMap((current) => SubscriptionRef.get(current.entries)),
+                Effect.map((entries) => inRange(entries, range)),
               ),
             tail: (key, after) =>
               Stream.unwrap(
@@ -1214,8 +1216,11 @@ export const make = (
               Stream.unwrap(
                 get(key).pipe(Effect.map((current) => SubscriptionRef.changes(current.meta))),
               ),
-            list: (key) =>
-              get(key).pipe(Effect.flatMap((current) => SubscriptionRef.get(current.entries))),
+            list: (key, range) =>
+              get(key).pipe(
+                Effect.flatMap((current) => SubscriptionRef.get(current.entries)),
+                Effect.map((entries) => inRange(entries, range)),
+              ),
             tail: (key, after) =>
               Stream.unwrap(
                 get(key).pipe(

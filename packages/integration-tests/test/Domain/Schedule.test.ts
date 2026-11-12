@@ -5,6 +5,7 @@ import { describe, expect, it } from "@alchemy.run/test";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import { Activity } from "effect/workflow";
 
@@ -46,6 +47,19 @@ class Hold extends Domain.Aggregate("Hold", {
     HoldExpired: () => ({ status: "expired" as const }),
   },
 }) {}
+
+/**
+ * Wait until a hold's scheduled expiry has run. Its 20ms timer runs on the
+ * real clock, which a loaded machine can push well past a fixed sleep.
+ */
+const untilExpired = <A extends { readonly status: string }, E, R>(get: Effect.Effect<A, E, R>) =>
+  get.pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced("20 millis"),
+      until: (hold) => hold.status === "expired",
+      times: 250,
+    }),
+  );
 
 /** The schedule key of a hold's expiry. */
 const expiryOf = (id: string) => `expire:${id}`;
@@ -257,9 +271,9 @@ describe("Domain schedule", { tags: ["unit", "local"] }, () => {
       yield* holds.schedule("h-3", new ExpireHold(), { after: "20 millis", commandId: "x" });
       yield* holds.schedule("h-4", new ExpireHold(), { after: "20 millis", commandId: "x" });
       yield* holds.unschedule("h-3", "x");
-      yield* Effect.sleep("100 millis");
+      // Once h-4's timer has run, h-3's would have too.
+      expect((yield* untilExpired(holds.get("h-4"))).status).toBe("expired");
       expect((yield* holds.get("h-3")).status).toBe("none");
-      expect((yield* holds.get("h-4")).status).toBe("expired");
     }).pipe(Effect.provide(HoldsLive)),
   );
 
@@ -284,7 +298,7 @@ describe("Domain schedule", { tags: ["unit", "local"] }, () => {
     Effect.gen(function* () {
       const holds = yield* Hold;
       yield* holds.schedule("h-5", new ExpireHold(), { after: "20 millis", commandId: "x" });
-      yield* Effect.sleep("100 millis");
+      yield* untilExpired(holds.get("h-5"));
       const error = yield* Effect.flip(holds.unschedule("h-5", "x"));
       expect(error).toEqual(
         new Domain.AlreadyExecuted({ aggregate: "Hold", id: "h-5", commandId: "x" }),
@@ -297,8 +311,7 @@ describe("Domain schedule", { tags: ["unit", "local"] }, () => {
       const holds = yield* Hold;
       yield* holds.send("h-6", new PlaceHold(), { commandId: "x" });
       yield* holds.schedule("h-6", new ExpireHold(), { after: "20 millis", commandId: "x" });
-      yield* Effect.sleep("100 millis");
-      expect((yield* holds.get("h-6")).status).toBe("expired");
+      expect((yield* untilExpired(holds.get("h-6"))).status).toBe("expired");
     }).pipe(Effect.provide(HoldsLive)),
   );
 
@@ -327,7 +340,7 @@ describe("Domain schedule", { tags: ["unit", "local"] }, () => {
     Effect.gen(function* () {
       const holds = yield* Hold;
       yield* holds.schedule("h-10", new ExpireHold(), { after: "20 millis", commandId: "x" });
-      yield* Effect.sleep("100 millis");
+      yield* untilExpired(holds.get("h-10"));
       expect((yield* Effect.flip(holds.unschedule("h-10", "x")))._tag).toBe("AlreadyExecuted");
       const receipt = yield* holds.schedule("h-10", new ExpireHold(), {
         after: "1 hour",
@@ -344,8 +357,7 @@ describe("Domain schedule", { tags: ["unit", "local"] }, () => {
       const arm = yield* ArmExpiry;
       const holds = yield* Hold;
       yield* (yield* arm.start("h-11", { then: "wait" })).result;
-      yield* Effect.sleep("100 millis");
-      expect((yield* holds.get("h-11")).status).toBe("expired");
+      expect((yield* untilExpired(holds.get("h-11"))).status).toBe("expired");
       expect((yield* Effect.flip(holds.unschedule("h-11", "x")))._tag).toBe("AlreadyExecuted");
     }).pipe(Effect.provide(ArmingLive)),
   );
