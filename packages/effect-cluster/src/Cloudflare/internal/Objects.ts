@@ -11,8 +11,10 @@
 import * as Cloudflare from "@alchemy.run/cloudflare/Workers";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import { makeDurableObjectEngine, type ObjectImpl } from "alchemy/Workers/DurableObjectEngine";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import { InstanceStorage } from "../../Host.ts";
 import type { EntityStorage } from "../../internal/EntityRuntime.ts";
 import {
   type EntityObjectStub,
@@ -85,7 +87,13 @@ export const EntityObject = Cloudflare.DurableObject<EntityObjectStub>()(
         name: objectName(state),
         host,
         storage: storageOf(state),
-        runtime,
+        // The object's own key-value storage, for platforms built on
+        // entities (a Domain model's) to keep each instance's data in.
+        runtime: Context.add(
+          runtime,
+          InstanceStorage,
+          state.storage as unknown as InstanceStorage["Service"],
+        ) as Context.Context<RuntimeContext>,
         maxEncodedBytes: MAX_ENCODED_BYTES,
         waitUntil: (effect) => state.waitUntil(effect).pipe(Effect.provideContext(runtime)),
       });
