@@ -41,12 +41,17 @@ export const isOwnedName = Effect.fn(function* (id: string, name: string, inStat
 });
 
 /**
- * Whether a name has the shape alchemy generates: it ends in the base32
- * instance suffix. Objects with no tags (API keys, roles) are only listed
- * for `alchemy unsafe nuke` when their name has this shape, so keys and
- * roles people named by hand are never touched.
+ * Whether a name has exactly the shape {@link physicalName} generates:
+ * `<stack>-<id>-<stage>-` and the 16-character base32 instance suffix, or,
+ * when that is longer than 50 characters, a truncated prefix followed by an
+ * 8-character hash and the suffix (24 base32 characters, 50 in all).
+ * Objects that carry no tags are only listed for `alchemy unsafe nuke`
+ * when their name has this shape, so objects people named by hand are never
+ * touched.
  */
-export const isGeneratedName = (name: string) => /-[a-z2-7]{12,}$/i.test(name);
+export const isGeneratedName = (name: string) =>
+  /^[A-Za-z0-9][A-Za-z0-9-]*-[a-z2-7]{16}$/.test(name) ||
+  (name.length === 50 && /^[A-Za-z0-9][A-Za-z0-9-]*[a-z2-7]{24}$/.test(name));
 
 const tagValue = (value: string) => value.replace(/[^A-Za-z0-9._-]+/g, "_");
 
