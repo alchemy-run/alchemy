@@ -17,14 +17,25 @@ import { RedshiftCatalog, RedshiftCatalogProvider } from "./Catalog/RedshiftCata
 import { S3Catalog, S3CatalogProvider } from "./Catalog/S3Catalog.ts";
 import { SnowflakeCatalog, SnowflakeCatalogProvider } from "./Catalog/SnowflakeCatalog.ts";
 import { SqlServerCatalog, SqlServerCatalogProvider } from "./Catalog/SqlServerCatalog.ts";
+import {
+  CrossAccountIamRole,
+  CrossAccountIamRoleProvider,
+} from "./CloudAccess/CrossAccountIamRole.ts";
+import {
+  CrossAccountIamRoleTrust,
+  CrossAccountIamRoleTrustProvider,
+} from "./CloudAccess/CrossAccountIamRoleTrust.ts";
 import { Cluster, ClusterProvider } from "./Cluster/Cluster.ts";
 import * as Credentials from "./Credentials.ts";
 import { DataDomain, DataDomainProvider } from "./DataProduct/DataDomain.ts";
 import { ColumnMask, ColumnMaskProvider } from "./Governance/ColumnMask.ts";
+import { Policy, PolicyProvider } from "./Governance/Policy.ts";
 import { RowFilter, RowFilterProvider } from "./Governance/RowFilter.ts";
 import { Tag, TagProvider } from "./Governance/Tag.ts";
 import { TagAssignment, TagAssignmentProvider } from "./Governance/TagAssignment.ts";
+import { PrivateLink, PrivateLinkProvider } from "./Network/PrivateLink.ts";
 import { Role, RoleProvider } from "./Role/Role.ts";
+import { RoleGrant, RoleGrantProvider } from "./Role/RoleGrant.ts";
 import { RolePrivilege, RolePrivilegeProvider } from "./Role/RolePrivilege.ts";
 import { ServiceAccount, ServiceAccountProvider } from "./ServiceAccount/ServiceAccount.ts";
 import {
@@ -32,6 +43,9 @@ import {
   ServiceAccountPasswordProvider,
 } from "./ServiceAccount/ServiceAccountPassword.ts";
 import { SqlJob, SqlJobProvider } from "./SqlJob/SqlJob.ts";
+import { Group, GroupProvider } from "./User/Group.ts";
+import { User, UserProvider } from "./User/User.ts";
+import { UserDefaultRole, UserDefaultRoleProvider } from "./User/UserDefaultRole.ts";
 
 /**
  * Service tag bundling every Starburst Galaxy provider, the AuthProvider
@@ -97,6 +111,14 @@ export const providers = () =>
       SqlServerCatalog,
       Tag,
       TagAssignment,
+      CrossAccountIamRole,
+      CrossAccountIamRoleTrust,
+      Group,
+      Policy,
+      PrivateLink,
+      RoleGrant,
+      User,
+      UserDefaultRole,
     ]),
   ).pipe(
     Layer.provide(
@@ -123,6 +145,14 @@ export const providers = () =>
         SqlServerCatalogProvider(),
         TagProvider(),
         TagAssignmentProvider(),
+        CrossAccountIamRoleProvider(),
+        CrossAccountIamRoleTrustProvider(),
+        GroupProvider(),
+        PolicyProvider(),
+        PrivateLinkProvider(),
+        RoleGrantProvider(),
+        UserProvider(),
+        UserDefaultRoleProvider(),
       ),
     ),
     Layer.provideMerge(Credentials.fromAuthProvider()),
