@@ -2,7 +2,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 /**
  * Standing prerequisites for the Floci-gated AWS suites (EKS, AMP scraper,
  * SageMaker HyperPod and endpoints, RDS proxy, ECS capacity providers, Flink,
- * custom domains, API Gateway VPC links, SES, OAM, Q Apps, Control Tower). They are
+ * custom domains, API Gateway VPC links, SES, OAM, Q Apps, Shield Advanced, Control Tower). They are
  * created through the emulated AWS APIs before `test:aws:floci` spawns the
  * suite, exported as the env vars the suites read, and removed after the run.
  *
@@ -32,6 +32,7 @@ import * as sagemaker from "@distilled.cloud/aws/sagemaker";
 import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
 import * as ses from "@distilled.cloud/aws/ses";
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
+import * as shield from "@distilled.cloud/aws/shield";
 import * as ssm from "@distilled.cloud/aws/ssm";
 import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
@@ -111,6 +112,7 @@ type Group =
   | "ses"
   | "oam"
   | "qapps"
+  | "shieldAdvanced"
   | "sagemakerEndpoint"
   | "controlTower"
   | "mediaConvert";
@@ -160,6 +162,7 @@ const groupVars: Record<Group, ReadonlyArray<string>> = {
   ],
   oam: ["AWS_TEST_OAM_SINK_ARN"],
   qapps: ["AWS_TEST_QAPPS", "QAPPS_INSTANCE_ID"],
+  shieldAdvanced: ["AWS_TEST_SHIELD_ADVANCED"],
   sagemakerEndpoint: ["AWS_TEST_SAGEMAKER_ENDPOINT", "AWS_TEST_SAGEMAKER_IMAGE"],
   mediaConvert: ["MEDIACONVERT_ROLE_ARN", "MEDIACONVERT_TEST_INPUT", "MEDIACONVERT_TEST_OUTPUT"],
   controlTower: [
@@ -204,6 +207,7 @@ const groupSuites: Record<Group, ReadonlyArray<string>> = {
   ],
   oam: ["OAM/Sink.test.ts"],
   qapps: ["QApps/QApp.test.ts", "QApps/Bindings.test.ts", "QApps/QAppsMissingLookup.test.ts"],
+  shieldAdvanced: ["Shield/Shield.test.ts"],
   sagemakerEndpoint: ["SageMaker/Endpoint.test.ts", "SageMaker/EndpointBindings.test.ts"],
   controlTower: ["ControlTower/ControlTower.test.ts"],
   mediaConvert: ["MediaConvert/MediaConvert.test.ts"],
@@ -1674,6 +1678,15 @@ const provision = (
     if (groups.has("qapps")) {
       env.QAPPS_INSTANCE_ID = yield* ensureQAppsInstance(ledger);
       env.AWS_TEST_QAPPS = "1";
+    }
+
+    if (groups.has("shieldAdvanced")) {
+      // A Shield Advanced subscription can't be ended inside its one-year
+      // commitment, in Floci as on AWS; it goes with the emulator.
+      yield* shield
+        .createSubscription({})
+        .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void));
+      env.AWS_TEST_SHIELD_ADVANCED = "1";
     }
 
     if (groups.has("sagemakerEndpoint")) {
