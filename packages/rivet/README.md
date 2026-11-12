@@ -130,6 +130,32 @@ yield* state.cron.set({
 
 `Rivet.Cron` is a Durable Object dedicated to one job. After deploy, call `getByName(...).arm()` once so the actor exists for RivetKit to schedule.
 
-A RivetKit workflows registry (`@rivet-dev/workflows`) or other RivetKit program deploys as an external Durable Object on its own pool: `Rivet.DurableObject("Checkout", { main: "./src/workflows.ts" })`. A services pool hosts Rivet's agentOS actor alongside Durable Streams.
+## Effect Workflows
+
+`Rivet.Workflows.layerDurableObjectEngine` runs Effect's `WorkflowEngine` on Rivet Durable Objects (same engine as Cloudflare's Durable Object Workflows). Provide a pool and the module that exports the workflows Layer:
+
+```typescript
+export const WorkflowsLive = SendWelcomeLive.pipe(
+  Layer.provideMerge(
+    Rivet.Workflows.layerDurableObjectEngine({
+      main: import.meta.url,
+      handler: "WorkflowsLive",
+      pool: Default,
+    }),
+  ),
+);
+```
+
+Each workflow execution is one actor instance, with its journal in SQLite and wake-ups on the actor's alarm.
+
+## agentOS (Sandbox)
+
+A services pool hosts Rivet's agentOS actor. `Rivet.AgentOs` returns Alchemy Sandbox handles (`exec`, `files`, `start`, `pty`, `getTcpPort`) against that pool:
+
+```typescript
+const agentOs = yield* Rivet.AgentOs;
+const sandbox = yield* agentOs.getOrCreate("session-1");
+const result = yield* sandbox.exec("uname -a");
+```
 
 Docs: [alchemy.run/rivet](https://alchemy.run/rivet) · [Setup](https://alchemy.run/rivet/setup) · [Tutorial](https://alchemy.run/rivet/tutorial/part-1). Reference: [alchemy.run/providers](https://alchemy.run/providers).

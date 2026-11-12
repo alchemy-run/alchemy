@@ -165,10 +165,12 @@ describe(
       }),
     );
 
-    it.effect("exports Cron", () =>
+    it.effect("exports Cron, Workflows engine and AgentOs", () =>
       Effect.sync(() => {
         expect(typeof Rivet.Cron).toBe("function");
         expect(Rivet.CRON_RUN_ACTION).toBe("run");
+        expect(typeof Rivet.Workflows.layerDurableObjectEngine).toBe("function");
+        expect(Effect.isEffect(Rivet.AgentOs)).toBe(true);
       }),
     );
   },

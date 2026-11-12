@@ -38,6 +38,7 @@
     "./Hetzner": "./src/Hetzner/index.ts",
     "./Kubernetes": "./src/Kubernetes/index.ts",
     "./Railway": "./src/Railway/index.ts",
+    "./Workflows": "./src/Workflows/index.ts",
     "./*": "./src/*.ts",
     "./package.json": "./package.json"
   },
@@ -97,6 +98,12 @@
         "worker": "./src/Railway/index.ts",
         "default": "./lib/Railway/index.js"
       },
+      "./Workflows": {
+        "types": "./lib/Workflows/index.d.ts",
+        "bun": "./src/Workflows/index.ts",
+        "worker": "./src/Workflows/index.ts",
+        "default": "./lib/Workflows/index.js"
+      },
       "./AWS/internal/*": null,
       "./internal/*": null,
       "./*": {
@@ -117,6 +124,7 @@
     "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/rivet": "workspace:*",
     "@effect/platform-node": "catalog:",
+    "@rivet-dev/agentos": "^0.4.6",
     "rivetkit": "3.0.0"
   },
   "devDependencies": {
