@@ -194,7 +194,8 @@ export const makeDurableObjectInstance = ({
           ),
         ).pipe(Effect.provideContext(instanceTelemetry.context));
         // What construction recorded goes out now, not with the first event.
-        waitUntil(Effect.runPromise(instanceTelemetry.flush));
+        const runPromise = Effect.runPromiseWith(yield* Effect.context<never>());
+        waitUntil(runPromise(instanceTelemetry.flush));
         return {
           instance: built as DurableObjectInstanceShape,
           services: Context.add(services, RuntimeContext, instanceRuntimeContext),
