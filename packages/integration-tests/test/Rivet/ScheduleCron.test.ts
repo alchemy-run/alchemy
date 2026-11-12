@@ -165,15 +165,10 @@ describe(
       }),
     );
 
-    it.effect("exports Workflow, Cron and agentOsClient", () =>
+    it.effect("exports Cron", () =>
       Effect.sync(() => {
-        expect(typeof Rivet.Workflow).toBe("function");
         expect(typeof Rivet.Cron).toBe("function");
         expect(Rivet.CRON_RUN_ACTION).toBe("run");
-        expect(typeof Rivet.agentOsClient).toBe("object");
-        expect(typeof Rivet.AgentOs).toBe("function");
-        expect(typeof Rivet.createAgentOsClient).toBe("function");
-        expect(typeof Rivet.workflow).toBe("function");
       }),
     );
   },

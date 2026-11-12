@@ -130,26 +130,6 @@ yield* state.cron.set({
 
 `Rivet.Cron` is a Durable Object dedicated to one job. After deploy, call `getByName(...).arm()` once so the actor exists for RivetKit to schedule.
 
-## Workflows
-
-Deploy a [`@rivet-dev/workflows`](https://www.npmjs.com/package/@rivet-dev/workflows) registry as an external program on its own pool:
-
-```typescript
-// src/workflows.ts — RivetKit registry using workflow({ run })
-export const Checkout = Rivet.Workflow("Checkout", { main: "./src/workflows.ts" }).pipe(
-  Effect.provide(Workflows),
-);
-```
-
-## agentOS
-
-A services pool hosts Rivet's agentOS actor. From any runtime given that pool:
-
-```typescript
-const agentOs = yield* Rivet.agentOsClient;
-const handle = agentOs.agentOS.getOrCreate(["session-1"]);
-```
-
-Or embed a VM in-process with `Rivet.AgentOs.create()` from `@rivet-dev/agentos-core`.
+A RivetKit workflows registry (`@rivet-dev/workflows`) or other RivetKit program deploys as an external Durable Object on its own pool: `Rivet.DurableObject("Checkout", { main: "./src/workflows.ts" })`. A services pool hosts Rivet's agentOS actor alongside Durable Streams.
 
 Docs: [alchemy.run/rivet](https://alchemy.run/rivet) · [Setup](https://alchemy.run/rivet/setup) · [Tutorial](https://alchemy.run/rivet/tutorial/part-1). Reference: [alchemy.run/providers](https://alchemy.run/providers).

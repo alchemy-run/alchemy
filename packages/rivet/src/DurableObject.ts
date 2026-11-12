@@ -319,9 +319,6 @@ const createRuntimeContext = (id: string): DurableObjectRuntimeContext => {
  * `@rivetkit/effect`, that its pool bundles and runs as it is. Given a
  * `crate`, it is a Rust program that its pool compiles into the node image.
  * Either needs a pool of its own, and has no bindings or `yield*` calls.
- * Deploy a `@rivet-dev/workflows` registry with `Rivet.Workflow` the same
- * way.
- *
  * An instance's calls run in parallel, storage included: unlike Cloudflare,
  * there is no input gate. Make a read-then-write atomic with
  * `state.storage.transaction(...)`, or provide `Workers.InputGate` (from
