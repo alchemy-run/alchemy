@@ -186,18 +186,20 @@ export const makeOsisIngestBinding = Effect.gen(function* () {
         return yield* fail(0, "pipeline has no ingestEndpointUrls");
       }
 
-      // Ingest endpoint URLs are bare hostnames
-      // (`{name}-{id}.{region}.osis.amazonaws.com`); sign for the endpoint's
-      // own region, parsed from the hostname.
-      const base = endpoint.startsWith("https://") ? endpoint : `https://${endpoint}`;
-      const url = new URL(request.path.startsWith("/") ? request.path : `/${request.path}`, base);
+      // AWS answers ingest endpoints as bare hostnames
+      // (`{name}-{id}.{region}.osis.amazonaws.com`); an emulator may answer a
+      // full URL, scheme and path included. Sign for the endpoint's own
+      // region, parsed from the hostname.
+      const base = /^https?:\/\//.test(endpoint) ? endpoint : `https://${endpoint}`;
+      const url = new URL(
+        `${base.replace(/\/+$/, "")}${request.path.startsWith("/") ? "" : "/"}${request.path}`,
+      );
 
       // Resolve credentials fresh per request (STS sessions rotate).
       const { credentials, region, client } = yield* Effect.gen(function* () {
         const credentials = yield* yield* Credentials.Credentials;
         const region =
-          /\.([a-z0-9-]+)\.osis\.amazonaws\.com$/.exec(url.hostname)?.[1] ??
-          (yield* yield* Region.Region);
+          /\.([a-z0-9-]+)\.osis\./.exec(url.hostname)?.[1] ?? (yield* yield* Region.Region);
         const client = yield* HttpClient.HttpClient;
         return { credentials, region, client };
       }).pipe(Effect.provideContext(services));
