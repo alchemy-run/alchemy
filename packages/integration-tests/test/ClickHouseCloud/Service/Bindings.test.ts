@@ -196,7 +196,10 @@ describe.skipIf(skipped).sequential("ClickHouseCloud service bindings", () => {
               : "view";
         })
         .sort();
-      // ClickHouse adds implied permissions; classified by what each may change.
+      // UpdateServiceState manages the service; DiscoverClickPipeSchema,
+      // UpdateClickPipeState and GetClickPipe hold the ClickPipes permission
+      // (reading a pipe needs it too); GetService, ListBackups, GetBackup,
+      // GetServicePrometheusMetrics and RunQueryApiEndpoint only view.
       expect(kinds).toEqual([
         "manage",
         "manage-clickpipes",
