@@ -44,6 +44,7 @@ import { assertHostDisk, type MountSpec } from "./MountVolume.ts";
 import { ownedProjects } from "./Project.ts";
 import { RPC_TOKEN_ENV } from "./rpc-token.ts";
 import { Service } from "./Service.ts";
+import { syncCheckSuites } from "./ServiceChecks.ts";
 import {
   deleteOwnedServiceDomain,
   ensureServiceDomain,
@@ -1264,6 +1265,12 @@ export const ServiceProvider = () =>
               branch: props.branch,
             });
             if (branchChanged) needsDeploy = true;
+            yield* syncCheckSuites({
+              environmentId,
+              projectId,
+              serviceId: current.id,
+              waitForChecks: props.waitForChecks,
+            });
           }
 
           if (localContext !== undefined) {

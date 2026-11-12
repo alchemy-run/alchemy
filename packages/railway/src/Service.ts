@@ -138,6 +138,19 @@ export interface ServiceProps extends PlatformProps {
    */
   branch?: string;
   /**
+   * "Wait for CI": hold each deployment of a GitHub-sourced service in
+   * `WAITING` until every GitHub Actions check suite on the commit has
+   * finished, and skip it if one fails (`source.checkSuites` in the
+   * environment config). Omit to leave the current Railway setting unchanged. Needs a
+   * GitHub workflow that runs on `push`.
+   *
+   * Only applies to a {@link repo} service. It has no effect on an
+   * `image`, `main` or `context` service, the same as {@link branch}.
+   *
+   * @see https://docs.railway.com/deployments/github-autodeploys#wait-for-ci
+   */
+  waitForChecks?: boolean;
+  /**
    * Monorepo subdirectory Railway builds from (`rootDirectory`).
    */
   rootDirectory?: string;
@@ -464,6 +477,20 @@ const createServiceRuntimeContext = (id: string): ServiceRuntimeContext => {
  *   rootDirectory: "apps/api",
  *   buildCommand: "pnpm build",
  *   startCommand: "pnpm start",
+ * });
+ * ```
+ *
+ * ### Wait for CI
+ * `waitForChecks` holds each GitHub deployment until the commit's GitHub
+ * Actions checks pass. It applies to `repo` services only.
+ *
+ * **Example:** Deploy only green commits
+ * ```typescript
+ * const api = yield* Railway.Service("Api", {
+ *   project: site,
+ *   repo: "acme/web",
+ *   branch: "main",
+ *   waitForChecks: true,
  * });
  * ```
  *
