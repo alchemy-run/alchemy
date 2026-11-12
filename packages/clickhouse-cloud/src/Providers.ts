@@ -5,6 +5,7 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import { ApiKey, ApiKeyProvider } from "./ApiKeys/ApiKey.ts";
 import { ClickHouseCloudAuth } from "./AuthProvider.ts";
+import { BackupBucket, BackupBucketProvider } from "./Backup/BackupBucket.ts";
 import { BackupConfiguration, BackupConfigurationProvider } from "./Backup/BackupConfiguration.ts";
 import * as Credentials from "./Credentials.ts";
 import {
@@ -51,6 +52,7 @@ export const providers = () =>
     Providers,
     Provider.collection([
       ApiKey,
+      BackupBucket,
       BackupConfiguration,
       ByocInfrastructure,
       ClickHouseSetting,
@@ -71,6 +73,7 @@ export const providers = () =>
     Layer.provide(
       Layer.mergeAll(
         ApiKeyProvider(),
+        BackupBucketProvider(),
         BackupConfigurationProvider(),
         ByocInfrastructureProvider(),
         ClickHouseSettingProvider(),
