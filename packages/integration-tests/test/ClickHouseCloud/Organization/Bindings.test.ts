@@ -80,6 +80,14 @@ describe.skipIf(noCloudflare)("ClickHouseCloud organization bindings", () => {
   );
 
   test(
+    "GetOrganizationPostgresPrometheusMetrics returns the exposition text",
+    Effect.gen(function* () {
+      expect(yield* get<{ isText: boolean }>("/postgres-metrics")).toEqual({ isText: true });
+    }),
+    { tags, timeout: 120_000 },
+  );
+
+  test(
     "GetUsageCost and GetCreditBalances read the last week's cost and the credits left",
     Effect.gen(function* () {
       const body = yield* get<{
@@ -119,7 +127,7 @@ describe.skipIf(noCloudflare)("ClickHouseCloud organization bindings", () => {
         (r) => r.type === "custom" && (r.name ?? "").startsWith(ROLE_PREFIX),
       );
       // One role per binding the Worker holds.
-      expect(scoped.length).toEqual(9);
+      expect(scoped.length).toEqual(10);
       for (const role of scoped) {
         expect(role.policies?.length).toEqual(1);
         const [policy] = role.policies ?? [];
