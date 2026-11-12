@@ -69,7 +69,8 @@ export type LogStream = Resource<
  */
 export const LogStream = Resource<LogStream>("Convex.LogStream");
 
-const list = (url: string) => onDeployment(url, deployment.listLogStreams({}));
+// Convex serves log streams from its integrations routes.
+const list = (url: string) => onDeployment(url, deployment.listIntegrations({}));
 
 const typeOf = (stream: deployment.LogStreamConfig) => stream.logStreamType;
 
@@ -120,7 +121,7 @@ export const LogStreamProvider = () =>
           yield* session.note(`Creating ${type} log stream...`);
           const created = yield* onDeployment(
             url,
-            createOnce(deployment.createLogStream({ body: news.config })),
+            createOnce(deployment.createIntegration({ body: news.config })),
           );
           return {
             logStreamId: created.id,
@@ -133,7 +134,7 @@ export const LogStreamProvider = () =>
         // Sync. Convex hides stored secrets, so the config can't be compared.
         yield* onDeployment(
           url,
-          deployment.updateLogStream({
+          deployment.updateIntegration({
             id: current.id,
             body: news.config as deployment.UpdateLogStreamArgs,
           }),
@@ -148,13 +149,15 @@ export const LogStreamProvider = () =>
       // Streams live on their deployment and go with it.
       list: () => Effect.succeed([]),
       delete: Effect.fn(function* ({ output }) {
+        // Observe first: a stream someone already removed needs no delete.
+        const streams = yield* list(output.deploymentUrl).pipe(
+          Effect.catchTag(GONE, () => Effect.succeed([])),
+        );
+        if (!streams.some((stream) => stream.id === output.logStreamId)) return;
         yield* onDeployment(
           output.deploymentUrl,
-          deployment.deleteLogStream({ id: output.logStreamId }),
-        ).pipe(
-          Effect.catchTag("InvalidLogStreamId", () => Effect.void),
-          Effect.catchTag(GONE, () => Effect.void),
-        );
+          deployment.deleteIntegration({ id: output.logStreamId }),
+        ).pipe(Effect.catchTag(GONE, () => Effect.void));
       }),
     }),
   );

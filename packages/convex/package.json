@@ -66,6 +66,7 @@
   },
   "devDependencies": {
     "@alchemy.run/aws": "workspace:*",
+    "@alchemy.run/docker": "workspace:*",
     "@distilled.cloud/aws": "workspace:*",
     "@types/bun": "catalog:",
     "alchemy": "workspace:*",
@@ -74,12 +75,16 @@
   },
   "peerDependencies": {
     "@alchemy.run/aws": "workspace:*",
+    "@alchemy.run/docker": "workspace:*",
     "@distilled.cloud/aws": "workspace:*",
     "alchemy": "workspace:*",
     "effect": "catalog:"
   },
   "peerDependenciesMeta": {
     "@alchemy.run/aws": {
+      "optional": true
+    },
+    "@alchemy.run/docker": {
       "optional": true
     },
     "@distilled.cloud/aws": {

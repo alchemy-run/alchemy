@@ -9471,6 +9471,9 @@ importers:
       '@alchemy.run/aws':
         specifier: workspace:*
         version: link:../aws
+      '@alchemy.run/docker':
+        specifier: workspace:*
+        version: link:../docker
       '@distilled.cloud/aws':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/aws

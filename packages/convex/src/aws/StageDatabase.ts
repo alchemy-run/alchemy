@@ -129,12 +129,27 @@ export const StageDatabaseProvider = () =>
           Payload: JSON.stringify(request),
         });
         const body = response.Payload
-          ? yield* response.Payload.pipe(Stream.decodeText(), Stream.mkString)
+          ? yield* response.Payload.pipe(
+              Stream.decodeText(),
+              Stream.mkString,
+              Effect.mapError(
+                (cause) =>
+                  new StageDatabaseError({
+                    message: `Failed to read the database runner's response: ${cause.message}`,
+                  }),
+              ),
+            )
           : "";
         if (response.FunctionError !== undefined) {
           return yield* new StageDatabaseError({ message: "The database runner crashed." });
         }
-        const parsed = JSON.parse(body) as MigrationRunnerResponse;
+        const parsed = yield* Effect.try({
+          try: () => JSON.parse(body) as MigrationRunnerResponse,
+          catch: () =>
+            new StageDatabaseError({
+              message: "The database runner returned a malformed response.",
+            }),
+        });
         if (!parsed.ok) {
           // The statement holds a password, so only the server's message is kept.
           return yield* new StageDatabaseError({

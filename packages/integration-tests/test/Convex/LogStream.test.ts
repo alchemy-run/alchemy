@@ -49,7 +49,7 @@ test.provider.skipIf(!pro)(
       const name = yield* testName("logs-sync");
       const first = yield* stack.deploy(app(name, "https://example.com/one"));
       expect(Redacted.isRedacted(first.stream.hmacSecret)).toBe(true);
-      const list = () => onDeployment(first.deployment.url, deployments.listLogStreams({}));
+      const list = () => onDeployment(first.deployment.url, deployments.listIntegrations({}));
       expect(yield* list()).toHaveLength(1);
 
       const second = yield* stack.deploy(app(name, "https://example.com/two"));
