@@ -47,6 +47,7 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { MEDIACONVERT_INPUT_MP4_BASE64 } from "./floci-fixture-media.ts";
 
 export interface FlociStandingFixtures {
   readonly env: Record<string, string>;
@@ -109,7 +110,8 @@ type Group =
   | "ses"
   | "oam"
   | "sagemakerEndpoint"
-  | "controlTower";
+  | "controlTower"
+  | "mediaConvert";
 
 const groupVars: Record<Group, ReadonlyArray<string>> = {
   eksRole: ["AWS_TEST_EKS_ROLE_ARN", "AWS_TEST_EKS_SUBNET_IDS"],
@@ -156,6 +158,7 @@ const groupVars: Record<Group, ReadonlyArray<string>> = {
   ],
   oam: ["AWS_TEST_OAM_SINK_ARN"],
   sagemakerEndpoint: ["AWS_TEST_SAGEMAKER_ENDPOINT", "AWS_TEST_SAGEMAKER_IMAGE"],
+  mediaConvert: ["MEDIACONVERT_ROLE_ARN", "MEDIACONVERT_TEST_INPUT", "MEDIACONVERT_TEST_OUTPUT"],
   controlTower: [
     "AWS_TEST_CONTROLTOWER",
     "AWS_TEST_CONTROLTOWER_CONTROL",
@@ -199,6 +202,7 @@ const groupSuites: Record<Group, ReadonlyArray<string>> = {
   oam: ["OAM/Sink.test.ts"],
   sagemakerEndpoint: ["SageMaker/Endpoint.test.ts", "SageMaker/EndpointBindings.test.ts"],
   controlTower: ["ControlTower/ControlTower.test.ts"],
+  mediaConvert: ["MediaConvert/MediaConvert.test.ts"],
 };
 
 export class FixtureError extends Data.TaggedError("FlociFixtureError")<{
@@ -919,6 +923,39 @@ const ensureFlinkJar = (ledger: Array<Cleanup>) =>
     return `arn:aws:s3:::${FLINK_BUCKET}`;
   });
 
+// ─── S3 + IAM (MediaConvert job input) ───────────────────────────────────────
+
+const MEDIACONVERT_BUCKET = `${NAME}-mediaconvert`;
+const MEDIACONVERT_INPUT_KEY = "input/input.mp4";
+
+const ensureMediaConvertInput = (ledger: Array<Cleanup>) =>
+  Effect.gen(function* () {
+    const exists = yield* s3.headBucket({ Bucket: MEDIACONVERT_BUCKET }).pipe(
+      Effect.as(true),
+      Effect.catchTag(["NotFound", "NoSuchBucket"], () => Effect.succeed(false)),
+    );
+    yield* register(ledger, {
+      label: `S3 bucket ${MEDIACONVERT_BUCKET}`,
+      run: deleteBucket(MEDIACONVERT_BUCKET),
+    });
+    if (!exists) {
+      yield* s3
+        .createBucket({ Bucket: MEDIACONVERT_BUCKET })
+        .pipe(Effect.catchTag("BucketAlreadyOwnedByYou", () => Effect.void));
+    }
+    const body = yield* Effect.sync(() => Buffer.from(MEDIACONVERT_INPUT_MP4_BASE64, "base64"));
+    yield* s3.putObject({
+      Bucket: MEDIACONVERT_BUCKET,
+      Key: MEDIACONVERT_INPUT_KEY,
+      Body: new Uint8Array(body),
+      ContentType: "video/mp4",
+    });
+    return {
+      input: `s3://${MEDIACONVERT_BUCKET}/${MEDIACONVERT_INPUT_KEY}`,
+      output: `s3://${MEDIACONVERT_BUCKET}/output/`,
+    };
+  });
+
 // ─── Route 53 + ACM ──────────────────────────────────────────────────────────
 
 const trimDot = (name: string) => name.replace(/\.+$/, "");
@@ -1596,6 +1633,19 @@ const provision = (
     if (groups.has("sagemakerEndpoint")) {
       env.AWS_TEST_SAGEMAKER_ENDPOINT = "1";
       env.AWS_TEST_SAGEMAKER_IMAGE = yield* buildSageMakerServeImage;
+    }
+
+    if (groups.has("mediaConvert")) {
+      env.MEDIACONVERT_ROLE_ARN = yield* ensureRole(
+        ledger,
+        "mediaconvert",
+        "mediaconvert.amazonaws.com",
+        ["sts:AssumeRole"],
+        ["AmazonS3FullAccess"],
+      );
+      const { input, output } = yield* ensureMediaConvertInput(ledger);
+      env.MEDIACONVERT_TEST_INPUT = input;
+      env.MEDIACONVERT_TEST_OUTPUT = output;
     }
 
     if (groups.has("controlTower")) {
