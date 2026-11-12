@@ -7,7 +7,13 @@ import { ApiKey, ApiKeyProvider } from "./ApiKeys/ApiKey.ts";
 import { ClickHouseCloudAuth } from "./AuthProvider.ts";
 import { BackupBucket, BackupBucketProvider } from "./Backup/BackupBucket.ts";
 import { BackupConfiguration, BackupConfigurationProvider } from "./Backup/BackupConfiguration.ts";
+import { CdcScaling, CdcScalingProvider } from "./ClickPipes/CdcScaling.ts";
 import { ClickPipe, ClickPipeProvider } from "./ClickPipes/ClickPipe.ts";
+import {
+  ReversePrivateEndpoint,
+  ReversePrivateEndpointProvider,
+} from "./ClickPipes/ReversePrivateEndpoint.ts";
+import { WorkloadIdentity, WorkloadIdentityProvider } from "./ClickPipes/WorkloadIdentity.ts";
 import * as Credentials from "./Credentials.ts";
 import {
   MemberNotificationSetting,
@@ -71,6 +77,7 @@ export const providers = () =>
       BackupBucket,
       BackupConfiguration,
       ByocInfrastructure,
+      CdcScaling,
       ClickHouseSetting,
       ClickPipe,
       Invitation,
@@ -82,6 +89,7 @@ export const providers = () =>
       PrivateEndpoint,
       QueryApiEndpoint,
       QueryEndpoint,
+      ReversePrivateEndpoint,
       Role,
       SavedQuery,
       ScalingSchedule,
@@ -89,6 +97,7 @@ export const providers = () =>
       SnapshotConfiguration,
       UdfFunction,
       UpgradeWindow,
+      WorkloadIdentity,
     ]),
   ).pipe(
     Layer.provide(
@@ -98,6 +107,7 @@ export const providers = () =>
         BackupBucketProvider(),
         BackupConfigurationProvider(),
         ByocInfrastructureProvider(),
+        CdcScalingProvider(),
         ClickHouseSettingProvider(),
         ClickPipeProvider(),
         InvitationProvider(),
@@ -109,6 +119,7 @@ export const providers = () =>
         PrivateEndpointProvider(),
         QueryApiEndpointProvider(),
         QueryEndpointProvider(),
+        ReversePrivateEndpointProvider(),
         RoleProvider(),
         SavedQueryProvider(),
         ScalingScheduleProvider(),
@@ -116,6 +127,7 @@ export const providers = () =>
         SnapshotConfigurationProvider(),
         UdfFunctionProvider(),
         UpgradeWindowProvider(),
+        WorkloadIdentityProvider(),
       ),
     ),
     Layer.provideMerge(Credentials.fromAuthProvider()),
