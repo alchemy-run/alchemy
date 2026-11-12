@@ -35,6 +35,7 @@
     "./Prometheus": "./src/Prometheus/index.ts",
     "./RoleManagement": "./src/RoleManagement/index.ts",
     "./Service": "./src/Service/index.ts",
+    "./UserManagement": "./src/UserManagement/index.ts",
     "./*": "./src/*.ts",
     "./package.json": "./package.json"
   },
@@ -81,6 +82,12 @@
         "bun": "./src/Service/index.ts",
         "worker": "./src/Service/index.ts",
         "default": "./lib/Service/index.js"
+      },
+      "./UserManagement": {
+        "types": "./lib/UserManagement/index.d.ts",
+        "bun": "./src/UserManagement/index.ts",
+        "worker": "./src/UserManagement/index.ts",
+        "default": "./lib/UserManagement/index.js"
       },
       "./internal/*": null,
       "./*": {

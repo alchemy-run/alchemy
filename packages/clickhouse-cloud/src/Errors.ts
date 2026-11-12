@@ -98,6 +98,18 @@ export class ApiKeyInUse extends Data.TaggedError("ClickHouseCloud.ApiKeyInUse")
   }
 }
 
+/** A member resource names a user who is not (or no longer) in the organization. */
+export class MemberNotFound extends Data.TaggedError("ClickHouseCloud.MemberNotFound")<{
+  readonly userId: string;
+}> {
+  override get message() {
+    return (
+      `ClickHouse Cloud user ${this.userId} is not a member of the organization. Members join by ` +
+      "accepting an invitation (ClickHouseCloud.UserManagement.Invitation); a Member resource can only adopt one."
+    );
+  }
+}
+
 /** The preview a `PreviewFeature` names is not offered to the organization, or cannot be toggled. */
 export class PreviewNotOffered extends Data.TaggedError("ClickHouseCloud.PreviewNotOffered")<{
   readonly previewId: string;

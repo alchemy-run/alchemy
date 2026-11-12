@@ -11,6 +11,8 @@ import { Organization, OrganizationProvider } from "./Organization/Organization.
 import { PreviewFeature, PreviewFeatureProvider } from "./Organization/PreviewFeature.ts";
 import { Role, RoleProvider } from "./RoleManagement/Role.ts";
 import { Service, ServiceProvider } from "./Service/Service.ts";
+import { Invitation, InvitationProvider } from "./UserManagement/Invitation.ts";
+import { Member, MemberProvider } from "./UserManagement/Member.ts";
 
 /**
  * Service tag bundling all ClickHouse Cloud providers + auth + credentials.
@@ -33,12 +35,23 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 export const providers = () =>
   Layer.effect(
     Providers,
-    Provider.collection([ApiKey, BackupConfiguration, Organization, PreviewFeature, Role, Service]),
+    Provider.collection([
+      ApiKey,
+      BackupConfiguration,
+      Invitation,
+      Member,
+      Organization,
+      PreviewFeature,
+      Role,
+      Service,
+    ]),
   ).pipe(
     Layer.provide(
       Layer.mergeAll(
         ApiKeyProvider(),
         BackupConfigurationProvider(),
+        InvitationProvider(),
+        MemberProvider(),
         OrganizationProvider(),
         PreviewFeatureProvider(),
         RoleProvider(),
