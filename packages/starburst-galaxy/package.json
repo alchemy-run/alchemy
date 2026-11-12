@@ -30,6 +30,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./Catalog": "./src/Catalog/index.ts",
+    "./Cluster": "./src/Cluster/index.ts",
     "./*": "./src/*.ts",
     "./package.json": "./package.json"
   },
@@ -46,6 +47,12 @@
         "bun": "./src/Catalog/index.ts",
         "worker": "./src/Catalog/index.ts",
         "default": "./lib/Catalog/index.js"
+      },
+      "./Cluster": {
+        "types": "./lib/Cluster/index.d.ts",
+        "bun": "./src/Cluster/index.ts",
+        "worker": "./src/Cluster/index.ts",
+        "default": "./lib/Cluster/index.js"
       },
       "./internal": null,
       "./*": {
