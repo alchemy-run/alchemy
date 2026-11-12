@@ -3,6 +3,7 @@ import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnviron
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as kv from "@distilled.cloud/cloudflare/kv";
+import type * as Plan from "alchemy/Plan";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -729,16 +730,17 @@ describe.concurrent(
             'import { defineConfig } from "astro/config";\n\nexport default defineConfig({ output: "static" });\n',
           );
 
-          const site = yield* stack.deploy(
+          const program = (astro?: { trailingSlash: "always" }) =>
             Effect.gen(function* () {
               return yield* Cloudflare.Website.Astro("AstroStaticConfigSite", {
                 rootDir,
                 workersDev: { enabled: true, previewsEnabled: true },
                 compatibility: { date: "2026-03-10" },
                 assets: { notFoundHandling: "404-page" },
+                astro,
               });
-            }),
-          );
+            });
+          const site = yield* stack.deploy(program());
 
           // No server bundle was produced or uploaded.
           expect(site.hash?.assets).toBeDefined();
@@ -757,6 +759,12 @@ describe.concurrent(
             Effect.map(Option.getOrUndefined),
           );
           expect(sessionNamespace).toBeUndefined();
+
+          // Unchanged files and options plan nothing; changing only a source
+          // option plans a rebuild through the Worker's props diff.
+          const actionOf = (plan: Plan.Plan) => plan.resources["AstroStaticConfigSite"]?.action;
+          expect(actionOf(yield* stack.plan(program()))).toBe("noop");
+          expect(actionOf(yield* stack.plan(program({ trailingSlash: "always" })))).toBe("update");
 
           yield* stack.destroy();
           yield* waitForWorkerToBeDeleted(site.workerName, accountId);
