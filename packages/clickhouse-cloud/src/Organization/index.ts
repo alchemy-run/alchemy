@@ -7,3 +7,4 @@ export * from "./ListActivitiesHttp.ts";
 export * from "./ListOrganizationQuotas.ts";
 export * from "./ListOrganizationQuotasHttp.ts";
 export * from "./Organization.ts";
+export * from "./PreviewFeature.ts";
