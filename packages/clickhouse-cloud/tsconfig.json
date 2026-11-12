@@ -16,6 +16,9 @@
     },
     {
       "path": "../alchemy/tsconfig.json"
+    },
+    {
+      "path": "../sql/tsconfig.json"
     }
   ]
 }

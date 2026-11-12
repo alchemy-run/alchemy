@@ -35,6 +35,10 @@ import {
 import { Organization, OrganizationProvider } from "./Organization/Organization.ts";
 import { PreviewFeature, PreviewFeatureProvider } from "./Organization/PreviewFeature.ts";
 import {
+  Service as PostgresService,
+  ServiceProvider as PostgresServiceProvider,
+} from "./Postgres/Service.ts";
+import {
   QueryApiEndpoint,
   QueryApiEndpointProvider,
 } from "./QueryApiEndpoints/QueryApiEndpoint.ts";
@@ -97,6 +101,7 @@ export const providers = () =>
       Member,
       MemberNotificationSetting,
       Organization,
+      PostgresService,
       PreviewFeature,
       PrivateEndpoint,
       QueryApiEndpoint,
@@ -133,6 +138,7 @@ export const providers = () =>
         MemberProvider(),
         MemberNotificationSettingProvider(),
         OrganizationProvider(),
+        PostgresServiceProvider(),
         PreviewFeatureProvider(),
         PrivateEndpointProvider(),
         QueryApiEndpointProvider(),
