@@ -160,6 +160,10 @@ return {
 
 A caller passes the upgrade request along with `room.fetch(request)`, and Rivet's gateway carries the socket to the instance that owns the name. The room receives its messages in `webSocketMessage`, and `webSocketClose` and `webSocketError` when it ends. `state.getWebSockets(tag)` finds every open socket with a tag, and the room stays awake while it holds any.
 
+:::caution
+Rivet 3 doesn't hibernate WebSockets yet, so a room holding open sockets stays awake. Hibernatable WebSockets are coming soon.
+:::
+
 ## Wake it with alarm
 
 Return an `alarm` handler, and Rivet calls it when the room's alarm comes due:
