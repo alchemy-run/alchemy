@@ -33,6 +33,11 @@ import {
   DataProductUsageExample,
   DataProductUsageExampleProvider,
 } from "./DataProduct/DataProductUsageExample.ts";
+import { DataQualityCheck, DataQualityCheckProvider } from "./DataQuality/DataQualityCheck.ts";
+import {
+  DataQualitySchedule,
+  DataQualityScheduleProvider,
+} from "./DataQuality/DataQualitySchedule.ts";
 import { CatalogMetadata, CatalogMetadataProvider } from "./Discovery/CatalogMetadata.ts";
 import { SchemaMetadata, SchemaMetadataProvider } from "./Discovery/SchemaMetadata.ts";
 import { TableMetadata, TableMetadataProvider } from "./Discovery/TableMetadata.ts";
@@ -41,6 +46,9 @@ import { Policy, PolicyProvider } from "./Governance/Policy.ts";
 import { RowFilter, RowFilterProvider } from "./Governance/RowFilter.ts";
 import { Tag, TagProvider } from "./Governance/Tag.ts";
 import { TagAssignment, TagAssignmentProvider } from "./Governance/TagAssignment.ts";
+import { FileIngestSource, FileIngestSourceProvider } from "./Ingest/FileIngestSource.ts";
+import { KafkaIngestSource, KafkaIngestSourceProvider } from "./Ingest/KafkaIngestSource.ts";
+import { LiveTable, LiveTableProvider } from "./Ingest/LiveTable.ts";
 import { PrivateLink, PrivateLinkProvider } from "./Network/PrivateLink.ts";
 import { Role, RoleProvider } from "./Role/Role.ts";
 import { RoleGrant, RoleGrantProvider } from "./Role/RoleGrant.ts";
@@ -132,6 +140,11 @@ export const providers = () =>
       DataProductUsageExample,
       SchemaMetadata,
       TableMetadata,
+      DataQualityCheck,
+      DataQualitySchedule,
+      FileIngestSource,
+      KafkaIngestSource,
+      LiveTable,
     ]),
   ).pipe(
     Layer.provide(
@@ -171,6 +184,11 @@ export const providers = () =>
         DataProductUsageExampleProvider(),
         SchemaMetadataProvider(),
         TableMetadataProvider(),
+        DataQualityCheckProvider(),
+        DataQualityScheduleProvider(),
+        FileIngestSourceProvider(),
+        KafkaIngestSourceProvider(),
+        LiveTableProvider(),
       ),
     ),
     Layer.provideMerge(Credentials.fromAuthProvider()),

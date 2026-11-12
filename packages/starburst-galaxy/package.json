@@ -33,8 +33,10 @@
     "./CloudAccess": "./src/CloudAccess/index.ts",
     "./Cluster": "./src/Cluster/index.ts",
     "./DataProduct": "./src/DataProduct/index.ts",
+    "./DataQuality": "./src/DataQuality/index.ts",
     "./Discovery": "./src/Discovery/index.ts",
     "./Governance": "./src/Governance/index.ts",
+    "./Ingest": "./src/Ingest/index.ts",
     "./Network": "./src/Network/index.ts",
     "./Role": "./src/Role/index.ts",
     "./ServiceAccount": "./src/ServiceAccount/index.ts",
@@ -75,6 +77,12 @@
         "worker": "./src/DataProduct/index.ts",
         "default": "./lib/DataProduct/index.js"
       },
+      "./DataQuality": {
+        "types": "./lib/DataQuality/index.d.ts",
+        "bun": "./src/DataQuality/index.ts",
+        "worker": "./src/DataQuality/index.ts",
+        "default": "./lib/DataQuality/index.js"
+      },
       "./Discovery": {
         "types": "./lib/Discovery/index.d.ts",
         "bun": "./src/Discovery/index.ts",
@@ -86,6 +94,12 @@
         "bun": "./src/Governance/index.ts",
         "worker": "./src/Governance/index.ts",
         "default": "./lib/Governance/index.js"
+      },
+      "./Ingest": {
+        "types": "./lib/Ingest/index.d.ts",
+        "bun": "./src/Ingest/index.ts",
+        "worker": "./src/Ingest/index.ts",
+        "default": "./lib/Ingest/index.js"
       },
       "./Network": {
         "types": "./lib/Network/index.d.ts",
