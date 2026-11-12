@@ -32,6 +32,7 @@
     "./ApiKeys": "./src/ApiKeys/index.ts",
     "./Backup": "./src/Backup/index.ts",
     "./Organization": "./src/Organization/index.ts",
+    "./Prometheus": "./src/Prometheus/index.ts",
     "./RoleManagement": "./src/RoleManagement/index.ts",
     "./Service": "./src/Service/index.ts",
     "./*": "./src/*.ts",
@@ -62,6 +63,12 @@
         "bun": "./src/Organization/index.ts",
         "worker": "./src/Organization/index.ts",
         "default": "./lib/Organization/index.js"
+      },
+      "./Prometheus": {
+        "types": "./lib/Prometheus/index.d.ts",
+        "bun": "./src/Prometheus/index.ts",
+        "worker": "./src/Prometheus/index.ts",
+        "default": "./lib/Prometheus/index.js"
       },
       "./RoleManagement": {
         "types": "./lib/RoleManagement/index.d.ts",
