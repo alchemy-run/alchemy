@@ -33,6 +33,7 @@ import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
 import * as ses from "@distilled.cloud/aws/ses";
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import * as shield from "@distilled.cloud/aws/shield";
+import * as socialmessaging from "@distilled.cloud/aws/socialmessaging";
 import * as ssm from "@distilled.cloud/aws/ssm";
 import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
@@ -113,6 +114,7 @@ type Group =
   | "oam"
   | "qapps"
   | "shieldAdvanced"
+  | "socialMessaging"
   | "sagemakerEndpoint"
   | "controlTower"
   | "mediaConvert";
@@ -163,6 +165,7 @@ const groupVars: Record<Group, ReadonlyArray<string>> = {
   oam: ["AWS_TEST_OAM_SINK_ARN"],
   qapps: ["AWS_TEST_QAPPS", "QAPPS_INSTANCE_ID"],
   shieldAdvanced: ["AWS_TEST_SHIELD_ADVANCED"],
+  socialMessaging: ["AWS_TEST_SOCIALMESSAGING", "AWS_TEST_SOCIALMESSAGING_WABA_ID"],
   sagemakerEndpoint: ["AWS_TEST_SAGEMAKER_ENDPOINT", "AWS_TEST_SAGEMAKER_IMAGE"],
   mediaConvert: ["MEDIACONVERT_ROLE_ARN", "MEDIACONVERT_TEST_INPUT", "MEDIACONVERT_TEST_OUTPUT"],
   controlTower: [
@@ -208,6 +211,10 @@ const groupSuites: Record<Group, ReadonlyArray<string>> = {
   oam: ["OAM/Sink.test.ts"],
   qapps: ["QApps/QApp.test.ts", "QApps/Bindings.test.ts", "QApps/QAppsMissingLookup.test.ts"],
   shieldAdvanced: ["Shield/Shield.test.ts"],
+  socialMessaging: [
+    "SocialMessaging/LinkedWhatsAppBusinessAccount.test.ts",
+    "SocialMessaging/Bindings.test.ts",
+  ],
   sagemakerEndpoint: ["SageMaker/Endpoint.test.ts", "SageMaker/EndpointBindings.test.ts"],
   controlTower: ["ControlTower/ControlTower.test.ts"],
   mediaConvert: ["MediaConvert/MediaConvert.test.ts"],
@@ -1318,6 +1325,43 @@ const ensureQAppsInstance = (ledger: Array<Cleanup>) =>
     return id;
   });
 
+// ─── WhatsApp (End User Messaging Social) ────────────────────────────────────
+
+/**
+ * Links a WhatsApp Business Account through the two-step signup Floci simulates
+ * (on AWS this is Meta's embedded signup in the console): the callback lists
+ * the account and its phone number, and finalization registers them.
+ */
+const linkWhatsAppBusinessAccount = (ledger: Array<Cleanup>) =>
+  Effect.gen(function* () {
+    const callback = yield* socialmessaging.associateWhatsAppBusinessAccount({
+      signupCallback: { accessToken: NAME },
+    });
+    const result = callback.signupCallbackResult;
+    const [id, pending] = Object.entries(result?.linkedAccountsWithIncompleteSetup ?? {})[0] ?? [];
+    const phoneNumberId = pending?.unregisteredWhatsAppPhoneNumbers?.[0]?.phoneNumberId;
+    if (
+      result?.associateInProgressToken === undefined ||
+      id === undefined ||
+      phoneNumberId === undefined
+    ) {
+      return yield* fixtureError("WhatsApp signup returned no account to finish");
+    }
+    yield* socialmessaging.associateWhatsAppBusinessAccount({
+      setupFinalization: {
+        associateInProgressToken: result.associateInProgressToken,
+        phoneNumbers: [{ id: phoneNumberId, twoFactorPin: "123456" }],
+      },
+    });
+    yield* register(ledger, {
+      label: `WhatsApp Business Account ${id}`,
+      run: socialmessaging
+        .disassociateWhatsAppBusinessAccount({ id })
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
+    });
+    return id;
+  });
+
 // ─── OAM (second account) ────────────────────────────────────────────────────
 
 const OAM_RESOURCE_TYPES = ["AWS::CloudWatch::Metric", "AWS::Logs::LogGroup", "AWS::XRay::Trace"];
@@ -1687,6 +1731,11 @@ const provision = (
         .createSubscription({})
         .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void));
       env.AWS_TEST_SHIELD_ADVANCED = "1";
+    }
+
+    if (groups.has("socialMessaging")) {
+      env.AWS_TEST_SOCIALMESSAGING_WABA_ID = yield* linkWhatsAppBusinessAccount(ledger);
+      env.AWS_TEST_SOCIALMESSAGING = "1";
     }
 
     if (groups.has("sagemakerEndpoint")) {
