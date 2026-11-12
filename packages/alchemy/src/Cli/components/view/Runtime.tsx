@@ -17,7 +17,6 @@ import {
   TerminalCancelled,
   taskFromProgress,
 } from "../../../Interaction.ts";
-import { deferReadableAfterPauseOnBun } from "../bunStdin.ts";
 import type {
   ProgressHandle,
   ProgressOptions,
@@ -246,7 +245,6 @@ export const makeRuntime = (
   capabilities: TerminalCapabilities,
 ): SigilRuntime => {
   const stdin = options.stdin ?? process.stdin;
-  deferReadableAfterPauseOnBun(stdin);
   const stdout = options.stdout ?? process.stdout;
   const stderr = options.stderr ?? process.stderr;
   const store = new TerminalStore();
