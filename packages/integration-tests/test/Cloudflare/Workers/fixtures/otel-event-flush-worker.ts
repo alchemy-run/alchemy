@@ -29,6 +29,14 @@ export class OtelEventFlushTarget extends Cloudflare.DurableObject<OtelEventFlus
         ),
         ping: () =>
           Effect.succeed("durable-object-rpc-ok").pipe(Effect.withSpan("otel-event-flush.rpc")),
+        // Leaves a fiber running that records a span after the call ended.
+        forkLate: () =>
+          Effect.forkDetach(
+            Effect.void.pipe(
+              Effect.withSpan("otel-event-flush.after-event"),
+              Effect.delay("1 second"),
+            ),
+          ).pipe(Effect.as("durable-object-rpc-ok")),
         // A Stream result whose element records a span as the caller reads it.
         streamSpans: () =>
           Effect.succeed(
@@ -87,6 +95,10 @@ export default class OtelEventFlushWorker extends Cloudflare.Worker<OtelEventFlu
             ),
           );
           return HttpServerResponse.text("accepted", { status: 202 });
+        }
+        if (request.url.startsWith("/rpc-fork-late")) {
+          const pong = yield* targetNamespace.getByName("target").forkLate();
+          return HttpServerResponse.text(`worker-saw:${pong}`);
         }
         if (request.url.startsWith("/rpc-wait-until")) {
           const pong = yield* targetNamespace.getByName("target").pingLater();

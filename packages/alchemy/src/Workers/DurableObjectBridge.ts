@@ -23,7 +23,12 @@ import type * as Tracer from "effect/Tracer";
 import type { HttpEffect } from "../Http.ts";
 import { rpcMethodOf, serveRpc } from "../Rpc.ts";
 import { RuntimeContext } from "../RuntimeContext.ts";
-import { buildEventTelemetry, buildInstanceTelemetry } from "../TelemetryRuntime.ts";
+import {
+  buildEventTelemetry,
+  buildInstanceTelemetry,
+  handOffAfterEvent,
+  type InstanceTelemetry,
+} from "../TelemetryRuntime.ts";
 import type { DurableObjectExport, DurableObjectShape } from "./DurableObject.ts";
 import { EventLifetime, makeEventLifetime } from "./EventLifetime.ts";
 import { gateCall, InstanceInputGate, makeInputGate } from "./InputGate.ts";
@@ -54,10 +59,11 @@ export interface BuiltDurableObject {
   readonly runtime: RuntimeContext["Service"];
   readonly telemetry: () => Layer.Layer<never, any, any> | undefined;
   /**
-   * Deliver what the instance's own exporters hold — the records of fibers
-   * its initializer forked. Run at the end of every event.
+   * The instance's own exporters: fibers its initializer forks record into
+   * them, as do fibers an event leaves running once the event has ended.
+   * Every event flushes them on its way out.
    */
-  readonly flushInstanceTelemetry: Effect.Effect<void>;
+  readonly instanceTelemetry: InstanceTelemetry;
 }
 
 export interface DurableObjectInstanceOptions {
@@ -202,7 +208,7 @@ export const makeDurableObjectInstance = ({
           context,
           runtime: instanceRuntimeContext,
           telemetry,
-          flushInstanceTelemetry: instanceTelemetry.flush,
+          instanceTelemetry,
         } satisfies BuiltDurableObject;
       }).pipe(Effect.provide(doContext), Effect.runPromise);
     }),
@@ -223,8 +229,10 @@ export const makeDurableObjectInstance = ({
       context,
       runtime,
       telemetry,
-      flushInstanceTelemetry,
+      instanceTelemetry,
     } = await instance;
+    // Set once the call's scope has closed and its exporters have flushed.
+    let ended = false;
 
     // A class given the `InputGate` Layer has a gate; the call runs
     // through it so storage can't interleave between calls.
@@ -242,7 +250,13 @@ export const makeDurableObjectInstance = ({
             // scope by `buildEventTelemetry` so buffered telemetry flushes
             // when the scope closes into `waitUntil` below (the instance
             // scope never finalizes on workerd).
-            Layer.effectContext(buildEventTelemetry(context, scope, telemetry())),
+            Layer.effectContext(
+              buildEventTelemetry(context, scope, telemetry()).pipe(
+                Effect.map((event) =>
+                  handOffAfterEvent(event, instanceTelemetry.context, () => ended),
+                ),
+              ),
+            ),
           ).pipe(
             Layer.provideMerge(Layer.succeedContext(services)),
             Layer.provideMerge(Layer.succeedContext(context)),
@@ -266,9 +280,11 @@ export const makeDurableObjectInstance = ({
           new Promise((resolve) => setTimeout(resolve, 0)).then(() =>
             Effect.runPromise(
               Scope.close(scope, Exit.void).pipe(
-                // Records the instance's own fibers made since the last
-                // event, delivered from this event's I/O context.
-                Effect.andThen(flushInstanceTelemetry),
+                Effect.andThen(Effect.sync(() => (ended = true))),
+                // Records the instance's own fibers, and fibers earlier
+                // events left running, made since the last event,
+                // delivered from this event's I/O context.
+                Effect.andThen(instanceTelemetry.flush),
               ),
             ),
           ),

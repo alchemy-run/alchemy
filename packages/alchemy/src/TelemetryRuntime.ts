@@ -6,6 +6,7 @@ import * as Formatter from "effect/Formatter";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
 import * as OtlpExporter from "effect/observability/OtlpExporter";
 import * as OtlpLogger from "effect/observability/OtlpLogger";
 import * as OtlpMetrics from "effect/observability/OtlpMetrics";
@@ -15,6 +16,7 @@ import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import type * as Scope from "effect/Scope";
+import * as Tracer from "effect/Tracer";
 import { unpackEnvValue } from "./RuntimeContext.ts";
 
 /**
@@ -273,6 +275,8 @@ const makeExporterLayer = (options?: {
   shutdownTimeout?: Duration.Input;
   /** Leave the metrics exporter out even when a destination configures it. */
   withoutMetrics?: boolean;
+  /** Export early once this many records are buffered. @default 1000 */
+  maxBatchSize?: number;
 }): TelemetryLayer =>
   Layer.unwrap(
     Effect.gen(function* () {
@@ -298,6 +302,7 @@ const makeExporterLayer = (options?: {
             url: SENTINEL.traces,
             resource,
             exportInterval: options?.exportInterval,
+            maxBatchSize: options?.maxBatchSize,
             shutdownTimeout: options?.shutdownTimeout,
           }),
         );
@@ -309,6 +314,7 @@ const makeExporterLayer = (options?: {
             url: SENTINEL.logs,
             resource,
             exportInterval: options?.exportInterval,
+            maxBatchSize: options?.maxBatchSize,
             shutdownTimeout: options?.shutdownTimeout,
           }),
         );
@@ -383,6 +389,9 @@ const fromBoundConfigProcess: TelemetryLayer = makeExporterLayer();
  */
 const fromBoundConfigInstance: TelemetryLayer = makeExporterLayer({
   exportInterval: Duration.infinity,
+  // Never export on a full buffer either: a record pushed between events
+  // would start an export outside any event's I/O context.
+  maxBatchSize: Number.POSITIVE_INFINITY,
   shutdownTimeout: "10 seconds",
   withoutMetrics: true,
 });
@@ -518,3 +527,49 @@ export const buildInstanceTelemetry = (
       };
     }),
   );
+
+/**
+ * An event's telemetry, handing off to the instance's once the event has
+ * ended. A fiber the event forked and left running (`Effect.forkDetach`)
+ * keeps the event's Tracer and loggers, whose exporters flushed and stopped
+ * when the event's scope closed. Spans it starts and logs it writes after
+ * that go to the instance's exporters instead, which the next event
+ * flushes. Only services both contexts carry are switched.
+ *
+ * @internal
+ */
+export const handOffAfterEvent = (
+  event: Context.Context<never>,
+  instance: Context.Context<never>,
+  ended: () => boolean,
+): Context.Context<never> => {
+  let context = event;
+  const tracer = Context.getOption(event, Tracer.Tracer);
+  const instanceTracer = Context.getOption(instance, Tracer.Tracer);
+  if (tracer._tag === "Some" && instanceTracer._tag === "Some") {
+    context = Context.add(
+      context,
+      Tracer.Tracer,
+      Tracer.make({
+        span: (options) => (ended() ? instanceTracer.value : tracer.value).span(options),
+        context: tracer.value.context,
+      }),
+    );
+  }
+  const loggers = Context.getOption(event, Logger.CurrentLoggers);
+  const instanceLoggers = Context.getOption(instance, Logger.CurrentLoggers);
+  if (loggers._tag === "Some" && instanceLoggers._tag === "Some") {
+    context = Context.add(
+      context,
+      Logger.CurrentLoggers,
+      new Set([
+        Logger.make((options) => {
+          for (const logger of ended() ? instanceLoggers.value : loggers.value) {
+            logger.log(options);
+          }
+        }),
+      ]),
+    );
+  }
+  return context;
+};

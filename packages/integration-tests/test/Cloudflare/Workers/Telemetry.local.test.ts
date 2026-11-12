@@ -163,7 +163,7 @@ test.provider(
 );
 
 test.provider(
-  "exports spans from fibers a Durable Object's instance phase forks",
+  "exports spans from fibers a Durable Object's instance phase forks or a call leaves running",
   (stack) =>
     Effect.gen(function* () {
       const collector = yield* startOtlpCollector();
@@ -192,9 +192,10 @@ test.provider(
       }
 
       // The first call constructs the object; its instance phase forks a
-      // fiber that records a span outside any event.
+      // fiber that records a span outside any event. The call also leaves a
+      // fiber running that records a span a second after the call ended.
       const client = yield* HttpClient.HttpClient;
-      const response = yield* client.get(`${deployment.url}/rpc`);
+      const response = yield* client.get(`${deployment.url}/rpc-fork-late`);
       expect(response.status).toBe(200);
       expect(yield* response.text).toBe("worker-saw:durable-object-rpc-ok");
 
@@ -219,6 +220,21 @@ test.provider(
         }),
       );
       expect(names.filter((name) => name === "otel-event-flush.instance")).toHaveLength(1);
+
+      // The late span went to the instance's exporters, so the next event
+      // delivers it.
+      yield* Effect.sleep("2 seconds");
+      const next = yield* client.get(`${deployment.url}/rpc`);
+      expect(next.status).toBe(200);
+      yield* next.text;
+      const after = yield* spans.pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("200 millis"),
+          until: (names) => names.includes("otel-event-flush.after-event"),
+          times: 50,
+        }),
+      );
+      expect(after.filter((name) => name === "otel-event-flush.after-event")).toHaveLength(1);
 
       yield* stack.destroy();
     }),
