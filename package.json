@@ -10,6 +10,7 @@
   "type": "module",
   "scripts": {
     "audit:service": "node scripts/audit-service.ts",
+    "audit:starburst-galaxy": "node scripts/audit-starburst-galaxy.ts",
     "bench:containers": "cd benchmark/container && bun run bench",
     "build": "pnpm -r --filter \"{./packages/*}...\" run build:package && pnpm --filter ./website build && tsrs -b && bun lint:providers",
     "build:cloudflare-packages": "pnpm --filter @alchemy.run/cloudflare-test-tools build",
