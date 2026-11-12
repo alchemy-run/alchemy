@@ -1,0 +1,35 @@
+{
+  "name": "cluster-domain",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "examples/cluster-domain"
+  },
+  "type": "module",
+  "scripts": {
+    "deploy": "alchemy deploy",
+    "destroy": "alchemy destroy",
+    "deploy:aws": "BANK_TARGET=aws alchemy deploy",
+    "destroy:aws": "BANK_TARGET=aws alchemy destroy",
+    "test": "pnpm -r --filter './packages/*' test",
+    "deploy:cloudflare": "BANK_TARGET=cloudflare alchemy deploy",
+    "destroy:cloudflare": "BANK_TARGET=cloudflare alchemy destroy",
+    "test:integ": "bun test test/integ.test.ts",
+    "test:integ:cloudflare": "BANK_TARGET=cloudflare bun test test/integ.test.ts"
+  },
+  "dependencies": {
+    "@alchemy.run/aws": "workspace:*",
+    "@alchemy.run/cloudflare": "workspace:*",
+    "@alchemy.run/docker": "workspace:*",
+    "@alchemy.run/effect-cluster": "workspace:*",
+    "@cluster-bank/server": "workspace:*",
+    "alchemy": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@alchemy.run/test": "workspace:*"
+  }
+}

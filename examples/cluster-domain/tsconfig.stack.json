@@ -1,0 +1,34 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "include": ["alchemy.run.ts", "test/**/*.ts"],
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    "module": "Preserve",
+    "moduleResolution": "Bundler",
+    "target": "ESNext"
+  },
+  "references": [
+    {
+      "path": "../../packages/alchemy/tsconfig.json"
+    },
+    {
+      "path": "../../packages/cloudflare/tsconfig.json"
+    },
+    {
+      "path": "../../packages/aws/tsconfig.json"
+    },
+    {
+      "path": "../../packages/docker/tsconfig.json"
+    },
+    {
+      "path": "../../packages/effect-cluster/tsconfig.json"
+    },
+    {
+      "path": "../../packages/domain/tsconfig.json"
+    },
+    {
+      "path": "../../packages/alchemy-test/tsconfig.json"
+    }
+  ]
+}

@@ -49,6 +49,7 @@ import type * as Fiber from "effect/Fiber";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Headers from "effect/http/Headers";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import { type Rpc, RpcClient, RpcSchema } from "effect/rpc";
 import * as Schedule from "effect/Schedule";
 import type * as Scope from "effect/Scope";
@@ -56,6 +57,7 @@ import * as Stream from "effect/Stream";
 import type { Workflow as EffectWorkflow, WorkflowEngine } from "effect/workflow";
 import type { HostedCron } from "../Cron.ts";
 import { type HostedEntity, PlatformDeclaration } from "../Entity.ts";
+import { RunnerHost } from "../Host.ts";
 import type { HostedSingleton } from "../Singleton.ts";
 import type { HostedWorkflow } from "../Workflow.ts";
 import { type EntityStorage, makeEntityRuntime } from "./EntityRuntime.ts";
@@ -487,18 +489,34 @@ export interface HostedDefinition {
 // oxlint-disable-next-line effecttsgo/service-not-as-class
 const entrypointTag = Context.Service<any, any>(Self.key);
 
-/** Build each class's Construction phase, keeping what its runtime context hosts. */
+/**
+ * Build each class's Construction phase, keeping what its runtime context
+ * hosts. A Layer that hosts its entities itself (a Domain model's) provides
+ * no class: it hands them to `RunnerHost`, with a Layer to launch beside
+ * them once the workflow engine and Sharding are up.
+ */
 const buildHosted = (definitions: ReadonlyArray<HostedDefinition>, scope: Scope.Scope) =>
-  Effect.forEach(definitions, ({ value }) =>
-    Effect.gen(function* () {
+  Effect.gen(function* () {
+    const hosted: Array<Hosted> = [];
+    const launched: Array<Layer.Layer<never, never, any>> = [];
+    const runner = RunnerHost.of({
+      host: (entity, layer) =>
+        Effect.sync(() => {
+          if (!hosted.some((h) => h.kind === "entity" && h.entity.type === entity.entity.type))
+            hosted.push(entity);
+          launched.push(layer);
+        }),
+    });
+    for (const { value } of definitions) {
       const declaration =
         (value as { [PlatformDeclaration]?: unknown } | undefined)?.[PlatformDeclaration] ?? value;
       const context = yield* Layer.buildWithScope(
         makeEntrypointLayer(entrypointTag, declaration),
         scope,
-      );
-      const runtime = Context.get(context, entrypointTag)
-        .RuntimeContext as HostedRuntimeContext<Hosted>;
+      ).pipe(Effect.provideService(RunnerHost, runner));
+      const self = Context.getOption(context, entrypointTag);
+      if (Option.isNone(self)) continue;
+      const runtime = self.value.RuntimeContext as HostedRuntimeContext<Hosted>;
       const built = runtime.hosted();
       if (built === undefined) {
         return yield* Effect.die(
@@ -507,9 +525,10 @@ const buildHosted = (definitions: ReadonlyArray<HostedDefinition>, scope: Scope.
           }),
         );
       }
-      return built;
-    }),
-  );
+      hosted.push(built);
+    }
+    return { hosted, launched };
+  });
 
 /**
  * Build every class a pool hosts and register it for the pool's objects:
@@ -524,7 +543,7 @@ export const hostClasses = Effect.fn(function* (options: {
   readonly engine: Layer.Layer<WorkflowEngine.WorkflowEngine>;
 }) {
   registry.sharding = options.sharding;
-  const hosted = yield* buildHosted(options.definitions, options.scope).pipe(
+  const { hosted, launched } = yield* buildHosted(options.definitions, options.scope).pipe(
     Effect.provide(Layer.mergeAll(FetchHttpClient.layer, stackFromEnv)),
   );
   const entities = hosted.filter((entry): entry is HostedEntity => entry.kind === "entity");
@@ -549,7 +568,7 @@ export const hostClasses = Effect.fn(function* (options: {
     ),
   );
   const services = yield* Layer.buildWithScope(
-    Layer.mergeAll(...(workflowLayers as [Layer.Layer<never>])).pipe(
+    Layer.mergeAll(...(workflowLayers as [Layer.Layer<never>]), ...launched).pipe(
       Layer.provideMerge(options.engine),
       Layer.provideMerge(sharding),
     ),
