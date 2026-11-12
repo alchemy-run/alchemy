@@ -3,6 +3,7 @@ import * as Schema from "effect/Schema";
 import type { Annotations } from "./Annotations.ts";
 import type * as Event from "./Event.ts";
 import type { Data, Fields } from "./Event.ts";
+import { inputSchema } from "./internal.ts";
 import * as Middleware from "./Middleware.ts";
 import type * as Rejection from "./Rejection.ts";
 
@@ -249,7 +250,7 @@ export const make = <
     payload: {
       target: options.target,
       commandId: Schema.optional(Schema.String),
-      input: Schema.Struct(options.input ?? {}),
+      input: inputSchema(options.input),
     },
     success: Schema.Struct({
       reply: options.reply ? Schema.Struct(options.reply) : Schema.Void,

@@ -114,7 +114,7 @@ const serve = Effect.fn(function* (
           yield* wakeScheduled(scheduled);
         }
         const app = yield* RpcServer.toHttpEffect(group).pipe(
-          Effect.provide(Layer.mergeAll(handlers, RpcSerialization.layerJson)),
+          Effect.provide(Layer.mergeAll(handlers, RpcSerialization.layerNdjson)),
           Effect.provideContext(hosted.services),
         );
         return yield* app;

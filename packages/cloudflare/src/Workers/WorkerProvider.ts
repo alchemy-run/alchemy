@@ -65,7 +65,11 @@ import { createWorkerName } from "./WorkerName.ts";
 class MissingDurableObjects extends Data.TaggedError("MissingDurableObjects")<{
   scriptName: string;
   expected: string[];
-}> {}
+}> {
+  override get message() {
+    return `Durable Object namespaces not found for Worker '${this.scriptName}': ${this.expected.join(", ")}`;
+  }
+}
 
 /**
  * A Durable Object class is being dropped from this Worker while a binding in
@@ -3683,22 +3687,34 @@ export const LiveWorkerProvider = () =>
             continue;
           }
           const targetScriptName = crossScriptClassTargets.get(className);
+          const localNamespaceId = oldBindings.flatMap((binding) =>
+            binding.type === "durable_object_namespace" &&
+            "className" in binding &&
+            binding.className === className &&
+            (!("scriptName" in binding) ||
+              binding.scriptName == null ||
+              binding.scriptName === name) &&
+            "namespaceId" in binding &&
+            typeof binding.namespaceId === "string"
+              ? [binding.namespaceId]
+              : [],
+          )[0];
           const namespaceId =
-            oldBindings.flatMap((binding) =>
-              binding.type === "durable_object_namespace" &&
-              "className" in binding &&
-              binding.className === className &&
-              (!("scriptName" in binding) ||
-                binding.scriptName === undefined ||
-                binding.scriptName === name) &&
-              "namespaceId" in binding &&
-              typeof binding.namespaceId === "string"
-                ? [binding.namespaceId]
-                : [],
-            )[0] ??
+            localNamespaceId ??
             output?.durableObjectNamespaces?.[className] ??
             observedNamespaces.find((ns) => ns.script === name && ns.class === className)?.id;
           if (targetScriptName === undefined) {
+            // The script's own live settings are the authority on what it
+            // hosts. A transfer rewrites the former host's binding (dropping
+            // its class name, or repointing it at the new host through
+            // `scriptName`), so a local binding that still names the class
+            // with a namespace id proves the class lives here. Delete it
+            // without consulting the account-wide listing, whose pages
+            // Cloudflare doesn't return in a stable order.
+            if (localNamespaceId !== undefined) {
+              deletedClasses.push(className);
+              continue;
+            }
             const findNamespace = (namespaces: typeof observedNamespaces) =>
               namespaces.find((ns) =>
                 namespaceId === undefined
@@ -5806,6 +5822,14 @@ const contentTypeFromExtension = (extension: string) => {
 };
 
 /**
+ * Cloudflare returns the namespace listing's pages in an unstable order, so a
+ * walk of 20-row pages can return some rows twice and skip others (#3300).
+ * One large page sidesteps that for every account under this many
+ * namespaces.
+ */
+const LIST_NAMESPACES_PAGE_SIZE = 1000;
+
+/**
  * Observe every Durable Object namespace on the account with its identity,
  * script and class. Namespace ownership is authoritative cloud state: after a
  * transfer the namespace moves to the receiving
@@ -5816,7 +5840,7 @@ const contentTypeFromExtension = (extension: string) => {
  * are inconclusive because pagination is not an atomic account snapshot.
  */
 const listDurableObjectNamespaces = (accountId: string, dispatchNamespace?: string) =>
-  durableObjectsApi.listNamespaces.items({ accountId }).pipe(
+  durableObjectsApi.listNamespaces.items({ accountId, perPage: LIST_NAMESPACES_PAGE_SIZE }).pipe(
     Stream.runCollect,
     Effect.map((namespaces) =>
       Array.from(namespaces).flatMap((ns) =>
@@ -5849,7 +5873,7 @@ const getPreviewDurableObjectNamespaces = (
   previewId: string,
   classNames: readonly string[],
 ) =>
-  durableObjectsApi.listNamespaces.items({ accountId }).pipe(
+  durableObjectsApi.listNamespaces.items({ accountId, perPage: LIST_NAMESPACES_PAGE_SIZE }).pipe(
     Stream.runCollect,
     Effect.flatMap((namespaces) => {
       const byClass: Record<string, string> = {};

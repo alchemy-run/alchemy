@@ -11,6 +11,7 @@ import * as Schema from "effect/Schema";
 import type * as Aggregate from "./Aggregate.ts";
 import type { Annotations } from "./Annotations.ts";
 import type { Data, Fields } from "./Event.ts";
+import { inputSchema } from "./internal.ts";
 import * as Middleware from "./Middleware.ts";
 import type * as Projection from "./Projection.ts";
 import type * as Rejection from "./Rejection.ts";
@@ -322,7 +323,7 @@ export const make = <
   const middleware = definition.middleware ?? [];
   const rpc = Rpc.make(name, {
     payload: {
-      input: Schema.Struct(definition.input ?? {}),
+      input: inputSchema(definition.input),
       atLeast: Schema.optional(Schema.Union([Receipt, Schema.Array(Receipt)])),
       ...(definition.paged
         ? { after: Schema.optional(Schema.String), take: Schema.optional(Schema.Number) }

@@ -30,6 +30,7 @@ import {
   runFiredAlarm,
   type ActorContextLike,
 } from "../DurableObjectState.ts";
+import type { WebSocket } from "../WebSocket.ts";
 import {
   AWAITING_HEADER,
   Awaiting,
@@ -40,14 +41,25 @@ import {
   waitingSection,
   type Activation,
 } from "./Calls.ts";
+import {
+  makeSocketRegistry,
+  PendingWebSocket,
+  type RawWebSocket,
+  type SocketRegistry,
+} from "./Sockets.ts";
 
 /** What an actor activation keeps in memory until it sleeps. */
 interface ActivationVars {
   instance: DurableObjectInstance | undefined;
   activation: Activation | undefined;
+  sockets: SocketRegistry | undefined;
 }
 
-type ActivationContext = ActorContextLike & { readonly vars: ActivationVars };
+type ActivationContext = ActorContextLike & {
+  readonly vars: ActivationVars;
+  /** The request a WebSocket was opened with. */
+  readonly request?: Request | undefined;
+};
 
 /** Read a RivetKit setting the pool put in the node's environment. */
 const env = (name: string): string | undefined => process.env[name];
@@ -110,6 +122,97 @@ const handleRequest = (
   );
 };
 
+/** The path a WebSocket's request reaches `fetch` with: the caller's, without the gateway's prefix. */
+const withoutGatewayPrefix = (request: Request) => {
+  const url = new URL(request.url, "http://actor");
+  if (url.pathname !== "/websocket" && !url.pathname.startsWith("/websocket/")) return request;
+  url.pathname = url.pathname.slice("/websocket".length) || "/";
+  return new Request(url, request);
+};
+
+/**
+ * Serve a WebSocket through the instance's `fetch`, which accepts it with
+ * `Rivet.upgrade()`; then deliver its events to the instance's
+ * `webSocketMessage`, `webSocketClose` and `webSocketError`, one at a time.
+ * A `fetch` that doesn't accept it closes it.
+ */
+const handleWebSocket = async (
+  instance: DurableObjectInstance,
+  activation: Activation,
+  sockets: SocketRegistry,
+  request: Request | undefined,
+  ws: RawWebSocket,
+) => {
+  ws.binaryType = "arraybuffer";
+  let socket: WebSocket | undefined;
+  // Events run in order, after `fetch` accepted the socket.
+  let events: Promise<unknown> = Promise.resolve();
+  const deliver = (
+    handler: "webSocketMessage" | "webSocketClose" | "webSocketError",
+    ...args: ReadonlyArray<unknown>
+  ) => {
+    events = events.then(() =>
+      socket === undefined
+        ? undefined
+        : instance
+            .execute((shape) => {
+              const run = shape[handler] as
+                | ((...args: ReadonlyArray<unknown>) => Effect.Effect<void>)
+                | undefined;
+              return run === undefined
+                ? Effect.void
+                : Effect.suspend(() => run(socket, ...args)).pipe(
+                    Effect.provideService(Awaiting, receive(undefined)),
+                    Effect.catchCause((cause) =>
+                      Effect.logError(`Durable Object ${handler} failed`, cause),
+                    ),
+                  );
+            })
+            .catch(() => undefined),
+    );
+  };
+  ws.addEventListener("message", (event: { data: unknown }) =>
+    deliver(
+      "webSocketMessage",
+      typeof event.data === "string" ? event.data : new Uint8Array(event.data as ArrayBuffer),
+    ),
+  );
+  ws.addEventListener("close", (event: { code: number; reason: string; wasClean: boolean }) => {
+    if (socket !== undefined) sockets.remove(socket);
+    deliver("webSocketClose", event.code, event.reason, event.wasClean);
+  });
+  ws.addEventListener("error", (event: { error?: unknown }) =>
+    deliver("webSocketError", event.error ?? event),
+  );
+  if (request === undefined) return ws.close(1011, "No upgrade request");
+  const upgrade = withoutGatewayPrefix(request);
+  const awaiting = receive(upgrade.headers.get(AWAITING_HEADER));
+  if (waitingSection(activation, awaiting.received) === activation.construction) {
+    return ws.close(1011, "This Durable Object's constructor waits on this call.");
+  }
+  const status = await instance.execute(
+    (shape) =>
+      instance.fetch(shape, upgrade).pipe(
+        Effect.map((response) => response.status),
+        Effect.provideService(
+          HttpServerRequest.HttpServerRequest,
+          HttpServerRequest.fromWeb(upgrade),
+        ),
+        Effect.provideService(PendingWebSocket, {
+          accept: (tags) =>
+            Effect.sync(() => {
+              socket ??= sockets.add(ws, tags);
+              return socket;
+            }),
+        }),
+        Effect.provideService(Awaiting, awaiting),
+      ),
+    async (exit) => (Exit.isSuccess(exit) ? (exit.value as number) : 500),
+  );
+  // Not accepted: the caller sees the status as the close reason.
+  if (socket === undefined) ws.close(status >= 500 ? 1011 : 1008, `HTTP ${status}`);
+};
+
 /**
  * Host every Durable Object class as a RivetKit actor and connect this node
  * to the control plane. Runs for the life of the node.
@@ -143,13 +246,18 @@ export const runDurableObjects = (durableObjects: ReadonlyArray<HostedDurableObj
         let instance = c.vars.instance;
         if (instance === undefined) {
           const activation = makeActivation();
+          const sockets = makeSocketRegistry();
           c.vars.activation = activation;
+          c.vars.sockets = sockets;
           instance = makeDurableObjectInstance({
             build: () => Promise.resolve(build),
             // RivetKit runs an actor's calls concurrently over async
             // storage; a class given `Workers.InputGate` gets a gate per
             // instance from the bridge.
-            services: Context.make(DurableObjectState, makeDurableObjectState(c, activation)).pipe(
+            services: Context.make(
+              DurableObjectState,
+              makeDurableObjectState(c, activation, sockets),
+            ).pipe(
               // Construction runs under the activation's construction
               // section; each call replaces it with what it was sent.
               Context.add(Awaiting, {
@@ -178,15 +286,25 @@ export const runDurableObjects = (durableObjects: ReadonlyArray<HostedDurableObj
               return fn(shape);
             }, onExit)
             .finally(constructed);
-        return { instance: { ...instance, execute }, activation };
+        return { instance: { ...instance, execute }, activation, sockets: c.vars.sockets! };
       };
 
       use[name] = actor({
         db: db({ onMigrate: (database) => migrateStorage(database) }),
-        createVars: (): ActivationVars => ({ instance: undefined, activation: undefined }),
+        createVars: (): ActivationVars => ({
+          instance: undefined,
+          activation: undefined,
+          sockets: undefined,
+        }),
         onRequest: (c: ActivationContext, request: Request) => {
           const { instance, activation } = instanceOf(c);
           return handleRequest(instance, activation, request);
+        },
+        // A WebSocket through the gateway: the instance's `fetch` accepts it
+        // with `Rivet.upgrade()`.
+        onWebSocket: (c: ActivationContext, ws: RawWebSocket) => {
+          const { instance, activation, sockets } = instanceOf(c);
+          return handleWebSocket(instance, activation, sockets, c.request, ws);
         },
         actions: {
           // RivetKit times an action out after 60 seconds, and an alarm can
