@@ -19,3 +19,15 @@ export const Analytics = ClickHouseCloud.Service.Service("BindingsAnalytics", {
   ...small,
   ipAccessList: [{ source: "0.0.0.0/0", description: "bindings test" }],
 });
+
+/** 412 rows, 7 KB: ClickHouse's own public dataset bucket. */
+export const STATIONS_CSV =
+  "https://datasets-documentation.s3.eu-west-3.amazonaws.com/1brc/stations.csv";
+
+/** The public CSV as a ClickPipes object storage source. */
+export const stationsSource = {
+  type: "s3",
+  format: "CSVWithNames",
+  url: STATIONS_CSV,
+  isContinuous: false,
+} as const;
