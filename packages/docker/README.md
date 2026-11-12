@@ -61,7 +61,7 @@ Without `ipam`, Docker picks the subnet and gateway. Network settings are fixed 
 
 ## Volume ownership and data safety
 
-`Docker.Volume` creates persistent Docker volumes with a recorded generation identity. Before reconciling or deleting a tracked volume, Alchemy verifies that the Docker volume still matches its recorded identity. An external volume with the same name is not silently adopted or removed.
+`Docker.Volume` creates persistent Docker volumes with a recorded generation identity. Before reconciling or deleting a tracked volume, Alchemy verifies that the Docker volume still matches its recorded identity. An external volume with the same name is not silently adopted or removed. When the previous state is unavailable, even a volume with matching stack labels but a different generation must be explicitly adopted. Pre-generation volumes without that label retain legacy stack-label ownership detection.
 
 To manage an existing volume, explicitly opt into adoption; to reference one without managing its lifecycle, use `Docker.Volume.lookup`:
 
@@ -75,7 +75,7 @@ const imported = yield* Docker.Volume("ImportedData", {
 const external = Docker.Volume.lookup({ name: "shared-backup" });
 ```
 
-Changing immutable volume configuration can require replacement and deletion of the previous physical volume. Alchemy refuses automatic destructive replacements of volumes originally adopted from another owner. For data that must survive stack destruction or replacement, choose an explicit removal policy and maintain backups:
+Changing immutable volume configuration can require replacement and deletion of the previous physical volume. Alchemy refuses automatic destructive replacements of volumes adopted from another physical generation, including one labelled for the same stack. For data that must survive stack destruction or replacement, choose an explicit removal policy and maintain backups:
 
 ```typescript
 import * as RemovalPolicy from "alchemy/RemovalPolicy";

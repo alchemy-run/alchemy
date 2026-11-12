@@ -87,7 +87,10 @@ export interface VolumeLookup {
  * A Docker volume managed through the active Docker context.
  *
  * Pre-existing same-name volumes are treated as foreign until the engine is
- * allowed to adopt them with `--adopt` or `adopt(true)`.
+ * allowed to adopt them with `--adopt` or `adopt(true)`. This includes volumes
+ * bearing this stack's labels but a different `alchemy::volume-instance`
+ * generation after state loss. The previous generation is trusted only when
+ * the engine supplies its persisted attributes.
  *
  * Each newly created volume receives an internal `alchemy::volume-instance`
  * label that identifies its resource generation. Alchemy verifies this identity,
@@ -95,9 +98,9 @@ export interface VolumeLookup {
  * replacing or removing a tracked volume. Volumes adopted without this label
  * are checked against their previously observed identity instead.
  *
- * An explicitly adopted volume that originated outside the stack is not
- * automatically deleted to apply changed immutable settings. Alchemy fails
- * the plan instead, so data migration is a deliberate operation.
+ * An explicitly adopted volume that originated outside the current resource
+ * generation is not automatically deleted to apply changed immutable settings.
+ * Alchemy fails the plan instead, so data migration is a deliberate operation.
  *
  * Docker removes volumes **by name**, not an immutable object ID: inspection
  * followed by removal is not atomic. Some Docker Engines report creation times
@@ -235,10 +238,15 @@ export const VolumeProvider = () =>
             yield* verify(id, previous, info);
             return attrs;
           }
-          // Without prior state, only adopt a volume that carries our branding;
-          // anything else is foreign and gated behind `--adopt`.
+          // With no persisted state, matching stack tags alone cannot prove
+          // that a generation-labelled volume is ours. A stale generation
+          // could otherwise be adopted and deleted by an immutable-prop diff.
+          // Untagged pre-generation volumes keep the legacy ownership route.
           const owned = yield* hasAlchemyTags(id, info.Labels ?? undefined);
-          return owned ? attrs : Unowned(attrs);
+          const generation = info.Labels?.[VOLUME_INSTANCE_LABEL];
+          return owned && (generation === undefined || generation === instanceId)
+            ? attrs
+            : Unowned(attrs);
         }),
         diff: Effect.fn(function* ({ id, instanceId, output, news, olds }) {
           // A no-op plan cannot trust persisted attributes: the name may have
@@ -248,12 +256,15 @@ export const VolumeProvider = () =>
             ? yield* inspect(output.name, dockerContextName(olds?.context))
             : undefined;
           if (output && current) yield* verify(id, output, current);
-          // Adoption grants ownership of the existing data, not permission
-          // to destroy it implicitly when future immutable props drift.
-          const foreignOrigin =
+          // Adoption grants management of an existing volume, not permission
+          // to delete data created by a different physical generation.
+          // The internal stack tags alone do not establish ownership: an
+          // explicitly adopted volume may carry the same stack and logical id.
+          const ownedGeneration =
             output !== undefined &&
-            current !== undefined &&
-            !(yield* hasAlchemyTags(id, output.labels));
+            output.labels[VOLUME_INSTANCE_LABEL] === instanceId &&
+            (yield* hasAlchemyTags(id, output.labels));
+          const foreignOrigin = output !== undefined && current !== undefined && !ownedGeneration;
           if (!isResolved(news)) {
             return output && !current ? { action: "update" as const } : undefined;
           }
@@ -331,10 +342,18 @@ export const VolumeProvider = () =>
             context,
           });
           // docker volume create can succeed by reusing an existing name.
-          // Confirm it actually carries this new generation's identity.
+          // Inspect the entire identity and immutable configuration instead
+          // of trusting the return code or a copied generation label alone.
           const created = yield* docker.volume.inspect(result.stdout, context);
-          if (created.Labels?.[VOLUME_INSTANCE_LABEL] !== instanceId) {
+          if (
+            created.Name !== name ||
+            created.Labels?.[VOLUME_INSTANCE_LABEL] !== instanceId ||
+            !(yield* hasAlchemyTags(id, created.Labels ?? undefined))
+          ) {
             return yield* volumeOwnershipConflict(id, name);
+          }
+          if (!matchesVolumeConfiguration(created, args)) {
+            return yield* volumeConfigurationConflict(id, name);
           }
           return toVolumeAttributes(created);
         }),

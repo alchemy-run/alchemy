@@ -228,6 +228,114 @@ describe(
       }),
     );
 
+    test.provider(
+      "requires adoption when another volume generation reuses our ownership labels",
+      (stack) =>
+        Effect.gen(function* () {
+          const docker = yield* Docker.Docker;
+          const name = testVolumeName(stack.stage, "foreign-same-owner");
+          yield* stack.destroy();
+          const existing = yield* docker.volume
+            .inspect(name)
+            .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
+          expect(existing).toBeUndefined();
+          yield* Effect.addFinalizer(() => docker.volume.remove(name).pipe(Effect.ignore));
+
+          const resource = Docker.Volume("orphaned-volume", { name });
+          const old = yield* stack.deploy(resource);
+          yield* stack.destroy();
+          const differentGeneration =
+            old.labels["alchemy::volume-instance"] === "f".repeat(32)
+              ? "e".repeat(32)
+              : "f".repeat(32);
+          yield* docker.volume.create({
+            name,
+            label: { ...old.labels, "alchemy::volume-instance": differentGeneration },
+          });
+          const before = yield* docker.volume.inspect(name);
+
+          const rejected = yield* stack.plan(resource).pipe(Effect.flip);
+          expect(rejected._tag).toBe("OwnedBySomeoneElse");
+          const deployError = yield* stack.deploy(resource).pipe(Effect.flip);
+          expect(deployError._tag).toBe("OwnedBySomeoneElse");
+          const adopted = yield* stack.deploy(resource.pipe(adopt(true)));
+          expect(adopted.labels["alchemy::volume-instance"]).toBe(differentGeneration);
+          expect(adopted.createdAtRaw).toBe(before.CreatedAt);
+          expect((yield* docker.volume.inspect(name)).CreatedAt).toBe(before.CreatedAt);
+          yield* stack.destroy();
+        }),
+    );
+
+    test.provider(
+      "does not replace a same-owner foreign generation after explicit adoption",
+      (stack) =>
+        Effect.gen(function* () {
+          const docker = yield* Docker.Docker;
+          const name = testVolumeName(stack.stage, "foreign-same-owner-drift");
+          yield* stack.destroy();
+          const existing = yield* docker.volume
+            .inspect(name)
+            .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
+          expect(existing).toBeUndefined();
+          yield* Effect.addFinalizer(() => docker.volume.remove(name).pipe(Effect.ignore));
+
+          const old = yield* stack.deploy(
+            Docker.Volume("orphaned-drift", { name, labels: { version: "old" } }),
+          );
+          yield* stack.destroy();
+          const differentGeneration =
+            old.labels["alchemy::volume-instance"] === "f".repeat(32)
+              ? "e".repeat(32)
+              : "f".repeat(32);
+          yield* docker.volume.create({
+            name,
+            label: { ...old.labels, "alchemy::volume-instance": differentGeneration },
+          });
+          yield* docker.run([
+            "run",
+            "--rm",
+            "--network",
+            "none",
+            "--pull",
+            "never",
+            "--mount",
+            "type=volume,source=" + name + ",target=/data",
+            "alpine:3.22",
+            "sh",
+            "-c",
+            "printf 'preserve' > /data/marker",
+          ]);
+          const adopted = yield* stack.deploy(
+            Docker.Volume("orphaned-drift", { name }).pipe(adopt(true)),
+          );
+          expect(adopted.labels["alchemy::volume-instance"]).toBe(differentGeneration);
+          const rejected = yield* stack
+            .plan(Docker.Volume("orphaned-drift", { name, labels: { version: "new" } }))
+            .pipe(Effect.flip);
+          expect(rejected._tag).toBe("OwnedBySomeoneElse");
+          const deployError = yield* stack
+            .deploy(Docker.Volume("orphaned-drift", { name, labels: { version: "new" } }))
+            .pipe(Effect.flip);
+          expect(deployError._tag).toBe("OwnedBySomeoneElse");
+          const marker = yield* docker.run([
+            "run",
+            "--rm",
+            "--network",
+            "none",
+            "--pull",
+            "never",
+            "--mount",
+            "type=volume,source=" + name + ",target=/data,readonly",
+            "alpine:3.22",
+            "cat",
+            "/data/marker",
+          ]);
+          expect(marker.stdout.trim()).toBe("preserve");
+          expect((yield* docker.volume.inspect(name)).Labels?.version).toBe("old");
+          yield* stack.destroy();
+        }),
+    );
+
     test.provider("refuses to plan, deploy or destroy a volume replaced externally", (stack) =>
       Effect.gen(function* () {
         const docker = yield* Docker.Docker;

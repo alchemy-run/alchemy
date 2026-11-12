@@ -73,10 +73,49 @@ const data = yield* Docker.Volume("postgres-data");
 ```
 
 Neither needs any props — the engine generates unique physical names
-from the app, stage, and logical ID. Note that changing a `Network`
-or `Volume` prop (driver, labels, IPv6) is a replacement: the old
-one is deleted and a new one created, so treat a Volume's props as
-fixed once it holds data you care about.
+from the app, stage, and logical ID. Changing a `Network` or `Volume`
+creation-time prop (such as its driver or labels) replaces the resource.
+For a volume, replacement normally deletes its previous physical data.
+Keep volume configuration stable once it holds data you care about.
+
+### Protect volume data
+
+Alchemy records a generation label on managed volumes and checks it against
+persisted state before replacing or deleting them. An existing volume with
+the same name is **not** proof of ownership. If its generation differs,
+including after state loss, Alchemy requires explicit adoption instead of
+silently replacing it. Legacy volumes without a generation label retain
+their original stack-label ownership rules.
+
+Prevent replacement or destruction of critical volume data:
+
+```typescript
+import * as RemovalPolicy from "alchemy/RemovalPolicy";
+
+const data = yield* Docker.Volume("postgres-data").pipe(
+  RemovalPolicy.protect(),
+);
+```
+
+`protect()` refuses replacement and destruction. `retain()` leaves the
+physical volume in Docker when its Alchemy state is removed. For
+pre-existing volumes, `Docker.Volume.lookup({ name: "shared-data" })`
+references the volume without managing its lifecycle; `adopt(true)` opts
+into managing an existing volume, but does not authorize automatic
+destructive replacement of a foreign generation:
+
+```typescript
+import { adopt } from "alchemy/AdoptPolicy";
+
+const imported = yield* Docker.Volume("imported-data", {
+  name: "existing-data",
+}).pipe(adopt(true));
+```
+
+Docker volume removal is by name, not an immutable object identifier;
+it cannot eliminate concurrent replacement races. Preserve independent
+backups for irreplaceable data. See the
+[Volume API reference](/providers/docker/volume) for the full contract.
 
 ### Configure a network
 
