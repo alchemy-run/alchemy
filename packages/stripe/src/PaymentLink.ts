@@ -475,8 +475,8 @@ export interface PaymentLinkLookup {
  * `active`, and most Checkout options update in place; changing the set
  * of prices, `currency`, `managedPayments`, `subscriptionData.description`,
  * or `paymentIntentData.captureMethod` replaces the link, which gives it a
- * new URL. Options left out keep their current value. Payment links cannot be deleted; destroy
- * deactivates them (`active=false`).
+ * new URL. Options left out keep their current value. Payment links
+ * cannot be deleted; destroy deactivates them (`active=false`).
  *
  * @see https://docs.stripe.com/api/payment_links
  *
