@@ -13,7 +13,7 @@ import {
   ResultMissing,
   ServiceDeletionProtected,
   ServiceLimitReached,
-} from "../internal/Errors.ts";
+} from "../Errors.ts";
 import {
   hasOwnerTags,
   INSTANCE_TAG,

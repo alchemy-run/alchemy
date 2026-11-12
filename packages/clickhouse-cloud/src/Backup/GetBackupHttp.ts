@@ -2,7 +2,7 @@ import * as backup from "@distilled.cloud/clickhouse-cloud/backup";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { BindService } from "../ClickHouseCloudBindings.ts";
-import { requireResult } from "../internal/Errors.ts";
+import { requireResult } from "../Errors.ts";
 import type { Service } from "../Service/Service.ts";
 import { GetBackup } from "./GetBackup.ts";
 
