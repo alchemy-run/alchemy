@@ -58,3 +58,40 @@ test.provider(
     }),
   { timeout: 180_000 },
 );
+
+test.provider(
+  "an override never changes the deployment's own URLs",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const name = yield* testName("canonical-own");
+      const overridden = (paused: boolean) =>
+        Effect.gen(function* () {
+          const project = yield* Convex.Project("App", { name }).pipe(RemovalPolicy.destroy());
+          const deployment = yield* Convex.Deployment("Deployment", {
+            project,
+            type: "preview",
+            paused,
+          });
+          yield* Convex.CanonicalUrl("Site", {
+            deployment,
+            requestDestination: "convexSite",
+            url: "https://own.alchemy-convex.invalid",
+          });
+          return { deployment };
+        });
+      const first = yield* stack.deploy(overridden(false));
+
+      // Pausing reconciles the deployment while the override is in place.
+      const second = yield* stack.deploy(overridden(true));
+      expect(second.deployment.paused).toBe(true);
+      expect(second.deployment.url).toBe(first.deployment.url);
+      expect(second.deployment.siteUrl).toBe(first.deployment.siteUrl);
+      expect(second.deployment.siteUrl).toContain(".convex.site");
+      const live = yield* onDeployment(second.deployment.url, deployments.getCanonicalUrls({}));
+      expect(live.convexSiteUrl).toBe("https://own.alchemy-convex.invalid");
+
+      yield* stack.destroy();
+    }),
+  { timeout: 180_000 },
+);

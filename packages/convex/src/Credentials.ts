@@ -54,7 +54,13 @@ export const teamFromDetails = Effect.fn(function* (
         message: `Convex: CONVEX_TEAM_ID must be a numeric team ID, got "${override}".`,
       });
     }
-    return Number(override);
+    // A team token belongs to one team, so any other ID is a mistake. Taking
+    // it would let another team's 404 read as "already deleted".
+    if (Number(override) !== details.teamId) {
+      return yield* new InvalidTeamId({
+        message: `Convex: CONVEX_TEAM_ID is ${override}, but the token belongs to team ${details.teamId}.`,
+      });
+    }
   }
   return details.teamId;
 });

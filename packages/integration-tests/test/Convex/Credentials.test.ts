@@ -41,15 +41,26 @@ it.effect("reads CONVEX_API_BASE_URL and CONVEX_TEAM_ID", () =>
 
 it.effect("a team token gives its team", () =>
   Effect.gen(function* () {
-    const team = yield* teamFromDetails({ type: "teamToken", id: 1, teamId: 554006 } as never);
-    expect(team).toBe(554006);
+    const team = yield* teamFromDetails({ type: "teamToken", id: 1, teamId: 7 } as never);
+    expect(team).toBe(7);
   }),
 );
 
-it.effect("CONVEX_TEAM_ID overrides discovery", () =>
+it.effect("a CONVEX_TEAM_ID that matches the token's team is accepted", () =>
   Effect.gen(function* () {
-    const team = yield* teamFromDetails({ type: "teamToken", id: 1, teamId: 1 } as never, "42");
+    const team = yield* teamFromDetails({ type: "teamToken", id: 1, teamId: 42 } as never, "42");
     expect(team).toBe(42);
+  }),
+);
+
+it.effect("a CONVEX_TEAM_ID for another team fails with InvalidTeamId", () =>
+  Effect.gen(function* () {
+    const error = yield* teamFromDetails(
+      { type: "teamToken", id: 1, teamId: 1 } as never,
+      "42",
+    ).pipe(Effect.flip);
+    expect(error._tag).toBe("InvalidTeamId");
+    expect(error.message).toContain("belongs to team 1");
   }),
 );
 

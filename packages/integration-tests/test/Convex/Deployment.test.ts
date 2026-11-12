@@ -1,5 +1,6 @@
 import * as Convex from "@alchemy.run/convex";
 import { DeploymentProtected } from "@alchemy.run/convex/Deployment";
+import { isConvexCloudUrl, siteUrlOf } from "@alchemy.run/convex/internal/deployment";
 import { previewIdentifier, previewReference } from "@alchemy.run/convex/internal/references";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
@@ -207,6 +208,23 @@ test.provider(
 );
 
 test.provider(
+  "destroy removes a protected prod that was deleted outside Alchemy",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const name = yield* testName("deployment-vanished-protected");
+      const { deployment } = yield* stack.deploy(app(name, { type: "prod" }));
+      expect(deployment.deletionProtection).toBe(true);
+      yield* management.deleteDeployment({ deploymentName: deployment.deploymentName });
+
+      // Protection guards data, and there is none left to guard.
+      yield* stack.destroy();
+      expect(yield* projectsNamed(name)).toEqual([]);
+    }),
+  options,
+);
+
+test.provider(
   "transfers on a project change",
   (stack) =>
     Effect.gen(function* () {
@@ -351,5 +369,20 @@ test.provider("types a missing deployment", () =>
       .getDeployment({ deploymentName: "no-such-deployment-0" })
       .pipe(Effect.flip);
     expect(error._tag).toBe("DeploymentNotFound");
+  }),
+);
+
+test.provider("siteUrlOf maps a Convex Cloud host and nothing else", () =>
+  Effect.sync(() => {
+    expect(siteUrlOf("https://happy-otter-123.convex.cloud")).toBe(
+      "https://happy-otter-123.convex.site",
+    );
+    expect(siteUrlOf("https://happy-otter-123.eu-west-1.convex.cloud")).toBe(
+      "https://happy-otter-123.eu-west-1.convex.site",
+    );
+    expect(siteUrlOf("https://api.example.com")).toBeUndefined();
+    expect(isConvexCloudUrl("https://convex.cloud.example.com")).toBe(false);
+    expect(isConvexCloudUrl("http://localhost:3210")).toBe(false);
+    expect(isConvexCloudUrl("not a url")).toBe(false);
   }),
 );
