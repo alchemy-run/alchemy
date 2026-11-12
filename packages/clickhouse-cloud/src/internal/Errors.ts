@@ -48,11 +48,32 @@ export class ServiceDeletionProtected extends Data.TaggedError(
 )<{
   readonly serviceId: string;
   readonly serviceName: string;
+  /** The API's `DeletionProtectionEnabled` answer. */
+  readonly cause: unknown;
 }> {
   override get message() {
     return (
       `ClickHouse Cloud service "${this.serviceName}" (${this.serviceId}) has deletion protection on. ` +
       "Set `deletionProtection: false` and deploy before deleting it, or turn protection off in the console."
+    );
+  }
+}
+
+/**
+ * `createService` answered `InstanceLimitReached`: the organization already
+ * has as many services as its plan allows.
+ */
+export class ServiceLimitReached extends Data.TaggedError("ClickHouseCloud.ServiceLimitReached")<{
+  readonly organizationId: string;
+  readonly serviceName: string;
+  /** The API's `InstanceLimitReached` answer. */
+  readonly cause: unknown;
+}> {
+  override get message() {
+    return (
+      `Cannot create ClickHouse Cloud service "${this.serviceName}": organization ${this.organizationId} ` +
+      "already has as many services as its plan allows (INSTANCE_LIMIT_REACHED). Delete a service, or ask " +
+      "ClickHouse to raise the `services-per-organization` quota (ClickHouseCloud.Organization.GetOrganizationQuota shows it)."
     );
   }
 }

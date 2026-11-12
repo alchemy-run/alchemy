@@ -5,8 +5,10 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import { ApiKey, ApiKeyProvider } from "./ApiKeys/ApiKey.ts";
 import { ClickHouseCloudAuth } from "./AuthProvider.ts";
+import { BackupConfiguration, BackupConfigurationProvider } from "./Backup/BackupConfiguration.ts";
 import * as Credentials from "./Credentials.ts";
 import { Role, RoleProvider } from "./RoleManagement/Role.ts";
+import { Service, ServiceProvider } from "./Service/Service.ts";
 
 /**
  * Service tag bundling all ClickHouse Cloud providers + auth + credentials.
@@ -27,8 +29,15 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
  * ```
  */
 export const providers = () =>
-  Layer.effect(Providers, Provider.collection([ApiKey, Role])).pipe(
-    Layer.provide(Layer.mergeAll(ApiKeyProvider(), RoleProvider())),
+  Layer.effect(Providers, Provider.collection([ApiKey, BackupConfiguration, Role, Service])).pipe(
+    Layer.provide(
+      Layer.mergeAll(
+        ApiKeyProvider(),
+        BackupConfigurationProvider(),
+        RoleProvider(),
+        ServiceProvider(),
+      ),
+    ),
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(FetchHttpClient.layer),
     Layer.provideMerge(ClickHouseCloudAuth),
