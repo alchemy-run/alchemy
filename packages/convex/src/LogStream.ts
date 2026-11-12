@@ -3,12 +3,18 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import type { DeploymentAttributes } from "./Deployment.ts";
 import { GONE, onDeployment } from "./internal/deployment.ts";
 import { createOnce } from "./internal/retry.ts";
 import type { Providers } from "./Providers.ts";
+
+/** Convex said a stream of this type exists, but didn't list it. */
+export class LogStreamNotListed extends Data.TaggedError("LogStreamNotListed")<{
+  readonly message: string;
+}> {}
 
 export interface LogStreamProps {
   /** The deployment whose logs to send. Changing it replaces the stream. */
@@ -27,7 +33,7 @@ export interface LogStreamAttributes {
   deploymentUrl: string;
   /** Where the logs go. */
   logStreamType: string;
-  /** The secret that signs webhook requests. Convex returns it only at creation. */
+  /** The secret that signs webhook requests. Only a `webhook` stream has one. */
   hmacSecret: Redacted.Redacted<string> | undefined;
 }
 
@@ -74,6 +80,10 @@ const list = (url: string) => onDeployment(url, deployment.listIntegrations({}))
 
 const typeOf = (stream: deployment.LogStreamConfig) => stream.logStreamType;
 
+/** A webhook stream carries its signing secret as a plain string, so wrap it. */
+const secretOf = (stream: deployment.LogStreamConfig | deployment.CreateIntegrationResponse) =>
+  "hmacSecret" in stream ? Redacted.make(stream.hmacSecret) : undefined;
+
 export const LogStreamProvider = () =>
   Provider.effect(
     LogStream,
@@ -93,7 +103,9 @@ export const LogStreamProvider = () =>
         if (url === undefined) return undefined;
         const streams = yield* list(url);
         if (output !== undefined) {
-          return streams.some((stream) => stream.id === output.logStreamId) ? output : undefined;
+          const stream = streams.find((item) => item.id === output.logStreamId);
+          // The secret can be rotated outside the stack, so take the live one.
+          return stream && { ...output, hmacSecret: secretOf(stream) };
         }
         const stream = streams.find((item) => typeOf(item) === olds?.config.logStreamType);
         return (
@@ -102,36 +114,49 @@ export const LogStreamProvider = () =>
             logStreamId: stream.id,
             deploymentUrl: url,
             logStreamType: typeOf(stream),
-            hmacSecret: undefined,
+            hmacSecret: secretOf(stream),
           })
         );
       }),
       reconcile: Effect.fn(function* ({ news, output, session }) {
         const url = news.deployment.url;
         const type = news.config.logStreamType;
+        const observe = list(url).pipe(
+          Effect.map(
+            (streams) =>
+              streams.find((stream) => stream.id === output?.logStreamId) ??
+              streams.find((stream) => typeOf(stream) === type),
+          ),
+        );
 
         // Observe
-        const streams = yield* list(url);
-        const current =
-          streams.find((stream) => stream.id === output?.logStreamId) ??
-          streams.find((stream) => typeOf(stream) === type);
+        let current = yield* observe;
 
-        // Ensure. Webhook secrets arrive as plain strings, so wrap them here.
+        // Ensure. A deployment has one stream per type, so a create that loses
+        // a race to another deploy syncs the winner's stream instead.
         if (current === undefined) {
           yield* session.note(`Creating ${type} log stream...`);
           const created = yield* onDeployment(
             url,
             createOnce(deployment.createIntegration({ body: news.config })),
-          );
-          return {
-            logStreamId: created.id,
-            deploymentUrl: url,
-            logStreamType: created.logStreamType,
-            hmacSecret: "hmacSecret" in created ? Redacted.make(created.hmacSecret) : undefined,
-          };
+          ).pipe(Effect.catchTag("LogStreamAlreadyExists", () => Effect.undefined));
+          if (created !== undefined) {
+            return {
+              logStreamId: created.id,
+              deploymentUrl: url,
+              logStreamType: created.logStreamType,
+              hmacSecret: secretOf(created),
+            };
+          }
+          current = yield* observe;
+          if (current === undefined) {
+            return yield* new LogStreamNotListed({
+              message: `Convex: a ${type} log stream exists on ${url}, but the deployment doesn't list it.`,
+            });
+          }
         }
 
-        // Sync. Convex hides stored secrets, so the config can't be compared.
+        // Sync. Convex hides stored API keys, so the config can't be compared.
         yield* onDeployment(
           url,
           deployment.updateIntegration({
@@ -143,22 +168,17 @@ export const LogStreamProvider = () =>
           logStreamId: current.id,
           deploymentUrl: url,
           logStreamType: type,
-          hmacSecret: output?.hmacSecret,
+          hmacSecret: secretOf(current),
         };
       }),
       // Streams live on their deployment and go with it.
       list: () => Effect.succeed([]),
       delete: Effect.fn(function* ({ output }) {
-        // Observe first: a stream someone already removed needs no delete.
-        const streams = yield* list(output.deploymentUrl).pipe(
-          Effect.catchTag(GONE, () => Effect.succeed([])),
-        );
-        if (!streams.some((stream) => stream.id === output.logStreamId)) return;
         yield* onDeployment(
           output.deploymentUrl,
           deployment.deleteIntegration({ id: output.logStreamId }),
         ).pipe(
-          Effect.catchTag("InvalidLogStreamId", () => Effect.void),
+          Effect.catchTag("LogStreamDoesntExist", () => Effect.void),
           Effect.catchTag(GONE, () => Effect.void),
         );
       }),
