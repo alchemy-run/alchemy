@@ -1,5 +1,6 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Railway from "@alchemy.run/railway";
+import { serviceIpv6Egress } from "@alchemy.run/railway/ServiceIpv6Egress";
 import { activeReplicaRegions, serviceRegionPlacement } from "@alchemy.run/railway/ServiceRegion";
 import { withEnvironmentConfigLock } from "@alchemy.run/railway/transient";
 import { expect } from "@alchemy.run/test";
@@ -778,6 +779,63 @@ test.provider(
         updated.api.projectId,
       );
       expect(placedRegions(updatedConfig.config, updated.api.serviceId)).toEqual([moved]);
+
+      yield* stack.destroy();
+
+      const gone = yield* waitUntilGone(created.api.serviceId);
+      expect(gone).toEqual("gone");
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "provider:railway:service",
+      "live",
+    ],
+    timeout: 180_000,
+  },
+);
+
+test.provider(
+  "set IPv6 egress, flip it, and leave it alone when omitted",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deploy = (ipv6Egress: boolean | undefined) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const { project, environment } = yield* suitePartition;
+            const api = yield* Railway.Service("Ipv6Egress", {
+              project,
+              environment,
+              image: "hashicorp/http-echo",
+              port: 5678,
+              publicDomain: false,
+              ipv6Egress,
+            });
+            return { api };
+          }),
+        );
+      const observed = (api: { environmentId: string; projectId: string; serviceId: string }) =>
+        readEnvironmentConfig(api.environmentId, api.projectId).pipe(
+          Effect.map((environment) => serviceIpv6Egress(environment.config, api.serviceId)),
+        );
+
+      const created = yield* deploy(true);
+      expect(created.api.ipv6Egress).toEqual(true);
+      expect(yield* observed(created.api)).toEqual(true);
+
+      const disabled = yield* deploy(false);
+      expect(disabled.api.serviceId).toEqual(created.api.serviceId);
+      expect(disabled.api.ipv6Egress).toEqual(false);
+      expect(yield* observed(disabled.api)).toEqual(false);
+
+      const left = yield* deploy(undefined);
+      expect(left.api.serviceId).toEqual(created.api.serviceId);
+      expect(left.api.ipv6Egress).toEqual(false);
+      expect(yield* observed(left.api)).toEqual(false);
 
       yield* stack.destroy();
 
