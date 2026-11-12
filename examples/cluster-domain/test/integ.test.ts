@@ -75,16 +75,16 @@ const call = (
   }).pipe(Effect.provide(FetchHttpClient.layer));
 
 /**
- * The Api's URL once it answers. A fresh workers.dev URL serves an HTML
- * placeholder for a few seconds, and a fresh swarm service refuses
- * connections, so every test waits for `/openapi.json` to answer JSON.
+ * The Api's URL once the bank answers through it. A fresh workers.dev URL
+ * serves an HTML placeholder for a few seconds, a fresh swarm service
+ * refuses connections, and the Api can answer before the pool behind it
+ * does, so every test waits for a view read, which reaches the model, to
+ * answer 200.
  */
 const bankUrl = Effect.gen(function* () {
   const url = yield* deployedUrl;
-  yield* call(url, "GET", "/openapi.json").pipe(
-    Effect.flatMap((answer) =>
-      answer.status === 200 && typeof answer.body === "object" ? Effect.void : Effect.fail(answer),
-    ),
+  yield* call(url, "GET", "/AccountSummary/ready", "probe").pipe(
+    Effect.flatMap((answer) => (answer.status === 200 ? Effect.void : Effect.fail(answer))),
     Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 45 }),
   );
   return url;
@@ -172,7 +172,9 @@ test(
       url,
       "/TransferStatus/t-ok",
       "sam",
-      (s) => s.completed || s.failedReason,
+      // The view folds the Transfer's and both accounts' events, in any
+      // order: wait for every fact this asserts, or for a failure.
+      (s) => (s.completed && s.debited && s.credited) || s.failedReason,
     );
     expect(status).toMatchObject({
       debited: true,
@@ -207,7 +209,12 @@ test(
       to: "nobody",
       amount: 10,
     });
-    const status = yield* readUntil(url, "/TransferStatus/t-refund", "sam", (s) => s.failedReason);
+    const status = yield* readUntil(
+      url,
+      "/TransferStatus/t-refund",
+      "sam",
+      (s) => s.failedReason && s.debited && s.refunded,
+    );
     expect(status).toMatchObject({
       debited: true,
       credited: false,
