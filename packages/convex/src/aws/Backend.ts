@@ -83,6 +83,15 @@ interface BackendCommonProps {
    * go forward, so an Alchemy update must never change your image.
    */
   image: string;
+  /**
+   * Copy the image into an ECR repository of the stage's own before running it.
+   * Off, the task pulls `image` from its registry through the platform's NAT
+   * gateway, so a deploy pushes nothing from your machine. Turn it on when the
+   * tasks can't reach the registry, or to stop depending on it at each task
+   * start. On, the deploy needs Docker, which pulls the image and pushes it.
+   * @default false
+   */
+  mirror?: boolean;
   /** Environment for the backend. Names the resource sets are rejected. */
   env?: BackendEnv;
   /**
@@ -212,7 +221,8 @@ const hostOn = (
  * ### Requirements
  * Deploying needs no Docker: the admin key is computed on the deploying
  * machine, and the task pulls the image from its registry through the
- * platform's NAT gateway. The domain's hosted zone must be in the same account.
+ * platform's NAT gateway, unless `mirror` copies it into ECR first. The
+ * domain's hosted zone must be in the same account.
  *
  * ### Running on its own
  * **Example:** Postgres and buckets, created by the resource
@@ -566,8 +576,7 @@ export const Backend = (id: string, props: BackendProps) =>
       const service = yield* ECS.Service("Service", {
         cluster: { clusterArn: platform.clusterArn as never },
         image: props.image,
-        // Pulled from its registry by the task, never copied through this machine.
-        mirror: false,
+        mirror: props.mirror ?? false,
         cpu,
         memory,
         port: CLOUD_PORT,
