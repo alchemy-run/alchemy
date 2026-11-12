@@ -99,6 +99,7 @@ import { TaxSettings, TaxSettingsProvider } from "./TaxSettings.ts";
 import { TerminalConfiguration, TerminalConfigurationProvider } from "./TerminalConfiguration.ts";
 import { TerminalLocation, TerminalLocationProvider } from "./TerminalLocation.ts";
 import { TerminalReader, TerminalReaderProvider } from "./TerminalReader.ts";
+import { TrialOffer, TrialOfferProvider } from "./TrialOffer.ts";
 import { UpdateAccountHttp } from "./UpdateAccountHttp.ts";
 import { UpdateCreditGrantHttp } from "./UpdateCreditGrantHttp.ts";
 import { UpdateCustomerHttp } from "./UpdateCustomerHttp.ts";
@@ -181,6 +182,7 @@ export const providers = () =>
       TerminalConfiguration,
       TerminalLocation,
       TerminalReader,
+      TrialOffer,
       WebhookEndpoint,
     ]),
   ).pipe(
@@ -224,6 +226,7 @@ export const providers = () =>
         TerminalConfigurationProvider(),
         TerminalLocationProvider(),
         TerminalReaderProvider(),
+        TrialOfferProvider(),
         WebhookEndpointProvider(),
       ),
     ),

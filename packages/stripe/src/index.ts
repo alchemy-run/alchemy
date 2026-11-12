@@ -150,5 +150,6 @@ export * from "./UpdateTaxSettings.ts";
 export * from "./UpdateTaxSettingsHttp.ts";
 export * from "./UpdateTerminalReader.ts";
 export * from "./UpdateTerminalReaderHttp.ts";
+export * from "./TrialOffer.ts";
 export * from "./WebhookEndpoint.ts";
 export * from "./ConsumeEventsLive.ts";

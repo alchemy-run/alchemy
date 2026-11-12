@@ -101,6 +101,7 @@ describe.concurrent("lookup", () => {
           }),
           TerminalLocation: Stripe.TerminalLocation.lookup({ id: "tml_AlchemyMissing0000" }),
           TerminalReader: Stripe.TerminalReader.lookup({ id: "tmr_AlchemyMissing0000" }),
+          TrialOffer: Stripe.TrialOffer.lookup({ id: "to_AlchemyMissing0000" }),
           WebhookEndpoint: Stripe.WebhookEndpoint.lookup({ id: "we_AlchemyMissing0000" }),
         } as unknown as Record<string, Output.Output<unknown>>;
 
