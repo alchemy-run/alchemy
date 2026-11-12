@@ -10,7 +10,7 @@ import type { Service } from "./Service.ts";
  * `earliestRestoreTime`.
  *
  * The host gets its own API key, with a role that allows only
- * `control-plane:postgres-service:view` on the bound Postgres service. ClickHouse Cloud federates no workload identity, so a key
+ * `control-plane:postgres-service:view` on `postgres/*`: ClickHouse grants nothing to a role on one Postgres service's ID, so the key can reach every Postgres service in the organization. ClickHouse Cloud federates no workload identity, so a key
  * is the only way in.
  *
  * ### Using ListPostgresServiceBackups

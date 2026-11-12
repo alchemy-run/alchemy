@@ -12,7 +12,7 @@ import type { Service } from "./Service.ts";
  * remove its `replicaOf` too.
  *
  * The host gets its own API key, with a role that allows only
- * `control-plane:postgres-service:view` and `control-plane:postgres-service:manage` on the bound Postgres service. ClickHouse Cloud federates no workload identity, so a key
+ * `control-plane:postgres-service:view` and `control-plane:postgres-service:manage` on `postgres/*`: ClickHouse grants nothing to a role on one Postgres service's ID, so the key can reach every Postgres service in the organization. ClickHouse Cloud federates no workload identity, so a key
  * is the only way in.
  *
  * ### Using UpdatePostgresServiceState

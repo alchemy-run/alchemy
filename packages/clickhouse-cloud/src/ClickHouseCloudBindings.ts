@@ -195,9 +195,11 @@ export const BindOrganization = Effect.gen(function* () {
 });
 
 /**
- * Bind to one Postgres service: grants `permissions` on
- * `postgres/<postgresId>` and returns a runner that receives the Postgres
- * service's IDs.
+ * Bind to one Postgres service: grants `permissions` on `postgres/*` and
+ * returns a runner that receives the Postgres service's IDs. ClickHouse
+ * accepts a role on `postgres/<postgresId>` but answers its key FORBIDDEN
+ * (live, 2026-11-12); only the wildcard grants, so the key can read every
+ * Postgres service in the organization.
  */
 export const BindPostgres = Effect.gen(function* () {
   const bind = yield* Bind;
@@ -206,12 +208,7 @@ export const BindPostgres = Effect.gen(function* () {
     target: PostgresService,
     permissions: readonly string[],
   ) {
-    const { authorize } = yield* bind(
-      binding,
-      target,
-      Output.interpolate`postgres/${target.postgresId}`,
-      permissions,
-    );
+    const { authorize } = yield* bind(binding, target, Output.interpolate`postgres/*`, permissions);
     const postgresId = yield* target.postgresId;
     const organizationId = yield* target.organizationId;
     const run: Run<{ organizationId: string; postgresId: string }> = (call) =>
