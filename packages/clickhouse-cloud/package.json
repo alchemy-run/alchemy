@@ -31,6 +31,7 @@
     ".": "./src/index.ts",
     "./ApiKeys": "./src/ApiKeys/index.ts",
     "./Backup": "./src/Backup/index.ts",
+    "./ClickPipes": "./src/ClickPipes/index.ts",
     "./Notifications": "./src/Notifications/index.ts",
     "./Organization": "./src/Organization/index.ts",
     "./Prometheus": "./src/Prometheus/index.ts",
@@ -63,6 +64,12 @@
         "bun": "./src/Backup/index.ts",
         "worker": "./src/Backup/index.ts",
         "default": "./lib/Backup/index.js"
+      },
+      "./ClickPipes": {
+        "types": "./lib/ClickPipes/index.d.ts",
+        "bun": "./src/ClickPipes/index.ts",
+        "worker": "./src/ClickPipes/index.ts",
+        "default": "./lib/ClickPipes/index.js"
       },
       "./Notifications": {
         "types": "./lib/Notifications/index.d.ts",

@@ -7,6 +7,7 @@ import { ApiKey, ApiKeyProvider } from "./ApiKeys/ApiKey.ts";
 import { ClickHouseCloudAuth } from "./AuthProvider.ts";
 import { BackupBucket, BackupBucketProvider } from "./Backup/BackupBucket.ts";
 import { BackupConfiguration, BackupConfigurationProvider } from "./Backup/BackupConfiguration.ts";
+import { ClickPipe, ClickPipeProvider } from "./ClickPipes/ClickPipe.ts";
 import * as Credentials from "./Credentials.ts";
 import {
   MemberNotificationSetting,
@@ -71,6 +72,7 @@ export const providers = () =>
       BackupConfiguration,
       ByocInfrastructure,
       ClickHouseSetting,
+      ClickPipe,
       Invitation,
       JwtProvider,
       Member,
@@ -97,6 +99,7 @@ export const providers = () =>
         BackupConfigurationProvider(),
         ByocInfrastructureProvider(),
         ClickHouseSettingProvider(),
+        ClickPipeProvider(),
         InvitationProvider(),
         JwtProviderProvider(),
         MemberProvider(),
