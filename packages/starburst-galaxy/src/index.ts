@@ -11,8 +11,10 @@ export {
   fromClientCredentials,
 } from "./Credentials.ts";
 export * as DataProduct from "./DataProduct/index.ts";
+export * as DataQuality from "./DataQuality/index.ts";
 export * as Discovery from "./Discovery/index.ts";
 export * as Governance from "./Governance/index.ts";
+export * as Ingest from "./Ingest/index.ts";
 export * from "./LookupOnly.ts";
 export * as Network from "./Network/index.ts";
 export * from "./Providers.ts";
