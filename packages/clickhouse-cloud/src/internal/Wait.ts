@@ -166,3 +166,37 @@ export const waitUntilServiceGone = Effect.fn(function* (input: {
     session: input.session,
   });
 });
+
+/**
+ * Make sure a service is `running`: an idle service is woken with the
+ * `awake` command, a service on its way to running is waited for. Some
+ * operations (attaching a UDF) are refused unless the service runs. A
+ * stopped or missing service is returned as is: starting one is the
+ * `Service` resource's decision.
+ */
+export const ensureAwake = Effect.fn(function* (input: {
+  readonly organizationId: string;
+  readonly serviceId: string;
+  readonly session?: ScopedPlanStatusSession;
+}) {
+  const observed = yield* getLiveService(input.organizationId, input.serviceId);
+  if (observed === undefined || observed.state === "running" || observed.state === "stopped") {
+    return observed;
+  }
+  if (observed.state === "idle") {
+    if (input.session) yield* input.session.note("Waking the idle service...");
+    yield* service.updateServiceState({
+      organizationId: input.organizationId,
+      serviceId: input.serviceId,
+      command: "awake",
+    });
+  }
+  return yield* waitForService({
+    organizationId: input.organizationId,
+    serviceId: input.serviceId,
+    waitingFor: "running",
+    done: (s) => s.state === "running",
+    session: input.session,
+    budget: Duration.minutes(10),
+  });
+});

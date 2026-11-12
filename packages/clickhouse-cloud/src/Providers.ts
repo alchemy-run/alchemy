@@ -35,6 +35,11 @@ import {
   SnapshotConfiguration,
   SnapshotConfigurationProvider,
 } from "./Snapshot/SnapshotConfiguration.ts";
+import { Attachment, AttachmentProvider } from "./Udf/Attachment.ts";
+import {
+  Function as UdfFunction,
+  FunctionProvider as UdfFunctionProvider,
+} from "./Udf/Function.ts";
 import { Invitation, InvitationProvider } from "./UserManagement/Invitation.ts";
 import { Member, MemberProvider } from "./UserManagement/Member.ts";
 
@@ -61,6 +66,7 @@ export const providers = () =>
     Providers,
     Provider.collection([
       ApiKey,
+      Attachment,
       BackupBucket,
       BackupConfiguration,
       ByocInfrastructure,
@@ -79,12 +85,14 @@ export const providers = () =>
       ScalingSchedule,
       Service,
       SnapshotConfiguration,
+      UdfFunction,
       UpgradeWindow,
     ]),
   ).pipe(
     Layer.provide(
       Layer.mergeAll(
         ApiKeyProvider(),
+        AttachmentProvider(),
         BackupBucketProvider(),
         BackupConfigurationProvider(),
         ByocInfrastructureProvider(),
@@ -103,6 +111,7 @@ export const providers = () =>
         ScalingScheduleProvider(),
         ServiceProvider(),
         SnapshotConfigurationProvider(),
+        UdfFunctionProvider(),
         UpgradeWindowProvider(),
       ),
     ),

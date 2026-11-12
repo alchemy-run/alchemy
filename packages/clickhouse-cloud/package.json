@@ -39,6 +39,7 @@
     "./SavedQueries": "./src/SavedQueries/index.ts",
     "./Service": "./src/Service/index.ts",
     "./Snapshot": "./src/Snapshot/index.ts",
+    "./Udf": "./src/Udf/index.ts",
     "./UserManagement": "./src/UserManagement/index.ts",
     "./*": "./src/*.ts",
     "./package.json": "./package.json"
@@ -110,6 +111,12 @@
         "bun": "./src/Snapshot/index.ts",
         "worker": "./src/Snapshot/index.ts",
         "default": "./lib/Snapshot/index.js"
+      },
+      "./Udf": {
+        "types": "./lib/Udf/index.d.ts",
+        "bun": "./src/Udf/index.ts",
+        "worker": "./src/Udf/index.ts",
+        "default": "./lib/Udf/index.js"
       },
       "./UserManagement": {
         "types": "./lib/UserManagement/index.d.ts",
