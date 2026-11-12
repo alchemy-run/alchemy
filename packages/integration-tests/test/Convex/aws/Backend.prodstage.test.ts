@@ -234,5 +234,8 @@ test.provider.skipIf(process.env.CONVEX_TEST_AWS !== "1")(
       yield* stack.deploy(app(undefined));
       expect(yield* databaseExists(first.handle as never)).toBe(false);
     }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore))),
-  { timeout: 3_000_000 },
+  {
+    tags: ["provider:convex", "provider:convex:backend", "provider:aws", "live"],
+    timeout: 3_000_000,
+  },
 );

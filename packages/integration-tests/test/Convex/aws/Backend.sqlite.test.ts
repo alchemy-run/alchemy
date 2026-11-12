@@ -139,5 +139,8 @@ test.provider.skipIf(skipPaid)(
       });
       expect(unchanged.services![0]!.taskDefinition).toBe(currentTask);
     }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore))),
-  { timeout: 2_400_000 },
+  {
+    tags: ["provider:convex", "provider:convex:backend", "provider:aws", "live"],
+    timeout: 2_400_000,
+  },
 );

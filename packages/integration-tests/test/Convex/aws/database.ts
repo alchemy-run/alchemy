@@ -96,6 +96,9 @@ export const databaseSuite = (engine: "postgres" | "mysql") => {
           ),
         );
       }),
-    { timeout: 3_000_000 },
+    {
+      tags: ["provider:convex", "provider:convex:backend", "provider:aws", "live"],
+      timeout: 3_000_000,
+    },
   );
 };

@@ -7,9 +7,15 @@ sidebar:
 
 Deploy a preview for each pull request, and remove it when the pull request closes.
 
-## Add the secret
+## Keep state between runs
+
+`Alchemy.localState()` doesn't survive a CI run. Switch the Stack to a [remote state store](/state-store) first, so `destroy` can find what `deploy` made.
+
+## Add the secrets
 
 Create a team access token for CI in your Convex team settings, then add it to your repository as `CONVEX_ACCESS_TOKEN`. Convex recommends a service account.
+
+The Stack also deploys the Worker from part 2, so add `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` too. See [CI](/environments/ci).
 
 ## Deploy on pull requests
 
@@ -30,9 +36,11 @@ jobs:
       - run: bun alchemy deploy --stage pr-${{ github.event.number }} --yes
         env:
           CONVEX_ACCESS_TOKEN: ${{ secrets.CONVEX_ACCESS_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 ```
 
-In CI, Alchemy reads `CONVEX_ACCESS_TOKEN` instead of a profile.
+In CI, Alchemy reads these variables instead of a profile.
 
 ## Remove previews on close
 
@@ -53,11 +61,9 @@ jobs:
       - run: bun alchemy destroy --stage pr-${{ github.event.number }} --yes
         env:
           CONVEX_ACCESS_TOKEN: ${{ secrets.CONVEX_ACCESS_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 ```
-
-## Keep state between runs
-
-`Alchemy.localState()` doesn't survive a CI run. Use a [remote state store](/state-store) so `destroy` can find what `deploy` made.
 
 ## Where next
 

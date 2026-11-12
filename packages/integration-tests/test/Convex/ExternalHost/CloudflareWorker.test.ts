@@ -42,7 +42,10 @@ const get = (path: string) =>
     return (yield* res.json) as { value?: any; tag?: string };
   });
 
-const options = { timeout: 180_000 };
+const options = {
+  tags: ["provider:convex", "provider:convex:bindings", "provider:cloudflare", "live"],
+  timeout: 180_000,
+};
 
 test(
   "Connect and functions run on a deployed Worker",

@@ -11,7 +11,7 @@ import * as Result from "effect/Result";
 import { projectsNamed, testName } from "./support.ts";
 
 const { test } = Test.make({ providers: Convex.providers() });
-const options = { timeout: 120_000 };
+const options = { tags: ["provider:convex", "provider:convex:project", "live"], timeout: 120_000 };
 
 const App = (props: Convex.ProjectProps) =>
   Convex.Project("App", props).pipe(RemovalPolicy.destroy());
@@ -273,9 +273,12 @@ test.provider(
   options,
 );
 
-test.provider("types a missing project", () =>
-  Effect.gen(function* () {
-    const error = yield* management.getProject({ projectId: 1 }).pipe(Effect.flip);
-    expect(error._tag).toBe("ProjectNotFound");
-  }),
+test.provider(
+  "types a missing project",
+  () =>
+    Effect.gen(function* () {
+      const error = yield* management.getProject({ projectId: 1 }).pipe(Effect.flip);
+      expect(error._tag).toBe("ProjectNotFound");
+    }),
+  { tags: ["provider:convex", "provider:convex:project", "live"] },
 );

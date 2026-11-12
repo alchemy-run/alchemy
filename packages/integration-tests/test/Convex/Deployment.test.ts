@@ -13,7 +13,10 @@ import * as Result from "effect/Result";
 import { onDeployment, projectsNamed, testName } from "./support.ts";
 
 const { test } = Test.make({ providers: Convex.providers() });
-const options = { timeout: 180_000 };
+const options = {
+  tags: ["provider:convex", "provider:convex:deployment", "live"],
+  timeout: 180_000,
+};
 
 const app = (name: string, props: Omit<Convex.DeploymentProps, "project">) =>
   Effect.gen(function* () {
@@ -363,26 +366,32 @@ test.provider(
   options,
 );
 
-test.provider("types a missing deployment", () =>
-  Effect.gen(function* () {
-    const error = yield* management
-      .getDeployment({ deploymentName: "no-such-deployment-0" })
-      .pipe(Effect.flip);
-    expect(error._tag).toBe("DeploymentNotFound");
-  }),
+test.provider(
+  "types a missing deployment",
+  () =>
+    Effect.gen(function* () {
+      const error = yield* management
+        .getDeployment({ deploymentName: "no-such-deployment-0" })
+        .pipe(Effect.flip);
+      expect(error._tag).toBe("DeploymentNotFound");
+    }),
+  { tags: ["provider:convex", "provider:convex:deployment", "live"] },
 );
 
-test.provider("siteUrlOf maps a Convex Cloud host and nothing else", () =>
-  Effect.sync(() => {
-    expect(siteUrlOf("https://happy-otter-123.convex.cloud")).toBe(
-      "https://happy-otter-123.convex.site",
-    );
-    expect(siteUrlOf("https://happy-otter-123.eu-west-1.convex.cloud")).toBe(
-      "https://happy-otter-123.eu-west-1.convex.site",
-    );
-    expect(siteUrlOf("https://api.example.com")).toBeUndefined();
-    expect(isConvexCloudUrl("https://convex.cloud.example.com")).toBe(false);
-    expect(isConvexCloudUrl("http://localhost:3210")).toBe(false);
-    expect(isConvexCloudUrl("not a url")).toBe(false);
-  }),
+test.provider(
+  "siteUrlOf maps a Convex Cloud host and nothing else",
+  () =>
+    Effect.sync(() => {
+      expect(siteUrlOf("https://happy-otter-123.convex.cloud")).toBe(
+        "https://happy-otter-123.convex.site",
+      );
+      expect(siteUrlOf("https://happy-otter-123.eu-west-1.convex.cloud")).toBe(
+        "https://happy-otter-123.eu-west-1.convex.site",
+      );
+      expect(siteUrlOf("https://api.example.com")).toBeUndefined();
+      expect(isConvexCloudUrl("https://convex.cloud.example.com")).toBe(false);
+      expect(isConvexCloudUrl("http://localhost:3210")).toBe(false);
+      expect(isConvexCloudUrl("not a url")).toBe(false);
+    }),
+  { tags: ["unit", "provider:convex", "local"] },
 );

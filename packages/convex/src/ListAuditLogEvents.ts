@@ -19,7 +19,8 @@ export type ListAuditLogEventsClient = (
  * Read a Convex deployment's audit log from a Worker, Lambda or other host.
  *
  * The host gets a deploy key that can only do `deployment:auditLog:view` on
- * this deployment.
+ * this deployment. The Deployment API accepts only Convex's own keys, so
+ * there is no host identity to federate.
  *
  * :::caution
  * Plans that keep no audit logs fail with `AuditLogsTooOld`.

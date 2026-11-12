@@ -50,4 +50,5 @@ test.provider.skipIf(process.env.CONVEX_TEST_AWS !== "1")(
       );
       expect(Object.keys(plan.resources).length).toBeGreaterThan(0);
     }),
+  { tags: ["unit", "provider:convex", "local"] },
 );

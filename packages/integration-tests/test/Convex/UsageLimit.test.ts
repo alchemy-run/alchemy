@@ -10,7 +10,10 @@ import * as Result from "effect/Result";
 import { onDeployment, testName } from "./support.ts";
 
 const { test } = Test.make({ providers: Convex.providers() });
-const options = { timeout: 180_000 };
+const options = {
+  tags: ["provider:convex", "provider:convex:usagelimit", "live"],
+  timeout: 180_000,
+};
 
 const limit = { metric: "functionCalls", window: "month", limitType: "warning" } as const;
 

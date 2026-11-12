@@ -14,7 +14,10 @@ import { testName } from "./support.ts";
 
 const { test } = Test.make({ providers: Convex.providers() });
 const provider = test.provider;
-const options = { timeout: 180_000 };
+const options = {
+  tags: ["provider:convex", "provider:convex:deploykey", "live"],
+  timeout: 180_000,
+};
 
 const ENV_ACTIONS = ["deployment:env:view", "deployment:env:write"];
 
@@ -223,13 +226,16 @@ provider(
   options,
 );
 
-test.provider("findStoredKey finds the suffixed name Convex gives a repeated key", () =>
-  Effect.sync(() => {
-    const key = (name: string, creationTime: number) => ({ name, creationTime });
-    expect(findStoredKey([key("a", 1), key("b", 2)], "b")?.name).toBe("b");
-    const repeated = "deploy (43a710ee-e480-4946-9efa-eca2338fd72a)";
-    expect(findStoredKey([key("deploy", 1), key(repeated, 2)], "deploy")?.name).toBe(repeated);
-    expect(findStoredKey([key("deploy-2", 1)], "deploy")).toBeUndefined();
-    expect(findStoredKey([], "deploy")).toBeUndefined();
-  }),
+test.provider(
+  "findStoredKey finds the suffixed name Convex gives a repeated key",
+  () =>
+    Effect.sync(() => {
+      const key = (name: string, creationTime: number) => ({ name, creationTime });
+      expect(findStoredKey([key("a", 1), key("b", 2)], "b")?.name).toBe("b");
+      const repeated = "deploy (43a710ee-e480-4946-9efa-eca2338fd72a)";
+      expect(findStoredKey([key("deploy", 1), key(repeated, 2)], "deploy")?.name).toBe(repeated);
+      expect(findStoredKey([key("deploy-2", 1)], "deploy")).toBeUndefined();
+      expect(findStoredKey([], "deploy")).toBeUndefined();
+    }),
+  { tags: ["unit", "provider:convex", "local"] },
 );

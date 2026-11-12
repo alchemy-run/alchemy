@@ -10,7 +10,10 @@ import * as Result from "effect/Result";
 import { BACKEND_IMAGE } from "./support.ts";
 
 const { test } = Test.make({ providers: providers() });
-const options = { timeout: 180_000 };
+const options = {
+  tags: ["provider:convex", "provider:convex:adminkey", "local"],
+  timeout: 180_000,
+};
 
 const SECRET = Redacted.make("a".repeat(64));
 const OTHER_SECRET = Redacted.make("b".repeat(64));

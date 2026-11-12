@@ -58,7 +58,9 @@ const taskDefinitionOf = (stage: string) =>
     const { clusterArns } = yield* ecs.listClusters({});
     for (const cluster of clusterArns ?? []) {
       const { serviceArns } = yield* ecs.listServices({ cluster });
-      const service = (serviceArns ?? []).find((arn) => arn.toLowerCase().includes(`-${stage}-`));
+      // `-alice-` also starts `-alice-2-`, so a stage's name must not run on into a number.
+      const named = new RegExp(`-${stage}-(?!\\d+-)`);
+      const service = (serviceArns ?? []).find((arn) => named.test(arn.toLowerCase()));
       if (service === undefined) continue;
       const { services } = yield* ecs.describeServices({ cluster, services: [service] });
       const { taskDefinition } = yield* ecs.describeTaskDefinition({
@@ -159,5 +161,8 @@ test.provider.skipIf(skipPaid)(
         }),
       ),
     ),
-  { timeout: 4_500_000 },
+  {
+    tags: ["provider:convex", "provider:convex:backend", "provider:aws", "live"],
+    timeout: 4_500_000,
+  },
 );

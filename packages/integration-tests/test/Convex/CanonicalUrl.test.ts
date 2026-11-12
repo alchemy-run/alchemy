@@ -41,7 +41,7 @@ test.provider(
 
       yield* stack.destroy();
     }),
-  { timeout: 180_000 },
+  { tags: ["provider:convex", "provider:convex:canonicalurl", "live"], timeout: 180_000 },
 );
 
 test.provider(
@@ -56,7 +56,7 @@ test.provider(
       const destroyed = yield* stack.destroy().pipe(Effect.result);
       expect(Result.isSuccess(destroyed)).toBe(true);
     }),
-  { timeout: 180_000 },
+  { tags: ["provider:convex", "provider:convex:canonicalurl", "live"], timeout: 180_000 },
 );
 
 test.provider(
@@ -93,5 +93,5 @@ test.provider(
 
       yield* stack.destroy();
     }),
-  { timeout: 180_000 },
+  { tags: ["provider:convex", "provider:convex:canonicalurl", "live"], timeout: 180_000 },
 );

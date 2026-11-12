@@ -14,7 +14,10 @@ import * as Schedule from "effect/Schedule";
 import { onDeployment, testName } from "./support.ts";
 
 const { test } = Test.make({ providers: Convex.providers() });
-const options = { timeout: 180_000 };
+const options = {
+  tags: ["provider:convex", "provider:convex:environmentvariables", "live"],
+  timeout: 180_000,
+};
 
 const app = (name: string, env: Record<string, string | Redacted.Redacted<string>>) =>
   Effect.gen(function* () {
@@ -164,24 +167,30 @@ test.provider(
   options,
 );
 
-test.provider("envChanges sets, deletes managed names, and leaves the rest", () =>
-  Effect.sync(() => {
-    expect(envChanges({ A: "1" }, { A: "2" }, ["A"])).toEqual([{ name: "A", value: "2" }]);
-    expect(envChanges({}, { A: "1" }, [])).toEqual([{ name: "A", value: "1" }]);
-    expect(envChanges({ A: "1", B: "2" }, { A: "1" }, ["A", "B"])).toEqual([
-      { name: "B", value: null },
-    ]);
-    expect(envChanges({ HAND: "x" }, {}, [])).toEqual([]);
-    expect(envChanges({ A: "1" }, { A: "1" }, ["A"])).toEqual([]);
-    expect(envChanges({}, {}, ["A"])).toEqual([]);
-  }),
+test.provider(
+  "envChanges sets, deletes managed names, and leaves the rest",
+  () =>
+    Effect.sync(() => {
+      expect(envChanges({ A: "1" }, { A: "2" }, ["A"])).toEqual([{ name: "A", value: "2" }]);
+      expect(envChanges({}, { A: "1" }, [])).toEqual([{ name: "A", value: "1" }]);
+      expect(envChanges({ A: "1", B: "2" }, { A: "1" }, ["A", "B"])).toEqual([
+        { name: "B", value: null },
+      ]);
+      expect(envChanges({ HAND: "x" }, {}, [])).toEqual([]);
+      expect(envChanges({ A: "1" }, { A: "1" }, ["A"])).toEqual([]);
+      expect(envChanges({}, {}, ["A"])).toEqual([]);
+    }),
+  { tags: ["unit", "provider:convex", "local"] },
 );
 
-test.provider("envHash ignores order and depends on values and key", () =>
-  Effect.sync(() => {
-    expect(envHash({ A: "1", B: "2" }, "key")).toBe(envHash({ B: "2", A: "1" }, "key"));
-    expect(envHash({ A: "1" }, "key")).not.toBe(envHash({ A: "2" }, "key"));
-    expect(envHash({ A: "1" }, "key")).not.toBe(envHash({ A: "1" }, "other"));
-    expect(envHash({ AB: "C" }, "key")).not.toBe(envHash({ A: "BC" }, "key"));
-  }),
+test.provider(
+  "envHash ignores order and depends on values and key",
+  () =>
+    Effect.sync(() => {
+      expect(envHash({ A: "1", B: "2" }, "key")).toBe(envHash({ B: "2", A: "1" }, "key"));
+      expect(envHash({ A: "1" }, "key")).not.toBe(envHash({ A: "2" }, "key"));
+      expect(envHash({ A: "1" }, "key")).not.toBe(envHash({ A: "1" }, "other"));
+      expect(envHash({ AB: "C" }, "key")).not.toBe(envHash({ A: "BC" }, "key"));
+    }),
+  { tags: ["unit", "provider:convex", "local"] },
 );

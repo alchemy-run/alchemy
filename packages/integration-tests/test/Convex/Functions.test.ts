@@ -15,7 +15,10 @@ import * as Result from "effect/Result";
 import { scratchApp, testName } from "./support.ts";
 
 const { test } = Test.make({ providers: Convex.providers() });
-const options = { timeout: 300_000 };
+const options = {
+  tags: ["provider:convex", "provider:convex:functions", "live"],
+  timeout: 300_000,
+};
 
 const app = (
   name: string,
@@ -95,9 +98,7 @@ test.provider(
       const refused = yield* stack.deploy(app(name, rootDir)).pipe(Effect.result);
       expect(Result.isFailure(refused)).toBe(true);
       if (Result.isFailure(refused)) {
-        expect((refused.failure as { _tag: string })._tag).toBe(
-          "AuthConfigMissingEnvironmentVariable",
-        );
+        expect(refused.failure).toMatchObject({ _tag: "AuthConfigMissingEnvironmentVariable" });
       }
       yield* stack.destroy();
     }),
@@ -245,29 +246,35 @@ test.provider(
   options,
 );
 
-test.provider("findConvexCli finds the binary in a parent folder, or names rootDir", () =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
-    const dir = yield* fs.makeTempDirectoryScoped({ prefix: "convex-cli-" });
-    const empty = yield* findConvexCli(dir).pipe(Effect.flip);
-    expect(empty._tag).toBe("ConvexCliNotFound");
-    expect(empty.message).toContain(dir);
+test.provider(
+  "findConvexCli finds the binary in a parent folder, or names rootDir",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const dir = yield* fs.makeTempDirectoryScoped({ prefix: "convex-cli-" });
+      const empty = yield* findConvexCli(dir).pipe(Effect.flip);
+      expect(empty._tag).toBe("ConvexCliNotFound");
+      expect(empty.message).toContain(dir);
 
-    const bin = path.join(dir, "node_modules/.bin");
-    const rootDir = path.join(dir, "packages/backend");
-    yield* fs.makeDirectory(bin, { recursive: true });
-    yield* fs.makeDirectory(rootDir, { recursive: true });
-    yield* fs.writeFileString(path.join(bin, "convex"), "");
-    expect(yield* findConvexCli(rootDir)).toBe(path.join(bin, "convex"));
-    expect(yield* pushCommand(rootDir)).toBe(`"../../node_modules/.bin/convex" deploy --yes`);
-  }),
+      const bin = path.join(dir, "node_modules/.bin");
+      const rootDir = path.join(dir, "packages/backend");
+      yield* fs.makeDirectory(bin, { recursive: true });
+      yield* fs.makeDirectory(rootDir, { recursive: true });
+      yield* fs.writeFileString(path.join(bin, "convex"), "");
+      expect(yield* findConvexCli(rootDir)).toBe(path.join(bin, "convex"));
+      expect(yield* pushCommand(rootDir)).toBe(`"../../node_modules/.bin/convex" deploy --yes`);
+    }),
+  { tags: ["unit", "provider:convex", "local"] },
 );
 
-test.provider("a project with no convex CLI fails at the push, not when the stack is read", () =>
-  Effect.gen(function* () {
-    const command = yield* pushCommand("/nonexistent/app");
-    expect(command).toContain("exit 127");
-    expect(command).toContain("Add convex");
-  }),
+test.provider(
+  "a project with no convex CLI fails at the push, not when the stack is read",
+  () =>
+    Effect.gen(function* () {
+      const command = yield* pushCommand("/nonexistent/app");
+      expect(command).toContain("exit 127");
+      expect(command).toContain("Add convex");
+    }),
+  { tags: ["unit", "provider:convex", "local"] },
 );
