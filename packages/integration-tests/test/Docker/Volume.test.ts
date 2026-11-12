@@ -420,6 +420,59 @@ describe(
     );
 
     test.provider(
+      "rejects invalid local Docker volume names before deleting the existing generation",
+      (stack) =>
+        Effect.gen(function* () {
+          const docker = yield* Docker.Docker;
+          yield* stack.destroy();
+          yield* Effect.addFinalizer(() => stack.destroy().pipe(Effect.ignore));
+          const resource = Docker.Volume("valid-name-before-replace");
+          const original = yield* stack.deploy(resource);
+          yield* docker.run([
+            "run",
+            "--rm",
+            "--network",
+            "none",
+            "--pull",
+            "never",
+            "--mount",
+            "type=volume,source=" + original.name + ",target=/data",
+            "alpine:3.22",
+            "sh",
+            "-c",
+            "printf 'original-data' > /data/marker",
+          ]);
+          const invalid = Docker.Volume("valid-name-before-replace", {
+            name: original.name + "/not-a-volume",
+          });
+
+          const planError = yield* stack.plan(invalid).pipe(Effect.flip);
+          expect(planError._tag).toBe("InvalidVolumeOptions");
+          expect(planError.path).toBe("name");
+
+          const deployError = yield* stack.deploy(invalid).pipe(Effect.flip);
+          expect(deployError._tag).toBe("InvalidVolumeOptions");
+          expect((yield* docker.volume.inspect(original.name)).CreatedAt).toBe(
+            original.createdAtRaw,
+          );
+          const marker = yield* docker.run([
+            "run",
+            "--rm",
+            "--network",
+            "none",
+            "--pull",
+            "never",
+            "--mount",
+            "type=volume,source=" + original.name + ",target=/data,readonly",
+            "alpine:3.22",
+            "cat",
+            "/data/marker",
+          ]);
+          expect(marker.stdout.trim()).toBe("original-data");
+        }),
+    );
+
+    test.provider(
       "recreates a missing managed volume without silently adopting a foreign one",
       (stack) =>
         Effect.gen(function* () {

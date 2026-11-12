@@ -24,6 +24,11 @@ export interface VolumeProps {
   /**
    * Docker volume name.
    *
+   * With the default `local` driver, the name must start with an ASCII
+   * letter or digit and contain only letters, digits, `_`, `.`, and `-`.
+   * Invalid local names fail at plan time, before deleting an old volume.
+   * Third-party drivers may support different name formats.
+   *
    * @default Generated from stack, stage, logical id, and instance id.
    */
   name?: string;
@@ -188,9 +193,12 @@ export interface VolumeLookup {
  * ### Validation and ownership conflicts
  * User-defined labels cannot start with `alchemy::`. Empty names/drivers and
  * invalid label or driver-option keys fail with `InvalidVolumeOptions`, which
- * reports the offending property path. When the observed volume no longer
- * matches its recorded generation, Alchemy reports `OwnedBySomeoneElse`
- * instead of modifying or removing it.
+ * reports the offending property path. For the built-in `local` driver, volume
+ * names must begin with a letter or digit and contain only letters, digits,
+ * `_`, `.` or `-`; invalid names fail during planning before delete-first
+ * replacement. Third-party drivers may support other name formats.
+ * When the observed volume no longer matches its recorded generation, Alchemy
+ * reports `OwnedBySomeoneElse` instead of modifying or removing it.
  *
  * @resource
  * @product Volume
@@ -396,6 +404,16 @@ const invalidVolumeOption = (path: string, reason: string) =>
 const validateVolumeOptions = (props: VolumeProps | undefined) => {
   if (props?.name !== undefined && !props.name.trim()) {
     return invalidVolumeOption("name", "must not be empty");
+  }
+  if (
+    props?.name !== undefined &&
+    (props.driver ?? "local") === "local" &&
+    !/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(props.name)
+  ) {
+    return invalidVolumeOption(
+      "name",
+      "local volume names must start with a letter or digit and contain only letters, digits, _, . or -",
+    );
   }
   if (props?.driver !== undefined && !props.driver.trim()) {
     return invalidVolumeOption("driver", "must not be empty");
