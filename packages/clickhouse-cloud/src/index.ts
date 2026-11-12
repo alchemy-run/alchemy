@@ -12,6 +12,7 @@ export {
 } from "./Credentials.ts";
 export {
   ApiKeyInUse,
+  ByocValidationFailed,
   MemberNotFound,
   OperationFailed,
   OperationTimedOut,
