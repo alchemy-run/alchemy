@@ -52,6 +52,42 @@ import { HasNoPool, type HostedRuntimeContext } from "./HostedRuntime.ts";
 
 const env = (name: string) => process.env[name];
 
+/**
+ * The ports and listen addresses a runner serves on. Each comes from the
+ * environment, else today's default: a host that starts runners itself
+ * (several on one machine, behind its own proxy) picks its own.
+ *
+ * - `CLUSTER_RUNNER_PORT`: the port runners reach each other on.
+ * - `CLUSTER_GATEWAY_PORT`: the port the gateway serves on.
+ * - `CLUSTER_LISTEN_HOST`: the address the runner listens on.
+ * - `CLUSTER_GATEWAY_LISTEN_HOST`: the address the gateway listens on;
+ *   every address when unset.
+ */
+export const listenConfig = (environment: Record<string, string | undefined> = process.env) => {
+  const port = (name: string, fallback: number) => {
+    const value = environment[name];
+    if (value === undefined || value === "") return fallback;
+    const parsed = Number(value);
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
+      throw new Error(`${name} must be a TCP port (1-65535), got '${value}'.`);
+    }
+    return parsed;
+  };
+  return {
+    runnerPort: port("CLUSTER_RUNNER_PORT", RUNNER_PORT),
+    gatewayPort: port("CLUSTER_GATEWAY_PORT", GATEWAY_PORT),
+    runnerListenHost: environment.CLUSTER_LISTEN_HOST || "0.0.0.0",
+    gatewayListenHost: environment.CLUSTER_GATEWAY_LISTEN_HOST || undefined,
+  };
+};
+
+/** The gateway's HTTP server, on its port and listen address. */
+const gatewayServer = (listen: ReturnType<typeof listenConfig>) =>
+  NodeHttpServer.layer(createServer, {
+    port: listen.gatewayPort,
+    ...(listen.gatewayListenHost ? { host: listen.gatewayListenHost } : {}),
+  });
+
 /** Whether an IPv4 address is in a CIDR range (`10.46.0.0/16`). */
 const inIpv4Range = (address: string, range: string) => {
   const [base, bits] = range.split("/");
@@ -130,6 +166,7 @@ export const runExternal = (
     "Effect Cluster runner",
     Effect.gen(function* () {
       const host = yield* runnerHost;
+      const listen = listenConfig();
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       // The program ships inside the runner; write it out to run it.
@@ -139,13 +176,13 @@ export const runExternal = (
       const programEnv = {
         ...process.env,
         HOST: host,
-        PORT: String(RUNNER_PORT),
-        LISTEN_HOST: env("CLUSTER_LISTEN_HOST") ?? "0.0.0.0",
+        PORT: String(listen.runnerPort),
+        LISTEN_HOST: listen.runnerListenHost,
         DATABASE_URL: env("DATABASE_URL") ?? env("CLUSTER_DATABASE_URL"),
         ASSIGNED_SHARD_GROUPS: env("CLUSTER_SHARD_GROUPS"),
         AVAILABLE_SHARD_GROUPS: env("CLUSTER_AVAILABLE_SHARD_GROUPS"),
       };
-      yield* Effect.logInfo(`Effect Cluster runner ${host}:${RUNNER_PORT}: external program`);
+      yield* Effect.logInfo(`Effect Cluster runner ${host}:${listen.runnerPort}: external program`);
       // The program owns this runner: if it stops, so does the runner.
       const child = yield* Effect.sync(() =>
         spawn(process.execPath, [programFile], { env: programEnv, stdio: "inherit" }),
@@ -169,7 +206,7 @@ export const runExternal = (
         shardingConfig: shardGroupsConfig(),
       }).pipe(Layer.provide(PgClient.layer({ url: Redacted.make(env("CLUSTER_DATABASE_URL")!) })));
       const gateway = gatewayLayer(entities, env("CLUSTER_GATEWAY_TOKEN") ?? "").pipe(
-        Layer.provide(NodeHttpServer.layer(createServer, { port: GATEWAY_PORT })),
+        Layer.provide(gatewayServer(listen)),
       );
       return yield* Effect.raceFirst(Layer.launch(gateway.pipe(Layer.provide(cluster))), exited);
     }).pipe(
@@ -263,6 +300,7 @@ export const bootstrap = (
     const launched = yield* Ref.get(launchedRef);
 
     const host = yield* runnerHost;
+    const listen = listenConfig();
     const group = env("CLUSTER_SHARD_GROUPS") ?? "default";
     // Every hosted entity lives in this pool's own shard group.
     const placed = hosted
@@ -302,10 +340,10 @@ export const bootstrap = (
       transport: "http",
       storage: "sql",
       shardingConfig: {
-        runnerAddress: Option.some(RunnerAddress.make(host, RUNNER_PORT)),
+        runnerAddress: Option.some(RunnerAddress.make(host, listen.runnerPort)),
         // Fly's private network is IPv6 only.
         runnerListenAddress: Option.some(
-          RunnerAddress.make(env("CLUSTER_LISTEN_HOST") ?? "0.0.0.0", RUNNER_PORT),
+          RunnerAddress.make(listen.runnerListenHost, listen.runnerPort),
         ),
         ...shardGroupsConfig(),
       },
@@ -335,10 +373,10 @@ export const bootstrap = (
       placed.map((entry) => entry.entity),
       env("CLUSTER_GATEWAY_TOKEN") ?? "",
       new Map(workflows.map((entry) => [entry.workflow._tag, entry.workflow])),
-    ).pipe(Layer.provide(NodeHttpServer.layer(createServer, { port: GATEWAY_PORT })));
+    ).pipe(Layer.provide(gatewayServer(listen)));
 
     yield* Effect.logInfo(
-      `Effect Cluster runner ${host}:${RUNNER_PORT}: ${hosted
+      `Effect Cluster runner ${host}:${listen.runnerPort}: ${hosted
         .map((entry) =>
           entry.kind === "entity"
             ? entry.entity.type
